@@ -170,9 +170,11 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 
       const canvasRegion = page.locator('.canvas-region');
       const canvasBox = await canvasRegion.boundingBox();
-      if (!canvasBox) throw new Error('The canvas must be visible before adding a task.');
+      const releasePlanBox = await releasePlan.boundingBox();
+      if (!canvasBox || !releasePlanBox)
+        throw new Error('The canvas and release-plan node must be visible before adding a task.');
       await templates.getByRole('button', { name: /^Task/ }).dragTo(canvasRegion, {
-        targetPosition: { x: canvasBox.width * 0.75, y: canvasBox.height * 0.18 },
+        targetPosition: separatedDropPosition(canvasBox, releasePlanBox),
       });
       const taskNode = page.getByRole('article', { name: 'Task: Task' });
       await expect(taskNode).toBeVisible();
@@ -288,28 +290,55 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 });
 
 async function connectHandles(page: Page, source: Locator, target: Locator): Promise<void> {
-  await assertHandleIsExposed(source);
-  await assertHandleIsExposed(target);
-  const sourceBox = await source.boundingBox();
-  const targetBox = await target.boundingBox();
-  if (!sourceBox || !targetBox)
-    throw new Error('Both canvas handles must be visible to connect nodes.');
+  const sourcePoint = await exposedHandlePoint(source, 'source');
+  const targetPoint = await exposedHandlePoint(target, 'target');
 
-  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.move(sourcePoint.x, sourcePoint.y);
   await page.mouse.down();
-  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
+  await page.mouse.move(targetPoint.x, targetPoint.y, {
     steps: 12,
   });
   await page.mouse.up();
 }
 
-async function assertHandleIsExposed(handle: Locator): Promise<void> {
-  const exposed = await handle.evaluate((element) => {
+async function exposedHandlePoint(
+  handle: Locator,
+  label: 'source' | 'target',
+): Promise<{ x: number; y: number }> {
+  const result = await handle.evaluate((element) => {
     const box = element.getBoundingClientRect();
-    const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-    return hit === element || element.contains(hit);
+    const candidates = [
+      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+      { x: box.x + box.width * 0.25, y: box.y + box.height / 2 },
+      { x: box.x + box.width * 0.75, y: box.y + box.height / 2 },
+    ];
+    for (const point of candidates) {
+      const hit = document.elementFromPoint(point.x, point.y);
+      if (hit === element || element.contains(hit)) return { point, obstruction: '' };
+    }
+    const hit = document.elementFromPoint(candidates[0].x, candidates[0].y);
+    return {
+      point: null,
+      obstruction: hit ? `${hit.nodeName}.${hit.getAttribute('class') ?? ''}` : 'nothing',
+    };
   });
-  expect(exposed).toBe(true);
+  expect(result.point, `${label} handle was obscured by ${result.obstruction}`).not.toBeNull();
+  return result.point ?? { x: 0, y: 0 };
+}
+
+function separatedDropPosition(
+  canvas: { x: number; y: number; width: number; height: number },
+  source: { x: number; y: number; width: number; height: number },
+): { x: number; y: number } {
+  const estimatedNodeHeight = 120;
+  const gap = 90;
+  const sourceTop = source.y - canvas.y;
+  const above = sourceTop - estimatedNodeHeight - gap;
+  const below = sourceTop + source.height + gap;
+  return {
+    x: Math.min(Math.max(source.x - canvas.x, 80), canvas.width - 250),
+    y: above >= 70 ? above : Math.min(below, canvas.height - estimatedNodeHeight - 40),
+  };
 }
 
 async function clickExposedNodeEdge(page: Page, node: Locator): Promise<void> {
