@@ -649,6 +649,11 @@ export const CheckResultSchema = z
   .object({
     id: EntityIdSchema,
     runId: EntityIdSchema,
+    producerNodeId: EntityIdSchema.optional(),
+    producerAttempt: z.number().int().positive().optional(),
+    reviewedNodeId: EntityIdSchema.optional(),
+    reviewedNodeAttempt: z.number().int().positive().optional(),
+    reviewedOutputDigest: z.string().min(8).max(256).optional(),
     kind: z.enum(['lint', 'typecheck', 'test', 'build', 'custom']),
     command: CommandSpecSchema,
     status: z.enum(['queued', 'running', 'passed', 'failed', 'cancelled', 'lost']),

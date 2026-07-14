@@ -150,6 +150,28 @@ export interface RefComparison {
   readonly diff: ParsedDiff;
 }
 
+export interface WorktreeDescriptor {
+  readonly repositoryRoot: string;
+  readonly commonDirectory: string;
+  readonly worktreePath: string;
+  readonly branch: string | null;
+  readonly headOid: string;
+  readonly status: GitStatus;
+}
+
+export interface BaseComparison {
+  readonly worktree: WorktreeDescriptor;
+  readonly comparison: RefComparison;
+}
+
+export interface WorktreeComparison {
+  readonly commonDirectory: string;
+  readonly left: WorktreeDescriptor;
+  readonly right: WorktreeDescriptor;
+  /** Treats the left worktree as the base and the right worktree as the head. */
+  readonly comparison: RefComparison;
+}
+
 export type WorktreeLifecycleStatus = 'active' | 'archived' | 'cleanup-pending';
 export type WorktreeCleanupPolicy = 'manual' | 'after-merge' | 'on-success';
 
@@ -197,6 +219,20 @@ export interface ManagedWorktreeState {
 export interface CleanupImpact extends ManagedWorktreeState {
   readonly expectedHead: string;
   readonly dirtyPaths: readonly string[];
+}
+
+export interface ManagedWorktreeSummary extends ManagedWorktreeState {
+  readonly dirtyPaths: readonly string[];
+  readonly comparison: RefComparison | null;
+}
+
+export interface BranchRenameImpact extends CleanupImpact {
+  readonly oldBranch: string;
+  readonly newBranch: string;
+}
+
+export interface ArchiveImpact extends CleanupImpact {
+  readonly archiveStatus: 'archived';
 }
 
 export type MergeStrategy = 'fast-forward-only' | 'merge-commit' | 'squash';
@@ -258,6 +294,112 @@ export interface DiscardHunksApproval extends ApprovalBase<'discard-hunks'> {
   readonly hunkIds: readonly string[];
 }
 
+export interface RenameManagedBranchApproval extends ApprovalBase<'rename-managed-branch'> {
+  readonly worktreeId: string;
+  readonly worktreePath: string;
+  readonly oldBranch: string;
+  readonly newBranch: string;
+  readonly expectedBranchOid: string;
+  readonly dirtyPaths: readonly string[];
+}
+
+export interface ArchiveWorktreeApproval extends ApprovalBase<'archive-worktree'> {
+  readonly worktreeId: string;
+  readonly worktreePath: string;
+  readonly branch: string;
+  readonly expectedBranchOid: string | null;
+  readonly dirtyPaths: readonly string[];
+}
+
+export type InProgressGitOperation = 'merge' | 'rebase' | 'cherry-pick';
+
+export interface GitContinuationState {
+  readonly repositoryRoot: string;
+  readonly expectedHead: string;
+  readonly operation: InProgressGitOperation | null;
+  readonly status: GitStatus;
+  readonly conflictedPaths: readonly string[];
+  readonly stagedPaths: readonly string[];
+  readonly stagedPatchSha256: string;
+  readonly unstagedPatchSha256: string;
+  readonly canContinue: boolean;
+  readonly canAbort: boolean;
+}
+
+interface ContinuationApprovalBase<Action extends string> extends ApprovalBase<Action> {
+  readonly operation: InProgressGitOperation;
+  readonly conflictedPaths: readonly string[];
+  readonly stagedPaths: readonly string[];
+  readonly stagedPatchSha256: string;
+  readonly unstagedPatchSha256: string;
+}
+
+export type ContinueGitOperationApproval = ContinuationApprovalBase<'continue-git-operation'>;
+
+export type AbortGitOperationApproval = ContinuationApprovalBase<'abort-git-operation'>;
+
+export interface GitHubChangedFile {
+  readonly oldPath: string | null;
+  readonly newPath: string | null;
+  readonly status: DiffFileStatus;
+}
+
+export interface GitHubChangeDisclosure {
+  readonly remote: string;
+  readonly remoteUrl: string;
+  readonly hostname: string;
+  readonly ownerRepository: string;
+  readonly baseBranch: string;
+  readonly headBranch: string;
+  readonly baseOid: string;
+  readonly headOid: string;
+  readonly range: string;
+  readonly commits: readonly string[];
+  readonly files: readonly GitHubChangedFile[];
+  readonly additions: number;
+  readonly deletions: number;
+  readonly diffSha256: string;
+}
+
+export interface GitHubPullRequestPlan {
+  readonly kind: 'create-pull-request';
+  readonly repositoryRoot: string;
+  readonly expectedHead: string;
+  readonly disclosure: GitHubChangeDisclosure;
+  readonly title: string;
+  readonly body: string;
+  readonly bodySha256: string;
+  readonly draft: boolean;
+  readonly command: ArgumentArrayCommand;
+  readonly planSha256: string;
+}
+
+export interface GitHubCiStatusPlan {
+  readonly kind: 'read-ci-status';
+  readonly repositoryRoot: string;
+  readonly disclosure: GitHubChangeDisclosure;
+  readonly command: ArgumentArrayCommand;
+  readonly planSha256: string;
+}
+
+export interface CreateGitHubPullRequestApproval
+  extends ApprovalBase<'create-github-pull-request'> {
+  readonly planSha256: string;
+  readonly remote: string;
+  readonly remoteUrl: string;
+  readonly ownerRepository: string;
+  readonly baseBranch: string;
+  readonly headBranch: string;
+  readonly baseOid: string;
+  readonly headOid: string;
+  readonly range: string;
+  readonly commits: readonly string[];
+  readonly files: readonly GitHubChangedFile[];
+  readonly title: string;
+  readonly bodySha256: string;
+  readonly draft: boolean;
+}
+
 export type GitApproval =
   | CommitApproval
   | MergeApproval
@@ -265,7 +407,12 @@ export type GitApproval =
   | RebaseApproval
   | PushApproval
   | CleanupApproval
-  | DiscardHunksApproval;
+  | DiscardHunksApproval
+  | RenameManagedBranchApproval
+  | ArchiveWorktreeApproval
+  | ContinueGitOperationApproval
+  | AbortGitOperationApproval
+  | CreateGitHubPullRequestApproval;
 
 export interface GitOperationResult {
   readonly state: 'completed' | 'conflicted';
@@ -300,4 +447,41 @@ export interface GitApprovalSnapshot {
   readonly stagedPaths: readonly string[];
   readonly stagedPatchSha256: string;
   readonly status: GitStatus;
+}
+
+export interface GitHubCliAvailability {
+  readonly installed: boolean;
+  readonly executable: string;
+  readonly version: string | null;
+}
+
+export interface GitHubAuthStatus extends GitHubCliAvailability {
+  readonly hostname: string;
+  readonly authenticated: boolean;
+}
+
+export interface GitHubRepositoryStatus {
+  readonly hostname: string;
+  readonly ownerRepository: string;
+  readonly url: string;
+  readonly defaultBranch: string;
+}
+
+export interface GitHubPullRequestResult {
+  readonly url: string;
+  readonly ownerRepository: string;
+  readonly baseBranch: string;
+  readonly headBranch: string;
+  readonly planSha256: string;
+}
+
+export interface GitHubCiRun {
+  readonly databaseId: number;
+  readonly name: string;
+  readonly workflowName: string;
+  readonly status: string;
+  readonly conclusion: string | null;
+  readonly url: string;
+  readonly headBranch: string;
+  readonly headSha: string;
 }

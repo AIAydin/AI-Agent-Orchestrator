@@ -1,29 +1,31 @@
 # Forgeboard
 
 Forgeboard is an open-source, local-first visual workshop for building software with locally
-installed coding-agent CLIs. It combines a spatial canvas, isolated Git worktrees, streamed
-agent and terminal sessions, reviewable diffs, previews, checks, and human approval gates in a
-secure Electron desktop application.
+installed coding-agent CLIs. The current desktop application combines a spatial canvas, isolated
+Git worktrees, streamed agent sessions, loopback web/mobile previews, and explicit launch and
+workflow approval gates. The Git review/commit UI, interactive terminal node, executable command
+gates, and other unchecked surfaces in the implementation ledger are still under construction.
 
 > Forgeboard is under active construction. `IMPLEMENTATION_CHECKLIST.md` is the authoritative
 > status ledger; unchecked items are not claimed as complete.
 
-The release experience is download-first: finished GitHub Releases provide native installers for
-macOS, Windows, and Linux. A user can install Forgeboard, open a repository, and use the deterministic
-demo immediately. Normal setup is completed entirely in the UI—editing source, JSON, environment
-files, or command-line configuration is never required. Configuration files remain an optional
-advanced import/export mechanism.
+The release target is download-first: finished GitHub Releases will provide native installers for
+macOS, Windows, and Linux so a user can install Forgeboard and use its deterministic demo without
+developer tools. That full installer publication has not yet been verified. The implemented solo
+setup flow is completed in the UI without editing source, JSON, environment files, or hand-written
+configuration; broader unfinished product areas remain listed below and in the checklist.
 
 ## Local-first principles
 
 - Solo mode requires no account, cloud service, model API key, or Forgeboard server.
 - Repository contents, paths, prompts, transcripts, terminal output, and diffs stay local by
   default.
-- Forgeboard launches the user's installed Codex, Claude Code, Gemini CLI, OpenCode, or custom
+- Forgeboard uses its bundled Git runtime and launches the user's installed Codex, Claude Code,
+  Gemini CLI, OpenCode, or custom
   CLI. Those tools may send selected context to their providers under their own terms.
 - There is no telemetry, analytics, crash upload, model proxy, or automatic log collection.
-- Optional collaboration syncs approved canvas metadata only, never repository files or raw
-  transcripts.
+- The optional collaboration protocol/server accepts approved canvas metadata only, never
+  repository files or raw transcripts. Its desktop client is not complete yet.
 
 ## Workspace
 
@@ -34,43 +36,76 @@ apps/
 packages/
   core/             Domain models, workflow engine, security and persistence contracts
   agent-adapters/   Local coding-agent process adapters
+  extension-runtime/ Validated data-only local extension lifecycle
   git-engine/       Safe Git repository/worktree/change services
   ui/               Accessible shared component system
   test-agent/       Deterministic local agent used by tests and the demo
 ```
 
+## Current availability
+
+Forgeboard does not yet claim a published, end-user-ready GitHub Release. The current checkpoint
+has a passing production build and a verified unpacked macOS arm64 application; native installer
+generation and publication for all target platforms remain open checklist items.
+
+For implemented solo workflows, the first-run wizard and Settings provide UI controls for agent
+detection and executable selection, custom CLI setup, permission profile selection, Docker,
+project/worktree locations, preview commands, extensions, and local storage/retention. Source and
+config-file edits are optional for these flows.
+
+Docker isolation is optional. Forgeboard does not bundle or silently choose an agent image: select
+the Docker executable, exact image, and in-image agent executable in the UI. Forgeboard checks that
+combination locally and requires a native confirmation before any explicit image download.
+
+The release workflow is designed to emit clearly identified unsigned development artifacts until
+the optional signing secrets documented in the release guide are configured. Such artifacts may
+trigger the operating system's standard warning.
+
+Still unfinished are the desktop Git changes/review/commit flow, interactive terminal node,
+execution of configured lint/typecheck/test/build gates, collaboration client, updater, backup
+restore/full-data import UI, and complete wiring of every persisted setting. See
+`IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
+
 ## Development
 
-Prerequisites: Node.js 22.12 or later, Git, and Corepack.
+Prerequisites: Node.js 22.12 or later with Corepack. Forgeboard supplies its own Git runtime.
+
+For a developer source checkout, the one-command bootstrap is:
 
 ```bash
-corepack enable
-pnpm install
-pnpm dev
+corepack pnpm start
 ```
+
+The equivalent explicit commands are `corepack pnpm install --frozen-lockfile` followed by
+`corepack pnpm dev`.
 
 No external credentials are required for the deterministic demo flow. Real agent CLIs and `gh`
 are detected locally and remain optional.
 
-Developers may build from source with the commands below, but end users are not expected to clone the
-repository or install Node.js. The first-run wizard detects local tools and offers UI file pickers,
-command builders, validation, and safe defaults for anything it cannot detect.
+Developers may build from source with the commands below. The download-first release goal is that end
+users will not need to clone the repository or install Node.js; publication of those installers is
+not yet claimed. The current Settings UI detects local tools and offers executable and directory
+pickers, argument-array command builders, validation, and safe defaults for the implemented solo
+features. The guided first-run setup wizard exposes the same choices without requiring a config
+file.
 
 ## Verification
 
 ```bash
-pnpm format:check
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm test:e2e
-pnpm build
-pnpm package
-pnpm smoke:packaged
+corepack pnpm verify
+corepack pnpm test:e2e
+corepack pnpm package
+corepack pnpm smoke:packaged
 ```
 
-See [Architecture](ARCHITECTURE.md), [Security](SECURITY.md), [Privacy](PRIVACY.md), and
-[Contributing](CONTRIBUTING.md) for design and policy details.
+`verify` includes the 2,000-line structure gate, formatting, lint, strict typechecking, unit and
+integration tests, and production builds. Packaging commands do not by themselves prove that every
+platform installer has been generated and installed successfully.
+
+See [Architecture](ARCHITECTURE.md), [Security](SECURITY.md), [Privacy](PRIVACY.md),
+[Releases and signing](docs/RELEASES.md), [Local extensions](docs/EXTENSIONS.md), and
+[Contributing](CONTRIBUTING.md) for design and policy details. Installer third-party licenses and
+corresponding-source details are in [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## License
 

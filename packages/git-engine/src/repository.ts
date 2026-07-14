@@ -21,6 +21,7 @@ import type {
   PackageManagerName,
   RepositoryHealth,
   SensitivePathWarning,
+  WorktreeDescriptor,
 } from './types.js';
 
 const PACKAGE_JSON_LIMIT = 2 * 1024 * 1024;
@@ -201,6 +202,41 @@ export class RepositoryService {
       '-z',
     ]);
     return parseGitStatus(result.stdout);
+  }
+
+  /** Resolves the shared object/ref directory used to prove two linked worktrees are related. */
+  public async commonDirectory(repositoryPath: string): Promise<string> {
+    const repositoryRoot = await this.resolveRepositoryRoot(repositoryPath);
+    const result = await this.git.run([
+      '-C',
+      repositoryRoot,
+      'rev-parse',
+      '--path-format=absolute',
+      '--git-common-dir',
+    ]);
+    return await canonicalDirectory(result.stdout.trim());
+  }
+
+  public async describeWorktree(repositoryPath: string): Promise<WorktreeDescriptor> {
+    const repositoryRoot = await this.resolveRepositoryRoot(repositoryPath);
+    const [commonDirectory, status] = await Promise.all([
+      this.commonDirectory(repositoryRoot),
+      this.status(repositoryRoot),
+    ]);
+    if (status.headOid === null) {
+      throw new GitEngineError(
+        'INVALID_ARGUMENT',
+        'Comparisons require a worktree with at least one commit.',
+      );
+    }
+    return {
+      repositoryRoot,
+      commonDirectory,
+      worktreePath: repositoryRoot,
+      branch: status.branch,
+      headOid: status.headOid,
+      status,
+    };
   }
 
   public async remotes(repositoryPath: string): Promise<readonly GitRemote[]> {

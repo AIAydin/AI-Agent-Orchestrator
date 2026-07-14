@@ -1,0 +1,211 @@
+.canvas-region {
+  grid-area: canvas;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--canvas);
+}
+.react-flow__pane {
+  cursor: default;
+}
+.react-flow__edge-path {
+  stroke: color-mix(in srgb, var(--text-faint) 65%, transparent);
+  stroke-width: 1.35;
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.react-flow__edge-text {
+  fill: var(--text-soft);
+  font-size: 8px;
+}
+.react-flow__edge-textbg {
+  fill: var(--surface);
+}
+.react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--line) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+.react-flow__controls-button {
+  border-color: var(--line) !important;
+  background: var(--surface-raised) !important;
+  fill: var(--text-soft) !important;
+}
+.react-flow__minimap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface) !important;
+}
+.canvas-title {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px !important;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text-soft);
+  backdrop-filter: blur(8px);
+}
+.canvas-title span {
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 650;
+}
+.canvas-title small {
+  margin-left: 5px;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.canvas-empty {
+  width: 340px;
+  margin-top: 100px !important;
+  padding: 24px !important;
+  border: 1px dashed var(--line-strong);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  text-align: center;
+  backdrop-filter: blur(9px);
+}
+.empty-orbit {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 12px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.canvas-empty h2 {
+  margin: 0;
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-weight: 500;
+}
+.canvas-empty p {
+  margin: 9px 0 16px;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.55;
+}
+.canvas-empty > div {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+.canvas-empty .button {
+  min-height: 30px;
+  font-size: 9px;
+}
+.canvas-loading {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+}
+
+.canvas-node {
+  width: 210px;
+  min-height: 92px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: 0 6px 18px rgb(21 25 22 / 8%);
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+.canvas-node::before {
+  content: '';
+  display: block;
+  height: 3px;
+  background: var(--node-accent);
+}
+.canvas-node.selected {
+  border-color: var(--node-accent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--node-accent) 28%, transparent),
+    0 8px 25px rgb(21 25 22 / 13%);
+}
+.canvas-node > header {
+  height: 31px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border-bottom: 1px solid var(--line);
+}
+.node-kind-icon {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--node-accent) 15%, var(--surface));
+  color: var(--node-accent);
+}
+.node-kind {
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  font-size: 7px;
+  font-weight: 750;
+}
+.run-status {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.run-status.running {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.run-status.succeeded {
+  background: var(--green);
+}
+.run-status.failed {
+  background: var(--red);
+}
+.collapse-glyph {
+  color: var(--text-faint);
+}
+.node-body {
+  padding: 10px;
+}
+.node-body strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 11px;
+}
+.node-body p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 8px;
+  line-height: 1.4;
+}
+.node-status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 8px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: var(--surface-subtle);
+  color: var(--text-soft);
+  font-size: 7px;
+  text-transform: capitalize;
+}
+.node-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border: 2px solid var(--surface-raised) !important;
+  background: var(--node-accent) !important;
+}

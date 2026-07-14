@@ -1,0 +1,74 @@
+@media (max-width: 1180px) {
+  .workspace-grid {
+    grid-template-columns: 205px minmax(0, 1fr) 235px;
+  }
+  .agent-activity,
+  .autosave-state {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .start-grid {
+    grid-template-columns: 1fr;
+  }
+  .welcome-content {
+    padding-top: 24px;
+  }
+  .welcome-footer {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .tool-list {
+    display: none;
+  }
+  .recent-project.missing {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+  }
+  .recent-project.missing .missing-badge {
+    grid-column: 2;
+  }
+  .recent-project.missing .locate-project-button {
+    grid-row: 1 / span 2;
+    grid-column: 3;
+  }
+  .recovery-comparison {
+    grid-template-columns: 1fr;
+  }
+  .recovery-comparison > svg {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
+  .recovery-identity dl {
+    grid-template-columns: 1fr;
+  }
+  .settings-layout {
+    grid-template-columns: 155px 1fr;
+  }
+  .settings-content {
+    padding-inline: 20px;
+  }
+  .workspace-grid {
+    grid-template-columns: 185px minmax(0, 1fr);
+    grid-template-areas: 'rail canvas' 'rail activity';
+  }
+  .inspector {
+    position: fixed;
+    z-index: 40;
+    right: 0;
+    top: 48px;
+    bottom: 0;
+    width: 270px;
+    box-shadow: -10px 0 30px rgb(0 0 0 / 18%);
+  }
+}
+
+:root[data-density='compact'] .template-list button {
+  padding-block: 5px;
+}
+:root[data-density='compact'] .canvas-node {
+  min-height: 78px;
+}
+:root[data-density='compact'] .node-body {
+  padding: 7px 9px;
+}

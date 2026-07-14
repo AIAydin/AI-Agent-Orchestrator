@@ -2,6 +2,10 @@ import path from 'node:path';
 
 import { z } from 'zod';
 
+import { AgentAdapterIdSchema } from './identifiers.js';
+
+export { AgentAdapterIdSchema, NamespacedAgentAdapterIdSchema } from './identifiers.js';
+
 export const AGENT_ADAPTER_API_VERSION = 1 as const;
 export const AGENT_ADAPTERS_PACKAGE_VERSION = '0.1.0';
 
@@ -135,6 +139,7 @@ const InvocationSchema = z
       })
       .strict()
       .default({}),
+    permissionArgumentPolicy: z.enum(['provider-required', 'optional-disclosure']).optional(),
     output: z.enum(['text', 'json-lines']).default('text'),
   })
   .strict();
@@ -157,11 +162,7 @@ export type AgentCapabilities = z.infer<typeof AgentCapabilitiesSchema>;
 export const AgentAdapterManifestSchema = z
   .object({
     schemaVersion: z.literal(AGENT_ADAPTER_API_VERSION),
-    id: z
-      .string()
-      .min(1)
-      .max(128)
-      .regex(/^[a-z0-9][a-z0-9._-]*$/u),
+    id: AgentAdapterIdSchema,
     name: z.string().trim().min(1).max(128),
     provider: z
       .object({
@@ -302,8 +303,25 @@ export const AgentAdapterManifestSchema = z
       });
     }
 
+    const providerPermissionArgumentsRequired =
+      manifest.invocation.permissionArgumentPolicy !== 'optional-disclosure';
+    if (
+      manifest.invocation.permissionArgumentPolicy === 'optional-disclosure' &&
+      manifest.id !== 'custom'
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['invocation', 'permissionArgumentPolicy'],
+        message:
+          "Disclosure-only permission arguments are reserved for Forgeboard's Settings-owned custom adapter.",
+      });
+    }
     for (const mode of manifest.capabilities.permissionModes) {
-      if (manifest.invocation.permissionArguments[mode] === undefined && mode !== 'custom') {
+      if (
+        providerPermissionArgumentsRequired &&
+        manifest.invocation.permissionArguments[mode] === undefined &&
+        mode !== 'custom'
+      ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['invocation', 'permissionArguments', mode],
@@ -313,6 +331,7 @@ export const AgentAdapterManifestSchema = z
     }
 
     if (
+      providerPermissionArgumentsRequired &&
       manifest.capabilities.permissionModes.some((mode) => mode !== 'custom') &&
       (!launchArguments.includes('{permissionArgs}') ||
         (resumeArguments !== undefined && !resumeArguments.includes('{permissionArgs}')))
@@ -321,6 +340,19 @@ export const AgentAdapterManifestSchema = z
         code: z.ZodIssueCode.custom,
         path: ['invocation'],
         message: 'Provider permission modes require a {permissionArgs} expansion slot.',
+      });
+    }
+    if (
+      Object.values(manifest.invocation.permissionArguments).some(
+        (arguments_) => arguments_ !== undefined && arguments_.length > 0,
+      ) &&
+      (!launchArguments.includes('{permissionArgs}') ||
+        (resumeArguments !== undefined && !resumeArguments.includes('{permissionArgs}')))
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['invocation'],
+        message: 'Configured permission arguments require a {permissionArgs} expansion slot.',
       });
     }
 

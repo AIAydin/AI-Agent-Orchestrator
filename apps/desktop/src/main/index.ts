@@ -1,15 +1,16 @@
 import { join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 
 import { registerIpcHandlers } from './ipc.js';
-import type { RunService } from './run-service.js';
+import type { ApplicationServices } from './ipc.js';
+import { verifyBundledGit } from './git-runtime.js';
 import { LocalStore } from './storage.js';
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
-let runService: RunService | null = null;
+let services: ApplicationServices | null = null;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
@@ -24,21 +25,23 @@ app.on('second-instance', () => {
 
 void app
   .whenReady()
-  .then(() => {
+  .then(async () => {
     configureSessionSecurity();
     store = new LocalStore(join(app.getPath('userData'), 'forgeboard.sqlite'));
     if (process.argv.includes('--smoke-test')) {
-      process.stdout.write('FORGEBOARD_SMOKE_OK\n');
+      const gitVersion = await verifyBundledGit();
+      process.stdout.write(`FORGEBOARD_SMOKE_OK ${gitVersion}\n`);
       store.close();
       store = null;
       app.quit();
       return;
     }
-    runService = registerIpcHandlers(store);
-    mainWindow = createWindow();
+    services = registerIpcHandlers(store);
+    mainWindow = createWindow(services);
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
+      if (BrowserWindow.getAllWindows().length === 0 && services)
+        mainWindow = createWindow(services);
     });
   })
   .catch((error: unknown) => {
@@ -53,13 +56,13 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  runService?.dispose();
-  runService = null;
+  services?.dispose();
+  services = null;
   store?.close();
   store = null;
 });
 
-function createWindow(): BrowserWindow {
+function createWindow(applicationServices: ApplicationServices): BrowserWindow {
   const window = new BrowserWindow({
     title: PRODUCT.name,
     width: 1500,
@@ -81,13 +84,18 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isSafeExternalUrl(url)) void shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  // This handler also receives requests from untrusted preview subframes. Never let page content
+  // turn window.open into an external-send primitive; a future explicit UI action must use a
+  // separate validated IPC approval flow.
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => {
     const current = window.webContents.getURL();
     if (url !== current) event.preventDefault();
+  });
+  window.webContents.on('will-frame-navigate', (event) => {
+    if (!event.isMainFrame && !applicationServices.previews.isAllowedFrameNavigation(event.url)) {
+      event.preventDefault();
+    }
   });
   window.webContents.on('will-attach-webview', (event) => event.preventDefault());
   window.once('ready-to-show', () => window.show());
@@ -107,6 +115,10 @@ function configureSessionSecurity(): void {
     callback(false);
   });
   session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.webRequest.onBeforeRequest(
+    { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] },
+    (details, callback) => callback({ cancel: !isLoopbackNetworkUrl(details.url) }),
+  );
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const development = Boolean(process.env.ELECTRON_RENDERER_URL);
     const scriptPolicy = development ? "script-src 'self' 'unsafe-eval'" : "script-src 'self'";
@@ -135,10 +147,22 @@ function configureSessionSecurity(): void {
   });
 }
 
-function isSafeExternalUrl(value: string): boolean {
+export function isLoopbackNetworkUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:';
+    const hostname = url.hostname
+      .toLowerCase()
+      .replace(/^\[|\]$/g, '')
+      .replace(/\.$/, '');
+    if (hostname === 'localhost' || hostname === '::1' || hostname === '0:0:0:0:0:0:0:1') {
+      return true;
+    }
+    const octets = hostname.split('.').map(Number);
+    return (
+      octets.length === 4 &&
+      octets[0] === 127 &&
+      octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
+    );
   } catch {
     return false;
   }

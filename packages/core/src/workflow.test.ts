@@ -65,6 +65,39 @@ function reviewNode(id: string) {
   };
 }
 
+function testNode(id: string, runId: string) {
+  return {
+    id,
+    type: 'test' as const,
+    title: id,
+    color: '#445566',
+    icon: 'test',
+    position: { x: 0, y: 0 },
+    size: { width: 300, height: 200 },
+    data: { command: { executable: 'pnpm', args: ['test'] }, runIds: [runId] },
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+}
+
+function gateNode(id: string, maximumIterations: number) {
+  return {
+    id,
+    type: 'review-gate' as const,
+    title: id,
+    color: '#445566',
+    icon: 'gate',
+    position: { x: 0, y: 0 },
+    size: { width: 300, height: 200 },
+    data: {
+      humanApprovalRequired: false,
+      retryPolicy: { maximumIterations, backoffMs: 0 },
+    },
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+}
+
 function dependencyEdge(id: string, sourceNodeId: string, targetNodeId: string) {
   return {
     id,
@@ -217,6 +250,287 @@ describe('workflow validation and planning', () => {
       validateWorkflow(graph).issues.some((issue) => issue.code === 'UNREGISTERED_REVISION_EDGE'),
     ).toBe(true);
   });
+
+  it('rejects missing required context and reviewer targets that contradict edge configuration', () => {
+    const graph = canvas({
+      nodes: [taskNode('source'), agentNode('agent-target'), reviewNode('review-target')],
+      edges: [
+        {
+          id: 'required-context',
+          sourceNodeId: 'source',
+          targetNodeId: 'agent-target',
+          type: 'context',
+          config: { required: true, attachmentIds: [] },
+          createdAt: NOW,
+        },
+        {
+          id: 'wrong-agent-reviewer',
+          sourceNodeId: 'source',
+          targetNodeId: 'review-target',
+          type: 'review',
+          config: { reviewer: 'agent' },
+          createdAt: NOW,
+        },
+        {
+          id: 'wrong-gate-reviewer',
+          sourceNodeId: 'source',
+          targetNodeId: 'review-target',
+          type: 'review',
+          config: { reviewer: 'gate' },
+          createdAt: NOW,
+        },
+      ],
+    });
+
+    expect(validateWorkflow(graph).issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(['MISSING_REQUIRED_CONTEXT', 'INVALID_REVIEWER', 'INVALID_REVIEWER']),
+    );
+  });
+
+  it('unifies a review gate retry policy with its bounded revision loop', () => {
+    const graph = canvas({
+      nodes: [agentNode('agent-1'), gateNode('gate-1', 3)],
+      edges: [
+        {
+          id: 'review-edge',
+          sourceNodeId: 'agent-1',
+          targetNodeId: 'gate-1',
+          type: 'review',
+          config: { reviewer: 'gate', requireApproval: true },
+          createdAt: NOW,
+        },
+        {
+          id: 'revision-edge',
+          sourceNodeId: 'gate-1',
+          targetNodeId: 'agent-1',
+          type: 'revision',
+          config: { loopId: 'loop-1' },
+          createdAt: NOW,
+        },
+      ],
+      revisionLoops: [
+        {
+          id: 'loop-1',
+          implementationNodeId: 'agent-1',
+          reviewNodeId: 'gate-1',
+          reviewEdgeId: 'review-edge',
+          revisionEdgeId: 'revision-edge',
+          maximumAttempts: 2,
+          stopConditions: ['review-approved'],
+          humanEscapeHatch: {
+            enabled: true,
+            approvalRequired: true,
+            instructions: 'A human decides how to resolve an exhausted review loop.',
+          },
+        },
+      ],
+    });
+
+    expect(validateWorkflow(graph).issues).toContainEqual({
+      code: 'RETRY_POLICY_MISMATCH',
+      message: 'Review-gate retry iterations must equal the bounded revision-loop attempt limit',
+      entityIds: ['loop-1', 'gate-1'],
+    });
+  });
+
+  it('requires a real reviewer agent and an unambiguous producer for every required check', () => {
+    const duplicateProducer = (id: string) => ({
+      id,
+      type: 'test' as const,
+      title: id,
+      color: '#445566',
+      icon: 'test',
+      position: { x: 0, y: 0 },
+      size: { width: 300, height: 200 },
+      data: {
+        command: { executable: 'pnpm', args: ['test'] },
+        runIds: ['duplicate-check'],
+      },
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    const graph = canvas({
+      nodes: [
+        agentNode('implementation'),
+        duplicateProducer('producer-a'),
+        duplicateProducer('producer-b'),
+        {
+          ...gateNode('gate-1', 1),
+          data: {
+            humanApprovalRequired: false,
+            reviewerAgentId: 'missing-reviewer',
+            requiredCheckIds: ['missing-check', 'duplicate-check'],
+            retryPolicy: { maximumIterations: 1, backoffMs: 0 },
+          },
+        },
+      ],
+      edges: [
+        {
+          id: 'review-edge',
+          sourceNodeId: 'implementation',
+          targetNodeId: 'gate-1',
+          type: 'review',
+          config: { reviewer: 'gate', requireApproval: true },
+          createdAt: NOW,
+        },
+      ],
+    });
+
+    expect(validateWorkflow(graph).issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining([
+        'INVALID_REVIEWER',
+        'MISSING_CHECK_PRODUCER',
+        'AMBIGUOUS_CHECK_PRODUCER',
+      ]),
+    );
+  });
+
+  it('requires each check producer to consume a verified output from the reviewed source', () => {
+    const graph = canvas({
+      nodes: [
+        agentNode('implementation'),
+        testNode('producer', 'required-check'),
+        {
+          ...gateNode('gate-1', 1),
+          data: {
+            humanApprovalRequired: false,
+            requiredCheckIds: ['required-check'],
+            retryPolicy: { maximumIterations: 1, backoffMs: 0 },
+          },
+        },
+      ],
+      edges: [
+        {
+          id: 'review-edge',
+          sourceNodeId: 'implementation',
+          targetNodeId: 'gate-1',
+          type: 'review',
+          config: { reviewer: 'gate', requireApproval: true },
+          createdAt: NOW,
+        },
+      ],
+    });
+
+    expect(validateWorkflow(graph).issues).toContainEqual({
+      code: 'MISSING_CHECK_INPUT',
+      message:
+        'A required check producer must consume a required verified output from the reviewed source',
+      entityIds: ['gate-1', 'required-check', 'implementation', 'producer'],
+    });
+  });
+
+  it('restricts human decisions to one mandatory edge on a dedicated review node', () => {
+    const graph = canvas({
+      nodes: [
+        taskNode('source-a'),
+        taskNode('source-b'),
+        taskNode('arbitrary-target'),
+        reviewNode('shared-review'),
+        reviewNode('optional-review'),
+        reviewNode('controlled-review'),
+      ],
+      edges: [
+        {
+          id: 'arbitrary-human-review',
+          sourceNodeId: 'source-a',
+          targetNodeId: 'arbitrary-target',
+          type: 'review',
+          config: { reviewer: 'human', requireApproval: true },
+          createdAt: NOW,
+        },
+        {
+          id: 'shared-review-a',
+          sourceNodeId: 'source-a',
+          targetNodeId: 'shared-review',
+          type: 'review',
+          config: { reviewer: 'human', requireApproval: true },
+          createdAt: NOW,
+        },
+        {
+          id: 'shared-review-b',
+          sourceNodeId: 'source-b',
+          targetNodeId: 'shared-review',
+          type: 'review',
+          config: { reviewer: 'human', requireApproval: true },
+          createdAt: NOW,
+        },
+        {
+          id: 'optional-human-review',
+          sourceNodeId: 'source-a',
+          targetNodeId: 'optional-review',
+          type: 'review',
+          config: { reviewer: 'human', requireApproval: false },
+          createdAt: NOW,
+        },
+        {
+          id: 'controlled-human-review',
+          sourceNodeId: 'source-a',
+          targetNodeId: 'controlled-review',
+          type: 'review',
+          config: { reviewer: 'human', requireApproval: true },
+          createdAt: NOW,
+        },
+        {
+          id: 'unrelated-control',
+          sourceNodeId: 'source-b',
+          targetNodeId: 'controlled-review',
+          type: 'execute',
+          config: {},
+          createdAt: NOW,
+        },
+      ],
+    });
+
+    expect(
+      validateWorkflow(graph).issues.filter((issue) => issue.code === 'INVALID_REVIEW_TARGET'),
+    ).toHaveLength(4);
+  });
+
+  it('rejects revision loops whose only success path is the exhausted human escape', () => {
+    const graph = canvas({
+      nodes: [agentNode('implementation'), reviewNode('review-1')],
+      edges: [
+        {
+          id: 'review-edge',
+          sourceNodeId: 'implementation',
+          targetNodeId: 'review-1',
+          type: 'review',
+          config: { reviewer: 'human', requireApproval: true },
+          createdAt: NOW,
+        },
+        {
+          id: 'revision-edge',
+          sourceNodeId: 'review-1',
+          targetNodeId: 'implementation',
+          type: 'revision',
+          config: { loopId: 'loop-1' },
+          createdAt: NOW,
+        },
+      ],
+      revisionLoops: [
+        {
+          id: 'loop-1',
+          implementationNodeId: 'implementation',
+          reviewNodeId: 'review-1',
+          reviewEdgeId: 'review-edge',
+          revisionEdgeId: 'revision-edge',
+          maximumAttempts: 1,
+          stopConditions: ['human-accepted'],
+          humanEscapeHatch: {
+            enabled: true,
+            approvalRequired: true,
+            instructions: 'A human resolves the exhausted review loop.',
+          },
+        },
+      ],
+    });
+
+    expect(validateWorkflow(graph).issues).toContainEqual({
+      code: 'UNACHIEVABLE_STOP_CONDITION',
+      message: 'A revision loop requires an automatic success stop condition before human escape',
+      entityIds: ['loop-1', 'human-accepted'],
+    });
+  });
 });
 
 describe('run lifecycle, cancellation, and recovery', () => {
@@ -229,6 +543,32 @@ describe('run lifecycle, cancellation, and recovery', () => {
     process: { pid: 123, startedAt: NOW, identityToken: 'process-token-a' },
     resumable: false,
   };
+
+  it('rejects a terminal aggregate while a sibling node is still nonterminal', () => {
+    expect(() =>
+      WorkflowRunSchema.parse({
+        schemaVersion: 1,
+        id: 'run-1',
+        canvasId: 'canvas-1',
+        planId: 'plan-1',
+        status: 'failed',
+        nodeRuns: {
+          'task-a': {
+            nodeId: 'task-a',
+            status: 'failed',
+            attempt: 1,
+            queuedAt: NOW,
+            endedAt: LATER,
+          },
+          'task-b': { nodeId: 'task-b', status: 'queued', attempt: 1, queuedAt: NOW },
+        },
+        revisionLoops: {},
+        createdAt: NOW,
+        updatedAt: LATER,
+        endedAt: LATER,
+      }),
+    ).toThrow('cannot be terminal');
+  });
 
   it('cancels queued work immediately and requests interruption for live work', () => {
     const run = WorkflowRunSchema.parse({

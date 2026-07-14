@@ -4,13 +4,33 @@ import type {
   AppSettings,
   AuditEvent,
   AuditListInput,
+  BackupResult,
   CanvasDocument,
+  ConfirmProjectRecoveryInput,
+  ExtensionApproveInput,
+  ExtensionDiscoveryView,
+  ExtensionInstallPlanView,
+  ExtensionRemoveInput,
+  ExtensionSelectionKind,
   IpcResult,
+  LocalReferenceSelectionInput,
+  LocateProjectRecoveryInput,
   PrepareRunInput,
+  PreviewEventEnvelope,
+  PreviewNavigateInput,
+  PreviewNodeKey,
+  PreviewSessionSnapshot,
+  PreviewStartInput,
   Project,
+  ProjectRecoveryAssessment,
   RunDisclosure,
   RunEventEnvelope,
 } from './contracts.js';
+import type {
+  DockerPullResult,
+  DockerReadiness,
+  DockerReadinessInput,
+} from './docker-contracts.js';
 
 export interface ForgeboardApi {
   app: { getInfo(): Promise<IpcResult<AppInfo>> };
@@ -22,11 +42,20 @@ export interface ForgeboardApi {
     import(): Promise<IpcResult<AppSettings | null>>;
   };
   agents: { detect(): Promise<IpcResult<AgentDetection[]>> };
+  docker: {
+    check(input: DockerReadinessInput): Promise<IpcResult<DockerReadiness>>;
+    pull(input: DockerReadinessInput): Promise<IpcResult<DockerPullResult>>;
+  };
   projects: {
     recent(): Promise<IpcResult<Project[]>>;
     pick(): Promise<IpcResult<Project | null>>;
     pickParent(): Promise<IpcResult<string | null>>;
     pickExecutable(): Promise<IpcResult<string | null>>;
+    pickReferences(input: LocalReferenceSelectionInput): Promise<IpcResult<string[]>>;
+    locateMoved(
+      input: LocateProjectRecoveryInput,
+    ): Promise<IpcResult<ProjectRecoveryAssessment | null>>;
+    confirmMoved(input: ConfirmProjectRecoveryInput): Promise<IpcResult<Project>>;
     open(path: string): Promise<IpcResult<Project>>;
     create(input: {
       parentPath: string;
@@ -48,11 +77,28 @@ export interface ForgeboardApi {
     terminate(runId: string): Promise<IpcResult<boolean>>;
     onEvent(listener: (event: RunEventEnvelope) => void): () => void;
   };
+  previews: {
+    start(input: PreviewStartInput): Promise<IpcResult<PreviewSessionSnapshot>>;
+    restart(input: PreviewStartInput): Promise<IpcResult<PreviewSessionSnapshot>>;
+    stop(input: PreviewNodeKey): Promise<IpcResult<PreviewSessionSnapshot | null>>;
+    get(input: PreviewNodeKey): Promise<IpcResult<PreviewSessionSnapshot | null>>;
+    navigate(input: PreviewNavigateInput): Promise<IpcResult<string>>;
+    onEvent(listener: (event: PreviewEventEnvelope) => void): () => void;
+  };
   audit: {
     list(input: AuditListInput): Promise<IpcResult<AuditEvent[]>>;
+  };
+  extensions: {
+    list(): Promise<IpcResult<ExtensionDiscoveryView>>;
+    choose(kind: ExtensionSelectionKind): Promise<IpcResult<ExtensionInstallPlanView | null>>;
+    approve(input: ExtensionApproveInput): Promise<IpcResult<ExtensionDiscoveryView>>;
+    remove(input: ExtensionRemoveInput): Promise<IpcResult<ExtensionDiscoveryView>>;
   };
   privacy: {
     export(): Promise<IpcResult<string | null>>;
     deleteAll(confirmation: string): Promise<IpcResult<boolean>>;
+  };
+  storage: {
+    createBackup(): Promise<IpcResult<BackupResult>>;
   };
 }

@@ -8,6 +8,7 @@ import { launchDesktop, watchExternalRequests } from './electron.js';
 
 test('the deterministic agent requires approval and reports its real local work', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-agent-e2e-'));
+  const configuredWorktreeRoot = join(userDataDirectory, 'ui-configured-worktrees');
   let electronApp: ElectronApplication | null = null;
   const externalRequests: string[] = [];
 
@@ -17,6 +18,8 @@ test('the deterministic agent requires approval and reports its real local work'
     const page = session.page;
     watchExternalRequests(page, externalRequests);
 
+    await page.getByRole('button', { name: 'Use safe defaults' }).click();
+
     await test.step('the writable worktree location is configured in the UI', async () => {
       await expect(
         page.getByRole('heading', { name: /Build software in a visual workshop/i }),
@@ -24,9 +27,7 @@ test('the deterministic agent requires approval and reports its real local work'
       await page.getByRole('button', { name: 'Settings' }).click();
       const settings = page.locator('.settings-modal');
       await settings.getByRole('button', { name: /Git & previews/ }).click();
-      await settings
-        .getByLabel('Managed worktree location')
-        .fill(join(userDataDirectory, 'worktrees'));
+      await settings.getByLabel('Managed worktree location').fill(configuredWorktreeRoot);
       await settings.getByRole('button', { name: /Save settings/ }).click();
       await expect(settings).toBeHidden();
     });
@@ -63,7 +64,9 @@ test('the deterministic agent requires approval and reports its real local work'
       await expect(dialog).toContainText(writablePrompt);
       await expect(dialog).toContainText('Test agent in a dedicated worktree');
       await expect(dialog).toContainText('Network: blocked');
-      await expect(dialog).toContainText(join(userDataDirectory, 'worktrees'));
+      // The configured root has a deliberately unique leaf. Forgeboard canonicalizes paths, so
+      // Windows may expand the runner's 8.3 short temp prefix before displaying it.
+      await expect(dialog).toContainText('ui-configured-worktrees');
 
       await dialog.getByRole('button', { name: 'Cancel before launch' }).click();
       await expect(dialog).toBeHidden();

@@ -1,0 +1,271 @@
+.project-rail {
+  grid-area: rail;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+.rail-tabs {
+  height: 40px;
+  display: flex;
+  align-items: end;
+  padding: 0 9px;
+  border-bottom: 1px solid var(--line);
+}
+.rail-tabs button {
+  height: 35px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 9px;
+}
+.rail-tabs button.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.rail-search {
+  height: 43px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-faint);
+}
+.rail-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  font-size: 10px;
+}
+.repository-summary {
+  padding: 12px 11px;
+  border-bottom: 1px solid var(--line);
+}
+.repository-summary header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.repository-summary header strong {
+  max-width: 155px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+.clean-dot,
+.dirty-dot {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--green);
+}
+.dirty-dot {
+  background: var(--yellow);
+}
+.repository-summary > small {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 8px;
+}
+.repository-summary > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.repository-summary > div span {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--surface-subtle);
+  color: var(--text-soft);
+  font-size: 8px;
+}
+.template-section {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.template-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 12px 7px;
+}
+.template-section h2 {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.template-section header span {
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.template-list {
+  overflow-y: auto;
+  padding: 0 6px 12px;
+}
+.template-list button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 25px 1fr 14px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+.template-list button:hover {
+  background: var(--surface-subtle);
+}
+.template-list button > span:first-child {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-raised);
+}
+.template-list button > span:nth-child(2) {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.template-list strong {
+  font-size: 9px;
+}
+.template-list small {
+  color: var(--text-faint);
+  font-size: 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rail-node-section {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.rail-node-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 12px 7px;
+  color: var(--text-faint);
+}
+.rail-node-section h2 {
+  margin: 0;
+  font-size: 8px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.rail-node-section header > span {
+  font-size: 8px;
+}
+.rail-node-list {
+  min-height: 0;
+  padding: 0 6px 12px;
+  overflow-y: auto;
+}
+.rail-node-list button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 25px 1fr 10px;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+.rail-node-list button:hover {
+  background: var(--surface-subtle);
+}
+.rail-node-list button > span:nth-child(2) {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail-node-list strong,
+.rail-node-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-node-list strong {
+  font-size: 9px;
+}
+.rail-node-list small,
+.rail-node-list > p {
+  color: var(--text-faint);
+  font-size: 7px;
+}
+.rail-node-list > p {
+  margin: 18px 8px;
+  text-align: center;
+}
+.template-list button > svg {
+  color: var(--text-faint);
+}
+.project-rail > footer {
+  padding: 9px;
+  border-top: 1px solid var(--line);
+}
+.rail-safety {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+.rail-safety > span {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+}
+.rail-safety > span.warning {
+  background: var(--accent-soft);
+  color: var(--yellow);
+}
+.rail-safety > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail-safety strong {
+  font-size: 8px;
+}
+.rail-safety small {
+  color: var(--text-faint);
+  font-size: 7px;
+}

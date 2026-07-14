@@ -1,21 +1,29 @@
+import { lstat } from 'node:fs/promises';
+
 import { assertExplicitApproval, assertSameStrings } from './approval.js';
 import { parseUnifiedDiff, patchSha256, selectDiffHunks } from './diff-parser.js';
 import { GitEngineError } from './errors.js';
 import { RepositoryService } from './repository.js';
 import type {
+  AbortGitOperationApproval,
+  BaseComparison,
   CherryPickApproval,
   CommitApproval,
+  ContinueGitOperationApproval,
   DiffFile,
   DiscardHunksApproval,
   GitApprovalSnapshot,
+  GitContinuationState,
   GitOperationResult,
   HunkOperationResult,
+  InProgressGitOperation,
   MergeApproval,
   ParsedDiff,
   PushApproval,
   PushResult,
   RebaseApproval,
   RefComparison,
+  WorktreeComparison,
 } from './types.js';
 
 export type WorktreeDiffMode = 'unstaged' | 'staged' | 'head';
@@ -40,7 +48,9 @@ export class ChangeService {
       | CherryPickApproval
       | RebaseApproval
       | PushApproval
-      | DiscardHunksApproval,
+      | DiscardHunksApproval
+      | ContinueGitOperationApproval
+      | AbortGitOperationApproval,
   ): Promise<string> {
     const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
     const currentHead = await this.currentHead(repositoryRoot);
@@ -147,6 +157,42 @@ export class ChangeService {
       mergeBase: mergeBaseResult.stdout.trim(),
       commits: commitsResult.stdout.split(/\r?\n/u).filter((line) => line !== ''),
       diff: parseUnifiedDiff(diffResult.stdout),
+    };
+  }
+
+  /** Compares a worktree's immutable HEAD to a base ref in the same repository. */
+  public async compareToBase(worktreePath: string, baseRef: string): Promise<BaseComparison> {
+    const worktree = await this.repositories.describeWorktree(worktreePath);
+    return {
+      worktree,
+      comparison: await this.compareRefs(worktree.repositoryRoot, baseRef, worktree.headOid),
+    };
+  }
+
+  /** Compares two linked worktrees only after proving they share the same Git common directory. */
+  public async compareWorktrees(
+    leftWorktreePath: string,
+    rightWorktreePath: string,
+  ): Promise<WorktreeComparison> {
+    const [left, right] = await Promise.all([
+      this.repositories.describeWorktree(leftWorktreePath),
+      this.repositories.describeWorktree(rightWorktreePath),
+    ]);
+    if (left.commonDirectory !== right.commonDirectory) {
+      throw new GitEngineError(
+        'INVALID_ARGUMENT',
+        'Worktree comparison requires two worktrees from the same repository.',
+        {
+          leftCommonDirectory: left.commonDirectory,
+          rightCommonDirectory: right.commonDirectory,
+        },
+      );
+    }
+    return {
+      commonDirectory: left.commonDirectory,
+      left,
+      right,
+      comparison: await this.compareRefs(left.repositoryRoot, left.headOid, right.headOid),
     };
   }
 
@@ -353,6 +399,75 @@ export class ChangeService {
     ]);
   }
 
+  /** Returns the exact conflict/index state that continue or abort confirmation must bind. */
+  public async continuationState(repositoryPath: string): Promise<GitContinuationState> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    const [status, stagedPaths, stagedDiff, unstagedDiff, operation] = await Promise.all([
+      this.repositories.status(repositoryRoot),
+      this.repositories.stagedPaths(repositoryRoot),
+      this.diff(repositoryRoot, 'staged'),
+      this.diff(repositoryRoot, 'unstaged'),
+      this.inProgressOperation(repositoryRoot),
+    ]);
+    const conflictedPaths = status.entries
+      .filter((entry) => entry.kind === 'unmerged')
+      .map((entry) => entry.path)
+      .sort();
+    return {
+      repositoryRoot,
+      expectedHead: status.headOid ?? 'UNBORN',
+      operation,
+      status,
+      conflictedPaths,
+      stagedPaths,
+      stagedPatchSha256: patchSha256(stagedDiff.raw),
+      unstagedPatchSha256: patchSha256(unstagedDiff.raw),
+      canContinue: operation !== null && conflictedPaths.length === 0,
+      canAbort: operation !== null,
+    };
+  }
+
+  public async continueOperation(
+    repositoryPath: string,
+    approval: ContinueGitOperationApproval,
+  ): Promise<GitOperationResult> {
+    assertExplicitApproval(approval, 'continue-git-operation');
+    const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    const state = await this.assertContinuationApproval(repositoryRoot, approval);
+    if (state.conflictedPaths.length > 0) {
+      throw new GitEngineError(
+        'CONFLICTS_REMAIN',
+        'All conflicted paths must be resolved before continuing.',
+        { paths: state.conflictedPaths },
+      );
+    }
+    return await this.runConflictAware(repositoryRoot, [
+      '-C',
+      repositoryRoot,
+      '-c',
+      'core.editor=true',
+      '-c',
+      'sequence.editor=true',
+      approval.operation,
+      '--continue',
+    ]);
+  }
+
+  public async abortOperation(
+    repositoryPath: string,
+    approval: AbortGitOperationApproval,
+  ): Promise<GitOperationResult> {
+    assertExplicitApproval(approval, 'abort-git-operation');
+    const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    await this.assertContinuationApproval(repositoryRoot, approval);
+    const headBefore = await this.currentHead(repositoryRoot);
+    await this.repositories.git.run(['-C', repositoryRoot, approval.operation, '--abort']);
+    if ((await this.inProgressOperation(repositoryRoot)) !== null) {
+      throw new GitEngineError('COMMAND_FAILED', 'Git operation remained active after abort.');
+    }
+    return await this.operationResult(repositoryRoot, headBefore);
+  }
+
   public async push(repositoryPath: string, approval: PushApproval): Promise<PushResult> {
     assertExplicitApproval(approval, 'push');
     const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
@@ -409,6 +524,68 @@ export class ChangeService {
     const options = ['--cached'];
     if (reverse) options.push('--reverse');
     await this.applyPatch(repositoryRoot, patch, options);
+  }
+
+  private async assertContinuationApproval(
+    repositoryRoot: string,
+    approval: ContinueGitOperationApproval | AbortGitOperationApproval,
+  ): Promise<GitContinuationState> {
+    const state = await this.continuationState(repositoryRoot);
+    if (state.operation === null) {
+      throw new GitEngineError('NO_OPERATION_IN_PROGRESS', 'There is no Git operation to resume.');
+    }
+    if (state.operation !== approval.operation) {
+      throw new GitEngineError('STALE_APPROVAL', 'The in-progress Git operation changed.', {
+        approved: approval.operation,
+        actual: state.operation,
+      });
+    }
+    assertSameStrings(state.conflictedPaths, approval.conflictedPaths, 'conflicted paths');
+    assertSameStrings(state.stagedPaths, approval.stagedPaths, 'staged paths');
+    if (state.stagedPatchSha256 !== approval.stagedPatchSha256) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'Conflict resolution content changed after approval.',
+      );
+    }
+    if (state.unstagedPatchSha256 !== approval.unstagedPatchSha256) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'Unstaged conflict content changed after approval.',
+      );
+    }
+    return state;
+  }
+
+  private async inProgressOperation(
+    repositoryRoot: string,
+  ): Promise<InProgressGitOperation | null> {
+    if (
+      (await this.gitPathExists(repositoryRoot, 'rebase-merge')) ||
+      (await this.gitPathExists(repositoryRoot, 'rebase-apply'))
+    ) {
+      return 'rebase';
+    }
+    if (await this.gitPathExists(repositoryRoot, 'MERGE_HEAD')) return 'merge';
+    if (await this.gitPathExists(repositoryRoot, 'CHERRY_PICK_HEAD')) return 'cherry-pick';
+    return null;
+  }
+
+  private async gitPathExists(repositoryRoot: string, name: string): Promise<boolean> {
+    const result = await this.repositories.git.run([
+      '-C',
+      repositoryRoot,
+      'rev-parse',
+      '--path-format=absolute',
+      '--git-path',
+      name,
+    ]);
+    try {
+      await lstat(result.stdout.trim());
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async assertReviewablePaths(

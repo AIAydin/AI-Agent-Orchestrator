@@ -42,6 +42,7 @@ function closeStore(store: LocalStore): void {
 
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
+    onboardingCompleted: true,
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
@@ -52,6 +53,19 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     defaultPermissionProfile: 'plan-read-only',
     agentExecutableOverrides: {},
     agentDefaultModels: {},
+    customAgent: {
+      enabled: false,
+      name: 'Custom CLI',
+      providerName: 'Custom provider',
+      providerDisclosure: 'Custom provider disclosure.',
+      sendsContextOffDevice: true,
+      executable: '',
+      versionArguments: ['--version'],
+      launchArguments: [],
+      promptTransport: 'argument',
+      runtime: 'pty',
+      output: 'text',
+    },
     worktreeRoot: '/tmp/forgeboard-worktrees',
     worktreeCleanupPolicy: 'manual',
     branchPrefix: 'forgeboard/',
@@ -70,7 +84,8 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     previewTrustedHosts: ['127.0.0.1', 'localhost'],
     dockerEnabled: false,
     dockerExecutable: 'docker',
-    dockerImage: 'node:22-bookworm',
+    dockerImage: '',
+    dockerContainerExecutable: '',
     dockerNetwork: 'disabled',
     dockerCpuLimit: 2,
     dockerMemoryMb: 4096,
@@ -134,16 +149,10 @@ function canvas(overrides: Partial<CanvasDocument> = {}): CanvasDocument {
   };
 }
 
-function rows(store: LocalStore, key: 'settings' | 'projects' | 'canvases' | 'runs' | 'audit') {
+function rows(store: LocalStore, key: 'projects' | 'canvases' | 'runs' | 'snapshots' | 'audit') {
   const value = store.exportData()[key];
   if (!Array.isArray(value)) throw new Error(`Expected exported ${key} to be an array.`);
   return value as Record<string, unknown>[];
-}
-
-function parseJsonColumn(row: Record<string, unknown>, column: string): unknown {
-  const value = row[column];
-  if (typeof value !== 'string') throw new Error(`Expected ${column} to be JSON text.`);
-  return JSON.parse(value) as unknown;
 }
 
 function uuidFor(index: number): string {
@@ -160,16 +169,18 @@ describe('LocalStore', () => {
         journal_mode: 'wal',
       });
       expect(inspector.prepare('PRAGMA quick_check;').get()).toMatchObject({ quick_check: 'ok' });
-      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({ user_version: 2 });
+      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({ user_version: 5 });
       expect(
         inspector.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
-      ).toEqual([{ version: 1 }, { version: 2 }]);
+      ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }]);
       expect(
         inspector
           .prepare(
             `SELECT name FROM sqlite_master
              WHERE type = 'table' AND name IN
-               ('app_settings', 'recent_projects', 'canvas_documents', 'audit_events', 'agent_runs')
+               ('app_settings', 'recent_projects', 'canvas_documents', 'audit_events', 'agent_runs',
+                'canvas_snapshots', 'project_path_history', 'backup_records',
+                'trusted_extension_ledger')
              ORDER BY name`,
           )
           .all(),
@@ -177,8 +188,12 @@ describe('LocalStore', () => {
         { name: 'agent_runs' },
         { name: 'app_settings' },
         { name: 'audit_events' },
+        { name: 'backup_records' },
         { name: 'canvas_documents' },
+        { name: 'canvas_snapshots' },
+        { name: 'project_path_history' },
         { name: 'recent_projects' },
+        { name: 'trusted_extension_ledger' },
       ]);
     } finally {
       inspector.close();
@@ -209,7 +224,7 @@ describe('LocalStore', () => {
     expect(reopened.getSettings(fallback)).toEqual(saved);
   });
 
-  it('keeps the 30 most recently opened projects and updates a repeated path', () => {
+  it('keeps the 30 most recent projects without allowing a path to change project identity', () => {
     const store = openStore();
     for (let index = 1; index <= 32; index += 1) {
       store.saveProject(
@@ -227,12 +242,16 @@ describe('LocalStore', () => {
     expect(recent[0]?.name).toBe('Project 32');
     expect(recent.at(-1)?.name).toBe('Project 3');
 
-    const updated = project({
+    const conflictingIdentity = project({
       id: uuidFor(99),
       name: 'Renamed project',
       path: '/tmp/project-32',
       openedAt: '2026-07-14T17:00:00.000Z',
     });
+    expect(() => store.saveProject(conflictingIdentity)).toThrow(
+      'already bound to a different project identity',
+    );
+    const updated = { ...conflictingIdentity, id: uuidFor(32) };
     expect(store.saveProject(updated)).toEqual(updated);
     expect(store.listProjects()[0]).toEqual(updated);
     expect(rows(store, 'projects')).toHaveLength(32);
@@ -269,6 +288,14 @@ describe('LocalStore', () => {
       'authorization-value',
       'cookie-value',
       'private-key-value',
+      'inline-reason-secret',
+      'bearer-secret-value',
+      'query-secret-value',
+      'fragment-secret-value',
+      'project-query-secret',
+      'project-fragment-secret',
+      'script-token-secret',
+      'sk_live_51abcdefghijklmnopqrstuv',
     ];
 
     store.appendAudit('agent', 'launch', 'denied', {
@@ -282,6 +309,22 @@ describe('LocalStore', () => {
         ],
         safe: 'visible-metadata',
       },
+      reason: `request failed token=${secretValues[5]} Bearer ${secretValues[6]} raw ${secretValues[12]}`,
+      remote: `https://example.test/repository.git?access_token=${secretValues[7]}#${secretValues[8]}`,
+    });
+    const projectWithSecrets = project();
+    store.saveProject({
+      ...projectWithSecrets,
+      health: {
+        ...projectWithSecrets.health,
+        remotes: [
+          {
+            name: 'origin',
+            url: `https://example.test/repository.git?api_key=${secretValues[9]}#${secretValues[10]}`,
+          },
+        ],
+        scripts: { deploy: `deploy --token=${secretValues[11]}` },
+      },
     });
 
     const exported = store.exportData();
@@ -290,7 +333,7 @@ describe('LocalStore', () => {
 
     const auditRows = rows(store, 'audit');
     expect(auditRows).toHaveLength(1);
-    expect(parseJsonColumn(auditRows[0] ?? {}, 'metadata_json')).toEqual({
+    expect(auditRows[0]?.metadata).toEqual({
       token: '[REDACTED]',
       nested: {
         password: '[REDACTED]',
@@ -301,6 +344,8 @@ describe('LocalStore', () => {
         ],
         safe: 'visible-metadata',
       },
+      reason: 'request failed token=[REDACTED] Bearer [REDACTED] raw [REDACTED]',
+      remote: 'https://example.test/repository.git?access_token=REDACTED#REDACTED',
     });
   });
 
@@ -348,14 +393,16 @@ describe('LocalStore', () => {
       'projects',
       'runs',
       'settings',
+      'snapshots',
       'version',
     ]);
-    expect(exported).toMatchObject({ format: 'forgeboard-local-export', version: 1 });
+    expect(exported).toMatchObject({ format: 'forgeboard-local-export', version: 2 });
     expect(new Date(String(exported.exportedAt)).toISOString()).toBe(exported.exportedAt);
-    expect(parseJsonColumn(rows(store, 'settings')[0] ?? {}, 'value_json')).toEqual(savedSettings);
-    expect(parseJsonColumn(rows(store, 'projects')[0] ?? {}, 'value_json')).toEqual(savedProject);
-    expect(parseJsonColumn(rows(store, 'canvases')[0] ?? {}, 'value_json')).toEqual(savedCanvas);
+    expect(exported.settings).toEqual(savedSettings);
+    expect(rows(store, 'projects')[0]).toEqual(savedProject);
+    expect(rows(store, 'canvases')[0]).toEqual(savedCanvas);
     expect(rows(store, 'runs')).toEqual([]);
+    expect(rows(store, 'snapshots')).toEqual([]);
     expect(rows(store, 'audit')[0]).toMatchObject({
       sequence: 1,
       category: 'privacy',
@@ -386,7 +433,7 @@ describe('LocalStore', () => {
     closeStore(store);
 
     const reopened = openStore(databasePath);
-    const recovered = parseJsonColumn(rows(reopened, 'runs')[0] ?? {}, 'value_json');
+    const recovered = rows(reopened, 'runs')[0];
     expect(recovered).toMatchObject({
       id: record.id,
       status: 'lost',
@@ -395,7 +442,7 @@ describe('LocalStore', () => {
     expect(recovered).toHaveProperty('endedAt');
   });
 
-  it('rolls back every local-data deletion if any table delete fails', () => {
+  it('rolls back every local-data deletion if any table delete fails', async () => {
     const store = openStore();
     store.saveSettings(settings());
     store.saveProject(project());
@@ -415,8 +462,8 @@ describe('LocalStore', () => {
       triggerConnection.close();
     }
 
-    expect(() => store.deleteAllLocalData()).toThrow('forced delete failure');
-    expect(rows(store, 'settings')).toHaveLength(1);
+    await expect(store.deleteAllLocalData()).rejects.toThrow('forced delete failure');
+    expect(store.exportData().settings).not.toBeNull();
     expect(rows(store, 'projects')).toHaveLength(1);
     expect(rows(store, 'canvases')).toHaveLength(1);
     expect(rows(store, 'audit')).toHaveLength(1);
@@ -428,8 +475,8 @@ describe('LocalStore', () => {
       cleanupConnection.close();
     }
 
-    store.deleteAllLocalData();
-    expect(rows(store, 'settings')).toEqual([]);
+    await store.deleteAllLocalData();
+    expect(store.exportData().settings).toBeNull();
     expect(rows(store, 'projects')).toEqual([]);
     expect(rows(store, 'canvases')).toEqual([]);
     expect(rows(store, 'audit')).toEqual([]);

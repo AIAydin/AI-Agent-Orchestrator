@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Command, CornerDownLeft, Search, X } from 'lucide-react';
 
 interface PaletteAction {
@@ -17,6 +17,7 @@ export function CommandPalette({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
   const filtered = useMemo(() => {
     const normalized = query.toLowerCase().trim();
     return normalized
@@ -25,6 +26,25 @@ export function CommandPalette({
         )
       : actions;
   }, [actions, query]);
+
+  useEffect(() => {
+    setActiveIndex(filtered.length > 0 ? 0 : -1);
+  }, [filtered]);
+
+  function runActive(): void {
+    const action = filtered[activeIndex];
+    if (!action) return;
+    action.run();
+    onClose();
+  }
+
+  function moveActive(offset: number): void {
+    if (filtered.length === 0) return;
+    setActiveIndex((current) => {
+      const safeCurrent = current < 0 ? 0 : current;
+      return (safeCurrent + offset + filtered.length) % filtered.length;
+    });
+  }
 
   return (
     <div
@@ -36,14 +56,36 @@ export function CommandPalette({
           <Search size={18} />
           <input
             autoFocus
+            name="command-palette-query"
+            aria-label="Search commands"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="true"
+            aria-controls="command-palette-results"
+            aria-activedescendant={
+              filtered[activeIndex] ? paletteOptionId(filtered[activeIndex].id) : undefined
+            }
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search actions…"
             onKeyDown={(event) => {
-              if (event.key === 'Escape') onClose();
-              if (event.key === 'Enter' && filtered[0]) {
-                filtered[0].run();
+              if (event.key === 'Escape') {
                 onClose();
+              } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                moveActive(1);
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                moveActive(-1);
+              } else if (event.key === 'Home') {
+                event.preventDefault();
+                setActiveIndex(filtered.length > 0 ? 0 : -1);
+              } else if (event.key === 'End') {
+                event.preventDefault();
+                setActiveIndex(filtered.length - 1);
+              } else if (event.key === 'Enter') {
+                event.preventDefault();
+                runActive();
               }
             }}
           />
@@ -51,11 +93,17 @@ export function CommandPalette({
             <X size={16} />
           </button>
         </header>
-        <div className="palette-results">
-          {filtered.map((action) => (
+        <div id="command-palette-results" className="palette-results" role="listbox">
+          {filtered.map((action, index) => (
             <button
               type="button"
               key={action.id}
+              id={paletteOptionId(action.id)}
+              role="option"
+              aria-selected={index === activeIndex}
+              className={index === activeIndex ? 'active' : ''}
+              tabIndex={-1}
+              onMouseMove={() => setActiveIndex(index)}
               onClick={() => {
                 action.run();
                 onClose();
@@ -89,4 +137,8 @@ export function CommandPalette({
       </div>
     </div>
   );
+}
+
+function paletteOptionId(actionId: string): string {
+  return `command-palette-option-${encodeURIComponent(actionId)}`;
 }

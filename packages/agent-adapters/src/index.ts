@@ -4,10 +4,12 @@ export {
   UnsupportedAgentCapabilityError,
   createCustomCliAdapter,
   detectAgent,
+  locateAgentExecutable,
   launchPreparedAgent,
   prepareAgentLaunch,
   prepareAgentResume,
   type AgentSession,
+  type AgentExecutableLocationOptions,
 } from './adapter.js';
 export {
   BUILT_IN_AGENT_MANIFESTS,
@@ -18,9 +20,26 @@ export {
   getBuiltInAgentManifest,
 } from './manifests.js';
 export {
+  DockerLaunchOptionsSchema,
+  DockerLaunchValidationError,
+  DockerNetworkPolicySchema,
+  DockerRuntimeDetectionOptionsSchema,
+  detectDockerRuntime,
+  isForbiddenDockerEnvironmentName,
+  mapWorktreePathToContainer,
+  planDockerAgentLaunch,
+  type DockerHostPathStyle,
+  type DockerLaunchOptions,
+  type DockerNetworkPolicy,
+  type DockerRuntimeDetection,
+  type DockerRuntimeDetectionOptions,
+  type ParsedDockerLaunchOptions,
+} from './docker.js';
+export {
   AGENT_ADAPTER_API_VERSION,
   AGENT_ADAPTERS_PACKAGE_VERSION,
   AgentAdapterManifestSchema,
+  AgentAdapterIdSchema,
   AgentCapabilitiesSchema,
   AgentDetectionResultSchema,
   AgentEventSchema,
@@ -34,6 +53,7 @@ export {
   ContextAttachmentSchema,
   LaunchDisclosureSchema,
   LaunchEnvironmentSchema,
+  NamespacedAgentAdapterIdSchema,
   PermissionModeSchema,
   PermissionProfileSchema,
   PreparedAgentLaunchSchema,

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
-import { access, chmod, stat } from 'node:fs/promises';
+import { access, chmod, realpath, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
@@ -661,6 +661,88 @@ interface ExecutableProbeResult {
   reason?: string;
 }
 
+export interface AgentExecutableLocationOptions {
+  readonly executable?: string;
+  readonly cwd?: string;
+  readonly environment?: NodeJS.ProcessEnv;
+}
+
+/**
+ * Locate an adapter executable without running any extension-controlled command. This is the
+ * only detection suitable for passive discovery or application bootstrap. Version and
+ * capability probes are intentionally deferred until an explicit run is prepared.
+ */
+export async function locateAgentExecutable(
+  manifestInput: AgentAdapterManifest,
+  options: AgentExecutableLocationOptions = {},
+): Promise<AgentDetectionResult> {
+  const manifest = AgentAdapterManifestSchema.parse(manifestInput);
+  const command = options.executable ?? manifest.executable.command;
+  const environment = options.environment ?? process.env;
+  const cwd = options.cwd ?? process.cwd();
+  const checkedAt = new Date().toISOString();
+  const candidates = executableCandidates(command, cwd, environment);
+
+  for (const candidate of candidates) {
+    try {
+      const details = await stat(candidate);
+      if (!details.isFile()) continue;
+      await access(candidate, process.platform === 'win32' ? fsConstants.F_OK : fsConstants.X_OK);
+      return {
+        adapterId: manifest.id,
+        executable: await realpath(candidate),
+        available: true,
+        capabilityWarnings: [],
+        checkedAt,
+      };
+    } catch {
+      // Continue through the bounded PATH candidate list without executing any candidate.
+    }
+  }
+
+  return {
+    adapterId: manifest.id,
+    executable: command,
+    available: false,
+    reason: 'Executable was not found on PATH or is not an executable regular file.',
+    capabilityWarnings: [],
+    checkedAt,
+  };
+}
+
+function executableCandidates(
+  command: string,
+  cwd: string,
+  environment: NodeJS.ProcessEnv,
+): string[] {
+  if (path.isAbsolute(command)) return [path.normalize(command)];
+  if (command.includes('/') || (process.platform === 'win32' && command.includes('\\'))) {
+    return [path.resolve(cwd, command)];
+  }
+
+  const pathEntries = (environment.PATH ?? environment.Path ?? environment.path ?? '')
+    .split(path.delimiter)
+    .filter((entry) => entry !== '')
+    .slice(0, 4_096);
+  const executableNames = windowsExecutableNames(command, environment);
+  return pathEntries.flatMap((entry) => {
+    const normalizedEntry =
+      process.platform === 'win32' && entry.startsWith('"') && entry.endsWith('"')
+        ? entry.slice(1, -1)
+        : entry;
+    return executableNames.map((name) => path.resolve(cwd, normalizedEntry, name));
+  });
+}
+
+function windowsExecutableNames(command: string, environment: NodeJS.ProcessEnv): string[] {
+  if (process.platform !== 'win32' || path.extname(command) !== '') return [command];
+  const extensions = (environment.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
+    .split(';')
+    .filter((extension) => /^\.[A-Za-z0-9]+$/u.test(extension))
+    .slice(0, 32);
+  return extensions.map((extension) => `${command}${extension.toLowerCase()}`);
+}
+
 async function runExecutableProbe(
   executable: string,
   arguments_: readonly string[],
@@ -806,8 +888,14 @@ export async function detectAgent(
       detectedCapabilities = effective.capabilities;
       capabilityWarnings.push(...effective.warnings);
     } else {
+      detectedCapabilities = {
+        ...manifest.capabilities,
+        permissionModes: [],
+        ...(capabilityProbe.resume === undefined ? {} : { resume: false }),
+        ...(capabilityProbe.modelSelection === undefined ? {} : { modelSelection: false }),
+      };
       capabilityWarnings.push(
-        `Installed capability probe failed: ${helpProbe.reason ?? `exit code ${String(helpProbe.exitCode)}`}.`,
+        `Installed capability probe failed: ${helpProbe.reason ?? `exit code ${String(helpProbe.exitCode)}`}. Permission modes are disabled until a probe succeeds.`,
       );
     }
   }

@@ -14,6 +14,8 @@
     "clean": "corepack pnpm -r --if-present clean",
     "dev": "corepack pnpm --filter @forgeboard/desktop dev",
     "dev:collab": "corepack pnpm --filter @forgeboard/collab-server dev",
+    "start": "node scripts/start-from-source.mjs",
+    "check:structure": "node scripts/check-structure.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
@@ -22,7 +24,7 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:e2e": "corepack pnpm --filter @forgeboard/desktop test:e2e",
-    "verify": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
+    "verify": "corepack pnpm check:structure && corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
     "package": "corepack pnpm --filter @forgeboard/desktop package",
     "smoke:packaged": "corepack pnpm --filter @forgeboard/desktop smoke:packaged"
   },

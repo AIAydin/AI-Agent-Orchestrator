@@ -1,12 +1,23 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
+import { locateAgentExecutable, type AgentAdapterManifest } from '@forgeboard/agent-adapters';
+import { RepositoryService } from '@forgeboard/git-engine';
 import type { App, Dialog } from 'electron';
 
-import type { AgentDetection, GitHealth, Project } from '../shared/contracts.js';
+import type {
+  AgentDetection,
+  ConfirmProjectRecoveryInput,
+  CustomAgentConfiguration,
+  GitHealth,
+  LocalReferenceSelectionInput,
+  Project,
+  ProjectRecoveryAssessment,
+} from '../shared/contracts.js';
+import { customAgentManifest } from './custom-agent.js';
 import type { LocalStore } from './storage.js';
 
 const execFileAsync = promisify(execFile);
@@ -24,11 +35,29 @@ const PROVIDER_DISCLOSURES = {
     'Docker runs locally; container network access depends on the selected Forgeboard profile.',
 } as const;
 
+const RECOVERY_CONFIRMATION_TTL_MS = 10 * 60 * 1_000;
+
+type RecoveryInspection = Pick<
+  ProjectRecoveryAssessment,
+  'projectId' | 'original' | 'candidate' | 'warnings'
+>;
+
+interface PendingProjectRecovery {
+  projectId: string;
+  candidatePath: string;
+  directoryIdentity: string;
+  fingerprint: string;
+  expiresAtMs: number;
+}
+
 export class ProjectService {
+  readonly #pendingRecoveries = new Map<string, PendingProjectRecovery>();
+
   constructor(
     private readonly electronApp: App,
     private readonly dialog: Dialog,
     private readonly store: LocalStore,
+    private readonly repositories: RepositoryService = new RepositoryService(),
   ) {}
 
   async pickRepository(): Promise<Project | null> {
@@ -39,6 +68,155 @@ export class ProjectService {
     });
     const path = selection.filePaths[0];
     return selection.canceled || !path ? null : this.open(path);
+  }
+
+  async refreshRecentProjects(): Promise<Project[]> {
+    const projects = this.store.listProjects();
+    for (const project of projects) {
+      let missing = true;
+      try {
+        const canonicalPath = await realpath(resolve(project.path));
+        missing = canonicalPath !== project.path || !(await stat(canonicalPath)).isDirectory();
+      } catch {
+        missing = true;
+      }
+      if (project.missing !== missing) this.store.setProjectMissing(project.id, missing);
+    }
+    return this.store.listProjects();
+  }
+
+  async selectMovedProject(projectId: string): Promise<ProjectRecoveryAssessment | null> {
+    await this.refreshRecentProjects();
+    const project = this.store.getProject(projectId);
+    if (!project || !project.missing) {
+      throw new Error(
+        'Only a missing recent project can be located. Refresh recent projects first.',
+      );
+    }
+    const selection = await this.dialog.showOpenDialog({
+      title: 'Locate moved repository',
+      properties: ['openDirectory'],
+      buttonLabel: 'Inspect repository',
+    });
+    const path = selection.filePaths[0];
+    if (selection.canceled || !path) return null;
+
+    const inspection = await this.inspectRecoveryCandidate(projectId, path);
+    const candidateStats = await stat(inspection.candidate.path);
+    const confirmationId = randomUUID();
+    const now = Date.now();
+    const expiresAtMs = now + RECOVERY_CONFIRMATION_TTL_MS;
+    const assessment: ProjectRecoveryAssessment = {
+      confirmationId,
+      expiresAt: new Date(expiresAtMs).toISOString(),
+      ...inspection,
+    };
+    for (const [pendingId, pending] of this.#pendingRecoveries) {
+      if (pending.expiresAtMs < now || pending.projectId === projectId) {
+        this.#pendingRecoveries.delete(pendingId);
+      }
+    }
+    this.#pendingRecoveries.set(confirmationId, {
+      projectId,
+      candidatePath: inspection.candidate.path,
+      directoryIdentity: `${candidateStats.dev}:${candidateStats.ino}`,
+      fingerprint: recoveryFingerprint(inspection),
+      expiresAtMs,
+    });
+    return assessment;
+  }
+
+  async inspectRecoveryCandidate(
+    projectId: string,
+    candidatePath: string,
+  ): Promise<RecoveryInspection> {
+    const existing = this.store.getProject(projectId);
+    if (!existing) throw new Error('The missing project is no longer in recent projects.');
+    if (!existing.missing) {
+      throw new Error('Only a missing recent project can be rebound to a new location.');
+    }
+    const canonicalPath = await realpath(resolve(candidatePath));
+    if (!(await stat(canonicalPath)).isDirectory()) {
+      throw new Error('The selected recovery path is not a directory.');
+    }
+    const conflict = this.store
+      .listProjects(10_000)
+      .find((project) => project.id !== projectId && project.path === canonicalPath);
+    if (conflict) throw new Error('The selected path already belongs to another recent project.');
+    const health = await scanRepository(canonicalPath, this.repositories);
+    const expectedRemotes = new Set(existing.health.remotes.map((remote) => remote.url));
+    const candidateRemotes = new Set(health.remotes.map((remote) => remote.url));
+    const warnings: string[] = [];
+    if (existing.health.isGitRepository && !health.isGitRepository) {
+      warnings.push('The previous location was a Git repository but this candidate is not.');
+    }
+    if (
+      expectedRemotes.size > 0 &&
+      ![...expectedRemotes].some((remote) => candidateRemotes.has(remote))
+    ) {
+      warnings.push('The candidate does not share a known remote with the previous location.');
+    }
+    return {
+      projectId,
+      original: {
+        name: existing.name,
+        path: existing.path,
+        health: existing.health,
+      },
+      candidate: {
+        name: basename(canonicalPath),
+        path: canonicalPath,
+        health,
+      },
+      warnings,
+    };
+  }
+
+  async confirmMovedProject(input: ConfirmProjectRecoveryInput): Promise<Project> {
+    if (input.confirmed !== true) throw new Error('Recovery was not explicitly confirmed.');
+    const pending = this.#pendingRecoveries.get(input.confirmationId);
+    this.#pendingRecoveries.delete(input.confirmationId);
+    if (!pending || pending.projectId !== input.projectId) {
+      throw new Error(
+        'The recovery confirmation is missing, expired, or belongs to another project.',
+      );
+    }
+    if (Date.now() > pending.expiresAtMs) {
+      throw new Error('The recovery confirmation expired. Locate the repository again.');
+    }
+
+    await this.refreshRecentProjects();
+    const assessment = await this.inspectRecoveryCandidate(input.projectId, pending.candidatePath);
+    const candidateStats = await stat(assessment.candidate.path);
+    if (
+      `${candidateStats.dev}:${candidateStats.ino}` !== pending.directoryIdentity ||
+      recoveryFingerprint(assessment) !== pending.fingerprint
+    ) {
+      throw new Error(
+        'The selected repository changed after review. Locate it again before confirming.',
+      );
+    }
+
+    const project = this.store.getProject(input.projectId);
+    if (!project) throw new Error('The missing project is no longer in recent projects.');
+    const recovered: Project = {
+      ...project,
+      name: assessment.candidate.name,
+      path: assessment.candidate.path,
+      openedAt: new Date().toISOString(),
+      missing: false,
+      health: assessment.candidate.health,
+    };
+    this.store.relocateProject(recovered);
+    for (const [confirmationId, recovery] of this.#pendingRecoveries) {
+      if (recovery.projectId === input.projectId) this.#pendingRecoveries.delete(confirmationId);
+    }
+    this.store.appendAudit('project', 'recover-moved', 'allowed', {
+      projectId: input.projectId,
+      repositoryName: recovered.name,
+      warnings: assessment.warnings,
+    });
+    return recovered;
   }
 
   async pickParent(): Promise<string | null> {
@@ -65,12 +243,41 @@ export class ProjectService {
     return canonicalPath;
   }
 
+  async pickReferences(input: LocalReferenceSelectionInput): Promise<string[]> {
+    const selection = await this.dialog.showOpenDialog({
+      title: input.kind === 'file' ? 'Choose a local file' : 'Choose a local folder',
+      properties: [
+        input.kind === 'file' ? 'openFile' : 'openDirectory',
+        ...(input.multiple ? (['multiSelections'] as const) : []),
+      ],
+      buttonLabel: input.multiple ? 'Choose items' : 'Choose',
+    });
+    if (selection.canceled) return [];
+    if (selection.filePaths.length > (input.multiple ? 256 : 1)) {
+      throw new Error('The local reference selection exceeds the supported item limit.');
+    }
+    const selected: string[] = [];
+    for (const candidate of selection.filePaths) {
+      const canonicalPath = await realpath(resolve(candidate));
+      const details = await stat(canonicalPath);
+      const expectedType = input.kind === 'file' ? details.isFile() : details.isDirectory();
+      if (!expectedType) {
+        throw new Error(`The selected path is not a ${input.kind}.`);
+      }
+      if (canonicalPath.includes('\0') || canonicalPath.length > 32_768) {
+        throw new Error('The selected local reference is not a supported path.');
+      }
+      if (!selected.includes(canonicalPath)) selected.push(canonicalPath);
+    }
+    return selected;
+  }
+
   async open(candidatePath: string): Promise<Project> {
     const canonicalPath = await realpath(resolve(candidatePath));
     const info = await stat(canonicalPath);
     if (!info.isDirectory()) throw new Error('The selected path is not a directory.');
-    const health = await scanRepository(canonicalPath);
-    const existing = this.store.listProjects().find((project) => project.path === canonicalPath);
+    const health = await scanRepository(canonicalPath, this.repositories);
+    const existing = this.store.getProjectByPath(canonicalPath);
     const project: Project = {
       id: existing?.id ?? randomUUID(),
       name: basename(canonicalPath),
@@ -79,19 +286,26 @@ export class ProjectService {
       missing: false,
       health,
     };
-    this.store.saveProject(project);
+    const saved = this.store.saveProject(project);
     this.store.appendAudit('project', 'open', 'allowed', {
-      projectId: project.id,
-      repositoryName: project.name,
+      projectId: saved.id,
+      repositoryName: saved.name,
       isGitRepository: health.isGitRepository,
     });
-    return project;
+    return saved;
   }
 
   async create(parentPath: string, name: string, initializeGit: boolean): Promise<Project> {
     const canonicalParent = await realpath(resolve(parentPath));
     const target = join(canonicalParent, name);
-    if (resolve(target) !== target || !resolve(target).startsWith(`${canonicalParent}/`)) {
+    const relativeTarget = relative(canonicalParent, target);
+    if (
+      resolve(target) !== target ||
+      relativeTarget === '' ||
+      relativeTarget === '..' ||
+      relativeTarget.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
+      isAbsolute(relativeTarget)
+    ) {
       throw new Error('Project path escapes the selected parent.');
     }
     await mkdir(target, { recursive: false, mode: 0o755 });
@@ -99,10 +313,9 @@ export class ProjectService {
       flag: 'wx',
     });
     if (initializeGit) {
-      await run('git', ['init', '--initial-branch=main'], target);
-      await run('git', ['add', '--', 'README.md'], target);
-      await run(
-        'git',
+      await this.repositories.git.run(['init', '--initial-branch=main'], { cwd: target });
+      await this.repositories.git.run(['add', '--', 'README.md'], { cwd: target });
+      await this.repositories.git.run(
         [
           '-c',
           'user.name=Forgeboard',
@@ -112,7 +325,7 @@ export class ProjectService {
           '-m',
           'Initialize project',
         ],
-        target,
+        { cwd: target },
       );
     }
     this.store.appendAudit('project', 'create', 'allowed', { name, initializeGit });
@@ -121,7 +334,10 @@ export class ProjectService {
 
   async clone(remoteUrl: string, destinationPath: string): Promise<Project> {
     const resolvedDestination = resolve(destinationPath);
-    await run('git', ['clone', '--', remoteUrl, resolvedDestination], process.cwd(), 120_000);
+    await this.repositories.git.run(['clone', '--', remoteUrl, resolvedDestination], {
+      cwd: process.cwd(),
+      timeoutMs: 120_000,
+    });
     this.store.appendAudit('git', 'clone', 'allowed', {
       destinationName: basename(resolvedDestination),
       remoteHost: safeRemoteHost(remoteUrl),
@@ -145,10 +361,12 @@ export class ProjectService {
         "export const message = 'Ready for a deterministic agent run.';\n",
       );
       await writeFile(marker, '1\n');
-      await run('git', ['init', '--initial-branch=main'], target);
-      await run('git', ['add', '--', 'README.md', 'src/message.ts', '.forgeboard-demo-v1'], target);
-      await run(
-        'git',
+      await this.repositories.git.run(['init', '--initial-branch=main'], { cwd: target });
+      await this.repositories.git.run(
+        ['add', '--', 'README.md', 'src/message.ts', '.forgeboard-demo-v1'],
+        { cwd: target },
+      );
+      await this.repositories.git.run(
         [
           '-c',
           'user.name=Forgeboard Demo',
@@ -158,7 +376,7 @@ export class ProjectService {
           '-m',
           'Initialize local demo',
         ],
-        target,
+        { cwd: target },
       );
     }
     this.store.appendAudit('project', 'create-demo', 'allowed', { version: 1 });
@@ -166,7 +384,12 @@ export class ProjectService {
   }
 }
 
-export async function detectAgents(testAgentPath: string): Promise<AgentDetection[]> {
+export async function detectAgents(
+  testAgentPath: string,
+  trustedExtensionAdapters: readonly AgentAdapterManifest[] = [],
+  executableOverrides: Readonly<Record<string, string>> = {},
+  customAgent?: CustomAgentConfiguration,
+): Promise<AgentDetection[]> {
   const definitions = [
     ['test-agent', 'Deterministic test agent', testAgentPath],
     ['codex', 'OpenAI Codex CLI', 'codex'],
@@ -177,9 +400,15 @@ export async function detectAgents(testAgentPath: string): Promise<AgentDetectio
     ['docker', 'Docker', 'docker'],
   ] as const;
 
-  return Promise.all(
+  const builtInDetections = Promise.all(
     definitions.map(async ([id, label, executable]) => {
-      const located = id === 'test-agent' ? executable : await findExecutable(executable);
+      const configured = executableOverrides[id]?.trim();
+      const located =
+        id === 'test-agent'
+          ? executable
+          : configured
+            ? await validateExecutableOverride(configured)
+            : await findExecutable(executable);
       let version: string | null = null;
       if (located) {
         try {
@@ -199,9 +428,67 @@ export async function detectAgents(testAgentPath: string): Promise<AgentDetectio
       };
     }),
   );
+  const extensionDetections = Promise.all(
+    trustedExtensionAdapters.map(async (manifest): Promise<AgentDetection> => {
+      // Passive discovery must never run extension-controlled version/help arguments. Full
+      // probes happen only after the user starts the explicit prepare/run flow.
+      const configured = executableOverrides[manifest.id]?.trim();
+      const detection = await locateAgentExecutable(
+        manifest,
+        configured ? { executable: configured } : {},
+      );
+      return {
+        id: manifest.id,
+        label: manifest.name,
+        installed: detection.available,
+        executable: detection.executable,
+        version: null,
+        providerDisclosure: manifest.provider.disclosure,
+      };
+    }),
+  );
+  const customDetection: AgentDetection = await (async () => {
+    const disclosure =
+      customAgent?.providerDisclosure ??
+      'A custom CLI is disabled until its executable and provider disclosure are configured in Settings.';
+    if (!customAgent?.enabled) {
+      return {
+        id: 'custom',
+        label: customAgent?.name ?? 'Custom CLI',
+        installed: false,
+        executable: customAgent?.executable || null,
+        version: null,
+        providerDisclosure: disclosure,
+      };
+    }
+    try {
+      const manifest = customAgentManifest(customAgent);
+      const detection = await locateAgentExecutable(manifest, {
+        executable: manifest.executable.command,
+      });
+      return {
+        id: 'custom',
+        label: manifest.name,
+        installed: detection.available,
+        executable: detection.executable,
+        version: null,
+        providerDisclosure: disclosure,
+      };
+    } catch {
+      return {
+        id: 'custom',
+        label: customAgent.name,
+        installed: false,
+        executable: customAgent.executable || null,
+        version: null,
+        providerDisclosure: disclosure,
+      };
+    }
+  })();
+  return [...(await builtInDetections), customDetection, ...(await extensionDetections)];
 }
 
-async function scanRepository(path: string): Promise<GitHealth> {
+async function scanRepository(path: string, repositories: RepositoryService): Promise<GitHealth> {
   let isGitRepository = false;
   let branch: string | null = null;
   let dirty = false;
@@ -209,11 +496,15 @@ async function scanRepository(path: string): Promise<GitHealth> {
   let remotes: { name: string; url: string }[] = [];
 
   try {
-    await run('git', ['rev-parse', '--is-inside-work-tree'], path);
+    await repositories.git.run(['rev-parse', '--is-inside-work-tree'], { cwd: path });
     isGitRepository = true;
-    branch = (await run('git', ['branch', '--show-current'], path)).stdout.trim() || null;
-    dirty = Boolean((await run('git', ['status', '--porcelain=v1'], path)).stdout.trim());
-    const remoteText = (await run('git', ['remote', '-v'], path)).stdout;
+    branch =
+      (await repositories.git.run(['branch', '--show-current'], { cwd: path })).stdout.trim() ||
+      null;
+    dirty = Boolean(
+      (await repositories.git.run(['status', '--porcelain=v1'], { cwd: path })).stdout.trim(),
+    );
+    const remoteText = (await repositories.git.run(['remote', '-v'], { cwd: path })).stdout;
     const unique = new Map<string, string>();
     for (const line of remoteText.split('\n')) {
       const match = /^(\S+)\s+(\S+)\s+\(fetch\)$/.exec(line);
@@ -245,7 +536,11 @@ async function scanRepository(path: string): Promise<GitHealth> {
     branch,
     dirty,
     remotes,
-    packageManager: await detectPackageManager(path),
+    packageManager: await detectPackageManager(
+      path,
+      packageData.declaredPackageManager,
+      packageData.hasPackageJson,
+    ),
     frameworks: packageData.frameworks,
     scripts: packageData.scripts,
     hasSubmodules,
@@ -253,12 +548,23 @@ async function scanRepository(path: string): Promise<GitHealth> {
   };
 }
 
-async function readPackageMetadata(
-  path: string,
-): Promise<{ scripts: Record<string, string>; frameworks: string[] }> {
+function recoveryFingerprint(inspection: RecoveryInspection): string {
+  return JSON.stringify(inspection);
+}
+
+async function readPackageMetadata(path: string): Promise<{
+  scripts: Record<string, string>;
+  frameworks: string[];
+  declaredPackageManager: 'pnpm' | 'npm' | 'yarn' | 'bun' | null;
+  hasPackageJson: boolean;
+}> {
   try {
-    const raw = await readFile(join(path, 'package.json'), 'utf8');
+    const packagePath = join(path, 'package.json');
+    const packageStats = await stat(packagePath);
+    if (!packageStats.isFile() || packageStats.size > 2 * 1024 * 1024) throw new Error();
+    const raw = await readFile(packagePath, 'utf8');
     const parsed = JSON.parse(raw) as {
+      packageManager?: unknown;
       scripts?: unknown;
       dependencies?: Record<string, unknown>;
       devDependencies?: Record<string, unknown>;
@@ -266,9 +572,14 @@ async function readPackageMetadata(
     const scripts =
       parsed.scripts && typeof parsed.scripts === 'object'
         ? Object.fromEntries(
-            Object.entries(parsed.scripts).filter(
-              (entry): entry is [string, string] => typeof entry[1] === 'string',
-            ),
+            Object.entries(parsed.scripts)
+              .filter(
+                (entry): entry is [string, string] =>
+                  /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/u.test(entry[0]) &&
+                  typeof entry[1] === 'string' &&
+                  entry[1].length <= 32_768,
+              )
+              .slice(0, 256),
           )
         : {};
     const deps = { ...parsed.dependencies, ...parsed.devDependencies };
@@ -283,18 +594,28 @@ async function readPackageMetadata(
     };
     return {
       scripts,
+      declaredPackageManager: declaredPackageManager(parsed.packageManager),
+      hasPackageJson: true,
       frameworks: Object.entries(candidates)
         .filter(([dependency]) => dependency in deps)
         .map(([, label]) => label),
     };
   } catch {
-    return { scripts: {}, frameworks: [] };
+    return {
+      scripts: {},
+      frameworks: [],
+      declaredPackageManager: null,
+      hasPackageJson: false,
+    };
   }
 }
 
 async function detectPackageManager(
   path: string,
+  declared: 'pnpm' | 'npm' | 'yarn' | 'bun' | null,
+  hasPackageJson: boolean,
 ): Promise<'pnpm' | 'npm' | 'yarn' | 'bun' | 'unknown'> {
+  if (declared) return declared;
   for (const [file, manager] of [
     ['pnpm-lock.yaml', 'pnpm'],
     ['package-lock.json', 'npm'],
@@ -309,7 +630,15 @@ async function detectPackageManager(
       // Try the next lockfile.
     }
   }
-  return 'unknown';
+  // npm is the interoperable default for a package.json without a lockfile or
+  // packageManager declaration. Detection remains passive: no command is run.
+  return hasPackageJson ? 'npm' : 'unknown';
+}
+
+function declaredPackageManager(value: unknown): 'pnpm' | 'npm' | 'yarn' | 'bun' | null {
+  if (typeof value !== 'string') return null;
+  const name = value.split('@')[0];
+  return name === 'pnpm' || name === 'npm' || name === 'yarn' || name === 'bun' ? name : null;
 }
 
 async function findExecutable(name: string): Promise<string | null> {
@@ -317,6 +646,16 @@ async function findExecutable(name: string): Promise<string | null> {
     const locator = process.platform === 'win32' ? 'where.exe' : 'which';
     const result = await run(locator, [name], process.cwd(), 5_000);
     return result.stdout.trim().split('\n')[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function validateExecutableOverride(candidate: string): Promise<string | null> {
+  try {
+    const canonicalPath = await realpath(resolve(candidate));
+    if (!(await stat(canonicalPath)).isFile()) return null;
+    return canonicalPath;
   } catch {
     return null;
   }
@@ -343,9 +682,25 @@ function redactRemote(remote: string): string {
     const url = new URL(remote);
     url.username = url.username ? '[redacted]' : '';
     url.password = '';
+    for (const key of [...url.searchParams.keys()]) {
+      if (
+        /(token|secret|password|authorization|cookie|credential|signature|api.?key|access.?key|private.?key)/iu.test(
+          key,
+        )
+      ) {
+        url.searchParams.set(key, '[redacted]');
+      }
+    }
+    if (url.hash !== '') url.hash = '#[redacted]';
     return url.toString();
   } catch {
-    return remote.replace(/^(https?:\/\/)[^/@]+@/i, '$1[redacted]@');
+    return remote
+      .replace(/^(https?:\/\/)[^/@]+@/iu, '$1[redacted]@')
+      .replace(
+        /([?&](?:token|secret|password|authorization|cookie|credential|signature|api.?key|access.?key|private.?key)=)[^&#\s]*/giu,
+        '$1[redacted]',
+      )
+      .replace(/#.*$/u, '#[redacted]');
   }
 }
 

@@ -39,11 +39,19 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
       role="presentation"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
-      <form className="modal project-dialog" onSubmit={submit}>
+      <form
+        className="modal project-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="project-dialog-title"
+        onSubmit={submit}
+      >
         <header>
           <div className="modal-title-icon">{mode === 'create' ? <GitFork /> : <FolderOpen />}</div>
           <div>
-            <h2>{mode === 'create' ? 'Create a local project' : 'Clone a repository'}</h2>
+            <h2 id="project-dialog-title">
+              {mode === 'create' ? 'Create a local project' : 'Clone a repository'}
+            </h2>
             <p>
               {mode === 'create'
                 ? 'Everything is configured here—no files to edit.'
@@ -60,6 +68,7 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
             Repository URL
             <input
               autoFocus
+              name="project-remote-url"
               required
               value={remote}
               onChange={(event) => setRemote(event.target.value)}
@@ -71,6 +80,7 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
           Project name
           <input
             autoFocus={mode === 'create'}
+            name="project-name"
             required
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -78,20 +88,28 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
             pattern="[^/\\:]+"
           />
         </label>
-        <label>
-          Location
+        <div className="project-form-field">
+          <label htmlFor="project-location">Location</label>
           <div className="path-picker">
-            <input required readOnly value={location} placeholder="Choose a folder" />
+            <input
+              id="project-location"
+              name="project-location"
+              required
+              readOnly
+              value={location}
+              placeholder="Choose a folder"
+            />
             <button type="button" onClick={() => void chooseLocation()}>
               <FolderOpen size={15} /> Browse
             </button>
           </div>
-        </label>
+        </div>
 
         {mode === 'create' ? (
           <label className="check-row">
             <input
               type="checkbox"
+              name="project-initialize-git"
               checked={initializeGit}
               onChange={(event) => setInitializeGit(event.target.checked)}
             />

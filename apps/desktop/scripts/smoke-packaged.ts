@@ -1,72 +1,119 @@
 import { spawn } from 'node:child_process';
-import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readdir, stat } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
-const releaseRoot = join(import.meta.dirname, '..', 'release');
-const entries = await readdir(releaseRoot, { withFileTypes: true });
+export interface PackagedLaunch {
+  executable: string;
+  args: string[];
+}
 
-let executable: string | undefined;
-let args = ['--smoke-test'];
+export async function resolvePackagedLaunch(
+  releaseRoot: string,
+  platform: NodeJS.Platform = process.platform,
+  architecture: string = process.arch,
+): Promise<PackagedLaunch> {
+  const entries = (await readdir(releaseRoot, { withFileTypes: true })).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+  const args = ['--smoke-test'];
 
-if (process.platform === 'darwin') {
-  const appBundle = entries.find((entry) => entry.isDirectory() && entry.name.endsWith('.app'));
-  if (appBundle) executable = join(releaseRoot, appBundle.name, 'Contents', 'MacOS', 'Forgeboard');
-  if (!executable) {
-    const unpacked = entries.find((entry) => entry.isDirectory() && entry.name.startsWith('mac'));
-    if (unpacked)
-      executable = join(
-        releaseRoot,
-        unpacked.name,
-        'Forgeboard.app',
-        'Contents',
-        'MacOS',
-        'Forgeboard',
-      );
-  }
-} else if (process.platform === 'win32') {
-  const unpacked = entries.find((entry) => entry.isDirectory() && entry.name.includes('unpacked'));
-  if (unpacked) executable = join(releaseRoot, unpacked.name, 'Forgeboard.exe');
-} else {
-  const unpacked = entries.find((entry) => entry.isDirectory() && entry.name.includes('unpacked'));
-  if (unpacked) executable = join(releaseRoot, unpacked.name, 'forgeboard');
-  if (!executable) {
-    const appImage = entries.find((entry) => entry.isFile() && entry.name.endsWith('.AppImage'));
+  if (platform === 'darwin') {
+    const directory = architecture === 'x64' ? 'mac' : `mac-${architecture}`;
+    const executable = join(
+      releaseRoot,
+      directory,
+      'Forgeboard.app',
+      'Contents',
+      'MacOS',
+      'Forgeboard',
+    );
+    if (await isFile(executable)) return { executable, args };
+  } else if (platform === 'win32') {
+    const directory = architecture === 'x64' ? 'win-unpacked' : `win-${architecture}-unpacked`;
+    const executable = join(releaseRoot, directory, 'Forgeboard.exe');
+    if (await isFile(executable)) return { executable, args };
+  } else {
+    const normalizedArchitecture = architecture === 'arm' ? 'armv7l' : architecture;
+    const directory =
+      architecture === 'x64' ? 'linux-unpacked' : `linux-${normalizedArchitecture}-unpacked`;
+    const executable = join(releaseRoot, directory, 'forgeboard');
+    if (await isFile(executable)) return { executable, args };
+
+    const appImages = entries.filter(
+      (entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.appimage'),
+    );
+    const architectureMatches = appImages.filter((entry) =>
+      entry.name.toLowerCase().includes(normalizedArchitecture.toLowerCase()),
+    );
+    const appImage =
+      architectureMatches.length === 1
+        ? architectureMatches[0]
+        : appImages.length === 1
+          ? appImages[0]
+          : undefined;
     if (appImage) {
-      executable = join(releaseRoot, appImage.name);
-      args = ['--no-sandbox', '--smoke-test'];
+      const appImagePath = join(releaseRoot, appImage.name);
+      if (await isFile(appImagePath)) {
+        return { executable: appImagePath, args: ['--no-sandbox', '--smoke-test'] };
+      }
     }
   }
+
+  throw new Error(
+    `No packaged Forgeboard executable for ${platform}-${architecture} found in ${releaseRoot}.`,
+  );
 }
 
-if (!executable) throw new Error(`No packaged Forgeboard executable found in ${releaseRoot}.`);
+export async function runPackagedSmoke(releaseRoot: string): Promise<void> {
+  const launch = await resolvePackagedLaunch(releaseRoot);
+  const output = await new Promise<string>((resolveOutput, rejectOutput) => {
+    const child = spawn(launch.executable, launch.args, {
+      env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let combined = '';
+    let settled = false;
+    const finish = (error: Error | undefined, value = ''): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) rejectOutput(error);
+      else resolveOutput(value);
+    };
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      finish(new Error(`Packaged smoke test timed out. Output:\n${combined}`));
+    }, 25_000);
+    child.stdout.on('data', (chunk: Buffer) => {
+      combined += chunk.toString();
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      combined += chunk.toString();
+    });
+    child.once('error', (error) => finish(error));
+    child.once('exit', (code) => {
+      if (code === 0) finish(undefined, combined);
+      else
+        finish(new Error(`Packaged Forgeboard exited with ${String(code)}. Output:\n${combined}`));
+    });
+  });
 
-const output = await new Promise<string>((resolve, reject) => {
-  const child = spawn(executable, args, {
-    env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
-  let combined = '';
-  const timer = setTimeout(() => {
-    child.kill('SIGTERM');
-    reject(new Error(`Packaged smoke test timed out. Output:\n${combined}`));
-  }, 25_000);
-  child.stdout.on('data', (chunk: Buffer) => {
-    combined += chunk.toString();
-  });
-  child.stderr.on('data', (chunk: Buffer) => {
-    combined += chunk.toString();
-  });
-  child.once('error', reject);
-  child.once('exit', (code) => {
-    clearTimeout(timer);
-    if (code === 0) resolve(combined);
-    else reject(new Error(`Packaged Forgeboard exited with ${String(code)}. Output:\n${combined}`));
-  });
-});
-
-if (!output.includes('FORGEBOARD_SMOKE_OK')) {
-  throw new Error(`Packaged Forgeboard did not report smoke-test readiness. Output:\n${output}`);
+  if (!output.includes('FORGEBOARD_SMOKE_OK')) {
+    throw new Error(`Packaged Forgeboard did not report smoke-test readiness. Output:\n${output}`);
+  }
+  process.stdout.write('Packaged Forgeboard smoke test passed.\n');
 }
 
-process.stdout.write('Packaged Forgeboard smoke test passed.\n');
+async function isFile(path: string): Promise<boolean> {
+  return await stat(path).then(
+    (value) => value.isFile(),
+    () => false,
+  );
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await runPackagedSmoke(join(import.meta.dirname, '..', 'release'));
+}

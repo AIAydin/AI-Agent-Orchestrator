@@ -1,13 +1,16 @@
 import {
   Bot,
+  Box,
   CheckCircle2,
   ChevronDown,
   FileCode2,
   FileDiff,
   Frame,
   GitPullRequest,
+  GitBranch,
   Image,
   ListChecks,
+  LayoutGrid,
   Lock,
   MonitorPlay,
   Network,
@@ -17,8 +20,12 @@ import {
   Smartphone,
   TerminalSquare,
   TestTube2,
+  Workflow,
 } from 'lucide-react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+
+import type { ExtensionCanvasNodeTypeView } from '../../../shared/contracts.js';
+import type { ExtensionNodeAvailability } from './extension-nodes.js';
 
 export interface WorkshopNodeData extends Record<string, unknown> {
   kind: NodeKind;
@@ -28,13 +35,27 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   locked: boolean;
   collapsed: boolean;
   color: string;
-  adapterId?: 'test-agent' | 'codex' | 'claude' | 'gemini' | 'opencode';
-  permissionProfile?: 'plan-read-only' | 'worktree-write';
+  adapterId?: string;
+  permissionProfile?: 'plan-read-only' | 'worktree-write' | 'docker-isolated';
   prompt?: string;
   runId?: string;
   transcript?: string;
   lastRunSummary?: string;
   changedFiles?: string[];
+  previewCwdRelative?: string;
+  previewPackageScript?: string;
+  previewReadinessPath?: string;
+  previewUrlPath?: string;
+  previewPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
+  previewSecondaryPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
+  previewOrientation?: 'portrait' | 'landscape';
+  previewSideBySide?: boolean;
+  extensionId?: string;
+  extensionVersion?: string;
+  extensionNodeTypeId?: string;
+  extensionDefinition?: ExtensionCanvasNodeTypeView;
+  extensionValues?: Record<string, unknown>;
+  extensionAvailability?: ExtensionNodeAvailability;
 }
 
 export type WorkshopNode = Node<WorkshopNodeData, 'workshop'>;
@@ -57,7 +78,8 @@ export const NODE_KINDS = [
   'group-frame',
 ] as const;
 
-export type NodeKind = (typeof NODE_KINDS)[number];
+export type BuiltInNodeKind = (typeof NODE_KINDS)[number];
+export type NodeKind = BuiltInNodeKind | 'extension';
 
 export const NODE_DEFINITIONS: Record<
   NodeKind,
@@ -153,18 +175,62 @@ export const NODE_DEFINITIONS: Record<
     color: '#82909b',
     icon: Frame,
   },
+  extension: {
+    label: 'Extension node',
+    description: 'Trusted declarative extension fields',
+    color: '#7f8c98',
+    icon: Box,
+  },
+};
+
+const EXTENSION_ICONS: Readonly<Record<ExtensionCanvasNodeTypeView['icon'], typeof Bot>> = {
+  bot: Bot,
+  box: Box,
+  'check-circle': CheckCircle2,
+  file: FileCode2,
+  'git-branch': GitBranch,
+  image: Image,
+  layout: LayoutGrid,
+  note: NotebookPen,
+  play: Play,
+  terminal: TerminalSquare,
+  workflow: Workflow,
 };
 
 export function CanvasNode({ data, selected }: NodeProps<WorkshopNode>) {
-  const definition = NODE_DEFINITIONS[data.kind];
+  const builtInDefinition = NODE_DEFINITIONS[data.kind];
+  const extensionDefinition = data.kind === 'extension' ? data.extensionDefinition : undefined;
+  const definition =
+    extensionDefinition === undefined
+      ? builtInDefinition
+      : {
+          label: extensionDefinition.displayName,
+          description: extensionDefinition.description,
+          color: extensionDefinition.color,
+          icon: EXTENSION_ICONS[extensionDefinition.icon],
+        };
   const Icon = definition.icon;
+  const inputPorts = extensionDefinition?.ports.filter((port) => port.direction === 'input') ?? [];
+  const outputPorts =
+    extensionDefinition?.ports.filter((port) => port.direction === 'output') ?? [];
+  const targetHandles = extensionDefinition === undefined ? [{ id: 'input' }] : inputPorts;
+  const sourceHandles = extensionDefinition === undefined ? [{ id: 'output' }] : outputPorts;
   return (
     <article
       className={`canvas-node ${selected ? 'selected' : ''} ${data.collapsed ? 'collapsed' : ''}`}
       style={{ '--node-accent': data.color } as React.CSSProperties}
       aria-label={`${definition.label}: ${data.title}`}
     >
-      <Handle type="target" position={Position.Left} className="node-handle" />
+      {targetHandles.map((port, index) => (
+        <Handle
+          key={port.id}
+          id={port.id}
+          type="target"
+          position={Position.Left}
+          className="node-handle"
+          style={{ top: `${((index + 1) / (targetHandles.length + 1)) * 100}%` }}
+        />
+      ))}
       <header>
         <span className="node-kind-icon">
           <Icon size={15} />
@@ -183,8 +249,22 @@ export function CanvasNode({ data, selected }: NodeProps<WorkshopNode>) {
             {data.status}
           </span>
         )}
+        {data.kind === 'extension' && data.extensionAvailability !== 'active' && (
+          <span className="extension-node-state">
+            {data.extensionAvailability === 'quarantined' ? 'Quarantined' : 'Unavailable'}
+          </span>
+        )}
       </div>
-      <Handle type="source" position={Position.Right} className="node-handle" />
+      {sourceHandles.map((port, index) => (
+        <Handle
+          key={port.id}
+          id={port.id}
+          type="source"
+          position={Position.Right}
+          className="node-handle"
+          style={{ top: `${((index + 1) / (sourceHandles.length + 1)) * 100}%` }}
+        />
+      ))}
     </article>
   );
 }

@@ -51,13 +51,39 @@ export const ApplicationSettingsSchema = z
     docker: z
       .object({
         enabled: z.boolean().default(false),
-        image: z.string().min(1).max(1024).default('node:22-bookworm'),
+        image: z.string().max(1024).default(''),
+        containerExecutable: z.string().max(4096).default(''),
         network: z.enum(['enabled', 'disabled']).default('disabled'),
         cpuLimit: z.number().positive().max(1024).default(2),
         memoryMbLimit: z.number().int().min(128).max(1_048_576).default(4096),
         mountHostCredentials: z.literal(false).default(false),
       })
-      .strict(),
+      .strict()
+      .superRefine((value, context) => {
+        if (value.enabled && value.image.trim() === '') {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['image'],
+            message: 'Docker isolation requires an explicit image.',
+          });
+        }
+        const executableSegments = value.containerExecutable.split('/').slice(1);
+        const executableIsValid =
+          value.containerExecutable.startsWith('/') &&
+          !value.containerExecutable.includes('\0') &&
+          !/[\r\n]/u.test(value.containerExecutable) &&
+          executableSegments.length > 0 &&
+          executableSegments.every(
+            (segment) => segment !== '' && segment !== '.' && segment !== '..',
+          );
+        if (value.enabled && !executableIsValid) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['containerExecutable'],
+            message: 'Docker isolation requires an absolute normalized agent executable.',
+          });
+        }
+      }),
     preview: z
       .object({
         portRangeStart: z.number().int().min(1024).max(65_535).default(4100),

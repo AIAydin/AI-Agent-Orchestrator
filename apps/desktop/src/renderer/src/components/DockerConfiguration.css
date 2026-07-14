@@ -1,0 +1,97 @@
+.docker-configuration {
+  display: grid;
+  gap: 12px;
+}
+
+.docker-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.docker-field {
+  display: grid;
+  gap: 7px;
+}
+
+.docker-field-grid label:last-child {
+  grid-column: 1 / -1;
+}
+
+.docker-explanation {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.docker-readiness-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.docker-readiness-actions small {
+  color: var(--text-soft);
+}
+
+.docker-readiness {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface-raised) 80%, transparent);
+}
+
+.docker-readiness > span {
+  display: grid;
+  gap: 3px;
+}
+
+.docker-readiness small {
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.docker-readiness.ready {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--line));
+}
+
+.docker-readiness.ready > svg {
+  color: var(--green);
+}
+
+.docker-readiness.blocked,
+.docker-readiness.missing {
+  border-color: color-mix(in srgb, var(--yellow) 38%, var(--line));
+}
+
+.docker-readiness.blocked > svg,
+.docker-readiness.missing > svg {
+  color: var(--yellow);
+}
+
+.docker-notice {
+  color: var(--text-soft);
+}
+
+.docker-configuration.compact .docker-field-grid {
+  grid-template-columns: 1fr;
+}
+
+.docker-configuration.compact .docker-field-grid label:last-child {
+  grid-column: auto;
+}
+
+@media (max-width: 760px) {
+  .docker-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .docker-field-grid label:last-child {
+    grid-column: auto;
+  }
+}

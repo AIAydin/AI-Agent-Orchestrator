@@ -31,9 +31,34 @@ describe('application settings', () => {
         writableRunsUseWorktrees: true,
         requireApprovalForExternalAndDestructiveActions: true,
       },
-      docker: { enabled: false, network: 'disabled', mountHostCredentials: false },
+      docker: {
+        enabled: false,
+        image: '',
+        containerExecutable: '',
+        network: 'disabled',
+        mountHostCredentials: false,
+      },
       collaboration: { enabled: false },
     });
+  });
+
+  it('requires an explicit image and in-image agent executable before enabling Docker', () => {
+    expect(
+      ApplicationSettingsSchema.safeParse({
+        ...settingsInput(),
+        docker: { enabled: true },
+      }).success,
+    ).toBe(false);
+    expect(
+      ApplicationSettingsSchema.safeParse({
+        ...settingsInput(),
+        docker: {
+          enabled: true,
+          image: 'registry.example/agent:1',
+          containerExecutable: '/usr/local/bin/agent',
+        },
+      }).success,
+    ).toBe(true);
   });
 
   it('stores environment variable names, never environment values', () => {

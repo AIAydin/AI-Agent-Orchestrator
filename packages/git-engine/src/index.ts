@@ -8,6 +8,15 @@ export {
   type GitExecutorOptions,
 } from './executor.js';
 export {
+  GitHubCliExecutor,
+  GitHubService,
+  type CiStatusPlanInput,
+  type GitHubCommandOptions,
+  type GitHubCommandResult,
+  type GitHubCommandRunner,
+  type PullRequestPlanInput,
+} from './github.js';
+export {
   assertPathUnderManagedRoot,
   canonicalDirectory,
   isPathInside,

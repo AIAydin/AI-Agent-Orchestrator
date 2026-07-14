@@ -7,12 +7,20 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./schema": {
+      "types": "./src/schema.ts",
+      "default": "./src/schema.ts"
+    },
+    "./identifiers": {
+      "types": "./src/identifiers.ts",
+      "default": "./src/identifiers.ts"
     }
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --root ../.. --project unit src/adapter.test.ts"
+    "test": "vitest run --root ../.. --project unit src/adapter.test.ts src/docker.test.ts"
   },
   "dependencies": {
     "node-pty": "catalog:",

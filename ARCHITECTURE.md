@@ -10,10 +10,13 @@ Forgeboard uses three desktop trust zones:
 3. The Electron main process owns SQLite, the filesystem, Git, PTYs, child processes, OS dialogs,
    and credential-vault integration.
 
-The preview process foundation binds and probes loopback-only servers with validated commands and
-bounded logs. The still-unchecked embedded-preview UI will use isolated browser views/frames with
-Node disabled, a restrictive session, navigation and popup controls, and no access to the
-Forgeboard preload. See `IMPLEMENTATION_CHECKLIST.md`; that surface is not claimed complete yet.
+The preview runtime binds and probes loopback-only servers with validated commands and bounded
+logs. Web and mobile preview nodes embed only runtime-owned loopback ports in sandboxed frames with
+Node disabled, a restrictive session, validated navigation, denied popups/downloads/permissions,
+and no Forgeboard preload access. Native development commands are never described as an OS sandbox.
+Docker-isolated agent profiles use a separate main-owned runner with an exact worktree mount,
+non-root identity, resource limits, no implicit host credentials or sockets, and network denial by
+default.
 
 ## Packages
 
@@ -21,6 +24,8 @@ Forgeboard preload. See `IMPLEMENTATION_CHECKLIST.md`; that surface is not claim
   policy, context selection, audit contracts, and persistence interfaces.
 - `@forgeboard/agent-adapters` converts local CLI processes into normalized lifecycle events while
   retaining raw output.
+- `@forgeboard/extension-runtime` validates and snapshots data-only local adapter and canvas-node
+  extensions, with content-bound permission approvals and no renderer code execution.
 - `@forgeboard/git-engine` executes native Git with argument arrays, provisions per-run branches
   and worktrees, and provides diff/review/change integration primitives.
 - `@forgeboard/ui` provides the visual language and accessible primitives shared by renderers.
@@ -41,16 +46,39 @@ context file list. Human approval produces a scoped audit record before the proc
 
 ## Configuration and distribution
 
-The settings database is the canonical configuration source. All normal configuration is created and
-edited through validated desktop screens: agent executable discovery/pickers, argument-array command
-builders, environment-name allowlists, Git behavior, Docker profile settings, preview ports,
-retention, and collaboration. The presence of a setting does not imply its unchecked runtime feature
-is enabled. Advanced manifest/config import and export uses the same schemas but is never required.
+The settings database is the canonical configuration source. Implemented desktop screens cover
+agent discovery and executable pickers, custom CLI setup, permission profiles, argument-array
+preview commands, worktree locations, Docker profiles, extensions, and local storage/retention.
+Several persisted settings are not yet connected to a complete runtime surface, including Git
+identity/remote behavior, terminal, collaboration, updates, and configured lint/typecheck/test/build
+gates. Backup restore and full-data import UI are also unfinished; their presence in a schema is not
+treated as implemented behavior.
 
-GitHub Releases provide platform installers and checksums. Release CI builds on each target operating
-system and enables code signing/notarization only when maintainers configure the relevant repository
-secrets. The packaged app bundles its renderer/runtime and does not require Node.js or pnpm on the end
-user's machine. External CLIs are optional capabilities detected and explained in the UI.
+Docker configuration starts blank rather than guessing that a generic image contains an agent CLI.
+The renderer can request a readiness check, but only the main process resolves Docker, validates the
+local image, probes the exact in-image executable, and performs a native-confirmed bounded image
+pull. Settings import/export uses the same validated schemas but is optional for the implemented
+setup flow.
+
+Local extension manifests are author-facing packages, not ordinary user configuration. Users select
+an extension folder or manifest in Settings with a native picker; the trusted process validates its
+declarative content, shows the exact identity, version, two digests, and permissions in a
+BrowserWindow-parented system confirmation, and stores a data-only snapshot. A trusted SQLite
+ledger is staged before mutation and activated only after success; discovery exposes contributions
+only when that active record exactly matches the snapshot. Window-bound pending plans, trust state,
+and registry mutations never cross into renderer authority. Typed discovery views contain only
+validated manifest, record, safe canvas projection, and safe-text documentation data. Forgeboard's
+generic canvas renderer owns extension fields and native file/folder pickers, while namespaced agent
+manifests re-enter the same launch disclosure and approval pipeline as built-in adapters.
+
+The release workflow is configured to build platform artifacts and checksums on each target
+operating system, enabling code signing/notarization only when maintainers configure the relevant
+repository secrets. Full cross-platform installer generation and GitHub Release publication are not
+yet verified. Current packaging proof is limited to an unpacked macOS arm64 application whose
+bundled Git runtime works outside the repository under a minimal `PATH`; this is not equivalent to a
+tested installer. The verified unpacked app bundles its renderer/runtime and does not require
+Node.js or pnpm on the end user's machine. External agent CLIs remain optional capabilities
+detected and explained in the UI.
 
 ## Persistence
 
@@ -63,4 +91,5 @@ implementation ledger and is not represented as complete.
 
 Yjs documents contain canvas layout, non-sensitive node metadata, task state, comments, presence,
 and workflow status. Schemas reject file contents, prompts, diffs, terminal output, environment
-values, secrets, and transcripts at both client and server boundaries.
+values, secrets, and transcripts at both client and server boundaries. The optional server and
+privacy schemas exist, but the Forgeboard desktop collaboration client remains unfinished.

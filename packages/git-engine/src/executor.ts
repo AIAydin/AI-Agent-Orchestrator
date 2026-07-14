@@ -49,6 +49,12 @@ export interface GitCommandResult {
 export interface GitExecutorOptions {
   readonly executable?: string;
   readonly environment?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Process-layer runtime wiring for a bundled Git distribution. This is deliberately separate
+   * from ordinary environment overrides because values such as GIT_EXEC_PATH are executable
+   * search paths and must never come from a renderer, repository, or imported setting.
+   */
+  readonly trustedRuntimeEnvironment?: Readonly<Record<string, string | undefined>>;
   readonly disableHooks?: boolean;
   readonly defaultTimeoutMs?: number;
   readonly maxOutputBytes?: number;
@@ -56,6 +62,7 @@ export interface GitExecutorOptions {
 
 function safeEnvironment(
   overrides: Readonly<Record<string, string | undefined>> | undefined,
+  trustedRuntimeEnvironment: Readonly<Record<string, string | undefined>> | undefined,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { ...process.env };
   for (const name of DANGEROUS_GIT_ENVIRONMENT) delete environment[name];
@@ -68,6 +75,33 @@ function safeEnvironment(
     }
     if (value === undefined) delete environment[name];
     else environment[name] = value;
+  }
+  const trustedNames = new Set([
+    'PATH',
+    'GIT_EXEC_PATH',
+    'GIT_CONFIG_SYSTEM',
+    'GIT_TEMPLATE_DIR',
+    'GIT_SSL_CAINFO',
+    'PREFIX',
+  ]);
+  for (const [name, value] of Object.entries(trustedRuntimeEnvironment ?? {})) {
+    if (!trustedNames.has(name)) {
+      throw new GitEngineError(
+        'INVALID_ARGUMENT',
+        `Unsupported bundled Git runtime environment name: ${name}`,
+      );
+    }
+    if (value === undefined) {
+      delete environment[name];
+      continue;
+    }
+    if (value.includes('\0') || /[\r\n]/u.test(value)) {
+      throw new GitEngineError(
+        'INVALID_ARGUMENT',
+        `Bundled Git runtime environment ${name} contains unsupported characters.`,
+      );
+    }
+    environment[name] = value;
   }
   environment.GIT_TERMINAL_PROMPT = '0';
   environment.GCM_INTERACTIVE = 'Never';
@@ -85,7 +119,7 @@ export class GitExecutor {
 
   public constructor(options: GitExecutorOptions = {}) {
     this.#executable = options.executable ?? 'git';
-    this.#environment = safeEnvironment(options.environment);
+    this.#environment = safeEnvironment(options.environment, options.trustedRuntimeEnvironment);
     this.#disableHooks = options.disableHooks ?? true;
     this.#defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.#maxOutputBytes = options.maxOutputBytes ?? 32 * 1024 * 1024;

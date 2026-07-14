@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { LoaderCircle } from 'lucide-react';
 
-import type { AgentDetection, AppInfo, AppSettings, Project } from '../../shared/contracts.js';
+import type {
+  AgentDetection,
+  AppInfo,
+  AppSettings,
+  ExtensionDiscoveryView,
+  Project,
+} from '../../shared/contracts.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
+import { SetupWizard } from './components/SetupWizard.js';
 import { Welcome } from './components/Welcome.js';
 import { Workspace } from './components/Workspace.js';
 import { unwrap } from './lib/ipc.js';
@@ -11,6 +19,7 @@ interface BootstrapState {
   info: AppInfo;
   settings: AppSettings;
   agents: AgentDetection[];
+  extensions: ExtensionDiscoveryView;
   recent: Project[];
 }
 
@@ -22,16 +31,18 @@ export function App() {
   const [busy, setBusy] = useState(false);
 
   const loadBootstrap = useCallback(async () => {
-    const [info, settings, agents, recent] = await Promise.all([
+    const [info, settings, agents, extensions, recent] = await Promise.all([
       window.forgeboard.app.getInfo(),
       window.forgeboard.settings.get(),
       window.forgeboard.agents.detect(),
+      window.forgeboard.extensions.list(),
       window.forgeboard.projects.recent(),
     ]);
     setBootstrap({
       info: unwrap(info),
       settings: unwrap(settings),
       agents: unwrap(agents),
+      extensions: unwrap(extensions),
       recent: unwrap(recent),
     });
   }, []);
@@ -83,11 +94,36 @@ export function App() {
 
   return (
     <>
-      {activeProject ? (
+      {!bootstrap.settings.onboardingCompleted ? (
+        <SetupWizard
+          settings={bootstrap.settings}
+          agents={bootstrap.agents}
+          onComplete={async (settings) => {
+            unwrap(
+              await window.forgeboard.settings.update({
+                ...settings,
+                onboardingCompleted: true,
+              }),
+            );
+            await loadBootstrap();
+          }}
+          onSkip={async () => {
+            unwrap(
+              await window.forgeboard.settings.update({
+                ...bootstrap.settings,
+                onboardingCompleted: true,
+              }),
+            );
+            await loadBootstrap();
+          }}
+          onError={setError}
+        />
+      ) : activeProject ? (
         <Workspace
           project={activeProject}
           settings={bootstrap.settings}
           agents={bootstrap.agents}
+          extensionDiscovery={bootstrap.extensions}
           onClose={() => setActiveProject(null)}
           onOpenSettings={() => setShowSettings(true)}
           onError={setError}
@@ -106,6 +142,21 @@ export function App() {
           onOpenRecent={(path) =>
             void run(async () => unwrap(await window.forgeboard.projects.open(path)))
           }
+          onLocateMoved={async (projectId) =>
+            unwrap(await window.forgeboard.projects.locateMoved({ projectId }))
+          }
+          onConfirmMoved={async (input) => {
+            setBusy(true);
+            setError(null);
+            try {
+              const project = unwrap(await window.forgeboard.projects.confirmMoved(input));
+              setActiveProject(project);
+              await loadBootstrap();
+            } finally {
+              setBusy(false);
+            }
+          }}
+          onError={setError}
           onCreate={(input) =>
             void run(async () => unwrap(await window.forgeboard.projects.create(input)))
           }
@@ -128,6 +179,15 @@ export function App() {
             setShowSettings(false);
           }}
           onError={setError}
+          onExtensionsChanged={loadBootstrap}
+          onDeleteAll={async (confirmation) => {
+            flushSync(() => {
+              setActiveProject(null);
+              setShowSettings(false);
+            });
+            unwrap(await window.forgeboard.privacy.deleteAll(confirmation));
+            await loadBootstrap();
+          }}
         />
       )}
 

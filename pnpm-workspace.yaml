@@ -5,6 +5,7 @@ packages:
 allowBuilds:
   '@tailwindcss/oxide': true
   better-sqlite3: false
+  dugite: true
   electron: true
   electron-winstaller: true
   esbuild: true

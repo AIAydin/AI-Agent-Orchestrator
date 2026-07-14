@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,6 +18,18 @@ test('a first-time user can configure and persist a local visual workshop', asyn
     electronApp = firstSession.app;
     let page = firstSession.page;
     watchExternalRequests(page, externalRequests);
+
+    await test.step('safe first-run defaults require no files or code editing', async () => {
+      const setup = page.getByRole('dialog', {
+        name: /Ready to build without wiring config files/i,
+      });
+      await expect(setup).toBeVisible();
+      await expect(setup.getByText('No Forgeboard cloud')).toBeVisible();
+      await expect(setup.getByText('Local by default')).toBeVisible();
+      await expect(setup.getByText('Changes stay reviewable')).toBeVisible();
+      await setup.getByRole('button', { name: 'Use safe defaults' }).click();
+      await expect(setup).toBeHidden();
+    });
 
     await test.step('the production window starts with a hardened renderer and welcome UI', async () => {
       await expect(page).toHaveTitle('Forgeboard');
@@ -82,6 +94,14 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await settings.getByRole('button', { name: 'compact', exact: true }).click();
       await settings.getByRole('checkbox', { name: /Reduce motion/ }).check();
 
+      await settings.getByRole('button', { name: 'Extensions', exact: true }).click();
+      await expect(settings.getByRole('heading', { name: 'Local extensions' })).toBeVisible();
+      await expect(settings.getByText('Data-only by design')).toBeVisible();
+      await expect(
+        settings.getByText('No trusted extensions active', { exact: true }),
+      ).toBeVisible();
+      await expect(settings.getByRole('button', { name: /Choose extension folder/ })).toBeVisible();
+
       await settings.getByRole('button', { name: /Agents & runtime/ }).click();
       await settings.getByLabel('Default agent').selectOption('test-agent');
       await settings.getByLabel('Default permission profile').selectOption('plan-read-only');
@@ -90,11 +110,15 @@ test('a first-time user can configure and persist a local visual workshop', asyn
         .fill('PATH, HOME, LANG, CI');
 
       await settings.getByRole('button', { name: /Git & previews/ }).click();
+      await settings.getByLabel('Branch prefix').fill('team/agents/');
       await settings.getByLabel('Preview port start').fill('42000');
       await settings.getByLabel('Preview port end').fill('42099');
       await expect(
-        settings.getByRole('checkbox', { name: /Enable collaboration/ }),
-      ).not.toBeChecked();
+        settings.getByRole('heading', { name: /Self-hosted collaboration/ }),
+      ).toHaveCount(0);
+
+      await settings.getByRole('button', { name: /Data & privacy/ }).click();
+      await settings.getByLabel('Backup directory').fill(join(userDataDirectory, 'backups'));
 
       await settings.getByRole('button', { name: /Save settings/ }).click();
       await expect(settings).toBeHidden();
@@ -140,7 +164,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await inspector.getByRole('button', { name: 'Duplicate' }).click();
       const duplicate = page.getByRole('article', { name: 'Product brief: Release plan copy' });
       await expect(duplicate).toBeVisible();
-      await clickExposedNodeEdge(page, duplicate);
+      await expect(inspector.getByLabel('Title')).toHaveValue('Release plan copy');
       await inspector.getByRole('button', { name: 'Delete' }).click();
       await expect(duplicate).toHaveCount(0);
 
@@ -204,6 +228,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       page = secondSession.page;
       watchExternalRequests(page, externalRequests);
 
+      await expect(page.locator('.setup-shell')).toHaveCount(0);
       await expect(
         page.getByRole('heading', { name: /Build software in a visual workshop/i }),
       ).toBeVisible();
@@ -223,6 +248,36 @@ test('a first-time user can configure and persist a local visual workshop', asyn
           .getByRole('article', { name: 'Product brief: Release plan' })
           .locator('[aria-label="Locked"]'),
       ).toBeVisible();
+    });
+
+    await test.step('complete deletion cannot be undone by a stale canvas autosave', async () => {
+      const recentBeforeDeletion = await readRecentProjects(page);
+      if (!recentBeforeDeletion.ok || recentBeforeDeletion.value.length !== 1) {
+        throw new Error('The persisted project must exist before deletion.');
+      }
+      const deletedProjectId = recentBeforeDeletion.value[0]?.id ?? '';
+
+      await page.getByRole('button', { name: 'Settings' }).click();
+      const settings = page.locator('.settings-modal');
+      await settings.getByRole('button', { name: /Data & privacy/ }).click();
+      await settings.getByRole('button', { name: /Create backup now/ }).click();
+      await expect(settings.getByText(/Backup created at/)).toBeVisible();
+      await expect
+        .poll(async () => await readdir(join(userDataDirectory, 'backups')))
+        .toHaveLength(1);
+      await settings.getByLabel(/Type DELETE ALL LOCAL DATA/).fill('DELETE ALL LOCAL DATA');
+      await settings.getByRole('button', { name: 'Delete local data' }).click();
+
+      await expect(
+        page.getByRole('dialog', { name: /Ready to build without wiring config files/i }),
+      ).toBeVisible({ timeout: 30_000 });
+      await page.waitForTimeout(2_500);
+      await expect.poll(() => readRecentProjects(page)).toEqual({ ok: true, value: [] });
+      await expect.poll(async () => await readdir(join(userDataDirectory, 'backups'))).toEqual([]);
+      await expect(loadCanvasForProject(page, deletedProjectId)).resolves.toMatchObject({
+        ok: false,
+        error: { message: 'The selected project is no longer available.' },
+      });
     });
 
     expect(externalRequests).toEqual([]);
@@ -250,6 +305,40 @@ async function clickExposedNodeEdge(page: Page, node: Locator): Promise<void> {
   // Duplicates are offset down and right. Click that genuinely exposed corner rather than the
   // midpoint on the right edge, which is occupied by React Flow's connection handle.
   await page.mouse.click(box.x + box.width - 16, box.y + box.height - 16);
+}
+
+type BrowserIpcResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: { code: string; message: string } };
+
+interface BrowserProject {
+  id: string;
+}
+
+function readRecentProjects(page: Page): Promise<BrowserIpcResult<BrowserProject[]>> {
+  return page.evaluate(() => {
+    const api = (
+      globalThis as unknown as {
+        forgeboard: {
+          projects: { recent: () => Promise<BrowserIpcResult<BrowserProject[]>> };
+        };
+      }
+    ).forgeboard;
+    return api.projects.recent();
+  });
+}
+
+function loadCanvasForProject(page: Page, projectId: string): Promise<BrowserIpcResult<unknown>> {
+  return page.evaluate((selectedProjectId) => {
+    const api = (
+      globalThis as unknown as {
+        forgeboard: {
+          canvas: { load: (id: string) => Promise<BrowserIpcResult<unknown>> };
+        };
+      }
+    ).forgeboard;
+    return api.canvas.load(selectedProjectId);
+  }, projectId);
 }
 
 async function readPersistedCanvas(

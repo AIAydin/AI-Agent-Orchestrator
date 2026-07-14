@@ -1,0 +1,223 @@
+import { CanvasSchema, type Canvas, type CanvasEdge, type CanvasNode } from '../domain.js';
+import {
+  NodeRunStateSchema,
+  WorkflowRunSchema,
+  WorkflowValidationError,
+  createRevisionLoopState,
+  planWorkflow,
+  validateWorkflow,
+} from '../workflow.js';
+
+import type {
+  RuntimeCreationOptions,
+  ScopedWorkflowPlan,
+  WorkflowExecutionRuntime,
+  WorkflowRunScope,
+} from './types.js';
+import { uniqueSorted } from './utils.js';
+
+function groupNodeIds(canvas: Canvas, groupId: string): readonly string[] {
+  const group = canvas.groups.find((candidate) => candidate.id === groupId);
+  if (group !== undefined) return uniqueSorted(group.nodeIds);
+  const frame = canvas.nodes.find(
+    (candidate): candidate is Extract<CanvasNode, { type: 'group-frame' }> =>
+      candidate.id === groupId && candidate.type === 'group-frame',
+  );
+  if (frame !== undefined) return uniqueSorted(frame.data.childNodeIds);
+  throw new WorkflowValidationError([
+    { code: 'INVALID_GROUP', message: 'Run group does not exist', entityIds: [groupId] },
+  ]);
+}
+
+function scopeTargets(
+  canvas: Canvas,
+  scope: WorkflowRunScope,
+): { readonly targetNodeIds?: readonly string[]; readonly includeUpstream?: boolean } {
+  if (scope.kind === 'workflow') return {};
+  if (scope.kind === 'node') {
+    return { targetNodeIds: [scope.nodeId], includeUpstream: scope.includeUpstream ?? true };
+  }
+  if (scope.kind === 'selection') {
+    if (scope.nodeIds.length === 0) {
+      throw new WorkflowValidationError([
+        { code: 'MISSING_NODE', message: 'Run selection cannot be empty', entityIds: [] },
+      ]);
+    }
+    return {
+      targetNodeIds: uniqueSorted(scope.nodeIds),
+      includeUpstream: scope.includeUpstream ?? true,
+    };
+  }
+  const nodeIds = groupNodeIds(canvas, scope.groupId);
+  if (nodeIds.length === 0) {
+    throw new WorkflowValidationError([
+      {
+        code: 'INVALID_GROUP',
+        message: 'Run group does not contain executable nodes',
+        entityIds: [scope.groupId],
+      },
+    ]);
+  }
+  return { targetNodeIds: nodeIds, includeUpstream: scope.includeUpstream ?? true };
+}
+
+function isAuthoritativeIncomingEdge(edge: CanvasEdge): boolean {
+  if (edge.type === 'dependency' || edge.type === 'execute') return true;
+  if (edge.type === 'output') return edge.config.required;
+  if (edge.type === 'review') return edge.config.requireApproval;
+  return false;
+}
+
+function expandMandatoryPlanNodes(canvas: Canvas, initiallySelected: readonly string[]): string[] {
+  const selected = new Set(initiallySelected);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const include = (nodeId: string): void => {
+      if (selected.has(nodeId)) return;
+      selected.add(nodeId);
+      changed = true;
+    };
+    for (const edge of canvas.edges) {
+      if (selected.has(edge.targetNodeId) && isAuthoritativeIncomingEdge(edge)) {
+        include(edge.sourceNodeId);
+      }
+      if (
+        selected.has(edge.targetNodeId) &&
+        edge.type === 'execute' &&
+        edge.config.approval === 'review-gate' &&
+        edge.config.approvalGateNodeId !== undefined
+      ) {
+        include(edge.config.approvalGateNodeId);
+      }
+    }
+    for (const nodeId of [...selected]) {
+      const node = canvas.nodes.find((candidate) => candidate.id === nodeId);
+      if (node?.type !== 'review-gate') continue;
+      if (node.data.reviewerAgentId !== undefined) include(node.data.reviewerAgentId);
+      for (const checkId of node.data.requiredCheckIds) {
+        for (const producer of canvas.nodes) {
+          if (producer.type === 'test' && producer.data.runIds.includes(checkId)) {
+            include(producer.id);
+          }
+        }
+      }
+      for (const edge of canvas.edges) {
+        if (edge.type === 'review' && edge.targetNodeId === node.id) include(edge.sourceNodeId);
+        if (
+          edge.type === 'execute' &&
+          edge.config.approval === 'review-gate' &&
+          edge.config.approvalGateNodeId === node.id
+        ) {
+          include(edge.sourceNodeId);
+        }
+      }
+    }
+  }
+  return uniqueSorted([...selected]);
+}
+
+/**
+ * Plans node, selection, group, or full-workflow execution. Context is deliberately data-only and
+ * revision is deliberately loop-only; neither creates an ordinary DAG scheduling dependency.
+ */
+export function planWorkflowScope(
+  untrustedCanvas: unknown,
+  options: Pick<RuntimeCreationOptions, 'planId' | 'scope'>,
+): ScopedWorkflowPlan {
+  const canvas = CanvasSchema.parse(untrustedCanvas);
+  const validation = validateWorkflow(canvas);
+  if (!validation.valid) throw new WorkflowValidationError(validation.issues);
+  const targets = scopeTargets(canvas, options.scope);
+  const planningCanvas: Canvas = {
+    ...canvas,
+    edges: canvas.edges.filter((edge) => edge.type !== 'context' && edge.type !== 'revision'),
+    revisionLoops: [],
+  };
+  const initial = planWorkflow(planningCanvas, {
+    planId: options.planId,
+    ...(targets.targetNodeIds === undefined ? {} : { targetNodeIds: targets.targetNodeIds }),
+    ...(targets.includeUpstream === undefined ? {} : { includeUpstream: targets.includeUpstream }),
+  });
+  const mandatoryNodeIds = expandMandatoryPlanNodes(canvas, initial.nodeIds);
+  const base =
+    mandatoryNodeIds.length === initial.nodeIds.length &&
+    mandatoryNodeIds.every((nodeId, index) => initial.nodeIds[index] === nodeId)
+      ? initial
+      : planWorkflow(planningCanvas, {
+          planId: options.planId,
+          targetNodeIds: mandatoryNodeIds,
+          includeUpstream: false,
+        });
+  const selected = new Set(base.nodeIds);
+  return {
+    ...base,
+    scope: options.scope,
+    executableEdgeIds: canvas.edges
+      .filter(
+        (edge) =>
+          selected.has(edge.targetNodeId) &&
+          (selected.has(edge.sourceNodeId) || edge.type === 'context'),
+      )
+      .map((edge) => edge.id)
+      .sort((left, right) => left.localeCompare(right)),
+    revisionLoopIds: canvas.revisionLoops
+      .filter((loop) => selected.has(loop.implementationNodeId) && selected.has(loop.reviewNodeId))
+      .map((loop) => loop.id)
+      .sort((left, right) => left.localeCompare(right)),
+  };
+}
+
+export function createWorkflowExecutionRuntime(
+  untrustedCanvas: unknown,
+  options: RuntimeCreationOptions,
+): WorkflowExecutionRuntime {
+  const canvas = CanvasSchema.parse(untrustedCanvas);
+  const plan = planWorkflowScope(canvas, options);
+  const loops = new Map(canvas.revisionLoops.map((loop) => [loop.id, loop]));
+  const revisionLoops = Object.fromEntries(
+    plan.revisionLoopIds.map((loopId) => {
+      const loop = loops.get(loopId);
+      if (loop === undefined) throw new Error(`Planned revision loop is missing: ${loopId}`);
+      return [loopId, createRevisionLoopState(loop)];
+    }),
+  );
+  const nodeRuns = Object.fromEntries(
+    plan.nodeIds.map((nodeId) => [
+      nodeId,
+      NodeRunStateSchema.parse({
+        nodeId,
+        status: 'queued',
+        attempt: 1,
+        queuedAt: options.occurredAt,
+        resumable: false,
+      }),
+    ]),
+  );
+  return {
+    canvas,
+    plan,
+    run: WorkflowRunSchema.parse({
+      schemaVersion: 1,
+      id: options.runId,
+      canvasId: canvas.id,
+      planId: plan.id,
+      status: 'queued',
+      nodeRuns,
+      revisionLoops,
+      createdAt: options.occurredAt,
+      updatedAt: options.occurredAt,
+    }),
+    evidence: {
+      humanApprovals: {},
+      humanReviewDecisions: {},
+      contextResolutions: {},
+      outputPublications: {},
+      reviewerAssessments: {},
+      gateChecks: {},
+      revisionEscapes: {},
+    },
+    activeRevisionLoopIds: [],
+    cancellationRequested: false,
+  };
+}

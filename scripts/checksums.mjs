@@ -1,37 +1,47 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { readdir, stat, writeFile } from 'node:fs/promises';
+import { readdir, writeFile } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(process.argv[2] ?? 'apps/desktop/release');
-const files = await collect(root);
-const distributables = files.filter((file) =>
-  /\.(?:dmg|zip|exe|AppImage|deb|rpm|snap|blockmap)$/i.test(file),
-);
+const DISTRIBUTABLE_PATTERN = /\.(?:dmg|zip|exe|AppImage|deb|rpm|snap|blockmap|tar\.gz)$/iu;
 
-const lines = [];
-for (const file of distributables.sort()) {
-  const hash = createHash('sha256');
-  await new Promise((resolvePromise, reject) => {
-    const input = createReadStream(file);
-    input.on('data', (chunk) => hash.update(chunk));
-    input.on('error', reject);
-    input.on('end', resolvePromise);
-  });
-  lines.push(`${hash.digest('hex')}  ${relative(root, file)}`);
+export function defaultChecksumName(platform = process.platform, architecture = process.arch) {
+  return `SHA256SUMS-${platform}-${architecture}.txt`;
 }
 
-if (!lines.length) throw new Error(`No distributable files found under ${root}.`);
-const destination = join(root, `SHA256SUMS-${process.platform}.txt`);
-await writeFile(destination, `${lines.join('\n')}\n`);
-process.stdout.write(`Wrote ${lines.length} checksums to ${basename(destination)}.\n`);
+export async function collectTopLevelDistributables(root) {
+  const entries = await readdir(root, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile() && DISTRIBUTABLE_PATTERN.test(entry.name))
+    .map((entry) => join(root, entry.name))
+    .sort();
+}
 
-async function collect(directory) {
-  const output = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) output.push(...(await collect(path)));
-    else if ((await stat(path)).isFile()) output.push(path);
+export async function writeChecksums(root, outputName = defaultChecksumName()) {
+  const distributables = await collectTopLevelDistributables(root);
+  const lines = [];
+  for (const file of distributables) {
+    const hash = createHash('sha256');
+    await new Promise((resolvePromise, reject) => {
+      const input = createReadStream(file);
+      input.on('data', (chunk) => hash.update(chunk));
+      input.on('error', reject);
+      input.on('end', resolvePromise);
+    });
+    lines.push(`${hash.digest('hex')}  ${relative(root, file)}`);
   }
-  return output;
+
+  if (!lines.length) throw new Error(`No top-level distributable files found under ${root}.`);
+  const destination = join(root, outputName);
+  await writeFile(destination, `${lines.join('\n')}\n`);
+  return { count: lines.length, destination };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const root = resolve(process.argv[2] ?? 'apps/desktop/release');
+  const outputName = process.argv[3] ?? defaultChecksumName();
+  const result = await writeChecksums(root, outputName);
+  process.stdout.write(`Wrote ${result.count} checksums to ${basename(result.destination)}.\n`);
 }

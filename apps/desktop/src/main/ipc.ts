@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
@@ -7,17 +7,24 @@ import { app, dialog, ipcMain } from 'electron';
 import { z } from 'zod';
 
 import {
-  AppSettingsSchema,
   AuditListInputSchema,
   CanvasDocumentSchema,
   CloneProjectInputSchema,
+  ConfirmProjectRecoveryInputSchema,
   CreateProjectInputSchema,
   IPC_CHANNELS,
+  LocalReferenceSelectionInputSchema,
+  LocateProjectRecoveryInputSchema,
   type AppSettings,
   type IpcResult,
 } from '../shared/contracts.js';
 import { detectAgents, ProjectService } from './project-service.js';
+import { DockerIpcService } from './docker-ipc.js';
+import { ExtensionIpcService } from './extension-ipc.js';
+import { createBundledGitRepositoryService } from './git-runtime.js';
+import { PreviewIpcService } from './preview-ipc.js';
 import { RunService } from './run-service.js';
+import { SettingsIpcService } from './settings-ipc.js';
 import type { LocalStore } from './storage.js';
 
 const PathSchema = z.string().min(1).max(32_768);
@@ -26,6 +33,7 @@ const ProjectIdSchema = z.string().uuid();
 export function createDefaultSettings(): AppSettings {
   const documents = app.getPath('documents');
   return {
+    onboardingCompleted: false,
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
@@ -36,6 +44,20 @@ export function createDefaultSettings(): AppSettings {
     defaultPermissionProfile: 'worktree-write',
     agentExecutableOverrides: {},
     agentDefaultModels: {},
+    customAgent: {
+      enabled: false,
+      name: 'Custom CLI',
+      providerName: 'Custom provider',
+      providerDisclosure:
+        'This user-configured CLI may send the prompt and selected context to its configured provider.',
+      sendsContextOffDevice: true,
+      executable: '',
+      versionArguments: ['--version'],
+      launchArguments: [],
+      promptTransport: 'argument',
+      runtime: 'pty',
+      output: 'text',
+    },
     worktreeRoot: join(documents, PRODUCT.dataDirectoryName, PRODUCT.worktreeDirectoryName),
     worktreeCleanupPolicy: 'manual',
     branchPrefix: 'forgeboard/',
@@ -55,7 +77,8 @@ export function createDefaultSettings(): AppSettings {
     previewTrustedHosts: ['127.0.0.1', 'localhost'],
     dockerEnabled: false,
     dockerExecutable: 'docker',
-    dockerImage: 'node:22-bookworm',
+    dockerImage: '',
+    dockerContainerExecutable: '',
     dockerNetwork: 'disabled',
     dockerCpuLimit: 2,
     dockerMemoryMb: 4096,
@@ -76,12 +99,40 @@ export function createDefaultSettings(): AppSettings {
   };
 }
 
-export function registerIpcHandlers(store: LocalStore): RunService {
-  const projects = new ProjectService(app, dialog, store);
+export interface ApplicationServices {
+  settings: SettingsIpcService;
+  docker: DockerIpcService;
+  runs: RunService;
+  previews: PreviewIpcService;
+  extensions: ExtensionIpcService;
+  dispose(): void;
+}
+
+export function registerIpcHandlers(store: LocalStore): ApplicationServices {
+  const repositories = createBundledGitRepositoryService();
+  const projects = new ProjectService(app, dialog, store, repositories);
   const transcripts = join(app.getPath('userData'), 'transcripts');
   const testAgentPath = app.isPackaged
     ? join(process.resourcesPath, 'test-agent', 'cli.js')
     : resolve(process.cwd(), '../../packages/test-agent/dist/cli.js');
+  const extensions = new ExtensionIpcService(app, dialog, store);
+  const docker = new DockerIpcService(dialog, store);
+  const settings = new SettingsIpcService(dialog, store, createDefaultSettings);
+  const runs = new RunService(
+    store,
+    () => store.getSettings(createDefaultSettings()),
+    async (adapterId) =>
+      (await extensions.listActiveAgentAdapters()).find((adapter) => adapter.id === adapterId),
+    async (adapterId, expectedManifest, launch) =>
+      await extensions.launchTrustedAdapter(adapterId, expectedManifest, launch),
+    repositories,
+  );
+  const previews = new PreviewIpcService(store, () => store.getSettings(createDefaultSettings()));
+  let dataDeletionInProgress = false;
+  const startupRetention = store.applyRetention(store.getSettings(createDefaultSettings()));
+  if (Object.values(startupRetention).some((count) => count > 0)) {
+    store.appendAudit('retention', 'startup', 'allowed', { ...startupRetention });
+  }
 
   handle(IPC_CHANNELS.appInfo, z.tuple([]), () => ({
     name: PRODUCT.name,
@@ -92,60 +143,34 @@ export function registerIpcHandlers(store: LocalStore): RunService {
     transcriptDirectory: transcripts,
   }));
 
-  handle(IPC_CHANNELS.settingsGet, z.tuple([]), () => store.getSettings(createDefaultSettings()));
-  handle(IPC_CHANNELS.settingsUpdate, z.tuple([AppSettingsSchema]), (settings) => {
-    const saved = store.saveSettings(AppSettingsSchema.parse(settings));
-    store.appendAudit('settings', 'update', 'allowed', {
-      keys: Object.keys(saved),
-      envNames: saved.envAllowlist,
-    });
-    return saved;
-  });
-  handle(IPC_CHANNELS.settingsReset, z.tuple([]), () => {
-    const saved = store.saveSettings(createDefaultSettings());
-    store.appendAudit('settings', 'reset', 'allowed', {});
-    return saved;
-  });
-  handle(IPC_CHANNELS.settingsExport, z.tuple([]), async () => {
-    const selection = await dialog.showSaveDialog({
-      title: 'Export Forgeboard settings',
-      defaultPath: 'forgeboard-settings.json',
-      filters: [{ name: 'JSON', extensions: ['json'] }],
-    });
-    if (selection.canceled || !selection.filePath) return null;
+  handle(IPC_CHANNELS.agentsDetect, z.tuple([]), async () => {
     const settings = store.getSettings(createDefaultSettings());
-    await writeFile(
-      selection.filePath,
-      `${JSON.stringify({ format: 'forgeboard-settings', version: 1, settings }, null, 2)}\n`,
-      { mode: 0o600 },
+    return detectAgents(
+      testAgentPath,
+      await extensions.listActiveAgentAdapters(),
+      settings.agentExecutableOverrides,
+      settings.customAgent,
     );
-    store.appendAudit('export', 'settings', 'allowed', { fileName: 'forgeboard-settings.json' });
-    return selection.filePath;
   });
-  handle(IPC_CHANNELS.settingsImport, z.tuple([]), async () => {
-    const selection = await dialog.showOpenDialog({
-      title: 'Import Forgeboard settings',
-      properties: ['openFile'],
-      filters: [{ name: 'JSON', extensions: ['json'] }],
-    });
-    const path = selection.filePaths[0];
-    if (selection.canceled || !path) return null;
-    const importSchema = z.object({
-      format: z.literal('forgeboard-settings'),
-      version: z.literal(1),
-      settings: AppSettingsSchema,
-    });
-    const imported = importSchema.parse(JSON.parse(await readFile(path, 'utf8')));
-    const saved = store.saveSettings(imported.settings);
-    store.appendAudit('settings', 'import', 'allowed', { keys: Object.keys(saved) });
-    return saved;
-  });
-
-  handle(IPC_CHANNELS.agentsDetect, z.tuple([]), () => detectAgents(testAgentPath));
-  handle(IPC_CHANNELS.projectsRecent, z.tuple([]), () => store.listProjects());
+  handle(IPC_CHANNELS.projectsRecent, z.tuple([]), () => projects.refreshRecentProjects());
   handle(IPC_CHANNELS.projectsPick, z.tuple([]), async () => projects.pickRepository());
   handle(IPC_CHANNELS.projectsPickParent, z.tuple([]), async () => projects.pickParent());
   handle(IPC_CHANNELS.projectsPickExecutable, z.tuple([]), async () => projects.pickExecutable());
+  handle(
+    IPC_CHANNELS.projectsPickReferences,
+    z.tuple([LocalReferenceSelectionInputSchema]),
+    async (input) => projects.pickReferences(input),
+  );
+  handle(
+    IPC_CHANNELS.projectsLocateMoved,
+    z.tuple([LocateProjectRecoveryInputSchema]),
+    async (input) => projects.selectMovedProject(input.projectId),
+  );
+  handle(
+    IPC_CHANNELS.projectsConfirmMoved,
+    z.tuple([ConfirmProjectRecoveryInputSchema]),
+    async (input) => projects.confirmMovedProject(input),
+  );
   handle(IPC_CHANNELS.projectsOpen, z.tuple([PathSchema]), async (path) => projects.open(path));
   handle(IPC_CHANNELS.projectsCreate, z.tuple([CreateProjectInputSchema]), async (input) =>
     projects.create(input.parentPath, input.name, input.initializeGit),
@@ -156,6 +181,10 @@ export function registerIpcHandlers(store: LocalStore): RunService {
   handle(IPC_CHANNELS.projectsDemo, z.tuple([]), async () => projects.createDemo());
 
   handle(IPC_CHANNELS.canvasLoad, z.tuple([ProjectIdSchema]), (projectId) => {
+    if (dataDeletionInProgress) throw new Error('Local data deletion is in progress.');
+    if (!store.listProjects().some((project) => project.id === projectId && !project.missing)) {
+      throw new Error('The selected project is no longer available.');
+    }
     const existing = store.loadCanvas(projectId);
     if (existing) return existing;
     return store.saveCanvas({
@@ -168,9 +197,15 @@ export function registerIpcHandlers(store: LocalStore): RunService {
       updatedAt: new Date().toISOString(),
     });
   });
-  handle(IPC_CHANNELS.canvasSave, z.tuple([CanvasDocumentSchema]), (document) =>
-    store.saveCanvas(document),
-  );
+  handle(IPC_CHANNELS.canvasSave, z.tuple([CanvasDocumentSchema]), (document) => {
+    if (dataDeletionInProgress) throw new Error('Local data deletion is in progress.');
+    if (
+      !store.listProjects().some((project) => project.id === document.projectId && !project.missing)
+    ) {
+      throw new Error('The selected project is no longer available.');
+    }
+    return store.saveCanvas(document);
+  });
 
   handle(IPC_CHANNELS.auditList, z.tuple([AuditListInputSchema]), (input) =>
     store.listAuditEvents(input.limit),
@@ -191,19 +226,60 @@ export function registerIpcHandlers(store: LocalStore): RunService {
     });
     return selection.filePath;
   });
+  handle(IPC_CHANNELS.storageCreateBackup, z.tuple([]), async () => {
+    if (dataDeletionInProgress) throw new Error('Local data deletion is in progress.');
+    const settings = store.getSettings(createDefaultSettings());
+    if (!settings.backupsEnabled) throw new Error('Enable local backups in Settings first.');
+    const destination = settings.backupDirectory.trim();
+    if (destination === '') throw new Error('Choose a backup directory in Settings first.');
+    const backup = await store.createBackup(destination);
+    store.appendAudit('backup', 'create', 'allowed', {
+      sizeBytes: backup.sizeBytes,
+      sha256Prefix: backup.sha256.slice(0, 12),
+    });
+    return backup;
+  });
   handle(
     IPC_CHANNELS.privacyDelete,
     z.tuple([z.literal('DELETE ALL LOCAL DATA')]),
-    (confirmation) => {
+    async (confirmation) => {
       if (confirmation !== 'DELETE ALL LOCAL DATA') throw new Error('Deletion was not confirmed.');
-      store.deleteAllLocalData();
-      return true;
+      if (dataDeletionInProgress) throw new Error('Local data deletion is already in progress.');
+      dataDeletionInProgress = true;
+      try {
+        await runs.resetForPrivacy();
+        await previews.resetForPrivacy();
+        await extensions.resetForPrivacy();
+        await store.deleteAllLocalData();
+        return true;
+      } finally {
+        extensions.resumeAfterPrivacyReset();
+        previews.resumeAfterPrivacyReset();
+        runs.resumeAfterPrivacyReset();
+        dataDeletionInProgress = false;
+      }
     },
   );
 
-  const runs = new RunService(store, () => store.getSettings(createDefaultSettings()));
+  settings.registerIpcHandlers();
   runs.registerIpcHandlers();
-  return runs;
+  previews.registerIpcHandlers();
+  extensions.registerIpcHandlers();
+  docker.registerIpcHandlers();
+  return {
+    settings,
+    docker,
+    runs,
+    previews,
+    extensions,
+    dispose: () => {
+      settings.dispose();
+      docker.dispose();
+      extensions.dispose();
+      previews.dispose();
+      runs.dispose();
+    },
+  };
 }
 
 function handle<Args extends unknown[], Output>(

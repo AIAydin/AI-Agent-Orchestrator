@@ -12,6 +12,7 @@ export default defineConfig({
         exclude: [
           '@forgeboard/agent-adapters',
           '@forgeboard/core',
+          '@forgeboard/extension-runtime',
           '@forgeboard/git-engine',
           '@forgeboard/test-agent',
           '@forgeboard/ui',

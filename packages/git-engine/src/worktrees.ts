@@ -12,16 +12,22 @@ import {
 import path from 'node:path';
 
 import { assertExplicitApproval, assertSameStrings } from './approval.js';
+import { ChangeService } from './changes.js';
 import { GitEngineError } from './errors.js';
 import { isPathInside, prepareManagedRoot, safeSlug } from './path-safety.js';
 import { RepositoryService } from './repository.js';
 import type {
+  ArchiveImpact,
+  ArchiveWorktreeApproval,
+  BranchRenameImpact,
   CleanupApproval,
   CleanupImpact,
   CleanupResult,
   ManagedWorktreeState,
+  ManagedWorktreeSummary,
   ProvisionedWorktree,
   ProvisionWorktreeInput,
+  RenameManagedBranchApproval,
   WorktreeCleanupPolicy,
   WorktreeLifecycleStatus,
   WorktreeOwnership,
@@ -122,6 +128,23 @@ async function persistOwnership(ownership: WorktreeOwnership): Promise<void> {
   await rename(temporary, destination);
 }
 
+function normalizeBranchPrefix(configured: string | undefined): string {
+  const trimmed = (configured ?? 'forgeboard/').trim();
+  const withoutTrailingSeparators = trimmed.replace(/\/+$/u, '');
+  if (
+    withoutTrailingSeparators === '' ||
+    withoutTrailingSeparators.startsWith('/') ||
+    withoutTrailingSeparators.includes('\\') ||
+    withoutTrailingSeparators.startsWith('refs/')
+  ) {
+    throw new GitEngineError(
+      'INVALID_ARGUMENT',
+      'The branch prefix must be a relative Git branch namespace such as forgeboard/.',
+    );
+  }
+  return `${withoutTrailingSeparators}/`;
+}
+
 export class WorktreeService {
   public constructor(public readonly repositories = new RepositoryService()) {}
 
@@ -142,12 +165,26 @@ export class WorktreeService {
       .slice(0, 10)}`;
     const repositoryDirectory = path.join(managedRoot, repositoryKey);
     await mkdir(repositoryDirectory, { recursive: true, mode: 0o700 });
-    const branchPrefix = safeSlug(input.branchPrefix ?? input.taskId ?? 'agent', 'agent');
+    const branchPrefix = normalizeBranchPrefix(input.branchPrefix);
+    const branchStem = `${branchPrefix}${safeSlug(input.taskId ?? 'task', 'task')}/${safeSlug(
+      input.agentId,
+      'agent',
+    )}-`;
+    const prefixCheck = await this.repositories.git.run(
+      ['check-ref-format', '--branch', `${branchStem}0000000000`],
+      { allowNonZeroExit: true },
+    );
+    if (prefixCheck.exitCode !== 0) {
+      throw new GitEngineError(
+        'INVALID_ARGUMENT',
+        'The branch prefix does not form a valid Git branch name. Use a value such as forgeboard/.',
+      );
+    }
 
     for (let attempt = 0; attempt < 16; attempt += 1) {
       const id = randomUUID();
-      const shortId = id.slice(0, 10);
-      const branch = `forgeboard/${branchPrefix}/${safeSlug(input.agentId, 'agent')}-${shortId}`;
+      const shortId = id.replaceAll('-', '').slice(0, 10);
+      const branch = `${branchStem}${shortId}`;
       const worktreePath = path.join(
         repositoryDirectory,
         `${safeSlug(input.agentId, 'agent')}-${shortId}`,
@@ -304,6 +341,108 @@ export class WorktreeService {
     return { ...state, expectedHead, dirtyPaths };
   }
 
+  public async summary(ownership: WorktreeOwnership): Promise<ManagedWorktreeSummary> {
+    const state = await this.inspect(ownership);
+    const dirtyPaths = (state.status?.entries ?? [])
+      .filter((entry) => entry.kind !== 'ignored')
+      .map((entry) => entry.path)
+      .sort();
+    const comparison = state.branchExists
+      ? await new ChangeService(this.repositories).compareRefs(
+          state.ownership.repositoryRoot,
+          state.ownership.baseRef,
+          state.ownership.branch,
+        )
+      : null;
+    return { ...state, dirtyPaths, comparison };
+  }
+
+  public async branchRenameImpact(
+    ownership: WorktreeOwnership,
+    newBranch: string,
+  ): Promise<BranchRenameImpact> {
+    const impact = await this.cleanupImpact(ownership);
+    await this.assertAvailableBranchName(impact.ownership.repositoryRoot, newBranch);
+    if (!impact.branchExists || impact.branchOid === null) {
+      throw new GitEngineError('INVALID_ARGUMENT', 'The managed branch no longer exists.');
+    }
+    return {
+      ...impact,
+      oldBranch: impact.ownership.branch,
+      newBranch,
+    };
+  }
+
+  public async renameBranch(
+    ownership: WorktreeOwnership,
+    approval: RenameManagedBranchApproval,
+  ): Promise<WorktreeOwnership> {
+    assertExplicitApproval(approval, 'rename-managed-branch');
+    const impact = await this.branchRenameImpact(ownership, approval.newBranch);
+    this.assertManagedApprovalIdentity(impact, approval);
+    if (
+      approval.oldBranch !== impact.oldBranch ||
+      approval.expectedBranchOid !== impact.branchOid ||
+      impact.ownership.status !== 'active' ||
+      impact.status?.branch !== impact.oldBranch
+    ) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'Managed branch rename approval no longer matches current state.',
+      );
+    }
+    assertSameStrings(impact.dirtyPaths, approval.dirtyPaths, 'dirty branch rename paths');
+    await this.repositories.git.run([
+      '-C',
+      impact.ownership.worktreePath,
+      'branch',
+      '-m',
+      impact.oldBranch,
+      impact.newBranch,
+    ]);
+    const timestamp = new Date().toISOString();
+    const updated: WorktreeOwnership = {
+      ...impact.ownership,
+      branch: impact.newBranch,
+      updatedAt: timestamp,
+    };
+    await persistOwnership(updated);
+    return updated;
+  }
+
+  public async archiveImpact(ownership: WorktreeOwnership): Promise<ArchiveImpact> {
+    const impact = await this.cleanupImpact(ownership);
+    return { ...impact, archiveStatus: 'archived' };
+  }
+
+  /** Archives ownership metadata only; it does not delete the branch or worktree. */
+  public async archive(
+    ownership: WorktreeOwnership,
+    approval: ArchiveWorktreeApproval,
+  ): Promise<WorktreeOwnership> {
+    assertExplicitApproval(approval, 'archive-worktree');
+    const impact = await this.archiveImpact(ownership);
+    this.assertManagedApprovalIdentity(impact, approval);
+    if (
+      approval.branch !== impact.ownership.branch ||
+      approval.expectedBranchOid !== impact.branchOid ||
+      impact.ownership.status !== 'active'
+    ) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'Worktree archive approval no longer matches current state.',
+      );
+    }
+    assertSameStrings(impact.dirtyPaths, approval.dirtyPaths, 'dirty archive paths');
+    const updated: WorktreeOwnership = {
+      ...impact.ownership,
+      status: 'archived',
+      updatedAt: new Date().toISOString(),
+    };
+    await persistOwnership(updated);
+    return updated;
+  }
+
   public async cleanup(
     ownership: WorktreeOwnership,
     approval: CleanupApproval,
@@ -351,6 +490,12 @@ export class WorktreeService {
       );
     }
 
+    await persistOwnership({
+      ...authoritative,
+      status: 'cleanup-pending',
+      updatedAt: new Date().toISOString(),
+    });
+
     let worktreeRemoved = false;
     if (state.missing) {
       await this.repositories.git.run(
@@ -388,5 +533,40 @@ export class WorktreeService {
     const directory = await ownershipDirectory(authoritative.managedRoot);
     await unlink(metadataPath(directory, authoritative.id));
     return { worktreeRemoved, branchDeleted, metadataRemoved: true };
+  }
+
+  private assertManagedApprovalIdentity(
+    impact: CleanupImpact,
+    approval: RenameManagedBranchApproval | ArchiveWorktreeApproval,
+  ): void {
+    if (
+      approval.repositoryRoot !== impact.ownership.repositoryRoot ||
+      approval.expectedHead !== impact.expectedHead ||
+      approval.worktreeId !== impact.ownership.id ||
+      approval.worktreePath !== impact.ownership.worktreePath
+    ) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'Managed worktree approval no longer matches current state.',
+      );
+    }
+  }
+
+  private async assertAvailableBranchName(
+    repositoryRoot: string,
+    newBranch: string,
+  ): Promise<void> {
+    if (newBranch.includes('\0')) {
+      throw new GitEngineError('INVALID_ARGUMENT', 'Branch names cannot contain NUL bytes.');
+    }
+    const valid = await this.repositories.git.run(['check-ref-format', '--branch', newBranch], {
+      allowNonZeroExit: true,
+    });
+    if (valid.exitCode !== 0) {
+      throw new GitEngineError('INVALID_ARGUMENT', 'The requested branch name is invalid.');
+    }
+    if (await this.repositories.branchExists(repositoryRoot, newBranch)) {
+      throw new GitEngineError('INVALID_ARGUMENT', 'The requested branch already exists.');
+    }
   }
 }

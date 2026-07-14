@@ -132,6 +132,21 @@ describe('adapter manifests', () => {
       }),
     ).toThrow(/unknown template placeholder/u);
   });
+
+  it('reserves disclosure-only provider modes for the main-owned custom adapter', () => {
+    const manifest = nodeManifest();
+    expect(() =>
+      AgentAdapterManifestSchema.parse({
+        ...manifest,
+        invocation: {
+          ...manifest.invocation,
+          permissionArguments: {},
+          permissionArgumentPolicy: 'optional-disclosure',
+        },
+        capabilities: { ...manifest.capabilities, permissionModes: ['plan-read-only'] },
+      }),
+    ).toThrow(/reserved for Forgeboard's Settings-owned custom adapter/u);
+  });
 });
 
 describe('launch preparation and execution', () => {
@@ -343,6 +358,34 @@ describe('launch preparation and execution', () => {
     expect(detection.effectiveCapabilities?.permissionModes).toEqual([]);
     expect(detection.capabilityWarnings).toContain(
       'The installed executable does not advertise permission mode custom.',
+    );
+    expect(() =>
+      adapter.prepareLaunch({ prompt: 'blocked', cwd, permissionProfile: permission(cwd) }),
+    ).toThrow(/detected executable version/u);
+  });
+
+  it('fails closed for every permission mode when the capability probe itself fails', async () => {
+    const cwd = await temporaryDirectory();
+    const manifest = nodeManifest({
+      executable: {
+        command: process.execPath,
+        versionArguments: ['--version'],
+        versionPattern: 'v(?<version>\\d+(?:\\.\\d+)+)',
+        detectionTimeoutMs: 2_000,
+        capabilityProbe: {
+          arguments: ['-e', 'process.exit(17)'],
+          permissionModes: { custom: ['supported'] },
+        },
+      },
+    });
+    const adapter = new CliAgentAdapter(manifest);
+
+    const detection = await adapter.detect();
+
+    expect(detection.available).toBe(true);
+    expect(detection.effectiveCapabilities?.permissionModes).toEqual([]);
+    expect(detection.capabilityWarnings.join(' ')).toContain(
+      'Permission modes are disabled until a probe succeeds.',
     );
     expect(() =>
       adapter.prepareLaunch({ prompt: 'blocked', cwd, permissionProfile: permission(cwd) }),

@@ -103,6 +103,8 @@ export interface PreviewStartRequest {
 
 export interface PreviewStartOptions {
   signal?: AbortSignal;
+  /** Called after the session is registered and before its first event is emitted. */
+  onSessionCreated?: (sessionId: string) => void;
 }
 
 export interface CapturedPreviewLog {
@@ -281,6 +283,7 @@ export class PreviewService {
       cleanupPromise: null,
     };
     this.sessions.set(session.id, session);
+    options.onSessionCreated?.(session.id);
     this.emit({ type: 'session-starting', sessionId: session.id });
 
     try {

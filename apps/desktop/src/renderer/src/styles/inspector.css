@@ -1,0 +1,337 @@
+.inspector {
+  grid-area: inspector;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+.inspector > header {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 13px;
+  border-bottom: 1px solid var(--line);
+}
+.inspector > header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.inspector > header span {
+  font-size: 10px;
+  font-weight: 650;
+}
+.inspector > header small {
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.inspector-content {
+  min-height: 0;
+  padding: 14px 12px;
+  overflow-y: auto;
+}
+.inspector-content > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 650;
+}
+.inspector textarea {
+  resize: vertical;
+  line-height: 1.4;
+}
+.inspector input[type='color'] {
+  padding: 4px;
+}
+.declarative-extension-inspector {
+  display: grid;
+  gap: 10px;
+  margin: 15px 0;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
+}
+.declarative-extension-inspector > header,
+.declarative-extension-inspector > header > div,
+.extension-boolean-field {
+  display: flex;
+  align-items: center;
+}
+.declarative-extension-inspector > header {
+  justify-content: space-between;
+}
+.declarative-extension-inspector > header > div {
+  gap: 6px;
+}
+.declarative-extension-inspector h3,
+.declarative-extension-inspector p {
+  margin: 0;
+}
+.declarative-extension-inspector h3 {
+  font-size: 10px;
+}
+.declarative-extension-inspector > p,
+.declarative-extension-inspector > small {
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.declarative-extension-inspector > label:not(.extension-boolean-field),
+.declarative-extension-inspector > .extension-reference-field {
+  display: grid;
+  gap: 5px;
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 650;
+}
+.declarative-extension-inspector label em {
+  color: var(--amber);
+  font-size: 7px;
+  font-style: normal;
+}
+.declarative-extension-inspector label small,
+.declarative-extension-inspector .extension-reference-field > small {
+  display: block;
+  color: var(--text-faint);
+  font-size: 7px;
+  font-weight: 450;
+  line-height: 1.45;
+}
+.declarative-extension-inspector .extension-reference-field {
+  gap: 6px;
+}
+.extension-reference-actions {
+  display: flex;
+  gap: 6px;
+}
+.extension-reference-actions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+.extension-boolean-field {
+  gap: 8px;
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 650;
+}
+.extension-node-unavailable {
+  display: flex;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line));
+  border-radius: 7px;
+  color: var(--amber);
+  font-size: 8px;
+  line-height: 1.45;
+}
+.extension-node-state {
+  display: inline-flex;
+  margin-top: 7px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--amber) 18%, transparent);
+  color: var(--amber);
+  font-size: 7px;
+  font-weight: 700;
+}
+.agent-run-config {
+  margin: 15px 0;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+.agent-run-config > header,
+.agent-run-config > header > div {
+  display: flex;
+  align-items: center;
+}
+.agent-run-config > header {
+  justify-content: space-between;
+  margin-bottom: 11px;
+}
+.agent-run-config > header > div {
+  gap: 6px;
+  color: var(--accent-strong);
+}
+.agent-run-config h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 9px;
+}
+.agent-run-config > header > span {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--green);
+  font-size: 7px;
+  font-weight: 700;
+}
+.agent-run-config > label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 9px;
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 650;
+}
+.agent-run-config > p {
+  margin: 9px 0 0;
+  color: var(--text-faint);
+  font-size: 7px;
+  line-height: 1.5;
+}
+.review-run-button {
+  width: 100%;
+  min-height: 34px;
+  font-size: 9px;
+}
+.live-run-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+.live-run-controls > div {
+  grid-column: 1 / -1;
+  display: flex;
+}
+.live-run-controls input {
+  min-width: 0;
+  border-radius: 7px 0 0 7px;
+}
+.live-run-controls button {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font-size: 8px;
+}
+.live-run-controls > div button {
+  border-left: 0;
+  border-radius: 0 7px 7px 0;
+}
+.inspector-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+  margin: 15px 0;
+}
+.inspector-actions button {
+  min-height: 45px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font-size: 8px;
+}
+.inspector-actions button:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.inspector-actions .danger-text {
+  color: var(--red);
+}
+.context-box,
+.run-history,
+.edge-explanation {
+  margin-top: 13px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+.context-box header,
+.run-history header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.context-box h3,
+.run-history h3 {
+  margin: 0;
+  font-size: 9px;
+}
+.context-box header span {
+  margin-left: auto;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-faint);
+  font-size: 7px;
+}
+.context-box p,
+.run-history p,
+.edge-explanation p {
+  margin: 7px 0 0;
+  color: var(--text-soft);
+  font-size: 8px;
+  line-height: 1.5;
+}
+.run-history pre {
+  max-height: 150px;
+  margin: 8px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font:
+    8px/1.5 'SFMono-Regular',
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.run-history > strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--green);
+  font-size: 8px;
+}
+.edge-explanation strong {
+  text-transform: capitalize;
+  color: var(--accent);
+}
+.inspector-empty {
+  padding: 35px 20px;
+  text-align: center;
+  color: var(--text-faint);
+}
+.inspector-empty h3 {
+  margin: 10px 0 5px;
+  color: var(--text);
+  font-size: 11px;
+}
+.inspector-empty p {
+  margin: 0;
+  font-size: 8px;
+  line-height: 1.5;
+}
+.inspector-empty dl {
+  margin-top: 24px;
+  text-align: left;
+}
+.inspector-empty dl div {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 8px;
+}
+.inspector-empty dd {
+  margin: 0;
+  color: var(--text-soft);
+}

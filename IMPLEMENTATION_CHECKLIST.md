@@ -11,6 +11,8 @@ not be reclassified as future work.
 - [x] Centralize the temporary product name and identity in `@forgeboard/core`.
 - [x] Add MIT license and initial architecture, security, privacy, and contribution documents.
 - [x] Pin all production/development dependencies and commit a verified lockfile.
+- [x] Enforce the 2,000-line hard ceiling and keep source, tests, styles, scripts, services, and UI
+      organized into coherent feature/domain modules well below that limit.
 - [ ] Add Dependabot and complete GitHub Actions verification/build workflows.
 - [ ] Document a one-command fresh-clone install and prove it in a clean checkout.
 - [ ] Publish GitHub Release installers/artifacts so a user can download, install, and enter solo
@@ -25,7 +27,7 @@ not be reclassified as future work.
       audit, and collaboration records.
 - [x] Deterministic DAG planning, dependency ordering, concurrency/resource limits, cancellation,
       approvals, and bounded review/revision loops.
-- [ ] SQLite migrations/repositories with transactions, WAL, retention, integrity checks, backups,
+- [x] SQLite migrations/repositories with transactions, WAL, retention, integrity checks, backups,
       JSON import/export, and interrupted-run recovery.
 - [ ] Persistent undo/redo checkpoints, autosave, recoverable snapshots, and moved-project recovery.
 
@@ -54,7 +56,7 @@ not be reclassified as future work.
 - [x] Deterministic fake-agent executable and full demo repository.
 - [x] Launch disclosure for executable, args, cwd, environment names, permissions, and context.
 - [x] Interactive ANSI-preserving PTY streams, input, permission prompts, interruption, and recovery.
-- [ ] Constrained non-root Docker runner with optional network denial and no implicit credentials.
+- [x] Constrained non-root Docker runner with optional network denial and no implicit credentials.
 
 ## Git and change management
 
@@ -71,7 +73,8 @@ not be reclassified as future work.
 
 - [x] Secure Electron main/preload/renderer production shell and signed-build documentation.
 - [x] Welcome actions: open local, clone, create empty, and recent project.
-- [ ] Setup wizard for default agent, permission profile, Docker, dev/test commands, and Git behavior.
+- [x] Setup wizard for default agent, permission profile, Docker, development-preview command, and
+      Git worktree defaults.
 - [ ] Zero-code first run: sensible defaults, UI executable pickers/detection, UI command builders,
       UI permission/environment controls, and actionable missing-dependency guidance.
 - [x] Repository health scan and installed CLI/version detection.
@@ -131,7 +134,7 @@ not be reclassified as future work.
 - [x] Schema/test proof that source, file contents, diffs, prompts, terminals, env, secrets, and
       transcripts never enter collaboration documents.
 - [x] Metadata-only state when a collaborator cannot resolve an authorized local file.
-- [ ] Dockerfile, local server, deployment, health, persistence, backups, and two-client tests.
+- [x] Dockerfile, local server, deployment, health, persistence, backups, and two-client tests.
 
 ## Settings, extensions, and polish
 
@@ -150,7 +153,7 @@ not be reclassified as future work.
 
 - [x] Required graph/workflow/recovery unit tests.
 - [x] Required path/ignore/sensitive/symlink/redaction unit tests.
-- [ ] Required IPC/adapter-manifest/Git/persistence unit tests.
+- [x] Required IPC/adapter-manifest/Git/persistence unit tests.
 - [x] Two fake agents in parallel worktrees integration flow through diff acceptance/merge/cleanup.
 - [ ] Interrupt/fail/retry/restart restoration integration test.
 - [ ] Two-worktree preview integration test.
@@ -162,7 +165,8 @@ not be reclassified as future work.
 - [ ] Failure E2E coverage for missing CLI, moved repo, collision, conflict, offline server, malformed
       import, and database recovery.
 - [x] Lint, formatting, typecheck, unit, integration, and E2E suites pass.
-- [ ] Production build and installers succeed.
+- [x] Production build succeeds.
+- [ ] Native installers are generated and install successfully on macOS, Windows, and Linux.
 - [ ] GitHub Release workflow produces installable macOS, Windows, and Linux artifacts with
       checksums; signing/notarization activates when repository secrets are configured and otherwise
       produces clearly identified unsigned development artifacts.
@@ -184,10 +188,21 @@ not be reclassified as future work.
 The following evidence applies to the current source checkpoint. Broad checklist entries remain
 unchecked when only a subset of their required behavior has proof.
 
-- 2026-07-14: frozen-lockfile install succeeded with `corepack pnpm install --frozen-lockfile`.
-- 2026-07-14: formatting, lint, strict typecheck, 97 unit tests, 9 integration tests, and production
-  builds passed through `corepack pnpm verify`.
-- 2026-07-14: both Electron Playwright scenarios passed, including first-run persistence and a real
-  approved/cancelled deterministic-agent worktree run, through `corepack pnpm test:e2e`.
-- 2026-07-14: an unpacked packaged macOS application passed the packaged smoke test; a copy outside
-  the repository also launched its bundled agent and native PTY without repository dependencies.
+- 2026-07-14: `corepack pnpm install --frozen-lockfile` succeeded in the working checkout; an
+  independent clean-clone proof remains open.
+- 2026-07-14: the structure gate scanned 237 hand-written source, test, style, script, workflow, and
+  configuration files and confirmed that each remains at or below 2,000 lines.
+- 2026-07-14: formatting, lint, strict typecheck, 242 unit tests across 44 files, 36 integration
+  tests across 6 files, and all workspace production builds passed through `corepack pnpm verify`.
+- 2026-07-14: 9 release-tool tests passed, including release tag/version binding, exact bundled-Git
+  metadata validation, top-level artifact checksums, and the cross-platform source bootstrap.
+- 2026-07-14: all 3 Electron Playwright E2E tests passed: agent run, first-run/settings/privacy, and
+  preview.
+- 2026-07-14: an unpacked macOS arm64 application passed the packaged smoke test with bundled Git
+  2.53.0. A copy outside the repository also passed `--smoke-test` under `PATH=/usr/bin:/bin`, proving
+  that this packaged runtime did not fall back to repository files or a user-installed Git. Only
+  `package:dir` was verified; this is not evidence that a native installer was generated or installed.
+- 2026-07-14: packaged resources include the project license, third-party notices, Dugite license,
+  Git copying terms, and the bundled Git runtime.
+- 2026-07-14: `corepack pnpm audit --prod --audit-level high` reported no known production
+  dependency vulnerabilities.

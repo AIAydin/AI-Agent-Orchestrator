@@ -5,4 +5,6 @@ export * from './persistence.js';
 export { PRODUCT, type ProductIdentity } from './product.js';
 export * from './security.js';
 export * from './settings.js';
+export * from './workflow-gates.js';
+export * from './workflow-runtime.js';
 export * from './workflow.js';

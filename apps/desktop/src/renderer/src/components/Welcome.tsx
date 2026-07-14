@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  AlertTriangle,
   ArrowRight,
   Bot,
   Check,
@@ -8,15 +9,22 @@ import {
   Code2,
   FolderGit2,
   FolderOpen,
+  FolderSearch,
   GitBranch,
   Github,
   Plus,
   Settings,
   ShieldCheck,
   Sparkles,
+  X,
 } from 'lucide-react';
 
-import type { AgentDetection, Project } from '../../../shared/contracts.js';
+import type {
+  AgentDetection,
+  ConfirmProjectRecoveryInput,
+  Project,
+  ProjectRecoveryAssessment,
+} from '../../../shared/contracts.js';
 import { ProjectDialog, type ProjectDialogMode } from './ProjectDialog.js';
 
 interface WelcomeProps {
@@ -25,6 +33,9 @@ interface WelcomeProps {
   busy: boolean;
   onOpen: () => void;
   onOpenRecent: (path: string) => void;
+  onLocateMoved: (projectId: string) => Promise<ProjectRecoveryAssessment | null>;
+  onConfirmMoved: (input: ConfirmProjectRecoveryInput) => Promise<void>;
+  onError: (message: string) => void;
   onCreate: (input: { parentPath: string; name: string; initializeGit: boolean }) => void;
   onClone: (input: { remoteUrl: string; destinationPath: string }) => void;
   onDemo: () => void;
@@ -33,7 +44,43 @@ interface WelcomeProps {
 
 export function Welcome(props: WelcomeProps) {
   const [dialogMode, setDialogMode] = useState<ProjectDialogMode | null>(null);
+  const [recovery, setRecovery] = useState<ProjectRecoveryAssessment | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState<string | null>(null);
   const detected = props.agents.filter((agent) => agent.installed && agent.id !== 'test-agent');
+
+  const locateMovedProject = async (projectId: string): Promise<void> => {
+    setRecoveryBusy(projectId);
+    try {
+      const assessment = await props.onLocateMoved(projectId);
+      if (assessment) setRecovery(assessment);
+    } catch (cause) {
+      props.onError(
+        cause instanceof Error ? cause.message : 'The repository could not be located.',
+      );
+    } finally {
+      setRecoveryBusy(null);
+    }
+  };
+
+  const confirmMovedProject = async (): Promise<void> => {
+    if (!recovery) return;
+    setRecoveryBusy(recovery.projectId);
+    try {
+      await props.onConfirmMoved({
+        projectId: recovery.projectId,
+        confirmationId: recovery.confirmationId,
+        confirmed: true,
+      });
+      setRecovery(null);
+    } catch (cause) {
+      setRecovery(null);
+      props.onError(
+        cause instanceof Error ? cause.message : 'The repository could not be rebound safely.',
+      );
+    } finally {
+      setRecoveryBusy(null);
+    }
+  };
 
   return (
     <main className="welcome-shell">
@@ -151,25 +198,52 @@ export function Welcome(props: WelcomeProps) {
             </div>
           ) : (
             <div className="recent-list">
-              {props.recent.slice(0, 5).map((project) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  onClick={() => props.onOpenRecent(project.path)}
-                >
-                  <span className="repo-glyph">
-                    <Code2 size={17} />
-                  </span>
-                  <span className="recent-name">
-                    <strong>{project.name}</strong>
-                    <small>{project.path}</small>
-                  </span>
-                  <span className="branch-badge">
-                    <GitBranch size={12} /> {project.health.branch ?? 'no branch'}
-                  </span>
-                  <ChevronRight size={16} />
-                </button>
-              ))}
+              {props.recent.slice(0, 5).map((project) =>
+                project.missing ? (
+                  <div className="recent-project missing" key={project.id}>
+                    <span className="repo-glyph" aria-hidden="true">
+                      <AlertTriangle size={17} />
+                    </span>
+                    <span className="recent-name">
+                      <strong>{project.name}</strong>
+                      <small>{project.path}</small>
+                    </span>
+                    <span className="missing-badge">
+                      <AlertTriangle size={12} /> Missing folder
+                    </span>
+                    <button
+                      className="locate-project-button"
+                      type="button"
+                      disabled={props.busy || recoveryBusy !== null}
+                      onClick={() => void locateMovedProject(project.id)}
+                      aria-label={`Locate moved repository for ${project.name}`}
+                    >
+                      <FolderSearch size={14} />
+                      {recoveryBusy === project.id ? 'Inspecting…' : 'Locate'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="recent-project recent-open"
+                    key={project.id}
+                    type="button"
+                    onClick={() => props.onOpenRecent(project.path)}
+                    disabled={props.busy}
+                  >
+                    <span className="repo-glyph">
+                      <Code2 size={17} />
+                    </span>
+                    <span className="recent-name">
+                      <strong>{project.name}</strong>
+                      <small>{project.path}</small>
+                    </span>
+                    <span className="branch-badge">
+                      <GitBranch size={12} /> {project.health.branch ?? 'no branch'}
+                    </span>
+                    <ChevronRight size={16} />
+                  </button>
+                ),
+              )}
             </div>
           )}
         </section>
@@ -206,6 +280,121 @@ export function Welcome(props: WelcomeProps) {
             props.onClone(input);
           }}
         />
+      )}
+
+      {recovery && (
+        <div className="modal-backdrop">
+          <section
+            className="modal project-dialog recovery-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="recovery-dialog-title"
+          >
+            <header>
+              <span className="modal-title-icon">
+                <FolderSearch size={19} />
+              </span>
+              <div>
+                <h2 id="recovery-dialog-title">Confirm moved project</h2>
+                <p>
+                  Review the selected folder before Forgeboard changes this project’s saved path.
+                </p>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => setRecovery(null)}
+                disabled={recoveryBusy !== null}
+                aria-label="Cancel project recovery"
+              >
+                <X size={16} />
+              </button>
+            </header>
+
+            <div className="recovery-comparison">
+              <section>
+                <span>Missing project record</span>
+                <strong>{recovery.original.name}</strong>
+                <code>{recovery.original.path}</code>
+              </section>
+              <ArrowRight size={17} aria-hidden="true" />
+              <section>
+                <span>Selected candidate</span>
+                <strong>{recovery.candidate.name}</strong>
+                <code>{recovery.candidate.path}</code>
+              </section>
+            </div>
+
+            <div className="recovery-identity" aria-label="Candidate repository identity">
+              <strong>Candidate identity</strong>
+              <dl>
+                <div>
+                  <dt>Repository</dt>
+                  <dd>{recovery.candidate.health.isGitRepository ? 'Git' : 'Plain folder'}</dd>
+                </div>
+                <div>
+                  <dt>Branch</dt>
+                  <dd>{recovery.candidate.health.branch ?? 'None detected'}</dd>
+                </div>
+                <div>
+                  <dt>Package manager</dt>
+                  <dd>{recovery.candidate.health.packageManager}</dd>
+                </div>
+                <div>
+                  <dt>Known remotes</dt>
+                  <dd>
+                    {recovery.candidate.health.remotes.length > 0
+                      ? recovery.candidate.health.remotes
+                          .map((remote) => `${remote.name}: ${remote.url}`)
+                          .join(', ')
+                      : 'None detected'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            {recovery.warnings.length > 0 ? (
+              <div className="recovery-warnings" role="alert">
+                <strong>
+                  <AlertTriangle size={14} /> Identity warning
+                </strong>
+                <ul>
+                  {recovery.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="recovery-clear">
+                <ShieldCheck size={14} /> No repository identity warnings detected.
+              </div>
+            )}
+
+            <p className="recovery-preservation-note">
+              Confirming keeps the existing project ID, canvas, snapshots, and run records. Only the
+              saved repository location and its refreshed identity details change.
+            </p>
+
+            <footer>
+              <button
+                className="button ghost"
+                type="button"
+                onClick={() => setRecovery(null)}
+                disabled={recoveryBusy !== null}
+              >
+                Cancel
+              </button>
+              <button
+                className="button primary"
+                type="button"
+                onClick={() => void confirmMovedProject()}
+                disabled={recoveryBusy !== null}
+              >
+                {recoveryBusy !== null ? 'Confirming…' : 'Confirm and rebind'}
+              </button>
+            </footer>
+          </section>
+        </div>
       )}
     </main>
   );

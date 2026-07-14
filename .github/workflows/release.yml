@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, ubuntu-22.04, windows-2022]
+        os: [macos-15, macos-15-intel, ubuntu-22.04, windows-2022]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -26,21 +26,64 @@ jobs:
           node-version: 22.17.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: node scripts/verify-release-metadata.mjs
+      - if: startsWith(github.ref, 'refs/tags/')
+        run: node scripts/verify-release-metadata.mjs --verify-tag
+      - run: >-
+          node --test
+          scripts/checksums.test.mjs
+          scripts/release-metadata.test.mjs
+          scripts/start-from-source.test.mjs
       - run: pnpm verify
       - if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum pnpm test:e2e
       - if: runner.os != 'Linux'
         run: pnpm test:e2e
       - run: pnpm --filter @forgeboard/test-agent build
-      - run: pnpm package
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        shell: bash
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -z "${CSC_LINK//[[:space:]]/}" ]]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          else
+            for variable in CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+              value="${!variable-}"
+              if [[ -z "${value//[[:space:]]/}" ]]; then
+                unset "$variable"
+              fi
+            done
+          fi
+          pnpm package
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) {
+            Remove-Item Env:WIN_CSC_LINK -ErrorAction SilentlyContinue
+            Remove-Item Env:WIN_CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
+            $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+          } elseif ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
+            Remove-Item Env:WIN_CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
+          }
+          pnpm package
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        run: pnpm package
+      - if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum pnpm --filter @forgeboard/desktop smoke:packaged
+      - if: runner.os != 'Linux'
+        run: pnpm --filter @forgeboard/desktop smoke:packaged
       - run: node scripts/checksums.mjs apps/desktop/release
       - uses: actions/upload-artifact@v4
         with:
@@ -60,10 +103,24 @@ jobs:
     needs: build
     runs-on: ubuntu-22.04
     steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.17.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+      - name: Attach bundled Git corresponding source
+        run: |
+          node scripts/verify-release-metadata.mjs --verify-tag
+          node scripts/download-release-sources.mjs artifacts
+          node scripts/checksums.mjs artifacts SHA256SUMS-source-and-installers.txt
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

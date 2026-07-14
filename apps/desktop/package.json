@@ -22,11 +22,13 @@
   "dependencies": {
     "@forgeboard/agent-adapters": "workspace:*",
     "@forgeboard/core": "workspace:*",
+    "@forgeboard/extension-runtime": "workspace:*",
     "@forgeboard/git-engine": "workspace:*",
     "@forgeboard/test-agent": "workspace:*",
     "@forgeboard/ui": "workspace:*",
     "@tanstack/react-query": "catalog:",
     "@xyflow/react": "catalog:",
+    "dugite": "3.2.2",
     "lucide-react": "catalog:",
     "monaco-editor": "catalog:",
     "node-pty": "catalog:",
@@ -61,9 +63,22 @@
       "package.json"
     ],
     "asarUnpack": [
-      "**/node-pty/**"
+      "**/node-pty/**",
+      "**/dugite/git/**"
     ],
     "extraResources": [
+      {
+        "from": "../../LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "../../THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "../../third_party/git/COPYING",
+        "to": "licenses/git/COPYING"
+      },
       {
         "from": "../../packages/test-agent/dist",
         "to": "test-agent",
@@ -76,13 +91,16 @@
       }
     ],
     "mac": {
+      "icon": "build/icon.png",
       "category": "public.app-category.developer-tools"
     },
     "win": {
+      "icon": "build/icon.png",
       "target": "nsis"
     },
     "linux": {
       "executableName": "forgeboard",
+      "icon": "build/icon.png",
       "target": [
         "AppImage",
         "deb"

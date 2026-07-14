@@ -76,6 +76,7 @@ export const WorkflowRunSchema = z
           ]),
           lastFeedback: z.string().max(200_000).optional(),
           stopCondition: z.enum(['review-approved', 'tests-passed', 'human-accepted']).optional(),
+          eligibleAt: TimestampSchema.optional(),
         })
         .strict(),
     ),
@@ -99,6 +100,16 @@ export const WorkflowRunSchema = z
         code: z.ZodIssueCode.custom,
         path: ['endedAt'],
         message: 'Terminal workflow runs require an end timestamp',
+      });
+    }
+    if (
+      isTerminalRunStatus(run.status) &&
+      Object.values(run.nodeRuns).some((nodeRun) => !isTerminalRunStatus(nodeRun.status))
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['status'],
+        message: 'A workflow cannot be terminal while any node run is still active or queued',
       });
     }
   });
@@ -160,6 +171,15 @@ export interface WorkflowValidationIssue {
     | 'UNREGISTERED_REVISION_EDGE'
     | 'INVALID_REVISION_LOOP'
     | 'DUPLICATE_LOOP_EDGE'
+    | 'MISSING_REQUIRED_CONTEXT'
+    | 'INVALID_REVIEWER'
+    | 'INVALID_REVIEW_TARGET'
+    | 'MISSING_CHECK_PRODUCER'
+    | 'MISSING_CHECK_INPUT'
+    | 'AMBIGUOUS_CHECK_PRODUCER'
+    | 'INVALID_GATE_SOURCE'
+    | 'RETRY_POLICY_MISMATCH'
+    | 'UNACHIEVABLE_STOP_CONDITION'
     | 'INVALID_GROUP'
     | 'RESOURCE_LIMIT';
   readonly message: string;
@@ -264,6 +284,56 @@ export function validateWorkflow(untrustedCanvas: unknown): WorkflowValidationRe
         edge.targetNodeId,
       );
     }
+    if (edge.type === 'context' && edge.config.required && edge.config.attachmentIds.length === 0) {
+      pushIssue(
+        issues,
+        'MISSING_REQUIRED_CONTEXT',
+        'Required context edges must select at least one explicit attachment',
+        edge.id,
+      );
+    }
+    if (edge.type === 'review' && edge.config.reviewer === 'agent' && target?.type !== 'agent') {
+      pushIssue(
+        issues,
+        'INVALID_REVIEWER',
+        'Agent review edges must target the configured reviewer agent',
+        edge.id,
+        edge.targetNodeId,
+      );
+    }
+    if (
+      edge.type === 'review' &&
+      edge.config.reviewer === 'gate' &&
+      target?.type !== 'review-gate'
+    ) {
+      pushIssue(
+        issues,
+        'INVALID_REVIEWER',
+        'Gate review edges must target a review-gate node',
+        edge.id,
+        edge.targetNodeId,
+      );
+    }
+    if (edge.type === 'review' && edge.config.reviewer === 'human') {
+      if (target?.type !== 'diff-review') {
+        pushIssue(
+          issues,
+          'INVALID_REVIEW_TARGET',
+          'Human review edges must target a dedicated diff-review node',
+          edge.id,
+          edge.targetNodeId,
+        );
+      }
+      if (!edge.config.requireApproval) {
+        pushIssue(
+          issues,
+          'INVALID_REVIEW_TARGET',
+          'Human review edges must require an explicit decision',
+          edge.id,
+          edge.targetNodeId,
+        );
+      }
+    }
     if (edge.type === 'dependency' && source?.type !== 'task') {
       pushIssue(
         issues,
@@ -292,6 +362,179 @@ export function validateWorkflow(untrustedCanvas: unknown): WorkflowValidationRe
           edge.id,
         );
       }
+    }
+  }
+
+  const humanReviewTargetIds = new Set(
+    canvas.edges.flatMap((edge) =>
+      edge.type === 'review' && edge.config.reviewer === 'human' ? [edge.targetNodeId] : [],
+    ),
+  );
+  for (const targetNodeId of humanReviewTargetIds) {
+    const incomingReviews = canvas.edges.filter(
+      (edge): edge is Extract<CanvasEdge, { type: 'review' }> =>
+        edge.type === 'review' && edge.targetNodeId === targetNodeId,
+    );
+    if (incomingReviews.length !== 1) {
+      pushIssue(
+        issues,
+        'INVALID_REVIEW_TARGET',
+        'A dedicated human review node must own exactly one incoming review decision',
+        targetNodeId,
+        ...incomingReviews.map((edge) => edge.id),
+      );
+    }
+    const humanReview = incomingReviews.find((edge) => edge.config.reviewer === 'human');
+    const conflictingInputs = canvas.edges.filter(
+      (edge) =>
+        edge.targetNodeId === targetNodeId &&
+        edge.id !== humanReview?.id &&
+        !(
+          edge.type === 'output' &&
+          humanReview !== undefined &&
+          edge.sourceNodeId === humanReview.sourceNodeId
+        ),
+    );
+    if (incomingReviews.length === 1 && conflictingInputs.length > 0) {
+      pushIssue(
+        issues,
+        'INVALID_REVIEW_TARGET',
+        'A dedicated human review node cannot share unrelated incoming controls or evidence',
+        targetNodeId,
+        ...conflictingInputs.map((edge) => edge.id),
+      );
+    }
+  }
+
+  for (const gate of canvas.nodes.filter(
+    (node): node is Extract<Canvas['nodes'][number], { type: 'review-gate' }> =>
+      node.type === 'review-gate',
+  )) {
+    const reviewerId = gate.data.reviewerAgentId;
+    if (reviewerId !== undefined) {
+      const reviewer = nodeById.get(reviewerId);
+      if (reviewer?.type !== 'agent') {
+        pushIssue(
+          issues,
+          'INVALID_REVIEWER',
+          'A review-gate reviewer must reference an existing agent node',
+          gate.id,
+          reviewerId,
+        );
+      }
+      if (!canvas.edges.some((edge) => edge.type === 'review' && edge.targetNodeId === gate.id)) {
+        pushIssue(
+          issues,
+          'INVALID_REVIEWER',
+          'A review-gate reviewer requires an explicit review edge for its assessment',
+          gate.id,
+          reviewerId,
+        );
+      }
+    }
+
+    if (
+      (gate.data.testsRequired || gate.data.lintRequired) &&
+      gate.data.requiredCheckIds.length === 0
+    ) {
+      pushIssue(
+        issues,
+        'MISSING_CHECK_PRODUCER',
+        'Kind-level deterministic gates must name at least one required check producer',
+        gate.id,
+      );
+    }
+    for (const checkId of gate.data.requiredCheckIds) {
+      const producers = canvas.nodes.filter(
+        (node) => node.type === 'test' && node.data.runIds.includes(checkId),
+      );
+      if (producers.length === 0) {
+        pushIssue(
+          issues,
+          'MISSING_CHECK_PRODUCER',
+          'Every required check must map to a planned test node',
+          gate.id,
+          checkId,
+        );
+      } else if (producers.length > 1) {
+        pushIssue(
+          issues,
+          'AMBIGUOUS_CHECK_PRODUCER',
+          'A required check id can belong to only one test node',
+          gate.id,
+          checkId,
+          ...producers.map((producer) => producer.id),
+        );
+      }
+    }
+
+    const reviewedSourceIds = new Set<string>();
+    for (const edge of canvas.edges) {
+      if (edge.type === 'review' && edge.targetNodeId === gate.id) {
+        reviewedSourceIds.add(edge.sourceNodeId);
+      }
+      if (
+        edge.type === 'execute' &&
+        edge.config.approval === 'review-gate' &&
+        edge.config.approvalGateNodeId === gate.id
+      ) {
+        reviewedSourceIds.add(edge.sourceNodeId);
+      }
+    }
+    for (const loop of canvas.revisionLoops) {
+      if (loop.reviewNodeId === gate.id) reviewedSourceIds.add(loop.implementationNodeId);
+    }
+    const requiresReviewedSource =
+      gate.data.requiredCheckIds.length > 0 ||
+      gate.data.testsRequired ||
+      gate.data.lintRequired ||
+      reviewerId !== undefined ||
+      gate.data.humanApprovalRequired;
+    if (requiresReviewedSource && reviewedSourceIds.size !== 1) {
+      pushIssue(
+        issues,
+        'INVALID_GATE_SOURCE',
+        'A nontrivial review gate must resolve to exactly one reviewed source node',
+        gate.id,
+        ...reviewedSourceIds,
+      );
+    }
+    if (reviewedSourceIds.size === 1) {
+      const reviewedSourceId = [...reviewedSourceIds][0]!;
+      for (const checkId of gate.data.requiredCheckIds) {
+        const producers = canvas.nodes.filter(
+          (node) => node.type === 'test' && node.data.runIds.includes(checkId),
+        );
+        if (
+          producers.length === 1 &&
+          !canvas.edges.some(
+            (edge) =>
+              edge.type === 'output' &&
+              edge.config.required &&
+              edge.sourceNodeId === reviewedSourceId &&
+              edge.targetNodeId === producers[0]!.id,
+          )
+        ) {
+          pushIssue(
+            issues,
+            'MISSING_CHECK_INPUT',
+            'A required check producer must consume a required verified output from the reviewed source',
+            gate.id,
+            checkId,
+            reviewedSourceId,
+            producers[0]!.id,
+          );
+        }
+      }
+    }
+    if (reviewerId !== undefined && reviewedSourceIds.has(reviewerId)) {
+      pushIssue(
+        issues,
+        'INVALID_REVIEWER',
+        'A review-gate reviewer must be different from the reviewed source node',
+        gate.id,
+        reviewerId,
+      );
     }
   }
 
@@ -329,6 +572,7 @@ export function validateWorkflow(untrustedCanvas: unknown): WorkflowValidationRe
     revisionEdgeOwners.set(loop.revisionEdgeId, loop.id);
     const validReview =
       reviewEdge?.type === 'review' &&
+      reviewEdge.config.requireApproval &&
       reviewEdge.sourceNodeId === loop.implementationNodeId &&
       reviewEdge.targetNodeId === loop.reviewNodeId;
     const validRevision =
@@ -342,6 +586,45 @@ export function validateWorkflow(untrustedCanvas: unknown): WorkflowValidationRe
         'INVALID_REVISION_LOOP',
         'Bounded loop edges must form implementation -> review -> implementation',
         loop.id,
+      );
+    }
+    const reviewNode = nodeById.get(loop.reviewNodeId);
+    if (
+      reviewNode?.type === 'review-gate' &&
+      reviewNode.data.retryPolicy.maximumIterations !== loop.maximumAttempts
+    ) {
+      pushIssue(
+        issues,
+        'RETRY_POLICY_MISMATCH',
+        'Review-gate retry iterations must equal the bounded revision-loop attempt limit',
+        loop.id,
+        reviewNode.id,
+      );
+    }
+    const deterministicTestStopAchievable =
+      reviewNode?.type === 'review-gate' &&
+      (reviewNode.data.requiredCheckIds.length > 0 ||
+        reviewNode.data.testsRequired ||
+        reviewNode.data.lintRequired);
+    if (loop.stopConditions.includes('tests-passed') && !deterministicTestStopAchievable) {
+      pushIssue(
+        issues,
+        'UNACHIEVABLE_STOP_CONDITION',
+        'The tests-passed stop condition requires a deterministic review gate',
+        loop.id,
+        loop.reviewNodeId,
+      );
+    }
+    if (
+      !loop.stopConditions.includes('review-approved') &&
+      !(loop.stopConditions.includes('tests-passed') && deterministicTestStopAchievable)
+    ) {
+      pushIssue(
+        issues,
+        'UNACHIEVABLE_STOP_CONDITION',
+        'A revision loop requires an automatic success stop condition before human escape',
+        loop.id,
+        ...loop.stopConditions,
       );
     }
   }
@@ -605,14 +888,22 @@ export function transitionNodeRun(
   return NodeRunStateSchema.parse(next);
 }
 
-function aggregateWorkflowStatus(nodeRuns: Readonly<Record<string, NodeRunState>>): RunStatus {
+export function aggregateWorkflowStatus(
+  nodeRuns: Readonly<Record<string, NodeRunState>>,
+): RunStatus {
   const statuses = Object.values(nodeRuns).map((run) => run.status);
-  if (statuses.some((status) => status === 'lost')) return 'lost';
-  if (statuses.some((status) => status === 'failed')) return 'failed';
+  if (statuses.length === 0) return 'queued';
+
+  // A failed parallel sibling must not make the aggregate terminal while other work can still
+  // finish or be cancelled. Terminal precedence applies only after every node is terminal.
   if (statuses.some((status) => status === 'cancelling')) return 'cancelling';
   if (statuses.some((status) => status === 'running')) return 'running';
   if (statuses.some((status) => status === 'waiting-for-approval')) return 'waiting-for-approval';
   if (statuses.some((status) => status === 'paused')) return 'paused';
+  if (statuses.some((status) => status === 'queued')) return 'queued';
+
+  if (statuses.some((status) => status === 'lost')) return 'lost';
+  if (statuses.some((status) => status === 'failed')) return 'failed';
   if (statuses.every((status) => status === 'succeeded')) return 'succeeded';
   if (statuses.every((status) => status === 'cancelled' || status === 'succeeded'))
     return 'cancelled';
@@ -712,12 +1003,19 @@ export function advanceRevisionLoop(
   if (state.status === 'satisfied' || state.status === 'cancelled') {
     throw new Error(`Revision loop is already ${state.status}`);
   }
-  if (event.type === 'human-aborted') return { ...state, status: 'cancelled' };
+  const withoutEligibility = (): Omit<RevisionLoopState, 'eligibleAt'> => ({
+    loopId: state.loopId,
+    attemptsStarted: state.attemptsStarted,
+    status: state.status,
+    ...(state.lastFeedback === undefined ? {} : { lastFeedback: state.lastFeedback }),
+    ...(state.stopCondition === undefined ? {} : { stopCondition: state.stopCondition }),
+  });
+  if (event.type === 'human-aborted') return { ...withoutEligibility(), status: 'cancelled' };
   if (event.type === 'stop-condition-met') {
     if (!loop.stopConditions.includes(event.condition)) {
       throw new Error(`Stop condition is not configured: ${event.condition}`);
     }
-    return { ...state, status: 'satisfied', stopCondition: event.condition };
+    return { ...withoutEligibility(), status: 'satisfied', stopCondition: event.condition };
   }
   if (event.type === 'review-failed') {
     if (state.status !== 'review-required')
@@ -733,5 +1031,9 @@ export function advanceRevisionLoop(
   if (state.attemptsStarted >= loop.maximumAttempts) {
     return { ...state, status: 'waiting-human' };
   }
-  return { ...state, attemptsStarted: state.attemptsStarted + 1, status: 'review-required' };
+  return {
+    ...withoutEligibility(),
+    attemptsStarted: state.attemptsStarted + 1,
+    status: 'review-required',
+  };
 }

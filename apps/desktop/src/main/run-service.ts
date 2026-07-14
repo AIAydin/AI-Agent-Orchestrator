@@ -6,6 +6,8 @@ import {
   CliAgentAdapter,
   createCustomCliAdapter,
   getBuiltInAgentManifest,
+  planDockerAgentLaunch,
+  type AgentAdapterManifest,
   type AgentEvent,
   type AgentSession,
   type PermissionProfile,
@@ -31,9 +33,12 @@ import {
   type RunDisclosure,
   type RunEventEnvelope,
 } from '../shared/contracts.js';
+import { customAgentManifest } from './custom-agent.js';
+import { checkDockerReadiness } from './docker-runtime.js';
 import type { LocalStore, StoredRunRecord } from './storage.js';
 
 const RunIdSchema = z.string().uuid();
+const DOCKER_SAFE_ENVIRONMENT_NAMES = new Set(['COLORTERM', 'LANG', 'LC_ALL', 'TERM']);
 const InputSchema = z
   .string()
   .max(1_000_000)
@@ -51,10 +56,12 @@ interface PreparedRun {
   readonly adapterId: RunAdapterId;
   readonly before: WorkspaceSnapshot;
   readonly disclosure: RunDisclosure;
+  readonly generation: number;
   readonly nodeId: string;
   readonly ownerId: number;
   readonly plan: PreparedAgentLaunch;
   readonly repositoryPath: string;
+  readonly trustedExtensionAdapter: boolean;
   readonly worktree: WorktreeOwnership | null;
   record: StoredRunRecord;
 }
@@ -65,18 +72,34 @@ interface ActiveRun extends PreparedRun {
   pendingTestInputId: string | null;
 }
 
+type TrustedAdapterLauncher = (
+  adapterId: string,
+  expectedManifest: AgentAdapterManifest,
+  launch: () => Promise<AgentSession>,
+) => Promise<AgentSession>;
+
 export class RunService {
   readonly #active = new Map<string, ActiveRun>();
   readonly #pending = new Map<string, PreparedRun>();
-  readonly #repositories = new RepositoryService();
-  readonly #worktrees = new WorktreeService(this.#repositories);
+  readonly #repositories: RepositoryService;
+  readonly #worktrees: WorktreeService;
   readonly #registeredChannels: string[] = [];
   #disposed = false;
+  #generation = 0;
+  #privacyResetting = false;
 
   public constructor(
     private readonly store: LocalStore,
     private readonly getSettings: () => AppSettings,
-  ) {}
+    private readonly getTrustedAdapter: (
+      adapterId: string,
+    ) => Promise<AgentAdapterManifest | undefined> = () => Promise.resolve(undefined),
+    private readonly launchTrustedAdapter?: TrustedAdapterLauncher,
+    repositories: RepositoryService = new RepositoryService(),
+  ) {
+    this.#repositories = repositories;
+    this.#worktrees = new WorktreeService(this.#repositories);
+  }
 
   public registerIpcHandlers(): void {
     this.#handle(
@@ -106,6 +129,7 @@ export class RunService {
 
   public async prepare(owner: WebContents, input: PrepareRunInput): Promise<RunDisclosure> {
     this.#assertAvailable();
+    const generation = this.#generation;
     const repositoryPath = await this.#repositories.resolveRepositoryRoot(input.repositoryPath);
     const primaryStatus = await this.#repositories.status(repositoryPath);
     const settings = this.getSettings();
@@ -117,7 +141,7 @@ export class RunService {
     let baseCommit = primaryStatus.headOid;
     let primaryWasDirty = primaryStatus.dirty;
 
-    if (input.permissionProfile === 'worktree-write') {
+    if (input.permissionProfile !== 'plan-read-only') {
       if (primaryStatus.headOid === null) {
         throw new Error('A writable agent run requires the repository to have an initial commit.');
       }
@@ -126,7 +150,7 @@ export class RunService {
         managedRoot: path.resolve(settings.worktreeRoot),
         agentId: input.adapterId,
         taskId: input.nodeId,
-        branchPrefix: configuredBranchPrefix(settings.branchPrefix, input.nodeId),
+        branchPrefix: settings.branchPrefix,
         cleanupPolicy: settings.worktreeCleanupPolicy === 'after-merge' ? 'after-merge' : 'manual',
       });
       worktree = provisioned.ownership;
@@ -137,12 +161,8 @@ export class RunService {
     }
 
     try {
-      const { adapter, plan, detectionWarnings } = await this.#prepareAdapter(
-        input,
-        cwd,
-        settings,
-        runId,
-      );
+      const { adapter, plan, detectionWarnings, trustedExtensionAdapter } =
+        await this.#prepareAdapter(input, cwd, settings, runId);
       const warnings = [...plan.disclosure.warnings, ...detectionWarnings];
       if (primaryWasDirty && worktree !== null) {
         warnings.push(
@@ -199,13 +219,16 @@ export class RunService {
         adapterId: input.adapterId,
         before: await this.#captureWorkspace(cwd),
         disclosure,
+        generation,
         nodeId: input.nodeId,
         ownerId: owner.id,
         plan,
         repositoryPath,
+        trustedExtensionAdapter,
         worktree,
         record,
       };
+      this.#assertGeneration(generation);
       this.store.saveRun(record);
       this.store.appendAudit('agent-run', 'prepare', 'allowed', {
         runId,
@@ -222,14 +245,16 @@ export class RunService {
       return disclosure;
     } catch (error) {
       if (worktree !== null) await this.#cleanupUnusedWorktree(worktree).catch(() => undefined);
-      this.store.appendAudit('agent-run', 'prepare', 'failed', {
-        runId,
-        projectId: input.projectId,
-        nodeId: input.nodeId,
-        adapterId: input.adapterId,
-        permissionProfile: input.permissionProfile,
-        reason: error instanceof Error ? error.message : 'Unknown preparation failure',
-      });
+      if (generation === this.#generation) {
+        this.store.appendAudit('agent-run', 'prepare', 'failed', {
+          runId,
+          projectId: input.projectId,
+          nodeId: input.nodeId,
+          adapterId: input.adapterId,
+          permissionProfile: input.permissionProfile,
+          reason: error instanceof Error ? error.message : 'Unknown preparation failure',
+        });
+      }
       throw error;
     }
   }
@@ -239,7 +264,12 @@ export class RunService {
     const prepared = this.#ownedPending(owner, runId);
     this.#pending.delete(runId);
     try {
-      const session = await prepared.adapter.launch(prepared.plan);
+      this.#assertGeneration(prepared.generation);
+      const session = await this.#launchPrepared(prepared);
+      if (prepared.generation !== this.#generation) {
+        session.terminate();
+        throw new Error('The prepared run was invalidated while local data was being deleted.');
+      }
       const now = new Date().toISOString();
       prepared.record = {
         ...prepared.record,
@@ -265,6 +295,7 @@ export class RunService {
       void this.#track(active);
       return true;
     } catch (error) {
+      if (prepared.generation !== this.#generation) throw error;
       let worktreePreserved = prepared.worktree !== null;
       if (prepared.worktree !== null) {
         try {
@@ -389,6 +420,27 @@ export class RunService {
     for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
   }
 
+  public async resetForPrivacy(): Promise<void> {
+    this.#assertAvailable();
+    this.#privacyResetting = true;
+    this.#generation += 1;
+    const activeRuns = [...this.#active.values()];
+    this.#pending.clear();
+    this.#active.clear();
+    for (const active of activeRuns) {
+      try {
+        active.session.terminate();
+      } catch {
+        // Continue invalidating every run. The process supervisor owns force termination.
+      }
+    }
+    await Promise.allSettled(activeRuns.map(async (active) => await active.session.result));
+  }
+
+  public resumeAfterPrivacyReset(): void {
+    if (!this.#disposed) this.#privacyResetting = false;
+  }
+
   async #prepareAdapter(
     input: PrepareRunInput,
     cwd: string,
@@ -398,9 +450,15 @@ export class RunService {
     adapter: CliAgentAdapter;
     plan: PreparedAgentLaunch;
     detectionWarnings: string[];
+    trustedExtensionAdapter: boolean;
   }> {
     const environment = allowedEnvironment(settings.envAllowlist);
     if (input.adapterId === 'test-agent') {
+      if (input.permissionProfile === 'docker-isolated') {
+        throw new Error(
+          'The bundled deterministic agent runs directly. Choose a container-ready coding-agent adapter for Docker isolation.',
+        );
+      }
       const cliPath = await testAgentCliPath();
       const adapter = createCustomCliAdapter({ ...TEST_AGENT_MANIFEST, id: 'test-agent' });
       const profile = permissionProfile(input.permissionProfile, cwd, true);
@@ -418,13 +476,87 @@ export class RunService {
           unset: [],
         },
       });
-      return { adapter, plan, detectionWarnings: [] };
+      return { adapter, plan, detectionWarnings: [], trustedExtensionAdapter: false };
     }
 
-    const manifest = getBuiltInAgentManifest(input.adapterId);
+    const settingsManifest =
+      input.adapterId === 'custom' ? customAgentManifest(settings.customAgent) : undefined;
+    const builtInManifest = getBuiltInAgentManifest(input.adapterId) ?? settingsManifest;
+    const trustedManifest =
+      builtInManifest === undefined ? await this.getTrustedAdapter(input.adapterId) : undefined;
+    const manifest = builtInManifest ?? trustedManifest;
     if (manifest === undefined) throw new Error(`No adapter is registered for ${input.adapterId}.`);
     const adapter = new CliAgentAdapter(manifest);
-    const executableOverride = settings.agentExecutableOverrides[input.adapterId]?.trim();
+    if (input.permissionProfile === 'docker-isolated') {
+      if (!settings.dockerEnabled) {
+        throw new Error('Enable and configure Docker isolation in Settings before using it.');
+      }
+      if (settings.dockerMountHostCredentials) {
+        throw new Error(
+          'The safe Docker profile does not mount host credentials. Disable that legacy setting and authenticate inside the selected image.',
+        );
+      }
+      const runtime = await checkDockerReadiness({
+        dockerExecutable: settings.dockerExecutable,
+        image: settings.dockerImage,
+        containerExecutable: settings.dockerContainerExecutable,
+      });
+      if (!runtime.available) {
+        throw new Error(`Docker isolation is unavailable: ${runtime.reason ?? 'probe failed'}`);
+      }
+      const configuredModel = manifest.capabilities.modelSelection
+        ? settings.agentDefaultModels[input.adapterId]?.trim()
+        : undefined;
+      const providerPlan = adapter.prepareLaunch({
+        prompt: input.prompt,
+        cwd,
+        permissionProfile: permissionProfile(
+          'worktree-write',
+          cwd,
+          false,
+          input.adapterId !== 'custom',
+        ),
+        contextAttachments: [],
+        ...(configuredModel === undefined || configuredModel === ''
+          ? {}
+          : { model: configuredModel }),
+        executable: manifest.executable.command,
+        extraArguments: [],
+        environment: { inherit: 'none', variables: environment, unset: [] },
+      });
+      const userId = positiveContainerIdentity(process.getuid?.());
+      const groupId = positiveContainerIdentity(process.getgid?.());
+      const plan = await planDockerAgentLaunch(providerPlan, {
+        assignedWorktreePath: cwd,
+        worktreeAccess: 'read-write',
+        dockerExecutable: runtime.executable,
+        image: settings.dockerImage,
+        containerExecutable: settings.dockerContainerExecutable,
+        userId,
+        groupId,
+        cpuLimit: settings.dockerCpuLimit,
+        memoryLimitMb: settings.dockerMemoryMb,
+        pidsLimit: 256,
+        tmpfsSizeMb: 128,
+        network:
+          settings.dockerNetwork === 'enabled'
+            ? { mode: 'bridge', explicitlyApproved: true }
+            : { mode: 'none' },
+        environmentAllowlist: settings.envAllowlist.filter((name) =>
+          DOCKER_SAFE_ENVIRONMENT_NAMES.has(name),
+        ),
+      });
+      return {
+        adapter,
+        plan,
+        detectionWarnings: [],
+        trustedExtensionAdapter: trustedManifest !== undefined,
+      };
+    }
+    const executableOverride =
+      input.adapterId === 'custom'
+        ? manifest.executable.command
+        : settings.agentExecutableOverrides[input.adapterId]?.trim();
     const detection = await adapter.detect({
       ...(executableOverride === undefined || executableOverride === ''
         ? {}
@@ -435,11 +567,18 @@ export class RunService {
         `${manifest.name} is not available: ${detection.reason ?? 'executable not found'}`,
       );
     }
-    const configuredModel = settings.agentDefaultModels[input.adapterId]?.trim();
+    const configuredModel = manifest.capabilities.modelSelection
+      ? settings.agentDefaultModels[input.adapterId]?.trim()
+      : undefined;
     const plan = adapter.prepareLaunch({
       prompt: input.prompt,
       cwd,
-      permissionProfile: permissionProfile(input.permissionProfile, cwd, false),
+      permissionProfile: permissionProfile(
+        input.permissionProfile,
+        cwd,
+        false,
+        input.adapterId !== 'custom',
+      ),
       contextAttachments: [],
       ...(configuredModel === undefined || configuredModel === ''
         ? {}
@@ -448,13 +587,39 @@ export class RunService {
       extraArguments: [],
       environment: { inherit: 'none', variables: environment, unset: [] },
     });
-    return { adapter, plan, detectionWarnings: [...detection.capabilityWarnings] };
+    return {
+      adapter,
+      plan,
+      detectionWarnings: [...detection.capabilityWarnings],
+      trustedExtensionAdapter: trustedManifest !== undefined,
+    };
+  }
+
+  async #launchPrepared(prepared: PreparedRun): Promise<AgentSession> {
+    if (!prepared.trustedExtensionAdapter) return prepared.adapter.launch(prepared.plan);
+    if (this.launchTrustedAdapter !== undefined) {
+      return this.launchTrustedAdapter(
+        prepared.adapterId,
+        prepared.plan.manifest,
+        async () => await prepared.adapter.launch(prepared.plan),
+      );
+    }
+    const currentManifest = await this.getTrustedAdapter(prepared.adapterId);
+    if (
+      currentManifest === undefined ||
+      JSON.stringify(currentManifest) !== JSON.stringify(prepared.plan.manifest)
+    ) {
+      throw new Error(
+        `Extension adapter ${prepared.adapterId} is no longer active with the reviewed manifest.`,
+      );
+    }
+    return prepared.adapter.launch(prepared.plan);
   }
 
   async #track(active: ActiveRun): Promise<void> {
     const events = (async (): Promise<void> => {
       for await (const event of active.session.events) {
-        if (this.#disposed) return;
+        if (this.#disposed || this.#active.get(active.record.id) !== active) return;
         this.#observeTestInput(active, event);
         this.#send(active.owner, {
           runId: active.record.id,
@@ -468,12 +633,13 @@ export class RunService {
     try {
       const result = await active.session.result;
       await events;
-      if (this.#disposed) return;
+      if (this.#disposed || this.#active.get(active.record.id) !== active) return;
       const changedFiles = await this.#changedFiles(
         active.repositoryPath,
         active.record.cwd,
         active.before,
       );
+      if (this.#disposed || this.#active.get(active.record.id) !== active) return;
       const now = new Date().toISOString();
       active.record = {
         ...active.record,
@@ -511,7 +677,7 @@ export class RunService {
         },
       });
     } catch (error) {
-      if (this.#disposed) return;
+      if (this.#disposed || this.#active.get(active.record.id) !== active) return;
       const now = new Date().toISOString();
       active.record = {
         ...active.record,
@@ -533,7 +699,7 @@ export class RunService {
         payload: { message: error instanceof Error ? error.message : 'Agent run failed.' },
       });
     } finally {
-      this.#active.delete(active.record.id);
+      if (this.#active.get(active.record.id) === active) this.#active.delete(active.record.id);
     }
   }
 
@@ -657,6 +823,15 @@ export class RunService {
 
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The agent runtime is shutting down.');
+    if (this.#privacyResetting) {
+      throw new Error('Agent runs are paused while Forgeboard deletes local data.');
+    }
+  }
+
+  #assertGeneration(generation: number): void {
+    if (generation !== this.#generation) {
+      throw new Error('The prepared run was invalidated while local data was being deleted.');
+    }
   }
 
   #send(owner: WebContents, envelope: RunEventEnvelope): void {
@@ -701,10 +876,15 @@ function allowedEnvironment(names: readonly string[]): Record<string, string> {
   );
 }
 
+function positiveContainerIdentity(value: number | undefined): number {
+  return value !== undefined && Number.isSafeInteger(value) && value > 0 ? value : 1000;
+}
+
 function permissionProfile(
-  requested: PrepareRunInput['permissionProfile'],
+  requested: Exclude<PrepareRunInput['permissionProfile'], 'docker-isolated'>,
   cwd: string,
   deterministicTestAgent: boolean,
+  providerPermissionEnforced = true,
 ): PermissionProfile {
   const writable = requested === 'worktree-write';
   if (deterministicTestAgent) {
@@ -724,16 +904,24 @@ function permissionProfile(
   }
   return {
     id: requested,
-    name: writable ? 'Dedicated worktree write' : 'Plan and read only',
+    name: writable
+      ? 'Dedicated worktree write'
+      : providerPermissionEnforced
+        ? 'Plan and read only'
+        : 'Plan requested (disclosure only)',
     mode: requested,
-    enforcement: 'provider',
+    enforcement: providerPermissionEnforced ? 'provider' : 'disclosure-only',
     readRoots: [cwd],
     writeRoots: writable ? [cwd] : [],
     network: 'provider-controlled',
     approvalPolicy: 'The exact process launch requires approval in Forgeboard.',
-    disclosure: writable
-      ? 'The provider is asked to confine writes to the dedicated worktree.'
-      : 'The provider is asked to run in its plan/read-only mode.',
+    disclosure: providerPermissionEnforced
+      ? writable
+        ? 'The provider is asked to confine writes to the dedicated worktree.'
+        : 'The provider is asked to run in its plan/read-only mode.'
+      : writable
+        ? 'The custom process starts in a dedicated worktree, but it has the operating-system permissions of the current user.'
+        : 'The custom process is asked to plan only, but no provider-specific flag enforces read-only access.',
   };
 }
 
@@ -773,14 +961,6 @@ function testAgentActions(input: PrepareRunInput, runId: string): TestAgentActio
     metadata: { permissionProfile: input.permissionProfile, runId },
   });
   return actions;
-}
-
-function configuredBranchPrefix(configured: string, fallback: string): string {
-  const normalized = configured
-    .trim()
-    .replace(/^forgeboard[\\/]+/u, '')
-    .replace(/[\\/]+$/u, '');
-  return normalized === '' ? fallback : normalized;
 }
 
 async function testAgentCliPath(): Promise<string> {

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "dugite": {
+    "packageVersion": "3.2.2",
+    "embeddedGitMetadataSha256": "1e57ab364d4dfedae42c93cf500e6f392c1637482779c45347c4915003ce7277",
+    "nativeRelease": "v2.53.0-3",
+    "nativeCommit": "f49d0098409aa243de8b9162127025ab0bb07a88",
+    "gitVersion": "2.53.0",
+    "gitCommit": "67ad42147a7acc2af6074753ebd03d904476118f",
+    "gitForWindowsVersion": "v2.53.0.windows.3",
+    "gitForWindowsCommit": "f8165afd89b0c190677a093f20894f5fce12f97a",
+    "gitLfsVersion": "v3.7.1",
+    "gitLfsCommit": "b84b33847fe6458f36ef521534dc0eac953cb379",
+    "gitCredentialManagerVersion": "v2.7.3",
+    "gitCredentialManagerCommit": "5fa7116896c82164996a609accd1c5ad90fe730a"
+  },
+  "archives": [
+    {
+      "id": "dugite-native",
+      "repository": "desktop/dugite-native",
+      "commit": "f49d0098409aa243de8b9162127025ab0bb07a88",
+      "filename": "dugite-native-source-f49d0098409aa243.tar.gz",
+      "url": "https://github.com/desktop/dugite-native/archive/f49d0098409aa243de8b9162127025ab0bb07a88.tar.gz"
+    },
+    {
+      "id": "git",
+      "repository": "git/git",
+      "commit": "67ad42147a7acc2af6074753ebd03d904476118f",
+      "filename": "git-source-67ad42147a7acc2af.tar.gz",
+      "url": "https://github.com/git/git/archive/67ad42147a7acc2af6074753ebd03d904476118f.tar.gz"
+    },
+    {
+      "id": "git-for-windows",
+      "repository": "git-for-windows/git",
+      "commit": "f8165afd89b0c190677a093f20894f5fce12f97a",
+      "filename": "git-for-windows-source-f8165afd89b0c190.tar.gz",
+      "url": "https://github.com/git-for-windows/git/archive/f8165afd89b0c190677a093f20894f5fce12f97a.tar.gz"
+    },
+    {
+      "id": "git-lfs",
+      "repository": "git-lfs/git-lfs",
+      "commit": "b84b33847fe6458f36ef521534dc0eac953cb379",
+      "filename": "git-lfs-source-b84b33847fe6458f.tar.gz",
+      "url": "https://github.com/git-lfs/git-lfs/archive/b84b33847fe6458f36ef521534dc0eac953cb379.tar.gz"
+    },
+    {
+      "id": "git-credential-manager",
+      "repository": "git-ecosystem/git-credential-manager",
+      "commit": "5fa7116896c82164996a609accd1c5ad90fe730a",
+      "filename": "git-credential-manager-source-5fa7116896c82164.tar.gz",
+      "url": "https://github.com/git-ecosystem/git-credential-manager/archive/5fa7116896c82164996a609accd1c5ad90fe730a.tar.gz"
+    }
+  ]
+}

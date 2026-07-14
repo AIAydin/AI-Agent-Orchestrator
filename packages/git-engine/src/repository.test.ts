@@ -78,6 +78,23 @@ describe('RepositoryService and GitExecutor', () => {
     await expect(access(sentinel)).rejects.toThrow();
   });
 
+  it('keeps executable search-path wiring behind the trusted runtime boundary', async () => {
+    expect(
+      () => new GitExecutor({ environment: { GIT_EXEC_PATH: '/untrusted/git-core' } }),
+    ).toThrow(/unsafe git environment override/iu);
+    expect(
+      () =>
+        new GitExecutor({
+          trustedRuntimeEnvironment: { FORGEBOARD_UNTRUSTED: '/tmp/value' },
+        }),
+    ).toThrow(/unsupported bundled git runtime environment name/iu);
+
+    const result = await new GitExecutor({
+      trustedRuntimeEnvironment: { PATH: process.env.PATH },
+    }).run(['--version']);
+    expect(result.stdout).toMatch(/^git version /u);
+  });
+
   it('rejects non-repositories with a structured error', async () => {
     const fixture = await createTemporaryRepository();
     fixtures.push(fixture);
