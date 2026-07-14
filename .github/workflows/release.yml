@@ -85,7 +85,7 @@ jobs:
       - if: runner.os != 'Linux'
         run: pnpm --filter @forgeboard/desktop smoke:packaged
       - run: node scripts/checksums.mjs apps/desktop/release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: forgeboard-${{ runner.os }}-${{ runner.arch }}
           path: |
