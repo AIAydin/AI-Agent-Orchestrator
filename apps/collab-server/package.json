@@ -12,13 +12,13 @@
     "test:integration": "vitest --root ../.. --config vitest.config.ts run --project integration apps/collab-server"
   },
   "dependencies": {
-    "@hocuspocus/server": "3.4.4",
+    "@hocuspocus/server": "4.4.0",
     "y-protocols": "1.0.7",
     "yjs": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@hocuspocus/provider": "3.4.4",
+    "@hocuspocus/provider": "4.4.0",
     "tsup": "catalog:",
     "vitest": "catalog:"
   }
