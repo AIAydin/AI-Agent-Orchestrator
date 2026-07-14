@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "description": "A local-first visual workshop for software-building agents.",
-  "author": "Forgeboard contributors",
+  "homepage": "https://github.com/AIAydin/AI-Agent-Orchestrator",
+  "author": {
+    "name": "Forgeboard contributors",
+    "email": "AIAydin@users.noreply.github.com"
+  },
   "license": "MIT",
   "type": "module",
   "main": "dist/main/index.js",
@@ -17,7 +21,8 @@
     "test:e2e": "playwright test",
     "package": "corepack pnpm build && electron-builder --publish never",
     "package:dir": "corepack pnpm build && electron-builder --dir --publish never",
-    "smoke:packaged": "tsx scripts/smoke-packaged.ts"
+    "smoke:packaged": "tsx scripts/smoke-packaged.ts",
+    "smoke:installer": "tsx scripts/smoke-installer.ts"
   },
   "dependencies": {
     "@forgeboard/agent-adapters": "workspace:*",
@@ -106,6 +111,9 @@
         "deb"
       ],
       "category": "Development"
+    },
+    "deb": {
+      "packageName": "forgeboard"
     }
   }
 }

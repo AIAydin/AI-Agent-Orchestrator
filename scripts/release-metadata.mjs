@@ -65,6 +65,7 @@ export function validateReleaseTag(tag, rootPackage, desktopPackage) {
 
 export function validateReleaseMetadata(metadata) {
   const { desktopPackage, dugitePackage, sourceManifest, embeddedGit, embeddedGitRaw } = metadata;
+  validateDesktopPackageMetadata(desktopPackage);
   assert(sourceManifest.schemaVersion === 1, 'Unsupported Dugite source manifest schema.');
   assertRecord(sourceManifest.dugite, 'Dugite source manifest');
   assert(Array.isArray(sourceManifest.archives), 'Dugite source archives must be an array.');
@@ -83,6 +84,24 @@ export function validateReleaseMetadata(metadata) {
   validateEmbeddedGit(sourceManifest.dugite, embeddedGit, embeddedGitRaw);
   validateSourceArchives(sourceManifest);
   return sourceManifest;
+}
+
+function validateDesktopPackageMetadata(desktopPackage) {
+  assert(
+    desktopPackage.homepage === 'https://github.com/AIAydin/AI-Agent-Orchestrator',
+    'Desktop package homepage must identify the public Forgeboard repository.',
+  );
+  assertRecord(desktopPackage.author, 'Desktop package author');
+  assertString(desktopPackage.author.name, 'Desktop package author name');
+  const authorEmail = assertString(desktopPackage.author.email, 'Desktop package author email');
+  assert(
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(authorEmail),
+    'Desktop package author email is invalid.',
+  );
+  assert(
+    desktopPackage.build?.deb?.packageName === 'forgeboard',
+    'Linux package name must remain forgeboard.',
+  );
 }
 
 function validateEmbeddedGit(dugite, embeddedGit, embeddedGitRaw) {

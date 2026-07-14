@@ -26,6 +26,16 @@ test('Dugite embedded metadata byte drift fails closed', async () => {
   assert.throws(() => validateReleaseMetadata(metadata), /metadata checksum changed/u);
 });
 
+test('Linux release metadata fails closed before DEB packaging', async () => {
+  const metadata = structuredClone(await loadReleaseMetadata());
+  metadata.desktopPackage.author = 'Forgeboard contributors';
+  assert.throws(() => validateReleaseMetadata(metadata), /Desktop package author is invalid/u);
+
+  const packageNameDrift = structuredClone(await loadReleaseMetadata());
+  packageNameDrift.desktopPackage.build.deb.packageName = 'other-package';
+  assert.throws(() => validateReleaseMetadata(packageNameDrift), /must remain forgeboard/u);
+});
+
 test('release tag must equal both package versions', async () => {
   const { rootPackage, desktopPackage } = await loadReleaseMetadata();
   assert.equal(validateReleaseTag('v0.1.0', rootPackage, desktopPackage), 'v0.1.0');

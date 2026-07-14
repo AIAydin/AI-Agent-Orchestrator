@@ -270,9 +270,19 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await settings.getByLabel(/Type DELETE ALL LOCAL DATA/).fill('DELETE ALL LOCAL DATA');
       await settings.getByRole('button', { name: 'Delete local data' }).click();
 
+      await expect
+        .poll(() => readDeletedSetupState(page), {
+          timeout: 60_000,
+          intervals: [100, 250, 500, 1_000],
+          message: 'local deletion should reset persisted setup state and render the setup shell',
+        })
+        .toEqual({ errorText: null, settingsReset: true, setupVisible: true });
+      const resetSetup = page.locator('.setup-shell');
+      await expect(resetSetup).toHaveAttribute('role', 'dialog');
+      await expect(resetSetup).toHaveAttribute('aria-modal', 'true');
       await expect(
-        page.getByRole('dialog', { name: /Ready to build without wiring config files/i }),
-      ).toBeVisible({ timeout: 30_000 });
+        resetSetup.getByRole('heading', { name: /Ready to build without wiring config files/i }),
+      ).toBeVisible();
       await page.waitForTimeout(2_500);
       await expect.poll(() => readRecentProjects(page)).toEqual({ ok: true, value: [] });
       await expect.poll(async () => await readdir(join(userDataDirectory, 'backups'))).toEqual([]);
@@ -357,6 +367,10 @@ interface BrowserProject {
   id: string;
 }
 
+interface BrowserSettings {
+  onboardingCompleted: boolean;
+}
+
 function readRecentProjects(page: Page): Promise<BrowserIpcResult<BrowserProject[]>> {
   return page.evaluate(() => {
     const api = (
@@ -381,6 +395,36 @@ function loadCanvasForProject(page: Page, projectId: string): Promise<BrowserIpc
     ).forgeboard;
     return api.canvas.load(selectedProjectId);
   }, projectId);
+}
+
+function readDeletedSetupState(page: Page): Promise<{
+  errorText: string | null;
+  settingsReset: boolean;
+  setupVisible: boolean;
+}> {
+  return page.evaluate(async () => {
+    const api = (
+      globalThis as unknown as {
+        forgeboard: {
+          settings: { get: () => Promise<BrowserIpcResult<BrowserSettings>> };
+        };
+      }
+    ).forgeboard;
+    const settings = await api.settings.get();
+    const setup = document.querySelector('.setup-shell');
+    const setupVisible =
+      setup instanceof HTMLElement &&
+      getComputedStyle(setup).visibility !== 'hidden' &&
+      setup.getBoundingClientRect().width > 0 &&
+      setup.getBoundingClientRect().height > 0;
+    const error = document.querySelector('[role="alert"]');
+    const errorText = error?.textContent?.trim() || null;
+    return {
+      errorText,
+      settingsReset: settings.ok && settings.value.onboardingCompleted === false,
+      setupVisible,
+    };
+  });
 }
 
 async function readPersistedCanvas(
