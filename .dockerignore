@@ -1,0 +1,13 @@
+.git
+.github
+**/node_modules
+**/dist
+apps/desktop/release
+playwright-report
+test-results
+coverage
+*.sqlite
+*.sqlite-*
+.env
+.env.*
+.DS_Store

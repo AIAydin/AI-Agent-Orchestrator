@@ -11,7 +11,7 @@ RUN --mount=type=cache,id=forgeboard-pnpm-store,target=/pnpm/store \
 
 COPY apps/collab-server ./apps/collab-server
 RUN pnpm --filter @forgeboard/collab-server build
-RUN pnpm deploy --filter @forgeboard/collab-server --prod /opt/forgeboard-collab
+RUN pnpm deploy --legacy --filter @forgeboard/collab-server --prod /opt/forgeboard-collab
 
 FROM node:22.17.0-bookworm-slim AS runtime
 

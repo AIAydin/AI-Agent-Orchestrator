@@ -59,7 +59,7 @@ test('the deterministic agent requires approval and reports its real local work'
         dialog.getByText('Local deterministic test process', { exact: true }),
       ).toBeVisible();
       await expect(dialog.getByText('PIPES', { exact: true })).toBeVisible();
-      await expect(dialog).toContainText('packages/test-agent/dist/cli.js');
+      await expect(dialog).toContainText(/packages[\\/]+test-agent[\\/]+dist[\\/]+cli\.js/);
       await expect(dialog).toContainText(writablePrompt);
       await expect(dialog).toContainText('Test agent in a dedicated worktree');
       await expect(dialog).toContainText('Network: blocked');

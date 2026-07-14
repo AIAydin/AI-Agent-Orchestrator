@@ -82,6 +82,7 @@
       "target": "nsis"
     },
     "linux": {
+      "executableName": "forgeboard",
       "target": [
         "AppImage",
         "deb"

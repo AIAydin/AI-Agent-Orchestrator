@@ -247,7 +247,9 @@ async function connectHandles(page: Page, source: Locator, target: Locator): Pro
 async function clickExposedNodeEdge(page: Page, node: Locator): Promise<void> {
   const box = await node.boundingBox();
   if (!box) throw new Error('The canvas node must be visible before it can be selected.');
-  await page.mouse.click(box.x + box.width - 6, box.y + box.height / 2);
+  // Duplicates are offset down and right. Click that genuinely exposed corner rather than the
+  // midpoint on the right edge, which is occupied by React Flow's connection handle.
+  await page.mouse.click(box.x + box.width - 16, box.y + box.height - 16);
 }
 
 async function readPersistedCanvas(
