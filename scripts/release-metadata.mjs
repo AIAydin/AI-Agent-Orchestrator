@@ -129,6 +129,15 @@ function validateDesktopPackageMetadata(desktopPackage) {
     desktopPackage.build?.deb?.packageName === 'forgeboard',
     'Linux package name must remain forgeboard.',
   );
+  assert(
+    desktopPackage.build?.deb?.artifactName === 'forgeboard_${version}_${arch}.${ext}',
+    'Linux DEB artifact name must remain unscoped and deterministic.',
+  );
+  assert(
+    desktopPackage.desktopName === 'forgeboard.desktop' &&
+      desktopPackage.build?.linux?.syncDesktopName === true,
+    'Linux desktop launcher and Electron window identity must remain synchronized.',
+  );
 }
 
 function validateEmbeddedGit(dugite, embeddedGit, embeddedGitRaw) {

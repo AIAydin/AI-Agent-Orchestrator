@@ -104,12 +104,21 @@ export const MIGRATIONS = [
 export function openDatabase(databasePath: string): DatabaseSync {
   mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const database = new DatabaseSync(databasePath);
-  database.exec('PRAGMA journal_mode = WAL;');
-  database.exec('PRAGMA foreign_keys = ON;');
-  database.exec('PRAGMA busy_timeout = 5000;');
-  database.exec('PRAGMA trusted_schema = OFF;');
-  database.exec('PRAGMA secure_delete = ON;');
-  return database;
+  try {
+    database.exec('PRAGMA journal_mode = WAL;');
+    database.exec('PRAGMA foreign_keys = ON;');
+    database.exec('PRAGMA busy_timeout = 5000;');
+    database.exec('PRAGMA trusted_schema = OFF;');
+    database.exec('PRAGMA secure_delete = ON;');
+    return database;
+  } catch (error) {
+    try {
+      database.close();
+    } catch {
+      // Preserve the initialization error when SQLite also rejects cleanup.
+    }
+    throw error;
+  }
 }
 
 export function transaction<T>(database: DatabaseSync, operation: () => T): T {

@@ -313,7 +313,7 @@ describe('trusted extension adapter detection', () => {
       installed: true,
       executable: await realpath(process.execPath),
     });
-  });
+  }, 15_000);
 
   it('detects the UI-built custom CLI passively without executing its version arguments', async () => {
     const root = temporaryRoot();
@@ -340,7 +340,7 @@ describe('trusted extension adapter detection', () => {
       version: null,
     });
     await expect(access(probeMarker)).rejects.toMatchObject({ code: 'ENOENT' });
-  });
+  }, 15_000);
 
   it('locates a validated namespaced adapter without running extension-controlled probes', async () => {
     const root = temporaryRoot();

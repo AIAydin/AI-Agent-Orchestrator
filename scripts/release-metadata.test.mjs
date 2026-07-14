@@ -34,6 +34,14 @@ test('Linux release metadata fails closed before DEB packaging', async () => {
   const packageNameDrift = structuredClone(await loadReleaseMetadata());
   packageNameDrift.desktopPackage.build.deb.packageName = 'other-package';
   assert.throws(() => validateReleaseMetadata(packageNameDrift), /must remain forgeboard/u);
+
+  const artifactNameDrift = structuredClone(await loadReleaseMetadata());
+  artifactNameDrift.desktopPackage.build.deb.artifactName = '@forgeboard/desktop.deb';
+  assert.throws(() => validateReleaseMetadata(artifactNameDrift), /unscoped and deterministic/u);
+
+  const desktopIdentityDrift = structuredClone(await loadReleaseMetadata());
+  desktopIdentityDrift.desktopPackage.build.linux.syncDesktopName = false;
+  assert.throws(() => validateReleaseMetadata(desktopIdentityDrift), /window identity/u);
 });
 
 test('versioned release notes must identify this unsigned prerelease', async () => {

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -485,9 +485,11 @@ describe('LocalStore', () => {
   it('rejects corrupt database input instead of silently replacing local data', () => {
     const databasePath = createDatabasePath();
     mkdirSync(dirname(databasePath), { recursive: true });
-    writeFileSync(databasePath, 'this is not a SQLite database');
+    const corruptBytes = Buffer.from('this is not a SQLite database');
+    writeFileSync(databasePath, corruptBytes);
 
     expect(() => openStore(databasePath)).toThrow();
-    expect(() => new DatabaseSync(databasePath).prepare('PRAGMA quick_check;').get()).toThrow();
+    expect(readFileSync(databasePath)).toEqual(corruptBytes);
+    expect(() => rmSync(databasePath)).not.toThrow();
   });
 });

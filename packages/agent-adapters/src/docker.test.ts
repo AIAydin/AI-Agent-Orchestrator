@@ -360,6 +360,16 @@ describe('Docker agent launch planning', () => {
         dockerOptions(worktree),
       ),
     ).rejects.toThrow('escapes the assigned worktree');
+
+    if (process.platform === 'win32') {
+      const insideFile = path.join(worktree, 'inside.txt');
+      await writeFile(insideFile, 'inside\n');
+      const insidePlan = await planDockerAgentLaunch(
+        preparedLaunch(worktree, { arguments: [`--file=${insideFile}`] }),
+        dockerOptions(worktree),
+      );
+      expect(insidePlan.disclosure.arguments).toContain('--file=/workspace/inside.txt');
+    }
     await expect(
       planDockerAgentLaunch(
         preparedLaunch(worktree, {

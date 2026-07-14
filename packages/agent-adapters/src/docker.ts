@@ -384,10 +384,13 @@ function isWindowsHostPath(value: string): boolean {
 }
 
 function looksLikePathArgument(value: string): boolean {
-  if (value === '' || isUrl(value)) return false;
+  if (value === '') return false;
+  // WHATWG URLs treat a Windows drive prefix such as `C:` as a URL scheme. Classify host paths
+  // first so native absolute paths still receive canonical worktree containment checks.
+  if (isWindowsHostPath(value)) return true;
+  if (isUrl(value)) return false;
   return (
     path.isAbsolute(value) ||
-    isWindowsHostPath(value) ||
     value.startsWith('./') ||
     value.startsWith('../') ||
     value.startsWith('.\\') ||

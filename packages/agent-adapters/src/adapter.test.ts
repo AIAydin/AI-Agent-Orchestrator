@@ -255,7 +255,7 @@ describe('launch preparation and execution', () => {
     expect(result.providerSessionId).toBe('session-7');
   });
 
-  it('preserves ANSI bytes from a real pseudo-terminal stream', async () => {
+  it('preserves ANSI styling semantics from a real pseudo-terminal stream', async () => {
     const cwd = await temporaryDirectory();
     const manifest = nodeManifest({
       invocation: {
@@ -285,7 +285,14 @@ describe('launch preparation and execution', () => {
       .join('');
 
     expect(events).toContainEqual(expect.objectContaining({ type: 'stream', channel: 'pty' }));
-    expect(output).toContain('\u001b[31mred\u001b[0m');
+    // Windows ConPTY may insert terminal housekeeping sequences and canonicalize SGR reset from
+    // `ESC[0m` to `ESC[m`. The ordered color, text, and reset semantics must still survive.
+    const colorIndex = output.indexOf('\u001b[31m');
+    const textIndex = output.indexOf('red', colorIndex + 1);
+    const afterText = output.slice(textIndex + 'red'.length);
+    expect(colorIndex).toBeGreaterThanOrEqual(0);
+    expect(textIndex).toBeGreaterThan(colorIndex);
+    expect(afterText.includes('\u001b[0m') || afterText.includes('\u001b[m')).toBe(true);
   });
 
   it('marks user interruption truthfully', async () => {

@@ -388,7 +388,9 @@ describe('LocalStore persistence and recovery', () => {
     const result = await store.createBackup(backupRoot, NOW);
 
     expect(result.path).toMatch(/forgeboard-2026-07-14T16-00-00-000Z-[a-f0-9-]{36}\.sqlite3$/);
-    expect(statSync(result.path).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') {
+      expect(statSync(result.path).mode & 0o777).toBe(0o600);
+    }
     const bytes = readFileSync(result.path);
     expect(result.sizeBytes).toBe(bytes.byteLength);
     expect(result.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));

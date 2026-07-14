@@ -84,11 +84,20 @@ export class LocalStore {
   constructor(databasePath: string) {
     this.databasePath = databasePath;
     this.database = openDatabase(databasePath);
-    migrate(this.database);
-    redactStoredSecrets(this.database);
-    sanitizeStoredExtensionData(this.database);
-    assertIntegrity(this.database);
-    this.startupRecovery = recoverDatabaseInterruptedRuns(this.database);
+    try {
+      migrate(this.database);
+      redactStoredSecrets(this.database);
+      sanitizeStoredExtensionData(this.database);
+      assertIntegrity(this.database);
+      this.startupRecovery = recoverDatabaseInterruptedRuns(this.database);
+    } catch (error) {
+      try {
+        this.database.close();
+      } catch {
+        // Preserve the initialization error when SQLite also rejects cleanup.
+      }
+      throw error;
+    }
   }
 
   close(): void {
