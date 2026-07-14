@@ -14,7 +14,7 @@ not be reclassified as future work.
 - [x] Enforce the 2,000-line hard ceiling and keep source, tests, styles, scripts, services, and UI
       organized into coherent feature/domain modules well below that limit.
 - [ ] Add Dependabot and complete GitHub Actions verification/build workflows.
-- [ ] Document a one-command fresh-clone install and prove it in a clean checkout.
+- [x] Document a one-command fresh-clone install and prove it in a clean checkout.
 - [ ] Publish GitHub Release installers/artifacts so a user can download, install, and enter solo
       mode without cloning the repository, installing developer tools, or editing code/config files.
 - [ ] Make every required setup and runtime option configurable in the UI; text manifests, env files,
@@ -188,8 +188,11 @@ not be reclassified as future work.
 The following evidence applies to the current source checkpoint. Broad checklist entries remain
 unchecked when only a subset of their required behavior has proof.
 
-- 2026-07-14: `corepack pnpm install --frozen-lockfile` succeeded in the working checkout; an
-  independent clean-clone proof remains open.
+- 2026-07-14: a fresh temporary clone at exact commit `08f4dd2bd23c461f1783d6a711aee68d992e5265`
+  completed `corepack pnpm install --frozen-lockfile` and `corepack pnpm verify` without modifying
+  the checkout: 237 files passed the structure gate, 242 unit tests across 44 files and 36
+  integration tests across 6 files passed, and formatting, lint, strict typecheck, and every
+  production build succeeded.
 - 2026-07-14: the structure gate scanned 237 hand-written source, test, style, script, workflow, and
   configuration files and confirmed that each remains at or below 2,000 lines.
 - 2026-07-14: formatting, lint, strict typecheck, 242 unit tests across 44 files, 36 integration

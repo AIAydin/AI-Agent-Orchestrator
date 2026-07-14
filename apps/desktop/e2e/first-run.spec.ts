@@ -172,7 +172,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       const canvasBox = await canvasRegion.boundingBox();
       if (!canvasBox) throw new Error('The canvas must be visible before adding a task.');
       await templates.getByRole('button', { name: /^Task/ }).dragTo(canvasRegion, {
-        targetPosition: { x: canvasBox.width * 0.9, y: canvasBox.height * 0.42 },
+        targetPosition: { x: canvasBox.width * 0.75, y: canvasBox.height * 0.18 },
       });
       const taskNode = page.getByRole('article', { name: 'Task: Task' });
       await expect(taskNode).toBeVisible();
@@ -288,15 +288,28 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 });
 
 async function connectHandles(page: Page, source: Locator, target: Locator): Promise<void> {
+  await assertHandleIsExposed(source);
+  await assertHandleIsExposed(target);
   const sourceBox = await source.boundingBox();
   const targetBox = await target.boundingBox();
   if (!sourceBox || !targetBox)
     throw new Error('Both canvas handles must be visible to connect nodes.');
 
-  await source.hover();
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
   await page.mouse.down();
-  await target.hover();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
+    steps: 12,
+  });
   await page.mouse.up();
+}
+
+async function assertHandleIsExposed(handle: Locator): Promise<void> {
+  const exposed = await handle.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    return hit === element || element.contains(hit);
+  });
+  expect(exposed).toBe(true);
 }
 
 async function clickExposedNodeEdge(page: Page, node: Locator): Promise<void> {

@@ -47,7 +47,7 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
     await expect(webNode).toBeVisible();
     await webNode.click();
     const preview = page.getByRole('region', { name: 'Preview configuration' });
-    await expect(preview).toContainText(process.execPath);
+    await expect(preview).toContainText(formatCommandPart(process.execPath));
     await preview.getByLabel('Project folder').fill('.');
     await preview.getByLabel('Readiness path').fill('/health');
     await preview.getByLabel('Initial URL path').fill('/initial');
@@ -123,4 +123,8 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
 
 function joinPath(...parts: string[]): string {
   return parts.join(process.platform === 'win32' ? '\\' : '/');
+}
+
+function formatCommandPart(value: string): string {
+  return /^[A-Za-z0-9_./:=@+{}-]+$/u.test(value) ? value : JSON.stringify(value);
 }
