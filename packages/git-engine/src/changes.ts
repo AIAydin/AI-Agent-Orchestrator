@@ -1,0 +1,507 @@
+import { assertExplicitApproval, assertSameStrings } from './approval.js';
+import { parseUnifiedDiff, patchSha256, selectDiffHunks } from './diff-parser.js';
+import { GitEngineError } from './errors.js';
+import { RepositoryService } from './repository.js';
+import type {
+  CherryPickApproval,
+  CommitApproval,
+  DiffFile,
+  DiscardHunksApproval,
+  GitApprovalSnapshot,
+  GitOperationResult,
+  HunkOperationResult,
+  MergeApproval,
+  ParsedDiff,
+  PushApproval,
+  PushResult,
+  RebaseApproval,
+  RefComparison,
+} from './types.js';
+
+export type WorktreeDiffMode = 'unstaged' | 'staged' | 'head';
+
+function conflictsFromDiff(files: readonly DiffFile[]): boolean {
+  return files.some((file) => file.status === 'unknown');
+}
+
+export class ChangeService {
+  public constructor(public readonly repositories = new RepositoryService()) {}
+
+  private async currentHead(repositoryRoot: string): Promise<string> {
+    const status = await this.repositories.status(repositoryRoot);
+    return status.headOid ?? 'UNBORN';
+  }
+
+  private async assertApprovalContext(
+    repositoryPath: string,
+    approval:
+      | CommitApproval
+      | MergeApproval
+      | CherryPickApproval
+      | RebaseApproval
+      | PushApproval
+      | DiscardHunksApproval,
+  ): Promise<string> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    const currentHead = await this.currentHead(repositoryRoot);
+    if (approval.repositoryRoot !== repositoryRoot) {
+      throw new GitEngineError('APPROVAL_MISMATCH', 'Approval belongs to a different repository.', {
+        approved: approval.repositoryRoot,
+        actual: repositoryRoot,
+      });
+    }
+    if (approval.expectedHead !== currentHead) {
+      throw new GitEngineError('STALE_APPROVAL', 'Repository HEAD changed after approval.', {
+        approved: approval.expectedHead,
+        actual: currentHead,
+      });
+    }
+    return repositoryRoot;
+  }
+
+  /** Returns canonical, current values a confirmation UI can bind into a typed approval. */
+  public async approvalSnapshot(repositoryPath: string): Promise<GitApprovalSnapshot> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    const [status, stagedPaths, stagedDiff] = await Promise.all([
+      this.repositories.status(repositoryRoot),
+      this.repositories.stagedPaths(repositoryRoot),
+      this.diff(repositoryRoot, 'staged'),
+    ]);
+    return {
+      repositoryRoot,
+      expectedHead: status.headOid ?? 'UNBORN',
+      branch: status.branch,
+      stagedPaths,
+      stagedPatchSha256: patchSha256(stagedDiff.raw),
+      status,
+    };
+  }
+
+  public async diff(
+    repositoryPath: string,
+    mode: WorktreeDiffMode = 'unstaged',
+  ): Promise<ParsedDiff> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    const args = [
+      '-C',
+      repositoryRoot,
+      '-c',
+      'core.quotePath=true',
+      'diff',
+      '--no-ext-diff',
+      '--no-color',
+      '--binary',
+      '--find-renames',
+      '--find-copies',
+      '--unified=3',
+    ];
+    if (mode === 'staged') args.push('--cached');
+    else if (mode === 'head') args.push('HEAD');
+    args.push('--');
+    const result = await this.repositories.git.run(args);
+    return parseUnifiedDiff(result.stdout);
+  }
+
+  public async compareRefs(
+    repositoryPath: string,
+    baseRef: string,
+    headRef: string,
+  ): Promise<RefComparison> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    const [baseOid, headOid] = await Promise.all([
+      this.repositories.resolveRef(repositoryRoot, baseRef),
+      this.repositories.resolveRef(repositoryRoot, headRef),
+    ]);
+    const [aheadBehind, mergeBaseResult, commitsResult, diffResult] = await Promise.all([
+      this.repositories.aheadBehind(repositoryRoot, baseOid, headOid),
+      this.repositories.git.run(['-C', repositoryRoot, 'merge-base', baseOid, headOid]),
+      this.repositories.git.run([
+        '-C',
+        repositoryRoot,
+        'rev-list',
+        '--reverse',
+        `${baseOid}..${headOid}`,
+      ]),
+      this.repositories.git.run([
+        '-C',
+        repositoryRoot,
+        '-c',
+        'core.quotePath=true',
+        'diff',
+        '--no-ext-diff',
+        '--no-color',
+        '--binary',
+        '--find-renames',
+        '--find-copies',
+        '--unified=3',
+        `${baseOid}...${headOid}`,
+        '--',
+      ]),
+    ]);
+    return {
+      baseRef,
+      headRef,
+      baseOid,
+      headOid,
+      aheadBehind,
+      mergeBase: mergeBaseResult.stdout.trim(),
+      commits: commitsResult.stdout.split(/\r?\n/u).filter((line) => line !== ''),
+      diff: parseUnifiedDiff(diffResult.stdout),
+    };
+  }
+
+  public async stageHunks(
+    repositoryPath: string,
+    hunkIds: readonly string[],
+  ): Promise<HunkOperationResult> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    const patch = selectDiffHunks(await this.diff(repositoryRoot, 'unstaged'), hunkIds);
+    await this.applyToIndex(repositoryRoot, patch, false);
+    return await this.hunkResult(repositoryRoot);
+  }
+
+  /** Adds intent-to-add entries so new files have reviewable diffs without staging content. */
+  public async prepareUntrackedForHunkReview(
+    repositoryPath: string,
+    paths: readonly string[],
+  ): Promise<ParsedDiff> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    await this.assertReviewablePaths(repositoryRoot, paths, 'untracked');
+    await this.repositories.git.run([
+      '-C',
+      repositoryRoot,
+      'add',
+      '--intent-to-add',
+      '--',
+      ...paths,
+    ]);
+    return await this.diff(repositoryRoot, 'unstaged');
+  }
+
+  /** Stages whole, explicitly named changed files, including binary files. */
+  public async stagePaths(
+    repositoryPath: string,
+    paths: readonly string[],
+  ): Promise<HunkOperationResult> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    await this.assertReviewablePaths(repositoryRoot, paths);
+    await this.repositories.git.run(['-C', repositoryRoot, 'add', '--', ...paths]);
+    return await this.hunkResult(repositoryRoot);
+  }
+
+  public async unstageHunks(
+    repositoryPath: string,
+    hunkIds: readonly string[],
+  ): Promise<HunkOperationResult> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    const patch = selectDiffHunks(await this.diff(repositoryRoot, 'staged'), hunkIds);
+    await this.applyToIndex(repositoryRoot, patch, true);
+    return await this.hunkResult(repositoryRoot);
+  }
+
+  public async applyPatchToWorktree(
+    repositoryPath: string,
+    patch: string,
+  ): Promise<HunkOperationResult> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    await this.applyPatch(repositoryRoot, patch, []);
+    return await this.hunkResult(repositoryRoot);
+  }
+
+  public async discardHunks(
+    repositoryPath: string,
+    hunkIds: readonly string[],
+    approval: DiscardHunksApproval,
+  ): Promise<HunkOperationResult> {
+    assertExplicitApproval(approval, 'discard-hunks');
+    const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    assertSameStrings(hunkIds, approval.hunkIds, 'discarded hunks');
+    const patch = selectDiffHunks(await this.diff(repositoryRoot, 'unstaged'), hunkIds);
+    if (approval.patchSha256 !== patchSha256(patch)) {
+      throw new GitEngineError('STALE_APPROVAL', 'The approved hunk content has changed.');
+    }
+    await this.applyPatch(repositoryRoot, patch, ['--reverse']);
+    return await this.hunkResult(repositoryRoot);
+  }
+
+  public async commit(
+    repositoryPath: string,
+    approval: CommitApproval,
+  ): Promise<GitOperationResult> {
+    assertExplicitApproval(approval, 'commit');
+    const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    if (approval.message.trim() === '' || approval.message.includes('\0')) {
+      throw new GitEngineError(
+        'INVALID_ARGUMENT',
+        'Commit message must not be empty or contain NUL.',
+      );
+    }
+    const stagedPaths = await this.repositories.stagedPaths(repositoryRoot);
+    if (stagedPaths.length === 0) {
+      throw new GitEngineError('INVALID_ARGUMENT', 'There are no staged changes to commit.');
+    }
+    assertSameStrings(stagedPaths, approval.stagedPaths, 'staged paths');
+    const stagedDiff = await this.diff(repositoryRoot, 'staged');
+    if (approval.stagedPatchSha256 !== patchSha256(stagedDiff.raw)) {
+      throw new GitEngineError('STALE_APPROVAL', 'The staged content changed after approval.');
+    }
+    const headBefore = await this.currentHead(repositoryRoot);
+    await this.repositories.git.run([
+      '-C',
+      repositoryRoot,
+      'commit',
+      '--no-gpg-sign',
+      '--no-verify',
+      '-m',
+      approval.message,
+    ]);
+    return await this.operationResult(repositoryRoot, headBefore);
+  }
+
+  public async merge(repositoryPath: string, approval: MergeApproval): Promise<GitOperationResult> {
+    assertExplicitApproval(approval, 'merge');
+    const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    const currentBranch = await this.repositories.currentBranch(repositoryRoot);
+    if (currentBranch !== approval.targetBranch) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'The checked-out merge target changed after approval.',
+        {
+          approved: approval.targetBranch,
+          actual: currentBranch,
+        },
+      );
+    }
+    await this.repositories.assertClean(repositoryRoot);
+    const sourceOid = await this.repositories.resolveRef(repositoryRoot, approval.sourceRef);
+    if (sourceOid !== approval.expectedSourceOid) {
+      throw new GitEngineError('STALE_APPROVAL', 'The approved merge source changed.');
+    }
+    const strategyArgs =
+      approval.strategy === 'fast-forward-only'
+        ? ['--ff-only', '--no-edit', '--no-gpg-sign']
+        : approval.strategy === 'merge-commit'
+          ? ['--no-ff', '--no-edit', '--no-gpg-sign']
+          : ['--squash', '--no-commit', '--no-gpg-sign'];
+    return await this.runConflictAware(repositoryRoot, [
+      '-C',
+      repositoryRoot,
+      'merge',
+      ...strategyArgs,
+      sourceOid,
+    ]);
+  }
+
+  public async cherryPick(
+    repositoryPath: string,
+    approval: CherryPickApproval,
+  ): Promise<GitOperationResult> {
+    assertExplicitApproval(approval, 'cherry-pick');
+    const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    await this.repositories.assertClean(repositoryRoot);
+    if (
+      approval.commits.length === 0 ||
+      new Set(approval.commits).size !== approval.commits.length
+    ) {
+      throw new GitEngineError(
+        'INVALID_ARGUMENT',
+        'Cherry-pick requires unique commit identifiers.',
+      );
+    }
+    if (approval.commits.some((commit) => !/^[0-9a-f]{40,64}$/iu.test(commit))) {
+      throw new GitEngineError(
+        'APPROVAL_MISMATCH',
+        'Cherry-pick approvals must contain full immutable commit IDs.',
+      );
+    }
+    const commits = await Promise.all(
+      approval.commits.map((commit) => this.repositories.resolveRef(repositoryRoot, commit)),
+    );
+    return await this.runConflictAware(repositoryRoot, [
+      '-C',
+      repositoryRoot,
+      'cherry-pick',
+      '--no-gpg-sign',
+      ...commits,
+    ]);
+  }
+
+  public async rebase(
+    repositoryPath: string,
+    approval: RebaseApproval,
+  ): Promise<GitOperationResult> {
+    assertExplicitApproval(approval, 'rebase');
+    const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    const currentBranch = await this.repositories.currentBranch(repositoryRoot);
+    if (currentBranch !== approval.branch) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'The checked-out rebase branch changed after approval.',
+      );
+    }
+    await this.repositories.assertClean(repositoryRoot);
+    const ontoOid = await this.repositories.resolveRef(repositoryRoot, approval.ontoRef);
+    if (ontoOid !== approval.expectedOntoOid) {
+      throw new GitEngineError('STALE_APPROVAL', 'The approved rebase target changed.');
+    }
+    return await this.runConflictAware(repositoryRoot, [
+      '-C',
+      repositoryRoot,
+      'rebase',
+      '--no-gpg-sign',
+      ontoOid,
+    ]);
+  }
+
+  public async push(repositoryPath: string, approval: PushApproval): Promise<PushResult> {
+    assertExplicitApproval(approval, 'push');
+    const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(approval.remote)) {
+      throw new GitEngineError('INVALID_ARGUMENT', 'Remote name is not safe.');
+    }
+    if (!approval.destinationRef.startsWith('refs/heads/')) {
+      throw new GitEngineError('INVALID_ARGUMENT', 'Push destination must be a full branch ref.');
+    }
+    const refCheck = await this.repositories.git.run(
+      ['check-ref-format', approval.destinationRef],
+      { allowNonZeroExit: true },
+    );
+    if (refCheck.exitCode !== 0)
+      throw new GitEngineError('INVALID_ARGUMENT', 'Invalid push destination ref.');
+    const remotes = await this.repositories.remotes(repositoryRoot);
+    if (!remotes.some((remote) => remote.name === approval.remote)) {
+      throw new GitEngineError('STALE_APPROVAL', 'The approved Git remote no longer exists.');
+    }
+    const sourceOid = await this.repositories.resolveRef(repositoryRoot, approval.sourceRef);
+    if (sourceOid !== approval.expectedSourceOid) {
+      throw new GitEngineError('STALE_APPROVAL', 'The approved push source changed.');
+    }
+    const args = ['-C', repositoryRoot, 'push', '--porcelain'];
+    if (approval.forceWithLease) {
+      if (
+        approval.expectedRemoteOid === null ||
+        !/^[0-9a-f]{40,64}$/iu.test(approval.expectedRemoteOid)
+      ) {
+        throw new GitEngineError(
+          'APPROVAL_MISMATCH',
+          'Force-with-lease approval must name the expected remote commit.',
+        );
+      }
+      args.push(`--force-with-lease=${approval.destinationRef}:${approval.expectedRemoteOid}`);
+    } else if (approval.expectedRemoteOid !== null) {
+      throw new GitEngineError('APPROVAL_MISMATCH', 'Unexpected remote lease on a normal push.');
+    }
+    args.push('--', approval.remote, `${sourceOid}:${approval.destinationRef}`);
+    await this.repositories.git.run(args, { timeoutMs: 120_000 });
+    return {
+      remote: approval.remote,
+      sourceOid,
+      destinationRef: approval.destinationRef,
+      forceWithLease: approval.forceWithLease,
+    };
+  }
+
+  private async applyToIndex(
+    repositoryRoot: string,
+    patch: string,
+    reverse: boolean,
+  ): Promise<void> {
+    const options = ['--cached'];
+    if (reverse) options.push('--reverse');
+    await this.applyPatch(repositoryRoot, patch, options);
+  }
+
+  private async assertReviewablePaths(
+    repositoryRoot: string,
+    paths: readonly string[],
+    requiredKind?: 'untracked',
+  ): Promise<void> {
+    if (
+      paths.length === 0 ||
+      new Set(paths).size !== paths.length ||
+      paths.some((filePath) => filePath === '' || filePath.includes('\0'))
+    ) {
+      throw new GitEngineError('INVALID_ARGUMENT', 'Changed paths must be non-empty and unique.');
+    }
+    const status = await this.repositories.status(repositoryRoot);
+    const visible = new Map(
+      status.entries
+        .filter((entry) => entry.kind !== 'ignored')
+        .map((entry) => [entry.path, entry.kind] as const),
+    );
+    for (const filePath of paths) {
+      const kind = visible.get(filePath);
+      if (kind === undefined || (requiredKind !== undefined && kind !== requiredKind)) {
+        throw new GitEngineError(
+          'INVALID_ARGUMENT',
+          'Only explicitly visible changed paths may be staged.',
+          { filePath, requiredKind },
+        );
+      }
+    }
+  }
+
+  private async applyPatch(
+    repositoryRoot: string,
+    patch: string,
+    options: readonly string[],
+  ): Promise<void> {
+    if (patch === '' || patch.includes('\0')) {
+      throw new GitEngineError('INVALID_PATCH', 'Patch must not be empty or contain NUL.');
+    }
+    const common = [
+      '-C',
+      repositoryRoot,
+      'apply',
+      '--recount',
+      '--whitespace=nowarn',
+      ...options,
+      '-',
+    ];
+    await this.repositories.git.run([...common.slice(0, -1), '--check', '-'], { input: patch });
+    await this.repositories.git.run(common, { input: patch });
+  }
+
+  private async hunkResult(repositoryRoot: string): Promise<HunkOperationResult> {
+    const [status, staged, unstaged] = await Promise.all([
+      this.repositories.status(repositoryRoot),
+      this.diff(repositoryRoot, 'staged'),
+      this.diff(repositoryRoot, 'unstaged'),
+    ]);
+    return { status, staged, unstaged };
+  }
+
+  private async runConflictAware(
+    repositoryRoot: string,
+    args: readonly string[],
+  ): Promise<GitOperationResult> {
+    const headBefore = await this.currentHead(repositoryRoot);
+    const result = await this.repositories.git.run(args, { allowNonZeroExit: true });
+    const operation = await this.operationResult(repositoryRoot, headBefore);
+    if (result.exitCode !== 0 && operation.status.conflicted) {
+      return { ...operation, state: 'conflicted' };
+    }
+    if (result.exitCode !== 0) {
+      throw new GitEngineError('COMMAND_FAILED', 'Git operation failed.', {
+        args: result.args,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
+    }
+    return operation;
+  }
+
+  private async operationResult(
+    repositoryRoot: string,
+    headBefore: string,
+  ): Promise<GitOperationResult> {
+    const status = await this.repositories.status(repositoryRoot);
+    const headAfter = status.headOid ?? 'UNBORN';
+    const state =
+      status.conflicted || conflictsFromDiff((await this.diff(repositoryRoot, 'unstaged')).files)
+        ? 'conflicted'
+        : 'completed';
+    return { state, headBefore, headAfter, status };
+  }
+}

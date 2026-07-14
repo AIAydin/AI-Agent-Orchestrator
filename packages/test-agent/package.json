@@ -1,0 +1,26 @@
+{
+  "name": "@forgeboard/test-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "forgeboard-test-agent": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ../.. --project unit src/index.test.ts"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "tsup": "catalog:"
+  }
+}

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+out/
+release/
+coverage/
+playwright-report/
+test-results/
+*.log
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+.forgeboard/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

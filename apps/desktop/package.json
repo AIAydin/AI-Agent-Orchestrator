@@ -1,0 +1,92 @@
+{
+  "name": "@forgeboard/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first visual workshop for software-building agents.",
+  "author": "Forgeboard contributors",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "predev": "corepack pnpm --dir ../../packages/test-agent build",
+    "dev": "electron-vite dev",
+    "prebuild": "corepack pnpm --dir ../../packages/test-agent build",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "pretest:e2e": "corepack pnpm build",
+    "test:e2e": "playwright test",
+    "package": "corepack pnpm build && electron-builder --publish never",
+    "package:dir": "corepack pnpm build && electron-builder --dir --publish never",
+    "smoke:packaged": "tsx scripts/smoke-packaged.ts"
+  },
+  "dependencies": {
+    "@forgeboard/agent-adapters": "workspace:*",
+    "@forgeboard/core": "workspace:*",
+    "@forgeboard/git-engine": "workspace:*",
+    "@forgeboard/test-agent": "workspace:*",
+    "@forgeboard/ui": "workspace:*",
+    "@tanstack/react-query": "catalog:",
+    "@xyflow/react": "catalog:",
+    "lucide-react": "catalog:",
+    "monaco-editor": "catalog:",
+    "node-pty": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "catalog:",
+    "zustand": "catalog:"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@testing-library/jest-dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "electron": "catalog:",
+    "electron-builder": "catalog:",
+    "electron-vite": "catalog:",
+    "jsdom": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:"
+  },
+  "build": {
+    "appId": "dev.forgeboard.desktop",
+    "productName": "Forgeboard",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node-pty/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../../packages/test-agent/dist",
+        "to": "test-agent",
+        "filter": [
+          "cli.js",
+          "cli.js.map",
+          "chunk-*.js",
+          "chunk-*.js.map"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    }
+  }
+}

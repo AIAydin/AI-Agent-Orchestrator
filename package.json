@@ -1,0 +1,42 @@
+{
+  "name": "forgeboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first visual workshop for software-building agents.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.13.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "corepack pnpm -r --if-present build",
+    "clean": "corepack pnpm -r --if-present clean",
+    "dev": "corepack pnpm --filter @forgeboard/desktop dev",
+    "dev:collab": "corepack pnpm --filter @forgeboard/collab-server dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "test": "corepack pnpm test:unit && corepack pnpm test:integration",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "corepack pnpm --filter @forgeboard/desktop test:e2e",
+    "verify": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
+    "package": "corepack pnpm --filter @forgeboard/desktop package",
+    "smoke:packaged": "corepack pnpm --filter @forgeboard/desktop smoke:packaged"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.30.0",
+    "@types/node": "24.0.10",
+    "eslint": "9.30.0",
+    "eslint-config-prettier": "10.1.5",
+    "globals": "16.3.0",
+    "pnpm": "11.13.0",
+    "prettier": "3.6.2",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.35.1",
+    "vitest": "3.2.4"
+  }
+}
