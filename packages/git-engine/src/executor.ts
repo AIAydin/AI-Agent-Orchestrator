@@ -4,8 +4,15 @@ import process from 'node:process';
 import { GitEngineError } from './errors.js';
 
 const DANGEROUS_GIT_ENVIRONMENT = [
+  'EMAIL',
   'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_AUTHOR_DATE',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_AUTHOR_NAME',
   'GIT_CEILING_DIRECTORIES',
+  'GIT_COMMITTER_DATE',
+  'GIT_COMMITTER_EMAIL',
+  'GIT_COMMITTER_NAME',
   'GIT_COMMON_DIR',
   'GIT_CONFIG',
   'GIT_CONFIG_COUNT',

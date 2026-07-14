@@ -44,15 +44,23 @@ Agent runs start in dedicated application-managed worktrees. A launch preview di
 arguments, working directory, environment variable names, permission profile, provider, and exact
 context file list. Human approval produces a scoped audit record before the process starts.
 
+Primary-checkout Git review accepts only a stored project ID from the renderer. Electron main
+resolves that project's canonical repository, reads authoritative status/diffs, serializes index
+mutations, and audits each action. Destructive hunk discard and commit use owner-bound, expiring,
+single-use plans followed by a native confirmation. The Git engine rechecks HEAD and exact patch or
+staged-content digests immediately before mutation; Forgeboard commits also bind the reviewed author
+identity while disabling repository hooks and signing.
+
 ## Configuration and distribution
 
 The settings database is the canonical configuration source. Implemented desktop screens cover
 agent discovery and executable pickers, custom CLI setup, permission profiles, argument-array
 preview commands, worktree locations, Docker profiles, extensions, and local storage/retention.
-Several persisted settings are not yet connected to a complete runtime surface, including Git
-identity/remote behavior, terminal, collaboration, updates, and configured lint/typecheck/test/build
-gates. Backup restore and full-data import UI are also unfinished; their presence in a schema is not
-treated as implemented behavior.
+The optional Git commit identity override is active and falls back to repository/global Git config
+when both UI fields are blank. Several persisted settings are not yet connected to a complete
+runtime surface, including Git remote behavior, terminal, collaboration, updates, and configured
+lint/typecheck/test/build gates. Backup restore and full-data import UI are also unfinished; their
+presence in a schema is not treated as implemented behavior.
 
 Docker configuration starts blank rather than guessing that a generic image contains an agent CLI.
 The renderer can request a readiness check, but only the main process resolves Docker, validates the
@@ -74,11 +82,11 @@ manifests re-enter the same launch disclosure and approval pipeline as built-in 
 The release workflow is configured to build platform artifacts and checksums on each target
 operating system, enabling code signing/notarization only when maintainers configure the relevant
 repository secrets. Full cross-platform installer generation and GitHub Release publication are not
-yet verified. Current packaging proof is limited to an unpacked macOS arm64 application whose
-bundled Git runtime works outside the repository under a minimal `PATH`; this is not equivalent to a
-tested installer. The verified unpacked app bundles its renderer/runtime and does not require
-Node.js or pnpm on the end user's machine. External agent CLIs remain optional capabilities
-detected and explained in the UI.
+yet verified. Unpacked packaged applications have passed smoke tests on macOS arm64, macOS Intel,
+Windows, and Linux; a copied macOS arm64 application also proved its bundled Git runtime outside the
+repository under a minimal `PATH`. This is not equivalent to a tested installer. The verified
+unpacked app bundles its renderer/runtime and does not require Node.js or pnpm on the end user's
+machine. External agent CLIs remain optional capabilities detected and explained in the UI.
 
 ## Persistence
 

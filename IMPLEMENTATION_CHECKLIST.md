@@ -193,14 +193,20 @@ unchecked when only a subset of their required behavior has proof.
   the checkout: 237 files passed the structure gate, 242 unit tests across 44 files and 36
   integration tests across 6 files passed, and formatting, lint, strict typecheck, and every
   production build succeeded.
-- 2026-07-14: the structure gate scanned 237 hand-written source, test, style, script, workflow, and
+- 2026-07-14: the structure gate scanned 257 hand-written source, test, style, script, workflow, and
   configuration files and confirmed that each remains at or below 2,000 lines.
-- 2026-07-14: formatting, lint, strict typecheck, 242 unit tests across 44 files, 36 integration
-  tests across 6 files, and all workspace production builds passed through `corepack pnpm verify`.
+- 2026-07-14: formatting, lint, strict typecheck, 256 unit tests across 47 files, 44 integration
+  tests across 7 files, and all workspace production builds passed through `corepack pnpm verify`.
 - 2026-07-14: 9 release-tool tests passed, including release tag/version binding, exact bundled-Git
   metadata validation, top-level artifact checksums, and the cross-platform source bootstrap.
-- 2026-07-14: all 3 Electron Playwright E2E tests passed: agent run, first-run/settings/privacy, and
-  preview.
+- 2026-07-14: all 4 Electron Playwright E2E tests passed: agent run,
+  first-run/settings/privacy, authoritative primary-checkout Git review, and preview.
+- 2026-07-14: primary-checkout Git review proved authoritative status/diffs, whole-file and hunk
+  stage/unstage, exact commit identity, owner-bound single-use stale-checked plans, cancel-default
+  native commit/discard confirmation, and exact-hunk discard. The Electron flow configured identity
+  entirely in the UI, reviewed a real file, staged/unstaged it, and stopped before native commit
+  approval while asserting zero external requests. Agent-worktree targeting and broader compare,
+  merge, push, PR, comments, split-diff, and conflict-resolution work remain unchecked.
 - 2026-07-14: GitHub Actions Verify run
   [29373978889](https://github.com/AIAydin/AI-Agent-Orchestrator/actions/runs/29373978889)
   passed at exact commit `64ff3905fb08ce6f5346fa88191abc0bdf8acdaf`: verification, the

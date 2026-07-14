@@ -130,7 +130,14 @@ export class RunService {
   public async prepare(owner: WebContents, input: PrepareRunInput): Promise<RunDisclosure> {
     this.#assertAvailable();
     const generation = this.#generation;
-    const repositoryPath = await this.#repositories.resolveRepositoryRoot(input.repositoryPath);
+    const project = this.store.getProject(input.projectId);
+    if (project === undefined || project.missing) {
+      throw new Error('The selected project is no longer available.');
+    }
+    const repositoryPath = await this.#repositories.resolveRepositoryRoot(project.path);
+    if (repositoryPath !== project.path) {
+      throw new Error('Reopen this project from its Git repository root before starting an agent.');
+    }
     const primaryStatus = await this.#repositories.status(repositoryPath);
     const settings = this.getSettings();
     const runId = randomUUID();

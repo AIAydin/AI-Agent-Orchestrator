@@ -3,6 +3,7 @@ import {
   ChevronDown,
   CircleDot,
   Command,
+  GitCompareArrows,
   Maximize2,
   Redo2,
   Settings,
@@ -23,6 +24,7 @@ interface WorkspaceCommandBarProps {
   onUndo: () => void;
   onRedo: () => void;
   onFitCanvas: () => void;
+  onOpenGitReview: () => void;
   onOpenCommands: () => void;
   onToggleNotifications: () => void;
   onOpenSettings: () => void;
@@ -40,6 +42,7 @@ export function WorkspaceCommandBar({
   onUndo,
   onRedo,
   onFitCanvas,
+  onOpenGitReview,
   onOpenCommands,
   onToggleNotifications,
   onOpenSettings,
@@ -93,6 +96,14 @@ export function WorkspaceCommandBar({
         </span>
         <small>local tools</small>
       </div>
+      <button
+        className="command-trigger"
+        type="button"
+        title="Review the primary checkout"
+        onClick={onOpenGitReview}
+      >
+        <GitCompareArrows size={14} /> Changes
+      </button>
       <button className="command-trigger" type="button" onClick={onOpenCommands}>
         <Command size={14} /> Commands <kbd>⌘K</kbd>
       </button>

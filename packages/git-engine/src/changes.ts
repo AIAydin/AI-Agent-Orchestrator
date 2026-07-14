@@ -32,6 +32,37 @@ function conflictsFromDiff(files: readonly DiffFile[]): boolean {
   return files.some((file) => file.status === 'unknown');
 }
 
+function containsControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code <= 31 || code === 127;
+  });
+}
+
+function assertCommitIdentity(name: string, email: string): void {
+  for (const [field, value] of [
+    ['name', name],
+    ['email', email],
+  ] as const) {
+    if (value.trim() === '' || value.length > 512 || containsControlCharacter(value)) {
+      throw new GitEngineError(
+        'INVALID_ARGUMENT',
+        `Commit identity ${field} must be non-empty and contain no control characters.`,
+      );
+    }
+  }
+}
+
+function assertPathSelection(paths: readonly string[]): void {
+  if (
+    paths.length === 0 ||
+    new Set(paths).size !== paths.length ||
+    paths.some((filePath) => filePath === '' || filePath.includes('\0'))
+  ) {
+    throw new GitEngineError('INVALID_ARGUMENT', 'Changed paths must be non-empty and unique.');
+  }
+}
+
 export class ChangeService {
   public constructor(public readonly repositories = new RepositoryService()) {}
 
@@ -245,6 +276,37 @@ export class ChangeService {
     return await this.hunkResult(repositoryRoot);
   }
 
+  /** Resets whole staged paths while preserving their worktree content. */
+  public async unstagePaths(
+    repositoryPath: string,
+    paths: readonly string[],
+  ): Promise<HunkOperationResult> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    const selection = await this.stagedPathSelection(repositoryRoot, paths);
+    if (selection.headOid === null) {
+      await this.repositories.git.run([
+        '-C',
+        repositoryRoot,
+        'rm',
+        '--cached',
+        '--force',
+        '--quiet',
+        '--',
+        ...selection.resetPaths,
+      ]);
+    } else {
+      await this.repositories.git.run([
+        '-C',
+        repositoryRoot,
+        'restore',
+        '--staged',
+        '--',
+        ...selection.resetPaths,
+      ]);
+    }
+    return await this.hunkResult(repositoryRoot);
+  }
+
   public async applyPatchToWorktree(
     repositoryPath: string,
     patch: string,
@@ -282,6 +344,7 @@ export class ChangeService {
         'Commit message must not be empty or contain NUL.',
       );
     }
+    assertCommitIdentity(approval.authorName, approval.authorEmail);
     const stagedPaths = await this.repositories.stagedPaths(repositoryRoot);
     if (stagedPaths.length === 0) {
       throw new GitEngineError('INVALID_ARGUMENT', 'There are no staged changes to commit.');
@@ -295,6 +358,10 @@ export class ChangeService {
     await this.repositories.git.run([
       '-C',
       repositoryRoot,
+      '-c',
+      `user.name=${approval.authorName}`,
+      '-c',
+      `user.email=${approval.authorEmail}`,
       'commit',
       '--no-gpg-sign',
       '--no-verify',
@@ -593,13 +660,7 @@ export class ChangeService {
     paths: readonly string[],
     requiredKind?: 'untracked',
   ): Promise<void> {
-    if (
-      paths.length === 0 ||
-      new Set(paths).size !== paths.length ||
-      paths.some((filePath) => filePath === '' || filePath.includes('\0'))
-    ) {
-      throw new GitEngineError('INVALID_ARGUMENT', 'Changed paths must be non-empty and unique.');
-    }
+    assertPathSelection(paths);
     const status = await this.repositories.status(repositoryRoot);
     const visible = new Map(
       status.entries
@@ -616,6 +677,39 @@ export class ChangeService {
         );
       }
     }
+  }
+
+  private async stagedPathSelection(
+    repositoryRoot: string,
+    paths: readonly string[],
+  ): Promise<{ readonly headOid: string | null; readonly resetPaths: readonly string[] }> {
+    assertPathSelection(paths);
+    const status = await this.repositories.status(repositoryRoot);
+    const entries = new Map(
+      status.entries
+        .filter((entry) => entry.kind !== 'ignored')
+        .map((entry) => [entry.path, entry] as const),
+    );
+    const resetPaths = new Set<string>();
+    for (const filePath of paths) {
+      const entry = entries.get(filePath);
+      if (
+        entry === undefined ||
+        entry.kind === 'untracked' ||
+        entry.index === '.' ||
+        entry.index === '?' ||
+        entry.index === '!'
+      ) {
+        throw new GitEngineError(
+          'INVALID_ARGUMENT',
+          'Only explicitly visible staged paths may be unstaged.',
+          { filePath },
+        );
+      }
+      resetPaths.add(filePath);
+      if (entry.originalPath !== undefined) resetPaths.add(entry.originalPath);
+    }
+    return { headOid: status.headOid, resetPaths: [...resetPaths] };
   }
 
   private async applyPatch(

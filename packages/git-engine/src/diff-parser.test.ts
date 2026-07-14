@@ -18,6 +18,22 @@ index 1234567..89abcde 100644
  twelve
 `;
 
+const IDENTICAL_HUNKS_IN_DIFFERENT_FILES = `diff --git a/alpha.txt b/alpha.txt
+index 1234567..89abcde 100644
+--- a/alpha.txt
++++ b/alpha.txt
+@@ -1 +1 @@
+-old
++new
+diff --git a/beta.txt b/beta.txt
+index 1234567..89abcde 100644
+--- a/beta.txt
++++ b/beta.txt
+@@ -1 +1 @@
+-old
++new
+`;
+
 describe('unified diff parser', () => {
   it('returns stable, individually selectable hunks and line counts', () => {
     const parsed = parseUnifiedDiff(TWO_HUNK_DIFF);
@@ -43,5 +59,19 @@ describe('unified diff parser', () => {
     const id = parsed.files[0]?.hunks[0]?.id ?? '';
     expect(() => selectDiffHunks(parsed, [id, id])).toThrow(/Duplicate/u);
     expect(() => selectDiffHunks(parsed, ['not-a-hunk'])).toThrow(/do not exist/u);
+  });
+
+  it('scopes hunk identifiers to their file when patch bodies are identical', () => {
+    const parsed = parseUnifiedDiff(IDENTICAL_HUNKS_IN_DIFFERENT_FILES);
+    const alphaId = parsed.files[0]?.hunks[0]?.id ?? '';
+    const betaId = parsed.files[1]?.hunks[0]?.id ?? '';
+
+    expect(alphaId).not.toBe(betaId);
+    expect(parseUnifiedDiff(IDENTICAL_HUNKS_IN_DIFFERENT_FILES).files[1]?.hunks[0]?.id).toBe(
+      betaId,
+    );
+    const selected = selectDiffHunks(parsed, [betaId]);
+    expect(selected).toContain('diff --git a/beta.txt b/beta.txt');
+    expect(selected).not.toContain('diff --git a/alpha.txt b/alpha.txt');
   });
 });

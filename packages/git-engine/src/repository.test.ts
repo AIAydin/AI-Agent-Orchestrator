@@ -83,6 +83,12 @@ describe('RepositoryService and GitExecutor', () => {
       () => new GitExecutor({ environment: { GIT_EXEC_PATH: '/untrusted/git-core' } }),
     ).toThrow(/unsafe git environment override/iu);
     expect(
+      () => new GitExecutor({ environment: { GIT_AUTHOR_NAME: 'Unapproved identity' } }),
+    ).toThrow(/unsafe git environment override/iu);
+    expect(() => new GitExecutor({ environment: { EMAIL: 'ambient@example.invalid' } })).toThrow(
+      /unsafe git environment override/iu,
+    );
+    expect(
       () =>
         new GitExecutor({
           trustedRuntimeEnvironment: { FORGEBOARD_UNTRUSTED: '/tmp/value' },

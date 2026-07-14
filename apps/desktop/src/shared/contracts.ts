@@ -82,6 +82,13 @@ const CustomAgentArgumentSchema = z
     'Forgeboard reserves standalone adapter template placeholders.',
   );
 
+function containsControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code <= 31 || code === 127;
+  });
+}
+
 export const CustomAgentConfigurationSchema = z
   .object({
     enabled: z.boolean().default(false),
@@ -127,8 +134,16 @@ export const AppSettingsSchema = z
     worktreeRoot: z.string(),
     worktreeCleanupPolicy: z.enum(['manual', 'after-merge', 'after-retention']).default('manual'),
     branchPrefix: BranchPrefixSchema.default('forgeboard/'),
-    gitIdentityName: z.string().max(512).default(''),
-    gitIdentityEmail: z.string().max(512).default(''),
+    gitIdentityName: z
+      .string()
+      .max(512)
+      .refine((value) => !containsControlCharacter(value))
+      .default(''),
+    gitIdentityEmail: z
+      .string()
+      .max(512)
+      .refine((value) => !containsControlCharacter(value))
+      .default(''),
     gitRemote: z.string().min(1).max(512).default('origin'),
     terminalShell: z.string(),
     envAllowlist: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/)),
@@ -205,6 +220,15 @@ export const AppSettingsSchema = z
         code: z.ZodIssueCode.custom,
         path: ['defaultPermissionProfile'],
         message: 'Enable and configure Docker before making it the default isolation profile.',
+      });
+    }
+    const hasGitIdentityName = settings.gitIdentityName.trim() !== '';
+    const hasGitIdentityEmail = settings.gitIdentityEmail.trim() !== '';
+    if (hasGitIdentityName !== hasGitIdentityEmail) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: hasGitIdentityName ? ['gitIdentityEmail'] : ['gitIdentityName'],
+        message: 'Provide both Git identity fields or leave both blank to use Git configuration.',
       });
     }
   });
@@ -288,14 +312,15 @@ export const RunAdapterIdSchema = z.union([
 ]);
 export type RunAdapterId = z.infer<typeof RunAdapterIdSchema>;
 
-export const PrepareRunInputSchema = z.object({
-  projectId: z.string().uuid(),
-  repositoryPath: z.string().min(1),
-  nodeId: z.string().min(1),
-  adapterId: RunAdapterIdSchema,
-  prompt: z.string().trim().min(1).max(1_000_000),
-  permissionProfile: z.enum(['plan-read-only', 'worktree-write', 'docker-isolated']),
-});
+export const PrepareRunInputSchema = z
+  .object({
+    projectId: z.string().uuid(),
+    nodeId: z.string().min(1),
+    adapterId: RunAdapterIdSchema,
+    prompt: z.string().trim().min(1).max(1_000_000),
+    permissionProfile: z.enum(['plan-read-only', 'worktree-write', 'docker-isolated']),
+  })
+  .strict();
 export type PrepareRunInput = z.infer<typeof PrepareRunInputSchema>;
 
 export const RunDisclosureSchema = z.object({
@@ -808,4 +833,13 @@ export const IPC_CHANNELS = Object.freeze({
   extensionsChoose: 'extensions:choose',
   extensionsApprove: 'extensions:approve',
   extensionsRemove: 'extensions:remove',
+  gitReview: 'git:review',
+  gitStagePaths: 'git:stage-paths',
+  gitStageHunks: 'git:stage-hunks',
+  gitUnstagePaths: 'git:unstage-paths',
+  gitUnstageHunks: 'git:unstage-hunks',
+  gitPrepareDiscard: 'git:prepare-discard',
+  gitConfirmDiscard: 'git:confirm-discard',
+  gitPrepareCommit: 'git:prepare-commit',
+  gitConfirmCommit: 'git:confirm-commit',
 } as const);

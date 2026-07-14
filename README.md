@@ -3,8 +3,9 @@
 Forgeboard is an open-source, local-first visual workshop for building software with locally
 installed coding-agent CLIs. The current desktop application combines a spatial canvas, isolated
 Git worktrees, streamed agent sessions, loopback web/mobile previews, and explicit launch and
-workflow approval gates. The Git review/commit UI, interactive terminal node, executable command
-gates, and other unchecked surfaces in the implementation ledger are still under construction.
+workflow approval gates, plus authoritative primary-checkout Git review, staging, and commits.
+Agent-worktree review targeting, the interactive terminal node, executable command gates, and other
+unchecked surfaces in the implementation ledger are still under construction.
 
 > Forgeboard is under active construction. `IMPLEMENTATION_CHECKLIST.md` is the authoritative
 > status ledger; unchecked items are not claimed as complete.
@@ -62,10 +63,10 @@ The release workflow is designed to emit clearly identified unsigned development
 the optional signing secrets documented in the release guide are configured. Such artifacts may
 trigger the operating system's standard warning.
 
-Still unfinished are the desktop Git changes/review/commit flow, interactive terminal node,
-execution of configured lint/typecheck/test/build gates, collaboration client, updater, backup
-restore/full-data import UI, and complete wiring of every persisted setting. See
-`IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
+Still unfinished are agent-worktree review targeting, agent comparison and merge/push flows, the
+interactive terminal node, execution of configured lint/typecheck/test/build gates, collaboration
+client, updater, backup restore/full-data import UI, and complete wiring of every persisted setting.
+See `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
 
 ## Development
 

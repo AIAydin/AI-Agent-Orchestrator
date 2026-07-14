@@ -15,8 +15,26 @@ import {
   PreviewEventEnvelopeSchema,
   PreviewNavigateInputSchema,
   PreviewStartInputSchema,
+  PrepareRunInputSchema,
   ProjectRecoveryAssessmentSchema,
 } from './contracts.js';
+
+describe('agent-run target contracts', () => {
+  it('accepts only a project ID and rejects renderer-selected repository paths', () => {
+    const input = {
+      projectId: 'c95b77bb-53d0-46f9-b9fc-5df23c0d5843',
+      nodeId: 'agent-1',
+      adapterId: 'test-agent' as const,
+      prompt: 'Inspect the project.',
+      permissionProfile: 'plan-read-only' as const,
+    };
+    expect(PrepareRunInputSchema.parse(input)).toEqual(input);
+    expect(
+      PrepareRunInputSchema.safeParse({ ...input, repositoryPath: '/renderer/chosen/path' })
+        .success,
+    ).toBe(false);
+  });
+});
 
 describe('Git branch prefix contracts', () => {
   it('accepts an explicit relative namespace and rejects unsafe Git ref forms', () => {

@@ -21,6 +21,7 @@ import {
 import { detectAgents, ProjectService } from './project-service.js';
 import { DockerIpcService } from './docker-ipc.js';
 import { ExtensionIpcService } from './extension-ipc.js';
+import { GitIpcService } from './git-ipc.js';
 import { createBundledGitRepositoryService } from './git-runtime.js';
 import { PreviewIpcService } from './preview-ipc.js';
 import { RunService } from './run-service.js';
@@ -105,6 +106,7 @@ export interface ApplicationServices {
   runs: RunService;
   previews: PreviewIpcService;
   extensions: ExtensionIpcService;
+  git: GitIpcService;
   dispose(): void;
 }
 
@@ -128,6 +130,9 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     repositories,
   );
   const previews = new PreviewIpcService(store, () => store.getSettings(createDefaultSettings()));
+  const git = new GitIpcService(dialog, store, repositories, () =>
+    store.getSettings(createDefaultSettings()),
+  );
   let dataDeletionInProgress = false;
   const startupRetention = store.applyRetention(store.getSettings(createDefaultSettings()));
   if (Object.values(startupRetention).some((count) => count > 0)) {
@@ -250,9 +255,11 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         await runs.resetForPrivacy();
         await previews.resetForPrivacy();
         await extensions.resetForPrivacy();
+        await git.resetForPrivacy();
         await store.deleteAllLocalData();
         return true;
       } finally {
+        git.resumeAfterPrivacyReset();
         extensions.resumeAfterPrivacyReset();
         previews.resumeAfterPrivacyReset();
         runs.resumeAfterPrivacyReset();
@@ -266,18 +273,21 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   previews.registerIpcHandlers();
   extensions.registerIpcHandlers();
   docker.registerIpcHandlers();
+  git.registerIpcHandlers();
   return {
     settings,
     docker,
     runs,
     previews,
     extensions,
+    git,
     dispose: () => {
       settings.dispose();
       docker.dispose();
       extensions.dispose();
       previews.dispose();
       runs.dispose();
+      git.dispose();
     },
   };
 }

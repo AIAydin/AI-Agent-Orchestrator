@@ -1,0 +1,110 @@
+import type {
+  GitDiffFileView,
+  GitReviewView,
+  GitStatusEntryView,
+} from '../../../../shared/git-contracts.js';
+
+export type GitReviewArea = 'staged' | 'unstaged' | 'untracked';
+
+export interface GitReviewFile {
+  readonly area: GitReviewArea;
+  readonly path: string;
+  readonly entry?: GitStatusEntryView;
+  readonly diff?: GitDiffFileView;
+}
+
+export interface GitReviewGroups {
+  readonly staged: readonly GitReviewFile[];
+  readonly unstaged: readonly GitReviewFile[];
+  readonly untracked: readonly GitReviewFile[];
+}
+
+export interface GitFileSelection {
+  readonly area: GitReviewArea;
+  readonly path: string;
+}
+
+function diffPath(file: GitDiffFileView): string | null {
+  return file.newPath ?? file.oldPath;
+}
+
+function entryPathMatches(entry: GitStatusEntryView, path: string): boolean {
+  return entry.path === path || entry.originalPath === path;
+}
+
+function hasIndexChange(entry: GitStatusEntryView): boolean {
+  return entry.index !== '.' && entry.index !== '?';
+}
+
+function hasWorktreeChange(entry: GitStatusEntryView): boolean {
+  return entry.worktree !== '.' && entry.worktree !== '?';
+}
+
+function makeGroup(
+  area: Exclude<GitReviewArea, 'untracked'>,
+  diffFiles: readonly GitDiffFileView[],
+  entries: readonly GitStatusEntryView[],
+): readonly GitReviewFile[] {
+  const files = new Map<string, GitReviewFile>();
+  for (const diff of diffFiles) {
+    const path = diffPath(diff);
+    if (path === null) continue;
+    const entry = entries.find((candidate) => entryPathMatches(candidate, path));
+    files.set(path, {
+      area,
+      path,
+      diff,
+      ...(entry === undefined ? {} : { entry }),
+    });
+  }
+  for (const entry of entries) {
+    if (!files.has(entry.path)) files.set(entry.path, { area, path: entry.path, entry });
+  }
+  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+
+export function buildReviewGroups(review: GitReviewView): GitReviewGroups {
+  const stagedEntries = review.entries.filter(hasIndexChange);
+  const unstagedEntries = review.entries.filter(
+    (entry) => entry.kind !== 'untracked' && hasWorktreeChange(entry),
+  );
+  const untracked = review.entries
+    .filter((entry) => entry.kind === 'untracked' || entry.index === '?' || entry.worktree === '?')
+    .map((entry) => ({ area: 'untracked' as const, path: entry.path, entry }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+
+  return {
+    staged: makeGroup('staged', review.staged.files, stagedEntries),
+    unstaged: makeGroup('unstaged', review.unstaged.files, unstagedEntries),
+    untracked,
+  };
+}
+
+export function selectionKey(selection: GitFileSelection): string {
+  return `${selection.area}:${selection.path}`;
+}
+
+export function allReviewFiles(groups: GitReviewGroups): readonly GitReviewFile[] {
+  return [...groups.staged, ...groups.unstaged, ...groups.untracked];
+}
+
+export function findReviewFile(
+  groups: GitReviewGroups,
+  selection: GitFileSelection | null,
+): GitReviewFile | null {
+  if (selection === null) return null;
+  return groups[selection.area].find((file) => file.path === selection.path) ?? null;
+}
+
+export function firstReviewSelection(groups: GitReviewGroups): GitFileSelection | null {
+  const file = allReviewFiles(groups)[0];
+  return file === undefined ? null : { area: file.area, path: file.path };
+}
+
+export function statusLabel(file: GitReviewFile): string {
+  if (file.area === 'untracked') return 'New';
+  if (file.diff?.binary === true) return 'Binary';
+  const status = file.diff?.status;
+  if (status === undefined || status === 'unknown') return 'Changed';
+  return `${status[0]?.toUpperCase() ?? ''}${status.slice(1)}`;
+}

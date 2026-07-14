@@ -1,0 +1,157 @@
+.git-diff-viewer {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-raised);
+}
+.git-diff-viewer > header {
+  min-height: 45px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 13px;
+  border-bottom: 1px solid var(--line);
+}
+.git-diff-viewer > header > span:first-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.git-diff-viewer > header strong {
+  overflow: hidden;
+  font:
+    10px 'SFMono-Regular',
+    Consolas,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-diff-viewer > header small {
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.git-diff-totals {
+  display: flex;
+  gap: 8px;
+  font-size: 9px;
+}
+.git-diff-totals b {
+  color: var(--green);
+}
+.git-diff-totals i {
+  color: var(--red);
+  font-style: normal;
+  font-weight: 700;
+}
+.git-hunk-list {
+  min-height: 0;
+  overflow: auto;
+}
+.git-hunk {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+.git-hunk > header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  background: var(--surface-subtle);
+}
+.git-hunk > header code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-hunk > header span {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 5px;
+}
+.git-hunk > header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  font-size: 8px;
+}
+.git-hunk > header .danger-text {
+  color: var(--red);
+}
+.git-hunk table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.git-hunk td {
+  padding: 1px 5px;
+  vertical-align: top;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.git-hunk td:nth-child(1),
+.git-hunk td:nth-child(2) {
+  width: 40px;
+  color: var(--text-faint);
+  text-align: right;
+  user-select: none;
+}
+.git-hunk td:nth-child(3) {
+  width: 17px;
+  padding-right: 0;
+  color: var(--text-faint);
+  user-select: none;
+}
+.git-hunk td:last-child {
+  overflow: hidden;
+  white-space: pre;
+}
+.git-hunk tr.addition {
+  background: color-mix(in srgb, var(--green) 13%, transparent);
+}
+.git-hunk tr.deletion {
+  background: color-mix(in srgb, var(--red) 13%, transparent);
+}
+.git-hunk tr.metadata {
+  color: var(--text-faint);
+}
+.git-diff-empty,
+.git-diff-notice {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 24px;
+  color: var(--text-soft);
+  text-align: center;
+}
+.git-diff-empty p,
+.git-diff-notice {
+  margin: 0;
+  font-size: 10px;
+}
+.git-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

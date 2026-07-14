@@ -45,7 +45,6 @@ export function useAgentRunController({
     try {
       const result = await window.forgeboard.runs.prepare({
         projectId: project.id,
-        repositoryPath: project.path,
         nodeId: selectedNode.id,
         adapterId: selectedAdapter,
         prompt,

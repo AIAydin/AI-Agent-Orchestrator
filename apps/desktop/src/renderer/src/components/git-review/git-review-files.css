@@ -1,0 +1,95 @@
+.git-file-sidebar {
+  min-height: 0;
+  padding: 10px 9px 18px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+.git-file-group + .git-file-group {
+  margin-top: 13px;
+}
+.git-file-group > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 6px 5px;
+}
+.git-file-group h3 {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+.git-file-group header > span {
+  min-width: 19px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-faint);
+  font-size: 8px;
+  text-align: center;
+}
+.git-file-group > p {
+  margin: 2px 6px 8px;
+  color: var(--text-faint);
+  font-size: 9px;
+}
+.git-file-group ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.git-file-group li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 29px;
+}
+.git-file-select,
+.git-file-action {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+}
+.git-file-select {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px;
+  text-align: left;
+}
+.git-file-select > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.git-file-select strong {
+  overflow: hidden;
+  font:
+    9px 'SFMono-Regular',
+    Consolas,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-file-select small {
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.git-file-select:hover,
+.git-file-select.active,
+.git-file-action:hover {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+.git-file-select.active {
+  box-shadow: inset 2px 0 var(--accent);
+}
+.git-file-action {
+  display: grid;
+  place-items: center;
+}

@@ -55,6 +55,38 @@ export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsPr
         </div>
       </SettingsSection>
       <SettingsSection
+        title="Commit identity"
+        description="Optionally override the author identity used by Forgeboard commits. Leave both fields blank to use this repository's Git configuration."
+      >
+        <div className="two-column">
+          <label>
+            Git identity name
+            <input
+              name="git-identity-name"
+              autoComplete="name"
+              maxLength={512}
+              value={draft.gitIdentityName}
+              onChange={(event) => setDraft({ ...draft, gitIdentityName: event.target.value })}
+            />
+          </label>
+          <label>
+            Git identity email
+            <input
+              type="email"
+              name="git-identity-email"
+              autoComplete="email"
+              maxLength={512}
+              value={draft.gitIdentityEmail}
+              onChange={(event) => setDraft({ ...draft, gitIdentityEmail: event.target.value })}
+            />
+          </label>
+        </div>
+        <small>
+          Provide both fields or neither. The exact effective identity is shown again before every
+          commit and bound to the native confirmation.
+        </small>
+      </SettingsSection>
+      <SettingsSection
         title="Development preview"
         description="The preview command is stored as an executable plus literal arguments—never as a shell string. Leave it blank to choose a detected package script per preview node."
       >

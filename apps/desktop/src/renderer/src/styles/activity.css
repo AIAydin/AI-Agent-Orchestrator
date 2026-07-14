@@ -93,6 +93,18 @@
   color: var(--text-soft);
   font-size: 8px;
 }
+.drawer-panel-summary .drawer-panel-actions {
+  flex: 0 0 auto;
+  align-items: center;
+}
+.drawer-panel-actions button {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 8px;
+}
 .drawer-empty {
   margin: 14px 0;
   color: var(--text-faint);

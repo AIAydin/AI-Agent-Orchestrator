@@ -16,6 +16,12 @@ import {
   ipcResultSchema,
 } from '../shared/contracts.js';
 import { DockerPullResultSchema, DockerReadinessSchema } from '../shared/docker-contracts.js';
+import {
+  GitCommitPlanViewSchema,
+  GitCommitResultViewSchema,
+  GitDiscardPlanViewSchema,
+  GitReviewViewSchema,
+} from '../shared/git-contracts.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -115,6 +121,23 @@ const api: ForgeboardApi = {
       invokeValidated(IPC_CHANNELS.extensionsApprove, ExtensionDiscoveryViewSchema, input),
     remove: (input) =>
       invokeValidated(IPC_CHANNELS.extensionsRemove, ExtensionDiscoveryViewSchema, input),
+  },
+  git: {
+    review: (input) => invokeValidated(IPC_CHANNELS.gitReview, GitReviewViewSchema, input),
+    stagePaths: (input) => invokeValidated(IPC_CHANNELS.gitStagePaths, GitReviewViewSchema, input),
+    stageHunks: (input) => invokeValidated(IPC_CHANNELS.gitStageHunks, GitReviewViewSchema, input),
+    unstagePaths: (input) =>
+      invokeValidated(IPC_CHANNELS.gitUnstagePaths, GitReviewViewSchema, input),
+    unstageHunks: (input) =>
+      invokeValidated(IPC_CHANNELS.gitUnstageHunks, GitReviewViewSchema, input),
+    prepareDiscard: (input) =>
+      invokeValidated(IPC_CHANNELS.gitPrepareDiscard, GitDiscardPlanViewSchema, input),
+    confirmDiscard: (input) =>
+      invokeValidated(IPC_CHANNELS.gitConfirmDiscard, GitReviewViewSchema.nullable(), input),
+    prepareCommit: (input) =>
+      invokeValidated(IPC_CHANNELS.gitPrepareCommit, GitCommitPlanViewSchema, input),
+    confirmCommit: (input) =>
+      invokeValidated(IPC_CHANNELS.gitConfirmCommit, GitCommitResultViewSchema.nullable(), input),
   },
   privacy: {
     export: () => ipcRenderer.invoke(IPC_CHANNELS.privacyExport),

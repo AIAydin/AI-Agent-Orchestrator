@@ -46,6 +46,13 @@ Push, pull-request creation, merge, cherry-pick, rebase, destructive discard, re
 push, worktree removal, and deletion of non-merged branches require impact-specific human approval.
 Provider prompts are never auto-approved.
 
+The primary-checkout review bridge accepts a stored project ID rather than a renderer-selected
+repository path. Main resolves the canonical root and creates all content-bound Git approvals.
+Commit and destructive hunk-discard plans are window-owned, short-lived, single-use, stale-checked,
+and followed by a cancel-default native confirmation. Commit author identity is fixed with literal
+Git arguments; inherited author/committer environment variables, hooks, and signing cannot override
+the reviewed operation.
+
 ### Untrusted previews
 
 The Electron shell denies unexpected top-level navigation, new windows, permissions, downloads, and

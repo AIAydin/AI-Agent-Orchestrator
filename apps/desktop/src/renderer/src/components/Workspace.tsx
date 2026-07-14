@@ -18,6 +18,7 @@ import { unwrap } from '../lib/ipc.js';
 import { NODE_DEFINITIONS, NODE_KINDS, type NodeKind, type WorkshopNode } from './CanvasNode.js';
 import { CommandPalette } from './CommandPalette.js';
 import { createExtensionNodeBinding, extensionTemplateKey } from './extension-nodes.js';
+import { GitReviewDialog } from './git-review/GitReviewDialog.js';
 import { RunApprovalDialog } from './workspace/RunApprovalDialog.js';
 import { WorkspaceActivityDrawer } from './workspace/WorkspaceActivityDrawer.js';
 import { WorkspaceCanvas } from './workspace/WorkspaceCanvas.js';
@@ -63,6 +64,7 @@ function WorkspaceInner({
   const [activityOpen, setActivityOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [gitReviewOpen, setGitReviewOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
   const [instance, setInstance] = useState<ReactFlowInstance<WorkshopNode, WorkshopEdge> | null>(
@@ -484,6 +486,12 @@ function WorkspaceInner({
           void instance?.fitView({ padding: 0.18, duration: settings.reducedMotion ? 0 : 240 }),
       },
       {
+        id: 'git-review',
+        label: 'Review Git changes',
+        section: 'Project',
+        run: () => setGitReviewOpen(true),
+      },
+      {
         id: 'settings',
         label: 'Open settings',
         section: 'Application',
@@ -519,6 +527,7 @@ function WorkspaceInner({
         onFitCanvas={() =>
           void instance?.fitView({ padding: 0.18, duration: settings.reducedMotion ? 0 : 240 })
         }
+        onOpenGitReview={() => setGitReviewOpen(true)}
         onOpenCommands={() => setPaletteOpen(true)}
         onToggleNotifications={() => setNotificationsOpen((open) => !open)}
         onOpenSettings={onOpenSettings}
@@ -634,6 +643,7 @@ function WorkspaceInner({
           events={events}
           changeReports={changeReports}
           checkCommands={checkCommands}
+          onOpenGitReview={() => setGitReviewOpen(true)}
           onClose={() => setActivityOpen(false)}
         />
       </div>
@@ -648,6 +658,14 @@ function WorkspaceInner({
       )}
       {notificationsOpen && (
         <WorkspaceNotifications events={events} onClose={() => setNotificationsOpen(false)} />
+      )}
+      {gitReviewOpen && (
+        <GitReviewDialog
+          projectId={project.id}
+          projectName={project.name}
+          onClose={() => setGitReviewOpen(false)}
+          onError={onError}
+        />
       )}
       {runs.disclosure && (
         <RunApprovalDialog

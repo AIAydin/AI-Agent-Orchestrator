@@ -19,6 +19,7 @@ interface WorkspaceActivityDrawerProps {
   events: string[];
   changeReports: ChangeReport[];
   checkCommands: CheckCommand[];
+  onOpenGitReview: () => void;
   onClose: () => void;
 }
 
@@ -26,6 +27,7 @@ export function WorkspaceActivityDrawer({
   events,
   changeReports,
   checkCommands,
+  onOpenGitReview,
   onClose,
 }: WorkspaceActivityDrawerProps) {
   const [tab, setTab] = useState<DrawerTab>('activity');
@@ -79,7 +81,9 @@ export function WorkspaceActivityDrawer({
         </button>
       </header>
       {tab === 'activity' && <ActivityPanel events={events} />}
-      {tab === 'changes' && <ChangesPanel reports={changeReports} />}
+      {tab === 'changes' && (
+        <ChangesPanel reports={changeReports} onOpenGitReview={onOpenGitReview} />
+      )}
       {tab === 'checks' && <ChecksPanel commands={checkCommands} />}
       {tab === 'audit' && (
         <AuditPanel
@@ -130,7 +134,13 @@ function ActivityPanel({ events }: { events: string[] }) {
   );
 }
 
-function ChangesPanel({ reports }: { reports: ChangeReport[] }) {
+function ChangesPanel({
+  reports,
+  onOpenGitReview,
+}: {
+  reports: ChangeReport[];
+  onOpenGitReview: () => void;
+}) {
   return (
     <div className="drawer-panel" role="tabpanel" aria-label="Changes">
       <header className="drawer-panel-summary">
@@ -138,7 +148,12 @@ function ChangesPanel({ reports }: { reports: ChangeReport[] }) {
           <strong>Run-reported file changes</strong>
           <small>Persisted on the agent node from its latest run summary.</small>
         </div>
-        <span>{reports.reduce((total, report) => total + report.files.length, 0)} files</span>
+        <div className="drawer-panel-actions">
+          <span>{reports.reduce((total, report) => total + report.files.length, 0)} files</span>
+          <button type="button" onClick={onOpenGitReview}>
+            Review primary checkout
+          </button>
+        </div>
       </header>
       {reports.length ? (
         <div className="change-report-list">

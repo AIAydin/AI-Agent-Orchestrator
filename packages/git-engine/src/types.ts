@@ -246,7 +246,12 @@ interface ApprovalBase<Action extends string> {
   readonly expectedHead: string;
 }
 
-export interface CommitApproval extends ApprovalBase<'commit'> {
+export interface GitCommitIdentity {
+  readonly authorName: string;
+  readonly authorEmail: string;
+}
+
+export interface CommitApproval extends ApprovalBase<'commit'>, GitCommitIdentity {
   readonly message: string;
   readonly stagedPaths: readonly string[];
   readonly stagedPatchSha256: string;

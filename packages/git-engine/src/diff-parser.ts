@@ -59,7 +59,11 @@ function statusFromHeader(header: string, binary: boolean): DiffFileStatus {
   return 'modified';
 }
 
-function buildHunk(header: string, body: readonly string[]): DiffHunk {
+function buildHunk(
+  fileIdentity: readonly [string | null, string | null],
+  header: string,
+  body: readonly string[],
+): DiffHunk {
   const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(header);
   if (match === null)
     throw new GitEngineError('INVALID_PATCH', 'Malformed unified diff hunk.', { header });
@@ -89,7 +93,12 @@ function buildHunk(header: string, body: readonly string[]): DiffHunk {
   }
 
   const patch = `${header}\n${body.map((line) => `${line}\n`).join('')}`;
-  const id = createHash('sha256').update(patch).digest('hex').slice(0, 20);
+  const id = createHash('sha256')
+    .update(JSON.stringify(fileIdentity))
+    .update('\0')
+    .update(patch)
+    .digest('hex')
+    .slice(0, 20);
   return { id, header, oldStart, oldLines, newStart, newLines, lines, patch };
 }
 
@@ -119,6 +128,8 @@ export function parseUnifiedDiff(raw: string): ParsedDiff {
 
     const oldMarker = headerLines.find((line) => line.startsWith('--- '));
     const newMarker = headerLines.find((line) => line.startsWith('+++ '));
+    const oldPath = oldMarker === undefined ? null : pathFromMarker(oldMarker);
+    const newPath = newMarker === undefined ? null : pathFromMarker(newMarker);
     const binary = headerLines.some(
       (line) => line.startsWith('Binary files ') || line === 'GIT binary patch',
     );
@@ -136,13 +147,13 @@ export function parseUnifiedDiff(raw: string): ParsedDiff {
         if (line.startsWith('-') && !line.startsWith('---')) deletions += 1;
         index += 1;
       }
-      hunks.push(buildHunk(hunkHeader, body));
+      hunks.push(buildHunk([oldPath, newPath], hunkHeader, body));
     }
 
     const header = `${headerLines.map((line) => `${line}\n`).join('')}`;
     files.push({
-      oldPath: oldMarker === undefined ? null : pathFromMarker(oldMarker),
-      newPath: newMarker === undefined ? null : pathFromMarker(newMarker),
+      oldPath,
+      newPath,
       status: statusFromHeader(header, binary),
       binary,
       header,

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -24,6 +24,11 @@ import {
   runGit,
   type TemporaryRepository,
 } from './__tests__/helpers.js';
+
+const TEST_COMMIT_IDENTITY = {
+  authorName: 'Forgeboard Test',
+  authorEmail: 'forgeboard@example.invalid',
+} as const;
 
 function approvalBase(repositoryRoot: string, expectedHead: string) {
   return {
@@ -56,6 +61,7 @@ async function commitAllHunks(
     action: 'commit',
     ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
     message,
+    ...TEST_COMMIT_IDENTITY,
     stagedPaths: snapshot.stagedPaths,
     stagedPatchSha256: snapshot.stagedPatchSha256,
   };
@@ -237,6 +243,7 @@ describe('parallel worktree change lifecycle', () => {
       action: 'commit',
       ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
       message: 'Accept first hunk',
+      ...TEST_COMMIT_IDENTITY,
       stagedPaths: ['story.txt'],
       stagedPatchSha256: snapshot.stagedPatchSha256,
     });
@@ -264,6 +271,107 @@ describe('parallel worktree change lifecycle', () => {
     expect(await readFile(path.join(fixture.repository, 'story.txt'), 'utf8')).toContain(
       'line two\n',
     );
+  });
+
+  it('unstages whole ordinary paths, including binary and newly added content', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const repositories = new RepositoryService();
+    const changes = new ChangeService(repositories);
+    const trackedPath = path.join(fixture.repository, 'tracked.bin');
+    const addedPath = path.join(fixture.repository, 'added.bin');
+    const trackedContent = Buffer.from([0, 1, 2, 3, 4]);
+    const addedContent = Buffer.from([0, 9, 8, 7, 6]);
+    await writeFile(trackedPath, Buffer.from([0, 1]));
+    await runGit(fixture.repository, ['add', '--', 'tracked.bin']);
+    await runGit(fixture.repository, ['commit', '-m', 'Add binary fixture']);
+    await writeFile(trackedPath, trackedContent);
+    await writeFile(addedPath, addedContent);
+
+    const staged = await changes.stagePaths(fixture.repository, ['tracked.bin', 'added.bin']);
+    expect(staged.status.staged).toBe(true);
+    expect(staged.staged.files.every((file) => file.binary)).toBe(true);
+
+    const unstaged = await changes.unstagePaths(fixture.repository, ['tracked.bin', 'added.bin']);
+    expect(unstaged.staged.raw).toBe('');
+    expect(unstaged.status.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'tracked.bin', index: '.', worktree: 'M' }),
+        expect.objectContaining({ path: 'added.bin', kind: 'untracked' }),
+      ]),
+    );
+    expect(await readFile(trackedPath)).toEqual(trackedContent);
+    expect(await readFile(addedPath)).toEqual(addedContent);
+  });
+
+  it('unstages newly added paths in an unborn repository without deleting worktree files', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const repository = path.join(fixture.root, 'unborn-repository');
+    await mkdir(repository);
+    await runGit(repository, ['init', '-b', 'main']);
+    const textPath = path.join(repository, 'new.txt');
+    const binaryPath = path.join(repository, 'new.bin');
+    const binaryContent = Buffer.from([0, 4, 3, 2, 1]);
+    await writeFile(textPath, 'new content\n');
+    await writeFile(binaryPath, binaryContent);
+    const changes = new ChangeService(new RepositoryService());
+
+    const staged = await changes.stagePaths(repository, ['new.txt', 'new.bin']);
+    expect(staged.status.headOid).toBeNull();
+    expect(staged.status.staged).toBe(true);
+
+    const unstaged = await changes.unstagePaths(repository, ['new.txt', 'new.bin']);
+    expect(unstaged.status.headOid).toBeNull();
+    expect(unstaged.status.staged).toBe(false);
+    expect(unstaged.status.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'new.txt', kind: 'untracked' }),
+        expect.objectContaining({ path: 'new.bin', kind: 'untracked' }),
+      ]),
+    );
+    expect(await readFile(textPath, 'utf8')).toBe('new content\n');
+    expect(await readFile(binaryPath)).toEqual(binaryContent);
+  });
+
+  it('commits with the exact approved identity and rejects invalid identity fields', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const changes = new ChangeService(new RepositoryService());
+    await writeFile(path.join(fixture.repository, 'identity.txt'), 'identity-bound content\n');
+    await changes.stagePaths(fixture.repository, ['identity.txt']);
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+    const approval: CommitApproval = {
+      action: 'commit',
+      ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+      message: 'Use approved identity',
+      authorName: 'UI Selected Author',
+      authorEmail: 'selected-author@example.invalid',
+      stagedPaths: snapshot.stagedPaths,
+      stagedPatchSha256: snapshot.stagedPatchSha256,
+    };
+
+    await expect(
+      changes.commit(fixture.repository, { ...approval, authorName: 'invalid\nname' }),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+    await expect(
+      changes.commit(fixture.repository, { ...approval, authorName: 'invalid\tname' }),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+    await expect(
+      changes.commit(fixture.repository, { ...approval, authorEmail: '   ' }),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+
+    await changes.commit(fixture.repository, approval);
+    expect(
+      (await runGit(fixture.repository, ['show', '-s', '--format=%an%n%ae%n%cn%n%ce', 'HEAD']))
+        .trim()
+        .split('\n'),
+    ).toEqual([
+      approval.authorName,
+      approval.authorEmail,
+      approval.authorName,
+      approval.authorEmail,
+    ]);
   });
 
   it('refuses to merge over dirty primary work and refuses unapproved branch deletion', async () => {

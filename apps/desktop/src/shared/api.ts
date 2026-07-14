@@ -31,6 +31,17 @@ import type {
   DockerReadiness,
   DockerReadinessInput,
 } from './docker-contracts.js';
+import type {
+  GitCommitPlanInput,
+  GitCommitPlanView,
+  GitCommitResultView,
+  GitDiscardPlanView,
+  GitHunkSelectionInput,
+  GitPathSelectionInput,
+  GitPlanConfirmationInput,
+  GitReviewView,
+  GitTargetInput,
+} from './git-contracts.js';
 
 export interface ForgeboardApi {
   app: { getInfo(): Promise<IpcResult<AppInfo>> };
@@ -93,6 +104,17 @@ export interface ForgeboardApi {
     choose(kind: ExtensionSelectionKind): Promise<IpcResult<ExtensionInstallPlanView | null>>;
     approve(input: ExtensionApproveInput): Promise<IpcResult<ExtensionDiscoveryView>>;
     remove(input: ExtensionRemoveInput): Promise<IpcResult<ExtensionDiscoveryView>>;
+  };
+  git: {
+    review(input: GitTargetInput): Promise<IpcResult<GitReviewView>>;
+    stagePaths(input: GitPathSelectionInput): Promise<IpcResult<GitReviewView>>;
+    stageHunks(input: GitHunkSelectionInput): Promise<IpcResult<GitReviewView>>;
+    unstagePaths(input: GitPathSelectionInput): Promise<IpcResult<GitReviewView>>;
+    unstageHunks(input: GitHunkSelectionInput): Promise<IpcResult<GitReviewView>>;
+    prepareDiscard(input: GitHunkSelectionInput): Promise<IpcResult<GitDiscardPlanView>>;
+    confirmDiscard(input: GitPlanConfirmationInput): Promise<IpcResult<GitReviewView | null>>;
+    prepareCommit(input: GitCommitPlanInput): Promise<IpcResult<GitCommitPlanView>>;
+    confirmCommit(input: GitPlanConfirmationInput): Promise<IpcResult<GitCommitResultView | null>>;
   };
   privacy: {
     export(): Promise<IpcResult<string | null>>;

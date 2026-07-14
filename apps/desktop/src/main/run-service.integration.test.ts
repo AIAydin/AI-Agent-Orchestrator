@@ -177,6 +177,8 @@ async function commitAgentChanges(
     action: 'commit',
     ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
     message,
+    authorName: 'Forgeboard integration test',
+    authorEmail: 'forgeboard-integration@example.invalid',
     stagedPaths: snapshot.stagedPaths,
     stagedPatchSha256: snapshot.stagedPatchSha256,
   };

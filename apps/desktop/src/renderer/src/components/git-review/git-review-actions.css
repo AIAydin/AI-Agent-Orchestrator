@@ -1,0 +1,140 @@
+.git-commit-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.5fr);
+  gap: 6px 12px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.git-commit-panel label {
+  grid-column: 1 / -1;
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 700;
+}
+.git-commit-panel textarea {
+  min-height: 50px;
+  resize: vertical;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-raised);
+}
+.git-commit-panel footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px;
+}
+.git-commit-panel footer small {
+  color: var(--text-faint);
+  font-size: 8px;
+  text-align: right;
+}
+.git-disclosure-backdrop {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(5 8 6 / 60%);
+  backdrop-filter: blur(5px);
+}
+.git-action-disclosure {
+  width: min(650px, 100%);
+  max-height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+}
+.git-action-disclosure > header {
+  display: flex;
+  gap: 10px;
+  padding: 15px 17px;
+  border-bottom: 1px solid var(--line);
+  color: var(--yellow);
+}
+.git-action-disclosure h3 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 15px;
+}
+.git-action-disclosure p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 9px;
+  line-height: 1.45;
+}
+.git-disclosure-body {
+  min-height: 0;
+  padding: 14px 17px;
+  overflow-y: auto;
+}
+.git-disclosure-body dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.git-disclosure-body dl > div {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.git-disclosure-body dl > .wide {
+  grid-column: 1 / -1;
+}
+.git-disclosure-body dt {
+  margin-bottom: 4px;
+  color: var(--text-faint);
+  font-size: 7px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+.git-disclosure-body dd {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.git-disclosure-message {
+  white-space: pre-wrap;
+}
+.git-disclosure-paths {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+}
+.git-disclosure-paths code {
+  overflow-wrap: anywhere;
+  font-size: 8px;
+}
+.git-disclosure-body > small,
+.git-disclosure-paths small {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.git-action-disclosure > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  padding: 11px 17px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+@media (max-width: 780px) {
+  .git-commit-panel {
+    grid-template-columns: 1fr;
+  }
+}

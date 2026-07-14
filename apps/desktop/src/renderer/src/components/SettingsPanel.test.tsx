@@ -181,8 +181,8 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
     expect(screen.getByText('Development preview')).toBeTruthy();
     expect(screen.getByText('Development server')).toBeTruthy();
-    expect(screen.queryByLabelText('Git identity name')).toBeNull();
-    expect(screen.queryByLabelText('Git identity email')).toBeNull();
+    expect(screen.getByLabelText('Git identity name')).toBeTruthy();
+    expect(screen.getByLabelText('Git identity email')).toBeTruthy();
     expect(screen.queryByLabelText('Default remote')).toBeNull();
     expect(screen.queryByLabelText('Cleanup policy')).toBeNull();
     expect(screen.queryByText('Tests')).toBeNull();
