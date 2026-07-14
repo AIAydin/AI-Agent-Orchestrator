@@ -36,6 +36,12 @@ test('Linux release metadata fails closed before DEB packaging', async () => {
   assert.throws(() => validateReleaseMetadata(packageNameDrift), /must remain forgeboard/u);
 });
 
+test('versioned release notes must identify this unsigned prerelease', async () => {
+  const metadata = structuredClone(await loadReleaseMetadata());
+  metadata.releaseNotes = 'Generic release notes';
+  assert.throws(() => validateReleaseMetadata(metadata), /must identify Forgeboard v0.1.0/u);
+});
+
 test('release tag must equal both package versions', async () => {
   const { rootPackage, desktopPackage } = await loadReleaseMetadata();
   assert.equal(validateReleaseTag('v0.1.0', rootPackage, desktopPackage), 'v0.1.0');

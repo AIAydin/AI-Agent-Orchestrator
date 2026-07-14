@@ -40,6 +40,10 @@ export async function loadReleaseMetadata(root = repositoryRoot) {
   const embeddedGitPath = join(dirname(dugitePackagePath), 'script', 'embedded-git.json');
   const embeddedGitRaw = await readFile(embeddedGitPath, 'utf8');
   const embeddedGit = JSON.parse(embeddedGitRaw);
+  const releaseNotes = await readFile(
+    join(root, 'docs', 'releases', `v${desktopPackage.version}.md`),
+    'utf8',
+  );
 
   return {
     rootPackage,
@@ -48,6 +52,7 @@ export async function loadReleaseMetadata(root = repositoryRoot) {
     dugitePackage,
     embeddedGit,
     embeddedGitRaw,
+    releaseNotes,
   };
 }
 
@@ -64,8 +69,16 @@ export function validateReleaseTag(tag, rootPackage, desktopPackage) {
 }
 
 export function validateReleaseMetadata(metadata) {
-  const { desktopPackage, dugitePackage, sourceManifest, embeddedGit, embeddedGitRaw } = metadata;
+  const {
+    desktopPackage,
+    dugitePackage,
+    sourceManifest,
+    embeddedGit,
+    embeddedGitRaw,
+    releaseNotes,
+  } = metadata;
   validateDesktopPackageMetadata(desktopPackage);
+  validateReleaseNotes(releaseNotes, desktopPackage.version);
   assert(sourceManifest.schemaVersion === 1, 'Unsupported Dugite source manifest schema.');
   assertRecord(sourceManifest.dugite, 'Dugite source manifest');
   assert(Array.isArray(sourceManifest.archives), 'Dugite source archives must be an array.');
@@ -84,6 +97,20 @@ export function validateReleaseMetadata(metadata) {
   validateEmbeddedGit(sourceManifest.dugite, embeddedGit, embeddedGitRaw);
   validateSourceArchives(sourceManifest);
   return sourceManifest;
+}
+
+function validateReleaseNotes(releaseNotes, version) {
+  assertString(releaseNotes, 'Versioned release notes');
+  assert(
+    releaseNotes.includes(`Forgeboard v${version}`),
+    `Release notes must identify Forgeboard v${version}.`,
+  );
+  if (String(version).startsWith('0.')) {
+    assert(
+      releaseNotes.includes('unsigned development prerelease'),
+      'Pre-1.0 release notes must disclose the unsigned development status.',
+    );
+  }
 }
 
 function validateDesktopPackageMetadata(desktopPackage) {
