@@ -45,8 +45,9 @@ packages/
 ## Current availability
 
 Forgeboard does not yet claim a published, end-user-ready GitHub Release. The current checkpoint
-has a passing production build and a verified unpacked macOS arm64 application; native installer
-generation and publication for all target platforms remain open checklist items.
+has a passing production build and verified unpacked applications on macOS arm64, macOS Intel,
+Windows, and Linux. Native installer generation, installation, and publication for all target
+platforms remain open checklist items.
 
 For implemented solo workflows, the first-run wizard and Settings provide UI controls for agent
 detection and executable selection, custom CLI setup, permission profile selection, Docker,

@@ -13,7 +13,7 @@ not be reclassified as future work.
 - [x] Pin all production/development dependencies and commit a verified lockfile.
 - [x] Enforce the 2,000-line hard ceiling and keep source, tests, styles, scripts, services, and UI
       organized into coherent feature/domain modules well below that limit.
-- [ ] Add Dependabot and complete GitHub Actions verification/build workflows.
+- [x] Add Dependabot and complete GitHub Actions verification/build workflows.
 - [x] Document a one-command fresh-clone install and prove it in a clean checkout.
 - [ ] Publish GitHub Release installers/artifacts so a user can download, install, and enter solo
       mode without cloning the repository, installing developer tools, or editing code/config files.
@@ -201,10 +201,15 @@ unchecked when only a subset of their required behavior has proof.
   metadata validation, top-level artifact checksums, and the cross-platform source bootstrap.
 - 2026-07-14: all 3 Electron Playwright E2E tests passed: agent run, first-run/settings/privacy, and
   preview.
-- 2026-07-14: an unpacked macOS arm64 application passed the packaged smoke test with bundled Git
-  2.53.0. A copy outside the repository also passed `--smoke-test` under `PATH=/usr/bin:/bin`, proving
-  that this packaged runtime did not fall back to repository files or a user-installed Git. Only
-  `package:dir` was verified; this is not evidence that a native installer was generated or installed.
+- 2026-07-14: GitHub Actions Verify run
+  [29373978889](https://github.com/AIAydin/AI-Agent-Orchestrator/actions/runs/29373978889)
+  passed at exact commit `64ff3905fb08ce6f5346fa88191abc0bdf8acdaf`: verification, the
+  collaboration container build, Electron E2E on macOS 15, Ubuntu 22.04, and Windows 2022, and
+  unpacked packaged smoke tests on macOS arm64, macOS Intel, Ubuntu, and Windows all succeeded.
+  This does not prove native installer generation/installation or GitHub Release publication.
+- 2026-07-14: a copied unpacked macOS arm64 application outside the repository passed
+  `--smoke-test` with bundled Git 2.53.0 under `PATH=/usr/bin:/bin`, proving that this packaged
+  runtime did not fall back to repository files or a user-installed Git.
 - 2026-07-14: packaged resources include the project license, third-party notices, Dugite license,
   Git copying terms, and the bundled Git runtime.
 - 2026-07-14: `corepack pnpm audit --prod --audit-level high` reported no known production
