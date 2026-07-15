@@ -10,6 +10,10 @@ import type {
   GitReviewView,
   GitTargetInput,
 } from '../../../../shared/git/contracts.js';
+import type {
+  GitShippingPlanView,
+  GitShippingResultView,
+} from '../../../../shared/git/shipping-contracts.js';
 import { GitReviewDialog } from './GitReviewDialog.js';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
@@ -17,6 +21,7 @@ const runId = '44444444-4444-4444-8444-444444444444';
 const worktreeId = '55555555-5555-4555-8555-555555555555';
 const commitPlanId = '22222222-2222-4222-8222-222222222222';
 const discardPlanId = '33333333-3333-4333-8333-333333333333';
+const shippingPlanId = '66666666-6666-4666-8666-666666666666';
 const stagedHunkId = 'b'.repeat(20);
 const unstagedHunkId = 'a'.repeat(20);
 const headOid = 'c'.repeat(40);
@@ -120,6 +125,35 @@ const commitPlan: GitCommitPlanView = {
   identity: review.identity,
 };
 
+const shippingPlan: GitShippingPlanView = {
+  kind: 'ship-agent-commits',
+  planId: shippingPlanId,
+  expiresAt: '2026-07-14T18:05:00.000Z',
+  strategy: 'fast-forward-only',
+  projectId,
+  runId,
+  worktreeId,
+  projectName: 'Workshop',
+  sourceBranch: 'forgeboard/agent-node-1',
+  targetBranch: 'main',
+  baseRef: 'refs/heads/main',
+  baseCommit: baseOid,
+  sourceHead: agentHeadOid,
+  targetHead: headOid,
+  commits: [agentHeadOid],
+  affectedPaths: ['src/committed.ts'],
+  identity: review.identity,
+};
+
+const shippingResult: GitShippingResultView = {
+  state: 'completed',
+  strategy: 'fast-forward-only',
+  headBefore: headOid,
+  headAfter: agentHeadOid,
+  conflictedPaths: [],
+  review,
+};
+
 const reviewMock = vi.fn<(target: GitTargetInput) => Promise<IpcResult<GitReviewView>>>(() =>
   Promise.resolve(success(review)),
 );
@@ -139,6 +173,8 @@ const confirmCommitMock = vi.fn(() =>
     }),
   ),
 );
+const prepareShippingMock = vi.fn(() => Promise.resolve(success(shippingPlan)));
+const confirmShippingMock = vi.fn(() => Promise.resolve(success(shippingResult)));
 
 beforeEach(() => {
   for (const mock of [
@@ -151,6 +187,8 @@ beforeEach(() => {
     confirmDiscardMock,
     prepareCommitMock,
     confirmCommitMock,
+    prepareShippingMock,
+    confirmShippingMock,
   ]) {
     mock.mockClear();
   }
@@ -167,6 +205,8 @@ beforeEach(() => {
         confirmDiscard: confirmDiscardMock,
         prepareCommit: prepareCommitMock,
         confirmCommit: confirmCommitMock,
+        prepareShipping: prepareShippingMock,
+        confirmShipping: confirmShippingMock,
       },
     },
   });
@@ -286,6 +326,10 @@ describe('GitReviewDialog', () => {
     expect(screen.getAllByText('src/committed.ts')).toHaveLength(2);
     expect(screen.getByText('committed line')).toBeTruthy();
     expect(screen.getByText('Committed comparison')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Review delivery…' })).toHaveProperty(
+      'disabled',
+      true,
+    );
     expect(screen.queryByRole('button', { name: 'Stage hunk' })).toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Staged & unstaged' }));
@@ -296,6 +340,49 @@ describe('GitReviewDialog', () => {
       target: worktreeTarget,
       paths: ['src/app.ts'],
     });
+  });
+
+  it('reviews an exact opaque agent delivery before invoking native confirmation', async () => {
+    reviewMock.mockResolvedValueOnce(
+      success({
+        ...agentReview,
+        dirty: false,
+        entries: [],
+        staged: { files: [], additions: 0, deletions: 0 },
+        unstaged: { files: [], additions: 0, deletions: 0 },
+      }),
+    );
+
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    await screen.findByText('Deliver reviewed commits to primary');
+    fireEvent.click(screen.getByRole('button', { name: 'Review delivery…' }));
+    const disclosure = await screen.findByRole('alertdialog', {
+      name: 'Review exact primary delivery',
+    });
+    expect(prepareShippingMock).toHaveBeenCalledWith({
+      target: worktreeTarget,
+      strategy: 'fast-forward-only',
+    });
+    expect(disclosure.textContent).toContain('forgeboard/agent-node-1');
+    expect(disclosure.textContent).toContain(`${baseOid}..${agentHeadOid}`);
+    expect(disclosure.textContent).toContain('src/committed.ts');
+    expect(disclosure.textContent).toContain('Ada Developer <ada@example.test>');
+    expect(disclosure.textContent).toContain('name from Forgeboard Settings');
+    expect(confirmShippingMock).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' }));
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Continue to system confirmation' }),
+    );
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to system confirmation' }));
+    await waitFor(() =>
+      expect(confirmShippingMock).toHaveBeenCalledWith({ planId: shippingPlanId }),
+    );
+    expect(await screen.findByText(/Delivered reviewed commits to primary/)).toBeTruthy();
   });
 
   it('shows an honest empty committed comparison while preserving working-tree changes', async () => {

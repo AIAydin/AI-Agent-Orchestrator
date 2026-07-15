@@ -1,0 +1,172 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+
+import {
+  createPlatformReleaseInfo,
+  platformReleasePlan,
+  signingSummary,
+  verifyCompleteReleaseSet,
+  writePlatformReleaseInfo,
+} from './artifacts.mjs';
+
+const VERSION = '0.1.0';
+
+test('release plans use deterministic platform and architecture names', () => {
+  assert.deepEqual(platformReleasePlan(VERSION, 'darwin', 'arm64').artifacts, [
+    'Forgeboard-0.1.0-mac-arm64.dmg',
+    'Forgeboard-0.1.0-mac-arm64.zip',
+  ]);
+  assert.deepEqual(platformReleasePlan(VERSION, 'darwin', 'x64').artifacts, [
+    'Forgeboard-0.1.0-mac-x64.dmg',
+    'Forgeboard-0.1.0-mac-x64.zip',
+  ]);
+  assert.deepEqual(platformReleasePlan(VERSION, 'win32', 'x64').artifacts, [
+    'Forgeboard-0.1.0-windows-x64-setup.exe',
+  ]);
+  assert.deepEqual(platformReleasePlan(VERSION, 'linux', 'x64').artifacts, [
+    'Forgeboard-0.1.0-linux-x86_64.AppImage',
+    'forgeboard_0.1.0_amd64.deb',
+  ]);
+  assert.throws(() => platformReleasePlan(VERSION, 'linux', 'arm64'), /Unsupported release/u);
+});
+
+test('signing summaries distinguish unsigned, signed, notarized, and Linux builds', () => {
+  assert.equal(signingSummary('darwin', {}).status, 'unsigned-development');
+  assert.equal(
+    signingSummary('darwin', { CSC_LINK: 'certificate' }).status,
+    'signed-not-notarized',
+  );
+  assert.equal(
+    signingSummary('darwin', {
+      CSC_LINK: 'certificate',
+      APPLE_ID: 'maintainer@example.invalid',
+      APPLE_APP_SPECIFIC_PASSWORD: 'secret',
+      APPLE_TEAM_ID: 'TEAM',
+    }).status,
+    'signed-and-notarized',
+  );
+  assert.equal(
+    signingSummary('darwin', {
+      CSC_LINK: 'certificate',
+      APPLE_API_KEY: 'key',
+      APPLE_API_KEY_ID: 'key-id',
+      APPLE_API_ISSUER: 'issuer',
+    }).status,
+    'signed-not-notarized',
+  );
+  assert.equal(signingSummary('win32', { WIN_CSC_LINK: 'certificate' }).status, 'signed');
+  assert.equal(signingSummary('linux', {}).status, 'not-applicable');
+});
+
+test('platform metadata requires only the exact installer set', async () => {
+  const root = await temporaryDirectory();
+  try {
+    for (const artifact of platformReleasePlan(VERSION, 'darwin', 'arm64').artifacts) {
+      await writeFile(join(root, artifact), artifact);
+    }
+    const result = await writePlatformReleaseInfo(root, {
+      version: VERSION,
+      platform: 'darwin',
+      architecture: 'arm64',
+      environment: { GITHUB_SHA: 'a'.repeat(40) },
+    });
+    const saved = JSON.parse(await readFile(result.destination, 'utf8'));
+    assert.equal(saved.sourceCommit, 'a'.repeat(40));
+    assert.equal(saved.signing.status, 'unsigned-development');
+    await writeFile(join(root, 'unexpected.exe'), 'unexpected');
+    await assert.rejects(
+      writePlatformReleaseInfo(root, {
+        version: VERSION,
+        platform: 'darwin',
+        architecture: 'arm64',
+      }),
+      /Unexpected darwin-arm64 artifacts/u,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('aggregate verification requires all four manifests from one source commit', async () => {
+  const root = await temporaryDirectory();
+  try {
+    const commit = 'b'.repeat(40);
+    for (const [platform, architecture] of [
+      ['darwin', 'arm64'],
+      ['darwin', 'x64'],
+      ['linux', 'x64'],
+      ['win32', 'x64'],
+    ]) {
+      const plan = platformReleasePlan(VERSION, platform, architecture);
+      for (const artifact of plan.artifacts) await writeFile(join(root, artifact), artifact);
+      const info = createPlatformReleaseInfo({
+        version: VERSION,
+        platform,
+        architecture,
+        environment: { GITHUB_SHA: commit },
+      });
+      await writeFile(join(root, plan.infoName), `${JSON.stringify(info)}\n`);
+    }
+    await expectComplete(root, 7, commit);
+
+    const intel = platformReleasePlan(VERSION, 'darwin', 'x64');
+    const drifted = createPlatformReleaseInfo({
+      version: VERSION,
+      platform: 'darwin',
+      architecture: 'x64',
+      environment: { GITHUB_SHA: 'c'.repeat(40) },
+    });
+    await writeFile(join(root, intel.infoName), `${JSON.stringify(drifted)}\n`);
+    await assert.rejects(verifyCompleteReleaseSet(root, VERSION), /different commits/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('aggregate verification rejects local manifests without a source commit', async () => {
+  const root = await temporaryDirectory();
+  try {
+    for (const [platform, architecture] of [
+      ['darwin', 'arm64'],
+      ['darwin', 'x64'],
+      ['linux', 'x64'],
+      ['win32', 'x64'],
+    ]) {
+      const plan = platformReleasePlan(VERSION, platform, architecture);
+      for (const artifact of plan.artifacts) await writeFile(join(root, artifact), artifact);
+      const info = createPlatformReleaseInfo({ version: VERSION, platform, architecture });
+      await writeFile(join(root, plan.infoName), `${JSON.stringify(info)}\n`);
+    }
+    await assert.rejects(verifyCompleteReleaseSet(root, VERSION), /identify its source commit/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('release workflow keeps build permissions read-only and tag-gates publication', async () => {
+  const workflow = await readFile(
+    new URL('../../.github/workflows/release.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(workflow, /permissions:\n {2}contents: read/u);
+  assert.match(
+    workflow,
+    /publish:\n {4}if: startsWith\(github\.ref, 'refs\/tags\/'\)[\s\S]*?permissions:\n {6}contents: write/u,
+  );
+  assert.match(workflow, /node scripts\/release\/artifacts\.mjs artifacts --all/u);
+  assert.match(workflow, /apps\/desktop\/release\/RELEASE-INFO-\*\.json/u);
+});
+
+async function expectComplete(root, artifactCount, sourceCommit) {
+  assert.deepEqual(await verifyCompleteReleaseSet(root, VERSION), {
+    artifactCount,
+    sourceCommit,
+  });
+}
+
+async function temporaryDirectory() {
+  return await mkdtemp(join(tmpdir(), 'forgeboard-release-artifacts-'));
+}

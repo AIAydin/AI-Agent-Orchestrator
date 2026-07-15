@@ -1,4 +1,4 @@
-import { AlertTriangle, Link2 } from 'lucide-react';
+import { AlertTriangle, Link2, Lock } from 'lucide-react';
 
 import type { WorkshopNode } from './CanvasNode.js';
 import { edgeExplanation } from '../model/helpers.js';
@@ -8,6 +8,7 @@ import { createEdgeData, type WorkshopEdgeData } from '../model/edge-config.js';
 interface TypedEdgeInspectorProps {
   edge: WorkshopEdge;
   nodes: readonly WorkshopNode[];
+  readOnly?: boolean;
   onChange: (data: WorkshopEdgeData) => void;
   onUpdateType: (edgeType: EdgeKind) => void;
 }
@@ -15,32 +16,45 @@ interface TypedEdgeInspectorProps {
 export function TypedEdgeInspector({
   edge,
   nodes,
+  readOnly = false,
   onChange,
   onUpdateType,
 }: TypedEdgeInspectorProps) {
   const data = edge.data ?? createEdgeData('context', edge.source);
   return (
     <div className="inspector-content">
-      <label>
-        Connection behavior
-        <select
-          name={`edge-${edge.id}-connection-behavior`}
-          value={data.edgeType}
-          onChange={(event) => onUpdateType(event.target.value as EdgeKind)}
-        >
-          <option value="context">Context</option>
-          <option value="execute">Execute</option>
-          <option value="output">Output</option>
-          <option value="review">Review</option>
-          <option value="revision">Revision</option>
-          <option value="dependency">Dependency</option>
-        </select>
-      </label>
-      <div className="edge-explanation">
-        <strong>{data.edgeType}</strong>
-        <p>{edgeExplanation(data.edgeType)}</p>
-      </div>
-      <EdgeConfiguration data={data} edge={edge} nodes={nodes} onChange={onChange} />
+      {readOnly ? (
+        <p className="node-lock-notice" role="status">
+          <Lock size={13} />
+          This connection touches a locked node. Unlock both endpoints to change it.
+        </p>
+      ) : null}
+      <fieldset
+        className="node-edit-fields"
+        disabled={readOnly}
+        aria-label="Connection configuration"
+      >
+        <label>
+          Connection behavior
+          <select
+            name={`edge-${edge.id}-connection-behavior`}
+            value={data.edgeType}
+            onChange={(event) => onUpdateType(event.target.value as EdgeKind)}
+          >
+            <option value="context">Context</option>
+            <option value="execute">Execute</option>
+            <option value="output">Output</option>
+            <option value="review">Review</option>
+            <option value="revision">Revision</option>
+            <option value="dependency">Dependency</option>
+          </select>
+        </label>
+        <div className="edge-explanation">
+          <strong>{data.edgeType}</strong>
+          <p>{edgeExplanation(data.edgeType)}</p>
+        </div>
+        <EdgeConfiguration data={data} edge={edge} nodes={nodes} onChange={onChange} />
+      </fieldset>
     </div>
   );
 }

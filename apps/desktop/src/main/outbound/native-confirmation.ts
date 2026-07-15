@@ -1,5 +1,6 @@
 import type { MessageBoxOptions } from 'electron';
 
+import { displayEscapedText } from '../../shared/text/display-literal.js';
 import type { OutboundApprovalPlan, OutboundConfirmationBoundary } from './outbound-action-gate.js';
 
 export interface NativeMessageBoxBoundary {
@@ -25,28 +26,24 @@ export function outboundMessageBox(plan: OutboundApprovalPlan): MessageBoxOption
   const { disclosure } = plan;
   return {
     type: 'warning',
-    title: disclosure.title,
-    message: disclosure.summary,
+    title: displayEscapedText(disclosure.title),
+    message: displayEscapedText(disclosure.summary),
     detail: [
-      `Action: ${displayLiteral(disclosure.action)}`,
-      `Transport: ${displayLiteral(disclosure.destination.transport)}`,
-      `Endpoint: ${displayLiteral(disclosure.destination.endpoint)}`,
-      `Resource: ${displayLiteral(disclosure.destination.resource)}`,
+      `Action: ${displayEscapedText(disclosure.action)}`,
+      `Transport: ${displayEscapedText(disclosure.destination.transport)}`,
+      `Endpoint: ${displayEscapedText(disclosure.destination.endpoint)}`,
+      `Resource: ${displayEscapedText(disclosure.destination.resource)}`,
       ...disclosure.details.map(
-        (detail) => `${displayLiteral(detail.label)}: ${displayLiteral(detail.value)}`,
+        (detail) => `${displayEscapedText(detail.label)}: ${displayEscapedText(detail.value)}`,
       ),
       '',
-      disclosure.warning,
+      displayEscapedText(disclosure.warning),
       '',
       `This approval is single-use and expires at ${plan.expiresAt}. If the exact action or destination changes, Forgeboard refuses it.`,
     ].join('\n'),
-    buttons: ['Cancel', disclosure.confirmLabel],
+    buttons: ['Cancel', displayEscapedText(disclosure.confirmLabel)],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
   };
-}
-
-function displayLiteral(value: string): string {
-  return JSON.stringify(value).slice(1, -1);
 }

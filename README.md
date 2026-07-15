@@ -26,6 +26,11 @@ developer tools. That full installer publication has not yet been verified. The 
 setup flow is completed in the UI without editing source, JSON, environment files, or hand-written
 configuration; broader unfinished product areas remain listed below and in the checklist.
 
+When a release is available, download the architecture-specific installer from
+[GitHub Releases](https://github.com/AIAydin/AI-Agent-Orchestrator/releases) and follow the
+[install and checksum guide](docs/install/README.md). Release installation requires no source
+checkout or configuration-file editing.
+
 ## Local-first principles
 
 - Solo mode requires no account, cloud service, model API key, or Forgeboard server.
@@ -61,6 +66,7 @@ docs/
   design/           Architecture documentation
   policies/         Privacy and operating policies
   legal/            Third-party notices
+  install/          End-user downloads, checksums, and platform installation
 .github/
   workflows/        Cross-platform verification and release automation
 ```

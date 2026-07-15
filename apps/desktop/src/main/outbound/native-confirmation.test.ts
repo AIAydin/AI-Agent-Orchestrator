@@ -36,6 +36,24 @@ describe('native outbound confirmation', () => {
     expect(options.detail).toContain('/tmp/project\\nshown-literally');
   });
 
+  it('makes controls and directional text explicit in every native display field', () => {
+    const options = outboundMessageBox({
+      ...plan,
+      disclosure: {
+        ...plan.disclosure,
+        title: 'Clone\u202e title',
+        summary: 'Summary\nnext',
+        confirmLabel: 'Clone\u200b now',
+        warning: 'Warning\u2066 hidden',
+      },
+    });
+
+    expect(options.title).toBe('Clone\\u202e title');
+    expect(options.message).toBe('Summary\\nnext');
+    expect(options.buttons).toEqual(['Cancel', 'Clone\\u200b now']);
+    expect(options.detail).toContain('Warning\\u2066 hidden');
+  });
+
   it('revalidates the native owner before and after the dialog', async () => {
     const order: string[] = [];
     const confirmation = createNativeOutboundConfirmation({

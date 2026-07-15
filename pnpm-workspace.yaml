@@ -12,8 +12,8 @@ allowBuilds:
   node-pty: true
 
 catalog:
-  '@hocuspocus/provider': 3.2.3
-  '@hocuspocus/server': 3.2.3
+  '@hocuspocus/provider': 3.4.4
+  '@hocuspocus/server': 3.4.4
   '@playwright/test': 1.53.2
   '@tailwindcss/vite': 4.1.11
   '@tanstack/react-query': 5.81.5

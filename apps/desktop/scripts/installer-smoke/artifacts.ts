@@ -21,7 +21,7 @@ export async function resolveInstallerArtifacts(
   }
   if (platform === 'win32') {
     const setupExecutables = files.filter((name) =>
-      /^Forgeboard Setup \d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\.exe$/u.test(name),
+      /^Forgeboard-\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?-windows-(?:x64|arm64)-setup\.exe$/u.test(name),
     );
     return {
       platform,

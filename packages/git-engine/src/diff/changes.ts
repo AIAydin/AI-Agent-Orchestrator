@@ -398,6 +398,7 @@ export class ChangeService {
   public async merge(repositoryPath: string, approval: MergeApproval): Promise<GitOperationResult> {
     assertExplicitApproval(approval, 'merge');
     const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    assertCommitIdentity(approval.authorName, approval.authorEmail);
     const currentBranch = await this.repositories.currentBranch(repositoryRoot);
     if (currentBranch !== approval.targetBranch) {
       throw new GitEngineError(
@@ -423,6 +424,10 @@ export class ChangeService {
     return await this.runConflictAware(repositoryRoot, [
       '-C',
       repositoryRoot,
+      '-c',
+      `user.name=${approval.authorName}`,
+      '-c',
+      `user.email=${approval.authorEmail}`,
       'merge',
       ...strategyArgs,
       sourceOid,
@@ -435,6 +440,7 @@ export class ChangeService {
   ): Promise<GitOperationResult> {
     assertExplicitApproval(approval, 'cherry-pick');
     const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
+    assertCommitIdentity(approval.authorName, approval.authorEmail);
     await this.repositories.assertClean(repositoryRoot);
     if (
       approval.commits.length === 0 ||
@@ -451,12 +457,20 @@ export class ChangeService {
         'Cherry-pick approvals must contain full immutable commit IDs.',
       );
     }
+    const sourceOid = await this.repositories.resolveRef(repositoryRoot, approval.sourceRef);
+    if (sourceOid !== approval.expectedSourceOid) {
+      throw new GitEngineError('STALE_APPROVAL', 'The approved cherry-pick source changed.');
+    }
     const commits = await Promise.all(
       approval.commits.map((commit) => this.repositories.resolveRef(repositoryRoot, commit)),
     );
     return await this.runConflictAware(repositoryRoot, [
       '-C',
       repositoryRoot,
+      '-c',
+      `user.name=${approval.authorName}`,
+      '-c',
+      `user.email=${approval.authorEmail}`,
       'cherry-pick',
       '--no-gpg-sign',
       ...commits,

@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { SaveDialogReturnValue } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const electronMock = vi.hoisted(() => {
@@ -73,12 +74,18 @@ describe('SettingsIpcService transactions', () => {
 
   it('rejects invalid generated defaults before returning or mutating anything', async () => {
     const current = settings({ onboardingCompleted: true });
-    const invalidDefaults = settings({ previewPortStart: 5000, previewPortEnd: 4999 });
+    const invalidDefaults = settings({
+      previewPortStart: 5000,
+      previewPortEnd: 4999,
+    });
     const fixture = createFixture(current, invalidDefaults);
 
     const result = await requiredHandler(IPC_CHANNELS.settingsReset)(liveEvent());
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_REQUEST' },
+    });
     expect(fixture.store.saveSettings).not.toHaveBeenCalled();
     expect(fixture.store.applyRetention).not.toHaveBeenCalled();
     expect(fixture.store.appendAudit).not.toHaveBeenCalled();
@@ -92,13 +99,19 @@ describe('SettingsIpcService transactions', () => {
       theme: 'dark',
       density: 'compact',
       transcriptRetentionDays: 7,
+      collaborationSubject: 'team-editor',
+      collaborationColor: '#123456',
     });
     const directory = mkdtempSync(join(tmpdir(), 'forgeboard-settings-ipc-'));
     temporaryDirectories.push(directory);
     const importPath = join(directory, 'settings.json');
     writeFileSync(
       importPath,
-      JSON.stringify({ format: 'forgeboard-settings', version: 1, settings: imported }),
+      JSON.stringify({
+        format: 'forgeboard-settings',
+        version: 1,
+        settings: imported,
+      }),
       'utf8',
     );
     const fixture = createFixture(current, defaults, importPath);
@@ -111,6 +124,36 @@ describe('SettingsIpcService transactions', () => {
     expect(fixture.store.saveSettings).not.toHaveBeenCalled();
     expect(fixture.store.applyRetention).not.toHaveBeenCalled();
     expect(fixture.store.appendAudit).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
+  it('exports persisted collaboration identity without a session credential', async () => {
+    const current = settings({
+      collaborationSubject: 'team-editor',
+      collaborationColor: '#123456',
+    });
+    const directory = mkdtempSync(join(tmpdir(), 'forgeboard-settings-ipc-'));
+    temporaryDirectories.push(directory);
+    const exportPath = join(directory, 'settings.json');
+    const fixture = createFixture(current, settings());
+    fixture.dialog.showSaveDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePath: exportPath,
+    });
+    electronMock.fromWebContents.mockReturnValue(liveParent());
+
+    await expect(requiredHandler(IPC_CHANNELS.settingsExport)(liveEvent())).resolves.toEqual({
+      ok: true,
+      value: exportPath,
+    });
+    const exported = JSON.parse(readFileSync(exportPath, 'utf8')) as {
+      settings: Record<string, unknown>;
+    };
+    expect(exported.settings).toMatchObject({
+      collaborationSubject: 'team-editor',
+      collaborationColor: '#123456',
+    });
+    expect(exported.settings).not.toHaveProperty('collaborationAccessToken');
     fixture.service.dispose();
   });
 
@@ -148,7 +191,10 @@ describe('SettingsIpcService transactions', () => {
 
     const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(event, settings());
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
     expect(fixture.store.saveSettings).not.toHaveBeenCalled();
     expect(fixture.store.applyRetention).not.toHaveBeenCalled();
     fixture.service.dispose();
@@ -170,7 +216,10 @@ describe('SettingsIpcService transactions', () => {
 
     const result = await resultPromise;
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
     expect(fixture.store.saveSettings).not.toHaveBeenCalled();
     expect(fixture.store.applyRetention).not.toHaveBeenCalled();
     fixture.service.dispose();
@@ -197,7 +246,9 @@ function createFixture(
           : { canceled: false, filePaths: [importPath] },
       ),
     ),
-    showSaveDialog: vi.fn(() => Promise.resolve({ canceled: true, filePath: undefined })),
+    showSaveDialog: vi.fn(
+      (): Promise<SaveDialogReturnValue> => Promise.resolve({ canceled: true, filePath: '' }),
+    ),
   };
   const service = new SettingsIpcService(
     dialog as unknown as ConstructorParameters<typeof SettingsIpcService>[0],
@@ -319,6 +370,8 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     collaborationEnabled: false,
     collaborationUrl: 'ws://127.0.0.1:1234',
     collaborationDisplayName: 'Local user',
+    collaborationSubject: 'local-user',
+    collaborationColor: '#6d5efc',
     collaborationRoom: 'default',
     collaborationReconnect: true,
     updateChannel: 'stable',

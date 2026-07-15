@@ -127,6 +127,8 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     collaborationEnabled: false,
     collaborationUrl: '',
     collaborationDisplayName: 'Local user',
+    collaborationSubject: 'local-user',
+    collaborationColor: '#6d5efc',
     collaborationRoom: 'default',
     collaborationReconnect: true,
     updateChannel: 'stable',
@@ -239,8 +241,12 @@ describe('LocalStore', () => {
       expect(inspector.prepare('PRAGMA journal_mode;').get()).toMatchObject({
         journal_mode: 'wal',
       });
-      expect(inspector.prepare('PRAGMA quick_check;').get()).toMatchObject({ quick_check: 'ok' });
-      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({ user_version: 9 });
+      expect(inspector.prepare('PRAGMA quick_check;').get()).toMatchObject({
+        quick_check: 'ok',
+      });
+      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({
+        user_version: 9,
+      });
       expect(
         inspector.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
       ).toEqual([
@@ -363,7 +369,10 @@ describe('LocalStore', () => {
     expect(store.loadCanvas(PROJECT_ID)).toBeUndefined();
     const savedInitial = store.saveCanvas(initial);
     expect(savedInitial).toMatchObject(initial);
-    expect(savedInitial).toMatchObject({ schemaVersion: 2, canonical: { schemaVersion: 1 } });
+    expect(savedInitial).toMatchObject({
+      schemaVersion: 2,
+      canonical: { schemaVersion: 1 },
+    });
     expect(store.loadCanvas(PROJECT_ID)).toEqual(savedInitial);
     const savedUpdated = store.saveCanvas(updated);
     expect(savedUpdated).toMatchObject(updated);
@@ -471,9 +480,18 @@ describe('LocalStore', () => {
   it('gets runs by id and lists only the selected project newest first', () => {
     const store = openStore();
     const otherProjectId = uuidFor(99);
-    const older = storedRun({ id: uuidFor(510), updatedAt: '2026-07-14T15:00:00.000Z' });
-    const newer = storedRun({ id: uuidFor(511), updatedAt: '2026-07-14T17:00:00.000Z' });
-    const unrelated = storedRun({ id: uuidFor(512), projectId: otherProjectId });
+    const older = storedRun({
+      id: uuidFor(510),
+      updatedAt: '2026-07-14T15:00:00.000Z',
+    });
+    const newer = storedRun({
+      id: uuidFor(511),
+      updatedAt: '2026-07-14T17:00:00.000Z',
+    });
+    const unrelated = storedRun({
+      id: uuidFor(512),
+      projectId: otherProjectId,
+    });
     store.saveRun(older);
     store.saveRun(newer);
     store.saveRun(unrelated);
@@ -486,7 +504,11 @@ describe('LocalStore', () => {
 
   it('freezes every identity-critical worktree field while allowing lifecycle updates', () => {
     const store = openStore();
-    const record = storedRun({ status: 'running', endedAt: null, exitCode: null });
+    const record = storedRun({
+      status: 'running',
+      endedAt: null,
+      exitCode: null,
+    });
     store.saveRun(record);
     const replacements: ReadonlyArray<Partial<StoredRunRecord>> = [
       { cwd: '/tmp/forgeboard-worktrees/replacement' },
@@ -565,7 +587,9 @@ describe('LocalStore', () => {
     store.saveSettings(savedSettings);
     store.saveProject(savedProject);
     const savedCanvas = store.saveCanvas(canvasInput);
-    store.appendAudit('privacy', 'export', 'allowed', { source: 'settings-ui' });
+    store.appendAudit('privacy', 'export', 'allowed', {
+      source: 'settings-ui',
+    });
 
     const exported = store.exportData();
     expect(Object.keys(exported).sort()).toEqual([
@@ -580,7 +604,10 @@ describe('LocalStore', () => {
       'snapshots',
       'version',
     ]);
-    expect(exported).toMatchObject({ format: 'forgeboard-local-export', version: 3 });
+    expect(exported).toMatchObject({
+      format: 'forgeboard-local-export',
+      version: 3,
+    });
     expect(new Date(String(exported.exportedAt)).toISOString()).toBe(exported.exportedAt);
     expect(exported.settings).toEqual(savedSettings);
     expect(rows(store, 'projects')[0]).toEqual(savedProject);
@@ -636,7 +663,9 @@ describe('LocalStore', () => {
     store.saveSettings(settings());
     store.saveProject(project());
     store.saveCanvas(canvas());
-    store.appendAudit('privacy', 'delete', 'allowed', { source: 'settings-ui' });
+    store.appendAudit('privacy', 'delete', 'allowed', {
+      source: 'settings-ui',
+    });
 
     const triggerConnection = new DatabaseSync(store.databasePath);
     try {

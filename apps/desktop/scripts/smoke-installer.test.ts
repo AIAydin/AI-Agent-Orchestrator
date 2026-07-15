@@ -21,18 +21,24 @@ async function releaseWith(...files: readonly string[]): Promise<string> {
 
 describe('installer artifact discovery', () => {
   it('requires exactly one macOS DMG', async () => {
-    const root = await releaseWith('Forgeboard-0.1.0-arm64.dmg', 'Forgeboard-0.1.0-arm64.zip');
+    const root = await releaseWith(
+      'Forgeboard-0.1.0-mac-arm64.dmg',
+      'Forgeboard-0.1.0-mac-arm64.zip',
+    );
     await expect(resolveInstallerArtifacts(root, 'darwin')).resolves.toEqual({
       platform: 'darwin',
-      dmg: join(root, 'Forgeboard-0.1.0-arm64.dmg'),
+      dmg: join(root, 'Forgeboard-0.1.0-mac-arm64.dmg'),
     });
   });
 
   it('prefers the named NSIS setup when a portable executable is also present', async () => {
-    const root = await releaseWith('Forgeboard Setup 0.1.0.exe', 'Forgeboard Portable 0.1.0.exe');
+    const root = await releaseWith(
+      'Forgeboard-0.1.0-windows-x64-setup.exe',
+      'Forgeboard-0.1.0-windows-x64-portable.exe',
+    );
     await expect(resolveInstallerArtifacts(root, 'win32')).resolves.toEqual({
       platform: 'win32',
-      nsis: join(root, 'Forgeboard Setup 0.1.0.exe'),
+      nsis: join(root, 'Forgeboard-0.1.0-windows-x64-setup.exe'),
     });
   });
 
@@ -44,10 +50,13 @@ describe('installer artifact discovery', () => {
   });
 
   it('requires both Linux distribution artifacts', async () => {
-    const root = await releaseWith('Forgeboard-0.1.0.AppImage', 'forgeboard_0.1.0_amd64.deb');
+    const root = await releaseWith(
+      'Forgeboard-0.1.0-linux-x86_64.AppImage',
+      'forgeboard_0.1.0_amd64.deb',
+    );
     await expect(resolveInstallerArtifacts(root, 'linux')).resolves.toEqual({
       platform: 'linux',
-      appImage: join(root, 'Forgeboard-0.1.0.AppImage'),
+      appImage: join(root, 'Forgeboard-0.1.0-linux-x86_64.AppImage'),
       deb: join(root, 'forgeboard_0.1.0_amd64.deb'),
     });
   });

@@ -44,10 +44,24 @@ import {
   type GitReviewView,
   type GitTargetInput,
 } from '../../shared/git/contracts.js';
+import {
+  GitShippingPlanInputSchema,
+  GitShippingPlanViewSchema,
+  GitShippingResultViewSchema,
+  type GitShippingPlanInput,
+  type GitShippingPlanView,
+  type GitShippingResultView,
+} from '../../shared/git/shipping-contracts.js';
+import { displayEscapedText } from '../../shared/text/display-literal.js';
 import { GitTargetResolver } from './git-target-resolver.js';
 import type { LocalStore } from '../storage.js';
 import { createAgentBaseComparison } from './git-base-comparison.js';
 import { createNativeGitDelegateAuthorizer } from './delegates/native-confirmation.js';
+import {
+  GitShippingService,
+  type PendingGitShippingPlan,
+} from './shipping/git-shipping-service.js';
+import { shippingConfirmation } from './shipping/native-confirmation.js';
 
 const PLAN_TTL_MS = 5 * 60_000;
 const MAX_PENDING_PLANS_PER_OWNER = 32;
@@ -83,7 +97,7 @@ interface PendingDiscardPlan extends PendingPlanBase {
   readonly deletions: number;
 }
 
-type PendingPlan = PendingCommitPlan | PendingDiscardPlan;
+type PendingPlan = PendingCommitPlan | PendingDiscardPlan | PendingGitShippingPlan;
 
 interface GitTarget {
   readonly view: GitReviewTargetView;
@@ -107,6 +121,7 @@ export class GitIpcService {
   readonly #trackedOwners = new Set<number>();
   readonly #operationParents = new WeakMap<IpcMainInvokeEvent, BrowserWindow>();
   readonly #targets: GitTargetResolver;
+  readonly #shipping: GitShippingService;
   #disposed = false;
   #disposePromise: Promise<void> | null = null;
   #privacyResetting = false;
@@ -125,6 +140,7 @@ export class GitIpcService {
   ) {
     this.#changes = new ChangeService(repositories);
     this.#targets = new GitTargetResolver(store, repositories, getSettings);
+    this.#shipping = new GitShippingService(this.#targets, repositories, this.#changes);
   }
 
   public registerIpcHandlers(): void {
@@ -202,6 +218,21 @@ export class GitIpcService {
       z.tuple([GitPlanConfirmationInputSchema]),
       GitCommitResultViewSchema.nullable(),
       (event, input) => this.confirmCommit(event, input.planId),
+    );
+    this.#handle(
+      IPC_CHANNELS.gitPrepareShipping,
+      z.tuple([GitShippingPlanInputSchema]),
+      GitShippingPlanViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.prepareShipping(event.sender.id, input);
+      },
+    );
+    this.#handle(
+      IPC_CHANNELS.gitConfirmShipping,
+      z.tuple([GitPlanConfirmationInputSchema]),
+      GitShippingResultViewSchema.nullable(),
+      (event, input) => this.confirmShipping(event, input.planId),
     );
   }
 
@@ -333,6 +364,42 @@ export class GitIpcService {
     });
   }
 
+  public prepareShipping(
+    ownerId: number,
+    input: GitShippingPlanInput,
+  ): Promise<GitShippingPlanView> {
+    return this.#withOperation(async () => {
+      try {
+        if (input.target.kind !== 'agent-worktree') {
+          throw new Error(
+            'Only a managed agent worktree can be delivered to the primary checkout.',
+          );
+        }
+        const plan = await this.#shipping.prepare({
+          id: randomUUID(),
+          ownerId,
+          expiresAtMs: Date.now() + PLAN_TTL_MS,
+          input,
+          resolveIdentity: async (primaryRepositoryRoot) =>
+            await this.#resolveIdentity(primaryRepositoryRoot),
+        });
+        const view = this.#shipping.view(plan);
+        this.#storePlan(plan);
+        return view;
+      } catch (error) {
+        this.store.appendAudit('git', 'ship-agent-commits', 'failed', {
+          projectId: input.target.projectId,
+          targetKind: input.target.kind,
+          ...(input.target.kind === 'agent-worktree' ? { runId: input.target.runId } : {}),
+          strategy: input.strategy,
+          stage: 'prepare',
+          reason: error instanceof Error ? error.message.slice(0, 4_096) : 'unknown failure',
+        });
+        throw error;
+      }
+    });
+  }
+
   public confirmCommit(
     event: IpcMainInvokeEvent,
     planId: string,
@@ -423,6 +490,67 @@ export class GitIpcService {
         return review;
       } catch (error) {
         this.#auditFailure('discard-hunks', plan.target, error);
+        throw error;
+      }
+    });
+  }
+
+  public confirmShipping(
+    event: IpcMainInvokeEvent,
+    planId: string,
+  ): Promise<GitShippingResultView | null> {
+    return this.#withOperation(async () => {
+      const plan = this.#takePlan(event, planId, 'ship-agent-commits');
+      try {
+        await this.#shipping.assertCurrent(plan);
+        const parent = this.#requireLiveWindow(event);
+        const decision = await this.dialog.showMessageBox(parent, shippingConfirmation(plan));
+        this.#assertLiveSender(event);
+        if (decision.response !== 1) {
+          this.store.appendAudit('git', 'ship-agent-commits', 'denied', {
+            ...auditTargetMetadata(plan.target),
+            strategy: plan.strategy,
+            reason: 'native-confirmation-cancelled',
+            commitCount: plan.commits.length,
+            affectedPathCount: plan.affectedPaths.length,
+          });
+          return null;
+        }
+        const result = await this.#shipping.apply(plan);
+        const review = await this.#reviewUnlocked(
+          await this.#resolveTarget({ kind: 'primary', projectId: plan.target.projectId }),
+        );
+        const conflictedPaths = result.status.entries
+          .filter((entry) => entry.kind === 'unmerged')
+          .map((entry) => entry.path)
+          .sort();
+        this.store.appendAudit(
+          'git',
+          'ship-agent-commits',
+          result.state === 'completed' ? 'allowed' : 'failed',
+          {
+            ...auditTargetMetadata(plan.target),
+            strategy: plan.strategy,
+            sourceBranch: plan.sourceBranch,
+            targetBranch: plan.targetBranch,
+            commitCount: plan.commits.length,
+            affectedPathCount: plan.affectedPaths.length,
+            conflictedPathCount: conflictedPaths.length,
+            headBefore: result.headBefore,
+            headAfter: result.headAfter,
+            ...(result.state === 'conflicted' ? { reason: 'git-conflicts' } : {}),
+          },
+        );
+        return {
+          state: result.state,
+          strategy: plan.strategy,
+          headBefore: result.headBefore,
+          headAfter: result.headAfter,
+          conflictedPaths,
+          review,
+        };
+      } catch (error) {
+        this.#auditFailure('ship-agent-commits', plan.target, error);
         throw error;
       }
     });
@@ -616,7 +744,7 @@ export class GitIpcService {
     }
   }
 
-  async #assertPlanTarget(plan: PendingPlan): Promise<void> {
+  async #assertPlanTarget(plan: PendingCommitPlan | PendingDiscardPlan): Promise<void> {
     const target = await this.#resolveTarget(targetInput(plan.target));
     if (
       target.repositoryRoot !== plan.repositoryRoot ||
@@ -886,7 +1014,7 @@ function commitConfirmation(plan: PendingCommitPlan): MessageBoxOptions {
     message: `Commit ${String(plan.stagedPaths.length)} staged path${plan.stagedPaths.length === 1 ? '' : 's'}?`,
     detail: [
       `Target: ${targetDisclosure(plan.target)}`,
-      `Branch: ${plan.branch ?? 'detached HEAD'}`,
+      `Branch: ${plan.branch === null ? 'detached HEAD' : displayBoundedLiteral(plan.branch, 4_096)}`,
       `Identity: ${displayBoundedLiteral(plan.identity.name, 512)} <${displayBoundedLiteral(plan.identity.email, 512)}>`,
       `Message: ${displayBoundedLiteral(plan.message, 2_048)}`,
       `Diff: +${String(plan.additions)} / -${String(plan.deletions)}`,
@@ -910,7 +1038,7 @@ function discardConfirmation(plan: PendingDiscardPlan): MessageBoxOptions {
     message: `Permanently discard ${String(plan.hunkIds.length)} selected hunk${plan.hunkIds.length === 1 ? '' : 's'}?`,
     detail: [
       `Target: ${targetDisclosure(plan.target)}`,
-      `Branch: ${plan.branch ?? 'detached HEAD'}`,
+      `Branch: ${plan.branch === null ? 'detached HEAD' : displayBoundedLiteral(plan.branch, 4_096)}`,
       `Diff removed: +${String(plan.additions)} / -${String(plan.deletions)}`,
       '',
       ...boundedPathDisclosure(plan.paths),
@@ -932,7 +1060,7 @@ function boundedPathDisclosure(paths: readonly string[]): string[] {
 }
 
 function displayBoundedLiteral(value: string, maxLength: number): string {
-  const encoded = JSON.stringify(value).slice(1, -1);
+  const encoded = displayEscapedText(value);
   return encoded.length > maxLength ? `${encoded.slice(0, maxLength)}…` : encoded;
 }
 

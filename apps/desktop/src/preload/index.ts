@@ -9,6 +9,15 @@ import {
   CheckExecutionViewSchema,
   CheckPlanViewSchema,
 } from '../shared/checks/contracts.js';
+import {
+  COLLABORATION_IPC_CHANNELS,
+  CollaborationConnectionSchema,
+  CollaborationEventSchema,
+  CollaborationJoinInputSchema,
+  CollaborationJoinResultSchema,
+  CollaborationPublishInputSchema,
+  CollaborationUpdateAwarenessInputSchema,
+} from '../shared/collaboration/index.js';
 import type { IpcResult } from '../shared/application/contracts.js';
 import {
   AppCloseRequestSchema,
@@ -33,6 +42,10 @@ import {
   GitDiscardPlanViewSchema,
   GitReviewViewSchema,
 } from '../shared/git/contracts.js';
+import {
+  GitShippingPlanViewSchema,
+  GitShippingResultViewSchema,
+} from '../shared/git/shipping-contracts.js';
 import { IntegrityCheckResultSchema } from '../shared/integrity/contracts.js';
 import {
   RECOVERY_IPC_CHANNELS,
@@ -58,6 +71,7 @@ import {
   WorkflowReviewDecisionInputSchema,
   WorkflowStartInputSchema,
 } from '../shared/workflow/contracts.js';
+import { createFileApi } from './files.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -147,6 +161,43 @@ const api: ForgeboardApi = {
   canvas: {
     load: (projectId) => ipcRenderer.invoke(IPC_CHANNELS.canvasLoad, projectId),
     save: (document) => ipcRenderer.invoke(IPC_CHANNELS.canvasSave, document),
+  },
+  files: createFileApi(async (channel, ...args) => {
+    const result: unknown = await ipcRenderer.invoke(channel, ...args);
+    return result;
+  }),
+  collaboration: {
+    get: () =>
+      invokeValidated(COLLABORATION_IPC_CHANNELS.get, CollaborationConnectionSchema.nullable()),
+    join: async (input) => {
+      const result: unknown = await ipcRenderer.invoke(
+        COLLABORATION_IPC_CHANNELS.join,
+        CollaborationJoinInputSchema.parse(input),
+      );
+      return CollaborationJoinResultSchema.parse(result);
+    },
+    leave: () =>
+      invokeValidated(COLLABORATION_IPC_CHANNELS.leave, CollaborationConnectionSchema.nullable()),
+    publish: (input) =>
+      invokeValidated(
+        COLLABORATION_IPC_CHANNELS.publish,
+        z.boolean(),
+        CollaborationPublishInputSchema.parse(input),
+      ),
+    updateAwareness: (input) =>
+      invokeValidated(
+        COLLABORATION_IPC_CHANNELS.updateAwareness,
+        z.boolean(),
+        CollaborationUpdateAwarenessInputSchema.parse(input),
+      ),
+    onEvent: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const event = CollaborationEventSchema.safeParse(payload);
+        if (event.success) listener(event.data);
+      };
+      ipcRenderer.on(COLLABORATION_IPC_CHANNELS.event, handler);
+      return () => ipcRenderer.removeListener(COLLABORATION_IPC_CHANNELS.event, handler);
+    },
   },
   runs: {
     prepare: (input) =>
@@ -301,6 +352,14 @@ const api: ForgeboardApi = {
       invokeValidated(IPC_CHANNELS.gitPrepareCommit, GitCommitPlanViewSchema, input),
     confirmCommit: (input) =>
       invokeValidated(IPC_CHANNELS.gitConfirmCommit, GitCommitResultViewSchema.nullable(), input),
+    prepareShipping: (input) =>
+      invokeValidated(IPC_CHANNELS.gitPrepareShipping, GitShippingPlanViewSchema, input),
+    confirmShipping: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.gitConfirmShipping,
+        GitShippingResultViewSchema.nullable(),
+        input,
+      ),
   },
   privacy: {
     export: () => ipcRenderer.invoke(IPC_CHANNELS.privacyExport),

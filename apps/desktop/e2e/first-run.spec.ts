@@ -186,15 +186,26 @@ test('a first-time user can configure and persist a local visual workshop', asyn
     });
 
     await test.step('nodes can be connected with the visual handles', async () => {
-      const source = page
-        .getByRole('article', { name: 'Product brief: Release plan' })
-        .locator('.react-flow__handle-right');
+      const releasePlan = page.getByRole('article', { name: 'Product brief: Release plan' });
+      await releasePlan.click();
+      const inspector = page.locator('.inspector');
+      await expect(
+        inspector.getByText('Unlock it to edit, move, connect, or delete it.'),
+      ).toBeVisible();
+      await inspector.getByRole('button', { name: 'Unlock' }).click();
+      await expect(releasePlan.locator('[aria-label="Locked"]')).toHaveCount(0);
+
+      const source = releasePlan.locator('.react-flow__handle-right');
       const target = page
         .getByRole('article', { name: 'Task: Task' })
         .locator('.react-flow__handle-left');
       await connectHandles(page, source, target);
       await expect(page.locator('.canvas-title')).toContainText('2 nodes · 1 connections');
       await expect(page.getByText('Connected nodes with a context edge.')).toBeVisible();
+
+      await releasePlan.click();
+      await inspector.getByRole('button', { name: 'Lock' }).click();
+      await expect(releasePlan.locator('[aria-label="Locked"]')).toBeVisible();
     });
 
     await test.step('the command palette and edit history work from the keyboard', async () => {

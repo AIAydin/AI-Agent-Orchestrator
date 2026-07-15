@@ -6,7 +6,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -31,6 +35,7 @@ jobs:
         run: node scripts/release/verify-metadata.mjs --verify-tag
       - run: >-
           node --test
+          scripts/release/artifacts.test.mjs
           scripts/release/checksums.test.mjs
           scripts/release/metadata.test.mjs
           scripts/startup/start-from-source.test.mjs
@@ -54,14 +59,17 @@ jobs:
             unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           else
-            for variable in CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
-              value="${!variable-}"
-              if [[ -z "${value//[[:space:]]/}" ]]; then
-                unset "$variable"
-              fi
-            done
+            if [[ -z "${CSC_KEY_PASSWORD//[[:space:]]/}" ]]; then
+              unset CSC_KEY_PASSWORD
+            fi
+            if [[ -z "${APPLE_ID//[[:space:]]/}" || \
+                  -z "${APPLE_APP_SPECIFIC_PASSWORD//[[:space:]]/}" || \
+                  -z "${APPLE_TEAM_ID//[[:space:]]/}" ]]; then
+              unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            fi
           fi
           pnpm package
+          node scripts/release/artifacts.mjs apps/desktop/release
       - name: Package Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -77,9 +85,12 @@ jobs:
             Remove-Item Env:WIN_CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
           }
           pnpm package
+          node scripts/release/artifacts.mjs apps/desktop/release
       - name: Package Linux
         if: runner.os == 'Linux'
-        run: pnpm package
+        run: |
+          pnpm package
+          node scripts/release/artifacts.mjs apps/desktop/release
       - if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum pnpm --filter @forgeboard/desktop smoke:packaged
       - if: runner.os != 'Linux'
@@ -101,6 +112,7 @@ jobs:
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
             apps/desktop/release/*.blockmap
+            apps/desktop/release/RELEASE-INFO-*.json
             apps/desktop/release/SHA256SUMS-*.txt
           if-no-files-found: error
 
@@ -108,6 +120,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -125,6 +139,7 @@ jobs:
       - name: Attach bundled Git corresponding source
         run: |
           node scripts/release/verify-metadata.mjs --verify-tag
+          node scripts/release/artifacts.mjs artifacts --all
           node scripts/release/download-sources.mjs artifacts
           node scripts/release/checksums.mjs artifacts SHA256SUMS-source-and-installers.txt
       - name: Publish GitHub Release

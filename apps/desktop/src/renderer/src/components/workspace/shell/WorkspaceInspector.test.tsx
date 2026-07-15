@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AppSettingsSchema,
@@ -11,6 +11,11 @@ import {
 } from '../../../../../shared/application/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
+
+afterEach(() => {
+  cleanup();
+  Reflect.deleteProperty(window, 'forgeboard');
+});
 
 const project: Project = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -89,6 +94,82 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByText(/No in-image agent payload starts/u)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Review & run' })).toHaveProperty('disabled', true);
   });
+
+  it('disables node editing and deletion while preserving unlock and duplicate actions', () => {
+    const selectedNode = agentNode({ locked: true });
+    render(<WorkspaceInspector {...props(settings(), selectedNode)} />);
+
+    expect(screen.getByRole('status').textContent).toMatch(/node is locked/u);
+    expect(
+      screen.getByRole<HTMLFieldSetElement>('group', { name: 'Node configuration' }),
+    ).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText<HTMLInputElement>('Title').matches(':disabled')).toBe(true);
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Description').matches(':disabled')).toBe(
+      true,
+    );
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Unlock' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', false);
+  });
+
+  it('keeps live run cancellation available when an Agent node is locked', () => {
+    const selectedNode = agentNode({ locked: true, status: 'running' });
+    const inspectorProps = props(settings(), selectedNode);
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    expect(screen.getByLabelText<HTMLSelectElement>('Installed adapter')).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Prompt')).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Terminate' })).toHaveProperty('disabled', false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Terminate' }));
+    expect(inspectorProps.onControlRun).toHaveBeenNthCalledWith(1, 'interrupt');
+    expect(inspectorProps.onControlRun).toHaveBeenNthCalledWith(2, 'terminate');
+  });
+
+  it('wires a selected File node to the real project-relative editor and preserves its lock', async () => {
+    const read = vi.fn().mockResolvedValue({
+      projectId: project.id,
+      relativePath: 'src/index.ts',
+      contentKind: 'text',
+      content: 'export {};\n',
+      encoding: 'utf-8',
+      sizeBytes: 11,
+      modifiedAt: '2026-07-15T12:00:00.000Z',
+      sha256: 'a'.repeat(64),
+      readOnly: false,
+      readOnlyReason: null,
+    });
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        files: {
+          tree: vi.fn(),
+          read,
+          save: vi.fn(),
+          revert: vi.fn(),
+          reveal: vi.fn(),
+        },
+      },
+    });
+    const selectedNode = fileNode({ locked: true });
+
+    render(<WorkspaceInspector {...props(settings(), selectedNode)} />);
+
+    expect(screen.getByRole('region', { name: 'File editor: src/index.ts' })).toBeTruthy();
+    await waitFor(() =>
+      expect(read).toHaveBeenCalledWith({
+        projectId: project.id,
+        relativePath: 'src/index.ts',
+      }),
+    );
+    await waitFor(() => expect(screen.getAllByRole('status')[1]?.textContent).toBe('Read-only'));
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
+  });
 });
 
 function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
@@ -136,6 +217,30 @@ function agentNode(data: Partial<WorkshopNode['data']>): WorkshopNode {
       collapsed: false,
       color: '#445566',
       adapterId: 'test-agent',
+      ...data,
+    },
+  };
+}
+
+function fileNode(data: Partial<WorkshopNode['data']>): WorkshopNode {
+  return {
+    id: 'file-1',
+    type: 'workshop',
+    position: { x: 0, y: 0 },
+    data: {
+      kind: 'file',
+      title: 'src/index.ts',
+      description: 'Live local source reference',
+      status: 'idle',
+      locked: false,
+      collapsed: false,
+      color: '#6d9ed0',
+      file: {
+        projectId: project.id,
+        relativePath: 'src/index.ts',
+        kind: 'file',
+        missing: false,
+      },
       ...data,
     },
   };

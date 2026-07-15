@@ -1,0 +1,141 @@
+.content-node-inspector {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.content-node-inspector > header,
+.content-list-header,
+.content-attachments > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.content-node-inspector > header > div {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.content-node-inspector h3,
+.content-node-inspector p {
+  margin: 0;
+}
+
+.content-node-inspector > header > span,
+.content-list-header span,
+.content-attachments header span {
+  color: var(--text-muted);
+  font-size: 8px;
+}
+
+.content-list-header {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.content-list-header button,
+.brief-versions > button {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.content-edit-list {
+  display: grid;
+  gap: 6px;
+}
+
+.content-edit-list > p,
+.content-attachments > p,
+.brief-versions > p {
+  color: var(--text-muted);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.content-edit-row,
+.content-variable-row {
+  align-items: start;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.content-variable-row {
+  grid-template-columns: minmax(70px, 0.5fr) minmax(0, 1fr) auto;
+}
+
+.content-edit-row > input[type='checkbox'] {
+  margin-top: 7px;
+}
+
+.content-edit-row .icon-button,
+.content-variable-row .icon-button {
+  margin-top: 2px;
+}
+
+.content-attachments {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+}
+
+.content-attachments label {
+  align-items: center;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  text-transform: none;
+}
+
+.content-attachments label small {
+  color: var(--text-muted);
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-versions {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.brief-versions ol {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.brief-versions li {
+  align-items: center;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.brief-versions li > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-versions li > button {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.brief-versions li small,
+.missing-local-reference {
+  color: var(--text-muted);
+}

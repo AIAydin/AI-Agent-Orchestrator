@@ -6,6 +6,8 @@ import type {
   GitDiscardPlanView,
   GitReviewTargetView,
 } from '../../../../../shared/git/contracts.js';
+import { displayEscapedText } from '../../../../../shared/text/display-literal.js';
+import { trapModalFocus } from '../../../lib/modal-focus.js';
 
 const MAX_VISIBLE_PATHS = 100;
 
@@ -20,7 +22,7 @@ function PathList({ paths }: { paths: readonly string[] }) {
   return (
     <div className="git-disclosure-paths">
       {paths.slice(0, MAX_VISIBLE_PATHS).map((path) => (
-        <code key={path}>{path}</code>
+        <code key={path}>{displayEscapedText(path)}</code>
       ))}
       {remaining > 0 && <small>+ {remaining} additional paths in this exact plan</small>}
     </div>
@@ -47,15 +49,20 @@ function DisclosureFrame({
   onConfirm: () => void;
 }) {
   const cancelButton = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLElement>(null);
   const cancelRef = useRef(onCancel);
+  const busyRef = useRef(busy);
   cancelRef.current = onCancel;
+  busyRef.current = busy;
 
   useEffect(() => {
     const previousFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     cancelButton.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
+      trapModalFocus(event, dialog.current);
       if (event.key !== 'Escape') return;
+      if (busyRef.current) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       cancelRef.current();
@@ -70,8 +77,10 @@ function DisclosureFrame({
   return (
     <div className="git-disclosure-backdrop" role="presentation">
       <section
+        ref={dialog}
         className="git-action-disclosure"
         role="alertdialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={`${titleId}-description`}
@@ -186,7 +195,7 @@ export function GitCommitDisclosure({
         </div>
         <div>
           <dt>Branch</dt>
-          <dd>{plan.branch ?? 'Unborn branch'}</dd>
+          <dd>{plan.branch === null ? 'Unborn branch' : displayEscapedText(plan.branch)}</dd>
         </div>
         <div>
           <dt>Staged snapshot</dt>
@@ -197,12 +206,13 @@ export function GitCommitDisclosure({
         <div className="wide">
           <dt>Author</dt>
           <dd>
-            {plan.identity.name} &lt;{plan.identity.email}&gt;
+            {displayEscapedText(plan.identity.name)} &lt;
+            {displayEscapedText(plan.identity.email)}&gt;
           </dd>
         </div>
         <div className="wide">
           <dt>Message</dt>
-          <dd className="git-disclosure-message">{plan.message}</dd>
+          <dd className="git-disclosure-message">{displayEscapedText(plan.message)}</dd>
         </div>
       </dl>
       <PathList paths={plan.stagedPaths} />

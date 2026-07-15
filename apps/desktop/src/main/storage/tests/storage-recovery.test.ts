@@ -196,6 +196,8 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     collaborationEnabled: false,
     collaborationUrl: '',
     collaborationDisplayName: 'Local user',
+    collaborationSubject: 'local-user',
+    collaborationColor: '#6d5efc',
     collaborationRoom: 'default',
     collaborationReconnect: true,
     updateChannel: 'stable',
@@ -319,7 +321,9 @@ describe('LocalStore persistence and recovery', () => {
     expect(upgraded.getProject(PROJECT_ID)).toEqual(project());
     expect(upgraded.loadCanvas(PROJECT_ID)).toEqual(sanitizeCanvasDocument(canvas()));
     const inspector = new DatabaseSync(databasePath, { readOnly: true });
-    expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({ user_version: 9 });
+    expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({
+      user_version: 9,
+    });
     expect(
       inspector
         .prepare(
@@ -364,7 +368,10 @@ describe('LocalStore persistence and recovery', () => {
     store.saveCanvas(changed);
     const previous = store.listCanvasSnapshots(PROJECT_ID);
     expect(previous).toHaveLength(1);
-    expect(previous[0]).toMatchObject({ reason: 'autosave', document: { name: 'Main canvas' } });
+    expect(previous[0]).toMatchObject({
+      reason: 'autosave',
+      document: { name: 'Main canvas' },
+    });
 
     closeStore(store);
     const reopened = openStore(databasePath);
@@ -372,7 +379,10 @@ describe('LocalStore persistence and recovery', () => {
       previous[0]?.id ?? '',
       new Date('2026-07-14T16:03:00.000Z'),
     );
-    expect(restored).toMatchObject({ name: 'Main canvas', updatedAt: '2026-07-14T16:03:00.000Z' });
+    expect(restored).toMatchObject({
+      name: 'Main canvas',
+      updatedAt: '2026-07-14T16:03:00.000Z',
+    });
     expect(reopened.loadCanvas(PROJECT_ID)).toEqual(restored);
     const restoreCheckpoint = reopened
       .listCanvasSnapshots(PROJECT_ID)
@@ -449,7 +459,11 @@ describe('LocalStore persistence and recovery', () => {
     vi.useRealTimers();
 
     const result = store.applyRetention(
-      settings({ transcriptRetentionDays: 30, auditRetentionDays: 365, snapshotRetentionCount: 2 }),
+      settings({
+        transcriptRetentionDays: 30,
+        auditRetentionDays: 365,
+        snapshotRetentionCount: 2,
+      }),
       NOW,
     );
     expect(result).toEqual({
@@ -547,7 +561,10 @@ describe('LocalStore persistence and recovery', () => {
       scrubbedSnapshotTranscripts: 1,
     });
     expect(JSON.stringify(store.exportData())).not.toContain('expired-transcript-secret');
-    expect(store.checkIntegrity('full')).toMatchObject({ ok: true, messages: [] });
+    expect(store.checkIntegrity('full')).toMatchObject({
+      ok: true,
+      messages: [],
+    });
   });
 
   it('validates a portable export before importing it transactionally', () => {
@@ -555,9 +572,16 @@ describe('LocalStore persistence and recovery', () => {
     source.saveSettings(settings({ theme: 'dark' }));
     source.saveProject(project());
     source.saveCanvas(canvas());
-    source.saveCanvas(canvas({ name: 'Exported canvas', updatedAt: '2026-07-14T16:01:00.000Z' }));
+    source.saveCanvas(
+      canvas({
+        name: 'Exported canvas',
+        updatedAt: '2026-07-14T16:01:00.000Z',
+      }),
+    );
     source.saveRun(run('30000000-0000-4000-8000-000000000001', 'succeeded'));
-    source.appendAudit('export', 'portable', 'allowed', { token: 'must-be-redacted' });
+    source.appendAudit('export', 'portable', 'allowed', {
+      token: 'must-be-redacted',
+    });
     const exported = source.exportData(NOW);
 
     const destination = openStore();
@@ -591,7 +615,10 @@ describe('LocalStore persistence and recovery', () => {
     expect(() => destination.importData(collision)).toThrow(
       'merge imports cannot replace run history',
     );
-    expect(destination.checkIntegrity()).toMatchObject({ ok: true, messages: [] });
+    expect(destination.checkIntegrity()).toMatchObject({
+      ok: true,
+      messages: [],
+    });
   });
 
   it('preflights replace imports without mutating current local data', () => {
@@ -622,7 +649,10 @@ describe('LocalStore persistence and recovery', () => {
       canvases: 1,
     });
     expect(destination.exportData(NOW)).toEqual(before);
-    expect(destination.preflightImportData(imported)).toMatchObject({ projects: 1, canvases: 1 });
+    expect(destination.preflightImportData(imported)).toMatchObject({
+      projects: 1,
+      canvases: 1,
+    });
     expect(destination.exportData(NOW)).toEqual(before);
   });
 
@@ -677,7 +707,10 @@ describe('LocalStore persistence and recovery', () => {
     canvasCollision.projects = [];
     canvasCollision.canvases = [
       sanitizeCanvasDocument(
-        canvas({ id: '12000000-0000-4000-8000-000000000002', name: 'Imported overwrite' }),
+        canvas({
+          id: '12000000-0000-4000-8000-000000000002',
+          name: 'Imported overwrite',
+        }),
       ),
     ];
     expect(() => store.importData(canvasCollision)).toThrow(
@@ -693,11 +726,16 @@ describe('LocalStore persistence and recovery', () => {
     const duplicateProjects = source.exportData(NOW);
     const importedProject = duplicateProjects.projects[0];
     if (!importedProject) throw new Error('Expected an exported project.');
-    duplicateProjects.projects.push({ ...importedProject, path: '/tmp/duplicate-project-id' });
+    duplicateProjects.projects.push({
+      ...importedProject,
+      path: '/tmp/duplicate-project-id',
+    });
 
     const destination = openStore();
     expect(() =>
-      destination.preflightImportData(duplicateProjects, { replaceExisting: true }),
+      destination.preflightImportData(duplicateProjects, {
+        replaceExisting: true,
+      }),
     ).toThrow('duplicate project id');
     expect(destination.listProjects()).toEqual([]);
 
@@ -710,10 +748,14 @@ describe('LocalStore persistence and recovery', () => {
       id: duplicateCanvasId,
       ...(importedCanvas.canonical === undefined
         ? {}
-        : { canonical: { ...importedCanvas.canonical, id: duplicateCanvasId } }),
+        : {
+            canonical: { ...importedCanvas.canonical, id: duplicateCanvasId },
+          }),
     });
     expect(() =>
-      destination.preflightImportData(duplicateCanvases, { replaceExisting: true }),
+      destination.preflightImportData(duplicateCanvases, {
+        replaceExisting: true,
+      }),
     ).toThrow('more than one canvas for project');
     expect(destination.listProjects()).toEqual([]);
   });
@@ -769,7 +811,10 @@ describe('LocalStore persistence and recovery', () => {
     const destination = openStore();
     destination.saveProject(project());
     destination.relocateProject(
-      project({ path: '/tmp/relocated-before-import', openedAt: '2026-07-14T16:01:00.000Z' }),
+      project({
+        path: '/tmp/relocated-before-import',
+        openedAt: '2026-07-14T16:01:00.000Z',
+      }),
     );
     const trusted = trustedExtension();
     destination.upsertActiveTrustedExtension(trusted);
@@ -781,7 +826,9 @@ describe('LocalStore persistence and recovery', () => {
     expect(destination.listTrustedExtensions()).toEqual([trusted]);
     expect(destination.getProject(PROJECT_ID)).toBeUndefined();
     expect(destination.getProject('14000000-0000-4000-8000-000000000001')).toBeDefined();
-    const inspector = new DatabaseSync(destination.databasePath, { readOnly: true });
+    const inspector = new DatabaseSync(destination.databasePath, {
+      readOnly: true,
+    });
     expect(inspector.prepare('SELECT COUNT(*) AS count FROM backup_records').get()).toEqual({
       count: 1,
     });
@@ -867,7 +914,9 @@ describe('LocalStore persistence and recovery', () => {
     expect(result.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
     expect(readdirSync(backupRoot)).toEqual([basename(result.path)]);
     const backup = new DatabaseSync(result.path, { readOnly: true });
-    expect(backup.prepare('PRAGMA quick_check;').get()).toEqual({ quick_check: 'ok' });
+    expect(backup.prepare('PRAGMA quick_check;').get()).toEqual({
+      quick_check: 'ok',
+    });
     expect(backup.prepare('SELECT COUNT(*) AS count FROM recent_projects').get()).toEqual({
       count: 1,
     });
@@ -1001,7 +1050,9 @@ describe('LocalStore persistence and recovery', () => {
 
     const allMissingBackupIds = await store.listMissingRecordedBackupIds();
     expect(allMissingBackupIds).toHaveLength(2);
-    await store.deleteAllLocalData({ approvedMissingBackupIds: allMissingBackupIds });
+    await store.deleteAllLocalData({
+      approvedMissingBackupIds: allMissingBackupIds,
+    });
     await expect(store.listMissingRecordedBackupIds()).resolves.toEqual([]);
     expect(store.getProject(PROJECT_ID)).toBeUndefined();
     inspector = new DatabaseSync(store.databasePath, { readOnly: true });
@@ -1042,7 +1093,11 @@ describe('LocalStore persistence and recovery', () => {
     const running = '40000000-0000-4000-8000-000000000002';
     store.saveRun(run(prepared, 'prepared'));
     store.saveRun(run(running, 'running'));
-    expect(store.checkIntegrity('full')).toMatchObject({ ok: true, mode: 'full', messages: [] });
+    expect(store.checkIntegrity('full')).toMatchObject({
+      ok: true,
+      mode: 'full',
+      messages: [],
+    });
     closeStore(store);
 
     const reopened = openStore(databasePath);
@@ -1063,7 +1118,9 @@ describe('LocalStore persistence and recovery', () => {
     const invalidBackupRoot = join(temporaryRoot(), 'invalid-backup');
     await expect(reopened.createBackup(invalidBackupRoot)).rejects.toThrow('failed validation');
     expect(readdirSync(invalidBackupRoot)).toEqual([]);
-    const failedBackupLedger = new DatabaseSync(reopened.databasePath, { readOnly: true });
+    const failedBackupLedger = new DatabaseSync(reopened.databasePath, {
+      readOnly: true,
+    });
     expect(
       failedBackupLedger.prepare('SELECT COUNT(*) AS count FROM backup_records').get(),
     ).toEqual({ count: 0 });

@@ -8,6 +8,13 @@ import {
   DockerImageReferenceSchema,
 } from '../docker/contracts.js';
 import {
+  CollaborationColorSchema,
+  CollaborationDisplayNameSchema,
+  CollaborationRoomIdSchema,
+  CollaborationServerUrlSchema,
+  CollaborationSubjectSchema,
+} from '../collaboration/values.js';
+import {
   CustomPermissionProfileSettingsSchema,
   PermissionProfileSchema,
 } from '../permissions/contracts.js';
@@ -207,11 +214,26 @@ export const AppSettingsSchema = z
     gitRemote: z.string().min(1).max(512).default('origin'),
     terminalShell: z.string(),
     envAllowlist: EnvironmentAllowlistSchema,
-    developmentCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
-    testCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
-    lintCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
-    typecheckCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
-    buildCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
+    developmentCommand: CommandConfigurationSchema.default({
+      executable: '',
+      arguments: [],
+    }),
+    testCommand: CommandConfigurationSchema.default({
+      executable: '',
+      arguments: [],
+    }),
+    lintCommand: CommandConfigurationSchema.default({
+      executable: '',
+      arguments: [],
+    }),
+    typecheckCommand: CommandConfigurationSchema.default({
+      executable: '',
+      arguments: [],
+    }),
+    buildCommand: CommandConfigurationSchema.default({
+      executable: '',
+      arguments: [],
+    }),
     customChecks: CustomChecksSchema.optional(),
     previewPortStart: z.number().int().min(1024).max(65534),
     previewPortEnd: z.number().int().min(1025).max(65535),
@@ -236,9 +258,11 @@ export const AppSettingsSchema = z
     backupOnQuit: z.boolean().default(true),
     backupRetentionCount: z.number().int().min(1).max(365).default(30),
     collaborationEnabled: z.boolean(),
-    collaborationUrl: z.string(),
-    collaborationDisplayName: z.string().min(1).max(200).default('Local user'),
-    collaborationRoom: z.string().min(1).max(200).default('default'),
+    collaborationUrl: z.union([z.literal(''), CollaborationServerUrlSchema]),
+    collaborationDisplayName: CollaborationDisplayNameSchema.default('Local user'),
+    collaborationSubject: CollaborationSubjectSchema.default('local-user'),
+    collaborationColor: CollaborationColorSchema.default('#6d5efc'),
+    collaborationRoom: CollaborationRoomIdSchema.default('default'),
     collaborationReconnect: z.boolean().default(true),
     updateChannel: z.enum(['stable', 'prerelease', 'disabled']).default('stable'),
     automaticUpdateDownloads: z.boolean().default(false),
@@ -249,6 +273,13 @@ export const AppSettingsSchema = z
         code: z.ZodIssueCode.custom,
         path: ['previewPortEnd'],
         message: 'Preview port end must be greater than preview port start.',
+      });
+    }
+    if (settings.collaborationEnabled && settings.collaborationUrl === '') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['collaborationUrl'],
+        message: 'Choose a WebSocket collaboration server before enabling collaboration.',
       });
     }
     if (settings.customAgent.enabled && settings.customAgent.executable.trim() === '') {
@@ -895,7 +926,11 @@ export const CanvasDocumentSchema = z.object({
   name: z.string().min(1),
   nodes: z.array(CanvasNodeSchema),
   edges: z.array(CanvasEdgeSchema),
-  viewport: z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() }),
+  viewport: z.object({
+    x: z.number(),
+    y: z.number(),
+    zoom: z.number().positive(),
+  }),
   updatedAt: z.string().datetime(),
   canonical: EmbeddedCanonicalCanvasSchema.optional(),
 });
@@ -1055,4 +1090,6 @@ export const IPC_CHANNELS = Object.freeze({
   gitConfirmDiscard: 'git:confirm-discard',
   gitPrepareCommit: 'git:prepare-commit',
   gitConfirmCommit: 'git:confirm-commit',
+  gitPrepareShipping: 'git:prepare-shipping',
+  gitConfirmShipping: 'git:confirm-shipping',
 } as const);

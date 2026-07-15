@@ -110,13 +110,20 @@ export function PreviewNodePanel({
 
   useEffect(() => {
     if (
+      !data.locked &&
       !settingsCommandConfigured &&
       (data.previewPackageScript === undefined || data.previewPackageScript === '') &&
       preferredScript
     ) {
       onUpdate({ previewPackageScript: preferredScript });
     }
-  }, [data.previewPackageScript, onUpdate, preferredScript, settingsCommandConfigured]);
+  }, [
+    data.locked,
+    data.previewPackageScript,
+    onUpdate,
+    preferredScript,
+    settingsCommandConfigured,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -225,7 +232,12 @@ export function PreviewNodePanel({
           aria-label="Preview command"
           name={`node-${nodeId}-preview-command`}
           value={selectedCommand}
-          disabled={running || busy || (!settingsCommandConfigured && detectedScripts.length === 0)}
+          disabled={
+            data.locked ||
+            running ||
+            busy ||
+            (!settingsCommandConfigured && detectedScripts.length === 0)
+          }
           onChange={(event) => onUpdate({ previewPackageScript: event.target.value })}
         >
           {settingsCommandConfigured && <option value="">Development command from Settings</option>}
@@ -274,7 +286,7 @@ export function PreviewNodePanel({
           <input
             name={`node-${nodeId}-preview-project-folder`}
             value={selectedScript ? '.' : (data.previewCwdRelative ?? '.')}
-            disabled={running || busy || Boolean(selectedScript)}
+            disabled={data.locked || running || busy || Boolean(selectedScript)}
             placeholder=". or apps/web"
             onChange={(event) => onUpdate({ previewCwdRelative: event.target.value })}
           />
@@ -284,7 +296,7 @@ export function PreviewNodePanel({
           <input
             name={`node-${nodeId}-preview-readiness-path`}
             value={data.previewReadinessPath ?? '/'}
-            disabled={running || busy}
+            disabled={data.locked || running || busy}
             placeholder="/health"
             onChange={(event) => onUpdate({ previewReadinessPath: event.target.value })}
           />
@@ -294,7 +306,7 @@ export function PreviewNodePanel({
           <input
             name={`node-${nodeId}-preview-initial-url-path`}
             value={data.previewUrlPath ?? '/'}
-            disabled={running || busy}
+            disabled={data.locked || running || busy}
             placeholder="/"
             onChange={(event) => onUpdate({ previewUrlPath: event.target.value })}
           />
@@ -304,6 +316,7 @@ export function PreviewNodePanel({
           <select
             name={`node-${nodeId}-preview-device-viewport`}
             value={primaryPreset}
+            disabled={data.locked}
             onChange={(event) => onUpdate({ previewPreset: event.target.value as PresetId })}
           >
             {Object.entries(PRESETS).map(([id, value]) => (
@@ -318,6 +331,7 @@ export function PreviewNodePanel({
       <div className="preview-options">
         <button
           type="button"
+          disabled={data.locked}
           onClick={() =>
             onUpdate({ previewOrientation: orientation === 'portrait' ? 'landscape' : 'portrait' })
           }
@@ -329,6 +343,7 @@ export function PreviewNodePanel({
             type="checkbox"
             name={`node-${nodeId}-preview-side-by-side`}
             checked={data.previewSideBySide === true}
+            disabled={data.locked}
             onChange={(event) => onUpdate({ previewSideBySide: event.target.checked })}
           />
           Side by side
@@ -338,6 +353,7 @@ export function PreviewNodePanel({
             aria-label="Secondary device viewport"
             name={`node-${nodeId}-preview-secondary-device-viewport`}
             value={secondaryPreset}
+            disabled={data.locked}
             onChange={(event) =>
               onUpdate({ previewSecondaryPreset: event.target.value as PresetId })
             }

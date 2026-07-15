@@ -44,6 +44,20 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   lastRunPermissionProfile?: PermissionProfile;
   prompt?: string;
   model?: string;
+  markdown?: string;
+  checklist?: Array<{
+    id: string;
+    label: string;
+    checked: boolean;
+  }>;
+  attachmentIds?: string[];
+  versions?: Array<{
+    id: string;
+    createdAt: string;
+    markdown: string;
+    authorId: string;
+  }>;
+  variables?: Record<string, string>;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   assigneeId?: string;
   acceptanceCriteria?: Array<{
@@ -66,6 +80,16 @@ export interface WorkshopNodeData extends Record<string, unknown> {
     missing: boolean;
     lastKnownHash?: string;
   };
+  images?: Array<{
+    projectId: string;
+    relativePath: string;
+    kind: 'file' | 'directory' | 'image' | 'artifact';
+    missing: boolean;
+    lastKnownHash?: string;
+  }>;
+  altText?: Record<string, string>;
+  mermaidSource?: string;
+  agentEditable?: boolean;
   taskStatus?: 'backlog' | 'ready' | 'in-progress' | 'review' | 'done' | 'cancelled';
   command?: WorkshopCommandConfiguration;
   checkKind?: 'lint' | 'typecheck' | 'test' | 'build' | 'custom';

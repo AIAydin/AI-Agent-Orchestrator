@@ -1,0 +1,64 @@
+.git-shipping-panel {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(210px, auto) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.git-shipping-panel > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.git-shipping-panel strong {
+  font-size: 10px;
+}
+
+.git-shipping-panel small,
+.git-shipping-panel label {
+  color: var(--text-faint);
+  font-size: 8px;
+}
+
+.git-shipping-panel select {
+  min-width: 210px;
+}
+
+.git-shipping-result {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 9px;
+}
+
+.git-shipping-result.success {
+  color: var(--green);
+}
+
+.git-shipping-result.conflict {
+  color: var(--red);
+}
+
+.git-disclosure-body h4 {
+  margin: 10px 0 5px;
+  color: var(--text-soft);
+  font-size: 9px;
+}
+
+@media (max-width: 900px) {
+  .git-shipping-panel {
+    grid-template-columns: 1fr auto;
+  }
+
+  .git-shipping-panel label {
+    display: none;
+  }
+}

@@ -19,7 +19,7 @@ const COMMIT_IDENTITY = {
 };
 const COMMIT_MESSAGE = 'Commit isolated deterministic agent work';
 
-test('an agent worktree can be reviewed and committed without changing the primary checkout', async () => {
+test('onboarding can run, review, commit, restart, and deliver isolated agent work to primary', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-worktree-review-e2e-'));
   const managedWorktreeRoot = join(userDataDirectory, 'ui-configured-worktrees');
   const externalRequests: string[] = [];
@@ -178,6 +178,38 @@ test('an agent worktree can be reviewed and committed without changing the prima
       primaryFilesBefore,
       changedFile,
     });
+
+    await reviewDialog.getByRole('tab', { name: 'Changes vs base' }).click();
+    const delivery = reviewDialog.getByRole('region', {
+      name: 'Deliver reviewed commits to primary',
+    });
+    await expect(delivery).toContainText(
+      'Forgeboard will verify the source and primary checkout again before delivery.',
+    );
+    await delivery.getByLabel('Delivery strategy').selectOption('fast-forward-only');
+    await delivery.getByRole('button', { name: /Review delivery/ }).click();
+
+    const deliveryDisclosure = page.getByRole('alertdialog', {
+      name: 'Review exact primary delivery',
+    });
+    await expect(deliveryDisclosure).toContainText('Fast-forward-only merge');
+    await expect(deliveryDisclosure).toContainText(COMMIT_IDENTITY.name);
+    await expect(deliveryDisclosure).toContainText(COMMIT_IDENTITY.email);
+    await expect(deliveryDisclosure).toContainText(worktreeHeadAfter);
+    await expect(deliveryDisclosure).toContainText(changedFile);
+
+    await approveNativeCommitDialogs(electronApp);
+    await deliveryDisclosure
+      .getByRole('button', { name: 'Continue to system confirmation' })
+      .click();
+    await expect(reviewDialog).toContainText('Delivered reviewed commits to primary', {
+      timeout: 20_000,
+    });
+    await expect(delivery).toContainText('Delivered to primary at');
+
+    expect(git(primaryPath, ['rev-parse', 'HEAD'])).toBe(worktreeHeadAfter);
+    expect(git(primaryPath, ['status', '--porcelain=v1', '--untracked-files=all'])).toBe('');
+    expect(await readFile(join(primaryPath, changedFile), 'utf8')).toBe(agentFileContent);
     expect(externalRequests).toEqual([]);
   } finally {
     await electronApp?.close().catch(() => undefined);

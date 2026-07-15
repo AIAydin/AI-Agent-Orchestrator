@@ -25,6 +25,7 @@ jobs:
       - run: node scripts/release/verify-metadata.mjs
       - run: >-
           node --test
+          scripts/release/artifacts.test.mjs
           scripts/release/checksums.test.mjs
           scripts/release/metadata.test.mjs
           scripts/startup/start-from-source.test.mjs

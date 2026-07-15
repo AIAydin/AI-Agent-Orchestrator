@@ -43,6 +43,22 @@ import { CheckApprovalDialog } from '../CheckApprovalDialog.js';
 import { RunApprovalDialog } from '../runs/RunApprovalDialog.js';
 import { WorkspaceActivityDrawer } from '../activity/WorkspaceActivityDrawer.js';
 import { WorkspaceCanvas } from '../canvas/WorkspaceCanvas.js';
+import {
+  canConnectUnlocked,
+  canEditEdge,
+  filterLockedEdgeChanges,
+  filterLockedNodeChanges,
+} from '../canvas/interactions/lock-protection.js';
+import {
+  moveSelectedCanvasNodes,
+  type CanvasKeyboardMovement,
+  type CanvasKeyboardMoveSummary,
+} from '../canvas/interactions/keyboard-navigation.js';
+import {
+  captureSelectedSubgraph,
+  instantiateClipboardSelection,
+  type CanvasClipboardSelection,
+} from '../canvas/interactions/selection-clipboard.js';
 import { WorkspaceCommandBar } from './WorkspaceCommandBar.js';
 import { WorkflowDecisionDialog } from '../workflows/WorkflowDecisionDialog.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
@@ -66,6 +82,7 @@ import type {
 import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
 import { useAgentRunController } from '../runs/useAgentRunController.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
+import { useCollaborationCanvas } from '../collaboration/useCollaborationCanvas.js';
 import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
@@ -74,6 +91,8 @@ import {
   runnableWorkflowNodeCount,
   workflowSelectionEligibility,
 } from '../workflows/workflow-run-eligibility.js';
+
+const LOCKED_CONNECTION_ACTIVITY = 'Unlock locked nodes before changing their connections.';
 
 export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
   function Workspace(props, ref) {
@@ -152,6 +171,17 @@ function workflowDecisionIsCurrent(
   );
 }
 
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target.closest('[contenteditable="true"]') !== null ||
+    target.tagName === 'INPUT' ||
+    target.tagName === 'SELECT' ||
+    target.tagName === 'TEXTAREA'
+  );
+}
+
 const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function WorkspaceInner(
   {
     project,
@@ -186,6 +216,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const [events, setEvents] = useState<string[]>(['Project health scan completed locally.']);
   const loaded = useRef(false);
   const pendingNodeSelection = useRef<string | null>(null);
+  const canvasClipboard = useRef<CanvasClipboardSelection | null>(null);
+  const pasteSequence = useRef(0);
   const extensionDiscoveryRef = useRef(extensionDiscovery);
 
   useEffect(() => {
@@ -228,7 +260,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   useEffect(() => {
     extensionDiscoveryRef.current = extensionDiscovery;
     setNodes((items) =>
-      items.map((node) => ({ ...node, data: hydrateNodeData(node.data, extensionDiscovery) })),
+      items.map((node) => ({
+        ...node,
+        data: hydrateNodeData(node.data, extensionDiscovery),
+      })),
     );
   }, [extensionDiscovery]);
 
@@ -260,7 +295,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     });
   }, []);
 
-  const previews = useWorkspacePreviews({ projectId: project.id, nodes, setNodes, setEvents });
+  const previews = useWorkspacePreviews({
+    projectId: project.id,
+    nodes,
+    setNodes,
+    setEvents,
+  });
 
   const pendingCanvas = useMemo<CanvasDocument | null>(() => {
     if (!canvas || !loaded.current) return null;
@@ -290,6 +330,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       viewport: instance?.getViewport() ?? canvas.viewport,
     };
   }, [canvas, edges, instance, nodes]);
+  useCollaborationCanvas({
+    enabled: settings.collaborationEnabled,
+    document: pendingCanvas,
+    selectedNodeId,
+    onError,
+  });
   const { saveState, flushCanvas } = useCanvasPersistence({
     projectId: project.id,
     document: pendingCanvas,
@@ -351,12 +397,124 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     setEvents((items) => ['Redid a canvas change.', ...items].slice(0, 30));
   }, [edges, future, nodes]);
 
+  const insertClipboardSelection = useCallback(
+    (selection: CanvasClipboardSelection, offset: number, activity: string) => {
+      if (selection.nodes.length === 0) return;
+      record();
+      const duplicate = instantiateClipboardSelection(selection, {
+        createId: () => crypto.randomUUID(),
+        offset,
+      });
+      const firstNodeId = duplicate.nodes[0]?.id ?? null;
+      pendingNodeSelection.current = firstNodeId;
+      setNodes((items) => [
+        ...items.map((node) => ({ ...node, selected: false })),
+        ...duplicate.nodes,
+      ]);
+      setEdges((items) => [
+        ...items.map((edge) => ({ ...edge, selected: false })),
+        ...duplicate.edges,
+      ]);
+      setSelectedNodeId(firstNodeId);
+      setSelectedEdgeId(null);
+      if (firstNodeId !== null) {
+        window.setTimeout(() => {
+          if (pendingNodeSelection.current === firstNodeId) pendingNodeSelection.current = null;
+        }, 250);
+      }
+      setEvents((items) => [activity, ...items].slice(0, 30));
+    },
+    [record],
+  );
+
+  const copySelected = useCallback(() => {
+    const selection = captureSelectedSubgraph(nodes, edges, selectedNodeId);
+    if (selection.nodes.length === 0) return;
+    canvasClipboard.current = selection;
+    pasteSequence.current = 0;
+    setEvents((items) =>
+      [
+        `Copied ${selection.nodes.length} canvas node${selection.nodes.length === 1 ? '' : 's'}.`,
+        ...items,
+      ].slice(0, 30),
+    );
+  }, [edges, nodes, selectedNodeId]);
+
+  const pasteClipboard = useCallback(() => {
+    if (canvasClipboard.current === null) return;
+    pasteSequence.current += 1;
+    insertClipboardSelection(
+      canvasClipboard.current,
+      pasteSequence.current * 32,
+      `Pasted ${canvasClipboard.current.nodes.length} canvas node${
+        canvasClipboard.current.nodes.length === 1 ? '' : 's'
+      }.`,
+    );
+  }, [insertClipboardSelection]);
+
+  const duplicateSelected = useCallback(() => {
+    const selection = captureSelectedSubgraph(nodes, edges, selectedNodeId);
+    insertClipboardSelection(
+      selection,
+      32,
+      `Duplicated ${selection.nodes.length} canvas node${selection.nodes.length === 1 ? '' : 's'}.`,
+    );
+  }, [edges, insertClipboardSelection, nodes, selectedNodeId]);
+
+  const moveSelectedByKeyboard = useCallback(
+    (
+      movement: CanvasKeyboardMovement,
+      recordUndoCheckpoint: boolean,
+    ): CanvasKeyboardMoveSummary => {
+      const result = moveSelectedCanvasNodes(nodes, movement);
+      if (result.movedNodeIds.length > 0) {
+        if (recordUndoCheckpoint) record();
+        setNodes((items) => moveSelectedCanvasNodes(items, movement).nodes);
+        if (recordUndoCheckpoint) {
+          setEvents((items) =>
+            [
+              `Moved ${result.movedNodeIds.length} canvas node${
+                result.movedNodeIds.length === 1 ? '' : 's'
+              } with the keyboard.`,
+              ...items,
+            ].slice(0, 30),
+          );
+        }
+      }
+      return {
+        selectedNodeIds: result.selectedNodeIds,
+        movedNodeIds: result.movedNodeIds,
+        lockedNodeIds: result.lockedNodeIds,
+      };
+    },
+    [nodes, record],
+  );
+
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       const command = event.metaKey || event.ctrlKey;
       if (opensCommandPalette(event, settings.keyboardPreset)) {
         event.preventDefault();
         setPaletteOpen(true);
+      }
+      if (isTextEntryTarget(event.target)) {
+        if (event.key === 'Escape') setPaletteOpen(false);
+        return;
+      }
+      if (command && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        copySelected();
+        return;
+      }
+      if (command && event.key.toLowerCase() === 'v') {
+        event.preventDefault();
+        pasteClipboard();
+        return;
+      }
+      if (command && event.key.toLowerCase() === 'd') {
+        event.preventDefault();
+        duplicateSelected();
+        return;
       }
       if (command && event.key.toLowerCase() === 'z' && !event.shiftKey) {
         event.preventDefault();
@@ -373,7 +531,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     };
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [redo, settings.keyboardPreset, undo]);
+  }, [copySelected, duplicateSelected, pasteClipboard, redo, settings.keyboardPreset, undo]);
 
   const addNode = useCallback(
     (kind: NodeKind, position?: { x: number; y: number }) => {
@@ -500,7 +658,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     setEvents,
     onError,
   });
-  const checks = useProjectChecks({ projectId: project.id, setEvents, onError });
+  const checks = useProjectChecks({
+    projectId: project.id,
+    setEvents,
+    onError,
+  });
   const workflowNodeTitles = useMemo(
     () => new Map(nodes.map((node) => [node.id, node.data.title] as const)),
     [nodes],
@@ -527,7 +689,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     () =>
       nodes.map((node) => {
         const status = workflowNodeStatuses.get(node.id);
-        return status === undefined ? node : { ...node, data: { ...node.data, status } };
+        const displayed = status === undefined ? node : { ...node, data: { ...node.data, status } };
+        const mutable = !node.data.locked;
+        return {
+          ...displayed,
+          ariaLabel: `${node.data.title}, ${NODE_DEFINITIONS[node.data.kind].label} node${
+            node.data.locked ? ', locked' : ''
+          }`,
+          connectable: mutable,
+          deletable: mutable,
+          draggable: mutable,
+        };
       }),
     [nodes, workflowNodeStatuses],
   );
@@ -648,34 +820,25 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   ];
 
   function updateSelected(data: Partial<WorkshopNode['data']>) {
-    if (selectedNode) updateNodeData(selectedNode.id, data);
-  }
-
-  function duplicateSelected() {
     if (!selectedNode) return;
-    record();
-    const id = crypto.randomUUID();
-    pendingNodeSelection.current = id;
-    setNodes((items) => [
-      ...items.map((node) => ({ ...node, selected: false })),
-      {
-        ...selectedNode,
-        id,
-        position: { x: selectedNode.position.x + 32, y: selectedNode.position.y + 32 },
-        selected: true,
-        data: { ...selectedNode.data, title: `${selectedNode.data.title} copy` },
-      },
-    ]);
-    setSelectedNodeId(id);
-    window.setTimeout(() => {
-      if (pendingNodeSelection.current === id) pendingNodeSelection.current = null;
-    }, 250);
+    const keys = Object.keys(data);
+    if (selectedNode.data.locked && !(keys.length === 1 && keys[0] === 'locked')) return;
+    updateNodeData(selectedNode.id, data);
   }
 
   function deleteSelected() {
     if (!selectedNode) return;
+    if (selectedNode.data.locked) {
+      setEvents((items) =>
+        [`Unlock ${selectedNode.data.title} before deleting it.`, ...items].slice(0, 30),
+      );
+      return;
+    }
     if (selectedNode.data.kind === 'web-preview' || selectedNode.data.kind === 'mobile-preview') {
-      void window.forgeboard.previews.stop({ projectId: project.id, nodeId: selectedNode.id });
+      void window.forgeboard.previews.stop({
+        projectId: project.id,
+        nodeId: selectedNode.id,
+      });
     }
     record();
     setNodes((items) => items.filter((node) => node.id !== selectedNode.id));
@@ -688,6 +851,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
 
   function updateEdgeType(edgeType: EdgeKind) {
     if (!selectedEdge) return;
+    if (!canEditEdge(selectedEdge, nodes)) {
+      setEvents((items) =>
+        items[0] === LOCKED_CONNECTION_ACTIVITY
+          ? items
+          : [LOCKED_CONNECTION_ACTIVITY, ...items].slice(0, 30),
+      );
+      return;
+    }
     record();
     setEdges((items) =>
       items.map((edge) =>
@@ -704,6 +875,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
 
   function updateEdgeData(data: WorkshopEdgeData) {
     if (!selectedEdge) return;
+    if (!canEditEdge(selectedEdge, nodes)) {
+      setEvents((items) =>
+        items[0] === LOCKED_CONNECTION_ACTIVITY
+          ? items
+          : [LOCKED_CONNECTION_ACTIVITY, ...items].slice(0, 30),
+      );
+      return;
+    }
     record();
     setEdges((items) =>
       items.map((edge) =>
@@ -714,8 +893,18 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
 
   const paletteActions = useMemo(
     () => [
-      { id: 'add-agent', label: 'Add agent node', section: 'Canvas', run: () => addNode('agent') },
-      { id: 'add-task', label: 'Add task node', section: 'Canvas', run: () => addNode('task') },
+      {
+        id: 'add-agent',
+        label: 'Add agent node',
+        section: 'Canvas',
+        run: () => addNode('agent'),
+      },
+      {
+        id: 'add-task',
+        label: 'Add task node',
+        section: 'Canvas',
+        run: () => addNode('task'),
+      },
       {
         id: 'add-brief',
         label: 'Add product brief',
@@ -734,7 +923,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         section: 'View',
         shortcut: 'F',
         run: () =>
-          void instance?.fitView({ padding: 0.18, duration: settings.reducedMotion ? 0 : 240 }),
+          void instance?.fitView({
+            padding: 0.18,
+            duration: settings.reducedMotion ? 0 : 240,
+          }),
       },
       ...(canRunWorkflow
         ? [
@@ -821,7 +1013,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         onUndo={undo}
         onRedo={redo}
         onFitCanvas={() =>
-          void instance?.fitView({ padding: 0.18, duration: settings.reducedMotion ? 0 : 240 })
+          void instance?.fitView({
+            padding: 0.18,
+            duration: settings.reducedMotion ? 0 : 240,
+          })
         }
         onRunWorkflow={() => void workflows.start({ kind: 'workflow' })}
         onRunSelected={() => {
@@ -850,6 +1045,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onInitializeGit={() => void initializeGit()}
           onSelectNode={(node) => {
             setSelectedNodeId(node.id);
+            setSelectedEdgeId(null);
+            setNodes((items) =>
+              items.map((item) => ({
+                ...item,
+                selected: item.id === node.id,
+              })),
+            );
+            setEdges((items) => items.map((edge) => ({ ...edge, selected: false })));
             void instance?.setCenter(node.position.x, node.position.y, {
               zoom: 1.15,
               duration: settings.reducedMotion ? 0 : 220,
@@ -864,14 +1067,47 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           extensionTemplates={extensionTemplates}
           instance={instance}
           onInstance={setInstance}
-          onNodesChange={(changes: NodeChange<WorkshopNode>[]) =>
-            setNodes((items) => applyNodeChanges(changes, items))
-          }
+          onNodesChange={(changes: NodeChange<WorkshopNode>[]) => {
+            const allowedChanges = filterLockedNodeChanges(changes, nodes, edges);
+            const blockedRemoval = changes.some(
+              (change) => change.type === 'remove' && !allowedChanges.includes(change),
+            );
+            if (allowedChanges.some((change) => change.type === 'remove')) record();
+            if (blockedRemoval) {
+              setEvents((items) =>
+                items[0] === LOCKED_CONNECTION_ACTIVITY
+                  ? items
+                  : [LOCKED_CONNECTION_ACTIVITY, ...items].slice(0, 30),
+              );
+            }
+            setNodes((items) =>
+              applyNodeChanges(filterLockedNodeChanges(changes, items, edges), items),
+            );
+          }}
           onEdgesChange={(changes: EdgeChange<WorkshopEdge>[]) => {
-            if (changes.some((change) => change.type === 'remove')) record();
-            setEdges((items) => applyEdgeChanges(changes, items));
+            const allowedChanges = filterLockedEdgeChanges(changes, edges, nodes);
+            const blockedRemoval = changes.some(
+              (change) => change.type === 'remove' && !allowedChanges.includes(change),
+            );
+            if (allowedChanges.some((change) => change.type === 'remove')) record();
+            if (blockedRemoval) {
+              setEvents((items) =>
+                items[0] === LOCKED_CONNECTION_ACTIVITY
+                  ? items
+                  : [LOCKED_CONNECTION_ACTIVITY, ...items].slice(0, 30),
+              );
+            }
+            setEdges((items) =>
+              applyEdgeChanges(filterLockedEdgeChanges(changes, items, nodes), items),
+            );
           }}
           onConnect={(connection: Connection) => {
+            if (!canConnectUnlocked(connection, nodes)) {
+              setEvents((items) =>
+                ['Unlock both nodes before changing their connections.', ...items].slice(0, 30),
+              );
+              return;
+            }
             record();
             setEdges((items) =>
               addEdge(
@@ -889,6 +1125,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             setEvents((items) => ['Connected nodes with a context edge.', ...items].slice(0, 30));
           }}
           onNodeDragStart={record}
+          onKeyboardMove={moveSelectedByKeyboard}
           onSelectionChange={({
             nodes: selectedNodes,
             edges: selectedEdges,
@@ -927,6 +1164,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onClearSelection={() => {
             setSelectedNodeId(null);
             setSelectedEdgeId(null);
+            setNodes((items) => items.map((node) => ({ ...node, selected: false })));
+            setEdges((items) => items.map((edge) => ({ ...edge, selected: false })));
           }}
           onRecord={record}
           onUpdateSelected={updateSelected}
@@ -1029,7 +1268,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
               .then(() => setWorkflowDecision(null));
           }}
           onReviewChanges={(runId) => {
-            setGitReviewTarget({ kind: 'agent-worktree', projectId: project.id, runId });
+            setGitReviewTarget({
+              kind: 'agent-worktree',
+              projectId: project.id,
+              runId,
+            });
             setWorkflowDecision(null);
           }}
         />

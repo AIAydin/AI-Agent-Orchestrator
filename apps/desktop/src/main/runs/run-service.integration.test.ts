@@ -92,6 +92,8 @@ async function createRepository(): Promise<TestRepository> {
 
 function approvalBase(repositoryRoot: string, expectedHead: string) {
   return {
+    authorName: 'Forgeboard Integration Test',
+    authorEmail: 'forgeboard@example.invalid',
     approved: true as const,
     approvalId: randomUUID(),
     approvedAt: new Date().toISOString(),

@@ -257,14 +257,16 @@ export interface CommitApproval extends ApprovalBase<'commit'>, GitCommitIdentit
   readonly stagedPatchSha256: string;
 }
 
-export interface MergeApproval extends ApprovalBase<'merge'> {
+export interface MergeApproval extends ApprovalBase<'merge'>, GitCommitIdentity {
   readonly sourceRef: string;
   readonly expectedSourceOid: string;
   readonly targetBranch: string;
   readonly strategy: MergeStrategy;
 }
 
-export interface CherryPickApproval extends ApprovalBase<'cherry-pick'> {
+export interface CherryPickApproval extends ApprovalBase<'cherry-pick'>, GitCommitIdentity {
+  readonly sourceRef: string;
+  readonly expectedSourceOid: string;
   readonly commits: readonly string[];
 }
 

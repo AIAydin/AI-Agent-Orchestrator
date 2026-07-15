@@ -216,4 +216,67 @@ describe('PreviewNodePanel package-script picker', () => {
       'enter a development command entirely in the UI',
     );
   });
+
+  it('keeps stop available while a locked running preview has read-only configuration', async () => {
+    const running: PreviewSessionSnapshot = {
+      id: '024b6a04-8a03-4d24-a16f-4baf20ddb3f5',
+      status: 'starting',
+      startedAt: '2026-07-14T16:00:00.000Z',
+      readyAt: null,
+      stoppedAt: null,
+      failure: null,
+      trustedHosts: ['127.0.0.1'],
+      processes: [],
+    };
+    const stop = vi.fn().mockResolvedValue({ ok: true, value: null });
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        previews: {
+          get: vi.fn().mockResolvedValue({ ok: true, value: running }),
+          start: vi.fn(),
+          restart: vi.fn(),
+          stop,
+          navigate: vi.fn(),
+          onEvent: vi.fn(),
+        },
+      },
+    });
+    render(
+      <PreviewNodePanel
+        projectId={PROJECT_ID}
+        project={project({ dev: 'vite' })}
+        nodeId="preview-node"
+        kind="web-preview"
+        data={{
+          kind: 'web-preview',
+          title: 'Preview',
+          description: 'Local preview',
+          status: 'running',
+          locked: true,
+          collapsed: false,
+          color: '#6099c5',
+          previewPackageScript: 'dev',
+        }}
+        settings={blankCommandSettings}
+        session={running}
+        onUpdate={vi.fn()}
+        onSession={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('combobox', { name: 'Preview command' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByLabelText('Readiness path')).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Stop' })).toHaveProperty('disabled', false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() =>
+      expect(stop).toHaveBeenCalledWith({ projectId: PROJECT_ID, nodeId: 'preview-node' }),
+    );
+  });
 });

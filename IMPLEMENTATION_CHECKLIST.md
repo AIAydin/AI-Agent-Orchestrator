@@ -159,12 +159,12 @@ not be reclassified as future work.
 - [x] Required path/ignore/sensitive/symlink/redaction unit tests.
 - [x] Required IPC/adapter-manifest/Git/persistence unit tests.
 - [x] Two fake agents in parallel worktrees integration flow through diff acceptance/merge/cleanup.
-- [ ] Interrupt/fail/retry/restart restoration integration test.
-- [ ] Two-worktree preview integration test.
-- [ ] Test/review gate and bounded revision integration tests.
-- [ ] Sensitive-context and zero-Forgeboard-outbound integration tests.
+- [x] Interrupt/fail/retry/restart restoration integration test.
+- [x] Two-worktree preview integration test.
+- [x] Test/review gate and bounded revision integration tests.
+- [x] Sensitive-context and zero-Forgeboard-outbound integration tests.
 - [x] Collaboration allowlist/two-client privacy integration tests.
-- [ ] Complete onboarding-to-merge Electron E2E flow.
+- [x] Complete onboarding-to-merge Electron E2E flow.
 - [ ] Keyboard-only, themes/reduced-motion, permissions/cancel, and multiplayer E2E flows.
 - [ ] Failure E2E coverage for missing CLI, moved repo, collision, conflict, offline server, malformed
       import, and database recovery.
@@ -423,3 +423,92 @@ unchecked when only a subset of their required behavior has proof.
   The packaged-app smoke passed its UI-driven safe-default/demo/real-child-process/durable-SQLite
   proof, and the native DMG mount/install/launch smoke returned `FORGEBOARD_SMOKE_OK`. GitHub Release
   publication, signing/notarization, and fresh Windows/Linux installer proof remain unchecked.
+- 2026-07-15: managed completed agent-worktree review gained a minimal local delivery path for
+  fast-forward-only merge or ordered cherry-pick into the canonical primary checkout. Renderer
+  requests contain only project/run ownership IDs and a strategy; main resolves branches, immutable
+  base/source/primary commits, ordered commit range, affected files, clean/conflict state, and the
+  exact Settings or canonical-primary Git identity with its source, then revalidates both checkouts
+  after an exact cancel-default native disclosure. Dirty,
+  detached, conflicted, rewritten, already-integrated, or drifted state fails closed; no force,
+  reset, clean, push, automatic resolution, or renderer path/ref/command is available. Cherry-pick
+  conflicts remain durable in primary and return its review state. Focused evidence passed 9 UI and
+  contract tests, 6 real temporary-repository delivery cases, 13 Git-engine/run integration tests,
+  focused lint/typecheck, and the 521-file structure gate. Squash, rebase, visual conflict
+  resolution/continuation, push, and PR delivery remain unchecked.
+- 2026-07-15: the canvas interaction layer gained keyboard-focusable nodes with visible shortcut
+  guidance, accessible movement announcements, 1 px Arrow movement, 10 px Shift+Arrow movement,
+  editable-control exclusion, multi-selection movement, hard-lock preservation, and one undo
+  checkpoint per keypress/hold. Configured grid snapping now uses a matching visible grid, while
+  zoom-aware edge/center alignment guides render in the React Flow viewport only during node drag.
+  Eight new focused geometry, keyboard, renderer-interaction, lock, and undo tests passed alongside
+  targeted lint/format checks and the structure gate. The broad canvas checklist item remains
+  unchecked because comments and complete grouping/containment behavior are not yet proven.
+- 2026-07-15: a real main-process workflow recovery integration scenario now runs bundled
+  deterministic child processes in five production-managed Git worktrees. It proves live SIGINT
+  interruption, workflow cancellation with process termination, deliberate exit-code-7 failure,
+  exactly two human-review revision attempts with no third launch, and explicit exhausted-loop
+  cancellation. The scenario then disposes the host/runtime/store, reopens SQLite with fresh
+  production service instances, and restores all four terminal workflows and all five exact run
+  records without recovery mutation. Uncommitted tracked and untracked primary-checkout work plus
+  partial files from interrupted, terminated, failed, and successful worktrees remain byte-exact
+  across the restart. The focused real-process and mapped recovery suites passed 52 tests across
+  five files, alongside lint, formatting, and the 567-file structure gate, without fake timers or
+  mocked child-process completion.
+- 2026-07-15: production workflow composition now has a real Test/Review Gate integration using
+  bundled deterministic agent children, exact-check child processes, SQLite, Git, and isolated
+  managed worktrees. An independent passing lint producer is deliberately unselected and cannot
+  release the gate; the selected Test fails on attempt one and triggers the configured bounded
+  revision; attempt-one output and gate evidence are cleared and cannot satisfy attempt two; the
+  Test is retargeted to the second owned worktree; and only its selected passing attempt-two
+  evidence releases the gate through the `tests-passed` stop condition. Durable events, check rows,
+  producer/reviewed attempt bindings, and worktree isolation are asserted. Together with the real
+  recovery scenario's two-attempt exhaustion, no-third-run proof, and explicit human escape
+  cancellation, this closes the named Test/review-gate and bounded-revision integration
+  requirement. The mapped workflow suites passed 29 integration tests, alongside desktop strict
+  typecheck, focused lint/format checks, the 574-file structure gate, and `git diff --check`.
+- 2026-07-15: release packaging gained deterministic platform-and-architecture installer names,
+  exact artifact-set validation, per-run source/signing manifests, tag-only GitHub publication,
+  build-job read-only permissions, an assisted per-user Windows installer that preserves local app
+  data, and a modular download/checksum/install guide requiring no source or configuration edits.
+  Eighteen release/startup tests, ten focused installer tests, metadata verification, lint, and
+  the 573-file structure gate passed. A clean unsigned macOS arm64 build emitted the canonical DMG
+  and ZIP names, generated four checksums plus an accurate `unsigned-development` manifest, and its
+  native DMG mount/install/launch smoke returned `FORGEBOARD_SMOKE_OK`. GitHub Release publication,
+  signed/notarized artifacts, and fresh native Windows/Linux CI installer proof remain unchecked.
+- 2026-07-15: the production preview runtime was exercised concurrently against two real managed
+  Git worktrees registered through LocalStore. Real loopback HTTP children served exact cwd-bound
+  worktree content on distinct collision-checked ports while a dirty primary checkout remained
+  byte-exact. The proof covers occupied and exhausted port ranges, bounded logs and renderer chunks,
+  cross-owner denial, independent restart/stop, PID and port cleanup, durable audit evidence, and
+  unchanged worktree ownership. The focused proof, 25 mapped preview tests, 11 Git-engine
+  integration tests, typecheck, lint, formatting, and the 576-file structure gate passed. This
+  closes only the named two-worktree preview integration test; automatic side-by-side UI binding
+  remains unchecked.
+- 2026-07-15: a production-composed default-solo workflow integration now proves that `.env*`, Git-
+  ignored, Forgeboard-ignored, symlink-escape, and corrupted traversal context is denied before
+  planning or process spawn without secret bytes entering audits. For allowed context, the exact
+  canonical path, SHA-256, manifest, provider, and `provider-controlled` network status are
+  disclosed before approval; only afterward does a real deterministic child receive that one file.
+  The fixture traps Forgeboard-owned HTTP, HTTPS, TCP, TLS, DNS, UDP, fetch, and WebSocket seams and
+  observes zero attempts and zero `external-send` audits. Two real-process tests and 85 mapped unit
+  tests passed with typecheck, lint, formatting, structure, and whitespace gates. This closes the
+  named integration-test requirement only: it is not packet capture or an OS firewall, does not
+  inspect provider-controlled child networking, and does not close the broader all-app-path solo
+  outbound claim.
+- 2026-07-15: the real Electron worktree journey now covers the complete local onboarding-to-merge
+  path without code or environment editing: accept safe defaults, configure the managed worktree
+  root and Git identity in Settings, open the demo, add and configure the deterministic agent in the
+  UI, review and approve its exact native launch, inspect and stage its isolated change, review and
+  approve the commit, restart the app, reopen the durable run, review the exact commit delivery, and
+  approve a fast-forward into primary. The test proves primary HEAD and bytes remain unchanged until
+  delivery, then proves primary HEAD exactly equals the reviewed agent HEAD, the delivered file is
+  byte-identical, status is clean, and no external web requests occurred. The focused Electron run
+  passed 1/1 in 13 seconds. This closes local onboarding-to-primary merge only; remote push, pull
+  request, and release publication remain separately unchecked.
+- 2026-07-15: the combined checkpoint passed the 576-file modularity gate, repository-wide
+  formatting, zero-warning ESLint, every workspace strict typecheck, 881 unit tests across 150
+  files, 160 real integration tests across 24 files, all 11 Electron Playwright journeys, all 18
+  standalone release/startup tests, every workspace production build, and `git diff --check`.
+  `corepack pnpm audit --prod --audit-level high` reported no known production dependency
+  vulnerabilities. The Electron suite includes the lock-aware first-run canvas journey and the new
+  end-to-end reviewed primary-delivery path.

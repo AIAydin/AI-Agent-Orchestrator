@@ -8,6 +8,11 @@ import type {
   GitReviewView,
   GitTargetInput,
 } from '../../../../shared/git/contracts.js';
+import type {
+  GitShippingPlanView,
+  GitShippingResultView,
+  GitShippingStrategy,
+} from '../../../../shared/git/shipping-contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 
 function errorMessage(error: unknown): string {
@@ -28,6 +33,10 @@ interface GitReviewController {
   readonly confirmDiscard: (planId: string) => Promise<GitReviewView | null | undefined>;
   readonly prepareCommit: (message: string) => Promise<GitCommitPlanView | undefined>;
   readonly confirmCommit: (planId: string) => Promise<GitCommitResultView | null | undefined>;
+  readonly prepareShipping: (
+    strategy: GitShippingStrategy,
+  ) => Promise<GitShippingPlanView | undefined>;
+  readonly confirmShipping: (planId: string) => Promise<GitShippingResultView | null | undefined>;
 }
 
 export function useGitReview(
@@ -177,6 +186,22 @@ export function useGitReview(
     [perform],
   );
 
+  const prepareShipping = useCallback(
+    (strategy: GitShippingStrategy) =>
+      perform('Preparing primary delivery review', () =>
+        window.forgeboard.git.prepareShipping({ target, strategy }),
+      ),
+    [perform, target],
+  );
+
+  const confirmShipping = useCallback(
+    (planId: string) =>
+      perform('Waiting for system confirmation', () =>
+        window.forgeboard.git.confirmShipping({ planId }),
+      ),
+    [perform],
+  );
+
   return {
     review,
     loading,
@@ -191,5 +216,7 @@ export function useGitReview(
     confirmDiscard,
     prepareCommit,
     confirmCommit,
+    prepareShipping,
+    confirmShipping,
   };
 }

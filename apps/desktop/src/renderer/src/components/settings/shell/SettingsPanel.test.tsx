@@ -74,7 +74,9 @@ beforeEach(() => {
         pickReferences,
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
-      privacy: { export: vi.fn(() => Promise.resolve({ ok: true, value: null })) },
+      privacy: {
+        export: vi.fn(() => Promise.resolve({ ok: true, value: null })),
+      },
       storage: {
         getBackupHealth,
         checkIntegrity: vi.fn(({ mode }: { mode: 'quick' | 'full' }) =>
@@ -244,7 +246,9 @@ describe('SettingsPanel draft transactions', () => {
       target: { value: '12' },
     });
     fireEvent.click(
-      screen.getByRole('checkbox', { name: /Back up unsaved changes when quitting/u }),
+      screen.getByRole('checkbox', {
+        name: /Back up unsaved changes when quitting/u,
+      }),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
 
@@ -320,7 +324,10 @@ describe('SettingsPanel draft transactions', () => {
       ok: true,
       value: ['/tmp/detected-project/src'],
     });
-    pickExecutable.mockResolvedValue({ ok: true, value: '/usr/local/bin/codex' });
+    pickExecutable.mockResolvedValue({
+      ok: true,
+      value: '/usr/local/bin/codex',
+    });
     render(<SettingsPanel {...props({ activeProject: project() })} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Permissions' }));
@@ -334,7 +341,9 @@ describe('SettingsPanel draft transactions', () => {
 
     const readable = screen.getByRole('group', { name: 'Readable roots' });
     fireEvent.click(
-      within(readable).getByRole('button', { name: 'Browse matching project folder' }),
+      within(readable).getByRole('button', {
+        name: 'Browse matching project folder',
+      }),
     );
     await waitFor(() => expect(within(readable).getByDisplayValue('src')).toBeTruthy());
     const writable = screen.getByRole('group', { name: 'Writable roots' });
@@ -351,7 +360,11 @@ describe('SettingsPanel draft transactions', () => {
     });
     expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', true);
     expect(screen.getAllByText(/Add at least one exact executable/u).length).toBeGreaterThan(0);
-    fireEvent.click(within(executableGroup).getByRole('button', { name: 'Browse executable' }));
+    fireEvent.click(
+      within(executableGroup).getByRole('button', {
+        name: 'Browse executable',
+      }),
+    );
     await waitFor(() =>
       expect(within(executableGroup).getByDisplayValue('/usr/local/bin/codex')).toBeTruthy(),
     );
@@ -368,7 +381,10 @@ describe('SettingsPanel draft transactions', () => {
         writePaths: ['src/generated'],
         executablePolicy: 'allowlist',
         allowedExecutables: ['/usr/local/bin/codex'],
-        forgeboardManagedActions: { developmentServers: 'deny', tests: 'allow' },
+        forgeboardManagedActions: {
+          developmentServers: 'deny',
+          tests: 'allow',
+        },
         requireReviewBeforePrimary: true,
       },
     });
@@ -439,7 +455,10 @@ describe('SettingsPanel draft transactions', () => {
   });
 
   it('keeps manual check configuration available without an open project', async () => {
-    pickExecutable.mockResolvedValue({ ok: true, value: '/usr/local/bin/eslint' });
+    pickExecutable.mockResolvedValue({
+      ok: true,
+      value: '/usr/local/bin/eslint',
+    });
     render(<SettingsPanel {...props()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
@@ -474,18 +493,30 @@ describe('SettingsPanel draft transactions', () => {
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     const saved = updateSettings.mock.calls[0]?.[0];
-    expect(saved?.lintCommand).toEqual({ executable: 'pnpm', arguments: ['run', 'lint'] });
+    expect(saved?.lintCommand).toEqual({
+      executable: 'pnpm',
+      arguments: ['run', 'lint'],
+    });
     expect(saved?.typecheckCommand).toEqual({
       executable: 'pnpm',
       arguments: ['run', 'typecheck'],
     });
-    expect(saved?.testCommand).toEqual({ executable: 'pnpm', arguments: ['run', 'test'] });
-    expect(saved?.buildCommand).toEqual({ executable: 'pnpm', arguments: ['run', 'build'] });
+    expect(saved?.testCommand).toEqual({
+      executable: 'pnpm',
+      arguments: ['run', 'test'],
+    });
+    expect(saved?.buildCommand).toEqual({
+      executable: 'pnpm',
+      arguments: ['run', 'build'],
+    });
     expect(JSON.stringify(saved)).not.toContain('touch should-not-run');
   });
 
   it('adds, edits, browses, and removes a custom check in the draft transaction', async () => {
-    pickExecutable.mockResolvedValue({ ok: true, value: '/opt/tools/license-check' });
+    pickExecutable.mockResolvedValue({
+      ok: true,
+      value: '/opt/tools/license-check',
+    });
     render(<SettingsPanel {...props()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
@@ -496,7 +527,9 @@ describe('SettingsPanel draft transactions', () => {
       target: { value: 'License scan' },
     });
 
-    const commandEditor = screen.getByRole('group', { name: 'License scan command' });
+    const commandEditor = screen.getByRole('group', {
+      name: 'License scan command',
+    });
     fireEvent.click(within(commandEditor).getByRole('button', { name: 'Browse' }));
     await waitFor(() =>
       expect(within(commandEditor).getByLabelText<HTMLInputElement>('Executable').value).toBe(
@@ -534,7 +567,9 @@ describe('SettingsPanel draft transactions', () => {
   it('persists the keyboard preset that drives the workspace shortcut behavior', async () => {
     render(<SettingsPanel {...props()} />);
 
-    fireEvent.change(screen.getByLabelText(/Keyboard preset/u), { target: { value: 'vscode' } });
+    fireEvent.change(screen.getByLabelText(/Keyboard preset/u), {
+      target: { value: 'vscode' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Help & shortcuts' }));
     expect(
       screen.getByText('VS Code preset · unsaved; Standard preset remains active'),
@@ -545,7 +580,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(updateSettings.mock.calls[0]?.[0].keyboardPreset).toBe('vscode');
   });
 
-  it('shows and preserves inactive legacy settings without presenting dead controls as working', async () => {
+  it('preserves unavailable legacy settings while exposing explicit collaboration controls', async () => {
     render(
       <SettingsPanel
         {...props({
@@ -588,14 +623,24 @@ describe('SettingsPanel draft transactions', () => {
     const collaborationEnabled = screen.getByRole<HTMLInputElement>('checkbox', {
       name: /Enable collaboration/u,
     });
-    expect(collaborationEnabled.disabled).toBe(true);
+    expect(collaborationEnabled.disabled).toBe(false);
     expect(collaborationEnabled.checked).toBe(true);
-    expect(screen.getByLabelText('Collaboration server URL')).toHaveProperty('disabled', true);
-    expect(screen.getByLabelText('Collaboration display name')).toHaveProperty('disabled', true);
-    expect(screen.getByLabelText('Collaboration room')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Collaboration server URL')).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Collaboration display name')).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Collaboration room')).toHaveProperty('disabled', false);
     expect(
-      screen.getByRole('checkbox', { name: /Reconnect collaboration automatically/u }),
-    ).toHaveProperty('disabled', true);
+      screen.getByRole('checkbox', {
+        name: /Reconnect collaboration automatically/u,
+      }),
+    ).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Session access token')).toHaveProperty('value', '');
+    fireEvent.change(screen.getByLabelText('Collaborator ID'), {
+      target: { value: 'team-editor' },
+    });
+    fireEvent.change(screen.getByLabelText('Collaborator color'), {
+      target: { value: '#123456' },
+    });
+    expect(screen.getByRole('button', { name: 'Connect' })).toHaveProperty('disabled', true);
     expect(screen.getByLabelText('Update channel')).toHaveProperty('disabled', true);
     const automaticDownloads = screen.getByRole<HTMLInputElement>('checkbox', {
       name: /Download updates automatically/u,
@@ -607,7 +652,7 @@ describe('SettingsPanel draft transactions', () => {
       true,
     );
     expect(screen.getByText(/Manual update checks are unavailable/u)).toBeTruthy();
-    expect(screen.getByText(/stored or imported setting requests collaboration/u)).toBeTruthy();
+    expect(screen.getByText(/Not connected/u)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
@@ -615,6 +660,8 @@ describe('SettingsPanel draft transactions', () => {
       terminalShell: '/bin/sh',
       gitRemote: 'origin',
       collaborationEnabled: true,
+      collaborationSubject: 'team-editor',
+      collaborationColor: '#123456',
       automaticUpdateDownloads: true,
     });
   });
@@ -622,7 +669,9 @@ describe('SettingsPanel draft transactions', () => {
   it('lets an imported inactive cleanup policy be replaced only with supported manual cleanup', async () => {
     render(
       <SettingsPanel
-        {...props({ settings: settings({ worktreeCleanupPolicy: 'after-retention' }) })}
+        {...props({
+          settings: settings({ worktreeCleanupPolicy: 'after-retention' }),
+        })}
       />,
     );
 

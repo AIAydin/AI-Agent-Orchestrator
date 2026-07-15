@@ -6,7 +6,13 @@ import { GitDiffViewer } from './diff/GitDiffViewer.js';
 import type { GitDiffDisplayFile } from './git-review-model.js';
 import { GIT_BASE_PANEL_ID, GIT_BASE_TAB_ID } from './GitReviewModeTabs.js';
 
-export function GitBaseComparisonPanel({ comparison }: { comparison: GitAgentBaseComparisonView }) {
+export function GitBaseComparisonPanel({
+  comparison,
+  footer,
+}: {
+  comparison: GitAgentBaseComparisonView;
+  footer?: React.ReactNode;
+}) {
   const files = useMemo(() => comparisonFiles(comparison), [comparison]);
   const [selectedPath, setSelectedPath] = useState<string | null>(files[0]?.path ?? null);
   const selected = files.find((file) => file.path === selectedPath) ?? null;
@@ -117,6 +123,7 @@ export function GitBaseComparisonPanel({ comparison }: { comparison: GitAgentBas
           />
         </div>
       )}
+      {footer}
     </section>
   );
 }

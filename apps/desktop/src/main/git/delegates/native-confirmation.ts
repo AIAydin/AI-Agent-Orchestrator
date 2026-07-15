@@ -1,6 +1,8 @@
 import type { GitDelegateAuthorizer, GitDelegatePlan } from '@forgeboard/git-engine';
 import type { MessageBoxOptions } from 'electron';
 
+import { displayLiteral } from '../../../shared/text/display-literal.js';
+
 export interface NativeGitDelegateAuthorizationOptions {
   readonly assertCurrent: () => void;
   readonly show: (options: MessageBoxOptions) => Promise<number>;
@@ -82,6 +84,6 @@ function operationLabel(operation: GitDelegatePlan['operation']): string {
 }
 
 function literal(value: string, maxLength: number): string {
-  const encoded = JSON.stringify(value);
+  const encoded = displayLiteral(value);
   return encoded.length > maxLength ? `${encoded.slice(0, maxLength)}…` : encoded;
 }

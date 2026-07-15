@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
 
 import {
@@ -28,9 +28,12 @@ import { ApprovalService } from './approvals/approval-service.js';
 import { AutomaticBackupCoordinator } from './backups/automatic-backup-coordinator.js';
 import { CheckIpcService } from './checks/check-ipc.js';
 import { CheckRuntime } from './checks/check-runtime.js';
+import { CollaborationIpcService } from './collaboration/ipc.js';
 import { detectAgents, ProjectService } from './projects/project-service.js';
 import { DockerIpcService } from './docker/docker-ipc.js';
 import { ExtensionIpcService } from './extensions/extension-ipc.js';
+import { FileIpcService } from './file-domain/ipc.js';
+import { ProjectFileService } from './file-domain/service.js';
 import { GitIpcService } from './git/git-ipc.js';
 import { createNativeGitDelegateAuthorizer } from './git/delegates/native-confirmation.js';
 import { createBundledGitRepositoryService } from './git/git-runtime.js';
@@ -140,6 +143,8 @@ export function createDefaultSettings(): AppSettings {
     collaborationEnabled: false,
     collaborationUrl: 'ws://127.0.0.1:1234',
     collaborationDisplayName: 'Local user',
+    collaborationSubject: 'local-user',
+    collaborationColor: '#6d5efc',
     collaborationRoom: 'default',
     collaborationReconnect: true,
     updateChannel: 'stable',
@@ -155,8 +160,10 @@ export interface ApplicationServices {
   runs: RunService;
   previews: PreviewIpcService;
   extensions: ExtensionIpcService;
+  files: FileIpcService;
   git: GitIpcService;
   checks: CheckIpcService;
+  collaboration: CollaborationIpcService;
   workflows: WorkflowIpcService;
   recovery: RecoveryIpcService;
   prepareToQuit(): Promise<void>;
@@ -196,7 +203,10 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     return value;
   };
   const projects = new ProjectService(app, dialog, store, repositories);
+  const projectFiles = new ProjectFileService(store);
+  const files = new FileIpcService(projectFiles, shell, runDataOperation);
   const outbound = new OutboundActionGate(store);
+  const collaboration = new CollaborationIpcService(dialog, outbound);
   const projectClones = new ProjectCloneIpcService(dialog, projects, outbound, runDataOperation);
   const transcripts = join(app.getPath('userData'), 'transcripts');
   const testAgentPath = app.isPackaged
@@ -279,6 +289,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     previews.resumeAfterPrivacyReset();
     runs.resumeAfterPrivacyReset();
     checks.resumeAfterPrivacyReset();
+    collaboration.resume();
     workflows.resumeAfterPrivacyReset();
     shutdownServicesPaused = false;
   };
@@ -299,6 +310,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       docker.pauseForShutdown(),
       extensions.pauseForShutdown(),
       git.pauseForShutdown(),
+      collaboration.pauseForShutdown(),
     ];
     if (includeRecovery) operations.push(recovery.pauseForExternalDataMutation());
     await awaitDataServices(operations);
@@ -317,13 +329,18 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           checks.resetForPrivacy(),
           extensions.pauseForDataMutation(),
           git.resetForPrivacy(),
+          collaboration.resetForPrivacy(),
         ]);
       } else {
         await workflows.pauseForDataMutation();
         runs.pauseForDataMutation();
         previews.pauseForDataMutation();
         checks.pauseForDataMutation();
-        await awaitDataServices([extensions.pauseForDataMutation(), git.resetForPrivacy()]);
+        await awaitDataServices([
+          extensions.pauseForDataMutation(),
+          git.resetForPrivacy(),
+          collaboration.pauseForDataMutation(),
+        ]);
       }
     } catch (error) {
       resumeAfterDataMutation();
@@ -340,7 +357,9 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   });
   const startupRetention = store.applyRetention(store.getSettings(createDefaultSettings()));
   if (Object.values(startupRetention).some((count) => count > 0)) {
-    store.appendAudit('retention', 'startup', 'allowed', { ...startupRetention });
+    store.appendAudit('retention', 'startup', 'allowed', {
+      ...startupRetention,
+    });
   }
 
   handle(IPC_CHANNELS.appInfo, z.tuple([]), () => ({
@@ -649,11 +668,14 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
               checks.resetForPrivacy(),
               docker.pauseForShutdown(),
               recovery.pauseForExternalDataMutation(),
+              collaboration.resetForPrivacy(),
             ]);
           },
           deleteData: async (approvedMissingBackupIds) => {
             authority.assertCurrent();
-            const outcome = await store.deleteAllLocalData({ approvedMissingBackupIds });
+            const outcome = await store.deleteAllLocalData({
+              approvedMissingBackupIds,
+            });
             authority.assertCurrent();
             return outcome;
           },
@@ -671,9 +693,11 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   runs.registerIpcHandlers();
   previews.registerIpcHandlers();
   extensions.registerIpcHandlers();
+  files.registerIpcHandlers();
   docker.registerIpcHandlers();
   git.registerIpcHandlers();
   checks.registerIpcHandlers();
+  collaboration.registerIpcHandlers();
   workflows.registerIpcHandlers();
   recovery.registerIpcHandlers();
   return {
@@ -684,8 +708,10 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     runs,
     previews,
     extensions,
+    files,
     git,
     checks,
+    collaboration,
     workflows,
     recovery,
     prepareToQuit: async () => {
@@ -702,12 +728,15 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     dispose: async () => {
       dataOperations.beginShutdown();
       settings.dispose();
+      await files.dispose();
       await recovery.dispose();
       if (dataOperations.mutationKind !== null && dataOperations.mutationKind !== 'quit') {
         await dataOperations.mutationCompletion;
       }
       if (!dataOperations.mutationInProgress) {
-        await dataOperations.beginMutation('quit', { allowDuringShutdown: true });
+        await dataOperations.beginMutation('quit', {
+          allowDuringShutdown: true,
+        });
       }
       if (!shutdownServicesPaused) {
         try {
@@ -728,6 +757,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         runs.dispose(),
         extensions.dispose(),
         git.dispose(),
+        collaboration.dispose(),
       ]);
       for (const result of [...workflowStopped, ...stopped]) {
         if (result.status !== 'rejected') continue;

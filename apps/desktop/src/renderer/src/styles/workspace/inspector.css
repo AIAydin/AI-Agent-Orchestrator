@@ -32,7 +32,8 @@
   padding: 14px 12px;
   overflow-y: auto;
 }
-.inspector-content > label {
+.inspector-content > label,
+.node-edit-fields > label {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -40,6 +41,36 @@
   color: var(--text-soft);
   font-size: 9px;
   font-weight: 650;
+}
+.node-edit-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.node-edit-fields:disabled {
+  opacity: 0.72;
+}
+.node-lock-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0 0 12px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--amber) 10%, var(--surface));
+  color: var(--text-soft);
+  font-size: 8px;
+  line-height: 1.45;
+}
+.node-lock-notice svg {
+  flex: 0 0 auto;
+}
+.inspector-file-editor {
+  height: min(52vh, 500px);
+  min-height: 340px;
+  margin: 14px 0;
 }
 .inspector textarea {
   resize: vertical;

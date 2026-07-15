@@ -21,13 +21,51 @@ vi.mock('../canvas/useCanvasPersistence.js', () => ({
   useCanvasPersistence: () => ({ saveState: 'saving', flushCanvas: mocks.flushCanvas }),
 }));
 vi.mock('./WorkspaceCommandBar.js', () => ({
-  WorkspaceCommandBar: ({ onCloseProject }: { onCloseProject: () => void }) => (
-    <button type="button" onClick={onCloseProject}>
-      Close project
-    </button>
+  WorkspaceCommandBar: ({
+    onCloseProject,
+    onUndo,
+  }: {
+    onCloseProject: () => void;
+    onUndo: () => void;
+  }) => (
+    <div>
+      <button type="button" onClick={onCloseProject}>
+        Close project
+      </button>
+      <button type="button" onClick={onUndo}>
+        Undo canvas
+      </button>
+    </div>
   ),
 }));
-vi.mock('../canvas/WorkspaceCanvas.js', () => ({ WorkspaceCanvas: () => null }));
+vi.mock('../canvas/WorkspaceCanvas.js', () => ({
+  WorkspaceCanvas: ({
+    nodes,
+    onNodesChange,
+    onKeyboardMove,
+  }: {
+    nodes: Array<{ id: string; position: { x: number; y: number } }>;
+    onNodesChange: (changes: Array<{ type: 'select'; id: string; selected: boolean }>) => void;
+    onKeyboardMove: (movement: { x: number; y: number }, recordUndoCheckpoint: boolean) => unknown;
+  }) => (
+    <div>
+      <output data-testid="canvas-node-positions">
+        {JSON.stringify(nodes.map(({ id, position }) => ({ id, position })))}
+      </output>
+      <button
+        type="button"
+        onClick={() =>
+          onNodesChange(nodes.map((node) => ({ type: 'select', id: node.id, selected: true })))
+        }
+      >
+        Select canvas nodes
+      </button>
+      <button type="button" onClick={() => onKeyboardMove({ x: 1, y: 0 }, true)}>
+        Move selected right
+      </button>
+    </div>
+  ),
+}));
 vi.mock('./WorkspaceRail.js', () => ({ WorkspaceRail: () => null }));
 vi.mock('./WorkspaceInspector.js', () => ({ WorkspaceInspector: () => null }));
 vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
@@ -161,6 +199,57 @@ describe('Workspace persistence boundary', () => {
     fireEvent.keyDown(window, { key: 'P', ctrlKey: true, shiftKey: true });
     expect(screen.getByLabelText('Command palette')).toBeTruthy();
   });
+
+  it('records keyboard movement for undo while leaving selected locked nodes in place', async () => {
+    const document = canvas([
+      canvasNode('open-node', 10, false),
+      canvasNode('locked-node', 30, true),
+    ]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('canvas-node-positions').textContent).toContain('open-node'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Select canvas nodes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move selected right' }));
+    await waitFor(() =>
+      expect(JSON.parse(screen.getByTestId('canvas-node-positions').textContent ?? '[]')).toEqual([
+        { id: 'open-node', position: { x: 11, y: 20 } },
+        { id: 'locked-node', position: { x: 30, y: 20 } },
+      ]),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo canvas' }));
+    await waitFor(() =>
+      expect(JSON.parse(screen.getByTestId('canvas-node-positions').textContent ?? '[]')).toEqual([
+        { id: 'open-node', position: { x: 10, y: 20 } },
+        { id: 'locked-node', position: { x: 30, y: 20 } },
+      ]),
+    );
+  });
 });
 
 function project(): Project {
@@ -184,15 +273,32 @@ function project(): Project {
   };
 }
 
-function canvas(): CanvasDocument {
+function canvas(nodes: CanvasDocument['nodes'] = []): CanvasDocument {
   return {
     id: '70000000-0000-4000-8000-000000000002',
     projectId: project().id,
     name: 'Canvas',
-    nodes: [],
+    nodes,
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 },
     updatedAt: '2026-07-15T12:00:00.000Z',
+  };
+}
+
+function canvasNode(id: string, x: number, locked: boolean): CanvasDocument['nodes'][number] {
+  return {
+    id,
+    type: 'task',
+    position: { x, y: 20 },
+    data: {
+      kind: 'task',
+      title: id,
+      description: id,
+      status: 'idle',
+      locked,
+      collapsed: false,
+      color: '#445566',
+    },
   };
 }
 

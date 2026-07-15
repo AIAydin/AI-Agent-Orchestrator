@@ -138,6 +138,38 @@ function validateDesktopPackageMetadata(desktopPackage) {
       desktopPackage.build?.linux?.syncDesktopName === true,
     'Linux desktop launcher and Electron window identity must remain synchronized.',
   );
+  const build = desktopPackage.build;
+  assert(
+    build?.mac?.artifactName === 'Forgeboard-${version}-mac-${arch}.${ext}' &&
+      sameStrings(build.mac.target, ['dmg', 'zip']) &&
+      build.mac.hardenedRuntime === true,
+    'macOS release targets and artifact names must remain deterministic and hardened.',
+  );
+  assert(
+    sameStrings(build?.win?.target, ['nsis']) &&
+      build?.nsis?.artifactName === 'Forgeboard-${version}-windows-${arch}-setup.${ext}',
+    'Windows must emit the deterministic architecture-specific NSIS installer.',
+  );
+  assert(
+    build.nsis.oneClick === false &&
+      build.nsis.perMachine === false &&
+      build.nsis.allowToChangeInstallationDirectory === true &&
+      build.nsis.deleteAppDataOnUninstall === false,
+    'Windows must retain an assisted per-user installer that preserves local application data.',
+  );
+  assert(
+    sameStrings(build?.linux?.target, ['AppImage', 'deb']) &&
+      build?.appImage?.artifactName === 'Forgeboard-${version}-linux-${arch}.${ext}',
+    'Linux must emit deterministic AppImage and DEB artifacts.',
+  );
+}
+
+function sameStrings(actual, expected) {
+  return (
+    Array.isArray(actual) &&
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index])
+  );
 }
 
 function validateEmbeddedGit(dugite, embeddedGit, embeddedGitRaw) {

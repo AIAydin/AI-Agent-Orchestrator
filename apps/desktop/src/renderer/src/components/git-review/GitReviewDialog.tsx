@@ -13,6 +13,11 @@ import type {
   GitDiscardPlanView,
   GitTargetInput,
 } from '../../../../shared/git/contracts.js';
+import type {
+  GitShippingPlanView,
+  GitShippingResultView,
+  GitShippingStrategy,
+} from '../../../../shared/git/shipping-contracts.js';
 import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
 import { GitCommitDisclosure, GitDiscardDisclosure } from './actions/GitActionDisclosure.js';
 import { GitCommitPanel } from './actions/GitCommitPanel.js';
@@ -32,6 +37,8 @@ import {
   type GitReviewMode,
 } from './GitReviewModeTabs.js';
 import { useGitReview } from './useGitReview.js';
+import { GitShippingDisclosure } from './shipping/GitShippingDisclosure.js';
+import { GitShippingPanel } from './shipping/GitShippingPanel.js';
 
 export interface GitReviewDialogProps {
   target: GitTargetInput;
@@ -45,6 +52,8 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
   const [selection, setSelection] = useState<GitFileSelection | null>(null);
   const [discardPlan, setDiscardPlan] = useState<GitDiscardPlanView | null>(null);
   const [commitPlan, setCommitPlan] = useState<GitCommitPlanView | null>(null);
+  const [shippingPlan, setShippingPlan] = useState<GitShippingPlanView | null>(null);
+  const [shippingResult, setShippingResult] = useState<GitShippingResultView | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState<GitReviewMode>(
     target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree',
@@ -119,6 +128,31 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
         setNotice('Commit cancelled in the system confirmation. Nothing was committed.');
       else if (result !== undefined)
         setNotice(`Created local commit ${result.headAfter.slice(0, 12)}.`);
+    });
+  };
+
+  const prepareShipping = (strategy: GitShippingStrategy) => {
+    setNotice(null);
+    setShippingResult(null);
+    void controller.prepareShipping(strategy).then((plan) => {
+      if (plan !== undefined) setShippingPlan(plan);
+    });
+  };
+
+  const confirmShipping = () => {
+    if (shippingPlan === null) return;
+    void controller.confirmShipping(shippingPlan.planId).then((result) => {
+      setShippingPlan(null);
+      if (result === null) {
+        setNotice('Delivery cancelled in the system confirmation. Primary was not changed.');
+      } else if (result !== undefined) {
+        setShippingResult(result);
+        setNotice(
+          result.state === 'completed'
+            ? `Delivered reviewed commits to primary at ${result.headAfter.slice(0, 12)}.`
+            : 'Git stopped at conflicts. Primary was left in a reviewable conflict state.',
+        );
+      }
     });
   };
 
@@ -225,7 +259,17 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
                   Refresh this review. Forgeboard will not infer a base or HEAD in the renderer.
                 </GitReviewState>
               ) : (
-                <GitBaseComparisonPanel comparison={controller.review.baseComparison} />
+                <GitBaseComparisonPanel
+                  comparison={controller.review.baseComparison}
+                  footer={
+                    <GitShippingPanel
+                      review={controller.review}
+                      busy={busy}
+                      result={shippingResult}
+                      onPrepare={prepareShipping}
+                    />
+                  }
+                />
               )
             ) : (
               <section
@@ -291,6 +335,14 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
             busy={busy}
             onCancel={() => setCommitPlan(null)}
             onConfirm={confirmCommit}
+          />
+        )}
+        {shippingPlan && (
+          <GitShippingDisclosure
+            plan={shippingPlan}
+            busy={busy}
+            onCancel={() => setShippingPlan(null)}
+            onConfirm={confirmShipping}
           />
         )}
       </section>

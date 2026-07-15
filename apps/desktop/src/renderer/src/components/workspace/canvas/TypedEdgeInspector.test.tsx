@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkshopNode } from './CanvasNode.js';
 import { TypedEdgeInspector } from './TypedEdgeInspector.js';
 import { createEdgeData, type WorkshopEdgeData } from '../model/edge-config.js';
 import type { WorkshopEdge } from '../model/types.js';
+
+afterEach(cleanup);
 
 function workshopNode(id: string, kind: WorkshopNode['data']['kind']): WorkshopNode {
   return {
@@ -35,6 +37,39 @@ function edge(data: WorkshopEdgeData): WorkshopEdge {
 }
 
 describe('TypedEdgeInspector', () => {
+  it('disables every connection control when either endpoint is locked', () => {
+    const onChange = vi.fn();
+    const onUpdateType = vi.fn();
+    render(
+      <TypedEdgeInspector
+        edge={edge(createEdgeData('context', 'brief-1'))}
+        nodes={[workshopNode('brief-1', 'brief'), workshopNode('agent-1', 'agent')]}
+        readOnly
+        onChange={onChange}
+        onUpdateType={onUpdateType}
+      />,
+    );
+
+    expect(screen.getByRole('status').textContent).toMatch(/touches a locked node/u);
+    expect(
+      screen.getByRole<HTMLFieldSetElement>('group', { name: 'Connection configuration' }),
+    ).toHaveProperty('disabled', true);
+    expect(
+      screen
+        .getByRole<HTMLSelectElement>('combobox', { name: 'Connection behavior' })
+        .matches(':disabled'),
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole<HTMLInputElement>('checkbox', {
+          name: 'Block the agent until this exact attachment resolves',
+        })
+        .matches(':disabled'),
+    ).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onUpdateType).not.toHaveBeenCalled();
+  });
+
   it('shows and updates the exact explicit context attachment contract', () => {
     const onChange = vi.fn();
     render(

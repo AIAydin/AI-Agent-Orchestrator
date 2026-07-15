@@ -32,6 +32,7 @@
     "@forgeboard/git-engine": "workspace:*",
     "@forgeboard/test-agent": "workspace:*",
     "@forgeboard/ui": "workspace:*",
+    "@hocuspocus/provider": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@xyflow/react": "catalog:",
     "dugite": "3.2.2",
@@ -40,6 +41,8 @@
     "node-pty": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "y-protocols": "1.0.7",
+    "yjs": "catalog:",
     "zod": "catalog:",
     "zustand": "catalog:"
   },
@@ -97,12 +100,30 @@
       }
     ],
     "mac": {
+      "artifactName": "Forgeboard-${version}-mac-${arch}.${ext}",
       "icon": "build/icon.png",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
       "icon": "build/icon.png",
-      "target": "nsis"
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "artifactName": "Forgeboard-${version}-windows-${arch}-setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Forgeboard"
     },
     "linux": {
       "executableName": "forgeboard",
@@ -112,7 +133,11 @@
         "AppImage",
         "deb"
       ],
-      "category": "Development"
+      "category": "Development",
+      "synopsis": "Local-first visual workshop for coding agents"
+    },
+    "appImage": {
+      "artifactName": "Forgeboard-${version}-linux-${arch}.${ext}"
     },
     "deb": {
       "artifactName": "forgeboard_${version}_${arch}.${ext}",

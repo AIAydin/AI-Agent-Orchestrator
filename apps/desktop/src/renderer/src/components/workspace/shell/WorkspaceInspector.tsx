@@ -29,7 +29,10 @@ import {
 import { DeclarativeExtensionInspector } from '../../extensions/DeclarativeExtensionInspector.js';
 import { PreviewNodePanel } from '../../preview/PreviewNodePanel.js';
 import { TypedEdgeInspector } from '../canvas/TypedEdgeInspector.js';
+import { canEditEdge } from '../canvas/interactions/lock-protection.js';
 import { GroupFrameInspector } from '../canvas/GroupFrameInspector.js';
+import { BuiltInContentInspector } from '../content/BuiltInContentInspector.js';
+import { FileEditorPanel } from '../../file-editor/index.js';
 import { WorkflowNodeInspector } from '../workflows/WorkflowNodeInspector.js';
 import type { WorkshopEdge } from '../model/types.js';
 import type { WorkshopEdgeData } from '../model/edge-config.js';
@@ -92,6 +95,7 @@ export function WorkspaceInspector(props: WorkspaceInspectorProps) {
         <TypedEdgeInspector
           edge={selectedEdge}
           nodes={props.nodes}
+          readOnly={!canEditEdge(selectedEdge, props.nodes)}
           onChange={props.onUpdateEdgeData}
           onUpdateType={props.onUpdateEdgeType}
         />
@@ -110,70 +114,90 @@ function NodeInspector(
   const { selectedNode, onRecord, onUpdateSelected } = props;
   return (
     <div className="inspector-content">
-      <label>
-        Title
-        <input
-          name={`node-${selectedNode.id}-title`}
-          value={selectedNode.data.title}
-          onFocus={onRecord}
-          onChange={(event) => onUpdateSelected({ title: event.target.value })}
-        />
-      </label>
-      <label>
-        Description
-        <textarea
-          name={`node-${selectedNode.id}-description`}
-          rows={4}
-          value={selectedNode.data.description}
-          onFocus={onRecord}
-          onChange={(event) => onUpdateSelected({ description: event.target.value })}
-        />
-      </label>
-      <label>
-        Accent colour
-        <input
-          type="color"
-          name={`node-${selectedNode.id}-accent-color`}
-          value={selectedNode.data.color}
-          onFocus={onRecord}
-          onChange={(event) => onUpdateSelected({ color: event.target.value })}
-        />
-      </label>
-      {selectedNode.data.kind === 'extension' &&
-        selectedNode.data.extensionDefinition !== undefined &&
-        selectedNode.data.extensionId !== undefined &&
-        selectedNode.data.extensionVersion !== undefined && (
-          <DeclarativeExtensionInspector
-            definition={selectedNode.data.extensionDefinition}
-            extensionId={selectedNode.data.extensionId}
-            extensionVersion={selectedNode.data.extensionVersion}
-            values={selectedNode.data.extensionValues ?? {}}
-            availability={selectedNode.data.extensionAvailability ?? 'unavailable'}
-            onChange={(extensionValues) => onUpdateSelected({ extensionValues })}
+      {selectedNode.data.locked && (
+        <p className="node-lock-notice" role="status">
+          <Lock size={13} />
+          This node is locked. Unlock it to edit, move, connect, or delete it.
+        </p>
+      )}
+      <fieldset
+        className="node-edit-fields"
+        disabled={selectedNode.data.locked}
+        aria-label="Node configuration"
+      >
+        <label>
+          Title
+          <input
+            name={`node-${selectedNode.id}-title`}
+            value={selectedNode.data.title}
+            onFocus={onRecord}
+            onChange={(event) => onUpdateSelected({ title: event.target.value })}
+          />
+        </label>
+        <label>
+          Description
+          <textarea
+            name={`node-${selectedNode.id}-description`}
+            rows={4}
+            value={selectedNode.data.description}
+            onFocus={onRecord}
+            onChange={(event) => onUpdateSelected({ description: event.target.value })}
+          />
+        </label>
+        <label>
+          Accent colour
+          <input
+            type="color"
+            name={`node-${selectedNode.id}-accent-color`}
+            value={selectedNode.data.color}
+            onFocus={onRecord}
+            onChange={(event) => onUpdateSelected({ color: event.target.value })}
+          />
+        </label>
+        {selectedNode.data.kind === 'extension' &&
+          selectedNode.data.extensionDefinition !== undefined &&
+          selectedNode.data.extensionId !== undefined &&
+          selectedNode.data.extensionVersion !== undefined && (
+            <DeclarativeExtensionInspector
+              definition={selectedNode.data.extensionDefinition}
+              extensionId={selectedNode.data.extensionId}
+              extensionVersion={selectedNode.data.extensionVersion}
+              values={selectedNode.data.extensionValues ?? {}}
+              availability={selectedNode.data.extensionAvailability ?? 'unavailable'}
+              onChange={(extensionValues) => onUpdateSelected({ extensionValues })}
+              onError={props.onError}
+            />
+          )}
+        {(selectedNode.data.kind === 'task' ||
+          selectedNode.data.kind === 'test' ||
+          selectedNode.data.kind === 'review-gate') && (
+          <WorkflowNodeInspector
+            node={selectedNode}
+            nodes={props.nodes}
+            settings={props.settings}
+            onRecord={onRecord}
+            onUpdate={onUpdateSelected}
             onError={props.onError}
           />
         )}
+        {selectedNode.data.kind === 'group-frame' && (
+          <GroupFrameInspector
+            node={selectedNode}
+            nodes={props.nodes}
+            onRecord={onRecord}
+            onUpdate={onUpdateSelected}
+          />
+        )}
+        {(selectedNode.data.kind === 'brief' || selectedNode.data.kind === 'note-image') && (
+          <BuiltInContentInspector
+            node={selectedNode}
+            nodes={props.nodes}
+            onRecord={onRecord}
+            onUpdate={onUpdateSelected}
+          />
+        )}
+      </fieldset>
       {selectedNode.data.kind === 'agent' && <AgentRunInspector {...props} />}
-      {(selectedNode.data.kind === 'task' ||
-        selectedNode.data.kind === 'test' ||
-        selectedNode.data.kind === 'review-gate') && (
-        <WorkflowNodeInspector
-          node={selectedNode}
-          nodes={props.nodes}
-          settings={props.settings}
-          onRecord={onRecord}
-          onUpdate={onUpdateSelected}
-          onError={props.onError}
-        />
-      )}
-      {selectedNode.data.kind === 'group-frame' && (
-        <GroupFrameInspector
-          node={selectedNode}
-          nodes={props.nodes}
-          onRecord={onRecord}
-          onUpdate={onUpdateSelected}
-        />
-      )}
       {(selectedNode.data.kind === 'web-preview' ||
         selectedNode.data.kind === 'mobile-preview') && (
         <PreviewNodePanel
@@ -190,6 +214,7 @@ function NodeInspector(
           onError={props.onError}
         />
       )}
+      {selectedNode.data.kind === 'file' && <FileNodeEditor node={selectedNode} />}
       <div className="inspector-actions">
         <button
           type="button"
@@ -205,7 +230,12 @@ function NodeInspector(
           <Copy size={14} />
           Duplicate
         </button>
-        <button type="button" className="danger-text" onClick={props.onDeleteSelected}>
+        <button
+          type="button"
+          className="danger-text"
+          disabled={selectedNode.data.locked}
+          onClick={props.onDeleteSelected}
+        >
           <Trash2 size={14} />
           Delete
         </button>
@@ -232,6 +262,34 @@ function NodeInspector(
         )}
         {selectedNode.data.lastRunSummary && <strong>{selectedNode.data.lastRunSummary}</strong>}
       </section>
+    </div>
+  );
+}
+
+function FileNodeEditor({ node }: { readonly node: WorkshopNode }) {
+  const reference = node.data.file;
+  if (reference === undefined) {
+    return (
+      <p className="recovery-guidance warning" role="status">
+        This File node does not have a project-relative file reference yet.
+      </p>
+    );
+  }
+  if (reference.kind === 'directory') {
+    return (
+      <p className="recovery-guidance warning" role="status">
+        This File node references a directory. Select an ordinary project file to edit its contents.
+      </p>
+    );
+  }
+  return (
+    <div className="inspector-file-editor">
+      <FileEditorPanel
+        projectId={reference.projectId}
+        relativePath={reference.relativePath}
+        operations={window.forgeboard.files}
+        readOnly={node.data.locked || reference.missing || reference.kind !== 'file'}
+      />
     </div>
   );
 }
@@ -270,7 +328,7 @@ function AgentRunInspector(
         <select
           name={`node-${selectedNode.id}-agent-adapter`}
           value={selectedAdapter}
-          disabled={running}
+          disabled={running || selectedNode.data.locked}
           onChange={(event) => onUpdateSelected({ adapterId: event.target.value })}
         >
           {runnableAgents.map((agent) => (
@@ -285,7 +343,7 @@ function AgentRunInspector(
         <select
           name={`node-${selectedNode.id}-permission-profile`}
           value={selectedPermission}
-          disabled={running}
+          disabled={running || selectedNode.data.locked}
           onChange={(event) =>
             onUpdateSelected({ permissionProfile: event.target.value as PermissionProfile })
           }
@@ -328,7 +386,7 @@ function AgentRunInspector(
           name={`node-${selectedNode.id}-prompt`}
           rows={6}
           value={selectedNode.data.prompt ?? selectedNode.data.description}
-          disabled={running}
+          disabled={running || selectedNode.data.locked}
           placeholder="Describe the concrete outcome for this agent…"
           onChange={(event) => onUpdateSelected({ prompt: event.target.value })}
         />

@@ -43,6 +43,14 @@ import type {
   CheckPrepareInput,
 } from './checks/contracts.js';
 import type {
+  CollaborationConnection,
+  CollaborationEvent,
+  CollaborationJoinInput,
+  CollaborationJoinResult,
+  CollaborationPublishInput,
+  CollaborationUpdateAwarenessInput,
+} from './collaboration/index.js';
+import type {
   DockerPullResult,
   DockerReadiness,
   DockerReadinessInput,
@@ -58,6 +66,20 @@ import type {
   GitReviewView,
   GitTargetInput,
 } from './git/contracts.js';
+import type {
+  GitShippingPlanInput,
+  GitShippingPlanView,
+  GitShippingResultView,
+} from './git/shipping-contracts.js';
+import type {
+  FileDocument,
+  FileReadInput,
+  FileRevealInput,
+  FileRevertInput,
+  FileSaveInput,
+  FileTreeInput,
+  FileTreeResult,
+} from './files/contracts.js';
 import type { IntegrityCheckInput, IntegrityCheckResult } from './integrity/contracts.js';
 import type {
   RecoveryImportChooseInput,
@@ -138,6 +160,21 @@ export interface ForgeboardApi {
     load(projectId: string): Promise<IpcResult<CanvasDocument>>;
     save(document: CanvasDocument): Promise<IpcResult<CanvasDocument>>;
   };
+  files: {
+    tree(input: FileTreeInput): Promise<FileTreeResult>;
+    read(input: FileReadInput): Promise<FileDocument>;
+    save(input: FileSaveInput): Promise<FileDocument>;
+    revert(input: FileRevertInput): Promise<FileDocument>;
+    reveal(input: FileRevealInput): Promise<void>;
+  };
+  collaboration: {
+    get(): Promise<IpcResult<CollaborationConnection | null>>;
+    join(input: CollaborationJoinInput): Promise<CollaborationJoinResult>;
+    leave(): Promise<IpcResult<CollaborationConnection | null>>;
+    publish(input: CollaborationPublishInput): Promise<IpcResult<boolean>>;
+    updateAwareness(input: CollaborationUpdateAwarenessInput): Promise<IpcResult<boolean>>;
+    onEvent(listener: (event: CollaborationEvent) => void): () => void;
+  };
   runs: {
     prepare(input: PrepareRunInput): Promise<IpcResult<RunApprovalView | null>>;
     approve(runId: string): Promise<IpcResult<boolean>>;
@@ -200,6 +237,10 @@ export interface ForgeboardApi {
     confirmDiscard(input: GitPlanConfirmationInput): Promise<IpcResult<GitReviewView | null>>;
     prepareCommit(input: GitCommitPlanInput): Promise<IpcResult<GitCommitPlanView>>;
     confirmCommit(input: GitPlanConfirmationInput): Promise<IpcResult<GitCommitResultView | null>>;
+    prepareShipping(input: GitShippingPlanInput): Promise<IpcResult<GitShippingPlanView>>;
+    confirmShipping(
+      input: GitPlanConfirmationInput,
+    ): Promise<IpcResult<GitShippingResultView | null>>;
   };
   privacy: {
     export(): Promise<IpcResult<string | null>>;

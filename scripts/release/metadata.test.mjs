@@ -40,6 +40,22 @@ test('Linux release metadata fails closed before DEB packaging', async () => {
   assert.throws(() => validateReleaseMetadata(desktopIdentityDrift), /window identity/u);
 });
 
+test('desktop release targets keep deterministic artifacts and user-preserving installers', async () => {
+  const metadata = await loadReleaseMetadata();
+  assert.doesNotThrow(() => validateReleaseMetadata(structuredClone(metadata)));
+
+  for (const [mutate, message] of [
+    [(build) => (build.mac.artifactName = 'Forgeboard.dmg'), /macOS release targets/u],
+    [(build) => (build.win.target = ['portable']), /architecture-specific NSIS/u],
+    [(build) => (build.nsis.oneClick = true), /preserves local application data/u],
+    [(build) => (build.appImage.artifactName = 'Forgeboard.AppImage'), /AppImage and DEB/u],
+  ]) {
+    const changed = structuredClone(metadata);
+    mutate(changed.desktopPackage.build);
+    assert.throws(() => validateReleaseMetadata(changed), message);
+  }
+});
+
 test('versioned release notes must identify this unsigned prerelease', async () => {
   const metadata = structuredClone(await loadReleaseMetadata());
   metadata.releaseNotes = 'Generic release notes';

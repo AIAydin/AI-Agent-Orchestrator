@@ -28,6 +28,7 @@ const TEST_COMMIT_IDENTITY = {
 
 function approvalBase(repositoryRoot: string, expectedHead: string) {
   return {
+    ...TEST_COMMIT_IDENTITY,
     approved: true as const,
     approvalId: randomUUID(),
     approvedAt: new Date().toISOString(),
@@ -429,12 +430,26 @@ describe('parallel worktree change lifecycle', () => {
     const pickResult = await changes.cherryPick(fixture.repository, {
       action: 'cherry-pick',
       ...approvalBase(beforePick.repositoryRoot, beforePick.expectedHead),
+      sourceRef: 'source-change',
+      expectedSourceOid: sourceCommit,
       commits: [sourceCommit],
     });
     expect(pickResult.state).toBe('completed');
     expect(await readFile(path.join(fixture.repository, 'picked.txt'), 'utf8')).toBe(
       'picked content\n',
     );
+
+    const beforeStalePick = await changes.approvalSnapshot(fixture.repository);
+    await runGit(fixture.repository, ['branch', '-f', 'source-change', 'main']);
+    await expect(
+      changes.cherryPick(fixture.repository, {
+        action: 'cherry-pick',
+        ...approvalBase(beforeStalePick.repositoryRoot, beforeStalePick.expectedHead),
+        sourceRef: 'source-change',
+        expectedSourceOid: sourceCommit,
+        commits: [sourceCommit],
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_APPROVAL' });
 
     const remotePath = path.join(fixture.root, 'remote.git');
     await runGit(fixture.root, ['init', '--bare', remotePath]);

@@ -39,8 +39,12 @@ function closeStore(store: LocalStore): void {
 describe('tamper-evident audit storage', () => {
   it('redacts before hashing, chains events, and blocks row updates', () => {
     const store = openStore();
-    store.appendAudit('security', 'first', 'allowed', { token: 'sk-live-secret' });
-    store.appendAudit('security', 'second', 'denied', { nested: { password: 'secret' } });
+    store.appendAudit('security', 'first', 'allowed', {
+      token: 'sk-live-secret',
+    });
+    store.appendAudit('security', 'second', 'denied', {
+      nested: { password: 'secret' },
+    });
     const connection = new DatabaseSync(store.databasePath);
     const rows = connection
       .prepare(
@@ -175,7 +179,11 @@ describe('tamper-evident audit storage', () => {
     const connection = new DatabaseSync(databasePath);
     const row = connection
       .prepare('SELECT metadata_json, previous_hash, event_hash FROM audit_events')
-      .get() as { metadata_json: string; previous_hash: string; event_hash: string };
+      .get() as {
+      metadata_json: string;
+      previous_hash: string;
+      event_hash: string;
+    };
     expect(row.metadata_json).toBe('{"authorization":"[REDACTED]"}');
     expect(row.previous_hash).toBe('0'.repeat(64));
     expect(row.event_hash).toMatch(/^[0-9a-f]{64}$/u);
@@ -242,7 +250,10 @@ function defaultSettings(): AppSettings {
       sensitiveFileRead: 'deny' as const,
       executablePolicy: 'selected-agent-only' as const,
       allowedExecutables: [],
-      forgeboardManagedActions: { developmentServers: 'deny' as const, tests: 'deny' as const },
+      forgeboardManagedActions: {
+        developmentServers: 'deny' as const,
+        tests: 'deny' as const,
+      },
       requireReviewBeforePrimary: true,
       docker: {
         network: 'disabled' as const,
@@ -287,6 +298,8 @@ function defaultSettings(): AppSettings {
     collaborationEnabled: false,
     collaborationUrl: '',
     collaborationDisplayName: 'Local user',
+    collaborationSubject: 'local-user',
+    collaborationColor: '#6d5efc',
     collaborationRoom: 'default',
     collaborationReconnect: true,
     updateChannel: 'stable' as const,

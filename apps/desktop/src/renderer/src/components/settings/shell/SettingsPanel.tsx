@@ -269,7 +269,9 @@ export function SettingsPanel(props: SettingsPanelProps) {
             {tab === 'extensions' && (
               <ExtensionSettings onError={props.onError} onChanged={props.onExtensionsChanged} />
             )}
-            {tab === 'connectivity' && <ConnectivitySettings settings={draft} />}
+            {tab === 'connectivity' && (
+              <ConnectivitySettings settings={draft} setSettings={setDraft} busy={busy} />
+            )}
             {tab === 'privacy' && (
               <PrivacySettings
                 info={props.info}

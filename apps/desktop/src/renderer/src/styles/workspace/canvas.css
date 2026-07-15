@@ -60,6 +60,29 @@
   color: var(--text-faint);
   font-size: 8px;
 }
+.canvas-keyboard-hint {
+  padding: 5px 8px !important;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text-faint);
+  font-size: 7px;
+  line-height: 1;
+  backdrop-filter: blur(8px);
+}
+.canvas-alignment-guide {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  background: var(--accent);
+  box-shadow: 0 0 0.5px color-mix(in srgb, var(--surface) 55%, transparent);
+}
+.canvas-alignment-guide.vertical {
+  transform: translateX(-50%);
+}
+.canvas-alignment-guide.horizontal {
+  transform: translateY(-50%);
+}
 .canvas-empty {
   width: 340px;
   margin-top: 100px !important;
