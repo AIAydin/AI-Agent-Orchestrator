@@ -1,8 +1,10 @@
-import { spawn } from 'node:child_process';
-import { readdir, stat } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+
+import { runWithCleanup, smokeExecutable } from './installer-smoke/process.js';
 
 export interface PackagedLaunch {
   executable: string;
@@ -17,7 +19,7 @@ export async function resolvePackagedLaunch(
   const entries = (await readdir(releaseRoot, { withFileTypes: true })).sort((left, right) =>
     left.name.localeCompare(right.name),
   );
-  const args = ['--smoke-test'];
+  const args: string[] = [];
 
   if (platform === 'darwin') {
     const directory = architecture === 'x64' ? 'mac' : `mac-${architecture}`;
@@ -56,7 +58,7 @@ export async function resolvePackagedLaunch(
     if (appImage) {
       const appImagePath = join(releaseRoot, appImage.name);
       if (await isFile(appImagePath)) {
-        return { executable: appImagePath, args: ['--no-sandbox', '--smoke-test'] };
+        return { executable: appImagePath, args: ['--no-sandbox'] };
       }
     }
   }
@@ -68,42 +70,15 @@ export async function resolvePackagedLaunch(
 
 export async function runPackagedSmoke(releaseRoot: string): Promise<void> {
   const launch = await resolvePackagedLaunch(releaseRoot);
-  const output = await new Promise<string>((resolveOutput, rejectOutput) => {
-    const child = spawn(launch.executable, launch.args, {
-      env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    let combined = '';
-    let settled = false;
-    const finish = (error: Error | undefined, value = ''): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (error) rejectOutput(error);
-      else resolveOutput(value);
-    };
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      finish(new Error(`Packaged smoke test timed out. Output:\n${combined}`));
-    }, 25_000);
-    child.stdout.on('data', (chunk: Buffer) => {
-      combined += chunk.toString();
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      combined += chunk.toString();
-    });
-    child.once('error', (error) => finish(error));
-    child.once('exit', (code) => {
-      if (code === 0) finish(undefined, combined);
-      else
-        finish(new Error(`Packaged Forgeboard exited with ${String(code)}. Output:\n${combined}`));
-    });
-  });
-
-  if (!output.includes('FORGEBOARD_SMOKE_OK')) {
-    throw new Error(`Packaged Forgeboard did not report smoke-test readiness. Output:\n${output}`);
-  }
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'forgeboard-packaged-runtime-smoke-'));
+  await runWithCleanup(
+    async () =>
+      await smokeExecutable(launch.executable, launch.args, join(temporaryRoot, 'user-data'), {
+        cwd: temporaryRoot,
+      }),
+    async () => await rm(temporaryRoot, { recursive: true, force: true }),
+    'Packaged runtime smoke test and temporary cleanup both failed.',
+  );
   process.stdout.write('Packaged Forgeboard smoke test passed.\n');
 }
 

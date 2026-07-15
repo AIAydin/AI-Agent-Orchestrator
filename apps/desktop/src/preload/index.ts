@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import type { ForgeboardApi } from '../shared/api.js';
 import {
@@ -38,6 +38,22 @@ import {
   RecoverySnapshotRestorePlanSchema,
   RecoverySnapshotSummarySchema,
 } from '../shared/recovery-contracts.js';
+import {
+  WORKFLOW_IPC_CHANNELS,
+  WorkflowApproveHumanDecisionInputSchema,
+  WorkflowApproveNodeInputSchema,
+  WorkflowCancelInputSchema,
+  WorkflowEventEnvelopeSchema,
+  WorkflowExecutionViewSchema,
+  WorkflowGetInputSchema,
+  WorkflowInteractionEventEnvelopeSchema,
+  WorkflowListInputSchema,
+  WorkflowNodeInputSchema,
+  WorkflowNodeInterruptSchema,
+  WorkflowResolveRevisionEscapeInputSchema,
+  WorkflowReviewDecisionInputSchema,
+  WorkflowStartInputSchema,
+} from '../shared/workflow-contracts.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -158,6 +174,83 @@ const api: ForgeboardApi = {
       };
       ipcRenderer.on(IPC_CHANNELS.checksEvent, handler);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.checksEvent, handler);
+    },
+  },
+  workflows: {
+    start: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.start,
+        WorkflowExecutionViewSchema,
+        WorkflowStartInputSchema.parse(input),
+      ),
+    get: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.get,
+        WorkflowExecutionViewSchema,
+        WorkflowGetInputSchema.parse(input),
+      ),
+    list: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.list,
+        WorkflowExecutionViewSchema.array(),
+        WorkflowListInputSchema.parse(input),
+      ),
+    approveNode: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.approveNode,
+        WorkflowExecutionViewSchema.nullable(),
+        WorkflowApproveNodeInputSchema.parse(input),
+      ),
+    approveHuman: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.approveHuman,
+        WorkflowExecutionViewSchema.nullable(),
+        WorkflowApproveHumanDecisionInputSchema.parse(input),
+      ),
+    decideReview: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.decideReview,
+        WorkflowExecutionViewSchema.nullable(),
+        WorkflowReviewDecisionInputSchema.parse(input),
+      ),
+    resolveRevisionEscape: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.resolveRevisionEscape,
+        WorkflowExecutionViewSchema.nullable(),
+        WorkflowResolveRevisionEscapeInputSchema.parse(input),
+      ),
+    cancel: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.cancel,
+        WorkflowExecutionViewSchema.nullable(),
+        WorkflowCancelInputSchema.parse(input),
+      ),
+    sendInput: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.sendInput,
+        z.boolean(),
+        WorkflowNodeInputSchema.parse(input),
+      ),
+    interrupt: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.interrupt,
+        z.boolean(),
+        WorkflowNodeInterruptSchema.parse(input),
+      ),
+    onEvent: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        listener(WorkflowEventEnvelopeSchema.parse(payload));
+      };
+      ipcRenderer.on(WORKFLOW_IPC_CHANNELS.event, handler);
+      return () => ipcRenderer.removeListener(WORKFLOW_IPC_CHANNELS.event, handler);
+    },
+    onInteractionEvent: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const parsed = WorkflowInteractionEventEnvelopeSchema.safeParse(payload);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on(WORKFLOW_IPC_CHANNELS.interactionEvent, handler);
+      return () => ipcRenderer.removeListener(WORKFLOW_IPC_CHANNELS.interactionEvent, handler);
     },
   },
   audit: {

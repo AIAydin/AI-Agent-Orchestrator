@@ -91,6 +91,42 @@ describe('useCanvasPersistence', () => {
     expect(hook.result.current.saveState).toBe('saved');
   });
 
+  it('coalesces content-identical document objects while a save is in flight', async () => {
+    const save = deferred<void>();
+    persistCanvas.mockImplementationOnce(() => save.promise);
+    const hook = renderPersistence(canvas('loaded'));
+    const edited = canvas('edited');
+    hook.rerender({ projectId: PROJECT_A, document: edited });
+
+    let flushed!: Promise<boolean>;
+    act(() => {
+      flushed = hook.result.current.flushCanvas();
+    });
+    expect(persistCanvas).toHaveBeenCalledTimes(1);
+
+    for (let index = 0; index < 5; index += 1) {
+      hook.rerender({
+        projectId: PROJECT_A,
+        document: {
+          ...edited,
+          nodes: [...edited.nodes],
+          edges: [...edited.edges],
+          viewport: { ...edited.viewport },
+        },
+      });
+    }
+
+    let saved = false;
+    await act(async () => {
+      save.resolve();
+      saved = await flushed;
+    });
+
+    expect(saved).toBe(true);
+    expect(persistCanvas).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.saveState).toBe('saved');
+  });
+
   it('ignores an obsolete save response after the project scope changes', async () => {
     const oldSave = deferred<void>();
     persistCanvas.mockImplementationOnce(() => oldSave.promise);

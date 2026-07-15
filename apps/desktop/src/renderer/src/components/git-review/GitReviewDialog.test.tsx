@@ -3,10 +3,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { IpcResult } from '../../../../shared/contracts.js';
 import type {
   GitCommitPlanView,
   GitDiscardPlanView,
   GitReviewView,
+  GitTargetInput,
 } from '../../../../shared/git-contracts.js';
 import { GitReviewDialog } from './GitReviewDialog.js';
 
@@ -19,6 +21,9 @@ const stagedHunkId = 'b'.repeat(20);
 const unstagedHunkId = 'a'.repeat(20);
 const headOid = 'c'.repeat(40);
 const nextHeadOid = 'd'.repeat(40);
+const baseOid = 'e'.repeat(40);
+const agentHeadOid = 'f'.repeat(40);
+const committedHunkId = '9'.repeat(20);
 const primaryTarget = { kind: 'primary' as const, projectId };
 const worktreeTarget = { kind: 'agent-worktree' as const, projectId, runId };
 
@@ -57,6 +62,37 @@ const review: GitReviewView = {
   refreshedAt: '2026-07-14T18:00:00.000Z',
 };
 
+const agentReview: GitReviewView = {
+  ...review,
+  target: {
+    ...worktreeTarget,
+    nodeId: 'agent-node-1',
+    worktreeId,
+    agentId: 'test-agent',
+    baseRef: 'refs/heads/main',
+    baseCommit: baseOid,
+  },
+  branch: 'forgeboard/agent-node-1',
+  headOid: agentHeadOid,
+  upstream: null,
+  ahead: 0,
+  behind: 0,
+  baseComparison: {
+    baseCommit: baseOid,
+    headCommit: agentHeadOid,
+    ahead: 1,
+    behind: 0,
+    commitCount: 1,
+    commits: [{ oid: agentHeadOid, relation: 'ahead' }],
+    commitIdsTruncated: false,
+    diff: {
+      additions: 1,
+      deletions: 1,
+      files: [diffFile('src/committed.ts', committedHunkId, 'committed line')],
+    },
+  },
+};
+
 const discardPlan: GitDiscardPlanView = {
   kind: 'discard-hunks',
   planId: discardPlanId,
@@ -84,7 +120,9 @@ const commitPlan: GitCommitPlanView = {
   identity: review.identity,
 };
 
-const reviewMock = vi.fn(() => Promise.resolve(success(review)));
+const reviewMock = vi.fn<(target: GitTargetInput) => Promise<IpcResult<GitReviewView>>>(() =>
+  Promise.resolve(success(review)),
+);
 const stagePathsMock = vi.fn(() => Promise.resolve(success(review)));
 const stageHunksMock = vi.fn(() => Promise.resolve(success(review)));
 const unstagePathsMock = vi.fn(() => Promise.resolve(success(review)));
@@ -230,23 +268,7 @@ describe('GitReviewDialog', () => {
   });
 
   it('labels an agent run as an isolated authoritative worktree and preserves opaque targeting', async () => {
-    reviewMock.mockResolvedValueOnce(
-      success({
-        ...review,
-        target: {
-          ...worktreeTarget,
-          nodeId: 'agent-node-1',
-          worktreeId,
-          agentId: 'test-agent',
-          baseRef: 'refs/heads/main',
-          baseCommit: 'e'.repeat(40),
-        },
-        branch: 'forgeboard/agent-node-1',
-        upstream: null,
-        ahead: 1,
-        behind: 0,
-      }),
-    );
+    reviewMock.mockResolvedValueOnce(success(agentReview));
 
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
@@ -255,7 +277,18 @@ describe('GitReviewDialog', () => {
       'The primary checkout remains untouched.',
     );
     expect(reviewMock).toHaveBeenCalledWith(worktreeTarget);
+    expect(screen.getByRole('tab', { name: 'Changes vs base' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getAllByText(baseOid.slice(0, 12))).toHaveLength(2);
+    expect(screen.getByText(agentHeadOid.slice(0, 12))).toBeTruthy();
+    expect(screen.getByText('1 ahead · 0 behind')).toBeTruthy();
+    expect(screen.getAllByText('src/committed.ts')).toHaveLength(2);
+    expect(screen.getByText('committed line')).toBeTruthy();
+    expect(screen.getByText('Committed comparison')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Stage hunk' })).toBeNull();
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Staged & unstaged' }));
     fireEvent.click(screen.getByRole('button', { name: /src\/app\.ts Modified/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Stage src/app.ts' }));
     await waitFor(() => expect(stagePathsMock).toHaveBeenCalledTimes(1));
@@ -263,6 +296,58 @@ describe('GitReviewDialog', () => {
       target: worktreeTarget,
       paths: ['src/app.ts'],
     });
+  });
+
+  it('shows an honest empty committed comparison while preserving working-tree changes', async () => {
+    reviewMock.mockResolvedValueOnce(
+      success({
+        ...agentReview,
+        headOid: baseOid,
+        baseComparison: {
+          baseCommit: baseOid,
+          headCommit: baseOid,
+          ahead: 0,
+          behind: 0,
+          commitCount: 0,
+          commits: [],
+          commitIdsTruncated: false,
+          diff: { files: [], additions: 0, deletions: 0 },
+        },
+      }),
+    );
+
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    expect(await screen.findByText('No committed changes vs base')).toBeTruthy();
+    expect(screen.getByText(/Staged or unstaged edits remain available/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Staged & unstaged' }));
+    expect(screen.getByRole('button', { name: /src\/app\.ts Modified/ })).toBeTruthy();
+  });
+
+  it('surfaces authoritative comparison errors without inventing renderer-side refs', async () => {
+    const onError = vi.fn();
+    reviewMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'OPERATION_FAILED',
+        message: 'Owned worktree comparison failed safely.',
+      },
+    });
+
+    render(
+      <GitReviewDialog
+        target={worktreeTarget}
+        projectName="Workshop"
+        onClose={vi.fn()}
+        onError={onError}
+      />,
+    );
+
+    expect(await screen.findByText('Git review is unavailable')).toBeTruthy();
+    expect(screen.getByText('Owned worktree comparison failed safely.')).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Changes vs base' })).toBeNull();
+    expect(reviewMock).toHaveBeenCalledWith(worktreeTarget);
+    expect(onError).toHaveBeenCalledWith('Owned worktree comparison failed safely.');
   });
 });
 

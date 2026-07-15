@@ -1,4 +1,5 @@
 import { unwrap } from '../../lib/ipc.js';
+import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../lib/literal-arguments.js';
 import { SettingsSection, type AsyncSettingsProps } from './shared.js';
 
 export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsProps) {
@@ -181,7 +182,8 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
         </label>
       </div>
       <label>
-        Launch arguments <small>One literal argument per line, before the prompt.</small>
+        Launch arguments
+        <small>Before the prompt. {LITERAL_ARGUMENT_HELP}</small>
         <textarea
           name="custom-agent-launch-arguments"
           rows={4}
@@ -192,14 +194,14 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
               ...draft,
               customAgent: {
                 ...draft.customAgent,
-                launchArguments: lines(event.target.value),
+                launchArguments: parseLiteralArguments(event.target.value),
               },
             })
           }
         />
       </label>
       <label>
-        Version arguments <small>One literal argument per line.</small>
+        Version arguments <small>{LITERAL_ARGUMENT_HELP}</small>
         <textarea
           name="custom-agent-version-arguments"
           rows={2}
@@ -209,7 +211,7 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
               ...draft,
               customAgent: {
                 ...draft.customAgent,
-                versionArguments: lines(event.target.value),
+                versionArguments: parseLiteralArguments(event.target.value),
               },
             })
           }
@@ -217,11 +219,4 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
       </label>
     </SettingsSection>
   );
-}
-
-function lines(value: string): string[] {
-  return value
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean);
 }

@@ -36,7 +36,7 @@ describe('packaged smoke artifact discovery', () => {
 
     await expect(resolvePackagedLaunch(root, 'win32', 'x64')).resolves.toEqual({
       executable: windowsExecutable,
-      args: ['--smoke-test'],
+      args: [],
     });
   });
 
@@ -51,7 +51,7 @@ describe('packaged smoke artifact discovery', () => {
 
     await expect(resolvePackagedLaunch(root, 'darwin', 'arm64')).resolves.toEqual({
       executable,
-      args: ['--smoke-test'],
+      args: [],
     });
   });
 
@@ -62,7 +62,7 @@ describe('packaged smoke artifact discovery', () => {
 
     await expect(resolvePackagedLaunch(root, 'linux', 'arm64')).resolves.toEqual({
       executable,
-      args: ['--no-sandbox', '--smoke-test'],
+      args: ['--no-sandbox'],
     });
   });
 

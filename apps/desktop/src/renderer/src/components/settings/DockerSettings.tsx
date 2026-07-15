@@ -5,7 +5,9 @@ import { SettingsSection, type AsyncSettingsProps } from './shared.js';
 export function dockerConfigurationIncomplete(settings: AppSettings): boolean {
   return (
     settings.dockerEnabled &&
-    (settings.dockerImage.trim() === '' || settings.dockerContainerExecutable.trim() === '')
+    (settings.dockerImage.trim() === '' ||
+      settings.dockerContainerExecutable.trim() === '' ||
+      settings.dockerMountHostCredentials)
   );
 }
 
@@ -14,6 +16,10 @@ interface DockerSettingsProps extends AsyncSettingsProps {
 }
 
 export function DockerSettings({ draft, setDraft, busy, onError }: DockerSettingsProps) {
+  const runtimeFieldsIncomplete =
+    draft.dockerEnabled &&
+    (draft.dockerImage.trim() === '' || draft.dockerContainerExecutable.trim() === '');
+
   return (
     <SettingsSection
       title="Docker isolation"
@@ -50,7 +56,7 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
         onChange={(docker) => setDraft({ ...draft, ...docker })}
         onError={onError}
       />
-      {dockerConfigurationIncomplete(draft) && (
+      {runtimeFieldsIncomplete && (
         <div className="inline-notice" role="status">
           Choose an image and its absolute in-image agent executable before saving Docker isolation.
         </div>
@@ -98,20 +104,34 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
       </label>
       <label className="switch-row warning-switch">
         <span>
-          <strong>Host CLI credentials stay unmounted</strong>
+          <strong>Mount host CLI credentials (unsupported)</strong>
           <small>
-            The safe Docker profile never exposes host auth stores, sockets, or keychains.
-            Authenticate inside your image through its own approved setup.
+            Forgeboard never honors this preference or exposes host auth stores, sockets, or
+            keychains. A checked value came from legacy or imported settings and can only be turned
+            off.
           </small>
         </span>
         <input
           type="checkbox"
           name="docker-mount-host-cli-credentials"
-          checked={false}
-          disabled
+          checked={draft.dockerMountHostCredentials}
+          disabled={!draft.dockerMountHostCredentials}
           aria-label="Mount host CLI credentials"
+          aria-describedby="docker-host-credentials-help"
+          onChange={(event) => {
+            if (!event.target.checked) {
+              setDraft({ ...draft, dockerMountHostCredentials: false });
+            }
+          }}
         />
       </label>
+      {draft.dockerMountHostCredentials && (
+        <p id="docker-host-credentials-help" className="recovery-guidance warning" role="status">
+          Host credential mounting is inactive and Docker launches fail closed while this legacy
+          value is checked. Uncheck it and save Settings, then authenticate inside the selected
+          image if the agent requires an account.
+        </p>
+      )}
     </SettingsSection>
   );
 }

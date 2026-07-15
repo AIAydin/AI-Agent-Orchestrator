@@ -35,6 +35,7 @@ import {
   type TrustedExtensionLedgerRow,
   validateSettings,
 } from './values.js';
+import { workflowStorageIntegrityMessages } from './workflow-executions.js';
 
 interface IntegrityRow {
   integrity_check?: string;
@@ -76,6 +77,7 @@ export function checkDatabaseIntegrity(
       messages.push(`SQLite reported ${foreignKeyFailures.length} foreign-key violation(s).`);
     }
     validateStoredJson(database, messages);
+    messages.push(...workflowStorageIntegrityMessages(database));
   } catch (error) {
     messages.push(error instanceof Error ? error.message : 'Unknown integrity-check failure.');
   }

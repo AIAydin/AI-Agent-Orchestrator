@@ -6,16 +6,25 @@ import {
   GitBranch,
   PanelBottomClose,
   ShieldCheck,
+  Workflow,
 } from 'lucide-react';
 
 import type { AuditEvent } from '../../../../shared/contracts.js';
 import type { CheckExecutionView } from '../../../../shared/check-contracts.js';
+import type {
+  WorkflowExecutionView,
+  WorkflowInteractionEventEnvelope,
+  WorkflowNodeInput,
+  WorkflowNodeInterrupt,
+} from '../../../../shared/workflow-contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 import type { ChangeReport, CheckCommand } from './types.js';
+import type { WorkflowDecisionTarget } from './workflow-ui-types.js';
 import { WorkspaceChecksPanel } from './WorkspaceChecksPanel.js';
+import { WorkspaceWorkflowPanel } from './WorkspaceWorkflowPanel.js';
 
-type DrawerTab = 'activity' | 'changes' | 'checks' | 'audit';
-const DRAWER_TABS: readonly DrawerTab[] = ['activity', 'changes', 'checks', 'audit'];
+type DrawerTab = 'activity' | 'workflows' | 'changes' | 'checks' | 'audit';
+const DRAWER_TABS: readonly DrawerTab[] = ['activity', 'workflows', 'changes', 'checks', 'audit'];
 
 interface WorkspaceActivityDrawerProps {
   events: string[];
@@ -23,8 +32,21 @@ interface WorkspaceActivityDrawerProps {
   checkCommands: CheckCommand[];
   latestChecks: ReadonlyMap<string, CheckExecutionView>;
   busyCheckId: string | null;
+  workflowExecutions: readonly WorkflowExecutionView[];
+  currentWorkflow: WorkflowExecutionView | null;
+  workflowNodeTitles: ReadonlyMap<string, string>;
+  workflowInteractiveNodeIds: ReadonlySet<string>;
+  workflowInteractionEvents: readonly WorkflowInteractionEventEnvelope[];
+  workflowLoading: boolean;
+  workflowBusyAction: string | null;
   onPrepareCheck: (checkId: string) => void;
   onCancelCheck: (executionId: string) => void;
+  onSelectWorkflow: (executionId: string) => void;
+  onRefreshWorkflows: () => void;
+  onCancelWorkflow: (executionId: string) => void;
+  onReviewWorkflowDecision: (target: WorkflowDecisionTarget) => void;
+  onSendWorkflowInput: (input: WorkflowNodeInput) => Promise<boolean>;
+  onInterruptWorkflowNode: (input: WorkflowNodeInterrupt) => Promise<boolean>;
   onOpenSettings: () => void;
   onOpenGitReview: (runId?: string) => void;
   onClose: () => void;
@@ -36,8 +58,21 @@ export function WorkspaceActivityDrawer({
   checkCommands,
   latestChecks,
   busyCheckId,
+  workflowExecutions,
+  currentWorkflow,
+  workflowNodeTitles,
+  workflowInteractiveNodeIds,
+  workflowInteractionEvents,
+  workflowLoading,
+  workflowBusyAction,
   onPrepareCheck,
   onCancelCheck,
+  onSelectWorkflow,
+  onRefreshWorkflows,
+  onCancelWorkflow,
+  onReviewWorkflowDecision,
+  onSendWorkflowInput,
+  onInterruptWorkflowNode,
   onOpenSettings,
   onOpenGitReview,
   onClose,
@@ -46,6 +81,14 @@ export function WorkspaceActivityDrawer({
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditState, setAuditState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [auditRefresh, setAuditRefresh] = useState(0);
+  const workflowDecisionCount =
+    (currentWorkflow?.approvals.length ?? 0) +
+    (currentWorkflow?.humanDecisions.length ?? 0) +
+    (currentWorkflow?.revisionEscapes.length ?? 0);
+
+  useEffect(() => {
+    if (workflowDecisionCount > 0) setTab('workflows');
+  }, [workflowDecisionCount]);
 
   useEffect(() => {
     if (tab !== 'audit') return;
@@ -73,6 +116,9 @@ export function WorkspaceActivityDrawer({
           <DrawerTabButton tab="activity" activeTab={tab} onSelect={setTab}>
             <Activity size={14} aria-hidden="true" /> Activity
           </DrawerTabButton>
+          <DrawerTabButton tab="workflows" activeTab={tab} onSelect={setTab}>
+            <Workflow size={14} aria-hidden="true" /> Workflows
+          </DrawerTabButton>
           <DrawerTabButton tab="changes" activeTab={tab} onSelect={setTab}>
             <GitBranch size={14} aria-hidden="true" /> Changes
           </DrawerTabButton>
@@ -93,6 +139,23 @@ export function WorkspaceActivityDrawer({
         </button>
       </header>
       {tab === 'activity' && <ActivityPanel events={events} />}
+      {tab === 'workflows' && (
+        <WorkspaceWorkflowPanel
+          executions={workflowExecutions}
+          current={currentWorkflow}
+          nodeTitles={workflowNodeTitles}
+          interactiveNodeIds={workflowInteractiveNodeIds}
+          interactionEvents={workflowInteractionEvents}
+          loading={workflowLoading}
+          busyAction={workflowBusyAction}
+          onSelect={onSelectWorkflow}
+          onRefresh={onRefreshWorkflows}
+          onCancel={onCancelWorkflow}
+          onReviewDecision={onReviewWorkflowDecision}
+          onSendInput={onSendWorkflowInput}
+          onInterrupt={onInterruptWorkflowNode}
+        />
+      )}
       {tab === 'changes' && (
         <ChangesPanel reports={changeReports} onOpenGitReview={onOpenGitReview} />
       )}

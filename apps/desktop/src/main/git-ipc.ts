@@ -46,6 +46,7 @@ import {
 } from '../shared/git-contracts.js';
 import { GitTargetResolver } from './git-target-resolver.js';
 import type { LocalStore } from './storage.js';
+import { createAgentBaseComparison } from './git-base-comparison.js';
 
 const PLAN_TTL_MS = 5 * 60_000;
 const MAX_PENDING_PLANS_PER_OWNER = 32;
@@ -86,6 +87,14 @@ type PendingPlan = PendingCommitPlan | PendingDiscardPlan;
 interface GitTarget {
   readonly view: GitReviewTargetView;
   readonly repositoryRoot: string;
+  readonly comparisonBinding?: {
+    readonly projectId: string;
+    readonly runId: string;
+    readonly worktreeId: string;
+    readonly branch: string;
+    readonly baseCommit: string;
+    readonly headCommit: string;
+  };
 }
 
 type WindowResolver = (event: IpcMainInvokeEvent) => BrowserWindow | null;
@@ -355,10 +364,9 @@ export class GitIpcService {
           authorEmail: plan.identity.email,
         };
         const committed = await this.#changes.commit(plan.repositoryRoot, approval);
-        const review = await this.#reviewUnlocked({
-          view: plan.target,
-          repositoryRoot: plan.repositoryRoot,
-        });
+        const review = await this.#reviewUnlocked(
+          await this.#resolveTarget(targetInput(plan.target)),
+        );
         this.store.appendAudit('git', 'commit', 'allowed', {
           ...auditTargetMetadata(plan.target),
           branch: plan.branch,
@@ -402,10 +410,9 @@ export class GitIpcService {
           hunkIds: plan.hunkIds,
         };
         await this.#changes.discardHunks(plan.repositoryRoot, plan.hunkIds, approval);
-        const review = await this.#reviewUnlocked({
-          view: plan.target,
-          repositoryRoot: plan.repositoryRoot,
-        });
+        const review = await this.#reviewUnlocked(
+          await this.#resolveTarget(targetInput(plan.target)),
+        );
         this.store.appendAudit('git', 'discard-hunks', 'allowed', {
           ...auditTargetMetadata(plan.target),
           pathCount: plan.paths.length,
@@ -442,12 +449,28 @@ export class GitIpcService {
   }
 
   async #reviewUnlocked(target: GitTarget): Promise<GitReviewView> {
-    const [status, staged, unstaged, identity] = await Promise.all([
+    const [status, staged, unstaged, identity, baseComparison] = await Promise.all([
       this.repositories.status(target.repositoryRoot),
       this.#changes.diff(target.repositoryRoot, 'staged'),
       this.#changes.diff(target.repositoryRoot, 'unstaged'),
       this.#resolveIdentity(target.repositoryRoot),
+      target.comparisonBinding === undefined
+        ? Promise.resolve(undefined)
+        : createAgentBaseComparison(this.repositories, {
+            repositoryRoot: target.repositoryRoot,
+            baseCommit: target.comparisonBinding.baseCommit,
+            headCommit: target.comparisonBinding.headCommit,
+          }),
     ]);
+    if (target.comparisonBinding !== undefined) {
+      if (
+        status.branch !== target.comparisonBinding.branch ||
+        status.headOid !== target.comparisonBinding.headCommit
+      ) {
+        throw new Error('The owned agent worktree branch or HEAD changed during Git review.');
+      }
+      await this.#assertComparisonTargetCurrent(target);
+    }
     const project = this.store.getProject(target.view.projectId);
     if (target.view.kind === 'primary' && project !== undefined) {
       this.store.saveProject({
@@ -479,6 +502,7 @@ export class GitIpcService {
         })),
       staged: diffView(staged),
       unstaged: diffView(unstaged),
+      ...(baseComparison === undefined ? {} : { baseComparison }),
       identity,
       refreshedAt: new Date().toISOString(),
     });
@@ -524,6 +548,10 @@ export class GitIpcService {
     this.#assertAvailable();
     if (input.kind === 'agent-worktree') {
       const resolved = await this.#targets.resolve(input);
+      const headCommit = resolved.state.branchOid;
+      if (headCommit === null) {
+        throw new Error('The authoritative agent worktree has no current branch commit.');
+      }
       const view = GitReviewTargetViewSchema.parse({
         kind: 'agent-worktree',
         projectId: input.projectId,
@@ -534,7 +562,18 @@ export class GitIpcService {
         baseRef: resolved.ownership.baseRef,
         baseCommit: resolved.ownership.baseCommit,
       });
-      return { view, repositoryRoot: resolved.worktreeRepositoryPath };
+      return {
+        view,
+        repositoryRoot: resolved.worktreeRepositoryPath,
+        comparisonBinding: {
+          projectId: input.projectId,
+          runId: input.runId,
+          worktreeId: resolved.ownership.id,
+          branch: resolved.ownership.branch,
+          baseCommit: resolved.ownership.baseCommit,
+          headCommit,
+        },
+      };
     }
     const project = this.store.getProject(input.projectId);
     if (project === undefined || project.missing) {
@@ -551,6 +590,28 @@ export class GitIpcService {
       throw new Error('Reopen this project from its canonical Git repository root.');
     }
     return { view: input, repositoryRoot };
+  }
+
+  async #assertComparisonTargetCurrent(target: GitTarget): Promise<void> {
+    const binding = target.comparisonBinding;
+    if (binding === undefined) return;
+    const current = await this.#targets.resolve({
+      projectId: binding.projectId,
+      runId: binding.runId,
+    });
+    const currentStatus = current.state.status;
+    if (
+      current.worktreeRepositoryPath !== target.repositoryRoot ||
+      current.ownership.id !== binding.worktreeId ||
+      current.ownership.branch !== binding.branch ||
+      current.ownership.baseCommit !== binding.baseCommit ||
+      current.state.branchOid !== binding.headCommit ||
+      currentStatus === null ||
+      currentStatus.branch !== binding.branch ||
+      currentStatus.headOid !== binding.headCommit
+    ) {
+      throw new Error('The authoritative agent worktree changed during base comparison.');
+    }
   }
 
   async #assertPlanTarget(plan: PendingPlan): Promise<void> {

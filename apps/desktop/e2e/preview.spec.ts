@@ -29,7 +29,7 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
       const command = settings.getByRole('group', { name: 'Development server' });
       await command.getByLabel('Executable').fill(process.execPath);
       await command
-        .getByLabel('Arguments · one per line')
+        .getByLabel('Arguments')
         .fill(resolve(import.meta.dirname, 'scripts', 'preview-server.mjs'));
       await settings.getByLabel('Preview port start').fill('44000');
       await settings.getByLabel('Preview port end').fill('44050');

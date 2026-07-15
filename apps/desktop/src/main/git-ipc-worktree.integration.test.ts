@@ -51,6 +51,19 @@ describe('GitIpcService agent-worktree target', () => {
         taskId: 'agent-node',
       })
     ).ownership;
+    await writeFile(
+      path.join(repository, 'primary-only.txt'),
+      'primary advanced after allocation\n',
+    );
+    await runGit(repository, ['add', '--', 'primary-only.txt']);
+    await runGit(repository, ['commit', '-m', 'Advance primary after worktree allocation']);
+    await writeFile(
+      path.join(ownership.worktreePath, 'agent-committed.txt'),
+      'committed by agent\n',
+    );
+    await runGit(ownership.worktreePath, ['add', '--', 'agent-committed.txt']);
+    await runGit(ownership.worktreePath, ['commit', '-m', 'Agent committed work']);
+    const firstAgentHead = await runGit(ownership.worktreePath, ['rev-parse', 'HEAD']);
     const store = new LocalStore(path.join(root, 'state', 'forgeboard.sqlite3'));
     stores.add(store);
     store.saveProject(project(repository));
@@ -90,6 +103,7 @@ describe('GitIpcService agent-worktree target', () => {
     const primaryReviewBefore = await service.review({ kind: 'primary', projectId: PROJECT_ID });
     const agentReview = await service.review(target);
     expect(primaryReviewBefore).toMatchObject({ dirty: false, branch: 'main' });
+    expect('baseComparison' in primaryReviewBefore).toBe(false);
     expect(agentReview).toMatchObject({
       target: {
         ...target,
@@ -101,7 +115,21 @@ describe('GitIpcService agent-worktree target', () => {
       },
       dirty: true,
       branch: ownership.branch,
+      headOid: firstAgentHead,
+      baseComparison: {
+        baseCommit: ownership.baseCommit,
+        headCommit: firstAgentHead,
+        ahead: 1,
+        behind: 0,
+        commitCount: 1,
+        commits: [{ oid: firstAgentHead, relation: 'ahead' }],
+        commitIdsTruncated: false,
+        diff: { additions: 1, deletions: 0 },
+      },
     });
+    expect(agentReview.baseComparison?.diff.files).toMatchObject([
+      { oldPath: null, newPath: 'agent-committed.txt', status: 'added' },
+    ]);
 
     const hunkId = agentReview.unstaged.files[0]?.hunks[0]?.id;
     if (hunkId === undefined) throw new Error('Expected the agent worktree change to have a hunk.');
@@ -120,7 +148,26 @@ describe('GitIpcService agent-worktree target', () => {
       message: 'Commit isolated agent work',
     });
     const committed = await service.confirmCommit(event, commitPlan.planId);
-    expect(committed?.review).toMatchObject({ dirty: false, target: agentReview.target });
+    const secondAgentHead = await runGit(ownership.worktreePath, ['rev-parse', 'HEAD']);
+    expect(committed?.review).toMatchObject({
+      dirty: false,
+      target: agentReview.target,
+      headOid: secondAgentHead,
+      baseComparison: {
+        baseCommit: ownership.baseCommit,
+        headCommit: secondAgentHead,
+        ahead: 2,
+        behind: 0,
+        commitCount: 2,
+      },
+    });
+    expect(committed?.review.baseComparison?.commits.map((commit) => commit.oid)).toEqual([
+      firstAgentHead,
+      secondAgentHead,
+    ]);
+    expect(
+      committed?.review.baseComparison?.diff.files.map((file) => file.newPath ?? file.oldPath),
+    ).toEqual(['agent-committed.txt', 'story.txt']);
     expect(await runGit(ownership.worktreePath, ['log', '-1', '--format=%an%x00%ae%x00%s'])).toBe(
       'Worktree UI Author\0worktree-author@forgeboard.invalid\0Commit isolated agent work',
     );

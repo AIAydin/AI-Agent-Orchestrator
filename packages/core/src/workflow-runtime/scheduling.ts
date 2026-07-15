@@ -1,13 +1,15 @@
 import type { CanvasNode } from '../domain.js';
 import {
+  NodeRunStateSchema,
   WorkflowRunSchema,
   aggregateWorkflowStatus,
   isTerminalRunStatus,
   recoverInterruptedRun,
   requestWorkflowCancellation,
   transitionNodeRun,
+  type InternalExecutionReference,
   type NodeRunState,
-  type ProcessReference,
+  type WorkflowExecutionReference,
 } from '../workflow.js';
 
 import { nodeById, reviewGateEvaluation } from './evidence-state.js';
@@ -198,12 +200,11 @@ export function markWaitingForApprovals(
   return changed ? replaceRunState(runtime, nodeRuns, occurredAt) : runtime;
 }
 
-export function startWorkflowNode(
+function assertWorkflowNodeLaunchable(
   runtime: WorkflowExecutionRuntime,
   nodeId: string,
-  process: ProcessReference,
   occurredAt: string,
-): WorkflowExecutionRuntime {
+): NodeRunState {
   const readiness = evaluateNodeReadiness(runtime, nodeId);
   if (readiness.disposition !== 'ready') {
     throw new Error(
@@ -236,8 +237,65 @@ export function startWorkflowNode(
   }
   const current = runtime.run.nodeRuns[nodeId];
   if (current === undefined) throw new Error(`Node is outside the current plan: ${nodeId}`);
-  const next = transitionNodeRun(current, { status: 'running', occurredAt, process });
+  return current;
+}
+
+export function startWorkflowNode(
+  runtime: WorkflowExecutionRuntime,
+  nodeId: string,
+  execution: WorkflowExecutionReference,
+  occurredAt: string,
+): WorkflowExecutionRuntime {
+  const current = assertWorkflowNodeLaunchable(runtime, nodeId, occurredAt);
+  const next = transitionNodeRun(current, {
+    status: 'running',
+    occurredAt,
+    ...(isInternalExecution(execution) ? { internalExecution: execution } : { process: execution }),
+  });
   return replaceRunState(runtime, { ...runtime.run.nodeRuns, [nodeId]: next }, occurredAt);
+}
+
+function isInternalExecution(
+  execution: WorkflowExecutionReference,
+): execution is InternalExecutionReference {
+  return 'kind' in execution && execution.kind === 'internal';
+}
+
+export interface NodePrelaunchFailure {
+  readonly failureCode: string;
+  readonly reason: string;
+}
+
+/**
+ * Records a launch failure without fabricating an active execution. Only a queued, currently-ready
+ * node may take this transition, and it never receives a start timestamp or execution reference.
+ */
+export function failWorkflowNodeBeforeLaunch(
+  runtime: WorkflowExecutionRuntime,
+  nodeId: string,
+  failure: NodePrelaunchFailure,
+  occurredAt: string,
+): WorkflowExecutionRuntime {
+  const current = runtime.run.nodeRuns[nodeId];
+  if (current === undefined) throw new Error(`Node is outside the current plan: ${nodeId}`);
+  if (current.status !== 'queued') {
+    throw new Error(`Node ${nodeId} cannot fail before launch from status ${current.status}`);
+  }
+  assertWorkflowNodeLaunchable(runtime, nodeId, occurredAt);
+  const failed = NodeRunStateSchema.parse({
+    nodeId: current.nodeId,
+    status: 'failed',
+    attempt: current.attempt,
+    queuedAt: current.queuedAt,
+    endedAt: occurredAt,
+    resumable: current.resumable,
+    failureCode: failure.failureCode,
+    statusReason: failure.reason,
+  });
+  return settleBlockedWorkflowNodes(
+    replaceRunState(runtime, { ...runtime.run.nodeRuns, [nodeId]: failed }, occurredAt),
+    occurredAt,
+  );
 }
 
 export type NodeCompletion =

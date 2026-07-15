@@ -7,6 +7,7 @@ import {
 
 import { canonicalEdgeFromLegacy, legacyEdgeFromCanonical } from './edge-adapter.js';
 import { canonicalNodeFromLegacy, legacyNodeFromCanonical } from './node-adapter.js';
+import { reconcileRevisionLoops } from './revision-loop-adapter.js';
 import type {
   CanvasMigrationIssue,
   CanvasMigrationResult,
@@ -46,19 +47,25 @@ export function canonicalCanvasFromLegacy(document: LegacyCanvasDocument): Canva
   const normalizedNodes = nodes.map((node) =>
     node.groupId !== undefined && !groupIds.has(node.groupId) ? nodeWithoutGroup(node) : node,
   );
-  const revisionLoops = (previous?.revisionLoops ?? []).filter(
-    (loop) =>
-      nodeIds.has(loop.implementationNodeId) &&
-      nodeIds.has(loop.reviewNodeId) &&
-      edgeIds.has(loop.reviewEdgeId) &&
-      edgeIds.has(loop.revisionEdgeId),
+  const reconciledLoops = reconcileRevisionLoops(
+    document.edges,
+    edges,
+    normalizedNodes,
+    (previous?.revisionLoops ?? []).filter(
+      (loop) =>
+        nodeIds.has(loop.implementationNodeId) &&
+        nodeIds.has(loop.reviewNodeId) &&
+        edgeIds.has(loop.reviewEdgeId) &&
+        edgeIds.has(loop.revisionEdgeId),
+    ),
+    document.updatedAt,
   );
   const parsed = CanvasSchema.safeParse({
     schemaVersion: 1,
     id: document.id,
     projectId: document.projectId,
     name: document.name,
-    nodes: normalizedNodes,
+    nodes: reconciledLoops.nodes,
     edges,
     groups,
     viewState: {
@@ -69,7 +76,7 @@ export function canonicalCanvasFromLegacy(document: LegacyCanvasDocument): Canva
       snapToGrid: previous?.viewState.snapToGrid ?? false,
       gridSize: previous?.viewState.gridSize ?? 16,
     },
-    revisionLoops,
+    revisionLoops: reconciledLoops.revisionLoops,
     workflowLimits: previous?.workflowLimits ?? {},
     createdAt: previous?.createdAt ?? document.updatedAt,
     updatedAt: document.updatedAt,

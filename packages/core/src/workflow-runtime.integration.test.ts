@@ -338,6 +338,24 @@ describe('scoped workflow planning and typed edge behavior', () => {
     ).toEqual(['task-a', 'task-b', 'task-c']);
   });
 
+  it('uses host eligibility to omit data-only nodes while rejecting an explicit unavailable run', () => {
+    const graph = canvas({ nodes: [taskNode('task-a'), noteNode('requirements')] });
+    expect(
+      planWorkflowScope(graph, {
+        planId: 'eligible-workflow',
+        scope: { kind: 'workflow' },
+        eligibleNodeIds: ['task-a'],
+      }).nodeIds,
+    ).toEqual(['task-a']);
+    expect(() =>
+      planWorkflowScope(graph, {
+        planId: 'unavailable-node',
+        scope: { kind: 'node', nodeId: 'requirements' },
+        eligibleNodeIds: ['task-a'],
+      }),
+    ).toThrow(/not runnable/u);
+  });
+
   it('retains authoritative dependencies even when an isolated scope requests no upstream work', () => {
     const graph = canvas({
       nodes: [{ ...taskNode('outside-source'), status: 'failed' }, taskNode('isolated-target')],

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type { CanvasDocument } from '../../../../shared/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
@@ -41,7 +41,7 @@ export function useCanvasPersistence({
   const mountedRef = useRef(true);
   const timerRef = useRef<number | null>(null);
   const scopeRef = useRef(projectId);
-  const observedDocumentRef = useRef<CanvasDocument | null>(null);
+  const observedFingerprintRef = useRef<string | null>(null);
   const initializedScopeRef = useRef(false);
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
@@ -56,6 +56,10 @@ export function useCanvasPersistence({
 
   onErrorRef.current = onError;
   persistCanvasRef.current = persistCanvas;
+  const documentFingerprint = useMemo(
+    () => (document === null ? null : JSON.stringify(document)),
+    [document],
+  );
 
   const clearAutosave = useCallback(() => {
     if (timerRef.current === null) return;
@@ -67,7 +71,7 @@ export function useCanvasPersistence({
     if (scopeRef.current !== projectId) {
       clearAutosave();
       scopeRef.current = projectId;
-      observedDocumentRef.current = null;
+      observedFingerprintRef.current = null;
       initializedScopeRef.current = false;
       revisionRef.current += 1;
       savedRevisionRef.current = revisionRef.current;
@@ -79,9 +83,15 @@ export function useCanvasPersistence({
       setSaveState('saved');
     }
 
-    if (document === null || observedDocumentRef.current === document) return;
+    if (
+      document === null ||
+      documentFingerprint === null ||
+      observedFingerprintRef.current === documentFingerprint
+    ) {
+      return;
+    }
 
-    observedDocumentRef.current = document;
+    observedFingerprintRef.current = documentFingerprint;
     revisionRef.current += 1;
     latestRef.current = { projectId, revision: revisionRef.current, document };
 
@@ -93,7 +103,7 @@ export function useCanvasPersistence({
     }
 
     setSaveState('saving');
-  }, [clearAutosave, document, projectId]);
+  }, [clearAutosave, document, documentFingerprint, projectId]);
 
   const drainSaves = useCallback((): Promise<boolean> => {
     if (inFlightRef.current) return inFlightRef.current;

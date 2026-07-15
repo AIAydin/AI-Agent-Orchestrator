@@ -4,12 +4,27 @@ export type EdgeKind = CanvasEdge['type'];
 
 type EdgeConfiguration<TKind extends EdgeKind> = Extract<CanvasEdge, { type: TKind }>['config'];
 
-export type WorkshopEdgeData = {
-  [TKind in EdgeKind]: {
+export interface RevisionLoopConfiguration {
+  maximumAttempts: number;
+  stopConditions: ('review-approved' | 'tests-passed' | 'human-accepted')[];
+  humanEscapeInstructions: string;
+}
+
+type StandardEdgeKind = Exclude<EdgeKind, 'revision'>;
+type StandardEdgeData = {
+  [TKind in StandardEdgeKind]: {
     edgeType: TKind;
     config: EdgeConfiguration<TKind>;
   };
-}[EdgeKind];
+}[StandardEdgeKind];
+
+export type WorkshopEdgeData =
+  | StandardEdgeData
+  | {
+      edgeType: 'revision';
+      config: EdgeConfiguration<'revision'>;
+      loop: RevisionLoopConfiguration;
+    };
 
 type UnknownRecord = Readonly<Record<string, unknown>>;
 
@@ -67,11 +82,19 @@ export function createEdgeData(
       };
     case 'revision': {
       const loopId = entityId(candidate?.['loopId']);
+      const loop = asRecord(record?.['loop']);
       return {
         edgeType,
         config: {
           ...(loopId === undefined ? {} : { loopId }),
           actionableFeedbackRequired: true,
+        },
+        loop: {
+          maximumAttempts: integerValue(loop?.['maximumAttempts'], 3, 1, 100),
+          stopConditions: stopConditions(loop?.['stopConditions']),
+          humanEscapeInstructions:
+            stringValue(loop?.['humanEscapeInstructions']) ??
+            'Pause after the final attempt and ask a human to accept the current result or cancel the workflow.',
         },
       };
     }
@@ -81,7 +104,10 @@ export function createEdgeData(
 }
 
 export function edgeDataForPersistence(data: WorkshopEdgeData | undefined): UnknownRecord {
-  return data === undefined ? {} : { config: data.config };
+  if (data === undefined) return {};
+  return data.edgeType === 'revision'
+    ? { config: data.config, loop: data.loop }
+    : { config: data.config };
 }
 
 function asRecord(value: unknown): UnknownRecord | undefined {
@@ -92,6 +118,35 @@ function asRecord(value: unknown): UnknownRecord | undefined {
 
 function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
+}
+
+function integerValue(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  return typeof value === 'number' && Number.isInteger(value)
+    ? Math.min(maximum, Math.max(minimum, value))
+    : fallback;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function stopConditions(value: unknown): RevisionLoopConfiguration['stopConditions'] {
+  const parsed = Array.isArray(value) ? [...new Set(value.filter(isStopCondition))] : [];
+  if (!parsed.includes('review-approved') && !parsed.includes('tests-passed')) {
+    parsed.unshift('review-approved');
+  }
+  return parsed;
+}
+
+function isStopCondition(
+  value: unknown,
+): value is RevisionLoopConfiguration['stopConditions'][number] {
+  return (
+    typeof value === 'string' &&
+    (['review-approved', 'tests-passed', 'human-accepted'] as const).includes(
+      value as RevisionLoopConfiguration['stopConditions'][number],
+    )
+  );
 }
 
 function entityId(value: unknown): string | undefined {

@@ -126,9 +126,14 @@ describe('SetupWizard', () => {
     fireEvent.change(screen.getByLabelText('Development server executable'), {
       target: { value: 'pnpm' },
     });
-    fireEvent.change(screen.getByLabelText('Development server arguments, one per line'), {
-      target: { value: 'dev\n--host' },
-    });
+    fireEvent.change(
+      screen.getByLabelText(
+        'Development server arguments, one non-empty literal argument per line; empty lines ignored',
+      ),
+      {
+        target: { value: 'dev\n--host' },
+      },
+    );
     expect(screen.queryByLabelText('Test command executable')).toBeNull();
     expect(screen.queryByLabelText('Cleanup policy')).toBeNull();
     fireEvent.change(screen.getByLabelText('Branch prefix'), {

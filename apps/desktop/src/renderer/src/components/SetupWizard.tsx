@@ -20,6 +20,7 @@ import type {
 } from '../../../shared/contracts.js';
 import type { DockerReadiness } from '../../../shared/docker-contracts.js';
 import { unwrap } from '../lib/ipc.js';
+import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../lib/literal-arguments.js';
 import { DockerConfiguration } from './DockerConfiguration.js';
 import './SetupWizard.css';
 
@@ -642,18 +643,16 @@ function CompactCommandEditor({
         name={`${name}-arguments`}
         rows={2}
         value={value.arguments.join('\n')}
-        placeholder={`${placeholder.split(' · ')[1]}\n(one argument per line)`}
-        aria-label={`${label} arguments, one per line`}
+        placeholder={`${placeholder.split(' · ')[1]}\n(one non-empty literal argument per line)`}
+        aria-label={`${label} arguments, one non-empty literal argument per line; empty lines ignored`}
         onChange={(event) =>
           onChange({
             ...value,
-            arguments: event.target.value
-              .split('\n')
-              .map((argument) => argument.trim())
-              .filter(Boolean),
+            arguments: parseLiteralArguments(event.target.value),
           })
         }
       />
+      <small>{LITERAL_ARGUMENT_HELP}</small>
     </fieldset>
   );
 }

@@ -218,6 +218,135 @@
   border-left: 0;
   border-radius: 0 7px 7px 0;
 }
+.workflow-node-config {
+  display: grid;
+  gap: 10px;
+  margin-top: 13px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+.workflow-node-config > header,
+.workflow-node-config > header > div,
+.workflow-check-producers legend,
+.workflow-gate-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.workflow-node-config > header {
+  justify-content: space-between;
+}
+.workflow-node-config h3,
+.workflow-node-config p {
+  margin: 0;
+}
+.workflow-node-config h3,
+.workflow-check-producers legend {
+  font-size: 9px;
+}
+.workflow-node-config > header > span,
+.workflow-node-config > small,
+.workflow-gate-summary {
+  color: var(--text-faint);
+  font-size: 7px;
+}
+.workflow-node-config > header > span {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+}
+.workflow-node-config > label:not(.workflow-toggle),
+.workflow-command-editor > label,
+.workflow-command-editor > .workflow-command-field,
+.workflow-retry-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 650;
+}
+.workflow-node-config > p,
+.workflow-check-producers p {
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.5;
+}
+.workflow-command-editor,
+.workflow-check-producers {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  margin: 0;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.workflow-command-editor legend,
+.workflow-check-producers legend {
+  padding: 0 4px;
+  color: var(--text-soft);
+  font-weight: 700;
+}
+.workflow-command-path {
+  display: flex;
+}
+.workflow-command-path input {
+  min-width: 0;
+  border-radius: 7px 0 0 7px;
+}
+.workflow-command-path button {
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 7px 7px 0;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font-size: 8px;
+}
+.workflow-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--text-soft);
+  font-size: 8px;
+  line-height: 1.4;
+}
+.workflow-toggle input {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.workflow-toggle span {
+  display: grid;
+  gap: 2px;
+}
+.workflow-toggle strong {
+  color: var(--text);
+}
+.workflow-toggle small {
+  color: var(--text-faint);
+  font-size: 7px;
+}
+.workflow-gate-requirements,
+.workflow-retry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.workflow-gate-requirements {
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--surface-raised);
+}
+.workflow-node-config .workflow-config-warning {
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--line));
+  border-radius: 7px;
+  color: var(--amber);
+}
+.workflow-gate-summary {
+  color: var(--accent);
+}
 .inspector-actions {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

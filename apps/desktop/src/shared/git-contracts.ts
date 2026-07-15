@@ -117,6 +117,102 @@ export const GitDiffViewSchema = z
   .strict();
 export type GitDiffView = z.infer<typeof GitDiffViewSchema>;
 
+const GitComparisonCommitSchema = z
+  .object({
+    oid: z.string().regex(/^[a-f0-9]{40,64}$/u),
+    relation: z.enum(['ahead', 'behind']),
+  })
+  .strict();
+
+const MAX_COMPARISON_FILES = 4_096;
+const MAX_COMPARISON_HUNKS = 16_384;
+const MAX_COMPARISON_LINES = 200_000;
+const MAX_COMPARISON_TEXT_CHARACTERS = 6 * 1_024 * 1_024;
+
+export const GitAgentBaseComparisonViewSchema = z
+  .object({
+    baseCommit: z.string().regex(/^[a-f0-9]{40,64}$/u),
+    headCommit: z.string().regex(/^[a-f0-9]{40,64}$/u),
+    ahead: z.number().int().nonnegative().max(10_000_000),
+    behind: z.number().int().nonnegative().max(10_000_000),
+    commitCount: z.number().int().nonnegative().max(20_000_000),
+    commits: z.array(GitComparisonCommitSchema).max(512),
+    commitIdsTruncated: z.boolean(),
+    diff: GitDiffViewSchema,
+  })
+  .strict()
+  .superRefine((comparison, context) => {
+    if (comparison.commitCount !== comparison.ahead + comparison.behind) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['commitCount'],
+        message: 'Comparison commit count must equal ahead plus behind.',
+      });
+    }
+    const aheadCommits = comparison.commits.filter((commit) => commit.relation === 'ahead').length;
+    const behindCommits = comparison.commits.length - aheadCommits;
+    if (aheadCommits > comparison.ahead || behindCommits > comparison.behind) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['commits'],
+        message: 'Comparison commit identifiers exceed their authoritative relation counts.',
+      });
+    }
+    if (
+      !comparison.commitIdsTruncated &&
+      (aheadCommits !== comparison.ahead || behindCommits !== comparison.behind)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['commits'],
+        message: 'A complete comparison must include every authoritative commit identifier.',
+      });
+    }
+    if (comparison.commitIdsTruncated && comparison.commits.length >= comparison.commitCount) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['commitIdsTruncated'],
+        message: 'A truncated comparison must omit at least one commit identifier.',
+      });
+    }
+    if (
+      new Set(comparison.commits.map((commit) => commit.oid)).size !== comparison.commits.length
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['commits'],
+        message: 'Comparison commit identifiers must be unique.',
+      });
+    }
+    let hunks = 0;
+    let lines = 0;
+    let textCharacters = 0;
+    for (const file of comparison.diff.files) {
+      textCharacters += (file.oldPath?.length ?? 0) + (file.newPath?.length ?? 0);
+      hunks += file.hunks.length;
+      for (const hunk of file.hunks) {
+        textCharacters += hunk.header.length;
+        lines += hunk.lines.length;
+        for (const line of hunk.lines) textCharacters += line.content.length;
+      }
+    }
+    const limits: ReadonlyArray<readonly [string, number, number, Array<string | number>]> = [
+      ['files', comparison.diff.files.length, MAX_COMPARISON_FILES, ['diff', 'files']],
+      ['hunks', hunks, MAX_COMPARISON_HUNKS, ['diff', 'files']],
+      ['lines', lines, MAX_COMPARISON_LINES, ['diff', 'files']],
+      ['text characters', textCharacters, MAX_COMPARISON_TEXT_CHARACTERS, ['diff', 'files']],
+    ];
+    for (const [label, count, maximum, path] of limits) {
+      if (count <= maximum) continue;
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path,
+        message: `Base comparison exceeds the bounded ${label} limit of ${maximum}.`,
+      });
+    }
+  });
+export type GitAgentBaseComparisonView = z.infer<typeof GitAgentBaseComparisonViewSchema>;
+
 export const GitIdentityViewSchema = z
   .object({
     name: z.string().max(512),
@@ -159,10 +255,45 @@ export const GitReviewViewSchema = z
     entries: z.array(GitStatusEntryViewSchema).max(100_000),
     staged: GitDiffViewSchema,
     unstaged: GitDiffViewSchema,
+    baseComparison: GitAgentBaseComparisonViewSchema.optional(),
     identity: GitIdentityViewSchema,
     refreshedAt: z.string().datetime(),
   })
-  .strict();
+  .strict()
+  .superRefine((review, context) => {
+    if (review.target.kind === 'primary') {
+      if (review.baseComparison !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['baseComparison'],
+          message: 'Primary-checkout reviews cannot contain an agent base comparison.',
+        });
+      }
+      return;
+    }
+    if (review.baseComparison === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['baseComparison'],
+        message: 'Agent-worktree reviews require an authoritative base comparison.',
+      });
+      return;
+    }
+    if (review.baseComparison.baseCommit !== review.target.baseCommit) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['baseComparison', 'baseCommit'],
+        message: 'Base comparison does not match the persisted worktree base commit.',
+      });
+    }
+    if (review.headOid === null || review.baseComparison.headCommit !== review.headOid) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['baseComparison', 'headCommit'],
+        message: 'Base comparison does not match the current owned worktree HEAD.',
+      });
+    }
+  });
 export type GitReviewView = z.infer<typeof GitReviewViewSchema>;
 
 export const GitCommitPlanViewSchema = z

@@ -1,24 +1,9 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 
-import {
-  CliAgentAdapter,
-  createCustomCliAdapter,
-  getBuiltInAgentManifest,
-  planDockerAgentLaunch,
-  type AgentAdapterManifest,
-  type AgentEvent,
-  type AgentSession,
-  type PermissionProfile,
-  type PreparedAgentLaunch,
-} from '@forgeboard/agent-adapters';
-import { RepositoryService, WorktreeService, type WorktreeOwnership } from '@forgeboard/git-engine';
-import {
-  TEST_AGENT_MANIFEST,
-  createTestAgentRunCommand,
-  type TestAgentAction,
-} from '@forgeboard/test-agent';
+import type { AgentAdapterManifest } from '@forgeboard/agent-adapters';
+import { RepositoryService } from '@forgeboard/git-engine';
 import { app, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { z } from 'zod';
 
@@ -29,16 +14,18 @@ import {
   type AppSettings,
   type IpcResult,
   type PrepareRunInput,
-  type RunAdapterId,
   type RunDisclosure,
   type RunEventEnvelope,
 } from '../shared/contracts.js';
-import { customAgentManifest } from './custom-agent.js';
-import { checkDockerReadiness } from './docker-runtime.js';
-import type { LocalStore, StoredRunRecord } from './storage.js';
+import {
+  type AgentExecutionEventSink,
+  type AgentExecutionOperations,
+  type TrustedAdapterLauncher,
+} from './agent-execution/contracts.js';
+import { AgentExecutionRuntime } from './agent-execution/runtime.js';
+import type { LocalStore } from './storage.js';
 
 const RunIdSchema = z.string().uuid();
-const DOCKER_SAFE_ENVIRONMENT_NAMES = new Set(['COLORTERM', 'LANG', 'LC_ALL', 'TERM']);
 const InputSchema = z
   .string()
   .max(1_000_000)
@@ -46,60 +33,58 @@ const InputSchema = z
     message: 'Agent input cannot contain NUL bytes.',
   });
 
-interface WorkspaceSnapshot {
-  readonly headOid: string | null;
-  readonly paths: ReadonlyMap<string, string>;
+interface PreparedApproval {
+  readonly disclosureFingerprint: string;
+  readonly ownerId: string;
+  readonly planId: string;
 }
 
-interface PreparedRun {
-  readonly adapter: CliAgentAdapter;
-  readonly adapterId: RunAdapterId;
-  readonly before: WorkspaceSnapshot;
-  readonly disclosure: RunDisclosure;
-  readonly generation: number;
-  readonly nodeId: string;
-  readonly ownerId: number;
-  readonly plan: PreparedAgentLaunch;
-  readonly repositoryPath: string;
-  readonly trustedExtensionAdapter: boolean;
-  readonly worktree: WorktreeOwnership | null;
-  record: StoredRunRecord;
-}
+export type RunServiceRuntimeFactory = (emit: AgentExecutionEventSink) => AgentExecutionOperations;
+export type RunServiceExecutionEventListener = (event: RunEventEnvelope) => void;
 
-interface ActiveRun extends PreparedRun {
-  readonly owner: WebContents;
-  readonly session: AgentSession;
-  pendingTestInputId: string | null;
-}
-
-type TrustedAdapterLauncher = (
-  adapterId: string,
-  expectedManifest: AgentAdapterManifest,
-  launch: () => Promise<AgentSession>,
-) => Promise<AgentSession>;
-
+/**
+ * Electron compatibility shell for agent execution.
+ *
+ * Process, Git, worktree, plan, and completion lifecycle policy lives in the WebContents-free
+ * AgentExecutionRuntime. This class validates IPC and maps renderer instances to opaque owner IDs.
+ */
 export class RunService {
-  readonly #active = new Map<string, ActiveRun>();
+  readonly #approvals = new Map<string, PreparedApproval>();
   readonly #operations = new Set<Promise<unknown>>();
-  readonly #pending = new Map<string, PreparedRun>();
-  readonly #repositories: RepositoryService;
-  readonly #worktrees: WorktreeService;
+  readonly #executionSubscribers = new Map<string, Set<RunServiceExecutionEventListener>>();
+  readonly #ownerIds = new WeakMap<WebContents, string>();
+  readonly #owners = new Map<string, WebContents>();
   readonly #registeredChannels: string[] = [];
+  readonly #runtime: AgentExecutionOperations;
+  readonly #store: Pick<LocalStore, 'appendAudit'>;
   #disposed = false;
-  #generation = 0;
   #privacyResetting = false;
+  #resetOperation: Promise<void> | null = null;
 
   public constructor(
-    private readonly store: LocalStore,
-    private readonly getSettings: () => AppSettings,
-    private readonly getTrustedAdapter: (
-      adapterId: string,
-    ) => Promise<AgentAdapterManifest | undefined> = () => Promise.resolve(undefined),
-    private readonly launchTrustedAdapter?: TrustedAdapterLauncher,
+    store: LocalStore,
+    getSettings: () => AppSettings,
+    getTrustedAdapter: (adapterId: string) => Promise<AgentAdapterManifest | undefined> = () =>
+      Promise.resolve(undefined),
+    launchTrustedAdapter?: TrustedAdapterLauncher,
     repositories: RepositoryService = new RepositoryService(),
+    runtimeFactory?: RunServiceRuntimeFactory,
   ) {
-    this.#repositories = repositories;
-    this.#worktrees = new WorktreeService(this.#repositories);
+    this.#store = store;
+    const emit: AgentExecutionEventSink = (ownerId, envelope) => {
+      this.#emitExecutionEvent(ownerId, envelope);
+    };
+    this.#runtime =
+      runtimeFactory?.(emit) ??
+      new AgentExecutionRuntime({
+        store,
+        getSettings,
+        emit,
+        getTrustedAdapter,
+        ...(launchTrustedAdapter === undefined ? {} : { launchTrustedAdapter }),
+        repositories,
+        resolveTestAgentCliPath: testAgentCliPath,
+      });
   }
 
   public registerIpcHandlers(): void {
@@ -128,767 +113,224 @@ export class RunService {
     );
   }
 
+  /** Main-process composition seam for durable workflow-owned agent runs. */
+  public executionOperations(): AgentExecutionOperations {
+    return this.#runtime;
+  }
+
+  /** Main-process-only, exact-owner event seam used by workflow-owned agent executions. */
+  public subscribeExecutionEvents(
+    ownerId: string,
+    listener: RunServiceExecutionEventListener,
+  ): () => void {
+    this.#assertAvailable();
+    if (ownerId.length === 0 || ownerId.length > 512 || ownerId.includes('\0')) {
+      throw new Error('Agent execution event subscriptions require a valid opaque owner ID.');
+    }
+    const listeners = this.#executionSubscribers.get(ownerId) ?? new Set();
+    listeners.add(listener);
+    this.#executionSubscribers.set(ownerId, listeners);
+    let subscribed = true;
+    return () => {
+      if (!subscribed) return;
+      subscribed = false;
+      listeners.delete(listener);
+      if (listeners.size === 0 && this.#executionSubscribers.get(ownerId) === listeners) {
+        this.#executionSubscribers.delete(ownerId);
+      }
+    };
+  }
+
   public async prepare(owner: WebContents, input: PrepareRunInput): Promise<RunDisclosure> {
     this.#assertAvailable();
-    const generation = this.#generation;
-    const project = this.store.getProject(input.projectId);
-    if (project === undefined || project.missing) {
-      throw new Error('The selected project is no longer available.');
+    const ownerId = this.#ownerId(owner);
+    const prepared = await this.#runtime.prepare(ownerId, {
+      ...input,
+      context: { attachments: [] },
+    });
+    if (owner.isDestroyed() || this.#owners.get(ownerId) !== owner) {
+      throw new Error('The originating Forgeboard window closed while preparing the agent run.');
     }
-    const repositoryPath = await this.#repositories.resolveRepositoryRoot(project.path);
-    if (repositoryPath !== project.path) {
-      throw new Error('Reopen this project from its Git repository root before starting an agent.');
-    }
-    const primaryStatus = await this.#repositories.status(repositoryPath);
-    const settings = this.getSettings();
-    const runId = randomUUID();
-
-    let worktree: WorktreeOwnership | null = null;
-    let cwd = repositoryPath;
-    let branch = primaryStatus.branch;
-    let baseCommit = primaryStatus.headOid;
-    let primaryWasDirty = primaryStatus.dirty;
-
-    if (input.permissionProfile !== 'plan-read-only') {
-      if (primaryStatus.headOid === null) {
-        throw new Error('A writable agent run requires the repository to have an initial commit.');
-      }
-      const provisioned = await this.#worktrees.provision({
-        repositoryPath,
-        managedRoot: path.resolve(settings.worktreeRoot),
-        agentId: input.adapterId,
-        taskId: input.nodeId,
-        branchPrefix: settings.branchPrefix,
-        cleanupPolicy: settings.worktreeCleanupPolicy === 'after-merge' ? 'after-merge' : 'manual',
-      });
-      worktree = provisioned.ownership;
-      cwd = worktree.worktreePath;
-      branch = worktree.branch;
-      baseCommit = worktree.baseCommit;
-      primaryWasDirty = provisioned.primaryWasDirty;
-    }
-
-    try {
-      const { adapter, plan, detectionWarnings, trustedExtensionAdapter } =
-        await this.#prepareAdapter(input, cwd, settings, runId);
-      const warnings = [...plan.disclosure.warnings, ...detectionWarnings];
-      if (primaryWasDirty && worktree !== null) {
-        warnings.push(
-          'The primary checkout has uncommitted changes. This run starts from its committed HEAD, so those changes are not present in the dedicated worktree.',
-        );
-      }
-      const disclosure: RunDisclosure = {
-        runId,
-        nodeId: input.nodeId,
-        adapterId: input.adapterId,
-        provider: plan.disclosure.provider,
-        executable: plan.disclosure.executable,
-        arguments: [...plan.disclosure.arguments],
-        cwd: plan.disclosure.cwd,
-        runtime: plan.disclosure.runtime,
-        environmentVariableNames: [...plan.disclosure.environmentVariableNames],
-        contextAttachments: plan.disclosure.contextAttachments.map(
-          ({ path: selectedPath, kind }) => ({
-            path: selectedPath,
-            kind,
-          }),
-        ),
-        permissionProfile: {
-          name: plan.disclosure.permissionProfile.name,
-          mode: plan.disclosure.permissionProfile.mode,
-          enforcement: plan.disclosure.permissionProfile.enforcement,
-          readRoots: [...plan.disclosure.permissionProfile.readRoots],
-          writeRoots: [...plan.disclosure.permissionProfile.writeRoots],
-          network: plan.disclosure.permissionProfile.network,
-        },
-        warnings,
-        branch,
-        baseCommit,
-        primaryWasDirty,
-      };
-      const now = new Date().toISOString();
-      const record: StoredRunRecord = {
-        id: runId,
-        projectId: input.projectId,
-        nodeId: input.nodeId,
-        adapterId: input.adapterId,
-        status: 'prepared',
-        cwd,
-        branch,
-        worktreeId: worktree?.id ?? null,
-        repositoryRoot: repositoryPath,
-        managedRoot: worktree?.managedRoot ?? null,
-        baseRef: worktree?.baseRef ?? null,
-        baseCommit: worktree?.baseCommit ?? null,
-        startedAt: null,
-        endedAt: null,
-        exitCode: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      const prepared: PreparedRun = {
-        adapter,
-        adapterId: input.adapterId,
-        before: await this.#captureWorkspace(cwd),
-        disclosure,
-        generation,
-        nodeId: input.nodeId,
-        ownerId: owner.id,
-        plan,
-        repositoryPath,
-        trustedExtensionAdapter,
-        worktree,
-        record,
-      };
-      this.#assertGeneration(generation);
-      this.store.saveRun(record);
-      this.store.appendAudit('agent-run', 'prepare', 'allowed', {
-        runId,
-        projectId: input.projectId,
-        nodeId: input.nodeId,
-        adapterId: input.adapterId,
-        permissionProfile: input.permissionProfile,
-        branch,
-        primaryWasDirty,
-        environmentVariableNames: disclosure.environmentVariableNames,
-        contextAttachmentCount: disclosure.contextAttachments.length,
-      });
-      this.#pending.set(runId, prepared);
-      return disclosure;
-    } catch (error) {
-      if (worktree !== null) await this.#cleanupUnusedWorktree(worktree).catch(() => undefined);
-      if (generation === this.#generation) {
-        this.store.appendAudit('agent-run', 'prepare', 'failed', {
-          runId,
-          projectId: input.projectId,
-          nodeId: input.nodeId,
-          adapterId: input.adapterId,
-          permissionProfile: input.permissionProfile,
-          reason: error instanceof Error ? error.message : 'Unknown preparation failure',
-        });
-      }
-      throw error;
-    }
+    this.#approvals.set(prepared.runId, {
+      disclosureFingerprint: prepared.disclosureFingerprint,
+      ownerId,
+      planId: prepared.planId,
+    });
+    return prepared.disclosure;
   }
 
   public async approve(owner: WebContents, runId: string): Promise<boolean> {
     this.#assertAvailable();
-    const prepared = this.#ownedPending(owner, runId);
-    this.#pending.delete(runId);
-    try {
-      this.#assertGeneration(prepared.generation);
-      const session = await this.#launchPrepared(prepared);
-      if (prepared.generation !== this.#generation) {
-        session.terminate();
-        throw new Error('The prepared run was invalidated while local data was being deleted.');
-      }
-      const now = new Date().toISOString();
-      prepared.record = {
-        ...prepared.record,
-        status: 'running',
-        startedAt: now,
-        updatedAt: now,
-      };
-      const active: ActiveRun = {
-        ...prepared,
-        owner,
-        session,
-        pendingTestInputId: null,
-      };
-      this.#active.set(runId, active);
-      this.store.saveRun(active.record);
-      this.store.appendAudit('agent-run', 'launch', 'allowed', {
-        runId,
-        nodeId: active.nodeId,
-        adapterId: active.adapterId,
-        processId: session.pid ?? null,
-        branch: active.record.branch,
-      });
-      void this.#track(active);
+    const ownerId = this.#ownerId(owner);
+    const approval = this.#approvals.get(runId);
+    if (approval === undefined) throw new Error('The prepared run no longer exists.');
+    if (approval.ownerId !== ownerId) {
+      await this.#runtime.launch(ownerId, approval.planId, approval.disclosureFingerprint);
       return true;
-    } catch (error) {
-      if (prepared.generation !== this.#generation) {
-        this.#persistInvalidatedRun(prepared);
-        throw error;
-      }
-      let worktreePreserved = prepared.worktree !== null;
-      if (prepared.worktree !== null) {
-        try {
-          await this.#cleanupUnusedWorktree(prepared.worktree);
-          worktreePreserved = false;
-        } catch {
-          // Preserve any worktree that no longer matches the safe, clean cleanup snapshot.
-        }
-      }
-      const now = new Date().toISOString();
-      prepared.record = {
-        ...prepared.record,
-        status: 'failed',
-        endedAt: now,
-        updatedAt: now,
-      };
-      this.store.saveRun(prepared.record);
-      this.store.appendAudit('agent-run', 'launch', 'failed', {
-        runId,
-        nodeId: prepared.nodeId,
-        adapterId: prepared.adapterId,
-        worktreePreserved,
-        reason: error instanceof Error ? error.message : 'Unknown launch failure',
-      });
-      this.#send(owner, {
-        runId,
-        nodeId: prepared.nodeId,
-        kind: 'run-error',
-        payload: { message: error instanceof Error ? error.message : 'Agent launch failed.' },
-      });
-      throw error;
     }
+    this.#approvals.delete(runId);
+    await this.#runtime.launch(ownerId, approval.planId, approval.disclosureFingerprint);
+    return true;
   }
 
   public sendInput(owner: WebContents, runId: string, data: string): boolean {
     this.#assertAvailable();
-    const active = this.#ownedActive(owner, runId);
-    if (active.adapterId === 'test-agent') {
-      const requestId = active.pendingTestInputId;
-      if (requestId === null) throw new Error('The test agent is not waiting for input.');
-      active.session.writeInput(`${JSON.stringify({ type: 'input', requestId, data })}\n`);
-      active.pendingTestInputId = null;
-    } else {
-      active.session.writeInput(data.endsWith('\n') ? data : `${data}\n`);
-    }
-    return true;
+    return this.#runtime.sendInput(this.#ownerId(owner), runId, data);
   }
 
   public interrupt(owner: WebContents, runId: string): boolean {
     this.#assertAvailable();
-    this.#ownedActive(owner, runId).session.interrupt();
-    return true;
+    return this.#runtime.interrupt(this.#ownerId(owner), runId);
   }
 
   public async terminate(owner: WebContents, runId: string): Promise<boolean> {
     this.#assertAvailable();
-    const generation = this.#generation;
-    const active = this.#active.get(runId);
-    if (active !== undefined) {
-      this.#assertOwner(owner, active.ownerId, runId);
-      active.session.terminate();
-      return true;
+    const ownerId = this.#ownerId(owner);
+    const approval = this.#approvals.get(runId);
+    if (approval !== undefined && approval.ownerId !== ownerId) {
+      return await this.#runtime.terminate(ownerId, approval.planId);
     }
-
-    const prepared = this.#ownedPending(owner, runId);
-    if (prepared.worktree !== null) await this.#cleanupUnusedWorktree(prepared.worktree);
-    this.#assertGeneration(generation);
-    this.#pending.delete(runId);
-    const now = new Date().toISOString();
-    prepared.record = {
-      ...prepared.record,
-      status: 'terminated',
-      endedAt: now,
-      updatedAt: now,
-    };
-    this.store.saveRun(prepared.record);
-    this.store.appendAudit('agent-run', 'cancel-preflight', 'allowed', {
-      runId,
-      nodeId: prepared.nodeId,
-      adapterId: prepared.adapterId,
-      worktreeRemoved: prepared.worktree !== null,
-    });
-    this.#send(owner, {
-      runId,
-      nodeId: prepared.nodeId,
-      kind: 'run-summary',
-      payload: {
-        status: 'terminated',
-        exitCode: null,
-        changedFiles: [],
-        branch: prepared.record.branch,
-        worktreePath: prepared.worktree?.worktreePath ?? null,
-      },
-    });
-    return true;
+    const terminated = await this.#runtime.terminate(ownerId, approval?.planId ?? runId);
+    if (terminated) this.#approvals.delete(runId);
+    return terminated;
   }
 
   public async dispose(): Promise<void> {
     if (this.#disposed) return;
     this.#disposed = true;
-    this.#privacyResetting = true;
-    this.#generation += 1;
     for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
     this.#registeredChannels.length = 0;
-    await Promise.allSettled([...this.#operations]);
-    const now = new Date().toISOString();
-    const persistenceFailures: unknown[] = [];
-    for (const prepared of this.#pending.values()) {
-      try {
-        this.store.saveRun({
-          ...prepared.record,
-          status: 'lost',
-          endedAt: now,
-          updatedAt: now,
-        });
-      } catch (error) {
-        persistenceFailures.push(error);
-      }
+    const resetOperation = this.#resetOperation;
+    if (resetOperation !== null) await Promise.allSettled([resetOperation]);
+    while (this.#operations.size > 0) {
+      await Promise.allSettled([...this.#operations]);
     }
-    const activeRuns = [...this.#active.values()];
-    this.#pending.clear();
-    this.#active.clear();
-    for (const active of activeRuns) {
-      try {
-        active.session.terminate();
-      } catch (error) {
-        try {
-          this.store.appendAudit('agent-run', 'shutdown-terminate', 'failed', {
-            runId: active.record.id,
-            reason: error instanceof Error ? error.message : 'Unknown termination failure',
-          });
-        } catch {
-          // Continue terminating and persisting every other run during shutdown.
-        }
-      }
-      try {
-        this.store.saveRun({
-          ...active.record,
-          status: 'terminated',
-          endedAt: now,
-          updatedAt: now,
-        });
-      } catch (error) {
-        persistenceFailures.push(error);
-      }
+    try {
+      await this.#runtime.dispose();
+    } finally {
+      this.#approvals.clear();
+      this.#executionSubscribers.clear();
+      this.#owners.clear();
+      this.#operations.clear();
     }
-    await Promise.allSettled(activeRuns.map(async (active) => await active.session.result));
-    this.#operations.clear();
-    if (persistenceFailures.length > 0) throw persistenceFailures[0];
   }
 
-  public async resetForPrivacy(): Promise<void> {
+  public resetForPrivacy(): Promise<void> {
     this.#assertAvailable();
     this.#privacyResetting = true;
-    this.#generation += 1;
-    await Promise.allSettled([...this.#operations]);
-    const now = new Date().toISOString();
-    const pendingRuns = [...this.#pending.values()];
-    const activeRuns = [...this.#active.values()];
-    this.#pending.clear();
-    this.#active.clear();
-    for (const prepared of pendingRuns) this.#persistStoppedRun(prepared, now);
-    for (const active of activeRuns) {
-      try {
-        active.session.terminate();
-      } catch {
-        // Continue invalidating every run. The process supervisor owns force termination.
+    const resetting = this.#performPrivacyReset();
+    this.#resetOperation = resetting;
+    void resetting.then(
+      () => {
+        if (this.#resetOperation === resetting) this.#resetOperation = null;
+      },
+      () => {
+        if (this.#resetOperation === resetting) this.#resetOperation = null;
+      },
+    );
+    return resetting;
+  }
+
+  async #performPrivacyReset(): Promise<void> {
+    try {
+      while (this.#operations.size > 0) {
+        await Promise.allSettled([...this.#operations]);
       }
+      await this.#runtime.resetForPrivacy();
+    } finally {
+      this.#approvals.clear();
+      this.#executionSubscribers.clear();
+      this.#privacyResetting = false;
     }
-    await Promise.allSettled(activeRuns.map(async (active) => await active.session.result));
-    for (const active of activeRuns) this.#persistStoppedRun(active, now);
   }
 
   public pauseForDataMutation(): void {
     this.#assertAvailable();
-    this.#privacyResetting = true;
-    if (this.#operations.size > 0 || this.#pending.size > 0 || this.#active.size > 0) {
-      this.#privacyResetting = false;
-      throw new Error('Stop or cancel every agent run before merging local data.');
-    }
+    this.#runtime.pauseForDataMutation();
   }
 
   public async pauseForShutdown(): Promise<void> {
     this.#assertAvailable();
-    this.#privacyResetting = true;
     while (this.#operations.size > 0) {
       await Promise.allSettled([...this.#operations]);
     }
+    await this.#runtime.pauseForShutdown();
   }
 
   public resumeAfterPrivacyReset(): void {
-    if (!this.#disposed) this.#privacyResetting = false;
+    if (!this.#disposed) this.#runtime.resumeAfterPrivacyReset();
   }
 
-  async #prepareAdapter(
-    input: PrepareRunInput,
-    cwd: string,
-    settings: AppSettings,
-    runId: string,
-  ): Promise<{
-    adapter: CliAgentAdapter;
-    plan: PreparedAgentLaunch;
-    detectionWarnings: string[];
-    trustedExtensionAdapter: boolean;
-  }> {
-    const environment = allowedEnvironment(settings.envAllowlist);
-    if (input.adapterId === 'test-agent') {
-      if (input.permissionProfile === 'docker-isolated') {
-        throw new Error(
-          'The bundled deterministic agent runs directly. Choose a container-ready coding-agent adapter for Docker isolation.',
-        );
+  #ownerId(owner: WebContents): string {
+    if (owner.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    const existing = this.#ownerIds.get(owner);
+    if (existing !== undefined) return existing;
+    const ownerId = `web-contents:${String(owner.id)}:${randomUUID()}`;
+    this.#ownerIds.set(owner, ownerId);
+    this.#owners.set(ownerId, owner);
+    owner.once('destroyed', () => {
+      this.#ownerIds.delete(owner);
+      if (this.#owners.get(ownerId) === owner) this.#owners.delete(ownerId);
+      for (const [runId, approval] of this.#approvals) {
+        if (approval.ownerId === ownerId) this.#approvals.delete(runId);
       }
-      const cliPath = await testAgentCliPath();
-      const adapter = createCustomCliAdapter({ ...TEST_AGENT_MANIFEST, id: 'test-agent' });
-      const profile = permissionProfile(input.permissionProfile, cwd, true);
-      const actions = testAgentActions(input, runId);
-      const plan = adapter.prepareLaunch({
-        prompt: createTestAgentRunCommand(actions),
-        cwd,
-        permissionProfile: profile,
-        contextAttachments: [],
-        executable: process.execPath,
-        extraArguments: [cliPath],
-        environment: {
-          inherit: 'none',
-          variables: { ...environment, ELECTRON_RUN_AS_NODE: '1' },
-          unset: [],
-        },
-      });
-      return { adapter, plan, detectionWarnings: [], trustedExtensionAdapter: false };
-    }
-
-    const settingsManifest =
-      input.adapterId === 'custom' ? customAgentManifest(settings.customAgent) : undefined;
-    const builtInManifest = getBuiltInAgentManifest(input.adapterId) ?? settingsManifest;
-    const trustedManifest =
-      builtInManifest === undefined ? await this.getTrustedAdapter(input.adapterId) : undefined;
-    const manifest = builtInManifest ?? trustedManifest;
-    if (manifest === undefined) throw new Error(`No adapter is registered for ${input.adapterId}.`);
-    const adapter = new CliAgentAdapter(manifest);
-    if (input.permissionProfile === 'docker-isolated') {
-      if (!settings.dockerEnabled) {
-        throw new Error('Enable and configure Docker isolation in Settings before using it.');
-      }
-      if (settings.dockerMountHostCredentials) {
-        throw new Error(
-          'The safe Docker profile does not mount host credentials. Disable that legacy setting and authenticate inside the selected image.',
-        );
-      }
-      const runtime = await checkDockerReadiness({
-        dockerExecutable: settings.dockerExecutable,
-        image: settings.dockerImage,
-        containerExecutable: settings.dockerContainerExecutable,
-      });
-      if (!runtime.available) {
-        throw new Error(`Docker isolation is unavailable: ${runtime.reason ?? 'probe failed'}`);
-      }
-      const configuredModel = manifest.capabilities.modelSelection
-        ? settings.agentDefaultModels[input.adapterId]?.trim()
-        : undefined;
-      const providerPlan = adapter.prepareLaunch({
-        prompt: input.prompt,
-        cwd,
-        permissionProfile: permissionProfile(
-          'worktree-write',
-          cwd,
-          false,
-          input.adapterId !== 'custom',
-        ),
-        contextAttachments: [],
-        ...(configuredModel === undefined || configuredModel === ''
-          ? {}
-          : { model: configuredModel }),
-        executable: manifest.executable.command,
-        extraArguments: [],
-        environment: { inherit: 'none', variables: environment, unset: [] },
-      });
-      const userId = positiveContainerIdentity(process.getuid?.());
-      const groupId = positiveContainerIdentity(process.getgid?.());
-      const plan = await planDockerAgentLaunch(providerPlan, {
-        assignedWorktreePath: cwd,
-        worktreeAccess: 'read-write',
-        dockerExecutable: runtime.executable,
-        image: settings.dockerImage,
-        containerExecutable: settings.dockerContainerExecutable,
-        userId,
-        groupId,
-        cpuLimit: settings.dockerCpuLimit,
-        memoryLimitMb: settings.dockerMemoryMb,
-        pidsLimit: 256,
-        tmpfsSizeMb: 128,
-        network:
-          settings.dockerNetwork === 'enabled'
-            ? { mode: 'bridge', explicitlyApproved: true }
-            : { mode: 'none' },
-        environmentAllowlist: settings.envAllowlist.filter((name) =>
-          DOCKER_SAFE_ENVIRONMENT_NAMES.has(name),
-        ),
-      });
-      return {
-        adapter,
-        plan,
-        detectionWarnings: [],
-        trustedExtensionAdapter: trustedManifest !== undefined,
-      };
-    }
-    const executableOverride =
-      input.adapterId === 'custom'
-        ? manifest.executable.command
-        : settings.agentExecutableOverrides[input.adapterId]?.trim();
-    const detection = await adapter.detect({
-      ...(executableOverride === undefined || executableOverride === ''
-        ? {}
-        : { executable: executableOverride }),
+      this.#stopDisconnectedOwner(ownerId);
     });
-    if (!detection.available) {
-      throw new Error(
-        `${manifest.name} is not available: ${detection.reason ?? 'executable not found'}`,
-      );
-    }
-    const configuredModel = manifest.capabilities.modelSelection
-      ? settings.agentDefaultModels[input.adapterId]?.trim()
-      : undefined;
-    const plan = adapter.prepareLaunch({
-      prompt: input.prompt,
-      cwd,
-      permissionProfile: permissionProfile(
-        input.permissionProfile,
-        cwd,
-        false,
-        input.adapterId !== 'custom',
-      ),
-      contextAttachments: [],
-      ...(configuredModel === undefined || configuredModel === ''
-        ? {}
-        : { model: configuredModel }),
-      executable: detection.executable,
-      extraArguments: [],
-      environment: { inherit: 'none', variables: environment, unset: [] },
-    });
-    return {
-      adapter,
-      plan,
-      detectionWarnings: [...detection.capabilityWarnings],
-      trustedExtensionAdapter: trustedManifest !== undefined,
-    };
-  }
-
-  async #launchPrepared(prepared: PreparedRun): Promise<AgentSession> {
-    if (!prepared.trustedExtensionAdapter) return prepared.adapter.launch(prepared.plan);
-    if (this.launchTrustedAdapter !== undefined) {
-      return this.launchTrustedAdapter(
-        prepared.adapterId,
-        prepared.plan.manifest,
-        async () => await prepared.adapter.launch(prepared.plan),
-      );
-    }
-    const currentManifest = await this.getTrustedAdapter(prepared.adapterId);
-    if (
-      currentManifest === undefined ||
-      JSON.stringify(currentManifest) !== JSON.stringify(prepared.plan.manifest)
-    ) {
-      throw new Error(
-        `Extension adapter ${prepared.adapterId} is no longer active with the reviewed manifest.`,
-      );
-    }
-    return prepared.adapter.launch(prepared.plan);
-  }
-
-  async #track(active: ActiveRun): Promise<void> {
-    const events = (async (): Promise<void> => {
-      for await (const event of active.session.events) {
-        if (this.#disposed || this.#active.get(active.record.id) !== active) return;
-        this.#observeTestInput(active, event);
-        this.#send(active.owner, {
-          runId: active.record.id,
-          nodeId: active.nodeId,
-          kind: 'agent-event',
-          payload: event,
-        });
-      }
-    })();
-
-    try {
-      const result = await active.session.result;
-      await events;
-      if (this.#disposed || this.#active.get(active.record.id) !== active) return;
-      const changedFiles = await this.#changedFiles(
-        active.repositoryPath,
-        active.record.cwd,
-        active.before,
-      );
-      if (this.#disposed || this.#active.get(active.record.id) !== active) return;
-      const now = new Date().toISOString();
-      active.record = {
-        ...active.record,
-        status: result.status,
-        startedAt: result.startedAt,
-        endedAt: result.endedAt,
-        exitCode: result.exitCode,
-        updatedAt: now,
-      };
-      this.store.saveRun(active.record);
-      this.store.appendAudit(
-        'agent-run',
-        'complete',
-        result.status === 'failed' ? 'failed' : 'allowed',
-        {
-          runId: active.record.id,
-          nodeId: active.nodeId,
-          adapterId: active.adapterId,
-          status: result.status,
-          exitCode: result.exitCode,
-          changedFiles,
-          branch: active.record.branch,
-        },
-      );
-      this.#send(active.owner, {
-        runId: active.record.id,
-        nodeId: active.nodeId,
-        kind: 'run-summary',
-        payload: {
-          status: result.status,
-          exitCode: result.exitCode,
-          changedFiles,
-          branch: active.record.branch,
-          worktreePath: active.worktree?.worktreePath ?? null,
-        },
-      });
-    } catch (error) {
-      if (this.#disposed || this.#active.get(active.record.id) !== active) return;
-      const now = new Date().toISOString();
-      active.record = {
-        ...active.record,
-        status: 'failed',
-        endedAt: now,
-        updatedAt: now,
-      };
-      this.store.saveRun(active.record);
-      this.store.appendAudit('agent-run', 'complete', 'failed', {
-        runId: active.record.id,
-        nodeId: active.nodeId,
-        adapterId: active.adapterId,
-        reason: error instanceof Error ? error.message : 'Unknown run tracking failure',
-      });
-      this.#send(active.owner, {
-        runId: active.record.id,
-        nodeId: active.nodeId,
-        kind: 'run-error',
-        payload: { message: error instanceof Error ? error.message : 'Agent run failed.' },
-      });
-    } finally {
-      if (this.#active.get(active.record.id) === active) this.#active.delete(active.record.id);
-    }
-  }
-
-  async #captureWorkspace(repositoryPath: string): Promise<WorkspaceSnapshot> {
-    const status = await this.#repositories.status(repositoryPath);
-    const paths = new Map<string, string>();
-    for (const entry of status.entries) {
-      if (entry.kind === 'ignored') continue;
-      const [content, index] = await Promise.all([
-        this.#repositories.git.run(
-          ['-C', repositoryPath, 'hash-object', '--no-filters', '--', entry.path],
-          { allowNonZeroExit: true },
-        ),
-        this.#repositories.git.run(['-C', repositoryPath, 'ls-files', '-s', '--', entry.path], {
-          allowNonZeroExit: true,
-        }),
-      ]);
-      paths.set(
-        entry.path,
-        createHash('sha256')
-          .update(
-            [
-              entry.kind,
-              entry.index,
-              entry.worktree,
-              entry.originalPath ?? '',
-              content.stdout.trim(),
-              index.stdout.trim(),
-            ].join('\0'),
-          )
-          .digest('hex'),
-      );
-    }
-    return { headOid: status.headOid, paths };
-  }
-
-  async #changedFiles(
-    repositoryRoot: string,
-    cwd: string,
-    before: WorkspaceSnapshot,
-  ): Promise<string[]> {
-    const after = await this.#captureWorkspace(cwd);
-    const changed = new Set<string>();
-    for (const candidate of new Set([...before.paths.keys(), ...after.paths.keys()])) {
-      if (before.paths.get(candidate) !== after.paths.get(candidate)) changed.add(candidate);
-    }
-    if (before.headOid !== null && after.headOid !== null && before.headOid !== after.headOid) {
-      const committed = await this.#repositories.git.run([
-        '-C',
-        cwd,
-        'diff',
-        '--name-only',
-        '-z',
-        before.headOid,
-        after.headOid,
-        '--',
-      ]);
-      for (const candidate of committed.stdout.split('\0')) {
-        if (candidate !== '') changed.add(candidate);
-      }
-    }
-    // Resolve once more through the primary repository to ensure the run remained in its Git repo.
-    await this.#repositories.resolveRepositoryRoot(repositoryRoot);
-    return [...changed].sort();
-  }
-
-  async #cleanupUnusedWorktree(ownership: WorktreeOwnership): Promise<void> {
-    const impact = await this.#worktrees.cleanupImpact(ownership);
-    if (impact.dirtyPaths.length > 0) {
-      throw new Error(
-        'Forgeboard preserved the prepared worktree because it unexpectedly contains changes.',
-      );
-    }
-    await this.#worktrees.cleanup(ownership, {
-      action: 'cleanup-worktree',
-      approved: true,
-      approvalId: randomUUID(),
-      approvedAt: new Date().toISOString(),
-      repositoryRoot: impact.ownership.repositoryRoot,
-      expectedHead: impact.expectedHead,
-      worktreeId: impact.ownership.id,
-      worktreePath: impact.ownership.worktreePath,
-      branch: impact.ownership.branch,
-      expectedBranchOid: impact.branchOid,
-      dirtyPaths: impact.dirtyPaths,
-      deleteBranch: true,
-      allowDirty: false,
-      allowUnmergedBranch: false,
-    });
-  }
-
-  #observeTestInput(active: ActiveRun, event: AgentEvent): void {
-    if (active.adapterId !== 'test-agent' || event.type !== 'message') return;
-    if (typeof event.payload !== 'object' || event.payload === null) return;
-    const payload = event.payload as Record<string, unknown>;
-    if (payload['type'] === 'input-requested' && typeof payload['requestId'] === 'string') {
-      active.pendingTestInputId = payload['requestId'];
-    }
-  }
-
-  #ownedPending(owner: WebContents, runId: string): PreparedRun {
-    const prepared = this.#pending.get(runId);
-    if (prepared === undefined) throw new Error('The prepared run no longer exists.');
-    this.#assertOwner(owner, prepared.ownerId, runId);
-    return prepared;
-  }
-
-  #ownedActive(owner: WebContents, runId: string): ActiveRun {
-    const active = this.#active.get(runId);
-    if (active === undefined) throw new Error('The agent run is not active.');
-    this.#assertOwner(owner, active.ownerId, runId);
-    return active;
-  }
-
-  #assertOwner(owner: WebContents, expectedOwnerId: number, runId: string): void {
-    if (owner.id !== expectedOwnerId) {
-      this.store.appendAudit('agent-run', 'access', 'denied', { runId, ownerId: owner.id });
-      throw new Error('This window does not own the requested agent run.');
-    }
+    return ownerId;
   }
 
   #assertAvailable(): void {
-    if (this.#disposed) throw new Error('The agent runtime is shutting down.');
+    if (this.#disposed) throw new Error('The agent service is shutting down.');
     if (this.#privacyResetting) {
-      throw new Error('Agent runs are paused while Forgeboard changes local data.');
+      throw new Error('Agent runs are paused while Forgeboard resets local data.');
+    }
+  }
+
+  #stopDisconnectedOwner(ownerId: string): void {
+    if (this.#runtime.stopOwner === undefined || this.#disposed || this.#privacyResetting) {
+      return;
+    }
+    let stopping: Promise<void>;
+    try {
+      stopping = this.#runtime.stopOwner(ownerId);
+    } catch (error) {
+      this.#auditOwnerStopFailure(ownerId, error);
+      return;
+    }
+    const supervised = stopping.catch((error: unknown) => {
+      this.#auditOwnerStopFailure(ownerId, error);
+    });
+    void this.#trackOperation(supervised);
+  }
+
+  #auditOwnerStopFailure(ownerId: string, error: unknown): void {
+    try {
+      this.#store.appendAudit('agent-run', 'owner-close', 'failed', {
+        ownerId,
+        reason: error instanceof Error ? error.message : 'Unknown owner cleanup failure',
+      });
+    } catch {
+      // The local store may already be closing; process supervision must remain rejection-safe.
+    }
+  }
+
+  #send(ownerId: string, envelope: RunEventEnvelope): void {
+    const owner = this.#owners.get(ownerId);
+    if (owner === undefined || owner.isDestroyed() || this.#disposed) return;
+    owner.send(IPC_CHANNELS.runsEvent, RunEventEnvelopeSchema.parse(envelope));
+  }
+
+  #emitExecutionEvent(ownerId: string, untrustedEnvelope: RunEventEnvelope): void {
+    const envelope = RunEventEnvelopeSchema.parse(untrustedEnvelope);
+    this.#send(ownerId, envelope);
+    const listeners = this.#executionSubscribers.get(ownerId);
+    if (listeners === undefined || this.#disposed) return;
+    for (const listener of [...listeners]) {
+      try {
+        listener(envelope);
+      } catch {
+        // One internal observer cannot disrupt process supervision or other exact-owner observers.
+      }
     }
   }
 
@@ -899,31 +341,6 @@ export class RunService {
       () => this.#operations.delete(operation),
     );
     return operation;
-  }
-
-  #persistInvalidatedRun(prepared: PreparedRun): void {
-    this.#persistStoppedRun(prepared, new Date().toISOString());
-  }
-
-  #persistStoppedRun(prepared: PreparedRun, stoppedAt: string): void {
-    prepared.record = {
-      ...prepared.record,
-      status: 'terminated',
-      endedAt: stoppedAt,
-      updatedAt: stoppedAt,
-    };
-    this.store.saveRun(prepared.record);
-  }
-
-  #assertGeneration(generation: number): void {
-    if (generation !== this.#generation) {
-      throw new Error('The prepared run was invalidated while local data was being deleted.');
-    }
-  }
-
-  #send(owner: WebContents, envelope: RunEventEnvelope): void {
-    if (owner.isDestroyed() || this.#disposed) return;
-    owner.send(IPC_CHANNELS.runsEvent, RunEventEnvelopeSchema.parse(envelope));
   }
 
   #handle<Args extends unknown[], Output>(
@@ -954,102 +371,6 @@ export class RunService {
   }
 }
 
-function allowedEnvironment(names: readonly string[]): Record<string, string> {
-  return Object.fromEntries(
-    names.flatMap((name) => {
-      const value = process.env[name];
-      return value === undefined || value.includes('\0') ? [] : [[name, value]];
-    }),
-  );
-}
-
-function positiveContainerIdentity(value: number | undefined): number {
-  return value !== undefined && Number.isSafeInteger(value) && value > 0 ? value : 1000;
-}
-
-function permissionProfile(
-  requested: Exclude<PrepareRunInput['permissionProfile'], 'docker-isolated'>,
-  cwd: string,
-  deterministicTestAgent: boolean,
-  providerPermissionEnforced = true,
-): PermissionProfile {
-  const writable = requested === 'worktree-write';
-  if (deterministicTestAgent) {
-    return {
-      id: `test-agent-${requested}`,
-      name: writable ? 'Test agent in a dedicated worktree' : 'Test agent read-only plan',
-      mode: 'custom',
-      enforcement: 'disclosure-only',
-      readRoots: [cwd],
-      writeRoots: writable ? [cwd] : [],
-      network: 'blocked',
-      approvalPolicy: 'The exact deterministic action list requires approval before launch.',
-      disclosure: writable
-        ? 'The local deterministic agent is instructed to write only inside this dedicated worktree.'
-        : 'The local deterministic agent receives an action list with no filesystem writes.',
-    };
-  }
-  return {
-    id: requested,
-    name: writable
-      ? 'Dedicated worktree write'
-      : providerPermissionEnforced
-        ? 'Plan and read only'
-        : 'Plan requested (disclosure only)',
-    mode: requested,
-    enforcement: providerPermissionEnforced ? 'provider' : 'disclosure-only',
-    readRoots: [cwd],
-    writeRoots: writable ? [cwd] : [],
-    network: 'provider-controlled',
-    approvalPolicy: 'The exact process launch requires approval in Forgeboard.',
-    disclosure: providerPermissionEnforced
-      ? writable
-        ? 'The provider is asked to confine writes to the dedicated worktree.'
-        : 'The provider is asked to run in its plan/read-only mode.'
-      : writable
-        ? 'The custom process starts in a dedicated worktree, but it has the operating-system permissions of the current user.'
-        : 'The custom process is asked to plan only, but no provider-specific flag enforces read-only access.',
-  };
-}
-
-function testAgentActions(input: PrepareRunInput, runId: string): TestAgentAction[] {
-  const actions: TestAgentAction[] = [
-    {
-      type: 'emit',
-      stream: 'stdout',
-      data: 'Forgeboard deterministic agent started.\n',
-    },
-  ];
-  if (input.permissionProfile === 'worktree-write') {
-    actions.push({
-      type: 'write-file',
-      path: `forgeboard-agent-output-${runId.slice(0, 8)}.md`,
-      content: [
-        '# Forgeboard deterministic agent output',
-        '',
-        'This file was created in a dedicated Git worktree after explicit launch approval.',
-        '',
-        '## Request',
-        '',
-        input.prompt,
-        '',
-      ].join('\n'),
-      encoding: 'utf8',
-    });
-  } else {
-    actions.push({
-      type: 'emit',
-      stream: 'stdout',
-      data: 'Read-only plan completed without filesystem writes.\n',
-    });
-  }
-  actions.push({
-    type: 'complete',
-    metadata: { permissionProfile: input.permissionProfile, runId },
-  });
-  return actions;
-}
-
 async function testAgentCliPath(): Promise<string> {
   if (app.isPackaged) {
     const packagedPath = path.join(process.resourcesPath, 'test-agent', 'cli.js');
@@ -1057,11 +378,8 @@ async function testAgentCliPath(): Promise<string> {
     return packagedPath;
   }
   const candidates = [
-    // A production-style local build starts from apps/desktop/dist/main.
     path.resolve(app.getAppPath(), '../../../../packages/test-agent/dist/cli.js'),
-    // electron-vite development and Playwright normally retain apps/desktop as cwd.
     path.resolve(process.cwd(), '../../packages/test-agent/dist/cli.js'),
-    // Keep root-launched development deterministic as well.
     path.resolve(process.cwd(), 'packages/test-agent/dist/cli.js'),
   ];
   for (const candidate of candidates) {
@@ -1069,7 +387,7 @@ async function testAgentCliPath(): Promise<string> {
       await access(candidate);
       return candidate;
     } catch {
-      // Continue through the fixed development locations without searching the filesystem.
+      // Continue through fixed development locations without searching the filesystem.
     }
   }
   throw new Error('The bundled deterministic test agent is missing. Rebuild Forgeboard and retry.');

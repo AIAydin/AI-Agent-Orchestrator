@@ -6,11 +6,17 @@ import type {
 
 export type GitReviewArea = 'staged' | 'unstaged' | 'untracked';
 
-export interface GitReviewFile {
-  readonly area: GitReviewArea;
+export type GitDiffDisplayArea = GitReviewArea | 'base';
+
+export interface GitDiffDisplayFile {
+  readonly area: GitDiffDisplayArea;
   readonly path: string;
   readonly entry?: GitStatusEntryView;
   readonly diff?: GitDiffFileView;
+}
+
+export interface GitReviewFile extends GitDiffDisplayFile {
+  readonly area: GitReviewArea;
 }
 
 export interface GitReviewGroups {

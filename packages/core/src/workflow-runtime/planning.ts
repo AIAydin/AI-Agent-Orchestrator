@@ -32,9 +32,32 @@ function groupNodeIds(canvas: Canvas, groupId: string): readonly string[] {
 function scopeTargets(
   canvas: Canvas,
   scope: WorkflowRunScope,
+  eligibleNodeIds?: readonly string[],
 ): { readonly targetNodeIds?: readonly string[]; readonly includeUpstream?: boolean } {
-  if (scope.kind === 'workflow') return {};
+  const eligible = eligibleNodeIds === undefined ? undefined : new Set(eligibleNodeIds);
+  if (eligible !== undefined) {
+    const missing = [...eligible].filter(
+      (nodeId) => !canvas.nodes.some((candidate) => candidate.id === nodeId),
+    );
+    if (missing.length > 0) {
+      throw new WorkflowValidationError([
+        {
+          code: 'MISSING_NODE',
+          message: 'Host capability target does not exist',
+          entityIds: uniqueSorted(missing),
+        },
+      ]);
+    }
+  }
+  if (scope.kind === 'workflow') {
+    if (eligible === undefined) return {};
+    if (eligible.size === 0) throw unavailableScope('Workflow does not contain runnable nodes', []);
+    return { targetNodeIds: uniqueSorted([...eligible]), includeUpstream: true };
+  }
   if (scope.kind === 'node') {
+    if (eligible !== undefined && !eligible.has(scope.nodeId)) {
+      throw unavailableScope('Selected node is not runnable in this application', [scope.nodeId]);
+    }
     return { targetNodeIds: [scope.nodeId], includeUpstream: scope.includeUpstream ?? true };
   }
   if (scope.kind === 'selection') {
@@ -43,12 +66,22 @@ function scopeTargets(
         { code: 'MISSING_NODE', message: 'Run selection cannot be empty', entityIds: [] },
       ]);
     }
+    const unavailable =
+      eligible === undefined ? [] : scope.nodeIds.filter((nodeId) => !eligible.has(nodeId));
+    if (unavailable.length > 0) {
+      throw unavailableScope(
+        'Run selection contains nodes that are not runnable in this application',
+        unavailable,
+      );
+    }
     return {
       targetNodeIds: uniqueSorted(scope.nodeIds),
       includeUpstream: scope.includeUpstream ?? true,
     };
   }
-  const nodeIds = groupNodeIds(canvas, scope.groupId);
+  const nodeIds = groupNodeIds(canvas, scope.groupId).filter(
+    (nodeId) => eligible === undefined || eligible.has(nodeId),
+  );
   if (nodeIds.length === 0) {
     throw new WorkflowValidationError([
       {
@@ -59,6 +92,12 @@ function scopeTargets(
     ]);
   }
   return { targetNodeIds: nodeIds, includeUpstream: scope.includeUpstream ?? true };
+}
+
+function unavailableScope(message: string, entityIds: readonly string[]): WorkflowValidationError {
+  return new WorkflowValidationError([
+    { code: 'NODE_UNAVAILABLE', message, entityIds: uniqueSorted(entityIds) },
+  ]);
 }
 
 function isAuthoritativeIncomingEdge(edge: CanvasEdge): boolean {
@@ -123,12 +162,12 @@ function expandMandatoryPlanNodes(canvas: Canvas, initiallySelected: readonly st
  */
 export function planWorkflowScope(
   untrustedCanvas: unknown,
-  options: Pick<RuntimeCreationOptions, 'planId' | 'scope'>,
+  options: Pick<RuntimeCreationOptions, 'planId' | 'scope' | 'eligibleNodeIds'>,
 ): ScopedWorkflowPlan {
   const canvas = CanvasSchema.parse(untrustedCanvas);
   const validation = validateWorkflow(canvas);
   if (!validation.valid) throw new WorkflowValidationError(validation.issues);
-  const targets = scopeTargets(canvas, options.scope);
+  const targets = scopeTargets(canvas, options.scope, options.eligibleNodeIds);
   const planningCanvas: Canvas = {
     ...canvas,
     edges: canvas.edges.filter((edge) => edge.type !== 'context' && edge.type !== 'revision'),

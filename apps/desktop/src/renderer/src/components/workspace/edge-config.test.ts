@@ -38,9 +38,17 @@ describe('typed canvas edge configuration', () => {
     expect(createEdgeData('review', 'source')).toMatchObject({
       config: { reviewer: 'human', requireApproval: true, structuredFindings: true },
     });
-    expect(createEdgeData('revision', 'source')).toMatchObject({
+    const revision = createEdgeData('revision', 'source');
+    expect(revision).toMatchObject({
       config: { actionableFeedbackRequired: true },
+      loop: {
+        maximumAttempts: 3,
+        stopConditions: ['review-approved'],
+      },
     });
+    expect(revision.edgeType === 'revision' && revision.loop.humanEscapeInstructions).toMatch(
+      /human/u,
+    );
     expect(createEdgeData('dependency', 'source')).toMatchObject({
       config: { requiredStatus: 'succeeded' },
     });
@@ -53,6 +61,25 @@ describe('typed canvas edge configuration', () => {
     });
     expect(edgeDataForPersistence(data)).toEqual({
       config: { outputKind: 'diff', required: false },
+    });
+  });
+
+  it('persists bounded revision policy beside the canonical edge config', () => {
+    const data = createEdgeData('revision', 'gate', {
+      config: { loopId: 'loop-1' },
+      loop: {
+        maximumAttempts: 6,
+        stopConditions: ['tests-passed', 'human-accepted'],
+        humanEscapeInstructions: 'Ask a human to accept or cancel after the final attempt.',
+      },
+    });
+    expect(edgeDataForPersistence(data)).toEqual({
+      config: { loopId: 'loop-1', actionableFeedbackRequired: true },
+      loop: {
+        maximumAttempts: 6,
+        stopConditions: ['tests-passed', 'human-accepted'],
+        humanEscapeInstructions: 'Ask a human to accept or cancel after the final attempt.',
+      },
     });
   });
 });

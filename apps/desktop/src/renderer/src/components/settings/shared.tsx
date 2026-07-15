@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { AppSettings, CommandConfiguration } from '../../../../shared/contracts.js';
+import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../lib/literal-arguments.js';
 
 export interface SettingsDraftProps {
   draft: AppSettings;
@@ -64,19 +65,19 @@ export function CommandEditor({
         </span>
       </div>
       <label>
-        Arguments · one per line
+        Arguments
+        <small id={`${name}-arguments-help`}>{LITERAL_ARGUMENT_HELP}</small>
         <textarea
           name={`${name}-arguments`}
+          aria-label="Arguments"
+          aria-describedby={`${name}-arguments-help`}
           rows={3}
           value={value.arguments.join('\n')}
           placeholder={'run\ntest'}
           onChange={(event) =>
             onChange({
               ...value,
-              arguments: event.target.value
-                .split('\n')
-                .map((argument) => argument.trim())
-                .filter(Boolean),
+              arguments: parseLiteralArguments(event.target.value),
             })
           }
         />

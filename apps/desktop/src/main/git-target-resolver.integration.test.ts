@@ -240,6 +240,15 @@ describe('GitTargetResolver', () => {
     );
   });
 
+  it('rejects a renderer-opaque run whose persisted base commit no longer matches ownership', async () => {
+    const fixture = await createFixture({ baseCommit: 'f'.repeat(40) });
+
+    await expectResolutionCode(
+      resolver(fixture).resolve({ projectId: PROJECT_ID, runId: RUN_ID }),
+      'OWNERSHIP_MISMATCH',
+    );
+  });
+
   it('rejects a run that has not reached a persisted terminal state', async () => {
     const fixture = await createFixture({ status: 'running', endedAt: null, exitCode: null });
 

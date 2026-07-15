@@ -39,6 +39,44 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   permissionProfile?: 'plan-read-only' | 'worktree-write' | 'docker-isolated';
   lastRunPermissionProfile?: 'plan-read-only' | 'worktree-write' | 'docker-isolated';
   prompt?: string;
+  model?: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  assigneeId?: string;
+  acceptanceCriteria?: Array<{
+    id: string;
+    description: string;
+    satisfied: boolean;
+    evidence?: string;
+  }>;
+  relatedFiles?: Array<{
+    projectId: string;
+    relativePath: string;
+    kind: 'file' | 'directory' | 'image' | 'artifact';
+    missing: boolean;
+    lastKnownHash?: string;
+  }>;
+  file?: {
+    projectId: string;
+    relativePath: string;
+    kind: 'file' | 'directory' | 'image' | 'artifact';
+    missing: boolean;
+    lastKnownHash?: string;
+  };
+  taskStatus?: 'backlog' | 'ready' | 'in-progress' | 'review' | 'done' | 'cancelled';
+  command?: WorkshopCommandConfiguration;
+  checkKind?: 'lint' | 'typecheck' | 'test' | 'build' | 'custom';
+  runIds?: string[];
+  humanApprovalRequired?: boolean;
+  requiredCheckIds?: string[];
+  lintRequired?: boolean;
+  testsRequired?: boolean;
+  reviewerAgentId?: string;
+  retryPolicy?: {
+    maximumIterations: number;
+    backoffMs: number;
+  };
+  gateState?: 'pending' | 'passed' | 'failed' | 'waiting-for-human';
+  childNodeIds?: string[];
   runId?: string;
   transcript?: string;
   lastRunSummary?: string;
@@ -57,6 +95,13 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   extensionDefinition?: ExtensionCanvasNodeTypeView;
   extensionValues?: Record<string, unknown>;
   extensionAvailability?: ExtensionNodeAvailability;
+}
+
+export interface WorkshopCommandConfiguration {
+  executable: string;
+  arguments: string[];
+  cwdRelative?: string;
+  environmentNames?: string[];
 }
 
 export type WorkshopNode = Node<WorkshopNodeData, 'workshop'>;

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { validateWorkflow } from '@forgeboard/core';
+
 import {
   canonicalCanvasFromLegacy,
   legacySurfaceFromCanonical,
@@ -215,6 +217,207 @@ describe('canonical desktop canvas adapter', () => {
         extensionId: 'example.tools',
         nodeTypeId: 'example-node',
         values: { enabled: true },
+      },
+    });
+  });
+
+  it('persists UI-authored Task execution configuration without a source edit', () => {
+    const document = legacy({
+      nodes: [
+        node('agent-1', 'agent', {
+          adapterId: 'test-agent',
+          permissionProfile: 'worktree-write',
+        }),
+        node('task-1', 'task', {
+          description: 'Implement the UI-authored task.',
+          priority: 'high',
+          assigneeId: 'agent-1',
+          acceptanceCriteria: [
+            { id: 'criterion-1', description: 'Focused tests pass.', satisfied: false },
+          ],
+          relatedFiles: [
+            {
+              projectId: 'project-1',
+              relativePath: 'src/task.ts',
+              kind: 'file',
+              missing: false,
+            },
+          ],
+          taskStatus: 'ready',
+        }),
+      ],
+      edges: [],
+    });
+
+    const migrated = canonicalCanvasFromLegacy(document);
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.canvas.nodes.find((candidate) => candidate.id === 'task-1')).toMatchObject({
+      type: 'task',
+      data: {
+        description: 'Implement the UI-authored task.',
+        priority: 'high',
+        assigneeId: 'agent-1',
+        acceptanceCriteria: [{ description: 'Focused tests pass.', satisfied: false }],
+        relatedFiles: [{ relativePath: 'src/task.ts', kind: 'file' }],
+        taskStatus: 'ready',
+      },
+    });
+    const surface = legacySurfaceFromCanonical(migrated.canvas);
+    expect(surface.nodes.find((candidate) => candidate.id === 'task-1')?.data).toMatchObject({
+      description: 'Implement the UI-authored task.',
+      assigneeId: 'agent-1',
+      priority: 'high',
+    });
+  });
+
+  it('persists UI-authored test commands and bounded review-gate configuration canonically', () => {
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('test-1', 'test', {
+            checkKind: 'test',
+            command: {
+              executable: 'pnpm',
+              arguments: ['run', 'test'],
+              cwdRelative: 'packages/app',
+              environmentNames: ['CI'],
+            },
+            runIds: ['check-tests'],
+          }),
+          node('agent-reviewer', 'agent', {
+            adapterId: 'test-agent',
+            permissionProfile: 'worktree-write',
+          }),
+          node('gate-1', 'review-gate', {
+            humanApprovalRequired: true,
+            requiredCheckIds: ['check-tests'],
+            testsRequired: true,
+            lintRequired: false,
+            reviewerAgentId: 'agent-reviewer',
+            retryPolicy: { maximumIterations: 4, backoffMs: 250 },
+            gateState: 'pending',
+          }),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.canvas.nodes[0]).toMatchObject({
+      type: 'test',
+      data: {
+        command: {
+          executable: 'pnpm',
+          args: ['run', 'test'],
+          cwdRelative: 'packages/app',
+          environmentNames: ['CI'],
+        },
+        runIds: ['check-tests'],
+      },
+      inspector: { legacyData: { checkKind: 'test' } },
+    });
+    expect(migrated.canvas.nodes[2]).toMatchObject({
+      type: 'review-gate',
+      data: {
+        humanApprovalRequired: true,
+        requiredCheckIds: ['check-tests'],
+        testsRequired: true,
+        reviewerAgentId: 'agent-reviewer',
+        retryPolicy: { maximumIterations: 4, backoffMs: 250 },
+      },
+    });
+
+    const surface = legacySurfaceFromCanonical(migrated.canvas);
+    expect(surface.nodes[0]?.data).toMatchObject({
+      checkKind: 'test',
+      command: {
+        executable: 'pnpm',
+        args: ['run', 'test'],
+        cwdRelative: 'packages/app',
+        environmentNames: ['CI'],
+      },
+      runIds: ['check-tests'],
+    });
+  });
+
+  it('promotes a UI-authored revision edge into an explicit bounded loop with human escape', () => {
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('implementation-1', 'agent', {
+            adapterId: 'test-agent',
+            permissionProfile: 'worktree-write',
+          }),
+          node('gate-1', 'review-gate', {
+            humanApprovalRequired: true,
+            retryPolicy: { maximumIterations: 3, backoffMs: 0 },
+          }),
+        ],
+        edges: [
+          {
+            id: 'review-1',
+            source: 'implementation-1',
+            target: 'gate-1',
+            type: 'review',
+            data: {
+              config: {
+                reviewer: 'gate',
+                requireApproval: true,
+                structuredFindings: true,
+              },
+            },
+          },
+          {
+            id: 'revision-1',
+            source: 'gate-1',
+            target: 'implementation-1',
+            type: 'revision',
+            data: {
+              config: { loopId: 'loop-1', actionableFeedbackRequired: true },
+              loop: {
+                maximumAttempts: 5,
+                stopConditions: ['review-approved', 'human-accepted'],
+                humanEscapeInstructions:
+                  'Ask the user to accept the current result or cancel after five attempts.',
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.canvas.revisionLoops).toEqual([
+      {
+        id: 'loop-1',
+        implementationNodeId: 'implementation-1',
+        reviewNodeId: 'gate-1',
+        reviewEdgeId: 'review-1',
+        revisionEdgeId: 'revision-1',
+        maximumAttempts: 5,
+        stopConditions: ['review-approved', 'human-accepted'],
+        humanEscapeHatch: {
+          enabled: true,
+          approvalRequired: true,
+          instructions: 'Ask the user to accept the current result or cancel after five attempts.',
+        },
+      },
+    ]);
+    expect(migrated.canvas.nodes[1]).toMatchObject({
+      type: 'review-gate',
+      data: { retryPolicy: { maximumIterations: 5, backoffMs: 0 } },
+    });
+    expect(validateWorkflow(migrated.canvas).valid).toBe(true);
+
+    const surface = legacySurfaceFromCanonical(migrated.canvas);
+    expect(surface.edges[1]?.data).toMatchObject({
+      loop: {
+        maximumAttempts: 5,
+        stopConditions: ['review-approved', 'human-accepted'],
       },
     });
   });

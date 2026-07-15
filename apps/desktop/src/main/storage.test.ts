@@ -215,7 +215,7 @@ describe('LocalStore', () => {
         journal_mode: 'wal',
       });
       expect(inspector.prepare('PRAGMA quick_check;').get()).toMatchObject({ quick_check: 'ok' });
-      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({ user_version: 7 });
+      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({ user_version: 8 });
       expect(
         inspector.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
       ).toEqual([
@@ -226,6 +226,7 @@ describe('LocalStore', () => {
         { version: 5 },
         { version: 6 },
         { version: 7 },
+        { version: 8 },
       ]);
       expect(
         inspector
@@ -234,7 +235,8 @@ describe('LocalStore', () => {
              WHERE type = 'table' AND name IN
                ('app_settings', 'recent_projects', 'canvas_documents', 'audit_events', 'agent_runs',
                 'canvas_snapshots', 'project_path_history', 'backup_records', 'backup_health',
-                'trusted_extension_ledger', 'check_executions')
+                'trusted_extension_ledger', 'check_executions', 'workflow_executions',
+                'workflow_execution_events', 'workflow_node_bindings')
              ORDER BY name`,
           )
           .all(),
@@ -250,6 +252,9 @@ describe('LocalStore', () => {
         { name: 'project_path_history' },
         { name: 'recent_projects' },
         { name: 'trusted_extension_ledger' },
+        { name: 'workflow_execution_events' },
+        { name: 'workflow_executions' },
+        { name: 'workflow_node_bindings' },
       ]);
     } finally {
       inspector.close();

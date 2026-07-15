@@ -4,7 +4,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AppSettingsSchema, type CanvasDocument, type Project } from '../../../shared/contracts.js';
+import {
+  AppSettingsSchema,
+  type AppSettings,
+  type CanvasDocument,
+  type Project,
+} from '../../../shared/contracts.js';
 import { Workspace } from './Workspace.js';
 import type { WorkspaceHandle } from './workspace/types.js';
 
@@ -29,7 +34,9 @@ vi.mock('./workspace/WorkspaceActivityDrawer.js', () => ({
   WorkspaceActivityDrawer: () => null,
 }));
 vi.mock('./workspace/WorkspaceOverlays.js', () => ({ WorkspaceNotifications: () => null }));
-vi.mock('./CommandPalette.js', () => ({ CommandPalette: () => null }));
+vi.mock('./CommandPalette.js', () => ({
+  CommandPalette: () => <div aria-label="Command palette">Command palette open</div>,
+}));
 vi.mock('./git-review/GitReviewDialog.js', () => ({ GitReviewDialog: () => null }));
 vi.mock('./workspace/RunApprovalDialog.js', () => ({ RunApprovalDialog: () => null }));
 vi.mock('./workspace/CheckApprovalDialog.js', () => ({ CheckApprovalDialog: () => null }));
@@ -60,6 +67,25 @@ vi.mock('./workspace/useProjectChecks.js', () => ({
     approving: false,
     dismissPlan: vi.fn(),
     confirm: vi.fn(),
+  }),
+}));
+vi.mock('./workspace/useWorkflowRuns.js', () => ({
+  workflowIsActive: () => false,
+  useWorkflowRuns: () => ({
+    executions: [],
+    currentExecution: null,
+    activeExecution: null,
+    selectedExecutionId: null,
+    loading: false,
+    busyAction: null,
+    selectExecution: vi.fn(),
+    refresh: vi.fn(),
+    start: vi.fn(),
+    approveNode: vi.fn(),
+    approveHuman: vi.fn(),
+    decideReview: vi.fn(),
+    resolveRevisionEscape: vi.fn(),
+    cancel: vi.fn(),
   }),
 }));
 
@@ -110,6 +136,31 @@ describe('Workspace persistence boundary', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close project' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
+
+  it('applies the saved VS Code command-palette shortcut in the workspace listener', () => {
+    render(
+      <Workspace
+        project={project()}
+        settings={settings({ keyboardPreset: 'vscode' })}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    expect(screen.queryByLabelText('Command palette')).toBeNull();
+    fireEvent.keyDown(window, { key: 'P', ctrlKey: true, shiftKey: true });
+    expect(screen.getByLabelText('Command palette')).toBeTruthy();
+  });
 });
 
 function project(): Project {
@@ -145,7 +196,7 @@ function canvas(): CanvasDocument {
   };
 }
 
-function settings() {
+function settings(overrides: Partial<AppSettings> = {}) {
   return AppSettingsSchema.parse({
     theme: 'system',
     reducedMotion: false,
@@ -160,5 +211,6 @@ function settings() {
     transcriptRetentionDays: 30,
     collaborationEnabled: false,
     collaborationUrl: '',
+    ...overrides,
   });
 }

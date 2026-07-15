@@ -172,6 +172,26 @@ export function AgentsSettings({
           </small>
         </label>
       </SettingsSection>
+      <SettingsSection
+        title="Process launching"
+        description="Forgeboard launches validated executables with literal argument arrays. It does not evaluate a configurable shell command."
+      >
+        <label>
+          Terminal shell
+          <input
+            name="terminal-shell"
+            value={draft.terminalShell}
+            readOnly
+            disabled
+            aria-describedby="terminal-shell-unavailable"
+          />
+        </label>
+        <p id="terminal-shell-unavailable" className="recovery-guidance" role="status">
+          Shell selection is not an active Forgeboard capability. This stored or imported legacy
+          value is shown for transparency but is not used by agent, check, or preview launches.
+          Configure the exact executable and arguments in their UI fields instead.
+        </p>
+      </SettingsSection>
       <DockerSettings
         draft={draft}
         setDraft={setDraft}

@@ -1,7 +1,7 @@
-import { chmod, realpath } from 'node:fs/promises';
+import { chmod, lstat, realpath } from 'node:fs/promises';
 
 import type { InstallerArtifacts } from './artifacts.js';
-import { isFile, runCommand, runWithCleanup, smokeExecutable } from './process.js';
+import { CommandExitError, runCommand, runWithCleanup, smokeExecutable } from './process.js';
 
 const EXPECTED_PACKAGE_NAME = 'forgeboard';
 const INSTALLED_EXECUTABLE = '/usr/bin/forgeboard';
@@ -36,9 +36,7 @@ export async function smokeLinuxArtifacts(
       `The DEB architecture ${packageArchitecture} does not match host ${hostArchitecture}.`,
     );
   }
-  if (await isFile(INSTALLED_EXECUTABLE)) {
-    throw new Error(`Refusing to overwrite a pre-existing executable: ${INSTALLED_EXECUTABLE}`);
-  }
+  await assertNoPreExistingLinuxInstall();
 
   let installAttempted = false;
   await runWithCleanup(
@@ -61,6 +59,32 @@ export async function smokeLinuxArtifacts(
   );
 }
 
+type CommandRunner = typeof runCommand;
+type PathProbe = (path: string) => Promise<boolean>;
+
+/** Prevents a smoke run from upgrading and then purging a user's existing package or files. */
+export async function assertNoPreExistingLinuxInstall(
+  run: CommandRunner = runCommand,
+  exists: PathProbe = pathExists,
+): Promise<void> {
+  for (const path of [INSTALLED_EXECUTABLE, OWNED_EXECUTABLE]) {
+    if (await exists(path)) {
+      throw new Error(`Refusing to overwrite a pre-existing Forgeboard path: ${path}`);
+    }
+  }
+  try {
+    const status = (
+      await run('dpkg-query', ['--show', '--showformat=${db:Status-Abbrev}', EXPECTED_PACKAGE_NAME])
+    ).trim();
+    throw new Error(
+      `Refusing to replace the registered ${EXPECTED_PACKAGE_NAME} package (status ${status || 'unknown'}).`,
+    );
+  } catch (error) {
+    if (error instanceof CommandExitError && error.exitCode === 1) return;
+    throw error;
+  }
+}
+
 async function verifyPackageOwnership(): Promise<void> {
   const status = (
     await runCommand('dpkg-query', ['--show', '--showformat=${Status}', EXPECTED_PACKAGE_NAME])
@@ -79,5 +103,15 @@ async function verifyPackageOwnership(): Promise<void> {
   ).split(/\r?\n/u);
   if (!installedFiles.includes(OWNED_EXECUTABLE)) {
     throw new Error(`${OWNED_EXECUTABLE} is not owned by the ${EXPECTED_PACKAGE_NAME} package.`);
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }

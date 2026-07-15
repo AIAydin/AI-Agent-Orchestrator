@@ -11,6 +11,7 @@ describe('WorkspaceActivityDrawer', () => {
   it('links tabs to panels and supports roving arrow-key navigation', () => {
     render(<WorkspaceActivityDrawer {...props()} />);
     const activityTab = screen.getByRole('tab', { name: 'Activity' });
+    const workflowsTab = screen.getByRole('tab', { name: 'Workflows' });
     const changesTab = screen.getByRole('tab', { name: 'Changes' });
 
     expect(activityTab.getAttribute('aria-controls')).toBe('workspace-panel-activity');
@@ -18,6 +19,14 @@ describe('WorkspaceActivityDrawer', () => {
 
     activityTab.focus();
     fireEvent.keyDown(activityTab, { key: 'ArrowRight' });
+    expect(workflowsTab.getAttribute('aria-selected')).toBe('true');
+    expect(workflowsTab.getAttribute('tabindex')).toBe('0');
+    expect(document.activeElement).toBe(workflowsTab);
+    expect(screen.getByRole('tabpanel', { name: 'Workflows' }).id).toBe(
+      'workspace-panel-workflows',
+    );
+
+    fireEvent.keyDown(workflowsTab, { key: 'ArrowRight' });
     expect(changesTab.getAttribute('aria-selected')).toBe('true');
     expect(changesTab.getAttribute('tabindex')).toBe('0');
     expect(document.activeElement).toBe(changesTab);
@@ -110,8 +119,21 @@ function props(): React.ComponentProps<typeof WorkspaceActivityDrawer> {
     ],
     latestChecks: new Map(),
     busyCheckId: null,
+    workflowExecutions: [],
+    currentWorkflow: null,
+    workflowNodeTitles: new Map(),
+    workflowInteractiveNodeIds: new Set(),
+    workflowInteractionEvents: [],
+    workflowLoading: false,
+    workflowBusyAction: null,
     onPrepareCheck: vi.fn(),
     onCancelCheck: vi.fn(),
+    onSelectWorkflow: vi.fn(),
+    onRefreshWorkflows: vi.fn(),
+    onCancelWorkflow: vi.fn(),
+    onReviewWorkflowDecision: vi.fn(),
+    onSendWorkflowInput: vi.fn(),
+    onInterruptWorkflowNode: vi.fn(),
     onOpenSettings: vi.fn(),
     onOpenGitReview: vi.fn(),
     onClose: vi.fn(),

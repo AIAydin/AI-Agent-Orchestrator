@@ -64,6 +64,21 @@ import type {
   RecoverySnapshotRestorePlan,
   RecoverySnapshotSummary,
 } from './recovery-contracts.js';
+import type {
+  WorkflowApproveHumanDecisionInput,
+  WorkflowApproveNodeInput,
+  WorkflowCancelInput,
+  WorkflowEventEnvelope,
+  WorkflowExecutionView,
+  WorkflowGetInput,
+  WorkflowInteractionEventEnvelope,
+  WorkflowListInput,
+  WorkflowNodeInput,
+  WorkflowNodeInterrupt,
+  WorkflowResolveRevisionEscapeInput,
+  WorkflowReviewDecisionInput,
+  WorkflowStartInput,
+} from './workflow-contracts.js';
 
 export interface ForgeboardApi {
   app: {
@@ -128,6 +143,26 @@ export interface ForgeboardApi {
     list(input: CheckListInput): Promise<IpcResult<CheckExecutionView[]>>;
     cancel(input: CheckCancelInput): Promise<IpcResult<CheckExecutionView>>;
     onEvent(listener: (event: CheckEventEnvelope) => void): () => void;
+  };
+  workflows: {
+    start(input: WorkflowStartInput): Promise<IpcResult<WorkflowExecutionView>>;
+    get(input: WorkflowGetInput): Promise<IpcResult<WorkflowExecutionView>>;
+    list(input: WorkflowListInput): Promise<IpcResult<WorkflowExecutionView[]>>;
+    approveNode(input: WorkflowApproveNodeInput): Promise<IpcResult<WorkflowExecutionView | null>>;
+    approveHuman(
+      input: WorkflowApproveHumanDecisionInput,
+    ): Promise<IpcResult<WorkflowExecutionView | null>>;
+    decideReview(
+      input: WorkflowReviewDecisionInput,
+    ): Promise<IpcResult<WorkflowExecutionView | null>>;
+    resolveRevisionEscape(
+      input: WorkflowResolveRevisionEscapeInput,
+    ): Promise<IpcResult<WorkflowExecutionView | null>>;
+    cancel(input: WorkflowCancelInput): Promise<IpcResult<WorkflowExecutionView | null>>;
+    sendInput(input: WorkflowNodeInput): Promise<IpcResult<boolean>>;
+    interrupt(input: WorkflowNodeInterrupt): Promise<IpcResult<boolean>>;
+    onEvent(listener: (event: WorkflowEventEnvelope) => void): () => void;
+    onInteractionEvent(listener: (event: WorkflowInteractionEventEnvelope) => void): () => void;
   };
   audit: {
     list(input: AuditListInput): Promise<IpcResult<AuditEvent[]>>;

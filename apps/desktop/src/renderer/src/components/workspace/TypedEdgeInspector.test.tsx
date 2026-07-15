@@ -92,7 +92,7 @@ describe('TypedEdgeInspector', () => {
   });
 
   it('keeps draft revision configuration bounded to valid entity-id characters', () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(data: WorkshopEdgeData) => void>();
     render(
       <TypedEdgeInspector
         edge={edge(createEdgeData('revision', 'brief-1'))}
@@ -105,9 +105,24 @@ describe('TypedEdgeInspector', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Bounded loop ID' }), {
       target: { value: 'loop 1/unsafe' },
     });
-    expect(onChange).toHaveBeenCalledWith({
+    const sanitized = onChange.mock.calls.at(-1)?.[0];
+    expect(sanitized).toMatchObject({
       edgeType: 'revision',
       config: { loopId: 'loop1unsafe', actionableFeedbackRequired: true },
+      loop: {
+        maximumAttempts: 3,
+        stopConditions: ['review-approved'],
+      },
     });
+    expect(
+      sanitized?.edgeType === 'revision' ? sanitized.loop.humanEscapeInstructions : '',
+    ).toMatch(/human/u);
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Maximum attempts' }), {
+      target: { value: '7' },
+    });
+    const bounded = onChange.mock.calls.at(-1)?.[0];
+    expect(bounded?.edgeType).toBe('revision');
+    expect(bounded?.edgeType === 'revision' ? bounded.loop.maximumAttempts : undefined).toBe(7);
   });
 });

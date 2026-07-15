@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Bot,
   FolderGit2,
+  CircleHelp,
   ListChecks,
   Palette,
   Puzzle,
   RotateCcw,
   Save,
   ShieldCheck,
+  Wifi,
   X,
 } from 'lucide-react';
 
@@ -17,11 +19,21 @@ import { ExtensionSettings } from './ExtensionSettings.js';
 import { AgentsSettings } from './settings/AgentsSettings.js';
 import { AppearanceSettings } from './settings/AppearanceSettings.js';
 import { CheckSettings } from './settings/CheckSettings.js';
+import { ConnectivitySettings } from './settings/ConnectivitySettings.js';
 import { dockerConfigurationIncomplete } from './settings/DockerSettings.js';
 import { GitPreviewSettings } from './settings/GitPreviewSettings.js';
+import { HelpSettings } from './settings/HelpSettings.js';
 import { PrivacySettings } from './settings/PrivacySettings.js';
 
-type SettingsTab = 'appearance' | 'agents' | 'git' | 'checks' | 'extensions' | 'privacy';
+type SettingsTab =
+  | 'appearance'
+  | 'agents'
+  | 'git'
+  | 'checks'
+  | 'extensions'
+  | 'connectivity'
+  | 'help'
+  | 'privacy';
 
 interface SettingsPanelProps {
   info: AppInfo;
@@ -132,7 +144,9 @@ export function SettingsPanel(props: SettingsPanelProps) {
             <span className="brand-mark small">F</span>
             <div>
               <h2 id="settings-title">Settings</h2>
-              <p>All everyday configuration lives here.</p>
+              <p>
+                Configure available features here; unavailable capabilities are clearly labeled.
+              </p>
             </div>
           </div>
           <button
@@ -180,10 +194,22 @@ export function SettingsPanel(props: SettingsPanelProps) {
               onClick={() => setTab('extensions')}
             />
             <SettingsTabButton
+              active={tab === 'connectivity'}
+              icon={<Wifi size={16} />}
+              label="Connectivity"
+              onClick={() => setTab('connectivity')}
+            />
+            <SettingsTabButton
               active={tab === 'privacy'}
               icon={<ShieldCheck size={16} />}
               label="Data & privacy"
               onClick={() => setTab('privacy')}
+            />
+            <SettingsTabButton
+              active={tab === 'help'}
+              icon={<CircleHelp size={16} />}
+              label="Help & shortcuts"
+              onClick={() => setTab('help')}
             />
           </nav>
 
@@ -214,6 +240,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
             {tab === 'extensions' && (
               <ExtensionSettings onError={props.onError} onChanged={props.onExtensionsChanged} />
             )}
+            {tab === 'connectivity' && <ConnectivitySettings settings={draft} />}
             {tab === 'privacy' && (
               <PrivacySettings
                 info={props.info}
@@ -232,6 +259,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 onDeleteAll={props.onDeleteAll}
                 onFlushActiveCanvas={props.onFlushActiveCanvas}
                 onRecoveryApplied={props.onRecoveryApplied}
+              />
+            )}
+            {tab === 'help' && (
+              <HelpSettings
+                keyboardPreset={draft.keyboardPreset}
+                activeKeyboardPreset={props.settings.keyboardPreset}
               />
             )}
             {notice && (

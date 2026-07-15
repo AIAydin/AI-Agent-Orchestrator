@@ -142,6 +142,18 @@ describe('SettingsPanel draft transactions', () => {
     expect(agentsTab.getAttribute('aria-current')).toBe('page');
   });
 
+  it('keeps searchable help and active shortcuts available inside the app', () => {
+    render(<SettingsPanel {...props()} />);
+
+    const helpTab = screen.getByRole('button', { name: 'Help & shortcuts' });
+    fireEvent.click(helpTab);
+
+    expect(helpTab.getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('heading', { name: 'Help & shortcuts' })).toBeTruthy();
+    expect(screen.getByRole('searchbox', { name: 'Search local help' })).toBeTruthy();
+    expect(screen.getByText('Run your first agent')).toBeTruthy();
+  });
+
   it('keeps restored defaults as a local draft and closing discards them', async () => {
     const onClose = vi.fn();
     render(<SettingsPanel {...props({ onClose })} />);
@@ -251,6 +263,29 @@ describe('SettingsPanel draft transactions', () => {
     expect(screen.getByText(/inherit this folder's access controls/u)).toBeTruthy();
   });
 
+  it('settles the active canvas before destructive local-data deletion', async () => {
+    const order: string[] = [];
+    const onFlushActiveCanvas = vi.fn(() => {
+      order.push('flush');
+      return Promise.resolve(false);
+    });
+    const onDeleteAll = vi.fn(() => {
+      order.push('delete');
+      return Promise.resolve();
+    });
+    render(<SettingsPanel {...props({ onFlushActiveCanvas, onDeleteAll })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
+    fireEvent.change(screen.getByLabelText(/Type DELETE ALL LOCAL DATA/u), {
+      target: { value: 'DELETE ALL LOCAL DATA' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete local data' }));
+
+    await waitFor(() => expect(onDeleteAll).toHaveBeenCalledWith('DELETE ALL LOCAL DATA'));
+    expect(onFlushActiveCanvas).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['flush', 'delete']);
+  });
+
   it('saves the custom CLI output format selected in the UI', async () => {
     render(<SettingsPanel {...props()} />);
 
@@ -279,15 +314,15 @@ describe('SettingsPanel draft transactions', () => {
         '/usr/local/bin/eslint',
       ),
     );
-    fireEvent.change(within(lintEditor).getByLabelText('Arguments · one per line'), {
-      target: { value: '.\n--max-warnings=0' },
+    fireEvent.change(within(lintEditor).getByLabelText(/Arguments/u), {
+      target: { value: '  .  \n\n--max-warnings=0 ' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0].lintCommand).toEqual({
       executable: '/usr/local/bin/eslint',
-      arguments: ['.', '--max-warnings=0'],
+      arguments: ['  .  ', '--max-warnings=0 '],
     });
   });
 
@@ -329,7 +364,7 @@ describe('SettingsPanel draft transactions', () => {
         '/opt/tools/license-check',
       ),
     );
-    fireEvent.change(within(commandEditor).getByLabelText('Arguments · one per line'), {
+    fireEvent.change(within(commandEditor).getByLabelText(/Arguments/u), {
       target: { value: 'scan\n--production' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
@@ -357,28 +392,143 @@ describe('SettingsPanel draft transactions', () => {
     expect(updateSettings.mock.calls[1]?.[0].customChecks).toEqual([]);
   });
 
-  it('does not present settings that have no active renderer or main-process behavior', () => {
+  it('persists the keyboard preset that drives the workspace shortcut behavior', async () => {
     render(<SettingsPanel {...props()} />);
 
-    expect(screen.queryByLabelText('Keyboard preset')).toBeNull();
-    expect(screen.queryByLabelText('Update channel')).toBeNull();
-    expect(screen.queryByText('Download updates automatically')).toBeNull();
+    fireEvent.change(screen.getByLabelText(/Keyboard preset/u), { target: { value: 'vscode' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Help & shortcuts' }));
+    expect(
+      screen.getByText('VS Code preset · unsaved; Standard preset remains active'),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0].keyboardPreset).toBe('vscode');
+  });
+
+  it('shows and preserves inactive legacy settings without presenting dead controls as working', async () => {
+    render(
+      <SettingsPanel
+        {...props({
+          settings: settings({
+            collaborationEnabled: true,
+            automaticUpdateDownloads: true,
+          }),
+        })}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    expect(screen.queryByLabelText('Terminal shell')).toBeNull();
+    const terminalShell = screen.getByLabelText<HTMLInputElement>('Terminal shell');
+    expect(terminalShell.disabled).toBe(true);
+    expect(terminalShell.value).toBe('/bin/sh');
+    expect(
+      screen.getByText(/Shell selection is not an active Forgeboard capability/u),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
     expect(screen.getByText('Development preview')).toBeTruthy();
     expect(screen.getByText('Development server')).toBeTruthy();
     expect(screen.getByLabelText('Git identity name')).toBeTruthy();
     expect(screen.getByLabelText('Git identity email')).toBeTruthy();
-    expect(screen.queryByLabelText('Default remote')).toBeNull();
-    expect(screen.queryByLabelText('Cleanup policy')).toBeNull();
+    const remote = screen.getByLabelText<HTMLInputElement>('Default remote');
+    expect(remote.disabled).toBe(true);
+    expect(remote.value).toBe('origin');
+    const cleanupPolicy = screen.getByLabelText<HTMLSelectElement>(/Cleanup policy/u);
+    expect(cleanupPolicy.disabled).toBe(false);
+    expect([...cleanupPolicy.options].filter((option) => !option.disabled)).toHaveLength(1);
+    expect([...cleanupPolicy.options].find((option) => !option.disabled)?.value).toBe('manual');
     expect(screen.queryByText('Tests')).toBeNull();
     expect(screen.queryByText('Lint')).toBeNull();
     expect(screen.queryByText('Typecheck')).toBeNull();
     expect(screen.queryByText('Build')).toBeNull();
     expect(screen.queryByText('Self-hosted collaboration')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connectivity' }));
+    expect(screen.getByRole('heading', { name: 'Self-hosted collaboration' })).toBeTruthy();
+    const collaborationEnabled = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: /Enable collaboration/u,
+    });
+    expect(collaborationEnabled.disabled).toBe(true);
+    expect(collaborationEnabled.checked).toBe(true);
+    expect(screen.getByLabelText('Collaboration server URL')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Collaboration display name')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Collaboration room')).toHaveProperty('disabled', true);
+    expect(
+      screen.getByRole('checkbox', { name: /Reconnect collaboration automatically/u }),
+    ).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Update channel')).toHaveProperty('disabled', true);
+    const automaticDownloads = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: /Download updates automatically/u,
+    });
+    expect(automaticDownloads.disabled).toBe(true);
+    expect(automaticDownloads.checked).toBe(true);
+    expect(screen.getByRole('button', { name: 'Check for updates' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByText(/Manual update checks are unavailable/u)).toBeTruthy();
+    expect(screen.getByText(/stored or imported setting requests collaboration/u)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
+      terminalShell: '/bin/sh',
+      gitRemote: 'origin',
+      collaborationEnabled: true,
+      automaticUpdateDownloads: true,
+    });
+  });
+
+  it('lets an imported inactive cleanup policy be replaced only with supported manual cleanup', async () => {
+    render(
+      <SettingsPanel
+        {...props({ settings: settings({ worktreeCleanupPolicy: 'after-retention' }) })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
+    const cleanupPolicy = screen.getByLabelText<HTMLSelectElement>(/Cleanup policy/u);
+    expect(cleanupPolicy.value).toBe('after-retention');
+    expect(screen.getByText(/imported legacy policy is not executed automatically/u)).toBeTruthy();
+    fireEvent.change(cleanupPolicy, { target: { value: 'manual' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0].worktreeCleanupPolicy).toBe('manual');
+  });
+
+  it('shows and safely clears an imported host-credential mount preference', async () => {
+    render(
+      <SettingsPanel
+        {...props({
+          settings: settings({
+            dockerEnabled: true,
+            dockerImage: 'example/agent:latest',
+            dockerContainerExecutable: '/usr/local/bin/agent',
+            dockerMountHostCredentials: true,
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
+    const credentialMount = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: 'Mount host CLI credentials',
+    });
+    expect(credentialMount.checked).toBe(true);
+    expect(credentialMount.disabled).toBe(false);
+    expect(screen.getByText(/Docker launches fail closed/u)).toBeTruthy();
+
+    fireEvent.click(credentialMount);
+    expect(credentialMount.checked).toBe(false);
+    expect(credentialMount.disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', false);
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0].dockerMountHostCredentials).toBe(false);
   });
 });
 

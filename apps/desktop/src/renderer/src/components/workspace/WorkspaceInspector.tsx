@@ -23,6 +23,8 @@ import { NODE_DEFINITIONS, type WorkshopNode } from '../CanvasNode.js';
 import { DeclarativeExtensionInspector } from '../DeclarativeExtensionInspector.js';
 import { PreviewNodePanel } from '../PreviewNodePanel.js';
 import { TypedEdgeInspector } from './TypedEdgeInspector.js';
+import { GroupFrameInspector } from './GroupFrameInspector.js';
+import { WorkflowNodeInspector } from './WorkflowNodeInspector.js';
 import type { WorkshopEdge } from './types.js';
 import type { WorkshopEdgeData } from './edge-config.js';
 
@@ -146,6 +148,26 @@ function NodeInspector(
           />
         )}
       {selectedNode.data.kind === 'agent' && <AgentRunInspector {...props} />}
+      {(selectedNode.data.kind === 'task' ||
+        selectedNode.data.kind === 'test' ||
+        selectedNode.data.kind === 'review-gate') && (
+        <WorkflowNodeInspector
+          node={selectedNode}
+          nodes={props.nodes}
+          settings={props.settings}
+          onRecord={onRecord}
+          onUpdate={onUpdateSelected}
+          onError={props.onError}
+        />
+      )}
+      {selectedNode.data.kind === 'group-frame' && (
+        <GroupFrameInspector
+          node={selectedNode}
+          nodes={props.nodes}
+          onRecord={onRecord}
+          onUpdate={onUpdateSelected}
+        />
+      )}
       {(selectedNode.data.kind === 'web-preview' ||
         selectedNode.data.kind === 'mobile-preview') && (
         <PreviewNodePanel

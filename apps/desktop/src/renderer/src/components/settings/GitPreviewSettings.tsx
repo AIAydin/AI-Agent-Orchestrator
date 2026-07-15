@@ -53,6 +53,34 @@ export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsPr
             Forgeboard never cleans a worktree or branch without an impact-specific confirmation.
           </small>
         </div>
+        <label>
+          Cleanup policy
+          <select
+            name="worktree-cleanup-policy"
+            value={draft.worktreeCleanupPolicy}
+            onChange={(event) =>
+              setDraft({ ...draft, worktreeCleanupPolicy: event.target.value as 'manual' })
+            }
+            aria-describedby="worktree-cleanup-policy-help"
+          >
+            <option value="manual">Manual · confirmation required</option>
+            {draft.worktreeCleanupPolicy !== 'manual' && (
+              <option value={draft.worktreeCleanupPolicy} disabled>
+                {draft.worktreeCleanupPolicy} · stored but unavailable
+              </option>
+            )}
+          </select>
+          <small id="worktree-cleanup-policy-help">
+            Manual cleanup is the only implemented policy. Automatic after-merge and retention
+            cleanup are not offered until Forgeboard can verify the lifecycle and show exact impact.
+          </small>
+        </label>
+        {draft.worktreeCleanupPolicy !== 'manual' && (
+          <p className="recovery-guidance warning" role="status">
+            This imported legacy policy is not executed automatically. Select Manual before saving
+            to use the supported behavior.
+          </p>
+        )}
       </SettingsSection>
       <SettingsSection
         title="Commit identity"
@@ -85,6 +113,26 @@ export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsPr
           Provide both fields or neither. The exact effective identity is shown again before every
           commit and bound to the native confirmation.
         </small>
+      </SettingsSection>
+      <SettingsSection
+        title="Remote automation"
+        description="Git review, staging, discard, and commit are local today. Forgeboard does not yet push branches or create pull requests."
+      >
+        <label>
+          Default remote
+          <input
+            name="git-default-remote"
+            value={draft.gitRemote}
+            readOnly
+            disabled
+            aria-describedby="git-default-remote-unavailable"
+          />
+        </label>
+        <p id="git-default-remote-unavailable" className="recovery-guidance" role="status">
+          Remote selection is not active because no remote-changing action is available. This stored
+          or imported legacy value is shown for transparency and is not used by current Git
+          operations.
+        </p>
       </SettingsSection>
       <SettingsSection
         title="Development preview"

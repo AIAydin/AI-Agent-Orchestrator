@@ -13,6 +13,7 @@ import type {
   GitDiscardPlanView,
   GitTargetInput,
 } from '../../../../shared/git-contracts.js';
+import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
 import { GitCommitDisclosure, GitDiscardDisclosure } from './GitActionDisclosure.js';
 import { GitCommitPanel } from './GitCommitPanel.js';
 import { GitDiffViewer } from './GitDiffViewer.js';
@@ -24,6 +25,12 @@ import {
   type GitFileSelection,
 } from './git-review-model.js';
 import { GitReviewSummary } from './GitReviewSummary.js';
+import {
+  GIT_WORKING_TREE_PANEL_ID,
+  GIT_WORKING_TREE_TAB_ID,
+  GitReviewModeTabs,
+  type GitReviewMode,
+} from './GitReviewModeTabs.js';
 import { useGitReview } from './useGitReview.js';
 
 export interface GitReviewDialogProps {
@@ -39,6 +46,9 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
   const [discardPlan, setDiscardPlan] = useState<GitDiscardPlanView | null>(null);
   const [commitPlan, setCommitPlan] = useState<GitCommitPlanView | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [reviewMode, setReviewMode] = useState<GitReviewMode>(
+    target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree',
+  );
   const closeButton = useRef<HTMLButtonElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -72,6 +82,10 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
       findReviewFile(groups, current) === null ? firstReviewSelection(groups) : current,
     );
   }, [groups]);
+
+  useEffect(() => {
+    setReviewMode(target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree');
+  }, [target.kind, target.projectId, target.kind === 'agent-worktree' ? target.runId : null]);
 
   const prepareDiscard = (hunkId: string) => {
     setNotice(null);
@@ -180,6 +194,9 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
                 </small>
               </section>
             )}
+            {controller.review.target.kind === 'agent-worktree' && (
+              <GitReviewModeTabs mode={reviewMode} onChange={setReviewMode} />
+            )}
             <GitReviewSummary review={controller.review} />
             {controller.review.conflicted && (
               <p className="git-conflict-banner" role="alert">
@@ -201,36 +218,62 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
                 {controller.busyLabel ?? controller.error ?? notice}
               </div>
             )}
-            {groups &&
-              groups.staged.length + groups.unstaged.length + groups.untracked.length === 0 && (
-                <p className="git-clean-state">
-                  <CheckCircle2 size={15} /> Working tree clean. There are no local changes to
-                  review.
-                </p>
-              )}
-            <div className="git-review-workspace">
-              <GitFileSidebar
-                groups={groups!}
-                selection={selection}
-                busy={busy}
-                onSelect={setSelection}
-                onStagePath={(path) => void controller.stagePaths([path])}
-                onUnstagePath={(path) => void controller.unstagePaths([path])}
-              />
-              <GitDiffViewer
-                file={selectedFile}
-                busy={busy}
-                onStageHunk={(hunkId) => void controller.stageHunks([hunkId])}
-                onUnstageHunk={(hunkId) => void controller.unstageHunks([hunkId])}
-                onPrepareDiscard={prepareDiscard}
-              />
-            </div>
-            <GitCommitPanel
-              key={controller.review.headOid ?? 'unborn'}
-              review={controller.review}
-              busy={busy}
-              onPrepare={prepareCommit}
-            />
+            {controller.review.target.kind === 'agent-worktree' &&
+            reviewMode === 'base-comparison' ? (
+              controller.review.baseComparison === undefined ? (
+                <GitReviewState icon={<TriangleAlert />} title="Base comparison is unavailable">
+                  Refresh this review. Forgeboard will not infer a base or HEAD in the renderer.
+                </GitReviewState>
+              ) : (
+                <GitBaseComparisonPanel comparison={controller.review.baseComparison} />
+              )
+            ) : (
+              <section
+                id={
+                  controller.review.target.kind === 'agent-worktree'
+                    ? GIT_WORKING_TREE_PANEL_ID
+                    : undefined
+                }
+                className="git-review-working-tree"
+                role={controller.review.target.kind === 'agent-worktree' ? 'tabpanel' : undefined}
+                aria-labelledby={
+                  controller.review.target.kind === 'agent-worktree'
+                    ? GIT_WORKING_TREE_TAB_ID
+                    : undefined
+                }
+              >
+                {groups &&
+                  groups.staged.length + groups.unstaged.length + groups.untracked.length === 0 && (
+                    <p className="git-clean-state">
+                      <CheckCircle2 size={15} /> Working tree clean. There are no local changes to
+                      review.
+                    </p>
+                  )}
+                <div className="git-review-workspace">
+                  <GitFileSidebar
+                    groups={groups!}
+                    selection={selection}
+                    busy={busy}
+                    onSelect={setSelection}
+                    onStagePath={(path) => void controller.stagePaths([path])}
+                    onUnstagePath={(path) => void controller.unstagePaths([path])}
+                  />
+                  <GitDiffViewer
+                    file={selectedFile}
+                    busy={busy}
+                    onStageHunk={(hunkId) => void controller.stageHunks([hunkId])}
+                    onUnstageHunk={(hunkId) => void controller.unstageHunks([hunkId])}
+                    onPrepareDiscard={prepareDiscard}
+                  />
+                </div>
+                <GitCommitPanel
+                  key={controller.review.headOid ?? 'unborn'}
+                  review={controller.review}
+                  busy={busy}
+                  onPrepare={prepareCommit}
+                />
+              </section>
+            )}
           </>
         )}
 

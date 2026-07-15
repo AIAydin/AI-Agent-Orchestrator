@@ -23,7 +23,9 @@ import { PanelBottomOpen } from 'lucide-react';
 
 import type { CanvasDocument, RunAdapterId } from '../../../shared/contracts.js';
 import type { GitTargetInput } from '../../../shared/git-contracts.js';
+import type { WorkflowExecutionView } from '../../../shared/workflow-contracts.js';
 import { unwrap } from '../lib/ipc.js';
+import { commandPaletteShortcutLabel, opensCommandPalette } from '../lib/keyboard-preset.js';
 import { NODE_DEFINITIONS, NODE_KINDS, type NodeKind, type WorkshopNode } from './CanvasNode.js';
 import { CommandPalette } from './CommandPalette.js';
 import { createExtensionNodeBinding, extensionTemplateKey } from './extension-nodes.js';
@@ -33,6 +35,7 @@ import { RunApprovalDialog } from './workspace/RunApprovalDialog.js';
 import { WorkspaceActivityDrawer } from './workspace/WorkspaceActivityDrawer.js';
 import { WorkspaceCanvas } from './workspace/WorkspaceCanvas.js';
 import { WorkspaceCommandBar } from './workspace/WorkspaceCommandBar.js';
+import { WorkflowDecisionDialog } from './workspace/WorkflowDecisionDialog.js';
 import { WorkspaceInspector } from './workspace/WorkspaceInspector.js';
 import { WorkspaceNotifications } from './workspace/WorkspaceOverlays.js';
 import { WorkspaceRail } from './workspace/WorkspaceRail.js';
@@ -51,10 +54,17 @@ import type {
   WorkspaceHandle,
   WorkspaceProps,
 } from './workspace/types.js';
+import type { WorkflowDecisionTarget } from './workspace/workflow-ui-types.js';
 import { useAgentRunController } from './workspace/useAgentRunController.js';
 import { useCanvasPersistence } from './workspace/useCanvasPersistence.js';
 import { useProjectChecks } from './workspace/useProjectChecks.js';
+import { useWorkflowRuns } from './workspace/useWorkflowRuns.js';
 import { useWorkspacePreviews } from './workspace/useWorkspacePreviews.js';
+import { initialWorkflowNodeData } from './workspace/workflow-node-config.js';
+import {
+  runnableWorkflowNodeCount,
+  workflowSelectionEligibility,
+} from './workspace/workflow-run-eligibility.js';
 
 export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
   function Workspace(props, ref) {
@@ -65,6 +75,73 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
     );
   },
 );
+
+function canvasNodeStatus(
+  status: WorkflowExecutionView['nodeRuns'][number]['status'],
+): WorkshopNode['data']['status'] {
+  switch (status) {
+    case 'queued':
+      return 'queued';
+    case 'running':
+    case 'cancelling':
+      return 'running';
+    case 'waiting-for-approval':
+    case 'paused':
+      return 'waiting';
+    case 'succeeded':
+      return 'succeeded';
+    case 'cancelled':
+      return 'cancelled';
+    case 'failed':
+    case 'lost':
+      return 'failed';
+  }
+}
+
+function workflowEdgeColor(
+  disposition: WorkflowExecutionView['edges'][number]['disposition'],
+): string {
+  switch (disposition) {
+    case 'satisfied':
+      return 'var(--green)';
+    case 'waiting':
+    case 'waiting-for-approval':
+      return 'var(--yellow)';
+    case 'blocked':
+      return 'var(--red)';
+    case 'inactive':
+      return 'var(--text-faint)';
+  }
+}
+
+function workflowDecisionIsCurrent(
+  target: WorkflowDecisionTarget,
+  execution: WorkflowExecutionView | null,
+): boolean {
+  if (execution === null || target.request.executionId !== execution.id) return false;
+  if (target.kind === 'launch') {
+    return execution.approvals.some(
+      (request) =>
+        request.preparationId === target.request.preparationId &&
+        request.approvalFingerprint === target.request.approvalFingerprint,
+    );
+  }
+  if (target.kind === 'human') {
+    return execution.humanDecisions.some(
+      (request) =>
+        request.targetId === target.request.targetId &&
+        request.targetType === target.request.targetType &&
+        request.targetAttempt === target.request.targetAttempt &&
+        request.evidenceFingerprint === target.request.evidenceFingerprint,
+    );
+  }
+  return execution.revisionEscapes.some(
+    (request) =>
+      request.loopId === target.request.loopId &&
+      request.attemptsStarted === target.request.attemptsStarted &&
+      request.evidenceFingerprint === target.request.evidenceFingerprint,
+  );
+}
 
 const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function WorkspaceInner(
   {
@@ -89,6 +166,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [gitReviewTarget, setGitReviewTarget] = useState<GitTargetInput | null>(null);
+  const [workflowDecision, setWorkflowDecision] = useState<WorkflowDecisionTarget | null>(null);
   const [initializingGit, setInitializingGit] = useState(false);
   const [search, setSearch] = useState('');
   const [instance, setInstance] = useState<ReactFlowInstance<WorkshopNode, WorkshopEdge> | null>(
@@ -209,6 +287,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     autosaveIntervalMs: settings.autosaveIntervalMs,
     onError,
   });
+  const workflows = useWorkflowRuns({
+    projectId: project.id,
+    canvasId: canvas?.projectId === project.id ? canvas.id : null,
+    flushCanvas,
+    setEvents,
+    onError,
+  });
   useImperativeHandle(ref, () => ({ flushCanvas }), [flushCanvas]);
 
   const closeProject = useCallback(async () => {
@@ -260,7 +345,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       const command = event.metaKey || event.ctrlKey;
-      if (command && event.key.toLowerCase() === 'k') {
+      if (opensCommandPalette(event, settings.keyboardPreset)) {
         event.preventDefault();
         setPaletteOpen(true);
       }
@@ -279,7 +364,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     };
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [redo, undo]);
+  }, [redo, settings.keyboardPreset, undo]);
 
   const addNode = useCallback(
     (kind: NodeKind, position?: { x: number; y: number }) => {
@@ -303,6 +388,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             locked: false,
             collapsed: false,
             color: definition.color,
+            ...initialWorkflowNodeData(kind, id, settings),
           },
         },
       ]);
@@ -312,7 +398,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       }, 250);
       setEvents((items) => [`Added ${definition.label} node.`, ...items].slice(0, 30));
     },
-    [nodes.length, record],
+    [nodes.length, record, settings],
   );
 
   const addExtensionNode = useCallback(
@@ -360,6 +446,18 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
 
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const selectedCanvasNodes = nodes.filter((node) => node.selected === true);
+  const selectedWorkflowEligibility = workflowSelectionEligibility(
+    selectedCanvasNodes.length > 0
+      ? selectedCanvasNodes
+      : selectedNode === null
+        ? []
+        : [selectedNode],
+    nodes,
+    edges,
+  );
+  const selectedWorkflowScope = selectedWorkflowEligibility.scope;
+  const canRunWorkflow = runnableWorkflowNodeCount(nodes, edges) > 0;
   const runnableAgents = agents.filter(
     (agent): agent is typeof agent & { id: RunAdapterId } =>
       agent.installed && isRunAdapterId(agent.id),
@@ -395,6 +493,77 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     onError,
   });
   const checks = useProjectChecks({ projectId: project.id, setEvents, onError });
+  const workflowNodeTitles = useMemo(
+    () => new Map(nodes.map((node) => [node.id, node.data.title] as const)),
+    [nodes],
+  );
+  const workflowInteractiveNodeIds = useMemo(
+    () =>
+      new Set(
+        nodes
+          .filter((node) => node.data.kind === 'agent' || node.data.kind === 'task')
+          .map((node) => node.id),
+      ),
+    [nodes],
+  );
+  const workflowNodeStatuses = useMemo(
+    () =>
+      new Map(
+        (workflows.currentExecution?.nodeRuns ?? []).map(
+          (run) => [run.nodeId, canvasNodeStatus(run.status)] as const,
+        ),
+      ),
+    [workflows.currentExecution],
+  );
+  const displayedNodes = useMemo(
+    () =>
+      nodes.map((node) => {
+        const status = workflowNodeStatuses.get(node.id);
+        return status === undefined ? node : { ...node, data: { ...node.data, status } };
+      }),
+    [nodes, workflowNodeStatuses],
+  );
+  const workflowEdgeStates = useMemo(
+    () => new Map((workflows.currentExecution?.edges ?? []).map((edge) => [edge.edgeId, edge])),
+    [workflows.currentExecution],
+  );
+  const displayedEdges = useMemo(
+    () =>
+      edges.map((edge) => {
+        const runtime = workflowEdgeStates.get(edge.id);
+        if (runtime === undefined) return edge;
+        return {
+          ...edge,
+          animated: runtime.disposition === 'waiting' || runtime.status === 'running',
+          label: `${edge.data?.edgeType ?? runtime.type} · ${runtime.disposition.replaceAll('-', ' ')}`,
+          style: {
+            ...edge.style,
+            stroke: workflowEdgeColor(runtime.disposition),
+            strokeWidth: runtime.disposition === 'inactive' ? 1 : 2,
+            opacity: runtime.disposition === 'inactive' ? 0.45 : 1,
+          },
+        };
+      }),
+    [edges, workflowEdgeStates],
+  );
+  const workflowActive = workflows.activeExecution !== null;
+  const workflowStartBusy =
+    workflows.busyAction !== null || workflowActive || canvas === null || nodes.length === 0;
+
+  useEffect(() => {
+    if (workflowDecision === null) return;
+    if (!workflowDecisionIsCurrent(workflowDecision, workflows.currentExecution)) {
+      setWorkflowDecision(null);
+    }
+  }, [workflowDecision, workflows.currentExecution]);
+
+  const workflowDecisionCount =
+    (workflows.currentExecution?.approvals.length ?? 0) +
+    (workflows.currentExecution?.humanDecisions.length ?? 0) +
+    (workflows.currentExecution?.revisionEscapes.length ?? 0);
+  useEffect(() => {
+    if (workflowDecisionCount > 0) setActivityOpen(true);
+  }, [workflowDecisionCount]);
 
   const extensionTemplates = useMemo<ExtensionTemplate[]>(
     () =>
@@ -559,6 +728,32 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         run: () =>
           void instance?.fitView({ padding: 0.18, duration: settings.reducedMotion ? 0 : 240 }),
       },
+      ...(canRunWorkflow
+        ? [
+            {
+              id: 'run-workflow',
+              label: 'Run saved canvas workflow',
+              section: 'Workflow',
+              run: () => {
+                if (!workflowStartBusy) void workflows.start({ kind: 'workflow' });
+              },
+            },
+          ]
+        : []),
+      ...(selectedNode === null || selectedWorkflowScope === undefined
+        ? []
+        : [
+            {
+              id: 'run-selected-workflow-node',
+              label: `Run ${selectedNode.data.title} with dependencies`,
+              section: 'Workflow',
+              run: () => {
+                if (!workflowStartBusy) {
+                  void workflows.start(selectedWorkflowScope);
+                }
+              },
+            },
+          ]),
       {
         id: 'git-review',
         label: 'Review Git changes',
@@ -582,12 +777,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     [
       addExtensionNode,
       addNode,
+      canRunWorkflow,
       closeProject,
       extensionTemplates,
       instance,
       onOpenSettings,
       project.id,
+      selectedNode,
+      selectedWorkflowScope,
       settings.reducedMotion,
+      workflowStartBusy,
+      workflows,
     ],
   );
 
@@ -601,12 +801,25 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         canUndo={past.length > 0}
         canRedo={future.length > 0}
         notificationsOpen={notificationsOpen}
+        workflowStatus={
+          workflows.activeExecution?.status ?? workflows.currentExecution?.status ?? null
+        }
+        workflowBusy={workflowStartBusy}
+        canRunWorkflow={canRunWorkflow}
+        canRunSelected={selectedWorkflowEligibility.runnable}
+        runSelectedReason={selectedWorkflowEligibility.reason}
+        commandPaletteShortcut={commandPaletteShortcutLabel(settings.keyboardPreset)}
         onCloseProject={() => void closeProject()}
         onUndo={undo}
         onRedo={redo}
         onFitCanvas={() =>
           void instance?.fitView({ padding: 0.18, duration: settings.reducedMotion ? 0 : 240 })
         }
+        onRunWorkflow={() => void workflows.start({ kind: 'workflow' })}
+        onRunSelected={() => {
+          if (selectedWorkflowScope === undefined) return;
+          void workflows.start(selectedWorkflowScope);
+        }}
         onOpenGitReview={() => setGitReviewTarget({ kind: 'primary', projectId: project.id })}
         onOpenCommands={() => setPaletteOpen(true)}
         onToggleNotifications={() => setNotificationsOpen((open) => !open)}
@@ -637,8 +850,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         />
         <WorkspaceCanvas
           canvas={canvas}
-          nodes={nodes}
-          edges={edges}
+          nodes={displayedNodes}
+          edges={displayedEdges}
           settings={settings}
           extensionTemplates={extensionTemplates}
           instance={instance}
@@ -736,8 +949,21 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           checkCommands={checkCommands}
           latestChecks={checks.latestByCheckId}
           busyCheckId={checks.busyCheckId}
+          workflowExecutions={workflows.executions}
+          currentWorkflow={workflows.currentExecution}
+          workflowNodeTitles={workflowNodeTitles}
+          workflowInteractiveNodeIds={workflowInteractiveNodeIds}
+          workflowInteractionEvents={workflows.interactionEvents}
+          workflowLoading={workflows.loading}
+          workflowBusyAction={workflows.busyAction}
           onPrepareCheck={(checkId) => void checks.prepare(checkId)}
           onCancelCheck={(executionId) => void checks.cancel(executionId)}
+          onSelectWorkflow={workflows.selectExecution}
+          onRefreshWorkflows={() => void workflows.refresh()}
+          onCancelWorkflow={(executionId) => void workflows.cancel(executionId)}
+          onReviewWorkflowDecision={setWorkflowDecision}
+          onSendWorkflowInput={workflows.sendInput}
+          onInterruptWorkflowNode={workflows.interrupt}
           onOpenSettings={onOpenSettings}
           onOpenGitReview={(runId) =>
             setGitReviewTarget(
@@ -767,6 +993,33 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           projectName={project.name}
           onClose={() => setGitReviewTarget(null)}
           onError={onError}
+        />
+      )}
+      {workflowDecision !== null && (
+        <WorkflowDecisionDialog
+          target={workflowDecision}
+          busy={workflows.busyAction !== null}
+          onClose={() => setWorkflowDecision(null)}
+          onApproveLaunch={(request) => {
+            void workflows.approveNode(request).then(() => setWorkflowDecision(null));
+          }}
+          onApproveHuman={(request) => {
+            void workflows.approveHuman(request).then(() => setWorkflowDecision(null));
+          }}
+          onDecideReview={(request, decision, feedback) => {
+            void workflows
+              .decideReview(request, decision, feedback)
+              .then(() => setWorkflowDecision(null));
+          }}
+          onResolveRevision={(request, decision) => {
+            void workflows
+              .resolveRevisionEscape(request, decision)
+              .then(() => setWorkflowDecision(null));
+          }}
+          onReviewChanges={(runId) => {
+            setGitReviewTarget({ kind: 'agent-worktree', projectId: project.id, runId });
+            setWorkflowDecision(null);
+          }}
         />
       )}
       {runs.disclosure && (

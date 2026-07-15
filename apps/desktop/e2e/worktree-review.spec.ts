@@ -82,6 +82,10 @@ test('an agent worktree can be reviewed and committed without changing the prima
     await expect(targetRegion).toContainText('primary checkout remains untouched');
     const isolatedRunLabel = await targetRegion.locator('strong').innerText();
 
+    const baseComparisonTab = reviewDialog.getByRole('tab', { name: 'Changes vs base' });
+    await expect(baseComparisonTab).toHaveAttribute('aria-selected', 'true');
+    await expect(reviewDialog).toContainText('No committed changes vs base');
+    await reviewDialog.getByRole('tab', { name: 'Staged & unstaged' }).click();
     await reviewDialog.getByRole('button', { name: `Stage ${changedFile}` }).click();
     await expect(
       reviewDialog.getByRole('button', { name: `Unstage ${changedFile}` }),
@@ -143,6 +147,14 @@ test('an agent worktree can be reviewed and committed without changing the prima
     await expect(reviewDialog.getByRole('region', { name: 'Agent worktree target' })).toContainText(
       isolatedRunLabel,
     );
+    await expect(reviewDialog.getByRole('tab', { name: 'Changes vs base' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(reviewDialog).toContainText('Committed changes');
+    await expect(reviewDialog).toContainText(changedFile);
+    await expect(reviewDialog).toContainText('Committed comparison');
+    await reviewDialog.getByRole('tab', { name: 'Staged & unstaged' }).click();
     await expect(reviewDialog).toContainText(
       'Working tree clean. There are no local changes to review.',
     );

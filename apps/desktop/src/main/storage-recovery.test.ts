@@ -252,6 +252,10 @@ describe('LocalStore persistence and recovery', () => {
 
     const legacy = new DatabaseSync(databasePath);
     legacy.exec(`
+      DROP TABLE workflow_node_bindings;
+      DROP TABLE workflow_execution_events;
+      DROP TABLE workflow_executions;
+      DROP TABLE backup_health;
       DROP TABLE canvas_snapshots;
       DROP TABLE project_path_history;
       DROP TABLE backup_records;
@@ -266,14 +270,15 @@ describe('LocalStore persistence and recovery', () => {
     expect(upgraded.getProject(PROJECT_ID)).toEqual(project());
     expect(upgraded.loadCanvas(PROJECT_ID)).toEqual(sanitizeCanvasDocument(canvas()));
     const inspector = new DatabaseSync(databasePath, { readOnly: true });
-    expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({ user_version: 7 });
+    expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({ user_version: 8 });
     expect(
       inspector
         .prepare(
           `SELECT name FROM sqlite_master
            WHERE type = 'table' AND name IN
-             ('canvas_snapshots', 'project_path_history', 'backup_records', 'backup_health',
-              'trusted_extension_ledger', 'check_executions')
+              ('canvas_snapshots', 'project_path_history', 'backup_records', 'backup_health',
+              'trusted_extension_ledger', 'check_executions', 'workflow_executions',
+              'workflow_execution_events', 'workflow_node_bindings')
            ORDER BY name`,
         )
         .all(),
@@ -284,6 +289,9 @@ describe('LocalStore persistence and recovery', () => {
       { name: 'check_executions' },
       { name: 'project_path_history' },
       { name: 'trusted_extension_ledger' },
+      { name: 'workflow_execution_events' },
+      { name: 'workflow_executions' },
+      { name: 'workflow_node_bindings' },
     ]);
     inspector.close();
   });

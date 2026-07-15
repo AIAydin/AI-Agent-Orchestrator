@@ -429,7 +429,7 @@ export function contextAttachmentsForNode(
 }[] {
   if (runtime.run.nodeRuns[nodeId] === undefined) return [];
   const target = nodeById(runtime, nodeId);
-  if (target.type !== 'agent') return [];
+  if (target.type !== 'agent' && target.type !== 'task') return [];
   return runtime.canvas.edges
     .filter(
       (edge): edge is Extract<CanvasEdge, { type: 'context' }> =>

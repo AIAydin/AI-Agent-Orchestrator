@@ -157,4 +157,9 @@ export interface RuntimeCreationOptions {
   readonly runId: string;
   readonly scope: WorkflowRunScope;
   readonly occurredAt: string;
+  /**
+   * Optional host capability boundary. Full-workflow and group scopes omit data-only nodes, while
+   * explicit node/selection scopes fail closed when they name an unavailable node.
+   */
+  readonly eligibleNodeIds?: readonly string[];
 }

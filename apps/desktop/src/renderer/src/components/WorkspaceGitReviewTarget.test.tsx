@@ -101,6 +101,25 @@ vi.mock('./workspace/useProjectChecks.js', () => ({
     confirm: vi.fn(),
   }),
 }));
+vi.mock('./workspace/useWorkflowRuns.js', () => ({
+  workflowIsActive: () => false,
+  useWorkflowRuns: () => ({
+    executions: [],
+    currentExecution: null,
+    activeExecution: null,
+    selectedExecutionId: null,
+    loading: false,
+    busyAction: null,
+    selectExecution: vi.fn(),
+    refresh: vi.fn(),
+    start: vi.fn(),
+    approveNode: vi.fn(),
+    approveHuman: vi.fn(),
+    decideReview: vi.fn(),
+    resolveRevisionEscape: vi.fn(),
+    cancel: vi.fn(),
+  }),
+}));
 
 beforeEach(() => {
   Object.defineProperty(window, 'forgeboard', {

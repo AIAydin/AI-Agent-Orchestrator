@@ -7,6 +7,7 @@ import type {
 } from '../../../../shared/contracts.js';
 import type { WorkshopNode } from '../CanvasNode.js';
 import { resolveExtensionNodeBinding } from '../extension-nodes.js';
+import { normalizeCheckProducerData } from './workflow-node-config.js';
 import type { EdgeKind } from './types.js';
 
 export function edgeExplanation(kind: EdgeKind): string {
@@ -25,6 +26,7 @@ export function hydrateNodeData(
   discovery: Pick<ExtensionDiscoveryView, 'installed' | 'quarantined'>,
 ): WorkshopNode['data'] {
   const current = data as WorkshopNode['data'];
+  if (current.kind === 'test') return normalizeCheckProducerData(current);
   if (current.kind !== 'extension') return current;
   const binding = resolveExtensionNodeBinding(
     {

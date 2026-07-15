@@ -3,6 +3,13 @@ import { stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import process from 'node:process';
 
+import { createIsolatedSmokeProfile } from '../packaged-smoke/profile.js';
+import {
+  assertSmokeReportProfile,
+  assertSqliteDatabase,
+  parsePackagedSmokeReport,
+} from '../packaged-smoke/report.js';
+
 const COMMAND_TIMEOUT_MS = 120_000;
 const FORCE_KILL_DELAY_MS = 5_000;
 const MAX_OUTPUT_LENGTH = 2 * 1024 * 1024;
@@ -11,6 +18,17 @@ export interface CommandOptions {
   readonly cwd?: string;
   readonly environment?: NodeJS.ProcessEnv;
   readonly windowsVerbatimArguments?: boolean;
+}
+
+export class CommandExitError extends Error {
+  public constructor(
+    executable: string,
+    public readonly exitCode: number,
+    output: string,
+  ) {
+    super(`${basename(executable)} exited with ${String(exitCode)}. Output:\n${output}`);
+    this.name = 'CommandExitError';
+  }
 }
 
 export async function runCommand(
@@ -64,7 +82,7 @@ export async function runCommand(
           ? timeoutError()
           : code === 0
             ? undefined
-            : new Error(`${basename(executable)} exited with ${String(code)}. Output:\n${output}`),
+            : new CommandExitError(executable, code ?? -1, output),
       );
     });
   });
@@ -79,26 +97,22 @@ export async function smokeExecutable(
   if (!(await isFile(executable))) {
     throw new Error(`Installed Forgeboard executable is missing: ${executable}`);
   }
-  const output = await runCommand(
-    executable,
-    [...leadingArgs, `--user-data-dir=${userDataDirectory}`, '--smoke-test'],
-    {
-      ...options,
-      environment: {
-        ...process.env,
-        ...options.environment,
-        ELECTRON_ENABLE_LOGGING: '1',
-      },
-    },
-  );
-  if (!output.includes('FORGEBOARD_SMOKE_OK')) {
-    throw new Error(
-      `Installed ${basename(executable)} did not report smoke-test readiness. Output:\n${output}`,
-    );
-  }
-  if (!(await isFile(join(userDataDirectory, 'forgeboard.sqlite')))) {
-    throw new Error(`Installed ${basename(executable)} did not use the clean user-data directory.`);
-  }
+  const profile = await createIsolatedSmokeProfile(userDataDirectory);
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...options.environment,
+    ...profile.environment,
+  };
+  delete environment.ELECTRON_RENDERER_URL;
+  delete environment.ELECTRON_RUN_AS_NODE;
+  delete environment.NODE_OPTIONS;
+  const output = await runCommand(executable, [...leadingArgs, ...profile.launchArguments], {
+    ...options,
+    environment,
+  });
+  const report = parsePackagedSmokeReport(output);
+  assertSmokeReportProfile(report, profile.root);
+  await assertSqliteDatabase(join(userDataDirectory, 'forgeboard.sqlite'));
 }
 
 export async function runWithCleanup(

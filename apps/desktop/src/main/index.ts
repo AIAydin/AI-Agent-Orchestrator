@@ -3,10 +3,12 @@ import { join } from 'node:path';
 import { PRODUCT } from '@forgeboard/core';
 import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
 
+import { PACKAGED_SMOKE_MARKER } from '../shared/packaged-smoke.js';
 import { CloseCoordinator } from './close-coordinator.js';
 import { registerIpcHandlers } from './ipc.js';
 import type { ApplicationServices } from './ipc.js';
 import { verifyBundledGit } from './git-runtime.js';
+import { configurePackagedSmokeProfile, runPackagedApplicationSmoke } from './packaged-smoke.js';
 import { LocalStore } from './storage.js';
 
 let mainWindow: BrowserWindow | null = null;
@@ -16,11 +18,11 @@ let closeCoordinator: CloseCoordinator | null = null;
 let quitReady = false;
 let quitAttempt: Promise<boolean> | null = null;
 const approvedWindowCloses = new WeakSet<BrowserWindow>();
+app.setName(PRODUCT.name);
+const packagedSmokeProfile = configurePackagedSmokeProfile(app, process.argv);
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
-
-app.setName(PRODUCT.name);
 
 app.on('second-instance', () => {
   if (!mainWindow) return;
@@ -33,17 +35,23 @@ void app
   .then(async () => {
     configureSessionSecurity();
     store = new LocalStore(join(app.getPath('userData'), 'forgeboard.sqlite'));
-    if (process.argv.includes('--smoke-test')) {
-      const gitVersion = await verifyBundledGit();
-      process.stdout.write(`FORGEBOARD_SMOKE_OK ${gitVersion}\n`);
-      store.close();
-      store = null;
+    services = registerIpcHandlers(store);
+    closeCoordinator = new CloseCoordinator(dialog, ipcMain);
+    mainWindow = createWindow(services, closeCoordinator, packagedSmokeProfile === null);
+
+    if (packagedSmokeProfile !== null) {
+      const report = await runPackagedApplicationSmoke({
+        profile: packagedSmokeProfile,
+        webContents: mainWindow.webContents,
+        verifyGit: verifyBundledGit,
+      });
+      quitReady = true;
+      mainWindow.destroy();
+      await disposeApplication();
+      process.stdout.write(`${PACKAGED_SMOKE_MARKER} ${JSON.stringify(report)}\n`);
       app.quit();
       return;
     }
-    services = registerIpcHandlers(store);
-    closeCoordinator = new CloseCoordinator(dialog, ipcMain);
-    mainWindow = createWindow(services, closeCoordinator);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0 && services && closeCoordinator) {
@@ -51,14 +59,28 @@ void app
       }
     });
   })
-  .catch((error: unknown) => {
+  .catch(async (error: unknown) => {
     process.stderr.write(
       `Forgeboard failed to start: ${error instanceof Error ? error.message : 'unknown error'}\n`,
     );
+    if (packagedSmokeProfile !== null) {
+      quitReady = true;
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+      try {
+        await disposeApplication();
+      } catch (cleanupError) {
+        process.stderr.write(
+          `Forgeboard smoke cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : 'unknown error'}\n`,
+        );
+      }
+      app.exit(1);
+      return;
+    }
     app.quit();
   });
 
 app.on('window-all-closed', () => {
+  if (packagedSmokeProfile !== null) return;
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -130,6 +152,7 @@ async function disposeApplication(): Promise<void> {
 function createWindow(
   applicationServices: ApplicationServices,
   coordinator: CloseCoordinator,
+  showWhenReady = true,
 ): BrowserWindow {
   const window = new BrowserWindow({
     title: PRODUCT.name,
@@ -183,7 +206,7 @@ function createWindow(
     }
   });
   window.webContents.on('will-attach-webview', (event) => event.preventDefault());
-  window.once('ready-to-show', () => window.show());
+  if (showWhenReady) window.once('ready-to-show', () => window.show());
 
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   if (rendererUrl) {

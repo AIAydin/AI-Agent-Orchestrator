@@ -208,6 +208,7 @@ export function App() {
             flushSync(() => {
               setActiveProject(null);
               setShowSettings(false);
+              setError(null);
             });
             await loadBootstrap();
           }}

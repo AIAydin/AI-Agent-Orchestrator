@@ -91,6 +91,24 @@ import {
   type PortableImportOptions,
 } from './storage/transfers.js';
 import { type JsonRow, validateSettings } from './storage/values.js';
+import {
+  createWorkflowExecution as createDatabaseWorkflowExecution,
+  getWorkflowExecution as getDatabaseWorkflowExecution,
+  listProjectWorkflowExecutions as listDatabaseProjectWorkflowExecutions,
+  listRecoverableWorkflowExecutions as listDatabaseRecoverableWorkflowExecutions,
+  listWorkflowExecutionEvents as listDatabaseWorkflowExecutionEvents,
+  listWorkflowNodeBindings as listDatabaseWorkflowNodeBindings,
+  mutateWorkflowExecution as mutateDatabaseWorkflowExecution,
+} from './storage/workflow-executions.js';
+import type {
+  WorkflowExecutionEvent,
+  WorkflowExecutionMutationInput,
+  WorkflowExecutionMutationResult,
+  WorkflowExecutionRecord,
+  WorkflowExecutionRecordInput,
+  WorkflowEventPageRequest,
+  WorkflowNodeBinding,
+} from './storage/workflow-contracts.js';
 import { writeSettings } from './storage/writes.js';
 
 export type {
@@ -103,6 +121,44 @@ export type {
 export type { TransactionalAuditEvent } from './storage/database.js';
 export type { AuditedCanvasSnapshotRestore } from './storage/projects-canvases.js';
 export type { PortableImportOptions } from './storage/transfers.js';
+export {
+  WorkflowExecutionEventReplayConflictError,
+  WorkflowExecutionRevisionConflictError,
+} from './storage/workflow-executions.js';
+export {
+  WORKFLOW_BINDING_MAX_BYTES,
+  WORKFLOW_EVENT_PAYLOAD_MAX_BYTES,
+  WORKFLOW_NODE_BINDINGS_MAX_COUNT,
+  WORKFLOW_RUNTIME_MAX_BYTES,
+  WORKFLOW_SNAPSHOT_MAX_BYTES,
+  WorkflowBindingEnvelopeSchema,
+  WorkflowExecutionEventInputSchema,
+  WorkflowExecutionEventSchema,
+  WorkflowExecutionMutationSchema,
+  WorkflowExecutionRecordSchema,
+  WorkflowExecutionStatusSchema,
+  WorkflowEventPageRequestSchema,
+  WorkflowIdentifierSchema,
+  WorkflowNodeBindingSchema,
+  WorkflowNodeBindingUpdateSchema,
+  WorkflowRuntimeEnvelopeSchema,
+  WorkflowSnapshotEnvelopeSchema,
+  type WorkflowBindingEnvelope,
+  type WorkflowExecutionEvent,
+  type WorkflowExecutionEventInput,
+  type WorkflowExecutionMutation,
+  type WorkflowExecutionMutationInput,
+  type WorkflowExecutionMutationResult,
+  type WorkflowExecutionRecord,
+  type WorkflowExecutionRecordInput,
+  type WorkflowExecutionStatus,
+  type WorkflowEventPageRequest,
+  type WorkflowJsonValue,
+  type WorkflowNodeBinding,
+  type WorkflowNodeBindingUpdate,
+  type WorkflowRuntimeEnvelope,
+  type WorkflowSnapshotEnvelope,
+} from './storage/workflow-contracts.js';
 
 /**
  * Stable storage boundary for the Electron main process.
@@ -283,6 +339,46 @@ export class LocalStore {
 
   listProjectRuns(projectId: string, limit = 200): StoredRunRecord[] {
     return listDatabaseProjectRuns(this.database, projectId, limit);
+  }
+
+  createWorkflowExecution(record: WorkflowExecutionRecordInput): WorkflowExecutionRecord {
+    const created = createDatabaseWorkflowExecution(this.database, record);
+    this.notifyDurableChange();
+    return created;
+  }
+
+  getWorkflowExecution(executionId: string): WorkflowExecutionRecord | undefined {
+    return getDatabaseWorkflowExecution(this.database, executionId);
+  }
+
+  listRecoverableWorkflowExecutions(limit = 200): WorkflowExecutionRecord[] {
+    return listDatabaseRecoverableWorkflowExecutions(this.database, limit);
+  }
+
+  listProjectWorkflowExecutions(
+    projectId: string,
+    options: { readonly canvasId?: string; readonly limit?: number } = {},
+  ): WorkflowExecutionRecord[] {
+    return listDatabaseProjectWorkflowExecutions(this.database, projectId, options);
+  }
+
+  listWorkflowExecutionEvents(
+    executionId: string,
+    request: WorkflowEventPageRequest = {},
+  ): WorkflowExecutionEvent[] {
+    return listDatabaseWorkflowExecutionEvents(this.database, executionId, request);
+  }
+
+  listWorkflowNodeBindings(executionId: string): WorkflowNodeBinding[] {
+    return listDatabaseWorkflowNodeBindings(this.database, executionId);
+  }
+
+  mutateWorkflowExecution(
+    mutation: WorkflowExecutionMutationInput,
+  ): WorkflowExecutionMutationResult {
+    const result = mutateDatabaseWorkflowExecution(this.database, mutation);
+    if (!result.replayed) this.notifyDurableChange();
+    return result;
   }
 
   saveCheckExecution(execution: CheckExecutionView): StoredCheckExecutionRecord {

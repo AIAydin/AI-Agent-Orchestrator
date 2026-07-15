@@ -376,6 +376,24 @@ describe('workflow validation and planning', () => {
     );
   });
 
+  it('allows explicit Context edges to target an Agent-backed Task', () => {
+    const graph = canvas({
+      nodes: [taskNode('context-source'), taskNode('assigned-task')],
+      edges: [
+        {
+          id: 'task-context',
+          sourceNodeId: 'context-source',
+          targetNodeId: 'assigned-task',
+          type: 'context',
+          config: { required: true, attachmentIds: ['context-source'] },
+          createdAt: NOW,
+        },
+      ],
+    });
+
+    expect(validateWorkflow(graph).valid).toBe(true);
+  });
+
   it('unifies a review gate retry policy with its bounded revision loop', () => {
     const graph = canvas({
       nodes: [agentNode('agent-1'), gateNode('gate-1', 3)],

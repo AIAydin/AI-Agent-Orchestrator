@@ -5,6 +5,7 @@ import {
   Command,
   GitCompareArrows,
   Maximize2,
+  Play,
   Redo2,
   Settings,
   Undo2,
@@ -20,10 +21,18 @@ interface WorkspaceCommandBarProps {
   canUndo: boolean;
   canRedo: boolean;
   notificationsOpen: boolean;
+  workflowStatus: string | null;
+  workflowBusy: boolean;
+  canRunWorkflow: boolean;
+  canRunSelected: boolean;
+  runSelectedReason: string;
+  commandPaletteShortcut: string;
   onCloseProject: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onFitCanvas: () => void;
+  onRunWorkflow: () => void;
+  onRunSelected: () => void;
   onOpenGitReview: () => void;
   onOpenCommands: () => void;
   onToggleNotifications: () => void;
@@ -38,10 +47,18 @@ export function WorkspaceCommandBar({
   canUndo,
   canRedo,
   notificationsOpen,
+  workflowStatus,
+  workflowBusy,
+  canRunWorkflow,
+  canRunSelected,
+  runSelectedReason,
+  commandPaletteShortcut,
   onCloseProject,
   onUndo,
   onRedo,
   onFitCanvas,
+  onRunWorkflow,
+  onRunSelected,
   onOpenGitReview,
   onOpenCommands,
   onToggleNotifications,
@@ -80,7 +97,34 @@ export function WorkspaceCommandBar({
       <button className="icon-button" type="button" onClick={onFitCanvas} aria-label="Fit canvas">
         <Maximize2 size={16} />
       </button>
+      <button
+        className="workflow-run-trigger"
+        type="button"
+        disabled={workflowBusy || !canRunWorkflow}
+        title={
+          canRunWorkflow
+            ? 'Run every runnable node in the saved canvas workflow'
+            : 'Add an Agent, Test, Review gate, or bound human Diff/review node to run this canvas'
+        }
+        onClick={onRunWorkflow}
+      >
+        <Play size={13} aria-hidden="true" /> Run canvas
+      </button>
+      <button
+        className="workflow-run-trigger secondary"
+        type="button"
+        disabled={workflowBusy || !canRunSelected}
+        title={runSelectedReason}
+        onClick={onRunSelected}
+      >
+        <Play size={13} aria-hidden="true" /> Run selected
+      </button>
       <div className="command-spacer" />
+      {workflowStatus !== null && (
+        <span className="workflow-toolbar-state" title={`Workflow: ${workflowStatus}`}>
+          Workflow · {workflowStatus.replaceAll('-', ' ')}
+        </span>
+      )}
       <span className={`autosave-state ${saveState}`}>
         <CircleDot size={12} />
         {saveState === 'saved' ? 'Saved locally' : saveState}
@@ -105,7 +149,7 @@ export function WorkspaceCommandBar({
         <GitCompareArrows size={14} /> Changes
       </button>
       <button className="command-trigger" type="button" onClick={onOpenCommands}>
-        <Command size={14} /> Commands <kbd>⌘K</kbd>
+        <Command size={14} /> Commands <kbd>{commandPaletteShortcut}</kbd>
       </button>
       <button
         className="icon-button"

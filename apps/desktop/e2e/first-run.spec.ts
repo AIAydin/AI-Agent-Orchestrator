@@ -84,11 +84,15 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       });
     });
 
-    await test.step('everyday configuration is completed in the UI', async () => {
+    await test.step('available everyday configuration is completed in the UI', async () => {
       await page.getByRole('button', { name: 'Settings' }).click();
       const settings = page.locator('.settings-modal');
       await expect(settings.getByRole('heading', { name: 'Settings' })).toBeVisible();
-      await expect(settings.getByText('All everyday configuration lives here.')).toBeVisible();
+      await expect(
+        settings.getByText(
+          'Configure available features here; unavailable capabilities are clearly labeled.',
+        ),
+      ).toBeVisible();
 
       await settings.getByRole('button', { name: 'dark', exact: true }).click();
       await settings.getByRole('button', { name: 'compact', exact: true }).click();

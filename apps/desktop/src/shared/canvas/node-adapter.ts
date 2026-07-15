@@ -164,7 +164,11 @@ function canonicalData(
       return compact({
         ...base,
         description:
-          typeof raw['taskDescription'] === 'string' ? raw['taskDescription'] : undefined,
+          typeof raw['taskDescription'] === 'string'
+            ? raw['taskDescription']
+            : typeof raw['description'] === 'string'
+              ? raw['description']
+              : undefined,
         priority: raw['priority'],
         assigneeId: stringValue(raw['assigneeId']),
         dependencyTaskIds: stringArray(raw['dependencyTaskIds']),

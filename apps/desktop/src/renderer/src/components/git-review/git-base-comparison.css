@@ -1,0 +1,180 @@
+.git-review-mode-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 7px 18px 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.git-review-mode-tabs button {
+  padding: 7px 10px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.git-review-mode-tabs button:hover {
+  color: var(--text);
+}
+
+.git-review-mode-tabs button[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.git-base-comparison {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.git-review-working-tree {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.git-base-comparison-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-subtle);
+}
+
+.git-base-comparison-summary > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.git-base-comparison-summary small {
+  color: var(--text-faint);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.git-base-comparison-summary code,
+.git-base-comparison-summary strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-base-commit-list {
+  flex: 0 0 auto;
+  max-height: 170px;
+  padding: 7px 18px;
+  overflow: auto;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-soft);
+  background: var(--surface);
+  font-size: 9px;
+}
+
+.git-base-commit-list summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.git-base-commit-list ol {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 2px;
+  padding-left: 20px;
+}
+
+.git-base-binding-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 9px;
+  margin: 9px 0 6px;
+}
+
+.git-base-binding-list dt {
+  color: var(--text-faint);
+}
+
+.git-base-binding-list dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.git-base-binding-list code {
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.git-base-commit-list li {
+  padding-left: 3px;
+}
+
+.git-base-commit-list li code {
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.git-base-commit-list li span {
+  margin-left: 9px;
+  color: var(--text-faint);
+}
+
+.git-base-commit-list p {
+  margin: 8px 0 2px;
+  color: var(--text-faint);
+}
+
+.git-base-comparison-empty {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 24px;
+  color: var(--green);
+  text-align: center;
+}
+
+.git-base-comparison-empty p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.git-base-comparison-workspace {
+  flex: 1 1 auto;
+}
+
+.git-file-group li.git-base-file {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.git-hunk-read-only {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  color: var(--text-faint);
+}
+
+@media (max-width: 780px) {
+  .git-base-comparison-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

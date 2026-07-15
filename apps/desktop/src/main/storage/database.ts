@@ -121,6 +121,60 @@ export const MIGRATIONS = [
       last_error TEXT
     );
   `,
+  `
+    CREATE TABLE IF NOT EXISTS workflow_executions (
+      id TEXT PRIMARY KEY,
+      schema_version INTEGER NOT NULL CHECK(schema_version > 0),
+      project_id TEXT NOT NULL,
+      canvas_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN (
+        'queued', 'running', 'waiting-for-approval', 'paused', 'cancelling',
+        'failed', 'succeeded', 'cancelled', 'lost'
+      )),
+      revision INTEGER NOT NULL CHECK(revision >= 0),
+      runtime_json TEXT NOT NULL CHECK(length(runtime_json) <= 8388608),
+      snapshot_json TEXT NOT NULL CHECK(length(snapshot_json) <= 8388608),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES recent_projects(id) ON DELETE CASCADE,
+      FOREIGN KEY(canvas_id) REFERENCES canvas_documents(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_executions_recovery
+      ON workflow_executions(status, updated_at, id);
+    CREATE INDEX IF NOT EXISTS idx_workflow_executions_canvas_updated
+      ON workflow_executions(canvas_id, updated_at DESC, id);
+
+    CREATE TABLE IF NOT EXISTS workflow_execution_events (
+      storage_sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      execution_id TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      schema_version INTEGER NOT NULL CHECK(schema_version > 0),
+      execution_sequence INTEGER NOT NULL CHECK(execution_sequence >= 0),
+      execution_revision INTEGER NOT NULL CHECK(execution_revision > 0),
+      type TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      payload_json TEXT NOT NULL CHECK(length(payload_json) <= 1048576),
+      mutation_digest TEXT NOT NULL CHECK(length(mutation_digest) = 64),
+      FOREIGN KEY(execution_id) REFERENCES workflow_executions(id) ON DELETE CASCADE,
+      UNIQUE(execution_id, event_id),
+      UNIQUE(execution_id, execution_sequence)
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_execution_events_ordered
+      ON workflow_execution_events(execution_id, execution_sequence);
+
+    CREATE TABLE IF NOT EXISTS workflow_node_bindings (
+      execution_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      schema_version INTEGER NOT NULL CHECK(schema_version > 0),
+      binding_json TEXT NOT NULL CHECK(length(binding_json) <= 1048576),
+      execution_revision INTEGER NOT NULL CHECK(execution_revision > 0),
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY(execution_id, node_id),
+      FOREIGN KEY(execution_id) REFERENCES workflow_executions(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_node_bindings_revision
+      ON workflow_node_bindings(execution_id, execution_revision, node_id);
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {
@@ -175,6 +229,7 @@ export function migrate(database: DatabaseSync): void {
 
 export function clearAllTables(database: DatabaseSync): void {
   database.prepare('DELETE FROM backup_health').run();
+  database.prepare('DELETE FROM workflow_executions').run();
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM trusted_extension_ledger').run();
   database.prepare('DELETE FROM canvas_snapshots').run();
@@ -195,6 +250,9 @@ export function clearAllTables(database: DatabaseSync): void {
  * revoke extensions that the user approved on this installation.
  */
 export function clearPortableTables(database: DatabaseSync): void {
+  // Workflow recovery records are not part of portable export version 3. Clear them before the
+  // canvases they bind to so a replace import cannot retain orphaned runtime state.
+  database.prepare('DELETE FROM workflow_executions').run();
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM canvas_snapshots').run();
   database.prepare('DELETE FROM canvas_documents').run();

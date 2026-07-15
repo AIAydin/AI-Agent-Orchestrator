@@ -35,6 +35,8 @@ import { RecoveryIpcService } from './recovery-ipc.js';
 import { RunService } from './run-service.js';
 import { SettingsIpcService } from './settings-ipc.js';
 import type { LocalStore } from './storage.js';
+import { createWorkflowRuntimeComposition } from './workflow/workflow-composition.js';
+import { WorkflowIpcService } from './workflow/workflow-ipc.js';
 
 const PathSchema = z.string().min(1).max(32_768);
 const ProjectIdSchema = z.string().uuid();
@@ -119,6 +121,7 @@ export interface ApplicationServices {
   extensions: ExtensionIpcService;
   git: GitIpcService;
   checks: CheckIpcService;
+  workflows: WorkflowIpcService;
   recovery: RecoveryIpcService;
   prepareToQuit(): Promise<void>;
   dispose(): Promise<void>;
@@ -189,6 +192,16 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     store,
     (emit) => new CheckRuntime(store, () => store.getSettings(createDefaultSettings()), emit),
   );
+  const workflowRuntime = createWorkflowRuntimeComposition({
+    store,
+    runs,
+    repositories,
+    getSettings: () => store.getSettings(createDefaultSettings()),
+  });
+  const workflows = new WorkflowIpcService(dialog, store, workflowRuntime.createHost, {
+    resetRuntime: workflowRuntime.resetForPrivacy,
+    disposeRuntime: workflowRuntime.dispose,
+  });
   const resumeDataServices = (): void => {
     recovery.resumeAfterExternalDataMutation();
     docker.resumeAfterShutdownPause();
@@ -197,6 +210,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     previews.resumeAfterPrivacyReset();
     runs.resumeAfterPrivacyReset();
     checks.resumeAfterPrivacyReset();
+    workflows.resumeAfterPrivacyReset();
     shutdownServicesPaused = false;
   };
   const resumeAfterDataMutation = (): void => {
@@ -206,6 +220,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   };
   const pauseForShutdown = async (includeRecovery = true): Promise<void> => {
     if (shutdownServicesPaused) return;
+    await workflows.pauseForShutdown();
     const operations = [
       runs.pauseForShutdown(),
       previews.pauseForShutdown(),
@@ -224,6 +239,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       await backups.pause();
       await docker.pauseForShutdown();
       if (mode === 'replace') {
+        await workflows.resetForPrivacy();
         await awaitDataServices([
           runs.resetForPrivacy(),
           previews.resetForPrivacy(),
@@ -232,6 +248,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           git.resetForPrivacy(),
         ]);
       } else {
+        await workflows.pauseForDataMutation();
         runs.pauseForDataMutation();
         previews.pauseForDataMutation();
         checks.pauseForDataMutation();
@@ -467,6 +484,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
             return decision.response === 1;
           },
           resetDataServices: async () => {
+            await workflows.resetForPrivacy();
             await awaitDataServices([
               runs.resetForPrivacy(),
               previews.resetForPrivacy(),
@@ -494,6 +512,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   docker.registerIpcHandlers();
   git.registerIpcHandlers();
   checks.registerIpcHandlers();
+  workflows.registerIpcHandlers();
   recovery.registerIpcHandlers();
   return {
     settings,
@@ -503,6 +522,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     extensions,
     git,
     checks,
+    workflows,
     recovery,
     prepareToQuit: async () => {
       await prepareReversibleQuitBackup({
@@ -534,6 +554,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           );
         }
       }
+      const workflowStopped = await Promise.allSettled([workflows.dispose()]);
       const stopped = await Promise.allSettled([
         docker.dispose(),
         checks.dispose(),
@@ -542,7 +563,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         extensions.dispose(),
         git.dispose(),
       ]);
-      for (const result of stopped) {
+      for (const result of [...workflowStopped, ...stopped]) {
         if (result.status !== 'rejected') continue;
         process.stderr.write(
           `Forgeboard service shutdown failed: ${result.reason instanceof Error ? result.reason.message : 'unknown error'}\n`,

@@ -315,3 +315,45 @@ unchecked when only a subset of their required behavior has proof.
   kept all 325 checked files at or below 2,000 lines; formatting, lint, strict typecheck, 403 unit
   tests across 70 files, 63 integration tests across 10 files, and every workspace production build
   succeeded. All 9 Electron Playwright tests also passed in 1.9 minutes.
+- 2026-07-15: the agent Git review now exposes a read-only committed comparison from its persisted
+  immutable base commit to the resolver-owned worktree HEAD, with bounded commit IDs, ahead/behind
+  counts, diff stats, files, and hunks; the renderer still submits only the opaque project/run
+  target. Focused coverage passed 21 contract/renderer tests and 13 real-repository integration
+  tests, including an advanced primary branch, ownership/base mismatch rejection, post-commit
+  refresh, empty/error/truncated UI states, accessible tab switching, and an unchanged primary
+  checkout. The structure gate passed for all 411 checked files; broader merge, push, PR, comments,
+  split-diff, archive, and cleanup surfaces remain unchecked.
+- 2026-07-15: workflow-owned Agent and assigned Task attempts gained exact-owner ephemeral output,
+  bounded live terminal rendering, input, and interrupt controls without renderer-selected owner or
+  run IDs. Main-process tests cover wrong-window, stale-attempt, numeric WebContents ID reuse,
+  non-JSON and oversized output, NUL and oversized input, restart-without-handle failure, and
+  subscription cleanup. The host now validates evidence and external execution identity before
+  terminal success, retries one-shot completion persistence failures, preserves retryable prepared
+  cleanup, and rejects unsupported agent-review semantics before launch. Focused verification passed
+  81 unit tests, 36 integration tests, desktop/core strict typechecks, focused lint, the 411-file
+  structure gate, and `git diff --check`.
+- 2026-07-15: Settings gained a persisted Standard/VS Code command-palette preset; helper tests
+  cover both shortcut sets and a workspace-listener test covers the saved VS Code path. It also
+  gained 10 searchable static local help guides.
+  Inactive stored or imported collaboration, updater, terminal-shell, Git-remote, automatic cleanup,
+  and host-credential-mount preferences remain visible but disabled, safely clearable, or explicitly
+  unavailable instead of presenting dead controls as active. Focused verification passed 30 unit/UI
+  tests across 5 files, including
+  dialog focus, keyboard behavior, accessible help search/shortcut semantics, draft-only
+  import/reset, and replacement of an inactive cleanup policy with supported manual cleanup. The
+  affected first-run, preview, and project-check Electron E2E flows also passed after their argument
+  editors were bound to a stable accessible name and the full literal-argument rule as its
+  description. The 412-file structure gate passed; the broader first-run tour, complete
+  documentation, all-settings, and keyboard-only E2E checklist items remain unchecked.
+- 2026-07-15: adversarial convergence review re-authorized workflow input and interrupt inside the
+  serialized host queue, kept failed-input audit metadata content-free, made prepared/active
+  resource cleanup durable across expiry, privacy reset, and shutdown, removed an unavailable
+  action from binary committed diffs, and hardened Linux installer smoke against replacing or
+  purging an existing installation. A live Electron trace also exposed and closed an identical-
+  canvas autosave loop; destructive privacy reset now settles admitted canvas writes first.
+- 2026-07-15: the final converged `corepack pnpm verify` passed with all 412 authored files below
+  2,000 lines, formatting, lint, strict typecheck, 585 unit tests, 112 real integration tests, and
+  every workspace production build green. All 9 Electron Playwright scenarios passed in 1.9
+  minutes. A fresh unsigned macOS arm64 app, ZIP, and DMG were built; the isolated packaged-app
+  smoke and native DMG install/launch smoke both passed. GitHub publication, signing/notarization,
+  and fresh Windows/Linux installer proof remain unchecked.

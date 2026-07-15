@@ -1,11 +1,12 @@
 import { FileQuestion, Minus, Plus, RotateCcw } from 'lucide-react';
 
 import type { GitDiffHunkView, GitDiffLineView } from '../../../../shared/git-contracts.js';
-import type { GitReviewFile } from './git-review-model.js';
+import type { GitDiffDisplayArea, GitDiffDisplayFile } from './git-review-model.js';
 
 interface GitDiffViewerProps {
-  file: GitReviewFile | null;
+  file: GitDiffDisplayFile | null;
   busy: boolean;
+  readOnly?: boolean;
   onStageHunk: (hunkId: string) => void;
   onUnstageHunk: (hunkId: string) => void;
   onPrepareDiscard: (hunkId: string) => void;
@@ -20,6 +21,7 @@ function linePrefix(line: GitDiffLineView): string {
 export function GitDiffViewer({
   file,
   busy,
+  readOnly = false,
   onStageHunk,
   onUnstageHunk,
   onPrepareDiscard,
@@ -57,7 +59,9 @@ export function GitDiffViewer({
         </GitDiffNotice>
       ) : diff?.binary === true ? (
         <GitDiffNotice>
-          Binary content cannot be shown or selected by hunk. Use the whole-file action.
+          {readOnly
+            ? 'Binary content cannot be shown in this read-only committed comparison.'
+            : 'Binary content cannot be shown or selected by hunk. Use the whole-file action.'}
         </GitDiffNotice>
       ) : diff === undefined || diff.hunks.length === 0 ? (
         <GitDiffNotice>No textual hunks are available for this change.</GitDiffNotice>
@@ -70,6 +74,7 @@ export function GitDiffViewer({
               area={file.area}
               path={file.path}
               busy={busy}
+              readOnly={readOnly}
               onStage={() => onStageHunk(hunk.id)}
               onUnstage={() => onUnstageHunk(hunk.id)}
               onDiscard={() => onPrepareDiscard(hunk.id)}
@@ -86,14 +91,16 @@ function GitDiffHunk({
   area,
   path,
   busy,
+  readOnly,
   onStage,
   onUnstage,
   onDiscard,
 }: {
   hunk: GitDiffHunkView;
-  area: GitReviewFile['area'];
+  area: GitDiffDisplayArea;
   path: string;
   busy: boolean;
+  readOnly: boolean;
   onStage: () => void;
   onUnstage: () => void;
   onDiscard: () => void;
@@ -103,7 +110,9 @@ function GitDiffHunk({
       <header>
         <code>{hunk.header}</code>
         <span>
-          {area === 'staged' ? (
+          {readOnly ? (
+            <small className="git-hunk-read-only">Committed comparison</small>
+          ) : area === 'staged' ? (
             <button type="button" disabled={busy} onClick={onUnstage}>
               <Minus size={12} aria-hidden="true" /> Unstage hunk
             </button>

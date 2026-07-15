@@ -259,14 +259,108 @@ function EdgeConfiguration({
                   actionableFeedbackRequired: true,
                   ...(loopId === '' ? {} : { loopId }),
                 },
+                loop: data.loop,
               });
             }}
           />
         </label>
+        <label>
+          Maximum attempts
+          <input
+            type="number"
+            name={`edge-${edge.id}-revision-maximum-attempts`}
+            min={1}
+            max={100}
+            value={data.loop.maximumAttempts}
+            onChange={(event) =>
+              onChange({
+                ...data,
+                loop: {
+                  ...data.loop,
+                  maximumAttempts: Math.min(
+                    100,
+                    Math.max(1, Number.parseInt(event.target.value, 10) || 1),
+                  ),
+                },
+              })
+            }
+          />
+        </label>
+        <RequiredToggle
+          name={`edge-${edge.id}-revision-stop-review`}
+          checked={data.loop.stopConditions.includes('review-approved')}
+          label="Stop when review is approved"
+          onChange={(checked) =>
+            onChange({
+              ...data,
+              loop: {
+                ...data.loop,
+                stopConditions: toggleStopCondition(
+                  data.loop.stopConditions,
+                  'review-approved',
+                  checked,
+                ),
+              },
+            })
+          }
+        />
+        <RequiredToggle
+          name={`edge-${edge.id}-revision-stop-tests`}
+          checked={data.loop.stopConditions.includes('tests-passed')}
+          label="Stop when required tests pass"
+          onChange={(checked) =>
+            onChange({
+              ...data,
+              loop: {
+                ...data.loop,
+                stopConditions: toggleStopCondition(
+                  data.loop.stopConditions,
+                  'tests-passed',
+                  checked,
+                ),
+              },
+            })
+          }
+        />
+        <RequiredToggle
+          name={`edge-${edge.id}-revision-stop-human`}
+          checked={data.loop.stopConditions.includes('human-accepted')}
+          label="Allow human acceptance as a stop condition"
+          onChange={(checked) =>
+            onChange({
+              ...data,
+              loop: {
+                ...data.loop,
+                stopConditions: toggleStopCondition(
+                  data.loop.stopConditions,
+                  'human-accepted',
+                  checked,
+                ),
+              },
+            })
+          }
+        />
+        <label>
+          Human escape instructions
+          <textarea
+            name={`edge-${edge.id}-revision-human-escape`}
+            rows={3}
+            value={data.loop.humanEscapeInstructions}
+            onChange={(event) =>
+              onChange({
+                ...data,
+                loop: { ...data.loop, humanEscapeInstructions: event.target.value },
+              })
+            }
+          />
+        </label>
         <div className="edge-warning">
           <AlertTriangle size={13} />
-          Revisions always require actionable feedback and a matching bounded loop with a human
-          escape hatch.
+          {data.config.loopId === undefined
+            ? 'Enter a loop ID before this revision can execute.'
+            : data.loop.humanEscapeInstructions.trim().length < 10
+              ? 'Human escape instructions must contain at least 10 characters.'
+              : 'Connect implementation → review with a Review edge, then this Revision edge back to the implementation. The human escape hatch is always approval-gated.'}
         </div>
       </section>
     );
@@ -278,6 +372,20 @@ function EdgeConfiguration({
       <p>The downstream task remains blocked until the source task succeeds.</p>
     </section>
   );
+}
+
+function toggleStopCondition(
+  current: readonly ('review-approved' | 'tests-passed' | 'human-accepted')[],
+  condition: 'review-approved' | 'tests-passed' | 'human-accepted',
+  enabled: boolean,
+): ('review-approved' | 'tests-passed' | 'human-accepted')[] {
+  const next = new Set(current);
+  if (enabled) next.add(condition);
+  else next.delete(condition);
+  if (!next.has('review-approved') && !next.has('tests-passed')) next.add('review-approved');
+  return ['review-approved', 'tests-passed', 'human-accepted'].filter((candidate) =>
+    next.has(candidate as 'review-approved' | 'tests-passed' | 'human-accepted'),
+  ) as ('review-approved' | 'tests-passed' | 'human-accepted')[];
 }
 
 function RequiredToggle({

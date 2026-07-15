@@ -22,6 +22,24 @@ export const ProcessReferenceSchema = z
   .strict();
 export type ProcessReference = z.infer<typeof ProcessReferenceSchema>;
 
+/**
+ * Identifies host-managed work that has no operating-system process of its own. The identifier is
+ * useful while the host is alive, but is deliberately not recovery proof after a host restart.
+ */
+export const InternalExecutionReferenceSchema = z
+  .object({
+    kind: z.literal('internal'),
+    executionId: EntityIdSchema,
+    startedAt: TimestampSchema,
+  })
+  .strict();
+export type InternalExecutionReference = z.infer<typeof InternalExecutionReferenceSchema>;
+export const WorkflowExecutionReferenceSchema = z.union([
+  ProcessReferenceSchema,
+  InternalExecutionReferenceSchema,
+]);
+export type WorkflowExecutionReference = z.infer<typeof WorkflowExecutionReferenceSchema>;
+
 export const NodeRunStateSchema = z
   .object({
     nodeId: EntityIdSchema,
@@ -31,17 +49,26 @@ export const NodeRunStateSchema = z
     startedAt: TimestampSchema.optional(),
     endedAt: TimestampSchema.optional(),
     process: ProcessReferenceSchema.optional(),
+    internalExecution: InternalExecutionReferenceSchema.optional(),
     resumable: z.boolean().default(false),
     failureCode: z.string().min(1).max(300).optional(),
     statusReason: z.string().min(1).max(20_000).optional(),
   })
   .strict()
   .superRefine((run, context) => {
-    if ((run.status === 'running' || run.status === 'cancelling') && run.process === undefined) {
+    const active = run.status === 'running' || run.status === 'cancelling';
+    if (active && run.process === undefined && run.internalExecution === undefined) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['process'],
-        message: `${run.status} runs require a live process reference`,
+        message: `${run.status} runs require a process or internal execution reference`,
+      });
+    }
+    if (run.process !== undefined && run.internalExecution !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['internalExecution'],
+        message: 'A node run cannot reference both a process and an internal execution',
       });
     }
     if (isTerminalRunStatus(run.status) && run.endedAt === undefined) {
@@ -366,11 +393,11 @@ export function validateWorkflow(untrustedCanvas: unknown): WorkflowValidationRe
     if (edge.sourceNodeId === edge.targetNodeId)
       pushIssue(issues, 'SELF_EDGE', 'Self edges are not executable', edge.id);
 
-    if (edge.type === 'context' && target?.type !== 'agent') {
+    if (edge.type === 'context' && target?.type !== 'agent' && target?.type !== 'task') {
       pushIssue(
         issues,
         'INVALID_EDGE_TARGET',
-        'Context edges must target an agent node',
+        'Context edges must target an Agent or assigned Task node',
         edge.id,
         edge.targetNodeId,
       );
@@ -768,8 +795,9 @@ export class WorkflowValidationError extends Error {
   public readonly issues: readonly WorkflowValidationIssue[];
 
   public constructor(issues: readonly WorkflowValidationIssue[]) {
+    const summary = issues[0]?.message;
     super(
-      `Workflow validation failed with ${issues.length} issue${issues.length === 1 ? '' : 's'}`,
+      `Workflow validation failed with ${issues.length} issue${issues.length === 1 ? '' : 's'}${summary === undefined ? '' : `: ${summary}`}`,
     );
     this.name = 'WorkflowValidationError';
     this.issues = issues;
@@ -948,6 +976,7 @@ export interface NodeRunTransition {
   readonly status: RunStatus;
   readonly occurredAt: string;
   readonly process?: ProcessReference;
+  readonly internalExecution?: InternalExecutionReference;
   readonly reason?: string;
   readonly failureCode?: string;
 }
@@ -964,6 +993,10 @@ export function transitionNodeRun(
     transition.status === 'running' || transition.status === 'cancelling'
       ? (transition.process ?? current.process)
       : undefined;
+  const internalExecution =
+    transition.status === 'running' || transition.status === 'cancelling'
+      ? (transition.internalExecution ?? current.internalExecution)
+      : undefined;
   const retrying =
     transition.status === 'queued' && (current.status === 'failed' || current.status === 'lost');
   const next = {
@@ -978,6 +1011,7 @@ export function transitionNodeRun(
         : { startedAt: current.startedAt }),
     ...(terminal ? { endedAt: transition.occurredAt } : {}),
     ...(process === undefined ? {} : { process }),
+    ...(internalExecution === undefined ? {} : { internalExecution }),
     resumable: current.resumable,
     ...(transition.failureCode === undefined ? {} : { failureCode: transition.failureCode }),
     ...(transition.reason === undefined ? {} : { statusReason: transition.reason }),
@@ -1019,6 +1053,9 @@ export function requestWorkflowCancellation(run: WorkflowRun, occurredAt: string
           status,
           occurredAt,
           ...(nodeRun.process === undefined ? {} : { process: nodeRun.process }),
+          ...(nodeRun.internalExecution === undefined
+            ? {}
+            : { internalExecution: nodeRun.internalExecution }),
           reason: 'Workflow cancellation requested by the user',
         }),
       ];
@@ -1039,7 +1076,10 @@ export interface RecoveryResult {
   readonly lostNodeIds: readonly string[];
 }
 
-/** Marks persisted active states as lost unless the caller proves the exact process identity is live. */
+/**
+ * Marks persisted active states as lost unless the caller proves an exact process identity is live.
+ * In-process executions always become lost because their identifier is not restart-recovery proof.
+ */
 export function recoverInterruptedRun(
   run: WorkflowRun,
   liveProcesses: ReadonlyMap<number, string>,
@@ -1049,6 +1089,18 @@ export function recoverInterruptedRun(
   const nodeRuns = Object.fromEntries(
     Object.entries(run.nodeRuns).map(([nodeId, nodeRun]) => {
       if (nodeRun.status !== 'running' && nodeRun.status !== 'cancelling') return [nodeId, nodeRun];
+      if (nodeRun.internalExecution !== undefined) {
+        lostNodeIds.push(nodeId);
+        return [
+          nodeId,
+          transitionNodeRun(nodeRun, {
+            status: 'lost',
+            occurredAt,
+            failureCode: 'INTERNAL_EXECUTION_NOT_RECOVERED',
+            reason: 'An in-process execution cannot be proven alive after a host restart',
+          }),
+        ];
+      }
       const liveIdentity =
         nodeRun.process === undefined ? undefined : liveProcesses.get(nodeRun.process.pid);
       if (liveIdentity === nodeRun.process?.identityToken) return [nodeId, nodeRun];

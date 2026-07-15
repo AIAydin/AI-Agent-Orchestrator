@@ -373,6 +373,9 @@ export function PrivacySettings({
             disabled={busy || deletePhrase !== 'DELETE ALL LOCAL DATA'}
             onClick={() =>
               void perform(async () => {
+                // Drain or settle any admitted canvas write before the main process closes
+                // ordinary data-operation admission for the destructive reset.
+                await onFlushActiveCanvas();
                 await onDeleteAll(deletePhrase);
               })
             }
