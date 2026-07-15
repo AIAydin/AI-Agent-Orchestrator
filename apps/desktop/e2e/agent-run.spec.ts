@@ -54,7 +54,9 @@ test('the deterministic agent requires approval and reports its real local work'
       const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
       await expect(dialog).toBeVisible();
       await expect(
-        dialog.getByText('Forgeboard has prepared this run, but no agent process has started.'),
+        dialog.getByText(
+          'Forgeboard has prepared this run, but no approved agent run has started.',
+        ),
       ).toBeVisible();
       await expect(
         dialog.getByText('Local deterministic test process', { exact: true }),
@@ -63,7 +65,7 @@ test('the deterministic agent requires approval and reports its real local work'
       await expect(dialog).toContainText(/packages[\\/]+test-agent[\\/]+dist[\\/]+cli\.js/);
       await expect(dialog).toContainText(writablePrompt);
       await expect(dialog).toContainText('Test agent in a dedicated worktree');
-      await expect(dialog).toContainText('Network: blocked');
+      await expect(dialog).toContainText('Network: provider-controlled');
       // The configured root has a deliberately unique leaf. Forgeboard canonicalizes paths, so
       // Windows may expand the runner's 8.3 short temp prefix before displaying it.
       await expect(dialog).toContainText('ui-configured-worktrees');
@@ -103,7 +105,7 @@ test('the deterministic agent requires approval and reports its real local work'
       const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
       await expect(dialog).toContainText('Test agent read-only plan');
       await expect(dialog).toContainText('Write: none');
-      await expect(dialog).toContainText('Network: blocked');
+      await expect(dialog).toContainText('Network: provider-controlled');
       await dialog.getByRole('button', { name: 'Approve & launch' }).click();
 
       const history = page.locator('.run-history');

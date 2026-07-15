@@ -1,8 +1,14 @@
+import path from 'node:path';
+
 import {
   CliAgentAdapter,
   createCustomCliAdapter,
+  detectDockerRuntime,
   getBuiltInAgentManifest,
+  locateAgentExecutable,
   planDockerAgentLaunch,
+  PreparedAgentLaunchSchema,
+  type AgentAdapterManifest,
   type PermissionProfile,
 } from '@forgeboard/agent-adapters';
 import {
@@ -13,13 +19,25 @@ import {
 
 import type { AppSettings } from '../../shared/contracts.js';
 import { customAgentManifest } from '../custom-agent.js';
-import { checkDockerReadiness } from '../docker-runtime.js';
+import { resolveDockerExecutable } from '../docker-runtime.js';
 import type {
   AgentAdapterPlanner,
   AgentExecutionRequest,
   AgentRuntimeAdapterPlan,
   TrustedAdapterLookup,
 } from './contracts.js';
+import {
+  assertCustomAttachmentsWithinReadRoots,
+  resolveCustomDockerPermission,
+  resolveCustomHostPermission,
+  type ResolvedCustomPermission,
+} from './custom-permission.js';
+import {
+  assertLaunchExecutableIdentity,
+  assertLaunchFileIdentity,
+  captureLaunchExecutableIdentity,
+  captureLaunchFileIdentity,
+} from './launch-integrity.js';
 
 const DOCKER_SAFE_ENVIRONMENT_NAMES = new Set(['COLORTERM', 'LANG', 'LC_ALL', 'TERM']);
 
@@ -48,15 +66,31 @@ async function prepareAdapter(
 ): Promise<AgentRuntimeAdapterPlan> {
   const environment = allowedEnvironment(settings.envAllowlist);
   if (input.adapterId === 'test-agent') {
-    if (input.permissionProfile === 'docker-isolated') {
+    if (
+      input.permissionProfile === 'docker-isolated' ||
+      (input.permissionProfile === 'custom' &&
+        settings.customPermissionProfile.runtime === 'docker')
+    ) {
       throw new Error(
         'The bundled deterministic agent runs directly. Choose a container-ready coding-agent adapter for Docker isolation.',
       );
     }
     const cliPath = await dependencies.resolveTestAgentCliPath();
     const adapter = createCustomCliAdapter({ ...TEST_AGENT_MANIFEST, id: 'test-agent' });
-    const profile = permissionProfile(input.permissionProfile, cwd, true);
-    const actions = testAgentActions(input, runId);
+    const custom =
+      input.permissionProfile === 'custom'
+        ? await resolveCustomHostPermission(
+            settings.customPermissionProfile,
+            cwd,
+            process.execPath,
+            input.prompt,
+          )
+        : undefined;
+    const profile = custom?.profile ?? permissionProfile(input.permissionProfile, cwd, true);
+    if (custom !== undefined) {
+      assertCustomAttachmentsWithinReadRoots(custom, input.context.attachments);
+    }
+    const actions = testAgentActions(input, runId, cwd, custom);
     const plan = adapter.prepareLaunch({
       prompt: createTestAgentRunCommand(actions),
       cwd,
@@ -70,7 +104,22 @@ async function prepareAdapter(
         unset: [],
       },
     });
-    return { adapter, plan, detectionWarnings: [], trustedExtensionAdapter: false };
+    const [executableIdentity, cliIdentity] = await Promise.all([
+      captureLaunchExecutableIdentity(process.execPath),
+      captureLaunchFileIdentity(cliPath),
+    ]);
+    return {
+      adapter,
+      plan,
+      detectionWarnings: [],
+      trustedExtensionAdapter: false,
+      revalidateBeforeLaunch: async () => {
+        await Promise.all([
+          assertLaunchExecutableIdentity(executableIdentity),
+          assertLaunchFileIdentity(cliIdentity),
+        ]);
+      },
+    };
   }
 
   const settingsManifest =
@@ -84,7 +133,10 @@ async function prepareAdapter(
   if (manifest === undefined) throw new Error(`No adapter is registered for ${input.adapterId}.`);
   const adapter = new CliAgentAdapter(manifest);
 
-  if (input.permissionProfile === 'docker-isolated') {
+  if (
+    input.permissionProfile === 'docker-isolated' ||
+    (input.permissionProfile === 'custom' && settings.customPermissionProfile.runtime === 'docker')
+  ) {
     return await prepareDockerAdapter(
       adapter,
       input,
@@ -99,39 +151,54 @@ async function prepareAdapter(
     input.adapterId === 'custom'
       ? manifest.executable.command
       : settings.agentExecutableOverrides[input.adapterId]?.trim();
-  const detection = await adapter.detect({
+  const location = await locateAgentExecutable(manifest, {
     ...(executableOverride === undefined || executableOverride === ''
       ? {}
       : { executable: executableOverride }),
+    cwd,
   });
-  if (!detection.available) {
+  if (!location.available || location.executable === null) {
     throw new Error(
-      `${manifest.name} is not available: ${detection.reason ?? 'executable not found'}`,
+      `${manifest.name} is not available: ${location.reason ?? 'executable not found'}`,
     );
+  }
+  const custom =
+    input.permissionProfile === 'custom'
+      ? await resolveCustomHostPermission(
+          settings.customPermissionProfile,
+          cwd,
+          location.executable,
+          input.prompt,
+        )
+      : undefined;
+  if (custom !== undefined) {
+    assertCustomAttachmentsWithinReadRoots(custom, input.context.attachments);
   }
   const configuredModel = manifest.capabilities.modelSelection
     ? settings.agentDefaultModels[input.adapterId]?.trim()
     : undefined;
   const plan = adapter.prepareLaunch({
-    prompt: input.prompt,
+    prompt: custom?.prompt ?? input.prompt,
     cwd,
-    permissionProfile: permissionProfile(
-      input.permissionProfile,
-      cwd,
-      false,
-      input.adapterId !== 'custom',
-    ),
+    permissionProfile:
+      custom === undefined
+        ? permissionProfile(input.permissionProfile, cwd, false, input.adapterId !== 'custom')
+        : providerBaseProfile(manifest, custom, cwd),
     contextAttachments: input.context.attachments,
     ...(configuredModel === undefined || configuredModel === '' ? {} : { model: configuredModel }),
-    executable: detection.executable,
+    executable: location.executable,
     extraArguments: [],
     environment: { inherit: 'none', variables: environment, unset: [] },
   });
+  const executableIdentity = await captureLaunchExecutableIdentity(location.executable);
   return {
     adapter,
-    plan,
-    detectionWarnings: [...detection.capabilityWarnings],
+    plan: custom === undefined ? plan : applyCustomDisclosure(plan, custom),
+    detectionWarnings: [],
     trustedExtensionAdapter: trustedManifest !== undefined,
+    revalidateBeforeLaunch: async () => {
+      await assertLaunchExecutableIdentity(executableIdentity);
+    },
   };
 }
 
@@ -151,53 +218,125 @@ async function prepareDockerAdapter(
       'The safe Docker profile does not mount host credentials. Disable that legacy setting and authenticate inside the selected image.',
     );
   }
-  const runtime = await checkDockerReadiness({
-    dockerExecutable: settings.dockerExecutable,
+  const custom =
+    input.permissionProfile === 'custom'
+      ? await resolveCustomDockerPermission(
+          settings.customPermissionProfile,
+          cwd,
+          settings.dockerContainerExecutable,
+          input.prompt,
+        )
+      : undefined;
+  if (custom !== undefined) {
+    assertCustomAttachmentsWithinReadRoots(custom, input.context.attachments);
+  }
+  const dockerExecutable = await resolveDockerExecutable(settings.dockerExecutable);
+  const dockerExecutableIdentity = await captureLaunchExecutableIdentity(dockerExecutable);
+  const runtime = await detectDockerRuntime({
+    dockerExecutable,
     image: settings.dockerImage,
-    containerExecutable: settings.dockerContainerExecutable,
+    timeoutMs: 5_000,
   });
   if (!runtime.available) {
     throw new Error(`Docker isolation is unavailable: ${runtime.reason ?? 'probe failed'}`);
   }
+  await assertLaunchExecutableIdentity(dockerExecutableIdentity);
+  if (runtime.imageId === undefined || runtime.imageId.trim() === '') {
+    throw new Error('Docker isolation is unavailable: the selected image has no stable image ID.');
+  }
+  const approvedImageId = runtime.imageId;
   const configuredModel = adapter.manifest.capabilities.modelSelection
     ? settings.agentDefaultModels[input.adapterId]?.trim()
     : undefined;
   const providerPlan = adapter.prepareLaunch({
-    prompt: input.prompt,
+    prompt: custom?.prompt ?? input.prompt,
     cwd,
-    permissionProfile: permissionProfile(
-      'worktree-write',
-      cwd,
-      false,
-      input.adapterId !== 'custom',
-    ),
+    permissionProfile:
+      custom === undefined
+        ? permissionProfile('worktree-write', cwd, false, input.adapterId !== 'custom')
+        : providerBaseProfile(adapter.manifest, custom, cwd),
     contextAttachments: input.context.attachments,
     ...(configuredModel === undefined || configuredModel === '' ? {} : { model: configuredModel }),
     executable: adapter.manifest.executable.command,
     extraArguments: [],
     environment: { inherit: 'none', variables: environment, unset: [] },
   });
+  const dockerPolicy = custom?.profile.custom;
   const plan = await planDockerAgentLaunch(providerPlan, {
     assignedWorktreePath: cwd,
-    worktreeAccess: 'read-write',
+    worktreeAccess: custom?.worktreeAccess ?? 'read-write',
     dockerExecutable: runtime.executable,
-    image: settings.dockerImage,
+    image: approvedImageId,
     containerExecutable: settings.dockerContainerExecutable,
     userId: positiveContainerIdentity(process.getuid?.()),
     groupId: positiveContainerIdentity(process.getgid?.()),
-    cpuLimit: settings.dockerCpuLimit,
-    memoryLimitMb: settings.dockerMemoryMb,
+    cpuLimit:
+      custom === undefined
+        ? settings.dockerCpuLimit
+        : settings.customPermissionProfile.docker.cpuLimit,
+    memoryLimitMb:
+      custom === undefined
+        ? settings.dockerMemoryMb
+        : settings.customPermissionProfile.docker.memoryMb,
     pidsLimit: 256,
     tmpfsSizeMb: 128,
     network:
-      settings.dockerNetwork === 'enabled'
+      (custom === undefined
+        ? settings.dockerNetwork
+        : settings.customPermissionProfile.docker.network) === 'enabled'
         ? { mode: 'bridge', explicitlyApproved: true }
         : { mode: 'none' },
     environmentAllowlist: settings.envAllowlist.filter((name) =>
       DOCKER_SAFE_ENVIRONMENT_NAMES.has(name),
     ),
   });
-  return { adapter, plan, detectionWarnings: [], trustedExtensionAdapter };
+  const imageBindingWarning = `Docker image ${settings.dockerImage} was reviewed as immutable image ID ${approvedImageId}; the approved launch uses that exact ID.`;
+  const dockerPreflightWarning =
+    'Plan preparation invoked only the identity-bound Docker client for bounded daemon/version and image-metadata inspection; it did not run the image or its agent entrypoint.';
+  const boundPlan = PreparedAgentLaunchSchema.parse({
+    ...plan,
+    disclosure: {
+      ...plan.disclosure,
+      warnings: [
+        ...new Set([...plan.disclosure.warnings, imageBindingWarning, dockerPreflightWarning]),
+      ],
+    },
+  });
+  return {
+    adapter,
+    plan:
+      custom === undefined
+        ? boundPlan
+        : PreparedAgentLaunchSchema.parse({
+            ...boundPlan,
+            disclosure: {
+              ...boundPlan.disclosure,
+              permissionProfile: custom.profile,
+              warnings: [
+                ...new Set([
+                  ...providerPlan.disclosure.warnings,
+                  ...boundPlan.disclosure.warnings,
+                  custom.profile.disclosure,
+                  ...(dockerPolicy === undefined ? [] : dockerPolicy.policyLimitations),
+                ]),
+              ],
+            },
+          }),
+    detectionWarnings: [],
+    trustedExtensionAdapter,
+    revalidateBeforeLaunch: async () => {
+      await assertLaunchExecutableIdentity(dockerExecutableIdentity);
+      const current = await detectDockerRuntime({
+        dockerExecutable: runtime.executable,
+        image: settings.dockerImage,
+        timeoutMs: 5_000,
+      });
+      if (!current.available || current.imageId !== approvedImageId) {
+        throw new Error('The reviewed Docker image changed. Review a fresh launch.');
+      }
+      await assertLaunchExecutableIdentity(dockerExecutableIdentity);
+    },
+  };
 }
 
 function allowedEnvironment(names: readonly string[]): Record<string, string> {
@@ -228,11 +367,24 @@ function permissionProfile(
       enforcement: 'disclosure-only',
       readRoots: [cwd],
       writeRoots: writable ? [cwd] : [],
-      network: 'blocked',
+      network: 'provider-controlled',
       approvalPolicy: 'The exact deterministic action list requires approval before launch.',
       disclosure: writable
         ? 'The local deterministic agent is instructed to write only inside this dedicated worktree.'
         : 'The local deterministic agent receives an action list with no filesystem writes.',
+      custom: {
+        runtime: 'host',
+        filesystem: writable ? 'assigned-worktree-write' : 'assigned-worktree-read-only',
+        ignoredFileRead: 'deny',
+        sensitiveFileRead: 'deny',
+        launchExecutablePolicy: 'selected-agent-only',
+        allowedLaunchExecutables: [process.execPath],
+        forgeboardManagedActions: { developmentServers: 'deny', tests: 'deny' },
+        requireReviewBeforePrimary: true,
+        policyLimitations: [
+          'The deterministic fixture executes only its exact reviewed action protocol.',
+        ],
+      },
     };
   }
   return {
@@ -258,14 +410,64 @@ function permissionProfile(
   };
 }
 
-function testAgentActions(input: AgentExecutionRequest, runId: string): TestAgentAction[] {
+function providerBaseProfile(
+  manifest: AgentAdapterManifest,
+  custom: ResolvedCustomPermission,
+  cwd: string,
+): PermissionProfile {
+  const preferred = custom.worktreeAccess === 'read-only' ? 'plan-read-only' : 'worktree-write';
+  const requested = manifest.capabilities.permissionModes.includes(preferred)
+    ? preferred
+    : manifest.capabilities.permissionModes.includes('custom')
+      ? 'custom'
+      : undefined;
+  if (requested === undefined) {
+    throw new Error(
+      `${manifest.name} does not support a permission mode compatible with this Custom profile.`,
+    );
+  }
+  if (requested === 'custom') return custom.profile;
+  const providerPermissionEnforced =
+    (manifest.invocation.permissionArguments[requested]?.length ?? 0) > 0;
+  return permissionProfile(requested, cwd, false, providerPermissionEnforced);
+}
+
+function applyCustomDisclosure(
+  plan: ReturnType<CliAgentAdapter['prepareLaunch']>,
+  custom: ResolvedCustomPermission,
+) {
+  return PreparedAgentLaunchSchema.parse({
+    ...plan,
+    disclosure: {
+      ...plan.disclosure,
+      permissionProfile: custom.profile,
+      warnings: [...new Set([...plan.disclosure.warnings, custom.profile.disclosure])],
+    },
+  });
+}
+
+function testAgentActions(
+  input: AgentExecutionRequest,
+  runId: string,
+  cwd: string,
+  custom?: ResolvedCustomPermission,
+): TestAgentAction[] {
   const actions: TestAgentAction[] = [
     { type: 'emit', stream: 'stdout', data: 'Forgeboard deterministic agent started.\n' },
   ];
-  if (input.permissionProfile === 'worktree-write') {
+  if (
+    input.permissionProfile === 'worktree-write' ||
+    (input.permissionProfile === 'custom' && custom?.worktreeAccess === 'read-write')
+  ) {
     actions.push({
       type: 'write-file',
-      path: `forgeboard-agent-output-${runId.slice(0, 8)}.md`,
+      path:
+        custom?.profile.writeRoots[0] === undefined
+          ? `forgeboard-agent-output-${runId.slice(0, 8)}.md`
+          : path.join(
+              path.relative(cwd, custom.profile.writeRoots[0]),
+              `forgeboard-agent-output-${runId.slice(0, 8)}.md`,
+            ),
       content: [
         '# Forgeboard deterministic agent output',
         '',
@@ -273,7 +475,7 @@ function testAgentActions(input: AgentExecutionRequest, runId: string): TestAgen
         '',
         '## Request',
         '',
-        input.prompt,
+        custom?.prompt ?? input.prompt,
         '',
       ].join('\n'),
       encoding: 'utf8',

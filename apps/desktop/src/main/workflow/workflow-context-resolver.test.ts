@@ -45,17 +45,17 @@ describe('FileNodeWorkflowContextResolver', () => {
       runtime,
     });
 
-    expect(result.attachments).toEqual([
-      {
-        attachmentId: 'file-1',
-        attachment: {
-          path: realpathSync(join(root, 'src.ts')),
-          kind: 'file',
-          label: 'Source file',
-          explicitlyApproved: true,
-        },
+    expect(result.attachments).toHaveLength(1);
+    expect(result.attachments[0]).toMatchObject({
+      attachmentId: 'file-1',
+      attachment: {
+        path: realpathSync(join(root, 'src.ts')),
+        kind: 'file',
+        label: 'Source file',
+        explicitlyApproved: true,
       },
-    ]);
+    });
+    expect(result.attachments[0]?.attachment.sha256).toMatch(/^[0-9a-f]{64}$/u);
     expect(typeof result.manifestId).toBe('string');
     expect(result.manifestDigest).toMatch(/^[0-9a-f]{64}$/u);
     expect(appendAudit).toHaveBeenCalledWith(

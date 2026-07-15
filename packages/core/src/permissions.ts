@@ -78,21 +78,177 @@ export const DockerIsolatedPermissionProfileSchema = z
   })
   .strict();
 
-export const CustomPermissionProfileSchema = z
+const CustomFilesystemPolicySchema = z.enum([
+  'assigned-worktree-read-only',
+  'assigned-worktree-write',
+  'explicit-paths',
+]);
+
+const CustomManagedActionPolicySchema = z
   .object({
-    ...permissionBaseShape,
-    kind: z.literal('custom'),
-    filesystem: z.enum(['project-read-only', 'assigned-worktree-write', 'explicit-paths']),
-    readPaths: z.array(RelativePathSchema).max(1024).default([]),
-    writePaths: z.array(RelativePathSchema).max(1024).default([]),
-    network: z.enum(['provider-only', 'enabled', 'disabled']),
-    allowedExecutables: z.array(z.string().min(1).max(4096)).max(1024).default([]),
-    processExecution: z.enum(['agent-only', 'agent-and-approved-commands', 'disabled']),
-    acknowledgesCwdIsNotSandbox: z.literal(true),
+    developmentServers: z.enum(['deny', 'allow']),
+    tests: z.enum(['deny', 'allow']),
   })
   .strict();
 
-export const PermissionProfileSchema = z.discriminatedUnion('kind', [
+const AbsoluteExecutablePathSchema = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine((value) => !value.includes('\0') && !/[\r\n]/u.test(value))
+  .refine(
+    (value) => value.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(value) || value.startsWith('\\\\'),
+    'Launch executable paths must be absolute',
+  );
+
+const CustomRelativeRootSchema = RelativePathSchema.refine(
+  (value) =>
+    value === '.' ||
+    (!value.includes('\\') &&
+      !value.endsWith('/') &&
+      !value.includes('//') &&
+      value.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..')),
+  'Permission roots must use normalized forward-slash relative paths',
+);
+
+const customPermissionShape = {
+  ...permissionBaseShape,
+  kind: z.literal('custom'),
+  filesystem: CustomFilesystemPolicySchema,
+  readPaths: z.array(CustomRelativeRootSchema).min(1).max(256),
+  writePaths: z.array(CustomRelativeRootSchema).max(256),
+  ignoredFileRead: z.enum(['deny', 'allow']),
+  sensitiveFileRead: z.enum(['deny', 'allow']),
+  executablePolicy: z.enum(['selected-agent-only', 'allowlist']),
+  allowedLaunchExecutables: z.array(AbsoluteExecutablePathSchema).max(256),
+  forgeboardManagedActions: CustomManagedActionPolicySchema,
+  processExecution: z.enum(['agent-only', 'agent-and-approved-commands', 'disabled']),
+  requireReviewBeforePrimary: z.literal(true),
+} as const;
+
+interface CustomPolicyRefinementValue {
+  readonly filesystem: 'assigned-worktree-read-only' | 'assigned-worktree-write' | 'explicit-paths';
+  readonly readPaths: readonly string[];
+  readonly writePaths: readonly string[];
+  readonly executablePolicy: 'selected-agent-only' | 'allowlist';
+  readonly allowedLaunchExecutables: readonly string[];
+}
+
+function refineCustomPolicy(profile: CustomPolicyRefinementValue, context: z.RefinementCtx): void {
+  if (new Set(profile.readPaths).size !== profile.readPaths.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['readPaths'],
+      message: 'Read roots must be unique',
+    });
+  }
+  if (new Set(profile.writePaths).size !== profile.writePaths.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['writePaths'],
+      message: 'Write roots must be unique',
+    });
+  }
+  if (new Set(profile.allowedLaunchExecutables).size !== profile.allowedLaunchExecutables.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['allowedLaunchExecutables'],
+      message: 'Launch executable paths must be unique',
+    });
+  }
+  const wholeRead = profile.readPaths.length === 1 && profile.readPaths[0] === '.';
+  const wholeWrite = profile.writePaths.length === 1 && profile.writePaths[0] === '.';
+  if (
+    profile.filesystem === 'assigned-worktree-read-only' &&
+    (!wholeRead || profile.writePaths.length > 0)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['filesystem'],
+      message: 'Read-only worktree profiles require readPaths [.] and no write paths',
+    });
+  }
+  if (profile.filesystem === 'assigned-worktree-write' && (!wholeRead || !wholeWrite)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['filesystem'],
+      message: 'Writable worktree profiles require readPaths and writePaths [.]',
+    });
+  }
+  for (const [index, writePath] of profile.writePaths.entries()) {
+    if (!profile.readPaths.some((readPath) => rootContains(readPath, writePath))) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['writePaths', index],
+        message: 'Every write root must be covered by a read root',
+      });
+    }
+  }
+  if (
+    profile.executablePolicy === 'selected-agent-only' &&
+    profile.allowedLaunchExecutables.length > 0
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['allowedLaunchExecutables'],
+      message: 'Selected-agent-only profiles cannot store an allowlist',
+    });
+  }
+  if (profile.executablePolicy === 'allowlist' && profile.allowedLaunchExecutables.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['allowedLaunchExecutables'],
+      message: 'Allowlist profiles require an executable path',
+    });
+  }
+}
+
+function rootContains(parent: string, candidate: string): boolean {
+  return parent === '.' || candidate === parent || candidate.startsWith(`${parent}/`);
+}
+
+export const CustomHostPermissionProfileSchema = z
+  .object({
+    ...customPermissionShape,
+    runtime: z.literal('host'),
+    network: z.literal('provider-only'),
+    acknowledgesCwdIsNotSandbox: z.literal(true),
+  })
+  .strict()
+  .superRefine(refineCustomPolicy);
+
+export const CustomDockerPermissionProfileSchema = z
+  .object({
+    ...customPermissionShape,
+    runtime: z.literal('docker'),
+    filesystem: z.enum(['assigned-worktree-read-only', 'assigned-worktree-write']),
+    network: z.enum(['enabled', 'disabled']),
+    docker: z
+      .object({
+        cpuLimit: z.number().positive().max(1024),
+        memoryMbLimit: z.number().int().positive().max(1_048_576),
+        credentialMount: DockerCredentialMountSchema.default({ enabled: false }),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((profile, context) => {
+    refineCustomPolicy(profile, context);
+    if (profile.ignoredFileRead !== 'allow' || profile.sensitiveFileRead !== 'allow') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ignoredFileRead'],
+        message: 'A whole-worktree Docker bind requires explicit ignored and sensitive visibility',
+      });
+    }
+  });
+
+export const CustomPermissionProfileSchema = z.union([
+  CustomHostPermissionProfileSchema,
+  CustomDockerPermissionProfileSchema,
+]);
+
+export const PermissionProfileSchema = z.union([
   PlanReadOnlyPermissionProfileSchema,
   WorktreeWritePermissionProfileSchema,
   DockerIsolatedPermissionProfileSchema,

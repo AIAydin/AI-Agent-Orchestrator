@@ -7,16 +7,20 @@ import {
   DockerExecutableSettingSchema,
   DockerImageReferenceSchema,
 } from './docker-contracts.js';
+import {
+  CustomPermissionProfileSettingsSchema,
+  PermissionProfileSchema,
+} from './permission-contracts.js';
+
+export {
+  CustomPermissionProfileSettingsSchema,
+  PermissionProfileSchema,
+  type CustomPermissionProfileSettings,
+  type PermissionProfile,
+} from './permission-contracts.js';
 
 export const ThemeSchema = z.enum(['system', 'light', 'dark']);
 export type Theme = z.infer<typeof ThemeSchema>;
-
-export const PermissionProfileSchema = z.enum([
-  'plan-read-only',
-  'worktree-write',
-  'docker-isolated',
-]);
-export type PermissionProfile = z.infer<typeof PermissionProfileSchema>;
 
 const MAX_COMMAND_VALUE_BYTES = 32_768;
 const CommandArgumentSchema = z
@@ -186,6 +190,7 @@ export const AppSettingsSchema = z
     agentExecutableOverrides: z.record(z.string(), z.string().max(32_768)).default({}),
     agentDefaultModels: z.record(z.string(), z.string().max(512)).default({}),
     customAgent: CustomAgentConfigurationSchema.default({}),
+    customPermissionProfile: CustomPermissionProfileSettingsSchema.default({}),
     worktreeRoot: z.string(),
     worktreeCleanupPolicy: z.enum(['manual', 'after-merge', 'after-retention']).default('manual'),
     branchPrefix: BranchPrefixSchema.default('forgeboard/'),
@@ -279,6 +284,25 @@ export const AppSettingsSchema = z
         code: z.ZodIssueCode.custom,
         path: ['defaultPermissionProfile'],
         message: 'Enable and configure Docker before making it the default isolation profile.',
+      });
+    }
+    if (settings.customPermissionProfile.runtime === 'docker' && !settings.dockerEnabled) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['customPermissionProfile', 'runtime'],
+        message: 'Enable and configure Docker before selecting it for the Custom profile.',
+      });
+    }
+    if (
+      settings.defaultAgent === 'test-agent' &&
+      settings.defaultPermissionProfile === 'custom' &&
+      settings.customPermissionProfile.runtime === 'docker'
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['defaultAgent'],
+        message:
+          'The deterministic test agent cannot run in Docker. Choose a container-ready agent or use the host Custom runtime.',
       });
     }
     const hasGitIdentityName = settings.gitIdentityName.trim() !== '';
@@ -377,10 +401,79 @@ export const PrepareRunInputSchema = z
     nodeId: z.string().min(1),
     adapterId: RunAdapterIdSchema,
     prompt: z.string().trim().min(1).max(1_000_000),
-    permissionProfile: z.enum(['plan-read-only', 'worktree-write', 'docker-isolated']),
+    permissionProfile: PermissionProfileSchema,
   })
   .strict();
 export type PrepareRunInput = z.infer<typeof PrepareRunInputSchema>;
+
+const RunPermissionProfileBaseSchema = z
+  .object({
+    name: z.string(),
+    mode: z.enum(['plan-read-only', 'worktree-write', 'docker-isolated']),
+    enforcement: z.string(),
+    readRoots: z.array(z.string()),
+    writeRoots: z.array(z.string()),
+    network: z.string(),
+  })
+  .strict();
+
+const RunCustomPermissionProfileSchema = RunPermissionProfileBaseSchema.extend({
+  mode: z.literal('custom'),
+  custom: z.discriminatedUnion('runtime', [
+    z
+      .object({
+        runtime: z.literal('host'),
+        filesystem: z.enum([
+          'assigned-worktree-read-only',
+          'assigned-worktree-write',
+          'explicit-paths',
+        ]),
+        ignoredFileRead: z.enum(['deny', 'allow']),
+        sensitiveFileRead: z.enum(['deny', 'allow']),
+        launchExecutablePolicy: z.enum(['selected-agent-only', 'allowlist']),
+        allowedLaunchExecutables: z.array(z.string()),
+        forgeboardManagedActions: z
+          .object({
+            developmentServers: z.enum(['deny', 'allow']),
+            tests: z.enum(['deny', 'allow']),
+          })
+          .strict(),
+        requireReviewBeforePrimary: z.literal(true),
+        policyLimitations: z.array(z.string()),
+      })
+      .strict(),
+    z
+      .object({
+        runtime: z.literal('docker'),
+        filesystem: z.enum([
+          'assigned-worktree-read-only',
+          'assigned-worktree-write',
+          'explicit-paths',
+        ]),
+        ignoredFileRead: z.enum(['deny', 'allow']),
+        sensitiveFileRead: z.enum(['deny', 'allow']),
+        launchExecutablePolicy: z.enum(['selected-agent-only', 'allowlist']),
+        allowedLaunchExecutables: z.array(z.string()),
+        forgeboardManagedActions: z
+          .object({
+            developmentServers: z.enum(['deny', 'allow']),
+            tests: z.enum(['deny', 'allow']),
+          })
+          .strict(),
+        requireReviewBeforePrimary: z.literal(true),
+        policyLimitations: z.array(z.string()),
+        docker: z
+          .object({
+            network: z.enum(['disabled', 'enabled']),
+            cpuLimit: z.number(),
+            memoryMb: z.number().int(),
+            mountHostCredentials: z.literal(false),
+          })
+          .strict(),
+      })
+      .strict(),
+  ]),
+}).strict();
 
 export const RunDisclosureSchema = z.object({
   runId: z.string().uuid(),
@@ -392,15 +485,19 @@ export const RunDisclosureSchema = z.object({
   cwd: z.string(),
   runtime: z.enum(['pty', 'pipes']),
   environmentVariableNames: z.array(z.string()),
-  contextAttachments: z.array(z.object({ path: z.string(), kind: z.string() })),
-  permissionProfile: z.object({
-    name: z.string(),
-    mode: z.string(),
-    enforcement: z.string(),
-    readRoots: z.array(z.string()),
-    writeRoots: z.array(z.string()),
-    network: z.string(),
-  }),
+  contextAttachments: z.array(
+    z.object({
+      path: z.string(),
+      kind: z.string(),
+      sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+    }),
+  ),
+  contextManifestId: z.string().min(1).max(128).nullable(),
+  contextManifestDigest: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/u)
+    .nullable(),
+  permissionProfile: z.union([RunCustomPermissionProfileSchema, RunPermissionProfileBaseSchema]),
   warnings: z.array(z.string()),
   branch: z.string().nullable(),
   baseCommit: z.string().nullable(),

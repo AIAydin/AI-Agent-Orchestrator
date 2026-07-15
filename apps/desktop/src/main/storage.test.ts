@@ -40,6 +40,26 @@ function closeStore(store: LocalStore): void {
   openStores.delete(store);
 }
 
+function customPermissionProfile(): AppSettings['customPermissionProfile'] {
+  return {
+    runtime: 'host',
+    filesystem: 'assigned-worktree-read-only',
+    readPaths: ['.'],
+    writePaths: [],
+    ignoredFileRead: 'deny',
+    sensitiveFileRead: 'deny',
+    executablePolicy: 'selected-agent-only',
+    allowedExecutables: [],
+    forgeboardManagedActions: { developmentServers: 'deny', tests: 'deny' },
+    requireReviewBeforePrimary: true,
+    docker: {
+      network: 'disabled',
+      cpuLimit: 2,
+      memoryMb: 4_096,
+      mountHostCredentials: false,
+    },
+  };
+}
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
     onboardingCompleted: true,
@@ -66,6 +86,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
       runtime: 'pty',
       output: 'text',
     },
+    customPermissionProfile: customPermissionProfile(),
     worktreeRoot: '/tmp/forgeboard-worktrees',
     worktreeCleanupPolicy: 'manual',
     branchPrefix: 'forgeboard/',

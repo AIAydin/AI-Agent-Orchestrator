@@ -777,7 +777,7 @@ function parseInspectedDockerImage(output: string): InspectedDockerImage {
       : undefined;
   const config = metadata['Config'];
   if (
-    !/^[A-Za-z0-9][A-Za-z0-9:._+-]{0,511}$/u.test(id) ||
+    !/^sha256:[a-f0-9]{64}$/u.test(id) ||
     !/^[a-z][a-z0-9._-]{0,63}$/u.test(imageOs) ||
     !isRecord(config)
   ) {

@@ -46,7 +46,7 @@ export function customAgentManifest(configuration: CustomAgentConfiguration): Ag
       structuredOutput: configuration.output === 'json-lines',
       modelSelection: false,
       contextAttachments: true,
-      permissionModes: ['plan-read-only', 'worktree-write'],
+      permissionModes: ['plan-read-only', 'worktree-write', 'custom'],
     },
     suggestedEnvironmentVariables: [],
   });

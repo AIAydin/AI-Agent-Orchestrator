@@ -2,7 +2,7 @@ import { createCustomCliAdapter, type PermissionProfile } from '@forgeboard/agen
 import { TEST_AGENT_MANIFEST } from '@forgeboard/test-agent';
 import { describe, expect, it } from 'vitest';
 
-import type { RunDisclosure } from '../../shared/contracts.js';
+import { RunDisclosureSchema, type RunDisclosure } from '../../shared/contracts.js';
 import { disclosureFingerprint } from './evidence.js';
 
 const RUN_ID = '123fae6e-e213-4a10-a0db-0f85b791f7e9';
@@ -15,9 +15,20 @@ const PERMISSION_PROFILE: PermissionProfile = {
   enforcement: 'disclosure-only',
   readRoots: ['/repo'],
   writeRoots: [],
-  network: 'blocked',
+  network: 'provider-controlled',
   approvalPolicy: 'Review before launch.',
   disclosure: 'Local test plan.',
+  custom: {
+    runtime: 'host',
+    filesystem: 'assigned-worktree-read-only',
+    ignoredFileRead: 'deny',
+    sensitiveFileRead: 'deny',
+    launchExecutablePolicy: 'selected-agent-only',
+    allowedLaunchExecutables: [process.execPath],
+    forgeboardManagedActions: { developmentServers: 'deny', tests: 'deny' },
+    requireReviewBeforePrimary: true,
+    policyLimitations: ['Test fixture disclosure only.'],
+  },
 };
 
 describe('agent disclosure evidence', () => {
@@ -43,14 +54,17 @@ describe('agent disclosure evidence', () => {
       runtime: plan.disclosure.runtime,
       environmentVariableNames: [...plan.disclosure.environmentVariableNames],
       contextAttachments: [],
-      permissionProfile: {
+      contextManifestId: null,
+      contextManifestDigest: null,
+      permissionProfile: RunDisclosureSchema.shape.permissionProfile.parse({
         name: plan.disclosure.permissionProfile.name,
         mode: plan.disclosure.permissionProfile.mode,
         enforcement: plan.disclosure.permissionProfile.enforcement,
         readRoots: [...plan.disclosure.permissionProfile.readRoots],
         writeRoots: [...plan.disclosure.permissionProfile.writeRoots],
         network: plan.disclosure.permissionProfile.network,
-      },
+        custom: PERMISSION_PROFILE.custom,
+      }),
       warnings: ['Detection warning shown to the user.'],
       branch: 'main',
       baseCommit: '1'.repeat(40),

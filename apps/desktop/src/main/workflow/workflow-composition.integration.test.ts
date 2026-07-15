@@ -6,7 +6,12 @@ import { CanvasNodeSchema, CanvasSchema } from '@forgeboard/core';
 import { RepositoryService } from '@forgeboard/git-engine';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { AppSettingsSchema, type AppSettings, type Project } from '../../shared/contracts.js';
+import {
+  AppSettingsSchema,
+  RunDisclosureSchema,
+  type AppSettings,
+  type Project,
+} from '../../shared/contracts.js';
 import { legacySurfaceFromCanonical } from '../../shared/canvas/adapter.js';
 import type {
   AgentExecutionOperations,
@@ -365,14 +370,16 @@ function assignedTaskAgentOperations(): {
           runtime: 'pipes',
           environmentVariableNames: [],
           contextAttachments: [],
-          permissionProfile: {
+          contextManifestId: request.context.manifestId ?? null,
+          contextManifestDigest: request.context.manifestDigest ?? null,
+          permissionProfile: RunDisclosureSchema.shape.permissionProfile.parse({
             name: 'Dedicated worktree',
             mode: request.permissionProfile,
             enforcement: 'provider',
             readRoots: ['/managed/task-node'],
             writeRoots: ['/managed/task-node'],
             network: 'provider-controlled',
-          },
+          }),
           warnings: [],
           branch: 'forgeboard/task-node',
           baseCommit: '1'.repeat(40),

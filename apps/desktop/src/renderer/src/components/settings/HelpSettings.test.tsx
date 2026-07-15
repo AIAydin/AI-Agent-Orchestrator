@@ -81,12 +81,25 @@ describe('HelpSettings', () => {
     expect(screen.getByRole('status').textContent).toBe('0 matching guides');
     expect(screen.getByText('No matching local guide')).toBeTruthy();
   });
+
+  it('explains Custom host and Docker boundaries without claiming cwd is a sandbox', () => {
+    render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
+      target: { value: 'custom cwd sandbox' },
+    });
+
+    expect(screen.getByText('Build a Custom permission profile')).toBeTruthy();
+    expect(screen.getByText(/cwd is not an operating-system sandbox/u)).toBeTruthy();
+    expect(screen.getByText(/one whole-worktree read-only or read-write mount/u)).toBeTruthy();
+  });
 });
 
 describe('searchHelpArticles', () => {
   it('uses AND matching across titles, summaries, keywords, and instructions', () => {
     expect(searchHelpArticles('docker credentials').map((article) => article.id)).toEqual([
       'docker-readiness',
+      'custom-permissions',
     ]);
     expect(searchHelpArticles('approval exact plan').map((article) => article.id)).toEqual([
       'run-will-not-start',

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { AppSettingsSchema, CommandConfigurationSchema } from './contracts.js';
+import {
+  AppSettingsSchema,
+  CommandConfigurationSchema,
+  CustomPermissionProfileSettingsSchema,
+  PermissionProfileSchema,
+} from './contracts.js';
 
 const baseSettings = {
   theme: 'system',
@@ -75,6 +80,68 @@ describe('process settings', () => {
       AppSettingsSchema.safeParse({
         ...baseSettings,
         envAllowlist: Array.from({ length: 257 }, (_, index) => `FORGEBOARD_ENV_${index}`),
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('Custom permission settings', () => {
+  it('provides a host disclosure-only intent without inventing an acknowledgement', () => {
+    const profile = CustomPermissionProfileSettingsSchema.parse({});
+    expect(profile).toMatchObject({
+      runtime: 'host',
+      filesystem: 'assigned-worktree-read-only',
+      readPaths: ['.'],
+      writePaths: [],
+      executablePolicy: 'selected-agent-only',
+      requireReviewBeforePrimary: true,
+    });
+    expect(profile).not.toHaveProperty('acknowledgesHostIsNotSandbox');
+    expect(PermissionProfileSchema.parse('custom')).toBe('custom');
+  });
+
+  it('rejects impossible roots, empty allowlists, and misleading Docker visibility', () => {
+    expect(
+      CustomPermissionProfileSettingsSchema.safeParse({
+        filesystem: 'explicit-paths',
+        readPaths: ['src/../secrets'],
+      }).success,
+    ).toBe(false);
+    expect(
+      CustomPermissionProfileSettingsSchema.safeParse({
+        executablePolicy: 'allowlist',
+        allowedExecutables: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      CustomPermissionProfileSettingsSchema.safeParse({
+        runtime: 'docker',
+        filesystem: 'assigned-worktree-read-only',
+        readPaths: ['.'],
+        writePaths: [],
+        ignoredFileRead: 'deny',
+        sensitiveFileRead: 'allow',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects an unsupported deterministic-agent Docker Custom default', () => {
+    expect(
+      AppSettingsSchema.safeParse({
+        ...baseSettings,
+        defaultAgent: 'test-agent',
+        defaultPermissionProfile: 'custom',
+        dockerEnabled: true,
+        dockerImage: 'forgeboard-agent:local',
+        dockerContainerExecutable: '/usr/local/bin/agent',
+        customPermissionProfile: {
+          runtime: 'docker',
+          filesystem: 'assigned-worktree-read-only',
+          readPaths: ['.'],
+          writePaths: [],
+          ignoredFileRead: 'allow',
+          sensitiveFileRead: 'allow',
+        },
       }).success,
     ).toBe(false);
   });

@@ -86,6 +86,7 @@ beforeEach(() => {
       projects: {
         pickExecutable: vi.fn(() => Promise.resolve({ ok: true, value: null })),
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
+        pickReferences: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
       },
     },
   });
@@ -225,5 +226,41 @@ describe('SetupWizard', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Use safe defaults' }));
     await waitFor(() => expect(onSkip).toHaveBeenCalledTimes(1));
+  });
+
+  it('configures a truthful host Custom profile in the Safety step without file editing', async () => {
+    const onComplete = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
+    render(
+      <SetupWizard
+        settings={settings}
+        agents={agents}
+        onComplete={onComplete}
+        onSkip={() => Promise.resolve()}
+        onError={(message) => {
+          throw new Error(message);
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /Custom/u }));
+
+    expect(screen.getByText('Host policy is disclosure-only')).toBeTruthy();
+    expect(screen.getByText(/cwd and path lists do not restrict/u)).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /Ask the agent to allow tests/u })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    expect(screen.getByText('Custom', { selector: 'dd' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Open Forgeboard/ }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(onComplete.mock.calls[0]?.[0]).toMatchObject({
+      defaultPermissionProfile: 'custom',
+      customPermissionProfile: {
+        runtime: 'host',
+        filesystem: 'assigned-worktree-read-only',
+      },
+    });
   });
 });

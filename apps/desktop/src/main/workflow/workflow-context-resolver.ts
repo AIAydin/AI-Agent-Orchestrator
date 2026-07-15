@@ -165,6 +165,7 @@ export class FileNodeWorkflowContextResolver {
           kind: 'file' as const,
           label: node.title,
           explicitlyApproved: true as const,
+          sha256: file.sha256,
         },
       };
     });

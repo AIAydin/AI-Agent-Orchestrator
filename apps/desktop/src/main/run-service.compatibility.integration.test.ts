@@ -104,6 +104,8 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
         runtime: 'pipes',
         environmentVariableNames: [],
         contextAttachments: [],
+        contextManifestId: input.context.manifestId ?? null,
+        contextManifestDigest: input.context.manifestDigest ?? null,
         permissionProfile: {
           name: 'Read only',
           mode: 'plan-read-only',

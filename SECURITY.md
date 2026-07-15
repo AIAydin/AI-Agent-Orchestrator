@@ -27,12 +27,15 @@ assigned-worktree mount, resource limits, a read-only container filesystem, defa
 capabilities, and network disabled unless the user explicitly enables it. Forgeboard adds no host
 credential stores, keychains, SSH agents, Docker socket, or extra host mounts to the container.
 
-Docker images are never pulled automatically. The main process checks the local daemon, image
-metadata, declared volumes, Linux compatibility, and exact in-image agent executable. Pulling is a
-separate UI action followed by a BrowserWindow-parented native confirmation. The pull uses a bounded
-argument array and output/timeout limits, then readiness is checked again with a disposable,
-no-network, no-mount `--version` probe. A Docker launch also rechecks readiness immediately before
-use and always passes `--pull never`.
+Docker images are never pulled automatically. Run planning uses an identity-bound Docker client to
+inspect the local daemon and image metadata, declared volumes, Linux compatibility, and immutable
+image ID without running the image. Pulling is a separate UI action followed by a
+BrowserWindow-parented native confirmation. The pull uses a bounded argument array and
+output/timeout limits; the explicit Settings readiness action can then use a disposable,
+no-network, no-mount `--version` probe. Immediately before an approved launch, Forgeboard rechecks
+the Docker client identity and mutable tag-to-image-ID binding, then runs the exact disclosed argv
+once against the approved immutable image ID with `--pull never`. A missing or broken in-image
+entrypoint fails that supervised launch instead of causing an undisclosed preflight execution.
 
 ### Project checks
 
@@ -55,11 +58,15 @@ finalization before closing storage.
 
 ### Filesystem boundaries
 
-Forgeboard-managed repository-content paths are canonicalized, symlinks resolved, and containment
-checked against approved roots immediately before access. Traversal, NUL bytes, device paths,
-credential patterns, ignored files, and symlink escapes are denied. Sensitive overrides require a
-per-file high-friction approval. Approved native checks remain ordinary user processes and can access
-other filesystem locations or the network according to operating-system permissions.
+Forgeboard-owned file selection and context paths are canonicalized, symlinks resolved, and
+containment checked against approved roots immediately before access. Traversal, NUL bytes, device
+paths, credential patterns, and symlink escapes are denied. Ignored and sensitive files are not
+attached as context unless the exact file has the required high-friction override. A Custom profile
+may separately permit its process to read matching content already visible in the assigned
+worktree; this never attaches that content automatically. Custom Host visibility is disclosure-only,
+while a Custom Docker whole-worktree bind technically exposes every file present in that worktree.
+Approved native checks remain ordinary user processes and can access other filesystem locations or
+the network according to operating-system permissions.
 
 ### Backups and recovery imports
 

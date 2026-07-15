@@ -1,0 +1,343 @@
+.permission-profile-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 15px;
+}
+
+.permission-profile-cards > article {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+
+.permission-profile-cards > article > strong {
+  font-size: 11px;
+}
+
+.permission-profile-cards > article > p {
+  min-height: 31px;
+  margin: 4px 0 10px;
+  color: var(--text-soft);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.custom-permission-editor {
+  display: grid;
+  gap: 13px;
+}
+
+.permission-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.permission-runtime-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.permission-runtime-grid > label,
+.permission-policy-group > label:not(.switch-row) {
+  display: grid;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.permission-boundary,
+.configured-permission-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.permission-boundary.host,
+.configured-permission-summary.custom:has(svg.lucide-triangle-alert) {
+  border-color: color-mix(in srgb, var(--yellow) 42%, var(--line));
+  background: color-mix(in srgb, var(--yellow) 8%, var(--surface));
+}
+
+.permission-boundary.docker {
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line));
+  background: color-mix(in srgb, var(--green) 8%, var(--surface));
+}
+
+.permission-boundary > span,
+.configured-permission-summary > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.permission-boundary strong,
+.configured-permission-summary strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.permission-boundary small,
+.configured-permission-summary small {
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 450;
+  line-height: 1.45;
+}
+
+.configured-permission-summary em {
+  color: var(--yellow);
+  font-size: 8px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.permission-root-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.permission-list-editor,
+.permission-policy-group {
+  min-width: 0;
+  margin: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+
+.permission-list-editor > legend,
+.permission-policy-group > legend {
+  padding: 0 5px;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.permission-list-editor > p,
+.permission-policy-group > p,
+.permission-list-editor > small {
+  margin: 0 0 9px;
+  color: var(--text-faint);
+  font-size: 8px;
+  font-weight: 450;
+  line-height: 1.45;
+}
+
+.permission-list-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.permission-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 6px;
+}
+
+.permission-list-row .icon-button {
+  min-height: 30px;
+}
+
+.permission-list-empty {
+  padding: 9px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+
+.permission-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.permission-list-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.permission-policy-group .switch-row {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.permission-policy-group .switch-row:last-of-type {
+  border-bottom: 0;
+}
+
+.permission-caution {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 10px !important;
+  padding: 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--yellow) 10%, var(--surface));
+  color: var(--yellow) !important;
+}
+
+.permission-locked-rules {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.permission-locked-rules > div {
+  display: flex;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--green) 35%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--green) 7%, var(--surface));
+}
+
+.permission-locked-rules span {
+  display: grid;
+  gap: 3px;
+}
+
+.permission-locked-rules strong {
+  font-size: 9px;
+}
+
+.permission-locked-rules small {
+  color: var(--text-soft);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.permission-validation {
+  padding: 10px;
+  border: 1px solid var(--red);
+  border-radius: 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 9px;
+}
+
+.permission-validation ul {
+  margin: 6px 0 0;
+  padding-left: 17px;
+}
+
+.permission-validation li + li {
+  margin-top: 4px;
+}
+
+.settings-footer > span {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-footer > span > small {
+  max-width: 360px;
+  color: var(--red);
+  font-size: 8px;
+  line-height: 1.3;
+}
+
+.agent-run-config .configured-permission-summary,
+.workflow-node-config .configured-permission-summary {
+  margin: 0 0 10px;
+}
+
+.workflow-inherited-permission > p {
+  margin: -3px 0 10px;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.node-permission-chip {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 7px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--node-accent) 14%, var(--surface-subtle));
+  color: var(--text-soft);
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.effective-permission-disclosure {
+  display: grid;
+  gap: 8px;
+}
+
+.effective-permission-disclosure > p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.effective-permission-disclosure > p > strong:first-child {
+  color: var(--text);
+}
+
+.effective-permission-custom {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 2px 0 0;
+}
+
+.effective-permission-custom > div {
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-raised);
+}
+
+.effective-permission-custom dt {
+  color: var(--text-faint);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.effective-permission-custom dd {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.permission-limitations {
+  margin: 0;
+  padding: 8px 8px 8px 24px;
+  border: 1px solid color-mix(in srgb, var(--yellow) 42%, var(--line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--yellow) 8%, var(--surface));
+  color: var(--yellow);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.permission-limitations li + li {
+  margin-top: 3px;
+}
+
+@media (max-width: 760px) {
+  .permission-profile-cards,
+  .permission-runtime-grid,
+  .permission-runtime-grid.three,
+  .permission-root-grid,
+  .permission-locked-rules,
+  .effective-permission-custom {
+    grid-template-columns: 1fr;
+  }
+}

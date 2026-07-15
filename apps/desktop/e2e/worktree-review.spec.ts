@@ -59,7 +59,7 @@ test('an agent worktree can be reviewed and committed without changing the prima
 
     const launchDisclosure = page.getByRole('dialog', { name: 'Review the exact agent launch' });
     await expect(launchDisclosure).toContainText('Test agent in a dedicated worktree');
-    await expect(launchDisclosure).toContainText('Network: blocked');
+    await expect(launchDisclosure).toContainText('Network: provider-controlled');
     await launchDisclosure.getByRole('button', { name: 'Approve & launch' }).click();
     await expect(page.locator('.run-history')).toContainText('succeeded · 1 changed file', {
       timeout: 20_000,

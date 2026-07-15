@@ -1,5 +1,6 @@
 import type { AgentDetection, AppSettings } from '../../../../shared/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
+import { permissionProfileNeedsDocker } from '../permissions/permission-profile-ui.js';
 import { CustomAgentSettings } from './CustomAgentSettings.js';
 import { DockerSettings } from './DockerSettings.js';
 import { SettingsSection, type AsyncSettingsProps } from './shared.js';
@@ -115,12 +116,20 @@ export function AgentsSettings({
           <select
             name="default-agent"
             value={draft.defaultAgent}
-            onChange={(event) =>
+            onChange={(event) => {
+              const defaultAgent = event.target.value as AppSettings['defaultAgent'];
+              const dockerProfile = permissionProfileNeedsDocker(
+                draft.defaultPermissionProfile,
+                draft,
+              );
               setDraft({
                 ...draft,
-                defaultAgent: event.target.value as AppSettings['defaultAgent'],
-              })
-            }
+                defaultAgent,
+                ...(defaultAgent === 'test-agent' && dockerProfile
+                  ? { defaultPermissionProfile: 'worktree-write' as const }
+                  : {}),
+              });
+            }}
           >
             <option value="test-agent">Deterministic test agent</option>
             <option value="codex">Codex CLI</option>
@@ -143,14 +152,28 @@ export function AgentsSettings({
               setDraft({
                 ...draft,
                 defaultPermissionProfile,
-                ...(defaultPermissionProfile === 'docker-isolated' ? { dockerEnabled: true } : {}),
+                ...(permissionProfileNeedsDocker(defaultPermissionProfile, draft)
+                  ? { dockerEnabled: true }
+                  : {}),
               });
             }}
           >
             <option value="plan-read-only">Plan / read-only</option>
             <option value="worktree-write">Worktree write</option>
             <option value="docker-isolated">Docker isolated</option>
+            <option
+              value="custom"
+              disabled={
+                draft.defaultAgent === 'test-agent' &&
+                draft.customPermissionProfile.runtime === 'docker'
+              }
+            >
+              Custom
+            </option>
           </select>
+          <small>
+            Build the Custom profile in the Permissions centre. No configuration file is required.
+          </small>
         </label>
         <label>
           Environment names allowed into processes

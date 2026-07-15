@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { lstat, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
@@ -14,6 +16,7 @@ import { z } from 'zod';
 
 import {
   RunEventEnvelopeSchema,
+  RunDisclosureSchema,
   type AppSettings,
   type RunDisclosure,
   type RunEventEnvelope,
@@ -27,6 +30,7 @@ import {
   PreparedAgentExecutionSchema,
   type AgentAdapterPlanner,
   type AgentExecutionCompletion,
+  type AgentExecutionContextRequest,
   type AgentExecutionEventSink,
   type AgentExecutionLaunchHandle,
   type AgentExecutionOperations,
@@ -422,7 +426,12 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     }
 
     try {
-      const planned = await this.#planAdapter(input, cwd, settings, runId);
+      const effectiveContext =
+        worktree === null
+          ? input.context
+          : await remapContextIntoWorktree(input.context, repositoryPath, cwd);
+      const effectiveInput: AgentExecutionRequest = { ...input, context: effectiveContext };
+      const planned = await this.#planAdapter(effectiveInput, cwd, settings, runId);
       const warnings = [...planned.plan.disclosure.warnings, ...planned.detectionWarnings];
       if (primaryWasDirty && worktree !== null) {
         warnings.push(
@@ -440,16 +449,26 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         runtime: planned.plan.disclosure.runtime,
         environmentVariableNames: [...planned.plan.disclosure.environmentVariableNames],
         contextAttachments: planned.plan.disclosure.contextAttachments.map(
-          ({ path: selectedPath, kind }) => ({ path: selectedPath, kind }),
+          ({ path: selectedPath, kind, sha256 }) => {
+            if (sha256 === undefined) {
+              throw new Error('The prepared agent context is missing its approved SHA-256 digest.');
+            }
+            return { path: selectedPath, kind, sha256 };
+          },
         ),
-        permissionProfile: {
+        contextManifestId: effectiveContext.manifestId ?? null,
+        contextManifestDigest: effectiveContext.manifestDigest ?? null,
+        permissionProfile: RunDisclosureSchema.shape.permissionProfile.parse({
           name: planned.plan.disclosure.permissionProfile.name,
           mode: planned.plan.disclosure.permissionProfile.mode,
           enforcement: planned.plan.disclosure.permissionProfile.enforcement,
           readRoots: [...planned.plan.disclosure.permissionProfile.readRoots],
           writeRoots: [...planned.plan.disclosure.permissionProfile.writeRoots],
           network: planned.plan.disclosure.permissionProfile.network,
-        },
+          ...(planned.plan.disclosure.permissionProfile.custom === undefined
+            ? {}
+            : { custom: planned.plan.disclosure.permissionProfile.custom }),
+        }),
         warnings,
         branch,
         baseCommit,
@@ -486,7 +505,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         expiresAt,
         plan: planned.plan,
         reviewedDisclosure: disclosure,
-        context: input.context,
+        context: effectiveContext,
         worktree,
         before,
       });
@@ -494,7 +513,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         adapter: planned.adapter,
         adapterId: input.adapterId,
         before,
-        context: input.context,
+        context: effectiveContext,
         disclosure,
         disclosureFingerprint: fingerprint,
         expiresAt,
@@ -504,6 +523,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         plan: planned.plan,
         planId,
         repositoryPath,
+        revalidateBeforeLaunch: planned.revalidateBeforeLaunch,
         trustedExtensionAdapter: planned.trustedExtensionAdapter,
         worktree,
         record,
@@ -534,8 +554,8 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         disclosureFingerprint: fingerprint,
         environmentVariableNames: disclosure.environmentVariableNames,
         contextAttachmentCount: disclosure.contextAttachments.length,
-        contextManifestId: input.context.manifestId ?? null,
-        contextManifestDigest: input.context.manifestDigest ?? null,
+        contextManifestId: effectiveContext.manifestId ?? null,
+        contextManifestDigest: effectiveContext.manifestDigest ?? null,
       });
       return publicPrepared;
     } catch (error) {
@@ -624,6 +644,8 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     try {
       this.#assertGeneration(prepared.generation);
       await this.#revalidateWorkspace(prepared);
+      await revalidateContextAttachments(prepared.context, prepared.record.cwd);
+      await prepared.revalidateBeforeLaunch?.();
       const session = await this.#launchPrepared(prepared);
       const ownerStopped = this.#stoppingOwners.has(prepared.ownerId);
       if (prepared.generation !== this.#generation || ownerStopped) {
@@ -1430,6 +1452,133 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     );
     return completion;
   }
+}
+
+export async function remapContextIntoWorktree(
+  context: AgentExecutionContextRequest,
+  repositoryPath: string,
+  worktreePath: string,
+): Promise<AgentExecutionContextRequest> {
+  if (context.attachments.length === 0) return context;
+  const [canonicalRepository, canonicalWorktree] = await Promise.all([
+    realpath(path.resolve(repositoryPath)),
+    realpath(path.resolve(worktreePath)),
+  ]);
+  const attachments = await Promise.all(
+    context.attachments.map(async (attachment) => {
+      if (attachment.kind !== 'file') {
+        throw new Error(
+          'Directory context cannot be safely remapped into an agent worktree. Select explicit File nodes instead.',
+        );
+      }
+      const source = await canonicalRegularFile(attachment.path, canonicalRepository, 'source');
+      const relativePath = path.relative(canonicalRepository, source);
+      if (!isContainedRelativePath(relativePath)) {
+        throw new Error('A selected context file is outside the approved project checkout.');
+      }
+      const target = await canonicalRegularFile(
+        path.resolve(canonicalWorktree, relativePath),
+        canonicalWorktree,
+        'worktree',
+      );
+      const [sourceDigest, targetDigest] = await Promise.all([
+        stableFileDigest(source),
+        stableFileDigest(target),
+      ]);
+      if (
+        attachment.sha256 === undefined ||
+        sourceDigest !== attachment.sha256 ||
+        targetDigest !== attachment.sha256
+      ) {
+        throw new Error(
+          `Selected context no longer matches its approved digest in the primary checkout and agent worktree: ${relativePath}`,
+        );
+      }
+      return { ...attachment, path: target };
+    }),
+  );
+  return AgentExecutionRequestSchema.shape.context.parse({ ...context, attachments });
+}
+
+export async function revalidateContextAttachments(
+  context: AgentExecutionContextRequest,
+  checkoutPath: string,
+): Promise<void> {
+  if (context.attachments.length === 0) return;
+  const canonicalCheckout = await realpath(path.resolve(checkoutPath));
+  await Promise.all(
+    context.attachments.map(async (attachment) => {
+      if (attachment.kind !== 'file' || attachment.sha256 === undefined) {
+        throw new Error('Approved context must contain only digest-bound ordinary files.');
+      }
+      const canonical = await canonicalRegularFile(attachment.path, canonicalCheckout, 'approved');
+      const digest = await stableFileDigest(canonical);
+      if (digest !== attachment.sha256) {
+        throw new Error(
+          'An approved context file changed after disclosure. Review a fresh launch.',
+        );
+      }
+    }),
+  );
+}
+
+async function canonicalRegularFile(
+  candidate: string,
+  canonicalRoot: string,
+  label: string,
+): Promise<string> {
+  const resolved = path.resolve(candidate);
+  const details = await lstat(resolved).catch(() => undefined);
+  if (details === undefined || !details.isFile() || details.isSymbolicLink()) {
+    throw new Error(`The selected ${label} context path is not an ordinary file.`);
+  }
+  const canonical = await realpath(resolved);
+  if (!pathsEqual(canonical, resolved)) {
+    throw new Error(`The selected ${label} context path crosses a symbolic-link alias.`);
+  }
+  const relativePath = path.relative(canonicalRoot, canonical);
+  if (!isContainedRelativePath(relativePath)) {
+    throw new Error(`The selected ${label} context path escapes its approved checkout.`);
+  }
+  return canonical;
+}
+
+async function stableFileDigest(filePath: string): Promise<string> {
+  const before = await stat(filePath);
+  if (!before.isFile()) throw new Error('Selected context is no longer a regular file.');
+  const digest = await new Promise<string>((resolve, reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('data', (chunk: Buffer | string) => hash.update(chunk));
+    stream.once('error', reject);
+    stream.once('end', () => resolve(hash.digest('hex')));
+  });
+  const after = await stat(filePath);
+  if (
+    before.dev !== after.dev ||
+    before.ino !== after.ino ||
+    before.size !== after.size ||
+    before.mtimeMs !== after.mtimeMs
+  ) {
+    throw new Error(
+      'Selected context changed while Forgeboard verified it. Review a fresh launch.',
+    );
+  }
+  return digest;
+}
+
+function isContainedRelativePath(relativePath: string): boolean {
+  return (
+    relativePath !== '..' &&
+    !relativePath.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relativePath)
+  );
+}
+
+function pathsEqual(left: string, right: string): boolean {
+  return process.platform === 'win32'
+    ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
+    : path.resolve(left) === path.resolve(right);
 }
 
 function sameWorktreeBinding(left: WorktreeOwnership, right: WorktreeOwnership): boolean {

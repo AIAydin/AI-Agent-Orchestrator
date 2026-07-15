@@ -1,6 +1,7 @@
 import type { AppSettings, CommandConfiguration } from '../../../../shared/contracts.js';
 import { CheckIdSchema, type CheckKind } from '../../../../shared/check-contracts.js';
 import type { NodeKind, WorkshopCommandConfiguration, WorkshopNode } from '../CanvasNode.js';
+import { permissionProfileUnavailableReason } from '../permissions/permission-profile-ui.js';
 
 const BUILT_IN_CHECK_KINDS = new Set<CheckKind>(['lint', 'typecheck', 'test', 'build']);
 
@@ -19,8 +20,8 @@ export function initialWorkflowNodeData(
   if (kind === 'agent') {
     const adapterId = settings.defaultAgent;
     const permissionProfile =
-      settings.defaultPermissionProfile === 'docker-isolated' &&
-      (!settings.dockerEnabled || adapterId === 'test-agent')
+      permissionProfileUnavailableReason(settings.defaultPermissionProfile, settings, adapterId) !==
+      null
         ? 'worktree-write'
         : settings.defaultPermissionProfile;
     return { adapterId, permissionProfile };

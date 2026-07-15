@@ -12,7 +12,7 @@ import {
 } from '@forgeboard/core/domain';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { RunEventEnvelope } from '../../shared/contracts.js';
+import { RunDisclosureSchema, type RunEventEnvelope } from '../../shared/contracts.js';
 import {
   AgentExecutionNotFoundError,
   type AgentExecutionCompletion,
@@ -104,6 +104,7 @@ describe('WorkflowAgentExecutor preparation', () => {
                 kind: 'file',
                 label: 'Agent source',
                 explicitlyApproved: true,
+                sha256: 'd'.repeat(64),
               },
             ],
             manifestId: 'workflow-context-v1',
@@ -933,15 +934,21 @@ class FakeAgentBackend implements WorkflowAgentExecutionBackend {
         cwd: '/managed/agent-node-1',
         runtime: 'pipes',
         environmentVariableNames: [],
-        contextAttachments: request.context.attachments.map(({ path, kind }) => ({ path, kind })),
-        permissionProfile: {
+        contextAttachments: request.context.attachments.map(({ path, kind, sha256 }) => ({
+          path,
+          kind,
+          sha256: sha256 ?? 'd'.repeat(64),
+        })),
+        contextManifestId: request.context.manifestId ?? null,
+        contextManifestDigest: request.context.manifestDigest ?? null,
+        permissionProfile: RunDisclosureSchema.shape.permissionProfile.parse({
           name: 'Dedicated worktree',
           mode: request.permissionProfile,
           enforcement: 'provider',
           readRoots: ['/managed/agent-node-1'],
           writeRoots: ['/managed/agent-node-1'],
           network: 'provider-controlled',
-        },
+        }),
         warnings: [],
         branch: 'forgeboard/agent-node-1',
         baseCommit: '1'.repeat(40),
@@ -1027,7 +1034,23 @@ function agentCompletion(
 function contextResolver(
   resolution: WorkflowAgentContextResolution,
 ): ReturnType<typeof vi.fn<WorkflowAgentContextResolver>> {
-  return vi.fn<WorkflowAgentContextResolver>(() => Promise.resolve(resolution));
+  const attachments = resolution.attachments.map((resolved) => ({
+    ...resolved,
+    attachment: {
+      ...resolved.attachment,
+      sha256: resolved.attachment.sha256 ?? 'd'.repeat(64),
+    },
+  }));
+  const normalized =
+    attachments.length === 0
+      ? { ...resolution, attachments }
+      : {
+          ...resolution,
+          attachments,
+          manifestId: resolution.manifestId ?? 'test-context-manifest',
+          manifestDigest: resolution.manifestDigest ?? 'e'.repeat(64),
+        };
+  return vi.fn<WorkflowAgentContextResolver>(() => Promise.resolve(normalized));
 }
 
 function workflowAgentExecutor(
@@ -1047,6 +1070,7 @@ function resolvedAttachment(
       kind: 'file' as const,
       label: attachmentId,
       explicitlyApproved: true,
+      sha256: 'd'.repeat(64),
     },
   };
 }

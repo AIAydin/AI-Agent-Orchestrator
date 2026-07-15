@@ -20,6 +20,12 @@ import type {
   RunAdapterId,
 } from '../../../../shared/contracts.js';
 import { NODE_DEFINITIONS, type WorkshopNode } from '../CanvasNode.js';
+import { ConfiguredPermissionSummary } from '../permissions/ConfiguredPermissionSummary.js';
+import {
+  PERMISSION_PROFILE_OPTIONS,
+  permissionProfileNeedsDocker,
+  permissionProfileUnavailableReason,
+} from '../permissions/permission-profile-ui.js';
 import { DeclarativeExtensionInspector } from '../DeclarativeExtensionInspector.js';
 import { PreviewNodePanel } from '../PreviewNodePanel.js';
 import { TypedEdgeInspector } from './TypedEdgeInspector.js';
@@ -244,6 +250,12 @@ function AgentRunInspector(
     onUpdateSelected,
   } = props;
   const running = selectedNode.data.status === 'running';
+  const permissionUnavailable = permissionProfileUnavailableReason(
+    selectedPermission,
+    settings,
+    selectedAdapter,
+  );
+  const permissionIssueId = `node-${selectedNode.id}-permission-unavailable`;
   return (
     <section className="agent-run-config" aria-label="Agent run configuration">
       <header>
@@ -259,15 +271,7 @@ function AgentRunInspector(
           name={`node-${selectedNode.id}-agent-adapter`}
           value={selectedAdapter}
           disabled={running}
-          onChange={(event) => {
-            const adapterId = event.target.value;
-            onUpdateSelected({
-              adapterId,
-              ...(adapterId === 'test-agent' && selectedPermission === 'docker-isolated'
-                ? { permissionProfile: 'worktree-write' as const }
-                : {}),
-            });
-          }}
+          onChange={(event) => onUpdateSelected({ adapterId: event.target.value })}
         >
           {runnableAgents.map((agent) => (
             <option key={agent.id} value={agent.id}>
@@ -286,30 +290,38 @@ function AgentRunInspector(
             onUpdateSelected({ permissionProfile: event.target.value as PermissionProfile })
           }
         >
-          <option value="plan-read-only">Plan only · primary checkout · no writes</option>
-          <option value="worktree-write">Worktree write · isolated branch</option>
-          <option
-            value="docker-isolated"
-            disabled={!settings.dockerEnabled || selectedAdapter === 'test-agent'}
-          >
-            Docker isolated · constrained worktree container
-          </option>
+          {PERMISSION_PROFILE_OPTIONS.map((option) => (
+            <option
+              key={option.value}
+              value={option.value}
+              disabled={
+                permissionProfileUnavailableReason(option.value, settings, selectedAdapter) !== null
+              }
+            >
+              {option.label} · {option.description}
+            </option>
+          ))}
         </select>
       </label>
-      {(!settings.dockerEnabled || selectedAdapter === 'test-agent') && (
-        <small>
-          {!settings.dockerEnabled
-            ? 'Enable and configure Docker in Settings to use the isolated profile.'
-            : 'The bundled deterministic agent runs directly; choose a container-ready coding-agent adapter for Docker.'}
-        </small>
+      <ConfiguredPermissionSummary
+        profile={selectedPermission}
+        settings={settings}
+        adapterId={selectedAdapter}
+      />
+      {permissionUnavailable !== null && (
+        <p id={permissionIssueId} className="recovery-guidance warning" role="alert">
+          {permissionUnavailable} Choose another adapter or permission profile before reviewing this
+          run.
+        </p>
       )}
-      {selectedAdapter === 'custom' && selectedPermission !== 'docker-isolated' && (
-        <small>
-          A generic CLI has no provider-specific sandbox flags. Worktree mode protects the primary
-          checkout, but OS-level access remains disclosure-only; choose Docker for a technical
-          boundary.
-        </small>
-      )}
+      {selectedAdapter === 'custom' &&
+        !permissionProfileNeedsDocker(selectedPermission, settings) && (
+          <small>
+            A generic CLI has no provider-specific sandbox flags. Worktree mode protects the primary
+            checkout, but OS-level access remains disclosure-only; choose Docker for a technical
+            boundary.
+          </small>
+        )}
       <label>
         Prompt
         <textarea
@@ -353,7 +365,11 @@ function AgentRunInspector(
         <button
           type="button"
           className="button primary review-run-button"
-          disabled={props.preparingRun || runnableAgents.length === 0}
+          disabled={
+            props.preparingRun || runnableAgents.length === 0 || permissionUnavailable !== null
+          }
+          title={permissionUnavailable ?? undefined}
+          aria-describedby={permissionUnavailable === null ? undefined : permissionIssueId}
           onClick={props.onPrepareRun}
         >
           <ShieldCheck size={14} />

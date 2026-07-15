@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
 import {
   AgentAdapterManifestSchema,
   createCustomCliAdapter,
@@ -38,9 +43,20 @@ const TEST_PERMISSION_PROFILE: PermissionProfile = {
   enforcement: 'disclosure-only',
   readRoots: [REPOSITORY_PATH],
   writeRoots: [],
-  network: 'blocked',
+  network: 'provider-controlled',
   approvalPolicy: 'Test approval',
   disclosure: 'Test disclosure',
+  custom: {
+    runtime: 'host',
+    filesystem: 'assigned-worktree-read-only',
+    ignoredFileRead: 'deny',
+    sensitiveFileRead: 'deny',
+    launchExecutablePolicy: 'selected-agent-only',
+    allowedLaunchExecutables: [process.execPath],
+    forgeboardManagedActions: { developmentServers: 'deny', tests: 'deny' },
+    requireReviewBeforePrimary: true,
+    policyLimitations: ['Test fixture disclosure only.'],
+  },
 };
 
 interface RuntimeHarness {
@@ -66,6 +82,7 @@ interface HarnessOptions {
   readonly maxPendingPlansPerOwner?: number;
   readonly now?: () => Date;
   readonly planTtlMs?: number;
+  readonly repositoryPath?: string;
   readonly session?: AgentSession;
   readonly trustedExtensionAdapter?: boolean;
   readonly worktrees?: WorktreeService;
@@ -93,6 +110,7 @@ function request(
 }
 
 function createHarness(options: HarnessOptions = {}): RuntimeHarness {
+  const repositoryPath = options.repositoryPath ?? REPOSITORY_PATH;
   let headOid: string | null = BASE_COMMIT;
   const records = new Map<string, StoredRunRecord>();
   const audits: Array<{ action: string; outcome: string }> = [];
@@ -100,7 +118,7 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
   const store: AgentExecutionStore = {
     getProject: (projectId) =>
       projectId === PROJECT_ID
-        ? { id: PROJECT_ID, path: REPOSITORY_PATH, missing: false }
+        ? { id: PROJECT_ID, path: repositoryPath, missing: false }
         : undefined,
     saveRun: (record) => {
       if (failSaveOnceStatuses.delete(record.status)) {
@@ -117,10 +135,10 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
     },
   };
   const repository = {
-    resolveRepositoryRoot: vi.fn(() => Promise.resolve(REPOSITORY_PATH)),
-    status: vi.fn((repositoryPath: string) =>
+    resolveRepositoryRoot: vi.fn(() => Promise.resolve(repositoryPath)),
+    status: vi.fn((candidatePath: string) =>
       Promise.resolve(
-        emptyStatus(repositoryPath === REPOSITORY_PATH ? 'main' : 'forgeboard/agent-node', headOid),
+        emptyStatus(candidatePath === repositoryPath ? 'main' : 'forgeboard/agent-node', headOid),
       ),
     ),
     commonDirectory: vi.fn(() => Promise.resolve('/repo/.git')),
@@ -129,7 +147,15 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
     },
   } as unknown as RepositoryService;
   const adapterId = options.adapterId ?? 'test-agent';
-  const adapter = createCustomCliAdapter({ ...TEST_AGENT_MANIFEST, id: adapterId });
+  const adapter = createCustomCliAdapter({
+    ...TEST_AGENT_MANIFEST,
+    id: adapterId,
+    invocation: {
+      ...TEST_AGENT_MANIFEST.invocation,
+      context: { strategy: 'prompt-references' },
+    },
+    capabilities: { ...TEST_AGENT_MANIFEST.capabilities, contextAttachments: true },
+  });
   const planner = vi.fn<AgentAdapterPlanner>((input, cwd) =>
     Promise.resolve({
       adapter,
@@ -604,6 +630,43 @@ describe('AgentExecutionRuntime approval binding', () => {
     ).rejects.toThrow('workspace changed');
     expect(harness.launchSession).not.toHaveBeenCalled();
     expect(harness.records.get(prepared.runId)?.status).toBe('failed');
+  });
+
+  it('rejects an approved ignored context file whose bytes changed after disclosure', async () => {
+    const temporaryRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), 'forgeboard-runtime-context-')),
+    );
+    try {
+      const selectedFile = path.join(temporaryRoot, '.ignored-context');
+      const approvedBytes = 'approved context\n';
+      await writeFile(selectedFile, approvedBytes);
+      const harness = createHarness({ repositoryPath: temporaryRoot });
+      const prepared = await harness.runtime.prepare('owner-a', {
+        ...request(),
+        context: {
+          attachments: [
+            {
+              path: selectedFile,
+              kind: 'file',
+              explicitlyApproved: true,
+              sha256: createHash('sha256').update(approvedBytes).digest('hex'),
+            },
+          ],
+          manifestId: 'ignored-context-v1',
+          manifestDigest: 'b'.repeat(64),
+        },
+      });
+
+      await writeFile(selectedFile, 'changed after approval\n');
+      await expect(
+        harness.runtime.launch('owner-a', prepared.planId, prepared.disclosureFingerprint),
+      ).rejects.toThrow(/context file changed after disclosure/iu);
+      expect(harness.launchSession).not.toHaveBeenCalled();
+      expect(harness.records.get(prepared.runId)?.status).toBe('failed');
+      await harness.runtime.dispose();
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
   });
 
   it('revalidates the exact trusted extension manifest before launch', async () => {

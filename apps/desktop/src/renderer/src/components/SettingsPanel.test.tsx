@@ -35,6 +35,7 @@ const importSettings = vi.fn(() => Promise.resolve({ ok: true as const, value: i
 const pickExecutable = vi.fn(() =>
   Promise.resolve({ ok: true as const, value: null as string | null }),
 );
+const pickReferences = vi.fn(() => Promise.resolve({ ok: true as const, value: [] as string[] }));
 const getBackupHealth = vi.fn(() =>
   Promise.resolve({
     ok: true as const,
@@ -56,6 +57,8 @@ beforeEach(() => {
   importSettings.mockClear();
   pickExecutable.mockReset();
   pickExecutable.mockResolvedValue({ ok: true, value: null });
+  pickReferences.mockReset();
+  pickReferences.mockResolvedValue({ ok: true, value: [] });
   getBackupHealth.mockClear();
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
@@ -68,6 +71,7 @@ beforeEach(() => {
       },
       projects: {
         pickExecutable,
+        pickReferences,
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
       privacy: { export: vi.fn(() => Promise.resolve({ ok: true, value: null })) },
@@ -297,6 +301,129 @@ describe('SettingsPanel draft transactions', () => {
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0].customAgent.output).toBe('json-lines');
+  });
+
+  it('builds and validates the Custom permission profile entirely in the permission centre', async () => {
+    pickReferences.mockResolvedValue({
+      ok: true,
+      value: ['/tmp/detected-project/src'],
+    });
+    pickExecutable.mockResolvedValue({ ok: true, value: '/usr/local/bin/codex' });
+    render(<SettingsPanel {...props({ activeProject: project() })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Permissions' }));
+    expect(screen.getByRole('heading', { name: 'Permission centre' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Default permission profile'), {
+      target: { value: 'custom' },
+    });
+    fireEvent.change(screen.getByLabelText('Filesystem policy'), {
+      target: { value: 'explicit-paths' },
+    });
+
+    const readable = screen.getByRole('group', { name: 'Readable roots' });
+    fireEvent.click(
+      within(readable).getByRole('button', { name: 'Browse matching project folder' }),
+    );
+    await waitFor(() => expect(within(readable).getByDisplayValue('src')).toBeTruthy());
+    const writable = screen.getByRole('group', { name: 'Writable roots' });
+    fireEvent.click(within(writable).getByRole('button', { name: 'Add path' }));
+    fireEvent.change(within(writable).getByRole('textbox', { name: 'Writable root 1' }), {
+      target: { value: 'src/generated' },
+    });
+
+    fireEvent.change(screen.getByLabelText('Top-level launch policy'), {
+      target: { value: 'allowlist' },
+    });
+    const executableGroup = screen.getByRole('group', {
+      name: 'Allowed top-level agent executables',
+    });
+    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', true);
+    expect(screen.getAllByText(/Add at least one exact executable/u).length).toBeGreaterThan(0);
+    fireEvent.click(within(executableGroup).getByRole('button', { name: 'Browse executable' }));
+    await waitFor(() =>
+      expect(within(executableGroup).getByDisplayValue('/usr/local/bin/codex')).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole('checkbox', { name: /Ask the agent to allow tests/u }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
+      defaultPermissionProfile: 'custom',
+      customPermissionProfile: {
+        runtime: 'host',
+        filesystem: 'explicit-paths',
+        readPaths: ['src'],
+        writePaths: ['src/generated'],
+        executablePolicy: 'allowlist',
+        allowedExecutables: ['/usr/local/bin/codex'],
+        forgeboardManagedActions: { developmentServers: 'deny', tests: 'allow' },
+        requireReviewBeforePrimary: true,
+      },
+    });
+  });
+
+  it('requires explicit content exposure when Custom switches to Docker', async () => {
+    render(
+      <SettingsPanel
+        {...props({
+          settings: settings({
+            dockerImage: 'example/agent:latest',
+            dockerContainerExecutable: '/usr/local/bin/agent',
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Permissions' }));
+    const ignoredFiles = screen.getByLabelText<HTMLSelectElement>('Ignored files');
+    const sensitiveFiles = screen.getByLabelText<HTMLSelectElement>('Sensitive files');
+    expect(ignoredFiles.value).toBe('deny');
+    expect(sensitiveFiles.value).toBe('deny');
+
+    fireEvent.change(screen.getByLabelText('Runtime boundary'), {
+      target: { value: 'docker' },
+    });
+
+    expect(ignoredFiles.value).toBe('deny');
+    expect(sensitiveFiles.value).toBe('deny');
+    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', true);
+    expect(
+      screen.getAllByText(/whole-worktree Docker bind cannot hide ignored or sensitive files/u)
+        .length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText('Top-level launch policy'), {
+      target: { value: 'allowlist' },
+    });
+    expect(screen.getByRole('button', { name: 'Browse executable' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    fireEvent.change(screen.getByLabelText('Top-level launch policy'), {
+      target: { value: 'selected-agent-only' },
+    });
+    fireEvent.change(ignoredFiles, { target: { value: 'allow' } });
+    fireEvent.change(sensitiveFiles, { target: { value: 'allow' } });
+    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
+    const dockerEnabled = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: /Enable Docker profiles/u,
+    });
+    expect(dockerEnabled.checked).toBe(true);
+    expect(dockerEnabled.disabled).toBe(true);
+    expect(screen.getByText(/Switch Custom to Host in the Permissions centre/u)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
+      dockerEnabled: true,
+      customPermissionProfile: {
+        runtime: 'docker',
+        ignoredFileRead: 'allow',
+        sensitiveFileRead: 'allow',
+      },
+    });
   });
 
   it('keeps manual check configuration available without an open project', async () => {

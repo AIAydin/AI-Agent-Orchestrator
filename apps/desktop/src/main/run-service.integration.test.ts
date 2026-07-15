@@ -108,9 +108,20 @@ function permissionProfile(cwd: string): PermissionProfile {
     enforcement: 'disclosure-only',
     readRoots: [cwd],
     writeRoots: [cwd],
-    network: 'blocked',
+    network: 'provider-controlled',
     approvalPolicy: 'The integration fixture approves only the disclosed worktree.',
     disclosure: 'The deterministic local test process may write only its assigned fixture.',
+    custom: {
+      runtime: 'host',
+      filesystem: 'assigned-worktree-write',
+      ignoredFileRead: 'deny',
+      sensitiveFileRead: 'deny',
+      launchExecutablePolicy: 'selected-agent-only',
+      allowedLaunchExecutables: [process.execPath],
+      forgeboardManagedActions: { developmentServers: 'deny', tests: 'deny' },
+      requireReviewBeforePrimary: true,
+      policyLimitations: ['Test fixture disclosure only.'],
+    },
   };
 }
 

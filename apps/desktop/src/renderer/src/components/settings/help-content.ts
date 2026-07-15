@@ -144,6 +144,31 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     ],
   },
   {
+    id: 'custom-permissions',
+    title: 'Build a Custom permission profile',
+    summary:
+      'Configure a reusable host disclosure policy or Docker boundary without editing a file.',
+    keywords: [
+      'custom',
+      'permission',
+      'cwd',
+      'sandbox',
+      'root',
+      'sensitive',
+      'ignored',
+      'executable',
+      'network',
+    ],
+    icon: ShieldCheck,
+    steps: [
+      'Open Settings → Permissions and choose Host or Docker for the Custom profile.',
+      'Host path, visibility, executable, development-server, and test choices are declared policy: cwd is not an operating-system sandbox and descendants are not constrained.',
+      'Docker technically enforces one whole-worktree read-only or read-write mount, non-root execution, network mode, CPU, and memory limits; host credentials remain unmounted.',
+      'Allowing ignored or sensitive worktree visibility does not attach a file as context. Forgeboard context still requires exact per-file approval.',
+      'Choose Custom as the default or on an Agent node, then review its complete effective profile and limitations before approving the exact launch.',
+    ],
+  },
+  {
     id: 'run-will-not-start',
     title: 'A run will not start',
     summary:

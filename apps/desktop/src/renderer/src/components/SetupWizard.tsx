@@ -22,6 +22,13 @@ import type { DockerReadiness } from '../../../shared/docker-contracts.js';
 import { unwrap } from '../lib/ipc.js';
 import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../lib/literal-arguments.js';
 import { DockerConfiguration } from './DockerConfiguration.js';
+import { CustomPermissionProfileEditor } from './permissions/CustomPermissionProfileEditor.js';
+import {
+  customPermissionConfigurationIssues,
+  permissionProfileLabel,
+  permissionProfileNeedsDocker,
+  permissionProfileUnavailableReason,
+} from './permissions/permission-profile-ui.js';
 import './SetupWizard.css';
 
 interface SetupWizardProps {
@@ -45,6 +52,16 @@ export function SetupWizard(props: SetupWizardProps) {
   );
   const customAgentIncomplete =
     draft.defaultAgent === 'custom' && draft.customAgent.executable.trim() === '';
+  const customPermissionIssues = customPermissionConfigurationIssues(draft);
+  const selectedPermissionNeedsDocker = permissionProfileNeedsDocker(
+    draft.defaultPermissionProfile,
+    draft,
+  );
+  const selectedPermissionUnavailable = permissionProfileUnavailableReason(
+    draft.defaultPermissionProfile,
+    draft,
+    draft.defaultAgent,
+  );
 
   async function perform(operation: () => Promise<void>) {
     setBusy(true);
@@ -174,7 +191,7 @@ export function SetupWizard(props: SetupWizardProps) {
                             ...draft,
                             defaultAgent: agent.id as AppSettings['defaultAgent'],
                             ...(agent.id === 'test-agent' &&
-                            draft.defaultPermissionProfile === 'docker-isolated'
+                            permissionProfileNeedsDocker(draft.defaultPermissionProfile, draft)
                               ? { defaultPermissionProfile: 'worktree-write' as const }
                               : {}),
                             ...(agent.id === 'custom'
@@ -361,7 +378,6 @@ export function SetupWizard(props: SetupWizardProps) {
                     setDraft({
                       ...draft,
                       defaultPermissionProfile: 'plan-read-only',
-                      dockerEnabled: false,
                     })
                   }
                 />
@@ -374,7 +390,6 @@ export function SetupWizard(props: SetupWizardProps) {
                     setDraft({
                       ...draft,
                       defaultPermissionProfile: 'worktree-write',
-                      dockerEnabled: false,
                     })
                   }
                 />
@@ -396,30 +411,61 @@ export function SetupWizard(props: SetupWizardProps) {
                     })
                   }
                 />
+                <ChoiceCard
+                  title="Custom"
+                  description="Configure a reusable host policy or Docker boundary entirely here."
+                  icon={<ShieldCheck size={20} />}
+                  checked={draft.defaultPermissionProfile === 'custom'}
+                  onSelect={() =>
+                    setDraft({
+                      ...draft,
+                      defaultPermissionProfile: 'custom',
+                      ...(draft.customPermissionProfile.runtime === 'docker'
+                        ? { dockerEnabled: true }
+                        : {}),
+                    })
+                  }
+                />
               </div>
-              {draft.defaultPermissionProfile === 'docker-isolated' && (
+              {draft.defaultPermissionProfile === 'custom' && (
                 <div className="setup-inline-settings">
-                  <label className="switch-row">
-                    <span>
-                      <strong>Disable container network</strong>
-                      <small>Recommended. It can be enabled for an approved run later.</small>
-                    </span>
-                    <input
-                      type="checkbox"
-                      name="setup-disable-docker-network"
-                      checked={draft.dockerNetwork === 'disabled'}
-                      onChange={(event) =>
-                        setDraft({
-                          ...draft,
-                          dockerNetwork: event.target.checked ? 'disabled' : 'enabled',
-                        })
-                      }
-                    />
-                  </label>
-                  <p>
-                    Host credentials remain unmounted. CPU and memory limits can be adjusted in
-                    Settings.
-                  </p>
+                  <CustomPermissionProfileEditor
+                    draft={draft}
+                    setDraft={setDraft}
+                    activeProject={null}
+                    busy={busy}
+                    compact
+                    onError={props.onError}
+                  />
+                </div>
+              )}
+              {selectedPermissionNeedsDocker && (
+                <div className="setup-inline-settings">
+                  {draft.defaultPermissionProfile === 'docker-isolated' && (
+                    <>
+                      <label className="switch-row">
+                        <span>
+                          <strong>Disable container network</strong>
+                          <small>Recommended. It can be enabled for an approved run later.</small>
+                        </span>
+                        <input
+                          type="checkbox"
+                          name="setup-disable-docker-network"
+                          checked={draft.dockerNetwork === 'disabled'}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              dockerNetwork: event.target.checked ? 'disabled' : 'enabled',
+                            })
+                          }
+                        />
+                      </label>
+                      <p>
+                        Host credentials remain unmounted. CPU and memory limits can be adjusted in
+                        Settings.
+                      </p>
+                    </>
+                  )}
                   <DockerConfiguration
                     compact
                     value={{
@@ -438,6 +484,11 @@ export function SetupWizard(props: SetupWizardProps) {
                     </span>
                   )}
                 </div>
+              )}
+              {selectedPermissionUnavailable && (
+                <span className="setup-validation" role="alert">
+                  {selectedPermissionUnavailable}
+                </span>
               )}
             </div>
           )}
@@ -509,7 +560,7 @@ export function SetupWizard(props: SetupWizardProps) {
                 </div>
                 <div>
                   <dt>Permission profile</dt>
-                  <dd>{profileLabel(draft.defaultPermissionProfile)}</dd>
+                  <dd>{permissionProfileLabel(draft.defaultPermissionProfile)}</dd>
                 </div>
                 <div>
                   <dt>Docker</dt>
@@ -556,8 +607,10 @@ export function SetupWizard(props: SetupWizardProps) {
                   busy ||
                   (step === 1 && customAgentIncomplete) ||
                   (step === 2 &&
-                    draft.defaultPermissionProfile === 'docker-isolated' &&
-                    dockerReadiness?.available !== true)
+                    (selectedPermissionUnavailable !== null ||
+                      (draft.defaultPermissionProfile === 'custom' &&
+                        customPermissionIssues.length > 0) ||
+                      (selectedPermissionNeedsDocker && dockerReadiness?.available !== true)))
                 }
                 onClick={() => setStep((current) => current + 1)}
               >
@@ -663,12 +716,4 @@ function isCodingAgent(id: AgentDetection['id']): boolean {
 
 function agentLabel(agents: AgentDetection[], id: AppSettings['defaultAgent']): string {
   return agents.find((agent) => agent.id === id)?.label ?? id;
-}
-
-function profileLabel(profile: AppSettings['defaultPermissionProfile']): string {
-  return {
-    'plan-read-only': 'Plan / read-only',
-    'worktree-write': 'Worktree write',
-    'docker-isolated': 'Docker isolated',
-  }[profile];
 }

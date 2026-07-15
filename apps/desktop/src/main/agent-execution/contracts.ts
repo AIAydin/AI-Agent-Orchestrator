@@ -35,6 +35,32 @@ export const AgentExecutionContextRequestSchema = z
         message: 'Context manifest ID and digest must be provided together.',
       });
     }
+    if (
+      context.attachments.length > 0 &&
+      (context.manifestId === undefined || context.manifestDigest === undefined)
+    ) {
+      refinement.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['attachments'],
+        message: 'Non-empty agent context requires an exact hashed attachment manifest.',
+      });
+    }
+    context.attachments.forEach((attachment, index) => {
+      if (attachment.kind !== 'file') {
+        refinement.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['attachments', index, 'kind'],
+          message: 'Agent context supports explicit regular files only, not directories.',
+        });
+      }
+      if (attachment.sha256 === undefined) {
+        refinement.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['attachments', index, 'sha256'],
+          message: 'Every selected context file requires its exact SHA-256 digest.',
+        });
+      }
+    });
   });
 export type AgentExecutionContextRequest = z.infer<typeof AgentExecutionContextRequestSchema>;
 
@@ -94,6 +120,8 @@ export interface AgentRuntimeAdapterPlan {
   readonly plan: PreparedAgentLaunch;
   readonly detectionWarnings: readonly string[];
   readonly trustedExtensionAdapter: boolean;
+  /** Rechecks executable/image identities after approval and immediately before spawn. */
+  readonly revalidateBeforeLaunch?: () => Promise<void>;
 }
 
 export type AgentAdapterPlanner = (
@@ -166,6 +194,7 @@ export interface PreparedRunState {
   readonly plan: PreparedAgentLaunch;
   readonly planId: string;
   readonly repositoryPath: string;
+  readonly revalidateBeforeLaunch: (() => Promise<void>) | undefined;
   readonly trustedExtensionAdapter: boolean;
   readonly worktree: WorktreeOwnership | null;
   record: StoredRunRecord;

@@ -452,7 +452,7 @@ if [ "$1" = "version" ]; then
   exit 0
 fi
 if [ "$1" = "image" ] && [ "$2" = "inspect" ] && [ "$3" = "local/test:1" ] && [ "$4" = "" ]; then
-  printf '[{"Id":"sha256:abc123","Os":"linux","Architecture":"amd64","Config":{"Volumes":null}}]'
+  printf '[{"Id":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","Os":"linux","Architecture":"amd64","Config":{"Volumes":null}}]'
   exit 0
 fi
 exit 9
@@ -481,7 +481,7 @@ exit 9
       imageCompatible: true,
       available: true,
       daemonVersion: '27.1.0',
-      imageId: 'sha256:abc123',
+      imageId: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     });
   });
 
@@ -502,16 +502,19 @@ if [ "$1" != "image" ] || [ "$2" != "inspect" ] || [ "$4" != "" ]; then
 fi
 case "$3" in
   local/volumes:1)
-    printf '[{"Id":"sha256:volumes","Os":"linux","Architecture":"amd64","Config":{"Volumes":{"/data":{},"/var/lib/tool":{}}}}]'
+    printf '[{"Id":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","Os":"linux","Architecture":"amd64","Config":{"Volumes":{"/data":{},"/var/lib/tool":{}}}}]'
     ;;
   local/windows:1)
-    printf '[{"Id":"sha256:windows","Os":"windows","Architecture":"amd64","Config":{"Volumes":null}}]'
+    printf '[{"Id":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","Os":"windows","Architecture":"amd64","Config":{"Volumes":null}}]'
     ;;
   local/malformed:1)
     printf '{not-json'
     ;;
   local/incomplete:1)
-    printf '[{"Id":"sha256:incomplete","Os":"linux","Config":null}]'
+    printf '[{"Id":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","Os":"linux","Config":null}]'
+    ;;
+  local/short-id:1)
+    printf '[{"Id":"sha256:abc123","Os":"linux","Architecture":"amd64","Config":{"Volumes":null}}]'
     ;;
   local/missing:1)
     printf '\\033[31mmissing local image\\nsecond line' >&2
@@ -578,6 +581,20 @@ esac
       available: false,
     });
     expect(incompleteDetection.reason).toContain('metadata is incomplete');
+
+    const shortIdDetection = await detectDockerRuntime({
+      dockerExecutable: executable,
+      image: 'local/short-id:1',
+      timeoutMs: 2_000,
+    });
+    expect(shortIdDetection).toMatchObject({
+      executableAvailable: true,
+      daemonAvailable: true,
+      imageAvailable: true,
+      imageCompatible: false,
+      available: false,
+    });
+    expect(shortIdDetection.reason).toContain('metadata is incomplete');
 
     const missingDetection = await detectDockerRuntime({
       dockerExecutable: executable,

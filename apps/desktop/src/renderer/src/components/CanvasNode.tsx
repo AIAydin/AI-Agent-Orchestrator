@@ -24,8 +24,9 @@ import {
 } from 'lucide-react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 
-import type { ExtensionCanvasNodeTypeView } from '../../../shared/contracts.js';
+import type { ExtensionCanvasNodeTypeView, PermissionProfile } from '../../../shared/contracts.js';
 import type { ExtensionNodeAvailability } from './extension-nodes.js';
+import { permissionProfileLabel } from './permissions/permission-profile-ui.js';
 
 export interface WorkshopNodeData extends Record<string, unknown> {
   kind: NodeKind;
@@ -36,8 +37,8 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   collapsed: boolean;
   color: string;
   adapterId?: string;
-  permissionProfile?: 'plan-read-only' | 'worktree-write' | 'docker-isolated';
-  lastRunPermissionProfile?: 'plan-read-only' | 'worktree-write' | 'docker-isolated';
+  permissionProfile?: PermissionProfile;
+  lastRunPermissionProfile?: PermissionProfile;
   prompt?: string;
   model?: string;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
@@ -293,6 +294,11 @@ export function CanvasNode({ data, selected }: NodeProps<WorkshopNode>) {
           <span className={`node-status-label ${data.status}`}>
             <Play size={10} />
             {data.status}
+          </span>
+        )}
+        {data.kind === 'agent' && data.permissionProfile !== undefined && (
+          <span className="node-permission-chip">
+            {permissionProfileLabel(data.permissionProfile)}
           </span>
         )}
         {data.kind === 'extension' && data.extensionAvailability !== 'active' && (

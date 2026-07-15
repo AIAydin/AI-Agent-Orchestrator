@@ -9,6 +9,7 @@ interface UseAgentRunControllerInput {
   selectedNode: WorkshopNode | null;
   selectedAdapter: RunAdapterId;
   selectedPermission: NonNullable<WorkshopNode['data']['permissionProfile']>;
+  permissionUnavailableReason: string | null;
   updateNodeData: (nodeId: string, data: Partial<WorkshopNode['data']>) => void;
   setEvents: Dispatch<SetStateAction<string[]>>;
   onError: (message: string) => void;
@@ -19,6 +20,7 @@ export function useAgentRunController({
   selectedNode,
   selectedAdapter,
   selectedPermission,
+  permissionUnavailableReason,
   updateNodeData,
   setEvents,
   onError,
@@ -30,6 +32,10 @@ export function useAgentRunController({
 
   async function prepareSelectedRun() {
     if (!selectedNode) return;
+    if (permissionUnavailableReason !== null) {
+      onError(permissionUnavailableReason);
+      return;
+    }
     const prompt = (selectedNode.data.prompt ?? selectedNode.data.description).trim();
     if (!prompt) {
       onError('Add a prompt before reviewing this run.');

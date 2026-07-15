@@ -34,6 +34,12 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
           type="checkbox"
           name="docker-enabled"
           checked={draft.dockerEnabled}
+          disabled={draft.customPermissionProfile.runtime === 'docker'}
+          aria-describedby={
+            draft.customPermissionProfile.runtime === 'docker'
+              ? 'docker-required-by-custom-profile'
+              : undefined
+          }
           onChange={(event) => {
             const dockerEnabled = event.target.checked;
             setDraft({
@@ -46,6 +52,12 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
           }}
         />
       </label>
+      {draft.customPermissionProfile.runtime === 'docker' && (
+        <p id="docker-required-by-custom-profile" className="recovery-guidance" role="status">
+          Docker stays enabled while the Custom profile uses it. Switch Custom to Host in the
+          Permissions centre before turning Docker off.
+        </p>
+      )}
       <DockerConfiguration
         value={{
           dockerExecutable: draft.dockerExecutable,

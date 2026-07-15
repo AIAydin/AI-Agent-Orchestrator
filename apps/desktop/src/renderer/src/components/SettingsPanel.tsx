@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Bot,
+  Database,
   FolderGit2,
   CircleHelp,
   ListChecks,
@@ -23,11 +24,14 @@ import { ConnectivitySettings } from './settings/ConnectivitySettings.js';
 import { dockerConfigurationIncomplete } from './settings/DockerSettings.js';
 import { GitPreviewSettings } from './settings/GitPreviewSettings.js';
 import { HelpSettings } from './settings/HelpSettings.js';
+import { PermissionSettings } from './settings/PermissionSettings.js';
 import { PrivacySettings } from './settings/PrivacySettings.js';
+import { customPermissionConfigurationIssues } from './permissions/permission-profile-ui.js';
 
 type SettingsTab =
   | 'appearance'
   | 'agents'
+  | 'permissions'
   | 'git'
   | 'checks'
   | 'extensions'
@@ -62,6 +66,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
   const busyRef = useRef(busy);
   closeRef.current = props.onClose;
   busyRef.current = busy;
+  const permissionIssues = customPermissionConfigurationIssues(draft);
 
   useEffect(() => {
     const previousFocus =
@@ -176,6 +181,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
               onClick={() => setTab('agents')}
             />
             <SettingsTabButton
+              active={tab === 'permissions'}
+              icon={<ShieldCheck size={16} />}
+              label="Permissions"
+              onClick={() => setTab('permissions')}
+            />
+            <SettingsTabButton
               active={tab === 'git'}
               icon={<FolderGit2 size={16} />}
               label="Git & previews"
@@ -201,7 +212,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
             />
             <SettingsTabButton
               active={tab === 'privacy'}
-              icon={<ShieldCheck size={16} />}
+              icon={<Database size={16} />}
               label="Data & privacy"
               onClick={() => setTab('privacy')}
             />
@@ -218,6 +229,16 @@ export function SettingsPanel(props: SettingsPanelProps) {
             {tab === 'agents' && (
               <AgentsSettings
                 agents={props.agents}
+                draft={draft}
+                setDraft={setDraft}
+                busy={busy}
+                perform={perform}
+                onError={props.onError}
+              />
+            )}
+            {tab === 'permissions' && (
+              <PermissionSettings
+                activeProject={props.activeProject}
                 draft={draft}
                 setDraft={setDraft}
                 busy={busy}
@@ -278,6 +299,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
         <footer className="settings-footer">
           <span>
             Forgeboard {props.info.version} · {props.info.platform}
+            {permissionIssues[0] !== undefined && (
+              <small id="settings-permission-validation" role="alert">
+                {permissionIssues[0]}
+              </small>
+            )}
           </span>
           <div>
             <button
@@ -297,7 +323,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
             <button
               className="button primary"
               type="submit"
-              disabled={busy || dockerConfigurationIncomplete(draft)}
+              disabled={busy || dockerConfigurationIncomplete(draft) || permissionIssues.length > 0}
+              title={permissionIssues[0]}
+              aria-describedby={
+                permissionIssues.length > 0 ? 'settings-permission-validation' : undefined
+              }
             >
               <Save size={15} /> Save settings
             </button>

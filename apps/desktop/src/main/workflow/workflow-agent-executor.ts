@@ -38,7 +38,12 @@ import type {
   WorkflowNodeExecutor,
 } from './workflow-host-contracts.js';
 
-const PermissionProfileSchema = z.enum(['plan-read-only', 'worktree-write', 'docker-isolated']);
+const PermissionProfileSchema = z.enum([
+  'plan-read-only',
+  'worktree-write',
+  'docker-isolated',
+  'custom',
+]);
 const ApprovalSchema = z
   .object({
     preparationId: z.string().uuid(),
@@ -516,11 +521,17 @@ function assertPreparedAgent(
     throw new Error('The agent disclosure no longer matches the configured Agent node.');
   }
   const reviewedAttachments = prepared.disclosure.contextAttachments;
-  const requestedAttachments = request.context.attachments.map(({ path, kind }) => ({
-    path,
-    kind,
-  }));
-  if (JSON.stringify(reviewedAttachments) !== JSON.stringify(requestedAttachments)) {
+  const requestedKinds = request.context.attachments.map(({ kind }) => kind);
+  const reviewedKinds = reviewedAttachments.map(({ kind }) => kind);
+  const requestedDigests = request.context.attachments.map(({ sha256 }) => sha256 ?? null);
+  const reviewedDigests = reviewedAttachments.map(({ sha256 }) => sha256);
+  if (
+    reviewedAttachments.length !== request.context.attachments.length ||
+    JSON.stringify(reviewedKinds) !== JSON.stringify(requestedKinds) ||
+    JSON.stringify(reviewedDigests) !== JSON.stringify(requestedDigests) ||
+    (prepared.disclosure.contextManifestId ?? null) !== (request.context.manifestId ?? null) ||
+    (prepared.disclosure.contextManifestDigest ?? null) !== (request.context.manifestDigest ?? null)
+  ) {
     throw new Error('The agent disclosure does not contain the resolved workflow context.');
   }
 }

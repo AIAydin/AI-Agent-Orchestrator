@@ -6,6 +6,8 @@ Git worktrees, streamed agent sessions, loopback web/mobile previews, and explic
 workflow approval gates, authoritative primary-checkout Git review, staging, and commits, plus
 UI-configured project checks with persisted output. Completed writable runs can also be reopened as
 authoritative, isolated agent-worktree reviews without entering a path or editing configuration.
+The permission centre exposes Plan/read-only, Worktree write, Docker isolated, and a reusable
+Custom profile with complete host/Docker controls and honest enforcement disclosures.
 Data & Privacy also provides UI-configured scheduled and quit-time SQLite backups with a per-folder
 retention target, canvas snapshot recovery, and reviewed portable JSON export/import. The interactive
 terminal node and other unchecked surfaces in the implementation ledger are still under
@@ -61,7 +63,8 @@ detection and executable selection, custom CLI setup, permission profile selecti
 project/worktree locations, preview commands, extensions, and local storage, backup, and retention
 behavior. Source and config-file edits are optional for these flows. Lint, typecheck, test, build,
 and custom project checks can likewise be configured, approved, run, cancelled, and inspected
-entirely in the UI.
+entirely in the UI. See [Permission profiles](docs/PERMISSIONS.md) for the exact technical and
+disclosure-only boundaries.
 
 Existing folders can be opened without Git. Forgeboard then offers an **Initialize Git** action in
 the project rail. A cancel-default native confirmation names the exact folder before Forgeboard
@@ -75,7 +78,9 @@ snapshots, and audit history; they do not embed repository files or extension so
 
 Docker isolation is optional. Forgeboard does not bundle or silently choose an agent image: select
 the Docker executable, exact image, and in-image agent executable in the UI. Forgeboard checks that
-combination locally and requires a native confirmation before any explicit image download.
+combination locally and requires a native confirmation before any explicit image download. Agent
+run planning performs only bounded Docker daemon/image metadata preflight, pins the approved launch
+to an immutable image ID, and does not execute the in-image agent until exact launch approval.
 
 The release workflow is designed to emit clearly identified unsigned development artifacts until
 the optional signing secrets documented in the release guide are configured. Such artifacts may

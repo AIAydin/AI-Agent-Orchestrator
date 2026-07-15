@@ -132,7 +132,7 @@ if [ "$1" = "version" ]; then
   exit 0
 fi
 if [ "$1" = "image" ] && [ "$2" = "inspect" ]; then
-  printf '[{"Id":"sha256:abc123","Os":"linux","Architecture":"amd64","Config":{"Volumes":null}}]'
+  printf '[{"Id":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","Os":"linux","Architecture":"amd64","Config":{"Volumes":null}}]'
   exit 0
 fi
 if [ "$1" = "run" ]; then

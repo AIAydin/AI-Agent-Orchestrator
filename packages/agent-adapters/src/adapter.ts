@@ -598,7 +598,11 @@ function prepare(
     extraArgs: request.extraArguments,
   });
   const environment = buildEnvironment(request);
-  const warnings = [CWD_WARNING, manifest.provider.disclosure];
+  const warnings = [
+    CWD_WARNING,
+    manifest.provider.disclosure,
+    request.permissionProfile.disclosure,
+  ];
   if (request.environment.inherit === 'all') {
     warnings.push(
       'This launch inherits every current process environment variable. Names are disclosed; values are never written to the launch disclosure.',

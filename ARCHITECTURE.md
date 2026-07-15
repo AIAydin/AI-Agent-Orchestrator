@@ -81,6 +81,16 @@ local image, probes the exact in-image executable, and performs a native-confirm
 pull. Settings import/export uses the same validated schemas but is optional for the implemented
 setup flow.
 
+The permission centre owns all four launch profiles. Custom Host runs always use a managed
+worktree, canonical folder roots, an identity-bound top-level executable, and explicit disclosure
+that host policy cannot constrain the current user or descendants. Custom Docker accepts only a
+whole-worktree bind and discloses its exact network/resource policy. Docker run planning invokes an
+identity-bound client only for bounded daemon/image metadata, pins actual argv to a strict immutable
+image ID, and leaves the first in-image agent execution behind the exact approval gate. Selected
+context carries resolver-supplied manifest evidence plus a separately enforced per-file SHA-256;
+primary and remapped worktree bytes are checked against that digest during preparation and again
+immediately before spawn.
+
 Local extension manifests are author-facing packages, not ordinary user configuration. Users select
 an extension folder or manifest in Settings with a native picker; the trusted process validates its
 declarative content, shows the exact identity, version, two digests, and permissions in a

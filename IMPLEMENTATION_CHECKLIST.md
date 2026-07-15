@@ -39,7 +39,7 @@ not be reclassified as future work.
 - [x] Canonical path/root policy, traversal/symlink escape protection, ignore evaluation, sensitive
       denylist, redaction, and high-friction per-file override.
 - [x] Explicit context manifest showing receiving agent/provider and exact attached files.
-- [ ] Permission profiles: Plan/read-only, Worktree write, Docker isolated, and Custom.
+- [x] Permission profiles: Plan/read-only, Worktree write, Docker isolated, and Custom.
 - [ ] Scoped/revocable approvals and impact-specific confirmations for external/destructive actions.
 - [ ] Append-only redacted audit log for all required security and outbound events.
 - [x] Renderer isolation, narrow validated IPC, strict CSP, and navigation/window/download controls.
@@ -357,3 +357,19 @@ unchecked when only a subset of their required behavior has proof.
   minutes. A fresh unsigned macOS arm64 app, ZIP, and DMG were built; the isolated packaged-app
   smoke and native DMG install/launch smoke both passed. GitHub publication, signing/notarization,
   and fresh Windows/Linux installer proof remain unchecked.
+- 2026-07-15: Custom permissions became fully configurable and persistable in the UI for host and
+  Docker execution, with no required file or environment configuration. The run review discloses
+  effective roots, visibility, executable identity, Docker resources, provider limitations, and
+  resolver-supplied context evidence before exact approval. Host execution fails closed on path,
+  symlink, executable, and attachment drift; Docker execution performs no in-container agent work
+  before approval, pins an immutable image ID, and revalidates client, tag, context, and workspace
+  identity immediately before launch. Independent adversarial review found no remaining critical
+  or high-severity blocker in this scope.
+- 2026-07-15: the Custom-permissions checkpoint passed `corepack pnpm verify`: all 432 authored
+  files remained below 2,000 lines; formatting, lint, strict typecheck, 608 unit tests across 104
+  files, 112 integration tests across 16 files, and every workspace production build passed. All
+  10 Electron Playwright scenarios passed in 1.7 minutes, including complete UI configuration,
+  process-restart persistence, cancel-without-launch, read-only enforcement, and one approved
+  deterministic write with zero external requests. Fresh unsigned macOS arm64 app, ZIP, and DMG
+  artifacts built successfully; packaged-app and native DMG installer launch smokes passed.
+  `corepack pnpm audit --prod --audit-level high` reported no known production vulnerabilities.

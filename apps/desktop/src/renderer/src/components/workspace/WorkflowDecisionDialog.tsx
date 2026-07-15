@@ -8,12 +8,14 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { RunDisclosureSchema } from '../../../../shared/contracts.js';
 import type {
   WorkflowApprovalRequest,
   WorkflowHumanDecisionRequest,
   WorkflowRevisionEscapeRequest,
 } from '../../../../shared/workflow-contracts.js';
 import type { WorkflowDecisionTarget } from './workflow-ui-types.js';
+import { RunDisclosureDetails, RunDisclosureWarnings } from './RunDisclosureDetails.js';
 
 interface WorkflowDecisionDialogProps {
   target: WorkflowDecisionTarget;
@@ -160,6 +162,7 @@ function LaunchDecision({
   busy: boolean;
   onApprove: (request: WorkflowApprovalRequest) => void;
 }) {
+  const agentDisclosure = RunDisclosureSchema.safeParse(request.disclosure);
   return (
     <div className="workflow-decision-body">
       <dl className="workflow-decision-facts">
@@ -184,7 +187,14 @@ function LaunchDecision({
       </dl>
       <details open>
         <summary>Exact launch disclosure</summary>
-        <pre>{JSON.stringify(request.disclosure, null, 2)}</pre>
+        {agentDisclosure.success ? (
+          <div className="workflow-agent-disclosure">
+            <RunDisclosureWarnings disclosure={agentDisclosure.data} />
+            <RunDisclosureDetails disclosure={agentDisclosure.data} />
+          </div>
+        ) : (
+          <pre>{JSON.stringify(request.disclosure, null, 2)}</pre>
+        )}
       </details>
       <button
         className="button primary workflow-decision-primary"

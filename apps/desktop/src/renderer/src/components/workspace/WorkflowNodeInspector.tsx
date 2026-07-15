@@ -4,6 +4,7 @@ import type { AppSettings } from '../../../../shared/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../lib/literal-arguments.js';
 import type { WorkshopCommandConfiguration, WorkshopNode } from '../CanvasNode.js';
+import { ConfiguredPermissionSummary } from '../permissions/ConfiguredPermissionSummary.js';
 import {
   checkProducerId,
   commandPresets,
@@ -28,8 +29,15 @@ export function WorkflowNodeInspector(props: WorkflowNodeInspectorProps) {
   return null;
 }
 
-function TaskNodeInspector({ node, nodes, onRecord, onUpdate }: WorkflowNodeInspectorProps) {
+function TaskNodeInspector({
+  node,
+  nodes,
+  settings,
+  onRecord,
+  onUpdate,
+}: WorkflowNodeInspectorProps) {
   const agents = nodes.filter((candidate) => candidate.data.kind === 'agent');
+  const assignedAgent = agents.find((candidate) => candidate.id === node.data.assigneeId);
   const criteria = node.data.acceptanceCriteria ?? [];
   const fileNodes = nodes.filter(
     (candidate) => candidate.data.kind === 'file' && candidate.data.file !== undefined,
@@ -66,6 +74,20 @@ function TaskNodeInspector({ node, nodes, onRecord, onUpdate }: WorkflowNodeInsp
         <p className="workflow-config-warning" role="alert">
           Add and configure an Agent node before this Task can run.
         </p>
+      )}
+      {assignedAgent !== undefined && (
+        <div className="workflow-inherited-permission">
+          <ConfiguredPermissionSummary
+            profile={assignedAgent.data.permissionProfile ?? settings.defaultPermissionProfile}
+            settings={settings}
+            adapterId={assignedAgent.data.adapterId ?? settings.defaultAgent}
+          />
+          <p>
+            This Task inherits its assignee Agent profile. Change the boundary on{' '}
+            <strong>{assignedAgent.data.title}</strong>; the exact effective profile is disclosed
+            again before the Task launches.
+          </p>
+        </div>
       )}
       <div className="workflow-retry-grid">
         <label>

@@ -30,6 +30,7 @@ import { NODE_DEFINITIONS, NODE_KINDS, type NodeKind, type WorkshopNode } from '
 import { CommandPalette } from './CommandPalette.js';
 import { createExtensionNodeBinding, extensionTemplateKey } from './extension-nodes.js';
 import { GitReviewDialog } from './git-review/GitReviewDialog.js';
+import { permissionProfileUnavailableReason } from './permissions/permission-profile-ui.js';
 import { CheckApprovalDialog } from './workspace/CheckApprovalDialog.js';
 import { RunApprovalDialog } from './workspace/RunApprovalDialog.js';
 import { WorkspaceActivityDrawer } from './workspace/WorkspaceActivityDrawer.js';
@@ -466,15 +467,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     ? (selectedNode.data.adapterId ??
       (isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'test-agent'))
     : 'test-agent';
-  const selectedPermission = selectedNode
-    ? (selectedNode.data.permissionProfile ??
-      (settings.defaultPermissionProfile === 'plan-read-only' ||
-      (settings.defaultPermissionProfile === 'docker-isolated' &&
-        settings.dockerEnabled &&
-        selectedAdapter !== 'test-agent')
-        ? settings.defaultPermissionProfile
-        : 'worktree-write'))
-    : 'worktree-write';
+  const configuredPermission =
+    selectedNode?.data.permissionProfile ?? settings.defaultPermissionProfile;
+  const selectedPermission = configuredPermission;
+  const selectedPermissionUnavailableReason =
+    selectedNode === null
+      ? null
+      : permissionProfileUnavailableReason(selectedPermission, settings, selectedAdapter);
 
   const updateNodeData = useCallback((nodeId: string, data: Partial<WorkshopNode['data']>) => {
     setNodes((items) =>
@@ -488,6 +487,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     selectedNode,
     selectedAdapter,
     selectedPermission,
+    permissionUnavailableReason: selectedPermissionUnavailableReason,
     updateNodeData,
     setEvents,
     onError,
@@ -930,6 +930,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onSendRunInput={() => void runs.sendRunInput()}
           onControlRun={(action) => void runs.controlRun(action)}
           onPrepareRun={() => {
+            if (selectedPermissionUnavailableReason !== null) {
+              onError(selectedPermissionUnavailableReason);
+              return;
+            }
             updateSelected({
               permissionProfile: selectedPermission,
               lastRunPermissionProfile: selectedPermission,

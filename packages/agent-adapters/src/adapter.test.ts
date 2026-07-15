@@ -43,6 +43,20 @@ function permission(cwd: string) {
     network: 'provider-controlled' as const,
     approvalPolicy: 'The fixture does not request approvals.',
     disclosure: 'Test-only direct process access.',
+    custom: {
+      runtime: 'host' as const,
+      filesystem: 'assigned-worktree-write' as const,
+      ignoredFileRead: 'deny' as const,
+      sensitiveFileRead: 'deny' as const,
+      launchExecutablePolicy: 'selected-agent-only' as const,
+      allowedLaunchExecutables: [process.execPath],
+      forgeboardManagedActions: {
+        developmentServers: 'deny' as const,
+        tests: 'deny' as const,
+      },
+      requireReviewBeforePrimary: true as const,
+      policyLimitations: ['Test fixture disclosure only.'],
+    },
   };
 }
 
@@ -326,12 +340,13 @@ describe('launch preparation and execution', () => {
     const cwd = await temporaryDirectory();
     const resumable = BUILT_IN_AGENT_MANIFESTS[0];
     expect(resumable).toBeDefined();
+    const basePermission = { ...permission(cwd), custom: undefined };
     const plan = prepareAgentResume(resumable!, {
       prompt: 'continue safely',
       cwd,
       sessionId: 'session-123',
       permissionProfile: {
-        ...permission(cwd),
+        ...basePermission,
         id: 'plan',
         name: 'Plan only',
         mode: 'plan-read-only',

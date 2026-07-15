@@ -66,7 +66,10 @@ function node(
 describe('WorkflowNodeInspector', () => {
   it('configures an executable Task assignee and prompt metadata entirely in the inspector', () => {
     const onUpdate = vi.fn<(data: Partial<WorkshopNode['data']>) => void>();
-    const agent = node('agent-1', 'agent');
+    const agent = node('agent-1', 'agent', {
+      adapterId: 'test-agent',
+      permissionProfile: 'custom',
+    });
     const file = node('file-1', 'file', {
       file: {
         projectId: 'project-1',
@@ -76,6 +79,7 @@ describe('WorkflowNodeInspector', () => {
       },
     });
     const task = node('task-1', 'task', {
+      assigneeId: agent.id,
       acceptanceCriteria: [
         { id: 'criterion-1', description: 'Preserve behavior.', satisfied: false },
       ],
@@ -116,6 +120,8 @@ describe('WorkflowNodeInspector', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'src/task.ts' }));
     expect(onUpdate).toHaveBeenCalledWith({ relatedFiles: [file.data.file] });
     expect(screen.getByText(/prompt metadata only/u)).toBeTruthy();
+    expect(screen.getByText('Custom · host disclosure-only')).toBeTruthy();
+    expect(screen.getByText(/inherits its assignee Agent profile/u)).toBeTruthy();
   });
 
   it('configures a test as an exact argument-array command from UI presets', () => {
@@ -240,5 +246,14 @@ describe('WorkflowNodeInspector', () => {
         node('legacy-test', 'test', { checkKind: 'lint', runIds: ['legacy-node-id'] }).data,
       ).runIds,
     ).toEqual(['lint']);
+
+    const customDefaults = AppSettingsSchema.parse({
+      ...settings,
+      defaultPermissionProfile: 'custom',
+    });
+    expect(initialWorkflowNodeData('agent', 'agent-2', customDefaults)).toEqual({
+      adapterId: 'test-agent',
+      permissionProfile: 'custom',
+    });
   });
 });

@@ -307,7 +307,7 @@ export function PrivacySettings({
       />
       <SettingsSection
         title="Portability"
-        description="Portable JSON covers settings, projects, canvases, runs, checks, snapshots, and audit history. Repository and extension files stay in their folders."
+        description="Portable JSON covers settings—including the no-code Custom permission profile—projects, canvases, runs, checks, snapshots, and audit history. Repository and extension files stay in their folders."
       >
         <div className="button-row">
           <button
