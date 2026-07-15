@@ -11,6 +11,8 @@ import { LocalStore } from './storage.js';
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let services: ApplicationServices | null = null;
+let quitReady = false;
+let disposal: Promise<void> | null = null;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
@@ -55,12 +57,33 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
-  services?.dispose();
+app.on('before-quit', (event) => {
+  if (quitReady) return;
+  event.preventDefault();
+  if (disposal !== null) return;
+  disposal = disposeApplication();
+  void disposal.then(
+    () => {
+      quitReady = true;
+      app.quit();
+    },
+    (error: unknown) => {
+      process.stderr.write(
+        `Forgeboard failed to stop cleanly: ${error instanceof Error ? error.message : 'unknown error'}\n`,
+      );
+      quitReady = true;
+      app.exit(1);
+    },
+  );
+});
+
+async function disposeApplication(): Promise<void> {
+  const applicationServices = services;
   services = null;
+  if (applicationServices) await applicationServices.dispose();
   store?.close();
   store = null;
-});
+}
 
 function createWindow(applicationServices: ApplicationServices): BrowserWindow {
   const window = new BrowserWindow({

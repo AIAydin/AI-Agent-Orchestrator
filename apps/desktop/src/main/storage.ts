@@ -1,14 +1,17 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { AppSettings, AuditEvent, CanvasDocument, Project } from '../shared/contracts.js';
+import type { CheckExecutionView } from '../shared/check-contracts.js';
 import {
   type BackupResult,
   type CanvasSnapshot,
   type ImportResult,
   type IntegrityReport,
+  type InterruptedCheckRecoveryReport,
   type InterruptedRunRecoveryReport,
   type LocalDataExport,
   type RetentionResult,
+  type StoredCheckExecutionRecord,
   type StoredRunRecord,
   type TrustedExtensionLedgerRecord,
   type TrustedExtensionState,
@@ -17,6 +20,12 @@ import {
   createBackup as createDatabaseBackup,
   deleteAllLocalData as deleteDatabaseData,
 } from './storage/backups.js';
+import {
+  getCheckExecution as getDatabaseCheckExecution,
+  listCheckExecutions as listDatabaseCheckExecutions,
+  recoverInterruptedCheckExecutions as recoverDatabaseInterruptedCheckExecutions,
+  saveCheckExecution as saveDatabaseCheckExecution,
+} from './storage/checks.js';
 import { migrate, openDatabase } from './storage/database.js';
 import { assertIntegrity, checkDatabaseIntegrity } from './storage/integrity.js';
 import {
@@ -62,6 +71,8 @@ import { type JsonRow, validateSettings } from './storage/values.js';
 import { writeSettings } from './storage/writes.js';
 
 export type {
+  InterruptedCheckRecoveryReport,
+  StoredCheckExecutionRecord,
   StoredRunRecord,
   TrustedExtensionLedgerRecord,
   TrustedExtensionState,
@@ -80,6 +91,10 @@ export class LocalStore {
     lostRunIds: [],
     recoveredAt: new Date(0).toISOString(),
   };
+  private startupCheckRecovery: InterruptedCheckRecoveryReport = {
+    lostCheckExecutionIds: [],
+    recoveredAt: new Date(0).toISOString(),
+  };
 
   constructor(databasePath: string) {
     this.databasePath = databasePath;
@@ -90,6 +105,7 @@ export class LocalStore {
       sanitizeStoredExtensionData(this.database);
       assertIntegrity(this.database);
       this.startupRecovery = recoverDatabaseInterruptedRuns(this.database);
+      this.startupCheckRecovery = recoverDatabaseInterruptedCheckExecutions(this.database);
     } catch (error) {
       try {
         this.database.close();
@@ -183,6 +199,18 @@ export class LocalStore {
     return saveDatabaseRun(this.database, record);
   }
 
+  saveCheckExecution(execution: CheckExecutionView): StoredCheckExecutionRecord {
+    return saveDatabaseCheckExecution(this.database, execution);
+  }
+
+  getCheckExecution(executionId: string): StoredCheckExecutionRecord | undefined {
+    return getDatabaseCheckExecution(this.database, executionId);
+  }
+
+  listCheckExecutions(projectId: string, limit = 200): StoredCheckExecutionRecord[] {
+    return listDatabaseCheckExecutions(this.database, projectId, limit);
+  }
+
   stageTrustedExtension(record: TrustedExtensionLedgerRecord): TrustedExtensionLedgerRecord {
     return stageDatabaseTrustedExtension(this.database, record);
   }
@@ -244,8 +272,19 @@ export class LocalStore {
     };
   }
 
+  getStartupCheckRecoveryReport(): InterruptedCheckRecoveryReport {
+    return {
+      lostCheckExecutionIds: [...this.startupCheckRecovery.lostCheckExecutionIds],
+      recoveredAt: this.startupCheckRecovery.recoveredAt,
+    };
+  }
+
   recoverInterruptedRuns(now = new Date()): InterruptedRunRecoveryReport {
     return recoverDatabaseInterruptedRuns(this.database, now);
+  }
+
+  recoverInterruptedCheckExecutions(now = new Date()): InterruptedCheckRecoveryReport {
+    return recoverDatabaseInterruptedCheckExecutions(this.database, now);
   }
 
   exportData(exportedAt = new Date()): LocalDataExport {

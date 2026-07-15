@@ -173,6 +173,7 @@ export function App() {
           info={bootstrap.info}
           settings={bootstrap.settings}
           agents={bootstrap.agents}
+          activeProject={activeProject}
           onClose={() => setShowSettings(false)}
           onSaved={async () => {
             await loadBootstrap();

@@ -27,6 +27,15 @@ import type {
   RunEventEnvelope,
 } from './contracts.js';
 import type {
+  CheckCancelInput,
+  CheckEventEnvelope,
+  CheckExecutionView,
+  CheckListInput,
+  CheckPlanConfirmationInput,
+  CheckPlanView,
+  CheckPrepareInput,
+} from './check-contracts.js';
+import type {
   DockerPullResult,
   DockerReadiness,
   DockerReadinessInput,
@@ -95,6 +104,13 @@ export interface ForgeboardApi {
     get(input: PreviewNodeKey): Promise<IpcResult<PreviewSessionSnapshot | null>>;
     navigate(input: PreviewNavigateInput): Promise<IpcResult<string>>;
     onEvent(listener: (event: PreviewEventEnvelope) => void): () => void;
+  };
+  checks: {
+    prepare(input: CheckPrepareInput): Promise<IpcResult<CheckPlanView>>;
+    confirm(input: CheckPlanConfirmationInput): Promise<IpcResult<CheckExecutionView | null>>;
+    list(input: CheckListInput): Promise<IpcResult<CheckExecutionView[]>>;
+    cancel(input: CheckCancelInput): Promise<IpcResult<CheckExecutionView>>;
+    onEvent(listener: (event: CheckEventEnvelope) => void): () => void;
   };
   audit: {
     list(input: AuditListInput): Promise<IpcResult<AuditEvent[]>>;

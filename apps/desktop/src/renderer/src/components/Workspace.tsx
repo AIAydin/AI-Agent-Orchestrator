@@ -19,6 +19,7 @@ import { NODE_DEFINITIONS, NODE_KINDS, type NodeKind, type WorkshopNode } from '
 import { CommandPalette } from './CommandPalette.js';
 import { createExtensionNodeBinding, extensionTemplateKey } from './extension-nodes.js';
 import { GitReviewDialog } from './git-review/GitReviewDialog.js';
+import { CheckApprovalDialog } from './workspace/CheckApprovalDialog.js';
 import { RunApprovalDialog } from './workspace/RunApprovalDialog.js';
 import { WorkspaceActivityDrawer } from './workspace/WorkspaceActivityDrawer.js';
 import { WorkspaceCanvas } from './workspace/WorkspaceCanvas.js';
@@ -36,6 +37,7 @@ import type {
   WorkspaceProps,
 } from './workspace/types.js';
 import { useAgentRunController } from './workspace/useAgentRunController.js';
+import { useProjectChecks } from './workspace/useProjectChecks.js';
 import { useWorkspacePreviews } from './workspace/useWorkspacePreviews.js';
 
 export function Workspace(props: WorkspaceProps) {
@@ -353,6 +355,7 @@ function WorkspaceInner({
     setEvents,
     onError,
   });
+  const checks = useProjectChecks({ projectId: project.id, setEvents, onError });
 
   const extensionTemplates = useMemo<ExtensionTemplate[]>(
     () =>
@@ -410,6 +413,12 @@ function WorkspaceInner({
       command: settings.buildCommand,
       detectedScript: project.health.scripts.build,
     },
+    ...(settings.customChecks ?? []).map((check) => ({
+      id: check.id,
+      label: check.label,
+      command: check.command,
+      detectedScript: undefined,
+    })),
   ];
 
   function updateSelected(data: Partial<WorkshopNode['data']>) {
@@ -643,6 +652,11 @@ function WorkspaceInner({
           events={events}
           changeReports={changeReports}
           checkCommands={checkCommands}
+          latestChecks={checks.latestByCheckId}
+          busyCheckId={checks.busyCheckId}
+          onPrepareCheck={(checkId) => void checks.prepare(checkId)}
+          onCancelCheck={(executionId) => void checks.cancel(executionId)}
+          onOpenSettings={onOpenSettings}
           onOpenGitReview={() => setGitReviewOpen(true)}
           onClose={() => setActivityOpen(false)}
         />
@@ -678,6 +692,14 @@ function WorkspaceInner({
           busy={runs.approvingRun}
           onCancel={() => void runs.cancelPreparedRun()}
           onApprove={() => void runs.approvePreparedRun()}
+        />
+      )}
+      {checks.plan && (
+        <CheckApprovalDialog
+          plan={checks.plan}
+          busy={checks.approving}
+          onCancel={checks.dismissPlan}
+          onContinue={() => void checks.confirm()}
         />
       )}
     </main>

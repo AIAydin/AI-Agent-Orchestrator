@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { z } from 'zod';
 
 import type { ForgeboardApi } from '../shared/api.js';
+import {
+  CheckEventEnvelopeSchema,
+  CheckExecutionViewSchema,
+  CheckPlanViewSchema,
+} from '../shared/check-contracts.js';
 import type { IpcResult } from '../shared/contracts.js';
 import {
   IPC_CHANNELS,
@@ -104,6 +109,21 @@ const api: ForgeboardApi = {
       };
       ipcRenderer.on(IPC_CHANNELS.previewsEvent, handler);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.previewsEvent, handler);
+    },
+  },
+  checks: {
+    prepare: (input) => invokeValidated(IPC_CHANNELS.checksPrepare, CheckPlanViewSchema, input),
+    confirm: (input) =>
+      invokeValidated(IPC_CHANNELS.checksConfirm, CheckExecutionViewSchema.nullable(), input),
+    list: (input) =>
+      invokeValidated(IPC_CHANNELS.checksList, CheckExecutionViewSchema.array(), input),
+    cancel: (input) => invokeValidated(IPC_CHANNELS.checksCancel, CheckExecutionViewSchema, input),
+    onEvent: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        listener(CheckEventEnvelopeSchema.parse(payload));
+      };
+      ipcRenderer.on(IPC_CHANNELS.checksEvent, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.checksEvent, handler);
     },
   },
   audit: {

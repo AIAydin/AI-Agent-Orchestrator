@@ -9,10 +9,16 @@ import {
 } from '../../shared/contracts.js';
 import {
   CanvasSnapshotSchema,
+  StoredCheckExecutionRecordSchema,
   StoredRunRecordSchema,
   TrustedExtensionLedgerRecordSchema,
   type IntegrityReport,
 } from '../storage-schemas.js';
+import {
+  CHECK_EXECUTION_COLUMNS,
+  checkExecutionMirrorsMatch,
+  type CheckExecutionRow,
+} from './checks.js';
 import { MIGRATIONS } from './database.js';
 import {
   canvasContentHash,
@@ -130,6 +136,7 @@ function validateStoredJson(database: DatabaseSync, messages: string[]): void {
     }
   });
   validateRows('agent_runs', StoredRunRecordSchema);
+  validateRows('check_executions', StoredCheckExecutionRecordSchema);
   validateRows('trusted_extension_ledger', TrustedExtensionLedgerRecordSchema);
   validateRows('canvas_snapshots', CanvasSnapshotSchema, (value) => {
     const snapshot = CanvasSnapshotSchema.parse(value);
@@ -248,6 +255,16 @@ function validateMirroredColumns(database: DatabaseSync, messages: string[]): vo
     const parsed = TrustedExtensionLedgerRecordSchema.safeParse(safeParseJson(row.value_json));
     if (parsed.success && !trustedExtensionLedgerMirrorsMatch(parsed.data, row)) {
       messages.push(`trusted_extension_ledger row ${index + 1}: indexed columns do not match JSON`);
+    }
+  });
+
+  const checkExecutions = database
+    .prepare(`SELECT ${CHECK_EXECUTION_COLUMNS} FROM check_executions`)
+    .all() as unknown as CheckExecutionRow[];
+  checkExecutions.forEach((row, index) => {
+    const parsed = StoredCheckExecutionRecordSchema.safeParse(safeParseJson(row.value_json));
+    if (parsed.success && !checkExecutionMirrorsMatch(parsed.data, row)) {
+      messages.push(`check_executions row ${index + 1}: indexed columns do not match JSON`);
     }
   });
 

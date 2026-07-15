@@ -17,6 +17,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import type { CheckExecutionView } from '../shared/check-contracts.js';
 import type { AppSettings, CanvasDocument, Project } from '../shared/contracts.js';
 import { LocalStore, type StoredRunRecord } from './storage.js';
 
@@ -173,6 +174,33 @@ function run(
   };
 }
 
+function checkExecution(
+  id: string,
+  status: CheckExecutionView['status'],
+  updatedAt: string,
+): CheckExecutionView {
+  const terminal =
+    status === 'passed' || status === 'failed' || status === 'cancelled' || status === 'lost';
+  return {
+    id,
+    projectId: PROJECT_ID,
+    checkId: 'test',
+    label: 'Tests',
+    kind: 'test',
+    executable: 'pnpm',
+    arguments: ['test'],
+    cwd: '/tmp/persistent-project',
+    environmentVariableNames: ['PATH'],
+    status,
+    exitCode: status === 'passed' ? 0 : status === 'failed' ? 1 : null,
+    startedAt: status === 'queued' ? null : updatedAt,
+    endedAt: terminal ? updatedAt : null,
+    output: terminal ? 'bounded retained output' : '',
+    outputTruncated: false,
+    updatedAt,
+  };
+}
+
 describe('LocalStore persistence and recovery', () => {
   it('upgrades a version-two database in place without losing project or canvas data', () => {
     const databasePath = join(temporaryRoot(), 'forgeboard.sqlite3');
@@ -187,6 +215,7 @@ describe('LocalStore persistence and recovery', () => {
       DROP TABLE project_path_history;
       DROP TABLE backup_records;
       DROP TABLE trusted_extension_ledger;
+      DROP TABLE check_executions;
       DELETE FROM schema_migrations WHERE version > 2;
       PRAGMA user_version = 2;
     `);
@@ -196,20 +225,21 @@ describe('LocalStore persistence and recovery', () => {
     expect(upgraded.getProject(PROJECT_ID)).toEqual(project());
     expect(upgraded.loadCanvas(PROJECT_ID)).toEqual(canvas());
     const inspector = new DatabaseSync(databasePath, { readOnly: true });
-    expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({ user_version: 5 });
+    expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({ user_version: 6 });
     expect(
       inspector
         .prepare(
           `SELECT name FROM sqlite_master
            WHERE type = 'table' AND name IN
              ('canvas_snapshots', 'project_path_history', 'backup_records',
-              'trusted_extension_ledger')
+              'trusted_extension_ledger', 'check_executions')
            ORDER BY name`,
         )
         .all(),
     ).toEqual([
       { name: 'backup_records' },
       { name: 'canvas_snapshots' },
+      { name: 'check_executions' },
       { name: 'project_path_history' },
       { name: 'trusted_extension_ledger' },
     ]);
@@ -264,7 +294,7 @@ describe('LocalStore persistence and recovery', () => {
     expect(store.loadCanvas(PROJECT_ID)).toBeUndefined();
   });
 
-  it('applies run, audit, and per-canvas snapshot retention in one maintenance pass', () => {
+  it('applies run, check, audit, and per-canvas snapshot retention in one maintenance pass', () => {
     const store = openStore();
     store.saveProject(project());
     store.saveCanvas(canvas());
@@ -282,6 +312,14 @@ describe('LocalStore persistence and recovery', () => {
     store.saveRun(run(oldRun, 'succeeded', '2025-01-01T00:00:00.000Z'));
     store.saveRun(run(currentRun, 'succeeded', '2026-07-10T00:00:00.000Z'));
     store.saveRun(run(activeRun, 'prepared', '2025-01-01T00:00:00.000Z'));
+    const oldCheck = '21000000-0000-4000-8000-000000000001';
+    const currentCheck = '21000000-0000-4000-8000-000000000002';
+    const runningCheck = '21000000-0000-4000-8000-000000000003';
+    const queuedCheck = '21000000-0000-4000-8000-000000000004';
+    store.saveCheckExecution(checkExecution(oldCheck, 'passed', '2025-01-01T00:00:00.000Z'));
+    store.saveCheckExecution(checkExecution(currentCheck, 'passed', '2026-07-10T00:00:00.000Z'));
+    store.saveCheckExecution(checkExecution(runningCheck, 'running', '2025-01-01T00:00:00.000Z'));
+    store.saveCheckExecution(checkExecution(queuedCheck, 'queued', '2025-01-01T00:00:00.000Z'));
     store.appendAudit('old', 'expired', 'allowed', {});
     store.appendAudit('new', 'retained', 'allowed', {});
     const connection = new DatabaseSync(store.databasePath);
@@ -296,6 +334,7 @@ describe('LocalStore persistence and recovery', () => {
     );
     expect(result).toEqual({
       deletedRuns: 1,
+      deletedCheckExecutions: 1,
       deletedAuditEvents: 1,
       deletedSnapshots: 3,
       scrubbedCanvasTranscripts: 0,
@@ -307,6 +346,13 @@ describe('LocalStore persistence and recovery', () => {
         .runs.map((record) => record.id)
         .sort(),
     ).toEqual([activeRun, currentRun].sort());
+    expect(
+      store
+        .listCheckExecutions(PROJECT_ID)
+        .map((record) => record.id)
+        .sort(),
+    ).toEqual([currentCheck, queuedCheck, runningCheck].sort());
+    expect(store.getCheckExecution(oldCheck)).toBeUndefined();
     expect(store.listAuditEvents(10).map((event) => event.category)).toEqual(['new']);
     expect(store.listCanvasSnapshots(PROJECT_ID)).toHaveLength(2);
   });
@@ -357,6 +403,7 @@ describe('LocalStore persistence and recovery', () => {
       projects: 1,
       canvases: 1,
       runs: 1,
+      checkExecutions: 0,
       snapshots: 1,
       auditEvents: 1,
     });

@@ -7,6 +7,10 @@ import {
 } from '@forgeboard/extension-runtime';
 
 import { AppSettingsSchema, CanvasDocumentSchema, ProjectSchema } from '../shared/contracts.js';
+import { CheckExecutionViewSchema, type CheckExecutionView } from '../shared/check-contracts.js';
+
+export const StoredCheckExecutionRecordSchema = CheckExecutionViewSchema;
+export type StoredCheckExecutionRecord = CheckExecutionView;
 
 export const StoredRunStatusSchema = z.enum([
   'prepared',
@@ -131,12 +135,13 @@ export type PortableAuditEvent = z.infer<typeof PortableAuditEventSchema>;
 export const LocalDataExportSchema = z
   .object({
     format: z.literal('forgeboard-local-export'),
-    version: z.literal(2),
+    version: z.union([z.literal(2), z.literal(3)]),
     exportedAt: z.string().datetime(),
     settings: AppSettingsSchema.nullable(),
     projects: z.array(ProjectSchema).max(100_000),
     canvases: z.array(CanvasDocumentSchema).max(100_000),
     runs: z.array(StoredRunRecordSchema).max(1_000_000),
+    checkExecutions: z.array(StoredCheckExecutionRecordSchema).max(1_000_000).default([]),
     snapshots: z.array(CanvasSnapshotSchema).max(1_000_000),
     audit: z.array(PortableAuditEventSchema).max(1_000_000),
   })
@@ -159,6 +164,7 @@ export interface BackupResult {
 
 export interface RetentionResult {
   deletedRuns: number;
+  deletedCheckExecutions: number;
   deletedAuditEvents: number;
   deletedSnapshots: number;
   scrubbedCanvasTranscripts: number;
@@ -170,10 +176,16 @@ export interface InterruptedRunRecoveryReport {
   recoveredAt: string;
 }
 
+export interface InterruptedCheckRecoveryReport {
+  lostCheckExecutionIds: string[];
+  recoveredAt: string;
+}
+
 export interface ImportResult {
   projects: number;
   canvases: number;
   runs: number;
+  checkExecutions: number;
   snapshots: number;
   auditEvents: number;
 }

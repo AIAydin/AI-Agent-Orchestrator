@@ -149,7 +149,10 @@ function canvas(overrides: Partial<CanvasDocument> = {}): CanvasDocument {
   };
 }
 
-function rows(store: LocalStore, key: 'projects' | 'canvases' | 'runs' | 'snapshots' | 'audit') {
+function rows(
+  store: LocalStore,
+  key: 'projects' | 'canvases' | 'runs' | 'checkExecutions' | 'snapshots' | 'audit',
+) {
   const value = store.exportData()[key];
   if (!Array.isArray(value)) throw new Error(`Expected exported ${key} to be an array.`);
   return value as Record<string, unknown>[];
@@ -169,10 +172,17 @@ describe('LocalStore', () => {
         journal_mode: 'wal',
       });
       expect(inspector.prepare('PRAGMA quick_check;').get()).toMatchObject({ quick_check: 'ok' });
-      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({ user_version: 5 });
+      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({ user_version: 6 });
       expect(
         inspector.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
-      ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }]);
+      ).toEqual([
+        { version: 1 },
+        { version: 2 },
+        { version: 3 },
+        { version: 4 },
+        { version: 5 },
+        { version: 6 },
+      ]);
       expect(
         inspector
           .prepare(
@@ -180,7 +190,7 @@ describe('LocalStore', () => {
              WHERE type = 'table' AND name IN
                ('app_settings', 'recent_projects', 'canvas_documents', 'audit_events', 'agent_runs',
                 'canvas_snapshots', 'project_path_history', 'backup_records',
-                'trusted_extension_ledger')
+                'trusted_extension_ledger', 'check_executions')
              ORDER BY name`,
           )
           .all(),
@@ -191,6 +201,7 @@ describe('LocalStore', () => {
         { name: 'backup_records' },
         { name: 'canvas_documents' },
         { name: 'canvas_snapshots' },
+        { name: 'check_executions' },
         { name: 'project_path_history' },
         { name: 'recent_projects' },
         { name: 'trusted_extension_ledger' },
@@ -388,6 +399,7 @@ describe('LocalStore', () => {
     expect(Object.keys(exported).sort()).toEqual([
       'audit',
       'canvases',
+      'checkExecutions',
       'exportedAt',
       'format',
       'projects',
@@ -396,12 +408,13 @@ describe('LocalStore', () => {
       'snapshots',
       'version',
     ]);
-    expect(exported).toMatchObject({ format: 'forgeboard-local-export', version: 2 });
+    expect(exported).toMatchObject({ format: 'forgeboard-local-export', version: 3 });
     expect(new Date(String(exported.exportedAt)).toISOString()).toBe(exported.exportedAt);
     expect(exported.settings).toEqual(savedSettings);
     expect(rows(store, 'projects')[0]).toEqual(savedProject);
     expect(rows(store, 'canvases')[0]).toEqual(savedCanvas);
     expect(rows(store, 'runs')).toEqual([]);
+    expect(rows(store, 'checkExecutions')).toEqual([]);
     expect(rows(store, 'snapshots')).toEqual([]);
     expect(rows(store, 'audit')[0]).toMatchObject({
       sequence: 1,

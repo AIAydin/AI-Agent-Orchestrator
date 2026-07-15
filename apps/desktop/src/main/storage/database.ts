@@ -99,6 +99,20 @@ export const MIGRATIONS = [
     CREATE INDEX IF NOT EXISTS idx_trusted_extension_ledger_state_updated
       ON trusted_extension_ledger(state, updated_at DESC, extension_id);
   `,
+  `
+    CREATE TABLE IF NOT EXISTS check_executions (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      check_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(
+        status IN ('queued', 'running', 'passed', 'failed', 'cancelled', 'lost')
+      ),
+      value_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_check_executions_project_updated
+      ON check_executions(project_id, updated_at DESC, id DESC);
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {
@@ -152,6 +166,7 @@ export function migrate(database: DatabaseSync): void {
 }
 
 export function clearAllTables(database: DatabaseSync): void {
+  database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM trusted_extension_ledger').run();
   database.prepare('DELETE FROM canvas_snapshots').run();
   database.prepare('DELETE FROM canvas_documents').run();

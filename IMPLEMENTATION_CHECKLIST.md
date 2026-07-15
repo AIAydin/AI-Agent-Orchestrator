@@ -122,7 +122,7 @@ not be reclassified as future work.
 - [x] Safe argument-array command configuration and common package script detection.
 - [x] Port allocation, readiness, multiple worktree dev servers, logs, cleanup, and collisions.
 - [ ] Side-by-side desktop/tablet/phone previews bound to competing worktrees.
-- [ ] Lint/typecheck/test/build/custom checks with raw output and best-effort parsing.
+- [x] Lint/typecheck/test/build/custom checks with raw output and best-effort parsing.
 - [ ] Review gates enforce selected passing commands before merge/push.
 
 ## Optional multiplayer
@@ -220,3 +220,28 @@ unchecked when only a subset of their required behavior has proof.
   Git copying terms, and the bundled Git runtime.
 - 2026-07-14: `corepack pnpm audit --prod --audit-level high` reported no known production
   dependency vulnerabilities.
+- 2026-07-14: manual Release installers run
+  [29376937527](https://github.com/AIAydin/AI-Agent-Orchestrator/actions/runs/29376937527)
+  generated unsigned native macOS arm64 and Intel DMGs; both jobs passed verification, Electron E2E,
+  packaging, packaged smoke, native installation/launch smoke, checksums, and artifact upload. The
+  Windows job exposed test portability failures and the Ubuntu job exposed a DEB path issue; those
+  fixes landed in `4623472ea64d344b2477f944f49e5013af7570dd`. Follow-up Verify run
+  [29377515034](https://github.com/AIAydin/AI-Agent-Orchestrator/actions/runs/29377515034)
+  and Release run
+  [29377517055](https://github.com/AIAydin/AI-Agent-Orchestrator/actions/runs/29377517055)
+  could not start any runner because GitHub reported failed account payments or a spending-limit
+  restriction. Windows/Linux native-installer proof and GitHub Release publication therefore remain
+  unchecked.
+- 2026-07-15: `corepack pnpm verify` passed: the structure gate kept all 286 checked files at or
+  below 2,000 lines; formatting, lint, strict typecheck, 301 unit tests across 56 files, 55
+  integration tests across 8 files, and all workspace production builds succeeded.
+- 2026-07-15: all 5 Electron Playwright E2E tests passed. The added project-check flow configured
+  lint, test, and build commands entirely in Settings; exercised exact renderer disclosure and
+  cancel-default native approval; verified raw and parsed output, terminal-state persistence across
+  relaunch, full-tree cancellation, graceful shutdown cleanup, and zero Forgeboard external
+  requests.
+- 2026-07-15: focused project-check coverage proved strict IPC and settings schemas, owner-bound
+  expiring single-use plans, concurrent prepare/launch reservations, stale executable/root/settings
+  rejection, package-script content binding, literal metacharacter handling, bounded output,
+  monotonic persisted state, retention/import/export/delete/recovery behavior, and cleanup after
+  storage or audit failures.

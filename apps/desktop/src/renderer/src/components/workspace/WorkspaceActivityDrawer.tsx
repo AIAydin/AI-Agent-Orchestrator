@@ -9,16 +9,23 @@ import {
 } from 'lucide-react';
 
 import type { AuditEvent } from '../../../../shared/contracts.js';
+import type { CheckExecutionView } from '../../../../shared/check-contracts.js';
 import { unwrap } from '../../lib/ipc.js';
-import { formatCommand } from './helpers.js';
 import type { ChangeReport, CheckCommand } from './types.js';
+import { WorkspaceChecksPanel } from './WorkspaceChecksPanel.js';
 
 type DrawerTab = 'activity' | 'changes' | 'checks' | 'audit';
+const DRAWER_TABS: readonly DrawerTab[] = ['activity', 'changes', 'checks', 'audit'];
 
 interface WorkspaceActivityDrawerProps {
   events: string[];
   changeReports: ChangeReport[];
   checkCommands: CheckCommand[];
+  latestChecks: ReadonlyMap<string, CheckExecutionView>;
+  busyCheckId: string | null;
+  onPrepareCheck: (checkId: string) => void;
+  onCancelCheck: (executionId: string) => void;
+  onOpenSettings: () => void;
   onOpenGitReview: () => void;
   onClose: () => void;
 }
@@ -27,6 +34,11 @@ export function WorkspaceActivityDrawer({
   events,
   changeReports,
   checkCommands,
+  latestChecks,
+  busyCheckId,
+  onPrepareCheck,
+  onCancelCheck,
+  onOpenSettings,
   onOpenGitReview,
   onClose,
 }: WorkspaceActivityDrawerProps) {
@@ -59,16 +71,16 @@ export function WorkspaceActivityDrawer({
       <header>
         <div className="activity-tabs" role="tablist" aria-label="Workspace details">
           <DrawerTabButton tab="activity" activeTab={tab} onSelect={setTab}>
-            <Activity size={14} /> Activity
+            <Activity size={14} aria-hidden="true" /> Activity
           </DrawerTabButton>
           <DrawerTabButton tab="changes" activeTab={tab} onSelect={setTab}>
-            <GitBranch size={14} /> Changes
+            <GitBranch size={14} aria-hidden="true" /> Changes
           </DrawerTabButton>
           <DrawerTabButton tab="checks" activeTab={tab} onSelect={setTab}>
-            <CheckCircle2 size={14} /> Checks
+            <CheckCircle2 size={14} aria-hidden="true" /> Checks
           </DrawerTabButton>
           <DrawerTabButton tab="audit" activeTab={tab} onSelect={setTab}>
-            <ShieldCheck size={14} /> Audit
+            <ShieldCheck size={14} aria-hidden="true" /> Audit
           </DrawerTabButton>
         </div>
         <button
@@ -77,14 +89,23 @@ export function WorkspaceActivityDrawer({
           onClick={onClose}
           aria-label="Close activity drawer"
         >
-          <PanelBottomClose size={16} />
+          <PanelBottomClose size={16} aria-hidden="true" />
         </button>
       </header>
       {tab === 'activity' && <ActivityPanel events={events} />}
       {tab === 'changes' && (
         <ChangesPanel reports={changeReports} onOpenGitReview={onOpenGitReview} />
       )}
-      {tab === 'checks' && <ChecksPanel commands={checkCommands} />}
+      {tab === 'checks' && (
+        <WorkspaceChecksPanel
+          commands={checkCommands}
+          latestByCheckId={latestChecks}
+          busyCheckId={busyCheckId}
+          onPrepare={onPrepareCheck}
+          onCancel={onCancelCheck}
+          onOpenSettings={onOpenSettings}
+        />
+      )}
       {tab === 'audit' && (
         <AuditPanel
           events={auditEvents}
@@ -107,13 +128,36 @@ function DrawerTabButton({
   onSelect: (tab: DrawerTab) => void;
   children: React.ReactNode;
 }) {
+  const selected = activeTab === tab;
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    const currentIndex = DRAWER_TABS.indexOf(tab);
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % DRAWER_TABS.length;
+    if (event.key === 'ArrowLeft') {
+      nextIndex = (currentIndex - 1 + DRAWER_TABS.length) % DRAWER_TABS.length;
+    }
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = DRAWER_TABS.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextTab = DRAWER_TABS[nextIndex];
+    if (!nextTab) return;
+    onSelect(nextTab);
+    document.getElementById(drawerTabId(nextTab))?.focus();
+  }
+
   return (
     <button
-      className={activeTab === tab ? 'active' : ''}
+      id={drawerTabId(tab)}
+      className={selected ? 'active' : ''}
       type="button"
       role="tab"
-      aria-selected={activeTab === tab}
+      aria-selected={selected}
+      aria-controls={drawerPanelId(tab)}
+      tabIndex={selected ? 0 : -1}
       onClick={() => onSelect(tab)}
+      onKeyDown={handleKeyDown}
     >
       {children}
     </button>
@@ -122,7 +166,13 @@ function DrawerTabButton({
 
 function ActivityPanel({ events }: { events: string[] }) {
   return (
-    <div className="event-stream" role="tabpanel" aria-label="Activity">
+    <div
+      id={drawerPanelId('activity')}
+      className="event-stream"
+      role="tabpanel"
+      aria-labelledby={drawerTabId('activity')}
+      tabIndex={0}
+    >
       {events.map((event, index) => (
         <div key={`${event}-${index}`}>
           <span>{String(index + 1).padStart(2, '0')}</span>
@@ -142,7 +192,13 @@ function ChangesPanel({
   onOpenGitReview: () => void;
 }) {
   return (
-    <div className="drawer-panel" role="tabpanel" aria-label="Changes">
+    <div
+      id={drawerPanelId('changes')}
+      className="drawer-panel"
+      role="tabpanel"
+      aria-labelledby={drawerTabId('changes')}
+      tabIndex={0}
+    >
       <header className="drawer-panel-summary">
         <div>
           <strong>Run-reported file changes</strong>
@@ -166,7 +222,7 @@ function ChangesPanel({
               <ul>
                 {report.files.map((file) => (
                   <li key={file}>
-                    <FileCode2 size={12} /> <code>{file}</code>
+                    <FileCode2 size={12} aria-hidden="true" /> <code>{file}</code>
                   </li>
                 ))}
               </ul>
@@ -176,44 +232,6 @@ function ChangesPanel({
       ) : (
         <DrawerEmpty>No completed run has reported file changes.</DrawerEmpty>
       )}
-    </div>
-  );
-}
-
-function ChecksPanel({ commands }: { commands: CheckCommand[] }) {
-  return (
-    <div className="drawer-panel" role="tabpanel" aria-label="Checks">
-      <header className="drawer-panel-summary">
-        <div>
-          <strong>Configured project checks</strong>
-          <small>Configuration only; this view never assumes a command has run.</small>
-        </div>
-      </header>
-      <div className="check-command-list">
-        {commands.map(({ id, label, command, detectedScript }) => {
-          const configured = command.executable.trim().length > 0;
-          return (
-            <article key={id}>
-              <header>
-                <strong>{label}</strong>
-                <span className={`check-state ${configured ? 'not-run' : 'unconfigured'}`}>
-                  {configured ? 'Not run' : 'Not configured'}
-                </span>
-              </header>
-              {configured ? (
-                <code>{formatCommand(command.executable, command.arguments)}</code>
-              ) : detectedScript ? (
-                <small>
-                  Project script detected: <code>{detectedScript}</code>. Choose it in Settings
-                  before running.
-                </small>
-              ) : (
-                <small>Configure this command in Settings.</small>
-              )}
-            </article>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -228,7 +246,14 @@ function AuditPanel({
   onRefresh: () => void;
 }) {
   return (
-    <div className="drawer-panel" role="tabpanel" aria-label="Audit">
+    <div
+      id={drawerPanelId('audit')}
+      className="drawer-panel"
+      role="tabpanel"
+      aria-labelledby={drawerTabId('audit')}
+      tabIndex={0}
+      aria-busy={state === 'loading'}
+    >
       <header className="drawer-panel-summary">
         <div>
           <strong>Local audit log</strong>
@@ -262,4 +287,12 @@ function AuditPanel({
 
 function DrawerEmpty({ children }: { children: string }) {
   return <p className="drawer-empty">{children}</p>;
+}
+
+function drawerTabId(tab: DrawerTab): string {
+  return `workspace-tab-${tab}`;
+}
+
+function drawerPanelId(tab: DrawerTab): string {
+  return `workspace-panel-${tab}`;
 }

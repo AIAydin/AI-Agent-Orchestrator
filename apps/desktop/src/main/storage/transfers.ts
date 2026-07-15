@@ -7,6 +7,7 @@ import {
   type ImportResult,
   type LocalDataExport,
 } from '../storage-schemas.js';
+import { saveCheckExecution } from './checks.js';
 import { clearAllTables, transaction } from './database.js';
 import {
   canvasContentHash,
@@ -40,6 +41,9 @@ export function exportData(database: DatabaseSync, exportedAt = new Date()): Loc
   const runRows = database
     .prepare('SELECT value_json FROM agent_runs ORDER BY updated_at')
     .all() as unknown as JsonRow[];
+  const checkExecutionRows = database
+    .prepare('SELECT value_json FROM check_executions ORDER BY updated_at, id')
+    .all() as unknown as JsonRow[];
   const snapshotRows = database
     .prepare('SELECT value_json FROM canvas_snapshots ORDER BY created_at, id')
     .all() as unknown as JsonRow[];
@@ -52,7 +56,7 @@ export function exportData(database: DatabaseSync, exportedAt = new Date()): Loc
 
   return LocalDataExportSchema.parse({
     format: 'forgeboard-local-export',
-    version: 2,
+    version: 3,
     exportedAt: exportedAt.toISOString(),
     settings: settingsRow ? parseJson(settingsRow.value_json) : null,
     projects: projectRows.map((row) =>
@@ -60,6 +64,7 @@ export function exportData(database: DatabaseSync, exportedAt = new Date()): Loc
     ),
     canvases: canvasRows.map((row) => sanitizeCanvasDocument(parseJson(row.value_json))),
     runs: runRows.map((row) => parseJson(row.value_json)),
+    checkExecutions: checkExecutionRows.map((row) => parseJson(row.value_json)),
     snapshots: snapshotRows.map((row) => sanitizeReadableCanvasSnapshot(parseJson(row.value_json))),
     audit: auditRows.map((row) => ({
       sequence: row.sequence,
@@ -86,6 +91,7 @@ export function importData(
     for (const project of parsed.projects) writeProject(database, project);
     for (const canvas of parsed.canvases) writeCanvas(database, canvas, false, 'import');
     for (const run of parsed.runs) writeRun(database, run);
+    for (const execution of parsed.checkExecutions) saveCheckExecution(database, execution);
     for (const snapshot of parsed.snapshots) writeSnapshot(database, snapshot);
     for (const event of parsed.audit) {
       writeAudit(
@@ -102,6 +108,7 @@ export function importData(
     projects: parsed.projects.length,
     canvases: parsed.canvases.length,
     runs: parsed.runs.length,
+    checkExecutions: parsed.checkExecutions.length,
     snapshots: parsed.snapshots.length,
     auditEvents: parsed.audit.length,
   };
@@ -174,6 +181,26 @@ function validateImportReferences(
     runIds.add(run.id);
   }
   const snapshotIds = new Set<string>();
+
+  const checkExecutionIds = new Set<string>();
+  const existingCheckExecution = replacing
+    ? undefined
+    : database.prepare('SELECT 1 FROM check_executions WHERE id = ?');
+  for (const execution of document.checkExecutions) {
+    if (!projectIds.has(execution.projectId)) {
+      throw new Error(`Check execution ${execution.id} references an unknown project.`);
+    }
+    if (checkExecutionIds.has(execution.id)) {
+      throw new Error(`The import contains duplicate check execution id ${execution.id}.`);
+    }
+    if (existingCheckExecution?.get(execution.id) !== undefined) {
+      throw new Error(
+        `Check execution ${execution.id} already exists; merge imports cannot replace check history.`,
+      );
+    }
+    checkExecutionIds.add(execution.id);
+  }
+
   for (const snapshot of document.snapshots) {
     if (!projectIds.has(snapshot.projectId)) {
       throw new Error(`Snapshot ${snapshot.id} references an unknown project.`);

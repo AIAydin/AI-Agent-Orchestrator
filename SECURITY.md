@@ -20,12 +20,12 @@ kept disabled until its sanitizer and tests are complete.
 
 ### Terminal and agent execution
 
-Commands use executable-plus-argument arrays without shell interpolation. Writable agents default to
-isolated Git worktrees. CWD isolation is explicitly not described as a sandbox. An optional Docker
-profile runs a configured in-image agent as a non-root user with one assigned-worktree mount,
-resource limits, a read-only container filesystem, default seccomp, dropped capabilities, and
-network disabled unless the user explicitly enables it. Forgeboard adds no host credential stores,
-keychains, SSH agents, Docker socket, or extra host mounts to the container.
+Agent launches use executable-plus-argument arrays without Forgeboard shell interpolation. Writable
+agents default to isolated Git worktrees. CWD isolation is explicitly not described as a sandbox. An
+optional Docker profile runs a configured in-image agent as a non-root user with one
+assigned-worktree mount, resource limits, a read-only container filesystem, default seccomp, dropped
+capabilities, and network disabled unless the user explicitly enables it. Forgeboard adds no host
+credential stores, keychains, SSH agents, Docker socket, or extra host mounts to the container.
 
 Docker images are never pulled automatically. The main process checks the local daemon, image
 metadata, declared volumes, Linux compatibility, and exact in-image agent executable. Pulling is a
@@ -34,11 +34,32 @@ argument array and output/timeout limits, then readiness is checked again with a
 no-network, no-mount `--version` probe. A Docker launch also rechecks readiness immediately before
 use and always passes `--pull never`.
 
+### Project checks
+
+Lint, typecheck, test, build, and custom checks execute user-approved, potentially untrusted
+repository code with the user's desktop privileges; they are quality tools, not a sandbox. A package
+manager may invoke repository scripts, lifecycle hooks, or its own shell. Forgeboard directly spawns
+native executables with `shell: false`; supported Windows package-manager `.cmd` shims use a
+constrained, disclosed absolute `cmd.exe` wrapper. The renderer supplies only a stored check
+identity. Electron main owns the configured executable, arguments, canonical working directory, and
+bounded allowlist of inherited environment-variable names. Values are not stored as structured
+configuration or shown in approval, but unredacted raw output can contain and persist any value the
+check prints.
+
+Every launch uses an owner-bound, expiring, single-use plan followed by a cancel-default native
+confirmation. Main revalidates the settings, project root, executable identity, and recognized
+package-script metadata before spawning. Concurrent launch reservations are bounded. Output is
+retained as bounded raw text with an explicit truncation marker. Cancellation and shutdown attempt
+verified full-tree termination; termination failures are recorded as lost, and shutdown awaits
+finalization before closing storage.
+
 ### Filesystem boundaries
 
-All candidate paths are canonicalized, symlinks resolved, and containment checked against approved
-roots immediately before access. Traversal, NUL bytes, device paths, credential patterns, ignored
-files, and symlink escapes are denied. Sensitive overrides require a per-file high-friction approval.
+Forgeboard-managed repository-content paths are canonicalized, symlinks resolved, and containment
+checked against approved roots immediately before access. Traversal, NUL bytes, device paths,
+credential patterns, ignored files, and symlink escapes are denied. Sensitive overrides require a
+per-file high-friction approval. Approved native checks remain ordinary user processes and can access
+other filesystem locations or the network according to operating-system permissions.
 
 ### Git and agent overreach
 
@@ -79,9 +100,11 @@ and retain their separate launch disclosure and approval. See
 ### Secrets
 
 `.env*`, private keys, certificates, common credential files, OS keychains, CLI auth stores, ignored
-files, and configured secret patterns are excluded by default. SQLite never stores tokens.
-Forgeboard currently delegates authentication to local CLIs and therefore does not handle tokens; a
-future integration that must handle one cannot ship until an operating-system vault is wired.
+files, and configured secret patterns are excluded from automatic context by default. SQLite has no
+structured authentication-token field. Unredacted agent, preview, or check output can still contain
+a secret printed by the child process. Forgeboard currently delegates authentication to local CLIs
+and therefore does not request or manage their tokens; a future integration that must handle one
+cannot ship until an operating-system vault is wired.
 
 ### Collaboration authorization
 
@@ -99,4 +122,5 @@ and audited mutations; it never loads extension code into the renderer.
 
 ## Supported versions
 
-Security fixes target the latest released Forgeboard version while the project is pre-1.0.
+Forgeboard has no published release yet. After publication, security fixes will target the latest
+released pre-1.0 version.

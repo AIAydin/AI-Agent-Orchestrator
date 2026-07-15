@@ -17,11 +17,65 @@ export const PermissionProfileSchema = z.enum([
 ]);
 export type PermissionProfile = z.infer<typeof PermissionProfileSchema>;
 
-export const CommandConfigurationSchema = z.object({
-  executable: z.string().max(32_768).default(''),
-  arguments: z.array(z.string().max(32_768)).max(512).default([]),
+const MAX_COMMAND_VALUE_BYTES = 32_768;
+const CommandArgumentSchema = z
+  .string()
+  .max(MAX_COMMAND_VALUE_BYTES)
+  .refine(
+    (value) =>
+      !value.includes('\0') &&
+      new TextEncoder().encode(value).byteLength <= MAX_COMMAND_VALUE_BYTES,
+    { message: 'Command arguments cannot contain NUL bytes or exceed 32 KiB.' },
+  );
+const CommandExecutableSchema = CommandArgumentSchema.refine((value) => !/[\r\n]/u.test(value), {
+  message: 'Command executables cannot contain line breaks.',
 });
+
+export const CommandConfigurationSchema = z
+  .object({
+    executable: CommandExecutableSchema.default(''),
+    arguments: z.array(CommandArgumentSchema).max(512).default([]),
+  })
+  .strict();
 export type CommandConfiguration = z.infer<typeof CommandConfigurationSchema>;
+
+const EnvironmentAllowlistSchema = z
+  .array(
+    z
+      .string()
+      .max(512)
+      .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u),
+  )
+  .max(256)
+  .superRefine((names, context) => {
+    if (new Set(names).size !== names.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Environment allowlist names must be unique.',
+      });
+    }
+  });
+
+export const CustomCheckConfigurationSchema = z
+  .object({
+    id: z.string().uuid(),
+    label: z.string().trim().min(1).max(128),
+    command: CommandConfigurationSchema,
+  })
+  .strict();
+export type CustomCheckConfiguration = z.infer<typeof CustomCheckConfigurationSchema>;
+
+export const CustomChecksSchema = z
+  .array(CustomCheckConfigurationSchema)
+  .max(32)
+  .superRefine((checks, context) => {
+    if (new Set(checks.map((check) => check.id)).size !== checks.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Custom check IDs must be unique.',
+      });
+    }
+  });
 
 function isValidBranchPrefix(value: string): boolean {
   const prefix = value.endsWith('/') ? value.slice(0, -1) : value;
@@ -146,12 +200,13 @@ export const AppSettingsSchema = z
       .default(''),
     gitRemote: z.string().min(1).max(512).default('origin'),
     terminalShell: z.string(),
-    envAllowlist: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/)),
+    envAllowlist: EnvironmentAllowlistSchema,
     developmentCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
     testCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
     lintCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
     typecheckCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
     buildCommand: CommandConfigurationSchema.default({ executable: '', arguments: [] }),
+    customChecks: CustomChecksSchema.optional(),
     previewPortStart: z.number().int().min(1024).max(65534),
     previewPortEnd: z.number().int().min(1025).max(65535),
     previewTrustedHosts: z.array(z.string().min(1).max(512)).default(['127.0.0.1', 'localhost']),
@@ -822,6 +877,11 @@ export const IPC_CHANNELS = Object.freeze({
   runsInterrupt: 'runs:interrupt',
   runsTerminate: 'runs:terminate',
   runsEvent: 'runs:event',
+  checksPrepare: 'checks:prepare',
+  checksConfirm: 'checks:confirm',
+  checksList: 'checks:list',
+  checksCancel: 'checks:cancel',
+  checksEvent: 'checks:event',
   previewsStart: 'previews:start',
   previewsRestart: 'previews:restart',
   previewsStop: 'previews:stop',

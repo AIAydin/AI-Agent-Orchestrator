@@ -1,21 +1,33 @@
-import { useState } from 'react';
-import { Bot, FolderGit2, Palette, Puzzle, RotateCcw, Save, ShieldCheck, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Bot,
+  FolderGit2,
+  ListChecks,
+  Palette,
+  Puzzle,
+  RotateCcw,
+  Save,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
 
-import type { AgentDetection, AppInfo, AppSettings } from '../../../shared/contracts.js';
+import type { AgentDetection, AppInfo, AppSettings, Project } from '../../../shared/contracts.js';
 import { unwrap } from '../lib/ipc.js';
 import { ExtensionSettings } from './ExtensionSettings.js';
 import { AgentsSettings } from './settings/AgentsSettings.js';
 import { AppearanceSettings } from './settings/AppearanceSettings.js';
+import { CheckSettings } from './settings/CheckSettings.js';
 import { dockerConfigurationIncomplete } from './settings/DockerSettings.js';
 import { GitPreviewSettings } from './settings/GitPreviewSettings.js';
 import { PrivacySettings } from './settings/PrivacySettings.js';
 
-type SettingsTab = 'appearance' | 'agents' | 'git' | 'extensions' | 'privacy';
+type SettingsTab = 'appearance' | 'agents' | 'git' | 'checks' | 'extensions' | 'privacy';
 
 interface SettingsPanelProps {
   info: AppInfo;
   settings: AppSettings;
   agents: AgentDetection[];
+  activeProject: Project | null;
   onClose: () => void;
   onSaved: () => Promise<void>;
   onExtensionsChanged: () => Promise<void>;
@@ -29,6 +41,57 @@ export function SettingsPanel(props: SettingsPanelProps) {
   const [busy, setBusy] = useState(false);
   const [deletePhrase, setDeletePhrase] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const dialog = useRef<HTMLFormElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef(props.onClose);
+  const busyRef = useRef(busy);
+  closeRef.current = props.onClose;
+  busyRef.current = busy;
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButton.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const openDialogs = [
+        ...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'),
+      ];
+      if (openDialogs.at(-1) !== dialog.current) return;
+      if (event.key === 'Escape') {
+        if (busyRef.current) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = dialog.current
+        ? [
+            ...dialog.current.querySelectorAll<HTMLElement>(
+              'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+            ),
+          ]
+        : [];
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!dialog.current?.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, []);
 
   async function perform(operation: () => Promise<void>) {
     setBusy(true);
@@ -53,10 +116,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
   return (
     <div className="modal-backdrop settings-backdrop">
       <form
+        ref={dialog}
         className="settings-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
+        aria-busy={busy}
         onSubmit={(event) => void save(event)}
       >
         <header className="settings-header">
@@ -68,12 +133,14 @@ export function SettingsPanel(props: SettingsPanelProps) {
             </div>
           </div>
           <button
+            ref={closeButton}
             className="icon-button"
             type="button"
+            disabled={busy}
             onClick={props.onClose}
             aria-label="Close settings"
           >
-            <X size={18} />
+            <X size={18} aria-hidden="true" />
           </button>
         </header>
 
@@ -96,6 +163,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
               icon={<FolderGit2 size={16} />}
               label="Git & previews"
               onClick={() => setTab('git')}
+            />
+            <SettingsTabButton
+              active={tab === 'checks'}
+              icon={<ListChecks size={16} />}
+              label="Checks"
+              onClick={() => setTab('checks')}
             />
             <SettingsTabButton
               active={tab === 'extensions'}
@@ -125,6 +198,15 @@ export function SettingsPanel(props: SettingsPanelProps) {
             )}
             {tab === 'git' && (
               <GitPreviewSettings draft={draft} setDraft={setDraft} busy={busy} perform={perform} />
+            )}
+            {tab === 'checks' && (
+              <CheckSettings
+                activeProject={props.activeProject}
+                draft={draft}
+                setDraft={setDraft}
+                busy={busy}
+                perform={perform}
+              />
             )}
             {tab === 'extensions' && (
               <ExtensionSettings onError={props.onError} onChanged={props.onExtensionsChanged} />

@@ -96,6 +96,14 @@ export function applyRetention(
         )
         .run(runCutoff).changes,
     );
+    const deletedCheckExecutions = Number(
+      database
+        .prepare(
+          `DELETE FROM check_executions
+           WHERE updated_at < ? AND status NOT IN ('queued', 'running')`,
+        )
+        .run(runCutoff).changes,
+    );
     const deletedAuditEvents = Number(
       database.prepare('DELETE FROM audit_events WHERE occurred_at < ?').run(auditCutoff).changes,
     );
@@ -117,6 +125,7 @@ export function applyRetention(
     const transcriptResult = scrubExpiredTranscripts(database, runCutoff);
     return {
       deletedRuns,
+      deletedCheckExecutions,
       deletedAuditEvents,
       deletedSnapshots,
       ...transcriptResult,

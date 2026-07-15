@@ -18,6 +18,8 @@ import {
   type AppSettings,
   type IpcResult,
 } from '../shared/contracts.js';
+import { CheckIpcService } from './check-ipc.js';
+import { CheckRuntime } from './check-runtime.js';
 import { detectAgents, ProjectService } from './project-service.js';
 import { DockerIpcService } from './docker-ipc.js';
 import { ExtensionIpcService } from './extension-ipc.js';
@@ -107,7 +109,8 @@ export interface ApplicationServices {
   previews: PreviewIpcService;
   extensions: ExtensionIpcService;
   git: GitIpcService;
-  dispose(): void;
+  checks: CheckIpcService;
+  dispose(): Promise<void>;
 }
 
 export function registerIpcHandlers(store: LocalStore): ApplicationServices {
@@ -132,6 +135,11 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const previews = new PreviewIpcService(store, () => store.getSettings(createDefaultSettings()));
   const git = new GitIpcService(dialog, store, repositories, () =>
     store.getSettings(createDefaultSettings()),
+  );
+  const checks = new CheckIpcService(
+    dialog,
+    store,
+    (emit) => new CheckRuntime(store, () => store.getSettings(createDefaultSettings()), emit),
   );
   let dataDeletionInProgress = false;
   const startupRetention = store.applyRetention(store.getSettings(createDefaultSettings()));
@@ -256,6 +264,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         await previews.resetForPrivacy();
         await extensions.resetForPrivacy();
         await git.resetForPrivacy();
+        await checks.resetForPrivacy();
         await store.deleteAllLocalData();
         return true;
       } finally {
@@ -263,6 +272,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         extensions.resumeAfterPrivacyReset();
         previews.resumeAfterPrivacyReset();
         runs.resumeAfterPrivacyReset();
+        checks.resumeAfterPrivacyReset();
         dataDeletionInProgress = false;
       }
     },
@@ -274,6 +284,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   extensions.registerIpcHandlers();
   docker.registerIpcHandlers();
   git.registerIpcHandlers();
+  checks.registerIpcHandlers();
   return {
     settings,
     docker,
@@ -281,13 +292,19 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     previews,
     extensions,
     git,
-    dispose: () => {
-      settings.dispose();
-      docker.dispose();
-      extensions.dispose();
-      previews.dispose();
-      runs.dispose();
-      git.dispose();
+    checks,
+    dispose: async () => {
+      const checksStopped = checks.dispose();
+      try {
+        settings.dispose();
+        docker.dispose();
+        extensions.dispose();
+        previews.dispose();
+        runs.dispose();
+        git.dispose();
+      } finally {
+        await checksStopped;
+      }
     },
   };
 }

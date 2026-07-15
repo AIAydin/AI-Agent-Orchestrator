@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { AppSettingsSchema } from './contracts.js';
+import { AppSettingsSchema, CommandConfigurationSchema } from './contracts.js';
 
 const baseSettings = {
   theme: 'system',
@@ -39,6 +39,42 @@ describe('Git identity settings', () => {
         ...baseSettings,
         gitIdentityName: 'Unsafe\tName',
         gitIdentityEmail: 'forgeboard@example.invalid',
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('process settings', () => {
+  it('rejects command values that cannot be launched literally and safely', () => {
+    const oversizedUtf8 = 'é'.repeat(20_000);
+    expect(
+      CommandConfigurationSchema.safeParse({ executable: 'node\n--version', arguments: [] })
+        .success,
+    ).toBe(false);
+    expect(
+      CommandConfigurationSchema.safeParse({ executable: 'node\0', arguments: [] }).success,
+    ).toBe(false);
+    expect(
+      CommandConfigurationSchema.safeParse({ executable: 'node', arguments: ['bad\0argument'] })
+        .success,
+    ).toBe(false);
+    expect(
+      CommandConfigurationSchema.safeParse({ executable: oversizedUtf8, arguments: [] }).success,
+    ).toBe(false);
+    expect(
+      CommandConfigurationSchema.safeParse({ executable: 'node', arguments: [oversizedUtf8] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('bounds and de-duplicates inherited environment names at the settings boundary', () => {
+    expect(
+      AppSettingsSchema.safeParse({ ...baseSettings, envAllowlist: ['PATH', 'PATH'] }).success,
+    ).toBe(false);
+    expect(
+      AppSettingsSchema.safeParse({
+        ...baseSettings,
+        envAllowlist: Array.from({ length: 257 }, (_, index) => `FORGEBOARD_ENV_${index}`),
       }).success,
     ).toBe(false);
   });

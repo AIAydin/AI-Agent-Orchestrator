@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +8,7 @@ import {
   AppSettingsSchema,
   type AgentDetection,
   type AppSettings,
+  type Project,
 } from '../../../shared/contracts.js';
 import { SettingsPanel } from './SettingsPanel.js';
 
@@ -31,11 +32,16 @@ const updateSettings = vi.fn((draft: AppSettings) =>
 );
 const resetSettings = vi.fn(() => Promise.resolve({ ok: true as const, value: resetDraft }));
 const importSettings = vi.fn(() => Promise.resolve({ ok: true as const, value: importedDraft }));
+const pickExecutable = vi.fn(() =>
+  Promise.resolve({ ok: true as const, value: null as string | null }),
+);
 
 beforeEach(() => {
   updateSettings.mockClear();
   resetSettings.mockClear();
   importSettings.mockClear();
+  pickExecutable.mockReset();
+  pickExecutable.mockResolvedValue({ ok: true, value: null });
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -46,7 +52,7 @@ beforeEach(() => {
         export: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
       projects: {
-        pickExecutable: vi.fn(() => Promise.resolve({ ok: true, value: null })),
+        pickExecutable,
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
       privacy: { export: vi.fn(() => Promise.resolve({ ok: true, value: null })) },
@@ -70,6 +76,26 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('SettingsPanel draft transactions', () => {
+  it('contains keyboard focus, supports Escape, and restores prior focus', () => {
+    const trigger = document.createElement('button');
+    document.body.append(trigger);
+    trigger.focus();
+    const onClose = vi.fn();
+    const view = render(<SettingsPanel {...props({ onClose })} />);
+    const closeButton = screen.getByRole('button', { name: 'Close settings' });
+    const saveButton = screen.getByRole('button', { name: 'Save settings' });
+
+    expect(document.activeElement).toBe(closeButton);
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(saveButton);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
+
   it('exposes dialog, selected-tab, and appearance-choice semantics', () => {
     render(<SettingsPanel {...props()} />);
 
@@ -168,6 +194,99 @@ describe('SettingsPanel draft transactions', () => {
     expect(updateSettings.mock.calls[0]?.[0].customAgent.output).toBe('json-lines');
   });
 
+  it('keeps manual check configuration available without an open project', async () => {
+    pickExecutable.mockResolvedValue({ ok: true, value: '/usr/local/bin/eslint' });
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
+    expect(screen.getByText('No project is open')).toBeTruthy();
+    expect(screen.getByText(/Open a project to adopt detected package scripts/u)).toBeTruthy();
+
+    const lintEditor = screen.getByRole('group', { name: 'Lint command' });
+    fireEvent.click(within(lintEditor).getByRole('button', { name: 'Browse' }));
+    await waitFor(() =>
+      expect(within(lintEditor).getByLabelText<HTMLInputElement>('Executable').value).toBe(
+        '/usr/local/bin/eslint',
+      ),
+    );
+    fireEvent.change(within(lintEditor).getByLabelText('Arguments · one per line'), {
+      target: { value: '.\n--max-warnings=0' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0].lintCommand).toEqual({
+      executable: '/usr/local/bin/eslint',
+      arguments: ['.', '--max-warnings=0'],
+    });
+  });
+
+  it('adopts detected project checks as separate package-manager process and argv', async () => {
+    render(<SettingsPanel {...props({ activeProject: project() })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use all 4 detected scripts' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    const saved = updateSettings.mock.calls[0]?.[0];
+    expect(saved?.lintCommand).toEqual({ executable: 'pnpm', arguments: ['run', 'lint'] });
+    expect(saved?.typecheckCommand).toEqual({
+      executable: 'pnpm',
+      arguments: ['run', 'typecheck'],
+    });
+    expect(saved?.testCommand).toEqual({ executable: 'pnpm', arguments: ['run', 'test'] });
+    expect(saved?.buildCommand).toEqual({ executable: 'pnpm', arguments: ['run', 'build'] });
+    expect(JSON.stringify(saved)).not.toContain('touch should-not-run');
+  });
+
+  it('adds, edits, browses, and removes a custom check in the draft transaction', async () => {
+    pickExecutable.mockResolvedValue({ ok: true, value: '/opt/tools/license-check' });
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom check' }));
+    const customName = screen.getByLabelText('Custom check 1 name');
+    expect(document.activeElement).toBe(customName);
+    fireEvent.change(customName, {
+      target: { value: 'License scan' },
+    });
+
+    const commandEditor = screen.getByRole('group', { name: 'License scan command' });
+    fireEvent.click(within(commandEditor).getByRole('button', { name: 'Browse' }));
+    await waitFor(() =>
+      expect(within(commandEditor).getByLabelText<HTMLInputElement>('Executable').value).toBe(
+        '/opt/tools/license-check',
+      ),
+    );
+    fireEvent.change(within(commandEditor).getByLabelText('Arguments · one per line'), {
+      target: { value: 'scan\n--production' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    const firstSaved = updateSettings.mock.calls[0]?.[0];
+    expect(firstSaved?.customChecks).toHaveLength(1);
+    expect(firstSaved?.customChecks?.[0]).toMatchObject({
+      label: 'License scan',
+      command: {
+        executable: '/opt/tools/license-check',
+        arguments: ['scan', '--production'],
+      },
+    });
+    expect(firstSaved?.customChecks?.[0]?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove License scan' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add custom check' }));
+    expect(screen.getByText('No custom checks configured.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
+    expect(updateSettings.mock.calls[1]?.[0].customChecks).toEqual([]);
+  });
+
   it('does not present settings that have no active renderer or main-process behavior', () => {
     render(<SettingsPanel {...props()} />);
 
@@ -207,12 +326,39 @@ function props(
     },
     settings: savedSettings,
     agents,
+    activeProject: null,
     onClose: vi.fn(),
     onSaved: vi.fn(() => Promise.resolve()),
     onExtensionsChanged: vi.fn(() => Promise.resolve()),
     onDeleteAll: vi.fn(() => Promise.resolve()),
     onError: vi.fn(),
     ...overrides,
+  };
+}
+
+function project(): Project {
+  return {
+    id: '00000000-0000-4000-8000-000000000001',
+    name: 'Detected project',
+    path: '/tmp/detected-project',
+    openedAt: '2026-07-14T16:00:00.000Z',
+    missing: false,
+    health: {
+      isGitRepository: true,
+      branch: 'main',
+      dirty: false,
+      remotes: [],
+      packageManager: 'pnpm',
+      frameworks: [],
+      scripts: {
+        lint: 'eslint . && touch should-not-run',
+        typecheck: 'tsc --noEmit',
+        test: 'vitest run',
+        build: 'vite build',
+      },
+      hasSubmodules: false,
+      sensitiveWarnings: [],
+    },
   };
 }
 

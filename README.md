@@ -3,9 +3,10 @@
 Forgeboard is an open-source, local-first visual workshop for building software with locally
 installed coding-agent CLIs. The current desktop application combines a spatial canvas, isolated
 Git worktrees, streamed agent sessions, loopback web/mobile previews, and explicit launch and
-workflow approval gates, plus authoritative primary-checkout Git review, staging, and commits.
-Agent-worktree review targeting, the interactive terminal node, executable command gates, and other
-unchecked surfaces in the implementation ledger are still under construction.
+workflow approval gates, authoritative primary-checkout Git review, staging, and commits, plus
+UI-configured project checks with persisted output. Agent-worktree review targeting, the interactive
+terminal node, and other unchecked surfaces in the implementation ledger are still under
+construction.
 
 > Forgeboard is under active construction. `IMPLEMENTATION_CHECKLIST.md` is the authoritative
 > status ledger; unchecked items are not claimed as complete.
@@ -47,13 +48,16 @@ packages/
 
 Forgeboard does not yet claim a published, end-user-ready GitHub Release. The current checkpoint
 has a passing production build and verified unpacked applications on macOS arm64, macOS Intel,
-Windows, and Linux. Native installer generation, installation, and publication for all target
-platforms remain open checklist items.
+Windows, and Linux. Unsigned native macOS arm64 and Intel DMGs have also been generated, installed,
+launched, smoke-tested, and checksummed. The current Windows and Linux installer rerun, and GitHub
+Release publication for every platform, remain open; the latest hosted rerun was prevented from
+starting by the repository account's GitHub Actions billing state.
 
 For implemented solo workflows, the first-run wizard and Settings provide UI controls for agent
 detection and executable selection, custom CLI setup, permission profile selection, Docker,
 project/worktree locations, preview commands, extensions, and local storage/retention. Source and
-config-file edits are optional for these flows.
+config-file edits are optional for these flows. Lint, typecheck, test, build, and custom project
+checks can likewise be configured, approved, run, cancelled, and inspected entirely in the UI.
 
 Docker isolation is optional. Forgeboard does not bundle or silently choose an agent image: select
 the Docker executable, exact image, and in-image agent executable in the UI. Forgeboard checks that
@@ -64,9 +68,9 @@ the optional signing secrets documented in the release guide are configured. Suc
 trigger the operating system's standard warning.
 
 Still unfinished are agent-worktree review targeting, agent comparison and merge/push flows, the
-interactive terminal node, execution of configured lint/typecheck/test/build gates, collaboration
-client, updater, backup restore/full-data import UI, and complete wiring of every persisted setting.
-See `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
+interactive terminal node, collaboration client, updater, backup restore/full-data import UI, and
+complete wiring of every persisted setting. See `IMPLEMENTATION_CHECKLIST.md` for the complete
+evidence-backed status.
 
 ## Development
 

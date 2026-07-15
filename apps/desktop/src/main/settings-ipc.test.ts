@@ -30,10 +30,11 @@ import { SettingsIpcService } from './settings-ipc.js';
 const temporaryDirectories: string[] = [];
 const retention = {
   deletedRuns: 1,
-  deletedAuditEvents: 2,
-  deletedSnapshots: 3,
-  scrubbedCanvasTranscripts: 4,
-  scrubbedSnapshotTranscripts: 5,
+  deletedCheckExecutions: 2,
+  deletedAuditEvents: 3,
+  deletedSnapshots: 4,
+  scrubbedCanvasTranscripts: 5,
+  scrubbedSnapshotTranscripts: 6,
 };
 
 beforeEach(() => {

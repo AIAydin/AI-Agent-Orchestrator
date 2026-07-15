@@ -1,0 +1,183 @@
+.check-settings-project-summary {
+  margin-bottom: 18px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+
+.check-settings-project-summary > strong,
+.check-settings-project-heading strong {
+  display: block;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.check-settings-project-summary p,
+.check-settings-custom-toolbar p,
+.check-settings-empty {
+  margin: 5px 0 0;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.check-settings-project-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.check-settings-project-heading > div {
+  min-width: 0;
+}
+
+.check-settings-project-heading span {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-size: 9px;
+}
+
+.check-settings-project-heading .button,
+.check-settings-custom-toolbar .button,
+.check-settings-adopt,
+.check-settings-remove {
+  min-height: 31px;
+  font-size: 10px;
+}
+
+.check-settings-command-list,
+.check-settings-custom-list {
+  display: grid;
+  gap: 14px;
+}
+
+.check-settings-command {
+  min-width: 0;
+}
+
+.check-settings-detected-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 7px;
+}
+
+.check-settings-detected-row > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.check-settings-detected-row strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.check-settings-detected-row span,
+.check-settings-detection-note {
+  color: var(--text-faint);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.check-settings-detection-note {
+  flex: 0 0 auto;
+}
+
+.check-settings-adopt {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.check-settings .command-editor {
+  margin-bottom: 0;
+}
+
+.check-settings-custom-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.check-settings-custom-toolbar p {
+  margin: 0;
+}
+
+.check-settings-empty {
+  padding: 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  text-align: center;
+}
+
+.check-settings-custom-card {
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+
+.check-settings-custom-card > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 11px;
+}
+
+.check-settings-custom-card > header label {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.check-settings-custom-card > header input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.check-settings-remove {
+  flex: 0 0 auto;
+  color: var(--red);
+}
+
+@media (max-width: 720px) {
+  .check-settings-project-heading,
+  .check-settings-detected-row,
+  .check-settings-custom-toolbar,
+  .check-settings-custom-card > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .check-settings-detection-note {
+    flex: initial;
+  }
+
+  .check-settings .command-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .check-settings-adopt,
+  .check-settings-remove {
+    align-self: flex-start;
+  }
+}
