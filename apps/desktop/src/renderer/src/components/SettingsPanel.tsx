@@ -27,11 +27,14 @@ interface SettingsPanelProps {
   info: AppInfo;
   settings: AppSettings;
   agents: AgentDetection[];
+  projects: Project[];
   activeProject: Project | null;
   onClose: () => void;
   onSaved: () => Promise<void>;
   onExtensionsChanged: () => Promise<void>;
   onDeleteAll: (confirmation: string) => Promise<void>;
+  onFlushActiveCanvas: () => Promise<boolean>;
+  onRecoveryApplied: () => Promise<void>;
   onError: (message: string) => void;
 }
 
@@ -215,6 +218,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
               <PrivacySettings
                 info={props.info}
                 agents={props.agents}
+                projects={props.projects}
+                activeProject={props.activeProject}
                 savedSettings={props.settings}
                 draft={draft}
                 setDraft={setDraft}
@@ -223,7 +228,10 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 deletePhrase={deletePhrase}
                 setDeletePhrase={setDeletePhrase}
                 setNotice={setNotice}
+                onError={props.onError}
                 onDeleteAll={props.onDeleteAll}
+                onFlushActiveCanvas={props.onFlushActiveCanvas}
+                onRecoveryApplied={props.onRecoveryApplied}
               />
             )}
             {notice && (

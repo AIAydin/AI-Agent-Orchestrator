@@ -43,6 +43,8 @@ interface PreviewAttempt {
   abortController: AbortController;
   generation: number;
   sessionId: string | null;
+  settled: Promise<void>;
+  settle: () => void;
 }
 
 interface OwnedSession {
@@ -97,12 +99,18 @@ export class PreviewRuntime {
     const { executable } = command;
 
     const abortController = new AbortController();
+    let settleAttempt: () => void = () => undefined;
+    const settled = new Promise<void>((resolve) => {
+      settleAttempt = resolve;
+    });
     const attempt: PreviewAttempt = {
       ownerId,
       input,
       abortController,
       generation,
       sessionId: null,
+      settled,
+      settle: settleAttempt,
     };
     this.#attempts.set(key, attempt);
     try {
@@ -174,6 +182,7 @@ export class PreviewRuntime {
       throw error;
     } finally {
       if (this.#attempts.get(key) === attempt) this.#attempts.delete(key);
+      attempt.settle();
     }
   }
 
@@ -280,32 +289,44 @@ export class PreviewRuntime {
     this.#assertAvailable();
     this.#privacyResetting = true;
     this.#generation += 1;
-    for (const attempt of this.#attempts.values()) attempt.abortController.abort();
-    await Promise.all(
+    const attempts = [...this.#attempts.values()];
+    for (const attempt of attempts) attempt.abortController.abort();
+    await Promise.allSettled(
       [...this.#sessionsByNode.values()].map(async (owned) => {
         const session = this.#service.get(owned.sessionId);
         if (!session || isTerminal(session.status)) return;
         await this.#service.kill(owned.sessionId).catch(() => undefined);
       }),
     );
+    await Promise.allSettled(attempts.map((attempt) => attempt.settled));
     this.#attempts.clear();
     this.#sessionsByNode.clear();
     this.#nodesBySession.clear();
+  }
+
+  pauseForDataMutation(): void {
+    this.#assertAvailable();
+    this.#privacyResetting = true;
+    if (this.#attempts.size > 0 || this.#sessionsByNode.size > 0) {
+      this.#privacyResetting = false;
+      throw new Error('Stop every development preview before merging local data.');
+    }
   }
 
   resumeAfterPrivacyReset(): void {
     if (!this.#disposed) this.#privacyResetting = false;
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     if (this.#disposed) return;
     this.#disposed = true;
-    for (const attempt of this.#attempts.values()) attempt.abortController.abort();
-    for (const owned of this.#sessionsByNode.values()) {
-      const session = this.#service.get(owned.sessionId);
-      if (session && !isTerminal(session.status)) void this.#service.kill(owned.sessionId);
-    }
-    void this.#service.dispose();
+    this.#generation += 1;
+    const attempts = [...this.#attempts.values()];
+    for (const attempt of attempts) attempt.abortController.abort();
+    await Promise.allSettled([
+      this.#service.dispose(),
+      ...attempts.map((attempt) => attempt.settled),
+    ]);
     this.#attempts.clear();
     this.#sessionsByNode.clear();
     this.#nodesBySession.clear();

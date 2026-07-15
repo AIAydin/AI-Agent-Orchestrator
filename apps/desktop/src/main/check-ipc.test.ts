@@ -170,6 +170,30 @@ describe('CheckIpcService', () => {
     await fixture.service.dispose();
   });
 
+  it('removes handlers immediately and drains a deferred launch before disposal resolves', async () => {
+    electronMock.fromWebContents.mockReturnValue({ isDestroyed: () => false });
+    const launch = deferred<CheckExecutionView>();
+    const fixture = createFixture({ nativeResponse: 1, start: () => launch.promise });
+    const event = liveEvent(35);
+    await requiredHandler(IPC_CHANNELS.checksPrepare)(event, {
+      projectId: PLAN.projectId,
+      checkId: 'lint',
+    });
+    const confirmation = requiredHandler(IPC_CHANNELS.checksConfirm)(event, {
+      planId: PLAN.planId,
+      confirmed: true,
+    });
+
+    const disposal = fixture.service.dispose();
+    expect(electronMock.handlers.size).toBe(0);
+    expect(fixture.disposeRuntime).not.toHaveBeenCalled();
+    launch.resolve(EXECUTION);
+
+    await expect(confirmation).resolves.toEqual({ ok: true, value: EXECUTION });
+    await disposal;
+    expect(fixture.disposeRuntime).toHaveBeenCalledTimes(1);
+  });
+
   it('discards the matching runtime plan when a renderer disclosure has expired', async () => {
     const expiredPlan = { ...PLAN, expiresAt: '2000-01-01T00:00:00.000Z' };
     const fixture = createFixture({ plan: expiredPlan });
@@ -270,13 +294,19 @@ const EXECUTION: CheckExecutionView = {
 function createFixture({
   nativeResponse = 0,
   plan = PLAN,
-}: { nativeResponse?: number; plan?: CheckPlanView } = {}) {
+  start,
+}: {
+  nativeResponse?: number;
+  plan?: CheckPlanView;
+  start?: () => Promise<CheckExecutionView>;
+} = {}) {
   let emit!: (ownerId: number, event: CheckEventEnvelope) => void;
   const prepareRuntime = vi.fn(() => Promise.resolve(plan));
-  const startRuntime = vi.fn(() => Promise.resolve(EXECUTION));
+  const startRuntime = vi.fn(start ?? (() => Promise.resolve(EXECUTION)));
   const discardPlanRuntime = vi.fn();
   const listRuntime = vi.fn(() => []);
   const cancelRuntime = vi.fn(() => Promise.resolve(EXECUTION));
+  const disposeRuntime = vi.fn();
   const runtime: CheckRuntimeOperations = {
     prepare: prepareRuntime,
     start: startRuntime,
@@ -285,8 +315,9 @@ function createFixture({
     cancel: cancelRuntime,
     stopOwner: vi.fn(() => Promise.resolve()),
     resetForPrivacy: vi.fn(() => Promise.resolve()),
+    pauseForDataMutation: vi.fn(),
     resumeAfterPrivacyReset: vi.fn(),
-    dispose: vi.fn(),
+    dispose: disposeRuntime,
   };
   const showMessageBox = vi.fn((...args: [BaseWindow, MessageBoxOptions] | [MessageBoxOptions]) => {
     void args;
@@ -302,12 +333,27 @@ function createFixture({
     appendAudit,
     cancelRuntime,
     discardPlanRuntime,
+    disposeRuntime,
     emit,
     listRuntime,
     prepareRuntime,
     service,
     showMessageBox,
     startRuntime,
+  };
+}
+
+function deferred<Value>(): { promise: Promise<Value>; resolve: (value: Value) => void } {
+  let settle: ((value: Value) => void) | null = null;
+  const promise = new Promise<Value>((resolve) => {
+    settle = resolve;
+  });
+  return {
+    promise,
+    resolve: (value) => {
+      if (settle === null) throw new Error('Deferred was not initialized.');
+      settle(value);
+    },
   };
 }
 

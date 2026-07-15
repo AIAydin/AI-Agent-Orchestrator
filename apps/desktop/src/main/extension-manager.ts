@@ -357,6 +357,15 @@ export class ExtensionManager {
     }
   }
 
+  public async quiesce(): Promise<void> {
+    this.#plans.clear();
+    await this.#mutationTail;
+  }
+
+  public async waitForMutations(): Promise<void> {
+    await this.#mutationTail;
+  }
+
   public dispose(): void {
     this.#plans.clear();
   }

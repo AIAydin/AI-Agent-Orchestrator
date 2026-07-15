@@ -35,6 +35,20 @@ const importSettings = vi.fn(() => Promise.resolve({ ok: true as const, value: i
 const pickExecutable = vi.fn(() =>
   Promise.resolve({ ok: true as const, value: null as string | null }),
 );
+const getBackupHealth = vi.fn(() =>
+  Promise.resolve({
+    ok: true as const,
+    value: {
+      lastAttemptAt: '2026-07-15T15:00:00.000Z',
+      lastAttemptOutcome: 'failed' as const,
+      lastError: 'Backup disk is unavailable.',
+      lastVerifiedAt: '2026-07-14T16:00:00.000Z',
+      lastVerifiedSizeBytes: 1_024,
+      lastVerifiedSha256Prefix: 'aaaaaaaaaaaa',
+      verifiedBackupCount: 2,
+    },
+  }),
+);
 
 beforeEach(() => {
   updateSettings.mockClear();
@@ -42,6 +56,7 @@ beforeEach(() => {
   importSettings.mockClear();
   pickExecutable.mockReset();
   pickExecutable.mockResolvedValue({ ok: true, value: null });
+  getBackupHealth.mockClear();
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -57,6 +72,7 @@ beforeEach(() => {
       },
       privacy: { export: vi.fn(() => Promise.resolve({ ok: true, value: null })) },
       storage: {
+        getBackupHealth,
         createBackup: vi.fn(() =>
           Promise.resolve({
             ok: true,
@@ -68,6 +84,14 @@ beforeEach(() => {
             },
           }),
         ),
+      },
+      recovery: {
+        listSnapshots: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
+        createSnapshot: vi.fn(),
+        prepareSnapshotRestore: vi.fn(),
+        confirmSnapshotRestore: vi.fn(),
+        chooseImport: vi.fn(),
+        confirmImport: vi.fn(),
       },
     },
   });
@@ -179,6 +203,52 @@ describe('SettingsPanel draft transactions', () => {
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith(importedDraft));
     expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('configures automatic local backup timing, shutdown protection, and retention in the UI', async () => {
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
+    fireEvent.change(screen.getByLabelText('Automatic backup interval (hours)'), {
+      target: { value: '6' },
+    });
+    fireEvent.change(screen.getByLabelText('Backups to keep'), {
+      target: { value: '12' },
+    });
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Back up unsaved changes when quitting/u }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
+      backupIntervalHours: 6,
+      backupOnQuit: false,
+      backupRetentionCount: 12,
+    });
+  });
+
+  it('shows persisted automatic-backup failures and Windows folder privacy guidance', async () => {
+    render(
+      <SettingsPanel
+        {...props({
+          info: {
+            name: 'Forgeboard',
+            version: '0.1.0',
+            platform: 'win32',
+            dataDirectory: 'C:\\Forgeboard',
+            databasePath: 'C:\\Forgeboard\\forgeboard.sqlite3',
+            transcriptDirectory: 'C:\\Forgeboard\\transcripts',
+          },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
+
+    expect(await screen.findByText(/Last attempt failed/u)).toBeTruthy();
+    expect(screen.getByText(/Backup disk is unavailable/u)).toBeTruthy();
+    expect(screen.getByText(/inherit this folder's access controls/u)).toBeTruthy();
   });
 
   it('saves the custom CLI output format selected in the UI', async () => {
@@ -326,11 +396,14 @@ function props(
     },
     settings: savedSettings,
     agents,
+    projects: [],
     activeProject: null,
     onClose: vi.fn(),
     onSaved: vi.fn(() => Promise.resolve()),
     onExtensionsChanged: vi.fn(() => Promise.resolve()),
     onDeleteAll: vi.fn(() => Promise.resolve()),
+    onFlushActiveCanvas: vi.fn(() => Promise.resolve(true)),
+    onRecoveryApplied: vi.fn(() => Promise.resolve()),
     onError: vi.fn(),
     ...overrides,
   };

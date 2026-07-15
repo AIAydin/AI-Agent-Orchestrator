@@ -80,6 +80,7 @@ type TrustedAdapterLauncher = (
 
 export class RunService {
   readonly #active = new Map<string, ActiveRun>();
+  readonly #operations = new Set<Promise<unknown>>();
   readonly #pending = new Map<string, PreparedRun>();
   readonly #repositories: RepositoryService;
   readonly #worktrees: WorktreeService;
@@ -105,12 +106,12 @@ export class RunService {
     this.#handle(
       IPC_CHANNELS.runsPrepare,
       z.tuple([PrepareRunInputSchema]),
-      async (event, input) => await this.prepare(event.sender, input),
+      async (event, input) => await this.#trackOperation(this.prepare(event.sender, input)),
     );
     this.#handle(
       IPC_CHANNELS.runsApprove,
       z.tuple([RunIdSchema]),
-      async (event, runId) => await this.approve(event.sender, runId),
+      async (event, runId) => await this.#trackOperation(this.approve(event.sender, runId)),
     );
     this.#handle(
       IPC_CHANNELS.runsInput,
@@ -123,7 +124,7 @@ export class RunService {
     this.#handle(
       IPC_CHANNELS.runsTerminate,
       z.tuple([RunIdSchema]),
-      async (event, runId) => await this.terminate(event.sender, runId),
+      async (event, runId) => await this.#trackOperation(this.terminate(event.sender, runId)),
     );
   }
 
@@ -306,7 +307,10 @@ export class RunService {
       void this.#track(active);
       return true;
     } catch (error) {
-      if (prepared.generation !== this.#generation) throw error;
+      if (prepared.generation !== this.#generation) {
+        this.#persistInvalidatedRun(prepared);
+        throw error;
+      }
       let worktreePreserved = prepared.worktree !== null;
       if (prepared.worktree !== null) {
         try {
@@ -363,6 +367,7 @@ export class RunService {
 
   public async terminate(owner: WebContents, runId: string): Promise<boolean> {
     this.#assertAvailable();
+    const generation = this.#generation;
     const active = this.#active.get(runId);
     if (active !== undefined) {
       this.#assertOwner(owner, active.ownerId, runId);
@@ -372,6 +377,7 @@ export class RunService {
 
     const prepared = this.#ownedPending(owner, runId);
     if (prepared.worktree !== null) await this.#cleanupUnusedWorktree(prepared.worktree);
+    this.#assertGeneration(generation);
     this.#pending.delete(runId);
     const now = new Date().toISOString();
     prepared.record = {
@@ -402,42 +408,71 @@ export class RunService {
     return true;
   }
 
-  public dispose(): void {
+  public async dispose(): Promise<void> {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#privacyResetting = true;
+    this.#generation += 1;
+    for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
+    this.#registeredChannels.length = 0;
+    await Promise.allSettled([...this.#operations]);
     const now = new Date().toISOString();
+    const persistenceFailures: unknown[] = [];
     for (const prepared of this.#pending.values()) {
-      this.store.saveRun({
-        ...prepared.record,
-        status: 'lost',
-        endedAt: now,
-        updatedAt: now,
-      });
+      try {
+        this.store.saveRun({
+          ...prepared.record,
+          status: 'lost',
+          endedAt: now,
+          updatedAt: now,
+        });
+      } catch (error) {
+        persistenceFailures.push(error);
+      }
     }
-    for (const active of this.#active.values()) {
+    const activeRuns = [...this.#active.values()];
+    this.#pending.clear();
+    this.#active.clear();
+    for (const active of activeRuns) {
       try {
         active.session.terminate();
-      } finally {
+      } catch (error) {
+        try {
+          this.store.appendAudit('agent-run', 'shutdown-terminate', 'failed', {
+            runId: active.record.id,
+            reason: error instanceof Error ? error.message : 'Unknown termination failure',
+          });
+        } catch {
+          // Continue terminating and persisting every other run during shutdown.
+        }
+      }
+      try {
         this.store.saveRun({
           ...active.record,
           status: 'terminated',
           endedAt: now,
           updatedAt: now,
         });
+      } catch (error) {
+        persistenceFailures.push(error);
       }
     }
-    this.#pending.clear();
-    this.#active.clear();
-    for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
+    await Promise.allSettled(activeRuns.map(async (active) => await active.session.result));
+    this.#operations.clear();
+    if (persistenceFailures.length > 0) throw persistenceFailures[0];
   }
 
   public async resetForPrivacy(): Promise<void> {
     this.#assertAvailable();
     this.#privacyResetting = true;
     this.#generation += 1;
+    await Promise.allSettled([...this.#operations]);
+    const now = new Date().toISOString();
+    const pendingRuns = [...this.#pending.values()];
     const activeRuns = [...this.#active.values()];
     this.#pending.clear();
     this.#active.clear();
+    for (const prepared of pendingRuns) this.#persistStoppedRun(prepared, now);
     for (const active of activeRuns) {
       try {
         active.session.terminate();
@@ -446,6 +481,24 @@ export class RunService {
       }
     }
     await Promise.allSettled(activeRuns.map(async (active) => await active.session.result));
+    for (const active of activeRuns) this.#persistStoppedRun(active, now);
+  }
+
+  public pauseForDataMutation(): void {
+    this.#assertAvailable();
+    this.#privacyResetting = true;
+    if (this.#operations.size > 0 || this.#pending.size > 0 || this.#active.size > 0) {
+      this.#privacyResetting = false;
+      throw new Error('Stop or cancel every agent run before merging local data.');
+    }
+  }
+
+  public async pauseForShutdown(): Promise<void> {
+    this.#assertAvailable();
+    this.#privacyResetting = true;
+    while (this.#operations.size > 0) {
+      await Promise.allSettled([...this.#operations]);
+    }
   }
 
   public resumeAfterPrivacyReset(): void {
@@ -835,8 +888,31 @@ export class RunService {
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The agent runtime is shutting down.');
     if (this.#privacyResetting) {
-      throw new Error('Agent runs are paused while Forgeboard deletes local data.');
+      throw new Error('Agent runs are paused while Forgeboard changes local data.');
     }
+  }
+
+  #trackOperation<T>(operation: Promise<T>): Promise<T> {
+    this.#operations.add(operation);
+    void operation.then(
+      () => this.#operations.delete(operation),
+      () => this.#operations.delete(operation),
+    );
+    return operation;
+  }
+
+  #persistInvalidatedRun(prepared: PreparedRun): void {
+    this.#persistStoppedRun(prepared, new Date().toISOString());
+  }
+
+  #persistStoppedRun(prepared: PreparedRun, stoppedAt: string): void {
+    prepared.record = {
+      ...prepared.record,
+      status: 'terminated',
+      endedAt: stoppedAt,
+      updatedAt: stoppedAt,
+    };
+    this.store.saveRun(prepared.record);
   }
 
   #assertGeneration(generation: number): void {

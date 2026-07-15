@@ -246,14 +246,16 @@ export class CheckRuntime {
       this.#active.set(execution.id, active);
       this.#rememberOwner(execution.id, ownerId);
     } catch (error) {
-      this.store.appendAudit('check', 'launch', 'denied', {
-        planId,
-        projectId: pending.plan.projectId,
-        checkId: pending.plan.checkId,
-        reason: errorMessage(error).includes('configuration or project folder changed')
-          ? 'stale-plan'
-          : 'revalidation-failed',
-      });
+      if (!this.#disposed && pending.generation === this.#generation) {
+        this.store.appendAudit('check', 'launch', 'denied', {
+          planId,
+          projectId: pending.plan.projectId,
+          checkId: pending.plan.checkId,
+          reason: errorMessage(error).includes('configuration or project folder changed')
+            ? 'stale-plan'
+            : 'revalidation-failed',
+        });
+      }
       throw error;
     } finally {
       this.#reservations.delete(planId);
@@ -393,6 +395,20 @@ export class CheckRuntime {
     );
     this.#active.clear();
     this.#executionOwners.clear();
+  }
+
+  public pauseForDataMutation(): void {
+    this.#assertAvailable();
+    this.#privacyResetting = true;
+    if (
+      this.#pending.size > 0 ||
+      this.#prepareReservations.size > 0 ||
+      this.#reservations.size > 0 ||
+      this.#active.size > 0
+    ) {
+      this.#privacyResetting = false;
+      throw new Error('Stop or cancel every project check before merging local data.');
+    }
   }
 
   public resumeAfterPrivacyReset(): void {

@@ -184,6 +184,7 @@ export function App() {
           info={bootstrap.info}
           settings={bootstrap.settings}
           agents={bootstrap.agents}
+          projects={bootstrap.recent}
           activeProject={activeProject}
           onClose={() => setShowSettings(false)}
           onSaved={async () => {
@@ -191,13 +192,19 @@ export function App() {
             setShowSettings(false);
           }}
           onError={setError}
+          onFlushActiveCanvas={async () => (await workspaceRef.current?.flushCanvas()) ?? true}
+          onRecoveryApplied={async () => {
+            await loadBootstrap();
+            setShowSettings(false);
+          }}
           onExtensionsChanged={loadBootstrap}
           onDeleteAll={async (confirmation) => {
+            const deleted = unwrap(await window.forgeboard.privacy.deleteAll(confirmation));
+            if (!deleted) return;
             flushSync(() => {
               setActiveProject(null);
               setShowSettings(false);
             });
-            unwrap(await window.forgeboard.privacy.deleteAll(confirmation));
             await loadBootstrap();
           }}
         />

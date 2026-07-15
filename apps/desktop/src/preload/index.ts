@@ -11,10 +11,11 @@ import type { IpcResult } from '../shared/contracts.js';
 import {
   AppCloseRequestSchema,
   AppCloseResponseSchema,
-  IPC_CHANNELS,
+  BackupHealthSchema,
   BackupResultSchema,
   ExtensionDiscoveryViewSchema,
   ExtensionInstallPlanViewSchema,
+  IPC_CHANNELS,
   LocalReferenceSelectionResultSchema,
   PreviewEventEnvelopeSchema,
   ProjectRecoveryAssessmentSchema,
@@ -29,6 +30,14 @@ import {
   GitDiscardPlanViewSchema,
   GitReviewViewSchema,
 } from '../shared/git-contracts.js';
+import {
+  RECOVERY_IPC_CHANNELS,
+  RecoveryImportCountsSchema,
+  RecoveryImportPlanSchema,
+  RecoveryRestoredCanvasSchema,
+  RecoverySnapshotRestorePlanSchema,
+  RecoverySnapshotSummarySchema,
+} from '../shared/recovery-contracts.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -188,6 +197,41 @@ const api: ForgeboardApi = {
   },
   storage: {
     createBackup: () => invokeValidated(IPC_CHANNELS.storageCreateBackup, BackupResultSchema),
+    getBackupHealth: () => invokeValidated(IPC_CHANNELS.storageBackupHealth, BackupHealthSchema),
+  },
+  recovery: {
+    listSnapshots: (input) =>
+      invokeValidated(
+        RECOVERY_IPC_CHANNELS.snapshotsList,
+        RecoverySnapshotSummarySchema.array(),
+        input,
+      ),
+    createSnapshot: (input) =>
+      invokeValidated(RECOVERY_IPC_CHANNELS.snapshotsCreate, RecoverySnapshotSummarySchema, input),
+    prepareSnapshotRestore: (input) =>
+      invokeValidated(
+        RECOVERY_IPC_CHANNELS.snapshotsPrepareRestore,
+        RecoverySnapshotRestorePlanSchema,
+        input,
+      ),
+    confirmSnapshotRestore: (input) =>
+      invokeValidated(
+        RECOVERY_IPC_CHANNELS.snapshotsConfirmRestore,
+        RecoveryRestoredCanvasSchema.nullable(),
+        input,
+      ),
+    chooseImport: (input) =>
+      invokeValidated(
+        RECOVERY_IPC_CHANNELS.importChoose,
+        RecoveryImportPlanSchema.nullable(),
+        input,
+      ),
+    confirmImport: (input) =>
+      invokeValidated(
+        RECOVERY_IPC_CHANNELS.importConfirm,
+        RecoveryImportCountsSchema.nullable(),
+        input,
+      ),
   },
 };
 

@@ -114,7 +114,7 @@ export function applyRetention(
              SELECT id FROM (
                SELECT id,
                  ROW_NUMBER() OVER (
-                   PARTITION BY canvas_id ORDER BY created_at DESC, id DESC
+                   PARTITION BY canvas_id ORDER BY rowid DESC
                  ) AS retention_rank
                FROM canvas_snapshots
              ) WHERE retention_rank > ?

@@ -30,8 +30,11 @@ const DEFAULT_OPERATIONS: DockerOperations = {
 };
 
 export class DockerIpcService {
+  readonly #operations = new Set<Promise<unknown>>();
   readonly #registeredChannels: string[] = [];
+  #disposePromise: Promise<void> | null = null;
   #disposed = false;
+  #paused = false;
   #pullInProgress = false;
 
   public constructor(
@@ -65,11 +68,24 @@ export class DockerIpcService {
     );
   }
 
-  public dispose(): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
-    for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
-    this.#registeredChannels.length = 0;
+  public dispose(): Promise<void> {
+    if (!this.#disposed) {
+      this.#disposed = true;
+      for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
+      this.#registeredChannels.length = 0;
+    }
+    this.#disposePromise ??= this.#drainOperations();
+    return this.#disposePromise;
+  }
+
+  public async pauseForShutdown(): Promise<void> {
+    if (this.#disposed) throw new Error('The Docker service has been disposed.');
+    this.#paused = true;
+    await this.#drainOperations();
+  }
+
+  public resumeAfterShutdownPause(): void {
+    if (!this.#disposed) this.#paused = false;
   }
 
   async #confirmAndPull(
@@ -148,31 +164,54 @@ export class DockerIpcService {
     operation: (event: IpcMainInvokeEvent, ...args: Args) => Output | Promise<Output>,
   ): void {
     this.#registeredChannels.push(channel);
-    ipcMain.handle(channel, async (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
-      try {
-        if (this.#disposed) throw new Error('The Docker service has been disposed.');
-        const args = inputSchema.parse(rawArgs);
-        const value = outputSchema.parse(await operation(event, ...args));
-        const result: IpcResult<Output> = { ok: true, value };
-        ipcResultSchema(outputSchema).parse(result);
-        return result;
-      } catch (error) {
-        const validation = error instanceof z.ZodError;
-        const result = {
-          ok: false as const,
-          error: {
-            code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
-            message: validation
-              ? 'Forgeboard rejected an invalid Docker request.'
-              : error instanceof Error
-                ? error.message
-                : 'The Docker operation failed.',
-          },
-        };
-        ipcResultSchema(outputSchema).parse(result);
-        return result;
-      }
+    ipcMain.handle(channel, (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
+      const pending = this.#invoke(event, rawArgs, inputSchema, outputSchema, operation);
+      this.#operations.add(pending);
+      const removePending = (): void => {
+        this.#operations.delete(pending);
+      };
+      void pending.then(removePending, removePending);
+      return pending;
     });
+  }
+
+  async #invoke<Args extends unknown[], Output>(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+    inputSchema: z.ZodType<Args>,
+    outputSchema: z.ZodType<Output>,
+    operation: (event: IpcMainInvokeEvent, ...args: Args) => Output | Promise<Output>,
+  ): Promise<IpcResult<Output>> {
+    try {
+      if (this.#disposed) throw new Error('The Docker service has been disposed.');
+      if (this.#paused) throw new Error('Docker operations are paused while Forgeboard quits.');
+      const args = inputSchema.parse(rawArgs);
+      const value = outputSchema.parse(await operation(event, ...args));
+      const result: IpcResult<Output> = { ok: true, value };
+      ipcResultSchema(outputSchema).parse(result);
+      return result;
+    } catch (error) {
+      const validation = error instanceof z.ZodError;
+      const result = {
+        ok: false as const,
+        error: {
+          code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
+          message: validation
+            ? 'Forgeboard rejected an invalid Docker request.'
+            : error instanceof Error
+              ? error.message
+              : 'The Docker operation failed.',
+        },
+      };
+      ipcResultSchema(outputSchema).parse(result);
+      return result;
+    }
+  }
+
+  async #drainOperations(): Promise<void> {
+    while (this.#operations.size > 0) {
+      await Promise.allSettled([...this.#operations]);
+    }
   }
 }
 

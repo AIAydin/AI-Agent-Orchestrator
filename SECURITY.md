@@ -61,6 +61,34 @@ credential patterns, ignored files, and symlink escapes are denied. Sensitive ov
 per-file high-friction approval. Approved native checks remain ordinary user processes and can access
 other filesystem locations or the network according to operating-system permissions.
 
+### Backups and recovery imports
+
+SQLite backup creation is main-owned and accepts only the UI-selected destination. Forgeboard
+requires a canonical ordinary directory, builds each backup in an isolated staging folder, rejects
+links and path changes, performs a SQLite integrity check, and verifies stable size and SHA-256
+content before recording success. POSIX builds require a current-user-owned destination that is not
+group/other writable, use a `0700` staging directory, and publish `0600` backup files. Windows builds
+inherit the chosen folder's ACL and show a warning to select a folder
+available only to the user's Windows account. Automatic interval, quit-time behavior, and the
+per-folder retention target are configured in the UI. Retention removes only recorded ordinary backup files whose
+canonical path, identity, size, and digest still match, and it applies separately to each selected
+destination. Cleanup failures remain visible in Backup health and do not invalidate the newly
+created backup. A missing recorded backup is never treated as proof of deletion; complete local-data
+deletion requires a separate cancel-default native choice before forgetting its record, with an
+explicit warning that a detached copy may survive. Direct SQLite backup restore is not implemented
+in the UI.
+
+Canvas restore and portable JSON import never accept renderer-supplied file contents. Pending
+actions are window-owned, expiring, bounded, and single-use, followed by a cancel-default native
+confirmation. Snapshot restore binds the exact selected snapshot digest and current canvas digest,
+rechecks both before mutation, and first preserves the displaced canvas as a new checkpoint when its
+content differs. Import requires a user-selected ordinary file no larger than 16 MiB, rejects a
+final-component symlink, validates the strict versioned export schema, and records an exact-byte
+SHA-256 digest. Immediately
+before a transactional merge or replacement, Forgeboard rereads the same stable file and requires
+its file name, size, digest, and disclosed record counts to match. Portable files do not contain
+repository files or extension source folders.
+
 ### Git and agent overreach
 
 Push, pull-request creation, merge, cherry-pick, rebase, destructive discard, reset, clean, force

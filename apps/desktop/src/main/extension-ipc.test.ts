@@ -107,7 +107,53 @@ describe('ExtensionIpcService', () => {
       throw new Error('Expected a structured extension IPC error.');
     }
     expect(result.error.message).toContain('closed');
-    service.dispose();
+    await service.dispose();
+  });
+
+  it('drains a deferred chooser before privacy purge completes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'forgeboard-extension-ipc-'));
+    roots.push(root);
+    let resolveSelection!: (selection: { canceled: boolean; filePaths: string[] }) => void;
+    const showOpenDialog = vi.fn(
+      () =>
+        new Promise<{ canceled: boolean; filePaths: string[] }>((resolve) => {
+          resolveSelection = resolve;
+        }),
+    );
+    const appendAudit = vi.fn();
+    electronMock.fromWebContents.mockReturnValue(null);
+    const service = new ExtensionIpcService(
+      { getPath: () => root } as unknown as ConstructorParameters<typeof ExtensionIpcService>[0],
+      { showOpenDialog } as unknown as ConstructorParameters<typeof ExtensionIpcService>[1],
+      {
+        appendAudit,
+        listTrustedExtensions: () => [],
+      } as unknown as ConstructorParameters<typeof ExtensionIpcService>[2],
+    );
+    service.registerIpcHandlers();
+    const event = {
+      sender: { id: 81, isDestroyed: () => false, once: vi.fn() },
+    } as unknown as IpcMainInvokeEvent;
+    const handler = electronMock.handlers.get(IPC_CHANNELS.extensionsChoose);
+    if (handler === undefined) throw new Error('Extension chooser handler was not registered.');
+    const choosing = handler(event, 'folder');
+    await vi.waitFor(() => {
+      expect(resolveSelection).toBeTypeOf('function');
+    });
+    let resetFinished = false;
+    const resetting = service.resetForPrivacy().then(() => {
+      resetFinished = true;
+    });
+    await Promise.resolve();
+    expect(resetFinished).toBe(false);
+
+    resolveSelection({ canceled: true, filePaths: [] });
+    await choosing;
+    await resetting;
+    expect(appendAudit).toHaveBeenCalledWith('extension', 'privacy-purge', 'allowed', {
+      ledgerCount: 0,
+    });
+    await service.dispose();
   });
 
   it('treats renderer confirmation as intent and denies install when the main dialog is cancelled', async () => {
@@ -165,6 +211,8 @@ describe('ExtensionIpcService', () => {
     ) {
       throw new Error('Expected a successful extension plan.');
     }
+    await service.pauseForShutdown();
+    service.resumeAfterPrivacyReset();
     const approvalResult = await approveHandler(event, {
       planId: chooseResult.value.planId,
       confirmed: true,
@@ -191,7 +239,7 @@ describe('ExtensionIpcService', () => {
     expect(
       (await new LocalExtensionService(join(root, 'extensions')).discover()).installed,
     ).toEqual([]);
-    service.dispose();
+    await service.dispose();
   });
 });
 

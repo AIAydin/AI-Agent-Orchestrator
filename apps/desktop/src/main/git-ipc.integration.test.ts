@@ -105,7 +105,7 @@ describe('GitIpcService with a real repository', () => {
       error: { code: 'OPERATION_FAILED' },
     });
     expect(JSON.stringify(rejectedFrame)).toMatch(/main Forgeboard frame/iu);
-    harness.service.dispose();
+    await harness.service.dispose();
   });
 
   it('stages and unstages exact paths and hunks without changing worktree content', async () => {
@@ -149,7 +149,7 @@ describe('GitIpcService with a real repository', () => {
     expect(fullyUnstaged.unstaged.additions).toBe(2);
     expect(await readFile(join(fixture.repository, 'story.txt'), 'utf8')).toBe(modified);
     expect(harness.appendAudit).toHaveBeenCalledTimes(4);
-    harness.service.dispose();
+    await harness.service.dispose();
   });
 
   it('keeps native commit cancellation non-mutating and consumes the plan', async () => {
@@ -166,6 +166,8 @@ describe('GitIpcService with a real repository', () => {
       target: primaryTarget(harness),
       message: 'Cancelled commit\nIdentity: forged disclosure',
     });
+    await harness.service.pauseForShutdown();
+    harness.service.resumeAfterPrivacyReset();
 
     await expect(harness.service.confirmCommit(event, plan.planId)).resolves.toBeNull();
     expect(await runGit(fixture.repository, ['rev-parse', 'HEAD'])).toBe(headBefore);
@@ -192,7 +194,7 @@ describe('GitIpcService with a real repository', () => {
       'denied',
       expect.objectContaining({ reason: 'native-confirmation-cancelled' }),
     );
-    harness.service.dispose();
+    await harness.service.dispose();
   });
 
   it('refuses another owner, rejects stale staged content, and commits with the exact UI identity', async () => {
@@ -248,7 +250,7 @@ describe('GitIpcService with a real repository', () => {
       'allowed',
       expect.objectContaining({ projectId: harness.project().id, stagedPathCount: 1 }),
     );
-    harness.service.dispose();
+    await harness.service.dispose();
   });
 
   it('requires native discard confirmation, preserves cancellation, then discards the exact hunk', async () => {
@@ -283,7 +285,7 @@ describe('GitIpcService with a real repository', () => {
       'allowed',
       expect.objectContaining({ hunkCount: 1, pathCount: 1 }),
     );
-    harness.service.dispose();
+    await harness.service.dispose();
   });
 });
 

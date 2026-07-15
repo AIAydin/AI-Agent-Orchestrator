@@ -8,7 +8,7 @@ import {
   type LocalDataExport,
 } from '../storage-schemas.js';
 import { saveCheckExecution } from './checks.js';
-import { clearAllTables, transaction } from './database.js';
+import { clearPortableTables, transaction, type TransactionalAuditEvent } from './database.js';
 import {
   canvasContentHash,
   type AuditRow,
@@ -80,20 +80,58 @@ export function exportData(database: DatabaseSync, exportedAt = new Date()): Loc
 export function importData(
   database: DatabaseSync,
   document: unknown,
-  options: { replaceExisting?: boolean } = {},
+  options: PortableImportOptions = {},
 ): ImportResult {
-  const parsed = LocalDataExportSchema.parse(document);
-  assertCanonicalImportedExtensionData(parsed);
+  return importValidatedData(database, document, options);
+}
+
+export function importDataWithAudit(
+  database: DatabaseSync,
+  document: unknown,
+  options: PortableImportOptions,
+  audit: TransactionalAuditEvent,
+): ImportResult {
+  return importValidatedData(database, document, options, audit);
+}
+
+export function preflightImportData(
+  database: DatabaseSync,
+  document: unknown,
+  options: PortableImportOptions = {},
+): ImportResult {
+  const parsed = parseImportDocument(document);
   validateImportReferences(database, parsed, Boolean(options.replaceExisting));
-  transaction(database, () => {
-    if (options.replaceExisting) clearAllTables(database);
-    if (parsed.settings) writeSettings(database, validateSettings(parsed.settings));
-    for (const project of parsed.projects) writeProject(database, project);
-    for (const canvas of parsed.canvases) writeCanvas(database, canvas, false, 'import');
-    for (const run of parsed.runs) writeRun(database, run);
-    for (const execution of parsed.checkExecutions) saveCheckExecution(database, execution);
-    for (const snapshot of parsed.snapshots) writeSnapshot(database, snapshot);
-    for (const event of parsed.audit) {
+  return importResult(parsed);
+}
+
+function importValidatedData(
+  database: DatabaseSync,
+  document: unknown,
+  options: PortableImportOptions,
+  audit?: TransactionalAuditEvent,
+): ImportResult {
+  const parsed = parseImportDocument(document);
+  const replacing = Boolean(options.replaceExisting);
+  return transaction(database, () => {
+    // Repeat the same collision validation used by preflight while holding the write transaction.
+    // This keeps the final decision and all writes atomic even if another database connection exists.
+    validateImportReferences(database, parsed, replacing);
+    const normalized = normalizeInterruptedRecords(parsed, options.importedAt ?? new Date());
+    const shouldWriteSettings = replacing;
+    if (replacing) clearPortableTables(database);
+    if (normalized.document.settings && shouldWriteSettings) {
+      writeSettings(database, validateSettings(normalized.document.settings));
+    }
+    for (const project of normalized.document.projects) writeProject(database, project);
+    for (const canvas of normalized.document.canvases) {
+      writeCanvas(database, canvas, false, 'import');
+    }
+    for (const run of normalized.document.runs) writeRun(database, run);
+    for (const execution of normalized.document.checkExecutions) {
+      saveCheckExecution(database, execution);
+    }
+    for (const snapshot of normalized.document.snapshots) writeSnapshot(database, snapshot);
+    for (const event of normalized.document.audit) {
       writeAudit(
         database,
         event.occurredAt,
@@ -103,7 +141,96 @@ export function importData(
         event.metadata,
       );
     }
+    if (audit !== undefined) {
+      writeAudit(
+        database,
+        (audit.occurredAt ?? new Date()).toISOString(),
+        audit.category,
+        audit.action,
+        audit.outcome,
+        {
+          ...audit.metadata,
+          normalizedInterruptedRecords: {
+            runs: normalized.normalizedRuns,
+            checkExecutions: normalized.normalizedCheckExecutions,
+          },
+        },
+      );
+    }
+    return importResult(parsed);
   });
+}
+
+export interface PortableImportOptions {
+  readonly replaceExisting?: boolean;
+  readonly importedAt?: Date;
+}
+
+interface NormalizedImport {
+  readonly document: LocalDataExport;
+  readonly normalizedRuns: number;
+  readonly normalizedCheckExecutions: number;
+}
+
+function normalizeInterruptedRecords(
+  document: LocalDataExport,
+  importedAt: Date,
+): NormalizedImport {
+  if (!Number.isFinite(importedAt.getTime())) throw new Error('Import time must be valid.');
+  let normalizedRuns = 0;
+  let normalizedCheckExecutions = 0;
+  const runs = document.runs.map((run) => {
+    if (run.status !== 'prepared' && run.status !== 'running') return run;
+    normalizedRuns += 1;
+    const recoveredAt = boundedImportTimestamp(importedAt, run.updatedAt, run.startedAt);
+    return {
+      ...run,
+      status: 'lost' as const,
+      endedAt: recoveredAt,
+      exitCode: null,
+      updatedAt: recoveredAt,
+    };
+  });
+  const checkExecutions = document.checkExecutions.map((execution) => {
+    if (execution.status !== 'queued' && execution.status !== 'running') return execution;
+    normalizedCheckExecutions += 1;
+    const recoveredAt = boundedImportTimestamp(
+      importedAt,
+      execution.updatedAt,
+      execution.startedAt,
+    );
+    return {
+      ...execution,
+      status: 'lost' as const,
+      exitCode: null,
+      endedAt: recoveredAt,
+      updatedAt: recoveredAt,
+    };
+  });
+  return {
+    document: { ...document, runs, checkExecutions },
+    normalizedRuns,
+    normalizedCheckExecutions,
+  };
+}
+
+function boundedImportTimestamp(importedAt: Date, ...timestamps: Array<string | null>): string {
+  const latest = timestamps.reduce(
+    (current, timestamp) =>
+      timestamp === null ? current : Math.max(current, Date.parse(timestamp)),
+    importedAt.getTime(),
+  );
+  return new Date(latest).toISOString();
+}
+
+function parseImportDocument(document: unknown): LocalDataExport {
+  const parsed = LocalDataExportSchema.parse(document);
+  if (parsed.settings !== null) validateSettings(parsed.settings);
+  assertCanonicalImportedData(parsed);
+  return parsed;
+}
+
+function importResult(parsed: LocalDataExport): ImportResult {
   return {
     projects: parsed.projects.length,
     canvases: parsed.canvases.length,
@@ -116,7 +243,7 @@ export function importData(
 
 function listAllProjects(database: DatabaseSync): Project[] {
   const rows = database
-    .prepare('SELECT value_json FROM recent_projects ORDER BY opened_at DESC LIMIT 10000')
+    .prepare('SELECT value_json FROM recent_projects ORDER BY opened_at DESC')
     .all() as unknown as JsonRow[];
   return rows.map((row) => sanitizeProject(ProjectSchema.parse(parseJson(row.value_json))));
 }
@@ -139,13 +266,14 @@ function validateImportReferences(
     if (importedProjectPaths.has(project.path)) {
       throw new Error(`The import contains a conflicting project path: ${project.path}`);
     }
-    const sameId = existingById.get(project.id);
-    if (sameId && sameId.path !== project.path) {
-      throw new Error(`Project ${project.id} already exists at a different path.`);
+    if (existingById.has(project.id)) {
+      throw new Error(`Project ${project.id} already exists; merge imports cannot replace it.`);
     }
     const samePath = existingByPath.get(project.path);
-    if (samePath && samePath.id !== project.id) {
-      throw new Error(`The import contains a conflicting project path: ${project.path}`);
+    if (samePath) {
+      throw new Error(
+        `Project path ${project.path} already exists; merge imports cannot reuse it.`,
+      );
     }
     importedProjectIds.add(project.id);
     importedProjectPaths.add(project.path);
@@ -153,6 +281,12 @@ function validateImportReferences(
   }
   const canvasProjectIds = new Set<string>();
   const canvasIds = new Set<string>();
+  const existingCanvasById = replacing
+    ? undefined
+    : database.prepare('SELECT project_id FROM canvas_documents WHERE id = ?');
+  const existingCanvasByProject = replacing
+    ? undefined
+    : database.prepare('SELECT id FROM canvas_documents WHERE project_id = ?');
   for (const canvas of document.canvases) {
     if (!projectIds.has(canvas.projectId)) {
       throw new Error(`Canvas ${canvas.id} references an unknown project.`);
@@ -162,6 +296,14 @@ function validateImportReferences(
     }
     if (canvasProjectIds.has(canvas.projectId)) {
       throw new Error(`The import contains more than one canvas for project ${canvas.projectId}.`);
+    }
+    if (existingCanvasById?.get(canvas.id) !== undefined) {
+      throw new Error(`Canvas ${canvas.id} already exists; merge imports cannot replace it.`);
+    }
+    if (existingCanvasByProject?.get(canvas.projectId) !== undefined) {
+      throw new Error(
+        `Project ${canvas.projectId} already has a canvas; merge imports cannot replace it.`,
+      );
     }
     canvasIds.add(canvas.id);
     canvasProjectIds.add(canvas.projectId);
@@ -181,6 +323,9 @@ function validateImportReferences(
     runIds.add(run.id);
   }
   const snapshotIds = new Set<string>();
+  const existingSnapshot = replacing
+    ? undefined
+    : database.prepare('SELECT 1 FROM canvas_snapshots WHERE id = ?');
 
   const checkExecutionIds = new Set<string>();
   const existingCheckExecution = replacing
@@ -211,6 +356,11 @@ function validateImportReferences(
     if (snapshotIds.has(snapshot.id)) {
       throw new Error(`The import contains duplicate snapshot id ${snapshot.id}.`);
     }
+    if (existingSnapshot?.get(snapshot.id) !== undefined) {
+      throw new Error(
+        `Snapshot ${snapshot.id} already exists; merge imports cannot replace recovery history.`,
+      );
+    }
     snapshotIds.add(snapshot.id);
   }
   const auditSequences = new Set<number>();
@@ -222,7 +372,13 @@ function validateImportReferences(
   }
 }
 
-function assertCanonicalImportedExtensionData(document: LocalDataExport): void {
+function assertCanonicalImportedData(document: LocalDataExport): void {
+  for (const project of document.projects) {
+    const sanitized = sanitizeProject(project);
+    if (!isDeepStrictEqual(project, sanitized)) {
+      throw new Error(`Project ${project.id} contains non-canonical data that would be rewritten.`);
+    }
+  }
   for (const canvas of document.canvases) {
     let sanitized: CanvasDocument;
     try {

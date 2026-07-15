@@ -25,6 +25,8 @@ type SettingsStore = Pick<
   'appendAudit' | 'applyRetention' | 'getSettings' | 'saveSettings'
 >;
 
+type SettingsOperationGate = <Output>(operation: () => Output | Promise<Output>) => Promise<Output>;
+
 /**
  * Owns the settings IPC transaction boundary.
  *
@@ -39,6 +41,8 @@ export class SettingsIpcService {
     private readonly dialog: Pick<Dialog, 'showOpenDialog' | 'showSaveDialog'>,
     private readonly store: SettingsStore,
     private readonly createDefaultSettings: () => AppSettings,
+    private readonly onSettingsSaved: (settings: AppSettings) => void = () => undefined,
+    private readonly runOperation: SettingsOperationGate = async (operation) => await operation(),
   ) {}
 
   public registerIpcHandlers(): void {
@@ -57,6 +61,7 @@ export class SettingsIpcService {
           envNames: saved.envAllowlist,
           retention,
         });
+        this.onSettingsSaved(saved);
         return saved;
       },
     );
@@ -121,7 +126,9 @@ export class SettingsIpcService {
       try {
         if (this.#disposed) throw new Error('The settings service has been disposed.');
         const args = inputSchema.parse(rawArgs);
-        const value = outputSchema.parse(await operation(...args));
+        const value = outputSchema.parse(
+          await this.runOperation(async () => await operation(...args)),
+        );
         const result: IpcResult<Output> = { ok: true, value };
         ipcResultSchema(outputSchema).parse(result);
         return result;

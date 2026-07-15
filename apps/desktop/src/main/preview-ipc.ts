@@ -15,10 +15,12 @@ import { PreviewRuntime } from './preview-runtime.js';
 import type { LocalStore } from './storage.js';
 
 export class PreviewIpcService {
+  readonly #operations = new Set<Promise<unknown>>();
   readonly #runtime: PreviewRuntime;
   readonly #registeredChannels: string[] = [];
   readonly #trackedOwners = new Set<number>();
   #disposed = false;
+  #paused = false;
 
   constructor(store: LocalStore, getSettings: () => AppSettings) {
     this.#runtime = new PreviewRuntime(store, getSettings, (ownerId, event) =>
@@ -54,16 +56,28 @@ export class PreviewIpcService {
     return this.#runtime.resetForPrivacy();
   }
 
+  pauseForDataMutation(): void {
+    this.#runtime.pauseForDataMutation();
+  }
+
+  async pauseForShutdown(): Promise<void> {
+    if (this.#disposed) throw new Error('The preview runtime has been disposed.');
+    this.#paused = true;
+    await this.#drainOperations();
+  }
+
   resumeAfterPrivacyReset(): void {
+    this.#paused = false;
     this.#runtime.resumeAfterPrivacyReset();
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     if (this.#disposed) return;
     this.#disposed = true;
     for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
     this.#registeredChannels.length = 0;
-    this.#runtime.dispose();
+    await this.#drainOperations();
+    await this.#runtime.dispose();
   }
 
   #send(ownerId: number, event: PreviewEventEnvelope): void {
@@ -78,7 +92,7 @@ export class PreviewIpcService {
     this.#trackedOwners.add(ownerId);
     event.sender.once('destroyed', () => {
       this.#trackedOwners.delete(ownerId);
-      void this.#runtime.stopOwner(ownerId);
+      if (!this.#disposed) void this.#trackOperation(this.#runtime.stopOwner(ownerId));
     });
   }
 
@@ -88,26 +102,51 @@ export class PreviewIpcService {
     operation: (event: IpcMainInvokeEvent, ...args: Args) => Output | Promise<Output>,
   ): void {
     this.#registeredChannels.push(channel);
-    ipcMain.handle(channel, async (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
-      try {
-        if (this.#disposed) throw new Error('The preview runtime has been disposed.');
-        this.#trackOwner(event);
-        const args = schema.parse(rawArgs);
-        return { ok: true, value: await operation(event, ...args) };
-      } catch (error) {
-        const validation = error instanceof z.ZodError;
-        return {
-          ok: false,
-          error: {
-            code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
-            message: validation
-              ? 'Forgeboard rejected an invalid preview request.'
-              : error instanceof Error
-                ? error.message
-                : 'The preview operation failed.',
-          },
-        };
-      }
+    ipcMain.handle(channel, (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
+      return this.#trackOperation(this.#invoke(event, rawArgs, schema, operation));
     });
+  }
+
+  async #invoke<Args extends unknown[], Output>(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+    schema: z.ZodType<Args>,
+    operation: (event: IpcMainInvokeEvent, ...args: Args) => Output | Promise<Output>,
+  ): Promise<IpcResult<Output>> {
+    try {
+      if (this.#disposed) throw new Error('The preview runtime has been disposed.');
+      if (this.#paused) throw new Error('Development previews are paused while Forgeboard quits.');
+      this.#trackOwner(event);
+      const args = schema.parse(rawArgs);
+      return { ok: true, value: await operation(event, ...args) };
+    } catch (error) {
+      const validation = error instanceof z.ZodError;
+      return {
+        ok: false,
+        error: {
+          code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
+          message: validation
+            ? 'Forgeboard rejected an invalid preview request.'
+            : error instanceof Error
+              ? error.message
+              : 'The preview operation failed.',
+        },
+      };
+    }
+  }
+
+  #trackOperation<Output>(operation: Promise<Output>): Promise<Output> {
+    this.#operations.add(operation);
+    void operation.then(
+      () => this.#operations.delete(operation),
+      () => this.#operations.delete(operation),
+    );
+    return operation;
+  }
+
+  async #drainOperations(): Promise<void> {
+    while (this.#operations.size > 0) {
+      await Promise.allSettled([...this.#operations]);
+    }
   }
 }

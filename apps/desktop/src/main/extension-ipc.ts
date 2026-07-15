@@ -28,9 +28,11 @@ import type { LocalStore } from './storage.js';
 
 export class ExtensionIpcService {
   readonly #manager: ExtensionManager;
+  readonly #operations = new Set<Promise<unknown>>();
   readonly #registeredChannels: string[] = [];
   readonly #trackedOwners = new Set<number>();
   #disposed = false;
+  #disposePromise: Promise<void> | null = null;
   #privacyResetting = false;
   #trustTail: Promise<void> = Promise.resolve();
 
@@ -135,13 +137,16 @@ export class ExtensionIpcService {
     );
   }
 
-  public dispose(): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
-    for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
-    this.#registeredChannels.length = 0;
-    this.#trackedOwners.clear();
-    this.#manager.dispose();
+  public dispose(): Promise<void> {
+    if (!this.#disposed) {
+      this.#disposed = true;
+      this.#privacyResetting = true;
+      for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
+      this.#registeredChannels.length = 0;
+      this.#trackedOwners.clear();
+    }
+    this.#disposePromise ??= this.#finishDisposal();
+    return this.#disposePromise;
   }
 
   public listActiveAgentAdapters() {
@@ -152,11 +157,38 @@ export class ExtensionIpcService {
     return this.#withTrustLock(() => this.#manager.purgeAll());
   }
 
-  public resetForPrivacy(): Promise<void> {
+  public async resetForPrivacy(): Promise<void> {
     if (this.#disposed) throw new Error('The extension service has been disposed.');
     if (this.#privacyResetting) throw new Error('Extension data deletion is already in progress.');
     this.#privacyResetting = true;
-    return this.#withTrustLock(() => this.#manager.purgeAll());
+    await this.#drainOperations();
+    await this.#withTrustLock(async () => await this.#manager.purgeAll());
+  }
+
+  public async pauseForDataMutation(): Promise<void> {
+    if (this.#disposed) throw new Error('The extension service has been disposed.');
+    if (this.#privacyResetting) throw new Error('Extension data is already paused.');
+    this.#privacyResetting = true;
+    try {
+      await this.#drainOperations();
+      await this.#withTrustLock(async () => await this.#manager.quiesce());
+    } catch (error) {
+      this.#privacyResetting = false;
+      throw error;
+    }
+  }
+
+  public async pauseForShutdown(): Promise<void> {
+    if (this.#disposed) throw new Error('The extension service has been disposed.');
+    if (this.#privacyResetting) throw new Error('Extension data is already paused.');
+    this.#privacyResetting = true;
+    try {
+      await this.#drainOperations();
+      await this.#withTrustLock(async () => await this.#manager.waitForMutations());
+    } catch (error) {
+      this.#privacyResetting = false;
+      throw error;
+    }
   }
 
   public resumeAfterPrivacyReset(): void {
@@ -250,42 +282,76 @@ export class ExtensionIpcService {
     ) => z.output<OutputSchema> | Promise<z.output<OutputSchema>>,
   ): void {
     this.#registeredChannels.push(channel);
-    ipcMain.handle(
-      channel,
-      async (event, ...rawArgs: unknown[]): Promise<IpcResult<z.output<OutputSchema>>> => {
-        try {
-          if (this.#disposed) throw new Error('The extension service has been disposed.');
-          if (this.#privacyResetting) {
-            throw new Error('Extensions are paused while Forgeboard deletes local data.');
-          }
-          const args = inputSchema.parse(rawArgs);
-          const value = await operation(event, ...args);
-          outputSchema.parse(value);
-          const result: IpcResult<z.output<OutputSchema>> = { ok: true, value };
-          ipcResultSchema(outputSchema).parse(result);
-          return result;
-        } catch (error) {
-          const validation = error instanceof z.ZodError;
-          const result = {
-            ok: false as const,
-            error: {
-              code: validation
-                ? 'INVALID_REQUEST'
-                : error instanceof ExtensionRuntimeError
-                  ? error.code
-                  : 'OPERATION_FAILED',
-              message: validation
-                ? 'Forgeboard rejected an invalid extension request.'
-                : error instanceof Error
-                  ? error.message
-                  : 'The extension operation failed.',
-            },
-          };
-          ipcResultSchema(outputSchema).parse(result);
-          return result;
-        }
-      },
+    ipcMain.handle(channel, (event, ...rawArgs: unknown[]) => {
+      return this.#trackOperation(
+        this.#invoke(event, rawArgs, inputSchema, outputSchema, operation),
+      );
+    });
+  }
+
+  async #invoke<Args extends unknown[], OutputSchema extends z.ZodTypeAny>(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+    inputSchema: z.ZodType<Args>,
+    outputSchema: OutputSchema,
+    operation: (
+      event: IpcMainInvokeEvent,
+      ...args: Args
+    ) => z.output<OutputSchema> | Promise<z.output<OutputSchema>>,
+  ): Promise<IpcResult<z.output<OutputSchema>>> {
+    try {
+      if (this.#disposed) throw new Error('The extension service has been disposed.');
+      if (this.#privacyResetting) {
+        throw new Error('Extensions are paused while Forgeboard deletes local data.');
+      }
+      const args = inputSchema.parse(rawArgs);
+      const value = await operation(event, ...args);
+      outputSchema.parse(value);
+      const result: IpcResult<z.output<OutputSchema>> = { ok: true, value };
+      ipcResultSchema(outputSchema).parse(result);
+      return result;
+    } catch (error) {
+      const validation = error instanceof z.ZodError;
+      const result = {
+        ok: false as const,
+        error: {
+          code: validation
+            ? 'INVALID_REQUEST'
+            : error instanceof ExtensionRuntimeError
+              ? error.code
+              : 'OPERATION_FAILED',
+          message: validation
+            ? 'Forgeboard rejected an invalid extension request.'
+            : error instanceof Error
+              ? error.message
+              : 'The extension operation failed.',
+        },
+      };
+      ipcResultSchema(outputSchema).parse(result);
+      return result;
+    }
+  }
+
+  #trackOperation<Output>(operation: Promise<Output>): Promise<Output> {
+    this.#operations.add(operation);
+    void operation.then(
+      () => this.#operations.delete(operation),
+      () => this.#operations.delete(operation),
     );
+    return operation;
+  }
+
+  async #drainOperations(): Promise<void> {
+    while (this.#operations.size > 0) {
+      await Promise.allSettled([...this.#operations]);
+    }
+  }
+
+  async #finishDisposal(): Promise<void> {
+    await this.#drainOperations();
+    await this.#trustTail;
+    await this.#manager.quiesce();
+    this.#manager.dispose();
   }
 }
 

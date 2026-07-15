@@ -78,7 +78,7 @@ describe('DockerIpcService', () => {
       error: { code: 'INVALID_REQUEST' },
     });
     expect(operations.check).not.toHaveBeenCalled();
-    service.dispose();
+    await service.dispose();
   });
 
   it('requires a native main-process confirmation and keeps cancellation non-mutating', async () => {
@@ -114,7 +114,7 @@ describe('DockerIpcService', () => {
       'denied',
       expect.objectContaining({ reason: 'native-confirmation-cancelled' }),
     );
-    service.dispose();
+    await service.dispose();
   });
 
   it('pulls only after confirmation, checks again, and returns bounded readiness state', async () => {
@@ -158,7 +158,7 @@ describe('DockerIpcService', () => {
       'allowed',
       expect.objectContaining({ containerExecutableAvailable: true }),
     );
-    service.dispose();
+    await service.dispose();
   });
 
   it('acquires the pull single-flight guard before asynchronous readiness and confirmation', async () => {
@@ -197,7 +197,7 @@ describe('DockerIpcService', () => {
     });
     expect(showMessageBox).toHaveBeenCalledTimes(1);
     expect(operations.pull).toHaveBeenCalledTimes(1);
-    service.dispose();
+    await service.dispose();
   });
 
   it('refuses a pull without a live originating window', async () => {
@@ -220,7 +220,52 @@ describe('DockerIpcService', () => {
     });
     expect(ipcErrorMessage(result)).toContain('live Forgeboard');
     expect(operations.pull).not.toHaveBeenCalled();
-    service.dispose();
+    await service.dispose();
+  });
+
+  it('removes handlers immediately and drains an in-flight request before disposal resolves', async () => {
+    let resolveCheck!: (readiness: DockerReadiness) => void;
+    const pendingCheck = new Promise<DockerReadiness>((resolve) => {
+      resolveCheck = resolve;
+    });
+    let disposalFinished = false;
+    const appendAudit = vi.fn(() => {
+      expect(disposalFinished).toBe(false);
+    });
+    const service = new DockerIpcService(
+      { showMessageBox: vi.fn() },
+      { appendAudit },
+      { check: vi.fn(() => pendingCheck), pull: vi.fn() },
+    );
+    service.registerIpcHandlers();
+    const staleHandler = requiredHandler(IPC_CHANNELS.dockerCheck);
+    const request = staleHandler(liveEvent(), input);
+
+    const disposal = service.dispose();
+    expect(service.dispose()).toBe(disposal);
+    expect(electronMock.handlers.has(IPC_CHANNELS.dockerCheck)).toBe(false);
+    expect(electronMock.handlers.has(IPC_CHANNELS.dockerPull)).toBe(false);
+    void disposal.then(() => {
+      disposalFinished = true;
+    });
+    await Promise.resolve();
+    expect(disposalFinished).toBe(false);
+    expect(appendAudit).not.toHaveBeenCalled();
+
+    resolveCheck(ready);
+    await expect(request).resolves.toMatchObject({
+      ok: true,
+      value: { available: true, status: 'ready' },
+    });
+    await disposal;
+    expect(disposalFinished).toBe(true);
+    expect(appendAudit).toHaveBeenCalledTimes(1);
+
+    await expect(staleHandler(liveEvent(), input)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED', message: 'The Docker service has been disposed.' },
+    });
+    expect(appendAudit).toHaveBeenCalledTimes(1);
   });
 });
 

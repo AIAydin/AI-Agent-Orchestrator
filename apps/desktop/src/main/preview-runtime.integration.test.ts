@@ -26,7 +26,7 @@ let runtime: PreviewRuntime | null = null;
 let root: string | null = null;
 
 afterEach(async () => {
-  runtime?.dispose();
+  await runtime?.dispose();
   runtime = null;
   if (root) await rm(root, { recursive: true, force: true });
   root = null;
@@ -187,6 +187,54 @@ describe('PreviewRuntime', () => {
         urlPath: '/',
       }),
     ).rejects.toThrow('escapes the approved worktree root');
+  });
+
+  it('drains an in-flight readiness attempt without auditing after disposal', async () => {
+    root = await mkdtemp(join(tmpdir(), 'forgeboard-preview-runtime-'));
+    const audits: string[] = [];
+    const store: PreviewRuntimeStore = {
+      listProjects: () => [projectAt(root ?? '')],
+      appendAudit: (_category, action, outcome) => audits.push(`${action}:${outcome}`),
+    };
+    const settings = AppSettingsSchema.parse({
+      theme: 'system',
+      reducedMotion: false,
+      density: 'comfortable',
+      defaultAgent: 'test-agent',
+      defaultPermissionProfile: 'worktree-write',
+      worktreeRoot: join(root, 'worktrees'),
+      branchPrefix: 'forgeboard/',
+      gitRemote: 'origin',
+      terminalShell: '/bin/sh',
+      envAllowlist: ['PATH'],
+      developmentCommand: {
+        executable: process.execPath,
+        arguments: ['-e', 'setInterval(() => {}, 1000)'],
+      },
+      previewPortStart: 43_000,
+      previewPortEnd: 43_100,
+      transcriptRetentionDays: 30,
+      collaborationEnabled: false,
+      collaborationUrl: '',
+    });
+    runtime = new PreviewRuntime(
+      store,
+      () => settings,
+      () => undefined,
+    );
+    const starting = runtime.start(7, {
+      projectId: PROJECT_ID,
+      nodeId: 'web-preview-dispose-race',
+      cwdRelative: '.',
+      readinessPath: '/',
+      urlPath: '/',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await runtime.dispose();
+    await expect(starting).rejects.toThrow();
+    expect(audits).toEqual([]);
+    runtime = null;
   });
 
   it('starts a detected package script when the global development command is blank', async () => {

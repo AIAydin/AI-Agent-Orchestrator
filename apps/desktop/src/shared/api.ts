@@ -4,6 +4,7 @@ import type {
   AppSettings,
   AuditEvent,
   AuditListInput,
+  BackupHealth,
   BackupResult,
   CanvasDocument,
   ConfirmProjectRecoveryInput,
@@ -51,6 +52,18 @@ import type {
   GitReviewView,
   GitTargetInput,
 } from './git-contracts.js';
+import type {
+  RecoveryImportChooseInput,
+  RecoveryImportCounts,
+  RecoveryImportPlan,
+  RecoveryPlanConfirmationInput,
+  RecoveryRestoredCanvas,
+  RecoverySnapshotCreateInput,
+  RecoverySnapshotListInput,
+  RecoverySnapshotPrepareRestoreInput,
+  RecoverySnapshotRestorePlan,
+  RecoverySnapshotSummary,
+} from './recovery-contracts.js';
 
 export interface ForgeboardApi {
   app: {
@@ -141,5 +154,20 @@ export interface ForgeboardApi {
   };
   storage: {
     createBackup(): Promise<IpcResult<BackupResult>>;
+    getBackupHealth(): Promise<IpcResult<BackupHealth>>;
+  };
+  recovery: {
+    listSnapshots(input: RecoverySnapshotListInput): Promise<IpcResult<RecoverySnapshotSummary[]>>;
+    createSnapshot(input: RecoverySnapshotCreateInput): Promise<IpcResult<RecoverySnapshotSummary>>;
+    prepareSnapshotRestore(
+      input: RecoverySnapshotPrepareRestoreInput,
+    ): Promise<IpcResult<RecoverySnapshotRestorePlan>>;
+    confirmSnapshotRestore(
+      input: RecoveryPlanConfirmationInput,
+    ): Promise<IpcResult<RecoveryRestoredCanvas | null>>;
+    chooseImport(input: RecoveryImportChooseInput): Promise<IpcResult<RecoveryImportPlan | null>>;
+    confirmImport(
+      input: RecoveryPlanConfirmationInput,
+    ): Promise<IpcResult<RecoveryImportCounts | null>>;
   };
 }

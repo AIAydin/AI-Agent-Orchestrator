@@ -96,6 +96,9 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     autosaveIntervalMs: 2000,
     backupsEnabled: true,
     backupDirectory: '/tmp/forgeboard-backups',
+    backupIntervalHours: 24,
+    backupOnQuit: true,
+    backupRetentionCount: 30,
     collaborationEnabled: false,
     collaborationUrl: '',
     collaborationDisplayName: 'Local user',
@@ -186,6 +189,23 @@ function storedRun(overrides: Partial<StoredRunRecord> = {}): StoredRunRecord {
 }
 
 describe('LocalStore', () => {
+  it('notifies backup observers only for durable user-data mutations', () => {
+    const store = openStore();
+    let changes = 0;
+    const unsubscribe = store.subscribeToDurableChanges(() => {
+      changes += 1;
+    });
+
+    store.saveProject(project());
+    store.appendAudit('backup', 'automatic-create', 'allowed', {}, false);
+    store.appendAudit('project', 'open', 'allowed', {});
+    expect(changes).toBe(2);
+
+    unsubscribe();
+    store.saveCanvas(canvas());
+    expect(changes).toBe(2);
+  });
+
   it('runs real SQLite migrations and starts with WAL and a healthy database', () => {
     const store = openStore();
     const inspector = new DatabaseSync(store.databasePath, { readOnly: true });
@@ -195,7 +215,7 @@ describe('LocalStore', () => {
         journal_mode: 'wal',
       });
       expect(inspector.prepare('PRAGMA quick_check;').get()).toMatchObject({ quick_check: 'ok' });
-      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({ user_version: 6 });
+      expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({ user_version: 7 });
       expect(
         inspector.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
       ).toEqual([
@@ -205,6 +225,7 @@ describe('LocalStore', () => {
         { version: 4 },
         { version: 5 },
         { version: 6 },
+        { version: 7 },
       ]);
       expect(
         inspector
@@ -212,7 +233,7 @@ describe('LocalStore', () => {
             `SELECT name FROM sqlite_master
              WHERE type = 'table' AND name IN
                ('app_settings', 'recent_projects', 'canvas_documents', 'audit_events', 'agent_runs',
-                'canvas_snapshots', 'project_path_history', 'backup_records',
+                'canvas_snapshots', 'project_path_history', 'backup_records', 'backup_health',
                 'trusted_extension_ledger', 'check_executions')
              ORDER BY name`,
           )
@@ -221,6 +242,7 @@ describe('LocalStore', () => {
         { name: 'agent_runs' },
         { name: 'app_settings' },
         { name: 'audit_events' },
+        { name: 'backup_health' },
         { name: 'backup_records' },
         { name: 'canvas_documents' },
         { name: 'canvas_snapshots' },

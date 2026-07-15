@@ -1,23 +1,38 @@
-import { Bot, Database, Download, HardDrive, Trash2, Upload } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Bot, Database, Download, HardDrive, RefreshCw, Trash2, Upload } from 'lucide-react';
 
-import type { AgentDetection, AppInfo, AppSettings } from '../../../../shared/contracts.js';
+import type {
+  AgentDetection,
+  AppInfo,
+  AppSettings,
+  BackupHealth,
+  Project,
+} from '../../../../shared/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
+import { RecoverySettings } from './RecoverySettings.js';
 import { InfoPath, SettingsSection, type AsyncSettingsProps } from './shared.js';
 
 interface PrivacySettingsProps extends AsyncSettingsProps {
   info: AppInfo;
   agents: AgentDetection[];
   savedSettings: AppSettings;
+  projects: Project[];
+  activeProject: Project | null;
   deletePhrase: string;
   setDeletePhrase: (value: string) => void;
   setNotice: (value: string) => void;
+  onError: (message: string) => void;
   onDeleteAll: (confirmation: string) => Promise<void>;
+  onFlushActiveCanvas: () => Promise<boolean>;
+  onRecoveryApplied: () => Promise<void>;
 }
 
 export function PrivacySettings({
   info,
   agents,
   savedSettings,
+  projects,
+  activeProject,
   draft,
   setDraft,
   busy,
@@ -25,8 +40,34 @@ export function PrivacySettings({
   deletePhrase,
   setDeletePhrase,
   setNotice,
+  onError,
   onDeleteAll,
+  onFlushActiveCanvas,
+  onRecoveryApplied,
 }: PrivacySettingsProps) {
+  const [backupHealth, setBackupHealth] = useState<BackupHealth | null>(null);
+  const [backupHealthError, setBackupHealthError] = useState<string | null>(null);
+  const refreshBackupHealth = useCallback(async () => {
+    try {
+      setBackupHealth(unwrap(await window.forgeboard.storage.getBackupHealth()));
+      setBackupHealthError(null);
+    } catch (error) {
+      setBackupHealthError(
+        error instanceof Error ? error.message : 'Backup health could not be loaded.',
+      );
+    }
+  }, []);
+  useEffect(() => {
+    void refreshBackupHealth();
+    const timer = window.setInterval(() => void refreshBackupHealth(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [refreshBackupHealth]);
+  const backupSettingsDirty =
+    draft.backupsEnabled !== savedSettings.backupsEnabled ||
+    draft.backupDirectory !== savedSettings.backupDirectory ||
+    draft.backupIntervalHours !== savedSettings.backupIntervalHours ||
+    draft.backupOnQuit !== savedSettings.backupOnQuit ||
+    draft.backupRetentionCount !== savedSettings.backupRetentionCount;
   return (
     <>
       <SettingsSection
@@ -124,7 +165,9 @@ export function PrivacySettings({
         <label className="switch-row">
           <span>
             <strong>Local backups</strong>
-            <small>Keep corruption-safe snapshots in the selected local folder.</small>
+            <small>
+              Create verified SQLite backups and clean older records per selected folder.
+            </small>
           </span>
           <input
             type="checkbox"
@@ -135,6 +178,52 @@ export function PrivacySettings({
         </label>
         {draft.backupsEnabled && (
           <>
+            <div className="two-column">
+              <label>
+                Automatic backup interval (hours)
+                <input
+                  type="number"
+                  name="backup-interval-hours"
+                  min="1"
+                  max="168"
+                  value={draft.backupIntervalHours}
+                  onChange={(event) =>
+                    setDraft({ ...draft, backupIntervalHours: event.target.valueAsNumber })
+                  }
+                />
+              </label>
+              <label>
+                Backups to keep
+                <input
+                  type="number"
+                  name="backup-retention-count"
+                  aria-label="Backups to keep"
+                  aria-describedby="backup-retention-help"
+                  min="1"
+                  max="365"
+                  value={draft.backupRetentionCount}
+                  onChange={(event) =>
+                    setDraft({ ...draft, backupRetentionCount: event.target.valueAsNumber })
+                  }
+                />
+                <small id="backup-retention-help">
+                  Applies per backup folder. Cleanup failures appear in Backup health and can
+                  temporarily leave extra files.
+                </small>
+              </label>
+            </div>
+            <label className="switch-row">
+              <span>
+                <strong>Back up unsaved changes when quitting</strong>
+                <small>Creates one final verified backup when local data changed.</small>
+              </span>
+              <input
+                type="checkbox"
+                name="backup-on-quit"
+                checked={draft.backupOnQuit}
+                onChange={(event) => setDraft({ ...draft, backupOnQuit: event.target.checked })}
+              />
+            </label>
             <div className="settings-form-field">
               <label htmlFor="backup-directory">Backup directory</label>
               <span className="path-picker">
@@ -158,20 +247,23 @@ export function PrivacySettings({
                   Browse
                 </button>
               </span>
+              {info.platform === 'win32' && (
+                <small className="recovery-guidance warning">
+                  Windows backup files inherit this folder&apos;s access controls. Choose a folder
+                  available only to your Windows account.
+                </small>
+              )}
             </div>
             <button
               type="button"
               className="button"
-              disabled={busy || draft.backupDirectory !== savedSettings.backupDirectory}
-              title={
-                draft.backupDirectory !== savedSettings.backupDirectory
-                  ? 'Save the selected backup directory first.'
-                  : undefined
-              }
+              disabled={busy || backupSettingsDirty}
+              title={backupSettingsDirty ? 'Save backup settings before creating one.' : undefined}
               onClick={() =>
                 void perform(async () => {
                   const backup = unwrap(await window.forgeboard.storage.createBackup());
                   setNotice(`Backup created at ${backup.path} · ${backup.sha256.slice(0, 12)}…`);
+                  await refreshBackupHealth();
                 })
               }
             >
@@ -179,10 +271,43 @@ export function PrivacySettings({
             </button>
           </>
         )}
+        <div
+          className={`backup-health${backupHealth?.lastAttemptOutcome === 'failed' ? ' warning' : ''}`}
+          aria-live="polite"
+        >
+          <span>
+            <strong>Backup activity</strong>
+            {backupHealthError ? (
+              <small>{backupHealthError}</small>
+            ) : backupHealth === null ? (
+              <small>Loading persisted backup status…</small>
+            ) : (
+              <BackupHealthSummary health={backupHealth} />
+            )}
+          </span>
+          <button
+            type="button"
+            className="button ghost"
+            disabled={busy}
+            onClick={() => void refreshBackupHealth()}
+          >
+            <RefreshCw size={14} /> Refresh status
+          </button>
+        </div>
       </SettingsSection>
+      <RecoverySettings
+        projects={projects}
+        activeProject={activeProject}
+        busy={busy}
+        perform={perform}
+        onError={onError}
+        onFlushActiveCanvas={onFlushActiveCanvas}
+        onRecoveryApplied={onRecoveryApplied}
+        setNotice={setNotice}
+      />
       <SettingsSection
         title="Portability"
-        description="Advanced JSON import/export is optional; it is never needed for normal setup."
+        description="Portable JSON covers settings, projects, canvases, runs, checks, snapshots, and audit history. Repository and extension files stay in their folders."
       >
         <div className="button-row">
           <button
@@ -225,13 +350,13 @@ export function PrivacySettings({
               })
             }
           >
-            <Download size={15} /> Export all local data
+            <Download size={15} /> Export portable local data
           </button>
         </div>
       </SettingsSection>
       <SettingsSection
         title="Delete local data"
-        description="This stops active runs and previews, then clears settings, recent projects, canvases, snapshots, run history, audit records, and installed extensions. Repositories and managed worktrees are repository files, so they are not deleted."
+        description="This stops active runs, checks, and previews, then clears settings, recent projects, canvases, snapshots, run and check history, audit records, installed extensions, and every recorded SQLite backup in current or previously selected backup folders. If a recorded file is unavailable, a native warning lets you cancel or explicitly forget it; a forgotten copy may still exist outside Forgeboard. Repositories and managed worktrees are repository files, so they are not deleted."
       >
         <div className="danger-zone">
           <label>
@@ -262,4 +387,30 @@ export function PrivacySettings({
 
 function isCodingAgent(id: AgentDetection['id']): boolean {
   return ['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom'].includes(id);
+}
+
+function BackupHealthSummary({ health }: { health: BackupHealth }) {
+  return (
+    <small>
+      {health.lastAttemptOutcome === null
+        ? 'No backup attempt recorded yet.'
+        : `Last attempt ${health.lastAttemptOutcome === 'verified' ? 'verified' : 'failed'} ${formatDate(health.lastAttemptAt)}.`}{' '}
+      {health.lastError ? `${health.lastError} ` : ''}
+      {health.lastVerifiedAt === null
+        ? 'No verified backup is recorded.'
+        : `Last backup verified when created ${formatDate(health.lastVerifiedAt)} · ${formatBytes(health.lastVerifiedSizeBytes ?? 0)} · SHA-256 ${health.lastVerifiedSha256Prefix}… · ${health.verifiedBackupCount} recorded. This is creation history; files are not continuously monitored.`}
+    </small>
+  );
+}
+
+function formatDate(value: string | null): string {
+  if (value === null) return 'at an unknown time';
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? `at ${date.toLocaleString()}` : 'at an unknown time';
+}
+
+function formatBytes(value: number): string {
+  if (value < 1_024) return `${value} B`;
+  if (value < 1_024 * 1_024) return `${(value / 1_024).toFixed(1)} KiB`;
+  return `${(value / (1_024 * 1_024)).toFixed(1)} MiB`;
 }

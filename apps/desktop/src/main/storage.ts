@@ -1,6 +1,12 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import type { AppSettings, AuditEvent, CanvasDocument, Project } from '../shared/contracts.js';
+import type {
+  AppSettings,
+  AuditEvent,
+  BackupHealth,
+  CanvasDocument,
+  Project,
+} from '../shared/contracts.js';
 import type { CheckExecutionView } from '../shared/check-contracts.js';
 import {
   type BackupResult,
@@ -17,8 +23,17 @@ import {
   type TrustedExtensionState,
 } from './storage-schemas.js';
 import {
+  backupAttemptFromResult,
+  getBackupHealth as getDatabaseBackupHealth,
+  recordBackupAttempt as recordDatabaseBackupAttempt,
+  type BackupAttempt,
+} from './storage/backup-health.js';
+import {
   createBackup as createDatabaseBackup,
   deleteAllLocalData as deleteDatabaseData,
+  type DeleteAllLocalDataOptions,
+  listMissingRecordedBackupIds as listDatabaseMissingRecordedBackupIds,
+  pruneBackups as pruneDatabaseBackups,
 } from './storage/backups.js';
 import {
   getCheckExecution as getDatabaseCheckExecution,
@@ -26,7 +41,7 @@ import {
   recoverInterruptedCheckExecutions as recoverDatabaseInterruptedCheckExecutions,
   saveCheckExecution as saveDatabaseCheckExecution,
 } from './storage/checks.js';
-import { migrate, openDatabase } from './storage/database.js';
+import { migrate, openDatabase, type TransactionalAuditEvent } from './storage/database.js';
 import { assertIntegrity, checkDatabaseIntegrity } from './storage/integrity.js';
 import {
   applyRetention as applyDatabaseRetention,
@@ -35,6 +50,7 @@ import {
 } from './storage/maintenance.js';
 import {
   createCanvasSnapshot as createDatabaseCanvasSnapshot,
+  createCanvasSnapshotWithAudit as createDatabaseCanvasSnapshotWithAudit,
   getProject as getDatabaseProject,
   getProjectByPath as getDatabaseProjectByPath,
   listCanvasSnapshots as listDatabaseCanvasSnapshots,
@@ -42,10 +58,12 @@ import {
   loadCanvas as loadDatabaseCanvas,
   relocateProject as relocateDatabaseProject,
   restoreCanvasSnapshot as restoreDatabaseCanvasSnapshot,
+  restoreCanvasSnapshotWithAudit as restoreDatabaseCanvasSnapshotWithAudit,
   saveCanvas as saveDatabaseCanvas,
   saveProjectAndCanvas as saveDatabaseProjectAndCanvas,
   saveProject as saveDatabaseProject,
   setProjectMissing as setDatabaseProjectMissing,
+  type AuditedCanvasSnapshotRestore,
 } from './storage/projects-canvases.js';
 import {
   appendAudit as appendDatabaseAudit,
@@ -68,6 +86,9 @@ import {
 import {
   exportData as exportDatabaseData,
   importData as importDatabaseData,
+  importDataWithAudit as importDatabaseDataWithAudit,
+  preflightImportData as preflightDatabaseImportData,
+  type PortableImportOptions,
 } from './storage/transfers.js';
 import { type JsonRow, validateSettings } from './storage/values.js';
 import { writeSettings } from './storage/writes.js';
@@ -79,6 +100,9 @@ export type {
   TrustedExtensionLedgerRecord,
   TrustedExtensionState,
 } from './storage-schemas.js';
+export type { TransactionalAuditEvent } from './storage/database.js';
+export type { AuditedCanvasSnapshotRestore } from './storage/projects-canvases.js';
+export type { PortableImportOptions } from './storage/transfers.js';
 
 /**
  * Stable storage boundary for the Electron main process.
@@ -89,6 +113,7 @@ export type {
 export class LocalStore {
   readonly databasePath: string;
   private readonly database: DatabaseSync;
+  private readonly durableChangeListeners = new Set<() => void>();
   private startupRecovery: InterruptedRunRecoveryReport = {
     lostRunIds: [],
     recoveredAt: new Date(0).toISOString(),
@@ -119,7 +144,13 @@ export class LocalStore {
   }
 
   close(): void {
+    this.durableChangeListeners.clear();
     this.database.close();
+  }
+
+  subscribeToDurableChanges(listener: () => void): () => void {
+    this.durableChangeListeners.add(listener);
+    return () => this.durableChangeListeners.delete(listener);
   }
 
   getSettings(fallback: AppSettings): AppSettings {
@@ -133,6 +164,7 @@ export class LocalStore {
   saveSettings(settings: AppSettings): AppSettings {
     const parsed = validateSettings(settings);
     writeSettings(this.database, parsed);
+    this.notifyDurableChange();
     return parsed;
   }
 
@@ -149,39 +181,79 @@ export class LocalStore {
   }
 
   saveProject(project: Project): Project {
-    return saveDatabaseProject(this.database, project);
+    const saved = saveDatabaseProject(this.database, project);
+    this.notifyDurableChange();
+    return saved;
   }
 
   saveProjectAndCanvas(project: Project, document: CanvasDocument): CanvasDocument {
-    return saveDatabaseProjectAndCanvas(this.database, project, document);
+    const saved = saveDatabaseProjectAndCanvas(this.database, project, document);
+    this.notifyDurableChange();
+    return saved;
   }
 
   setProjectMissing(projectId: string, missing: boolean): Project {
-    return setDatabaseProjectMissing(this.database, projectId, missing);
+    const saved = setDatabaseProjectMissing(this.database, projectId, missing);
+    this.notifyDurableChange();
+    return saved;
   }
 
   relocateProject(project: Project): Project {
-    return relocateDatabaseProject(this.database, project);
+    const saved = relocateDatabaseProject(this.database, project);
+    this.notifyDurableChange();
+    return saved;
   }
 
   loadCanvas(projectId: string): CanvasDocument | undefined {
-    return loadDatabaseCanvas(this.database, projectId);
+    const document = loadDatabaseCanvas(this.database, projectId);
+    // Legacy sanitation can repair stored JSON during a read. Conservatively mark the revision so
+    // a possible repair is never omitted from the next verified backup.
+    this.notifyDurableChange();
+    return document;
   }
 
   saveCanvas(document: CanvasDocument): CanvasDocument {
-    return saveDatabaseCanvas(this.database, document);
+    const saved = saveDatabaseCanvas(this.database, document);
+    this.notifyDurableChange();
+    return saved;
   }
 
   createCanvasSnapshot(projectId: string, reason: 'manual' | 'import' = 'manual'): CanvasSnapshot {
-    return createDatabaseCanvasSnapshot(this.database, projectId, reason);
+    const snapshot = createDatabaseCanvasSnapshot(this.database, projectId, reason);
+    this.notifyDurableChange();
+    return snapshot;
+  }
+
+  createCanvasSnapshotWithAudit(
+    projectId: string,
+    reason: 'manual' | 'import',
+    audit: TransactionalAuditEvent,
+  ): CanvasSnapshot {
+    const snapshot = createDatabaseCanvasSnapshotWithAudit(this.database, projectId, reason, audit);
+    this.notifyDurableChange();
+    return snapshot;
   }
 
   listCanvasSnapshots(projectId: string, limit = 100): CanvasSnapshot[] {
-    return listDatabaseCanvasSnapshots(this.database, projectId, limit);
+    const snapshots = listDatabaseCanvasSnapshots(this.database, projectId, limit);
+    // Snapshot sanitation may rewrite legacy rows; a conservative notification is data-safe.
+    this.notifyDurableChange();
+    return snapshots;
   }
 
   restoreCanvasSnapshot(snapshotId: string, restoredAt = new Date()): CanvasDocument {
-    return restoreDatabaseCanvasSnapshot(this.database, snapshotId, restoredAt);
+    const restored = restoreDatabaseCanvasSnapshot(this.database, snapshotId, restoredAt);
+    this.notifyDurableChange();
+    return restored;
+  }
+
+  restoreCanvasSnapshotWithAudit(
+    request: AuditedCanvasSnapshotRestore,
+    audit: TransactionalAuditEvent,
+  ): CanvasDocument {
+    const restored = restoreDatabaseCanvasSnapshotWithAudit(this.database, request, audit);
+    this.notifyDurableChange();
+    return restored;
   }
 
   appendAudit(
@@ -189,8 +261,10 @@ export class LocalStore {
     action: string,
     outcome: 'allowed' | 'denied' | 'failed',
     metadata: Record<string, unknown>,
+    markDurableChange = true,
   ): void {
     appendDatabaseAudit(this.database, category, action, outcome, metadata);
+    if (markDurableChange) this.notifyDurableChange();
   }
 
   listAuditEvents(limit: number): AuditEvent[] {
@@ -198,7 +272,9 @@ export class LocalStore {
   }
 
   saveRun(record: StoredRunRecord): StoredRunRecord {
-    return saveDatabaseRun(this.database, record);
+    const saved = saveDatabaseRun(this.database, record);
+    this.notifyDurableChange();
+    return saved;
   }
 
   getRun(runId: string): StoredRunRecord | undefined {
@@ -210,7 +286,9 @@ export class LocalStore {
   }
 
   saveCheckExecution(execution: CheckExecutionView): StoredCheckExecutionRecord {
-    return saveDatabaseCheckExecution(this.database, execution);
+    const saved = saveDatabaseCheckExecution(this.database, execution);
+    this.notifyDurableChange();
+    return saved;
   }
 
   getCheckExecution(executionId: string): StoredCheckExecutionRecord | undefined {
@@ -222,7 +300,9 @@ export class LocalStore {
   }
 
   stageTrustedExtension(record: TrustedExtensionLedgerRecord): TrustedExtensionLedgerRecord {
-    return stageDatabaseTrustedExtension(this.database, record);
+    const saved = stageDatabaseTrustedExtension(this.database, record);
+    this.notifyDurableChange();
+    return saved;
   }
 
   activateTrustedExtension(
@@ -230,7 +310,14 @@ export class LocalStore {
     operationId: string,
     activatedAt = new Date(),
   ): TrustedExtensionLedgerRecord {
-    return activateDatabaseTrustedExtension(this.database, extensionId, operationId, activatedAt);
+    const saved = activateDatabaseTrustedExtension(
+      this.database,
+      extensionId,
+      operationId,
+      activatedAt,
+    );
+    this.notifyDurableChange();
+    return saved;
   }
 
   restoreActiveTrustedExtension(
@@ -238,16 +325,20 @@ export class LocalStore {
     failedOperationId: string,
     restoredAt = new Date(),
   ): TrustedExtensionLedgerRecord {
-    return restoreDatabaseActiveTrustedExtension(
+    const saved = restoreDatabaseActiveTrustedExtension(
       this.database,
       previousRecord,
       failedOperationId,
       restoredAt,
     );
+    this.notifyDurableChange();
+    return saved;
   }
 
   upsertActiveTrustedExtension(record: TrustedExtensionLedgerRecord): TrustedExtensionLedgerRecord {
-    return upsertDatabaseActiveTrustedExtension(this.database, record);
+    const saved = upsertDatabaseActiveTrustedExtension(this.database, record);
+    this.notifyDurableChange();
+    return saved;
   }
 
   getTrustedExtension(extensionId: string): TrustedExtensionLedgerRecord | undefined {
@@ -263,16 +354,20 @@ export class LocalStore {
     removalOperationId: string,
     revokedAt = new Date(),
   ): TrustedExtensionLedgerRecord {
-    return revokeDatabaseTrustedExtension(
+    const saved = revokeDatabaseTrustedExtension(
       this.database,
       extensionId,
       removalOperationId,
       revokedAt,
     );
+    this.notifyDurableChange();
+    return saved;
   }
 
   purgeTrustedExtension(extensionId: string, removalOperationId: string): boolean {
-    return purgeDatabaseTrustedExtension(this.database, extensionId, removalOperationId);
+    const purged = purgeDatabaseTrustedExtension(this.database, extensionId, removalOperationId);
+    if (purged) this.notifyDurableChange();
+    return purged;
   }
 
   getStartupRecoveryReport(): InterruptedRunRecoveryReport {
@@ -290,23 +385,45 @@ export class LocalStore {
   }
 
   recoverInterruptedRuns(now = new Date()): InterruptedRunRecoveryReport {
-    return recoverDatabaseInterruptedRuns(this.database, now);
+    const recovered = recoverDatabaseInterruptedRuns(this.database, now);
+    if (recovered.lostRunIds.length > 0) this.notifyDurableChange();
+    return recovered;
   }
 
   recoverInterruptedCheckExecutions(now = new Date()): InterruptedCheckRecoveryReport {
-    return recoverDatabaseInterruptedCheckExecutions(this.database, now);
+    const recovered = recoverDatabaseInterruptedCheckExecutions(this.database, now);
+    if (recovered.lostCheckExecutionIds.length > 0) this.notifyDurableChange();
+    return recovered;
   }
 
   exportData(exportedAt = new Date()): LocalDataExport {
     return exportDatabaseData(this.database, exportedAt);
   }
 
-  importData(document: unknown, options: { replaceExisting?: boolean } = {}): ImportResult {
-    return importDatabaseData(this.database, document, options);
+  importData(document: unknown, options: PortableImportOptions = {}): ImportResult {
+    const imported = importDatabaseData(this.database, document, options);
+    this.notifyDurableChange();
+    return imported;
+  }
+
+  preflightImportData(document: unknown, options: PortableImportOptions = {}): ImportResult {
+    return preflightDatabaseImportData(this.database, document, options);
+  }
+
+  importDataWithAudit(
+    document: unknown,
+    options: PortableImportOptions,
+    audit: TransactionalAuditEvent,
+  ): ImportResult {
+    const imported = importDatabaseDataWithAudit(this.database, document, options, audit);
+    this.notifyDurableChange();
+    return imported;
   }
 
   applyRetention(settings: AppSettings, now = new Date()): RetentionResult {
-    return applyDatabaseRetention(this.database, settings, now);
+    const result = applyDatabaseRetention(this.database, settings, now);
+    if (Object.values(result).some((count) => count > 0)) this.notifyDurableChange();
+    return result;
   }
 
   checkIntegrity(mode: 'quick' | 'full' = 'quick', checkedAt = new Date()): IntegrityReport {
@@ -317,7 +434,38 @@ export class LocalStore {
     return createDatabaseBackup(this.database, destinationDirectory, now);
   }
 
-  async deleteAllLocalData(): Promise<void> {
-    await deleteDatabaseData(this.database);
+  getBackupHealth(): BackupHealth {
+    return getDatabaseBackupHealth(this.database);
+  }
+
+  recordBackupAttempt(attempt: BackupAttempt): void {
+    recordDatabaseBackupAttempt(this.database, attempt);
+  }
+
+  recordVerifiedBackup(result: BackupResult): void {
+    recordDatabaseBackupAttempt(this.database, backupAttemptFromResult(result));
+  }
+
+  async pruneBackups(retentionCount: number, protectedBackupPath: string): Promise<number> {
+    return pruneDatabaseBackups(this.database, retentionCount, protectedBackupPath);
+  }
+
+  async listMissingRecordedBackupIds(): Promise<string[]> {
+    return listDatabaseMissingRecordedBackupIds(this.database);
+  }
+
+  async deleteAllLocalData(options: DeleteAllLocalDataOptions = {}): Promise<void> {
+    await deleteDatabaseData(this.database, options);
+    this.notifyDurableChange();
+  }
+
+  private notifyDurableChange(): void {
+    for (const listener of this.durableChangeListeners) {
+      try {
+        listener();
+      } catch {
+        // A background observer must never make an already-persisted storage mutation look failed.
+      }
+    }
   }
 }

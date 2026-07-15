@@ -266,7 +266,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await expect(settings.getByText(/Backup created at/)).toBeVisible();
       await expect
         .poll(async () => await readdir(join(userDataDirectory, 'backups')))
-        .toHaveLength(1);
+        .toHaveLength(2);
       await settings.getByLabel(/Type DELETE ALL LOCAL DATA/).fill('DELETE ALL LOCAL DATA');
       await settings.getByRole('button', { name: 'Delete local data' }).click();
 

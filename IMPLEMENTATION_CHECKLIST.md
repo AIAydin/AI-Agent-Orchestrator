@@ -29,6 +29,9 @@ not be reclassified as future work.
       approvals, and bounded review/revision loops.
 - [x] SQLite migrations/repositories with transactions, WAL, retention, integrity checks, backups,
       JSON import/export, and interrupted-run recovery.
+- [x] UI-configured manual, scheduled, and changed-data-on-quit SQLite backups with per-folder
+      retention targets and persisted health; owner-bound canvas snapshot recovery; and reviewed,
+      transactional portable JSON merge/replace import.
 - [ ] Persistent undo/redo checkpoints, autosave, recoverable snapshots, and moved-project recovery.
 
 ## Security, permissions, and privacy
@@ -41,7 +44,8 @@ not be reclassified as future work.
 - [ ] Append-only redacted audit log for all required security and outbound events.
 - [x] Renderer isolation, narrow validated IPC, strict CSP, and navigation/window/download controls.
 - [ ] Sandboxed preview surface and sanitized Markdown, Mermaid, SVG, and imports.
-- [x] Data & Privacy screen with locations, integrations, retention, export, and deletion.
+- [x] Data & Privacy screen with locations, integrations, retention, backup configuration/health,
+      portable export/import, canvas recovery, and deletion.
 - [ ] No telemetry or Forgeboard-owned outbound requests in default solo mode, proven by tests.
 
 ## Agent adapters and execution
@@ -268,3 +272,18 @@ unchecked when only a subset of their required behavior has proof.
   coverage also proved latest-revision serialization, stale-response protection, retryable failure,
   owner/request/main-frame-bound close responses, timeout handling, and cancel-default native
   close-without-saving fallback.
+- 2026-07-15: `corepack pnpm verify` passed on the recovery checkpoint: the structure gate kept all
+  314 checked files at or below 2,000 lines; formatting, lint, strict typecheck, 384 unit tests
+  across 67 files, 63 integration tests across 10 files, and all workspace production builds
+  succeeded.
+- 2026-07-15: all 8 Electron Playwright E2E tests passed. The recovery flow configured backup
+  destination, interval, retention, and backup-on-quit entirely in the UI; created and restored an
+  exact snapshot with native approval; completed portable export and replace import; verified a
+  changed-data-on-quit backup in the selected folder; and observed zero external requests.
+- 2026-07-15: focused recovery, lifecycle, and storage coverage proved serialized recovery
+  requests; import, privacy-deletion, and quit drain ordering; reversible quit failure; persisted
+  backup health; per-destination retention; clock-rollback handling; cleanup-failure visibility;
+  exact missing-backup approval and cancellation ordering; merge and replace semantics; and 16 MiB
+  plus structural-complexity import bounds.
+- 2026-07-15: `corepack pnpm audit --prod --audit-level high` reported no known production
+  dependency vulnerabilities on the recovery checkpoint.

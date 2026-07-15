@@ -68,11 +68,12 @@ renderer cannot provide a command, working directory, or environment value.
 The settings database is the canonical configuration source. Implemented desktop screens cover
 agent discovery and executable pickers, custom CLI setup, permission profiles, argument-array
 preview and project-check commands, worktree locations, Docker profiles, extensions, and local
-storage/retention. The optional Git commit identity override is active and falls back to
-repository/global Git config when both UI fields are blank. Several persisted settings are not yet
-connected to a complete runtime surface, including Git remote behavior, terminal, collaboration,
-and updates. Backup restore and full-data import UI are also unfinished; their presence in a schema
-is not treated as implemented behavior.
+storage/retention. Backup settings cover the destination picker, automatic interval, quit-time
+behavior, and a per-folder retention target. The optional Git commit identity override is active and falls
+back to repository/global Git config when both UI fields are blank. Several persisted settings are
+not yet connected to a complete runtime surface, including Git remote behavior, terminal,
+collaboration, and updates. Direct SQLite backup restore UI remains unfinished; its presence in a
+schema is not treated as implemented behavior.
 
 Docker configuration starts blank rather than guessing that a generic image contains an agent CLI.
 The renderer can request a readiness check, but only the main process resolves Docker, validates the
@@ -116,6 +117,30 @@ Canvas changes use serialized revision-aware autosave. Internal project close an
 window/application close explicitly flush the latest revision before renderer teardown or storage
 disposal. A failed or timed-out save keeps Forgeboard open by default and requires a separate native
 choice to close without saving.
+
+The main-owned automatic-backup coordinator observes durable local-data revisions and serializes
+scheduled, manual, and quit-time SQLite backups. The UI selects a destination, an interval from 1
+through 168 hours, whether to back up changed data on quit, and a retention count from 1 through 365
+files. On POSIX systems Forgeboard requires a current-user-owned destination that is not writable by
+group/other users, creates a `0700` staging directory, and publishes a `0600` backup file. On
+Windows it validates canonical ordinary paths, inherits the selected folder's ACL,
+and warns the user to choose a folder limited to their Windows account. Each backup is staged,
+integrity-checked, SHA-256 verified while stable, published as an ordinary file, and recorded before
+older verified records in that destination are pruned. A cleanup failure is persisted in Backup
+health while the newly verified backup remains recorded, so the selected count is a cleanup target
+rather than a reason to discard a successful backup. Forgeboard does not yet provide a UI to restore
+one of these SQLite backup files.
+
+Canvas recovery and portable data import use a separate main-process service. Snapshot listings
+expose bounded summaries rather than complete canvas documents. A restore plan is window-owned,
+expiring, single-use, and bound to both the selected snapshot digest and the current canvas digest;
+the current canvas becomes another checkpoint when its content differs before the reviewed snapshot
+is restored after a cancel-default native confirmation. Portable imports accept a user-selected,
+bounded, ordinary JSON file, validate its versioned schema, and disclose record counts plus its
+exact-byte SHA-256 digest.
+After native confirmation, the file is read and validated again and its size and digest must match
+before a transactional merge or replacement. Portable JSON covers settings, projects, canvases,
+runs, checks, snapshots, and audit history, not repository files or extension source folders.
 
 ## Collaboration
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -19,7 +20,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { CheckExecutionView } from '../shared/check-contracts.js';
 import type { AppSettings, CanvasDocument, Project } from '../shared/contracts.js';
-import { LocalStore, type StoredRunRecord } from './storage.js';
+import { LocalStore, type StoredRunRecord, type TrustedExtensionLedgerRecord } from './storage.js';
+import { canvasContentHash } from './storage/values.js';
 
 const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
 const CANVAS_ID = '10000000-0000-4000-8000-000000000002';
@@ -85,6 +87,23 @@ function canvas(overrides: Partial<CanvasDocument> = {}): CanvasDocument {
   };
 }
 
+function rewriteSnapshotTimes(databasePath: string, timestamps: string[]): void {
+  const connection = new DatabaseSync(databasePath);
+  const rows = connection
+    .prepare('SELECT id, value_json FROM canvas_snapshots ORDER BY rowid')
+    .all() as unknown as Array<{ id: string; value_json: string }>;
+  expect(rows).toHaveLength(timestamps.length);
+  for (const [index, row] of rows.entries()) {
+    const createdAt = timestamps[index];
+    if (createdAt === undefined) throw new Error('Missing rewritten snapshot timestamp.');
+    const value = JSON.parse(row.value_json) as Record<string, unknown>;
+    connection
+      .prepare('UPDATE canvas_snapshots SET created_at = ?, value_json = ? WHERE id = ?')
+      .run(createdAt, JSON.stringify({ ...value, createdAt }), row.id);
+  }
+  connection.close();
+}
+
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
     onboardingCompleted: true,
@@ -141,6 +160,9 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     autosaveIntervalMs: 2000,
     backupsEnabled: true,
     backupDirectory: '/tmp/backups',
+    backupIntervalHours: 24,
+    backupOnQuit: true,
+    backupRetentionCount: 30,
     collaborationEnabled: false,
     collaborationUrl: '',
     collaborationDisplayName: 'Local user',
@@ -175,6 +197,21 @@ function run(
     exitCode: status === 'succeeded' ? 0 : null,
     createdAt: NOW.toISOString(),
     updatedAt,
+  };
+}
+
+function trustedExtension(): TrustedExtensionLedgerRecord {
+  return {
+    schemaVersion: 1,
+    extensionId: 'dev.forgeboard.recovery-test',
+    extensionVersion: '1.0.0',
+    manifestDigest: 'a'.repeat(64),
+    snapshotDigest: 'b'.repeat(64),
+    permissions: ['agent.adapter.register'],
+    approvedAt: NOW.toISOString(),
+    state: 'active',
+    operationId: '50000000-0000-4000-8000-000000000001',
+    updatedAt: NOW.toISOString(),
   };
 }
 
@@ -229,18 +266,19 @@ describe('LocalStore persistence and recovery', () => {
     expect(upgraded.getProject(PROJECT_ID)).toEqual(project());
     expect(upgraded.loadCanvas(PROJECT_ID)).toEqual(canvas());
     const inspector = new DatabaseSync(databasePath, { readOnly: true });
-    expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({ user_version: 6 });
+    expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({ user_version: 7 });
     expect(
       inspector
         .prepare(
           `SELECT name FROM sqlite_master
            WHERE type = 'table' AND name IN
-             ('canvas_snapshots', 'project_path_history', 'backup_records',
+             ('canvas_snapshots', 'project_path_history', 'backup_records', 'backup_health',
               'trusted_extension_ledger', 'check_executions')
            ORDER BY name`,
         )
         .all(),
     ).toEqual([
+      { name: 'backup_health' },
       { name: 'backup_records' },
       { name: 'canvas_snapshots' },
       { name: 'check_executions' },
@@ -279,6 +317,24 @@ describe('LocalStore persistence and recovery', () => {
       .listCanvasSnapshots(PROJECT_ID)
       .find((snapshot) => snapshot.reason === 'restore');
     expect(restoreCheckpoint?.document.name).toBe('Changed canvas');
+  });
+
+  it('rolls back manual snapshot creation when its atomic success audit fails', () => {
+    const store = openStore();
+    store.saveProject(project());
+    store.saveCanvas(canvas());
+
+    expect(() =>
+      store.createCanvasSnapshotWithAudit(PROJECT_ID, 'manual', {
+        category: 'recovery',
+        action: 'snapshot-create',
+        outcome: 'allowed',
+        metadata: {},
+        occurredAt: new Date(Number.NaN),
+      }),
+    ).toThrow('Invalid time value');
+    expect(store.listCanvasSnapshots(PROJECT_ID)).toEqual([]);
+    expect(store.loadCanvas(PROJECT_ID)).toEqual(canvas());
   });
 
   it('saves a project and its canvas atomically when a database write fails', () => {
@@ -361,6 +417,48 @@ describe('LocalStore persistence and recovery', () => {
     expect(store.listCanvasSnapshots(PROJECT_ID)).toHaveLength(2);
   });
 
+  it('retains the most recently inserted snapshots when the wall clock moves backwards', () => {
+    const store = openStore();
+    store.saveProject(project());
+    store.saveCanvas(canvas({ name: 'Original' }));
+    store.saveCanvas(canvas({ name: 'First revision' }));
+    store.saveCanvas(canvas({ name: 'Second revision' }));
+    store.saveCanvas(canvas({ name: 'Newest revision' }));
+    rewriteSnapshotTimes(store.databasePath, [
+      '2026-07-15T12:00:00.000Z',
+      '2026-07-15T12:01:00.000Z',
+      '2000-01-01T00:00:00.000Z',
+    ]);
+
+    const result = store.applyRetention(settings({ snapshotRetentionCount: 2 }), NOW);
+
+    expect(result.deletedSnapshots).toBe(1);
+    expect(store.listCanvasSnapshots(PROJECT_ID).map((snapshot) => snapshot.document.name)).toEqual(
+      ['Second revision', 'First revision'],
+    );
+  });
+
+  it('uses insertion order to break equal snapshot timestamps', () => {
+    const store = openStore();
+    store.saveProject(project());
+    store.saveCanvas(canvas({ name: 'Original' }));
+    store.saveCanvas(canvas({ name: 'First revision' }));
+    store.saveCanvas(canvas({ name: 'Second revision' }));
+    store.saveCanvas(canvas({ name: 'Newest revision' }));
+    rewriteSnapshotTimes(store.databasePath, [
+      NOW.toISOString(),
+      NOW.toISOString(),
+      NOW.toISOString(),
+    ]);
+
+    const result = store.applyRetention(settings({ snapshotRetentionCount: 2 }), NOW);
+
+    expect(result.deletedSnapshots).toBe(1);
+    expect(store.listCanvasSnapshots(PROJECT_ID).map((snapshot) => snapshot.document.name)).toEqual(
+      ['Second revision', 'First revision'],
+    );
+  });
+
   it('scrubs expired transcripts from active canvases and retained snapshots', () => {
     const store = openStore();
     store.saveProject(project());
@@ -424,11 +522,267 @@ describe('LocalStore persistence and recovery', () => {
     const collision = structuredClone(exported);
     const collisionRun = collision.runs[0];
     if (!collisionRun) throw new Error('Expected a run in the exported fixture.');
+    collision.settings = null;
+    collision.projects = [];
+    collision.canvases = [];
+    collision.snapshots = [];
+    collision.audit = [];
     collision.runs[0] = { ...collisionRun, nodeId: 'different-node' };
     expect(() => destination.importData(collision)).toThrow(
       'merge imports cannot replace run history',
     );
     expect(destination.checkIntegrity()).toMatchObject({ ok: true, messages: [] });
+  });
+
+  it('preflights replace imports without mutating current local data', () => {
+    const source = openStore();
+    source.saveSettings(settings({ theme: 'dark' }));
+    source.saveProject(
+      project({
+        id: '11000000-0000-4000-8000-000000000001',
+        path: '/tmp/imported-project',
+      }),
+    );
+    source.saveCanvas(
+      canvas({
+        id: '11000000-0000-4000-8000-000000000002',
+        projectId: '11000000-0000-4000-8000-000000000001',
+      }),
+    );
+    const imported = source.exportData(NOW);
+
+    const destination = openStore();
+    destination.saveSettings(settings({ theme: 'light' }));
+    destination.saveProject(project());
+    destination.saveCanvas(canvas({ name: 'Current local canvas' }));
+    const before = destination.exportData(NOW);
+
+    expect(destination.preflightImportData(imported, { replaceExisting: true })).toMatchObject({
+      projects: 1,
+      canvases: 1,
+    });
+    expect(destination.exportData(NOW)).toEqual(before);
+    expect(destination.preflightImportData(imported)).toMatchObject({ projects: 1, canvases: 1 });
+    expect(destination.exportData(NOW)).toEqual(before);
+  });
+
+  it('preserves existing settings while merging non-conflicting portable data', () => {
+    const source = openStore();
+    source.saveSettings(settings({ theme: 'dark' }));
+    source.saveProject(
+      project({
+        id: '11500000-0000-4000-8000-000000000001',
+        path: '/tmp/merge-settings-project',
+      }),
+    );
+    const imported = source.exportData(NOW);
+
+    const destination = openStore();
+    destination.saveSettings(settings({ theme: 'light' }));
+    expect(destination.importData(imported)).toMatchObject({ projects: 1 });
+    expect(destination.getSettings(settings()).theme).toBe('light');
+    expect(destination.getProject('11500000-0000-4000-8000-000000000001')).toBeDefined();
+  });
+
+  it('ignores imported settings during merge even when no local settings row exists', () => {
+    const source = openStore();
+    source.saveSettings(settings({ theme: 'dark' }));
+    const imported = source.exportData(NOW);
+    const destination = openStore();
+    const fallback = settings({ theme: 'light' });
+
+    expect(destination.importData(imported)).toMatchObject({ projects: 0 });
+    expect(destination.getSettings(fallback)).toEqual(fallback);
+  });
+
+  it('rejects merge identity and project-canvas collisions without overwriting data', () => {
+    const store = openStore();
+    store.saveSettings(settings({ theme: 'light' }));
+    store.saveProject(project());
+    store.saveCanvas(canvas({ name: 'Current local canvas' }));
+    store.appendAudit('existing', 'preserve', 'allowed', {});
+    const before = store.exportData(NOW);
+
+    const projectCollision = structuredClone(before);
+    projectCollision.settings = null;
+    projectCollision.canvases = [];
+    projectCollision.runs = [];
+    projectCollision.checkExecutions = [];
+    projectCollision.snapshots = [];
+    projectCollision.audit = [];
+    expect(() => store.importData(projectCollision)).toThrow('merge imports cannot replace it');
+    expect(store.exportData(NOW)).toEqual(before);
+
+    const canvasCollision = structuredClone(projectCollision);
+    canvasCollision.projects = [];
+    canvasCollision.canvases = [
+      canvas({ id: '12000000-0000-4000-8000-000000000002', name: 'Imported overwrite' }),
+    ];
+    expect(() => store.importData(canvasCollision)).toThrow(
+      'already has a canvas; merge imports cannot replace it',
+    );
+    expect(store.exportData(NOW)).toEqual(before);
+  });
+
+  it('rejects duplicate identities inside a portable import before writing', () => {
+    const source = openStore();
+    source.saveProject(project());
+    source.saveCanvas(canvas());
+    const duplicateProjects = source.exportData(NOW);
+    const importedProject = duplicateProjects.projects[0];
+    if (!importedProject) throw new Error('Expected an exported project.');
+    duplicateProjects.projects.push({ ...importedProject, path: '/tmp/duplicate-project-id' });
+
+    const destination = openStore();
+    expect(() =>
+      destination.preflightImportData(duplicateProjects, { replaceExisting: true }),
+    ).toThrow('duplicate project id');
+    expect(destination.listProjects()).toEqual([]);
+
+    const duplicateCanvases = source.exportData(NOW);
+    const importedCanvas = duplicateCanvases.canvases[0];
+    if (!importedCanvas) throw new Error('Expected an exported canvas.');
+    duplicateCanvases.canvases.push({
+      ...importedCanvas,
+      id: '13000000-0000-4000-8000-000000000002',
+    });
+    expect(() =>
+      destination.preflightImportData(duplicateCanvases, { replaceExisting: true }),
+    ).toThrow('more than one canvas for project');
+    expect(destination.listProjects()).toEqual([]);
+  });
+
+  it('normalizes imported active runs and checks to durable lost records', () => {
+    const source = openStore();
+    source.saveProject(project());
+    const runId = '16000000-0000-4000-8000-000000000001';
+    const checkId = '16000000-0000-4000-8000-000000000002';
+    source.saveRun(run(runId, 'prepared'));
+    source.saveCheckExecution(checkExecution(checkId, 'queued', NOW.toISOString()));
+    const imported = source.exportData(NOW);
+    const recoveredAt = new Date('2026-07-14T17:00:00.000Z');
+
+    const destination = openStore();
+    destination.importDataWithAudit(
+      imported,
+      { replaceExisting: true, importedAt: recoveredAt },
+      {
+        category: 'recovery',
+        action: 'local-data-import',
+        outcome: 'allowed',
+        metadata: {},
+        occurredAt: recoveredAt,
+      },
+    );
+
+    expect(destination.getRun(runId)).toMatchObject({
+      status: 'lost',
+      endedAt: recoveredAt.toISOString(),
+      updatedAt: recoveredAt.toISOString(),
+    });
+    expect(destination.getCheckExecution(checkId)).toMatchObject({
+      status: 'lost',
+      endedAt: recoveredAt.toISOString(),
+      updatedAt: recoveredAt.toISOString(),
+    });
+    expect(destination.exportData(NOW).audit.at(-1)?.metadata).toMatchObject({
+      normalizedInterruptedRecords: { runs: 1, checkExecutions: 1 },
+    });
+  });
+
+  it('preserves verified backups, trust, and only device-local ledgers on replace import', async () => {
+    const source = openStore();
+    source.saveProject(
+      project({
+        id: '14000000-0000-4000-8000-000000000001',
+        path: '/tmp/imported-project',
+      }),
+    );
+    const imported = source.exportData(NOW);
+
+    const destination = openStore();
+    destination.saveProject(project());
+    destination.relocateProject(
+      project({ path: '/tmp/relocated-before-import', openedAt: '2026-07-14T16:01:00.000Z' }),
+    );
+    const trusted = trustedExtension();
+    destination.upsertActiveTrustedExtension(trusted);
+    const backup = await destination.createBackup(join(temporaryRoot(), 'backups'), NOW);
+
+    destination.importData(imported, { replaceExisting: true });
+
+    expect(existsSync(backup.path)).toBe(true);
+    expect(destination.listTrustedExtensions()).toEqual([trusted]);
+    expect(destination.getProject(PROJECT_ID)).toBeUndefined();
+    expect(destination.getProject('14000000-0000-4000-8000-000000000001')).toBeDefined();
+    const inspector = new DatabaseSync(destination.databasePath, { readOnly: true });
+    expect(inspector.prepare('SELECT COUNT(*) AS count FROM backup_records').get()).toEqual({
+      count: 1,
+    });
+    expect(inspector.prepare('SELECT COUNT(*) AS count FROM project_path_history').get()).toEqual({
+      count: 0,
+    });
+    inspector.close();
+  });
+
+  it('rolls back audited imports and restores when writing their success audit fails', () => {
+    const importSource = openStore();
+    importSource.saveProject(
+      project({
+        id: '15000000-0000-4000-8000-000000000001',
+        path: '/tmp/audited-import-project',
+      }),
+    );
+    const imported = importSource.exportData(NOW);
+
+    const destination = openStore();
+    destination.saveProject(project());
+    destination.saveCanvas(canvas());
+    const beforeImport = destination.exportData(NOW);
+    expect(() =>
+      destination.importDataWithAudit(
+        imported,
+        { replaceExisting: true },
+        {
+          category: 'recovery',
+          action: 'local-data-import',
+          outcome: 'allowed',
+          metadata: {},
+          occurredAt: new Date(Number.NaN),
+        },
+      ),
+    ).toThrow('Invalid time value');
+    expect(destination.exportData(NOW)).toEqual(beforeImport);
+
+    destination.saveCanvas(
+      canvas({ name: 'Changed canvas', updatedAt: '2026-07-14T16:01:00.000Z' }),
+    );
+    const target = destination
+      .listCanvasSnapshots(PROJECT_ID)
+      .find((snapshot) => snapshot.document.name === 'Main canvas');
+    const current = destination.loadCanvas(PROJECT_ID);
+    if (!target || !current) throw new Error('Expected current and recovery canvas data.');
+    const snapshotCount = destination.listCanvasSnapshots(PROJECT_ID).length;
+    expect(() =>
+      destination.restoreCanvasSnapshotWithAudit(
+        {
+          projectId: PROJECT_ID,
+          snapshotId: target.id,
+          expectedSnapshotContentHash: target.contentHash,
+          expectedCurrentCanvasContentHash: canvasContentHash(current),
+          restoredAt: new Date('2026-07-14T16:02:00.000Z'),
+        },
+        {
+          category: 'recovery',
+          action: 'snapshot-restore',
+          outcome: 'allowed',
+          metadata: {},
+          occurredAt: new Date(Number.NaN),
+        },
+      ),
+    ).toThrow('Invalid time value');
+    expect(destination.loadCanvas(PROJECT_ID)).toEqual(current);
+    expect(destination.listCanvasSnapshots(PROJECT_ID)).toHaveLength(snapshotCount);
   });
 
   it('creates a timestamped, mode-restricted, checksummed SQLite backup', async () => {
@@ -456,6 +810,67 @@ describe('LocalStore persistence and recovery', () => {
     expect(existsSync(result.path)).toBe(false);
   });
 
+  it('persists bounded backup health separately from portable data', async () => {
+    const store = openStore();
+    expect(store.getBackupHealth()).toEqual({
+      lastAttemptAt: null,
+      lastAttemptOutcome: null,
+      lastError: null,
+      lastVerifiedAt: null,
+      lastVerifiedSizeBytes: null,
+      lastVerifiedSha256Prefix: null,
+      verifiedBackupCount: 0,
+    });
+    store.recordBackupAttempt({
+      attemptedAt: NOW,
+      outcome: 'failed',
+      error: new Error(`\nDisk\u202e unavailable ${'x'.repeat(5_000)}`),
+    });
+    const failed = store.getBackupHealth();
+    expect(failed.lastAttemptOutcome).toBe('failed');
+    expect(failed.lastError).not.toMatch(/[\n\u202e]/u);
+    expect(failed.lastError?.length).toBeLessThanOrEqual(4_096);
+
+    const result = await store.createBackup(join(temporaryRoot(), 'backups'), NOW);
+    store.recordVerifiedBackup(result);
+    expect(store.getBackupHealth()).toMatchObject({
+      lastAttemptAt: NOW.toISOString(),
+      lastAttemptOutcome: 'verified',
+      lastError: null,
+      lastVerifiedAt: NOW.toISOString(),
+      lastVerifiedSizeBytes: result.sizeBytes,
+      lastVerifiedSha256Prefix: result.sha256.slice(0, 12),
+      verifiedBackupCount: 1,
+    });
+  });
+
+  it('prunes by insertion order while preserving the just-created backup across clock rollback', async () => {
+    const store = openStore();
+    store.saveProject(project());
+    const backupRoot = join(temporaryRoot(), 'backups');
+    const first = await store.createBackup(backupRoot, new Date('2026-07-14T12:00:00.000Z'));
+    const latest = await store.createBackup(backupRoot, new Date('2026-07-12T12:00:00.000Z'));
+
+    await expect(store.pruneBackups(1, latest.path)).resolves.toBe(1);
+    expect(existsSync(first.path)).toBe(false);
+    expect(existsSync(latest.path)).toBe(true);
+    expect(readdirSync(backupRoot)).toEqual([basename(latest.path)]);
+    await expect(store.pruneBackups(0, latest.path)).rejects.toThrow('from 1 through 365');
+  }, 15_000);
+
+  it('applies backup retention only within the newly backed-up destination', async () => {
+    const store = openStore();
+    store.saveProject(project());
+    const firstRoot = join(temporaryRoot(), 'first-backups');
+    const secondRoot = join(temporaryRoot(), 'second-backups');
+    const first = await store.createBackup(firstRoot, new Date('2026-07-14T12:00:00.000Z'));
+    const second = await store.createBackup(secondRoot, new Date('2026-07-14T13:00:00.000Z'));
+
+    await expect(store.pruneBackups(1, second.path)).resolves.toBe(0);
+    expect(existsSync(first.path)).toBe(true);
+    expect(existsSync(second.path)).toBe(true);
+  }, 15_000);
+
   it('rejects a backup destination writable by other users', async () => {
     if (process.platform === 'win32') return;
     const store = openStore();
@@ -482,6 +897,52 @@ describe('LocalStore persistence and recovery', () => {
     await expect(store.deleteAllLocalData()).rejects.toThrow('no longer an ordinary file');
     expect(readFileSync(outside, 'utf8')).toBe('must survive');
     expect(store.getProject(PROJECT_ID)).toBeDefined();
+  });
+
+  it('does not forget backups in a currently unavailable recorded location', async () => {
+    const store = openStore();
+    store.saveProject(project());
+    const backupRoot = join(temporaryRoot(), 'detached-backups');
+    const backup = await store.createBackup(backupRoot, NOW);
+    const secondId = '50000000-0000-4000-8000-000000000001';
+    const secondPath = join(backupRoot, `forgeboard-manual-${secondId}.sqlite3`);
+    copyFileSync(backup.path, secondPath);
+    const ledgerWriter = new DatabaseSync(store.databasePath);
+    ledgerWriter
+      .prepare(
+        `INSERT INTO backup_records(id, canonical_path, created_at, sha256, size_bytes)
+         VALUES(?, ?, ?, ?, ?)`,
+      )
+      .run(secondId, secondPath, NOW.toISOString(), backup.sha256, backup.sizeBytes);
+    ledgerWriter.close();
+    rmSync(backup.path);
+
+    const missingBackupIds = await store.listMissingRecordedBackupIds();
+    expect(missingBackupIds).toHaveLength(1);
+    await expect(store.deleteAllLocalData()).rejects.toThrow('recorded backup file is unavailable');
+    expect(store.getProject(PROJECT_ID)).toBeDefined();
+    let inspector = new DatabaseSync(store.databasePath, { readOnly: true });
+    expect(inspector.prepare('SELECT COUNT(*) AS count FROM backup_records').get()).toEqual({
+      count: 2,
+    });
+    inspector.close();
+
+    rmSync(secondPath);
+    await expect(
+      store.deleteAllLocalData({ approvedMissingBackupIds: missingBackupIds }),
+    ).rejects.toThrow('recorded backup file is unavailable');
+    expect(store.getProject(PROJECT_ID)).toBeDefined();
+
+    const allMissingBackupIds = await store.listMissingRecordedBackupIds();
+    expect(allMissingBackupIds).toHaveLength(2);
+    await store.deleteAllLocalData({ approvedMissingBackupIds: allMissingBackupIds });
+    await expect(store.listMissingRecordedBackupIds()).resolves.toEqual([]);
+    expect(store.getProject(PROJECT_ID)).toBeUndefined();
+    inspector = new DatabaseSync(store.databasePath, { readOnly: true });
+    expect(inspector.prepare('SELECT COUNT(*) AS count FROM backup_records').get()).toEqual({
+      count: 0,
+    });
+    inspector.close();
   });
 
   it('securely vacuums deleted SQLite content instead of leaving recoverable row bytes', async () => {

@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { ProjectSchema, type CanvasDocument, type Project } from '../../shared/contracts.js';
 import { CanvasSnapshotSchema, type CanvasSnapshot } from '../storage-schemas.js';
-import { transaction } from './database.js';
+import { transaction, type TransactionalAuditEvent } from './database.js';
 import {
   canvasContentHash,
   type JsonRow,
@@ -15,6 +15,7 @@ import {
 import {
   insertCanvasSnapshot,
   loadCanvas,
+  writeAudit,
   writeCanvas,
   writeProject,
   writeSnapshot,
@@ -117,9 +118,40 @@ export function createCanvasSnapshot(
   projectId: string,
   reason: 'manual' | 'import' = 'manual',
 ): CanvasSnapshot {
-  const document = loadCanvas(database, projectId);
-  if (!document) throw new Error('No canvas exists for this project.');
-  return transaction(database, () => insertCanvasSnapshot(database, document, reason));
+  return createSnapshotTransaction(database, projectId, reason);
+}
+
+export function createCanvasSnapshotWithAudit(
+  database: DatabaseSync,
+  projectId: string,
+  reason: 'manual' | 'import',
+  audit: TransactionalAuditEvent,
+): CanvasSnapshot {
+  return createSnapshotTransaction(database, projectId, reason, audit);
+}
+
+function createSnapshotTransaction(
+  database: DatabaseSync,
+  projectId: string,
+  reason: 'manual' | 'import',
+  audit?: TransactionalAuditEvent,
+): CanvasSnapshot {
+  return transaction(database, () => {
+    const document = loadCanvas(database, projectId);
+    if (!document) throw new Error('No canvas exists for this project.');
+    const snapshot = insertCanvasSnapshot(database, document, reason);
+    if (audit !== undefined) {
+      writeAudit(
+        database,
+        (audit.occurredAt ?? new Date()).toISOString(),
+        audit.category,
+        audit.action,
+        audit.outcome,
+        audit.metadata,
+      );
+    }
+    return snapshot;
+  });
 }
 
 export function listCanvasSnapshots(
@@ -131,7 +163,7 @@ export function listCanvasSnapshots(
   const rows = database
     .prepare(
       `SELECT value_json FROM canvas_snapshots
-       WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+       WHERE project_id = ? ORDER BY rowid DESC LIMIT ?`,
     )
     .all(projectId, boundedLimit) as unknown as JsonRow[];
   return rows.map((row) => {
@@ -147,23 +179,102 @@ export function restoreCanvasSnapshot(
   snapshotId: string,
   restoredAt = new Date(),
 ): CanvasDocument {
-  const row = database
-    .prepare('SELECT value_json FROM canvas_snapshots WHERE id = ?')
-    .get(snapshotId) as JsonRow | undefined;
-  if (!row) throw new Error('The requested canvas snapshot does not exist.');
-  const parsedSnapshot = CanvasSnapshotSchema.parse(parseJson(row.value_json));
-  const snapshot = sanitizeReadableCanvasSnapshot(parsedSnapshot);
-  if (!isDeepStrictEqual(parsedSnapshot, snapshot)) writeSnapshot(database, snapshot);
-  const restored = sanitizeCanvasDocument({
-    ...snapshot.document,
-    updatedAt: restoredAt.toISOString(),
-  });
+  return restoreSnapshotTransaction(database, { snapshotId, restoredAt });
+}
+
+export interface AuditedCanvasSnapshotRestore {
+  readonly projectId: string;
+  readonly snapshotId: string;
+  readonly expectedSnapshotContentHash: string;
+  readonly expectedCurrentCanvasContentHash: string;
+  readonly restoredAt?: Date;
+}
+
+export function restoreCanvasSnapshotWithAudit(
+  database: DatabaseSync,
+  request: AuditedCanvasSnapshotRestore,
+  audit: TransactionalAuditEvent,
+): CanvasDocument {
+  return restoreSnapshotTransaction(
+    database,
+    { ...request, restoredAt: request.restoredAt ?? new Date() },
+    audit,
+  );
+}
+
+interface SnapshotRestoreTransaction {
+  readonly snapshotId: string;
+  readonly restoredAt: Date;
+  readonly projectId?: string;
+  readonly expectedSnapshotContentHash?: string;
+  readonly expectedCurrentCanvasContentHash?: string;
+}
+
+interface SnapshotRestoreRow extends JsonRow {
+  readonly project_id: string;
+  readonly canvas_id: string;
+  readonly content_hash: string;
+}
+
+function restoreSnapshotTransaction(
+  database: DatabaseSync,
+  request: SnapshotRestoreTransaction,
+  audit?: TransactionalAuditEvent,
+): CanvasDocument {
   return transaction(database, () => {
+    const row = database
+      .prepare(
+        `SELECT project_id, canvas_id, content_hash, value_json
+         FROM canvas_snapshots WHERE id = ?`,
+      )
+      .get(request.snapshotId) as SnapshotRestoreRow | undefined;
+    if (!row) throw new Error('The requested canvas snapshot does not exist.');
+    const parsedSnapshot = CanvasSnapshotSchema.parse(parseJson(row.value_json));
+    const snapshot = sanitizeReadableCanvasSnapshot(parsedSnapshot);
+    if (
+      row.project_id !== snapshot.projectId ||
+      row.canvas_id !== snapshot.canvasId ||
+      row.content_hash !== snapshot.contentHash
+    ) {
+      throw new Error('The selected snapshot storage record failed content verification.');
+    }
+    if (!isDeepStrictEqual(parsedSnapshot, snapshot)) writeSnapshot(database, snapshot);
+    if (request.projectId !== undefined && snapshot.projectId !== request.projectId) {
+      throw new Error('The selected snapshot no longer belongs to the approved project.');
+    }
+    if (
+      request.expectedSnapshotContentHash !== undefined &&
+      (snapshot.contentHash !== request.expectedSnapshotContentHash ||
+        canvasContentHash(snapshot.document) !== request.expectedSnapshotContentHash)
+    ) {
+      throw new Error('The selected snapshot changed. Prepare a new restore plan.');
+    }
     const current = loadCanvas(database, snapshot.projectId);
+    if (
+      request.expectedCurrentCanvasContentHash !== undefined &&
+      (current === undefined ||
+        canvasContentHash(current) !== request.expectedCurrentCanvasContentHash)
+    ) {
+      throw new Error('The current canvas changed. Prepare a new restore plan.');
+    }
+    const restored = sanitizeCanvasDocument({
+      ...snapshot.document,
+      updatedAt: request.restoredAt.toISOString(),
+    });
     if (current && canvasContentHash(current) !== canvasContentHash(restored)) {
       insertCanvasSnapshot(database, current, 'restore');
     }
     writeCanvas(database, restored, false, 'restore');
+    if (audit !== undefined) {
+      writeAudit(
+        database,
+        (audit.occurredAt ?? new Date()).toISOString(),
+        audit.category,
+        audit.action,
+        audit.outcome,
+        audit.metadata,
+      );
+    }
     return restored;
   });
 }

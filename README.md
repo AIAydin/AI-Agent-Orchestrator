@@ -6,8 +6,10 @@ Git worktrees, streamed agent sessions, loopback web/mobile previews, and explic
 workflow approval gates, authoritative primary-checkout Git review, staging, and commits, plus
 UI-configured project checks with persisted output. Completed writable runs can also be reopened as
 authoritative, isolated agent-worktree reviews without entering a path or editing configuration.
-The interactive terminal node and other unchecked surfaces in the implementation ledger are still
-under construction.
+Data & Privacy also provides UI-configured scheduled and quit-time SQLite backups with a per-folder
+retention target, canvas snapshot recovery, and reviewed portable JSON export/import. The interactive
+terminal node and other unchecked surfaces in the implementation ledger are still under
+construction.
 
 > Forgeboard is under active construction. `IMPLEMENTATION_CHECKLIST.md` is the authoritative
 > status ledger; unchecked items are not claimed as complete.
@@ -56,9 +58,16 @@ starting by the repository account's GitHub Actions billing state.
 
 For implemented solo workflows, the first-run wizard and Settings provide UI controls for agent
 detection and executable selection, custom CLI setup, permission profile selection, Docker,
-project/worktree locations, preview commands, extensions, and local storage/retention. Source and
-config-file edits are optional for these flows. Lint, typecheck, test, build, and custom project
-checks can likewise be configured, approved, run, cancelled, and inspected entirely in the UI.
+project/worktree locations, preview commands, extensions, and local storage, backup, and retention
+behavior. Source and config-file edits are optional for these flows. Lint, typecheck, test, build,
+and custom project checks can likewise be configured, approved, run, cancelled, and inspected
+entirely in the UI.
+
+The Data & Privacy screen can browse and create canvas snapshots, restore an exact reviewed
+snapshot after native confirmation, and import a validated portable JSON export in merge or replace
+mode. Import revalidates the selected file's exact-byte SHA-256 digest immediately before its
+transaction. Portable exports include Forgeboard settings, projects, canvases, runs, checks,
+snapshots, and audit history; they do not embed repository files or extension source folders.
 
 Docker isolation is optional. Forgeboard does not bundle or silently choose an agent image: select
 the Docker executable, exact image, and in-image agent executable in the UI. Forgeboard checks that
@@ -69,7 +78,7 @@ the optional signing secrets documented in the release guide are configured. Suc
 trigger the operating system's standard warning.
 
 Still unfinished are agent comparison and merge/push flows, the interactive terminal node,
-collaboration client, updater, backup restore/full-data import UI, and complete wiring of every
+collaboration client, updater, direct SQLite backup restore UI, and complete wiring of every
 persisted setting. See `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
 
 Git review is opened from the command bar for the primary checkout or from a completed run's entry

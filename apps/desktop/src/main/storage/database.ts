@@ -113,6 +113,14 @@ export const MIGRATIONS = [
     CREATE INDEX IF NOT EXISTS idx_check_executions_project_updated
       ON check_executions(project_id, updated_at DESC, id DESC);
   `,
+  `
+    CREATE TABLE IF NOT EXISTS backup_health (
+      singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+      last_attempt_at TEXT NOT NULL,
+      last_attempt_outcome TEXT NOT NULL CHECK(last_attempt_outcome IN ('verified', 'failed')),
+      last_error TEXT
+    );
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {
@@ -166,6 +174,7 @@ export function migrate(database: DatabaseSync): void {
 }
 
 export function clearAllTables(database: DatabaseSync): void {
+  database.prepare('DELETE FROM backup_health').run();
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM trusted_extension_ledger').run();
   database.prepare('DELETE FROM canvas_snapshots').run();
@@ -176,4 +185,30 @@ export function clearAllTables(database: DatabaseSync): void {
   database.prepare('DELETE FROM app_settings').run();
   database.prepare('DELETE FROM audit_events').run();
   database.prepare('DELETE FROM backup_records').run();
+}
+
+/**
+ * Clears only data represented by a portable Forgeboard export.
+ *
+ * Backup ownership records and the trusted-extension ledger are intentionally device-local
+ * security state. A portable replace import must not orphan verified backup files or silently
+ * revoke extensions that the user approved on this installation.
+ */
+export function clearPortableTables(database: DatabaseSync): void {
+  database.prepare('DELETE FROM check_executions').run();
+  database.prepare('DELETE FROM canvas_snapshots').run();
+  database.prepare('DELETE FROM canvas_documents').run();
+  database.prepare('DELETE FROM project_path_history').run();
+  database.prepare('DELETE FROM recent_projects').run();
+  database.prepare('DELETE FROM agent_runs').run();
+  database.prepare('DELETE FROM app_settings').run();
+  database.prepare('DELETE FROM audit_events').run();
+}
+
+export interface TransactionalAuditEvent {
+  readonly category: string;
+  readonly action: string;
+  readonly outcome: 'allowed' | 'denied' | 'failed';
+  readonly metadata: Record<string, unknown>;
+  readonly occurredAt?: Date;
 }

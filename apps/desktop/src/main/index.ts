@@ -93,6 +93,26 @@ async function attemptApplicationQuit(): Promise<boolean> {
     const coordinator = closeCoordinator;
     if (coordinator === null || !(await coordinator.requestSave(window))) return false;
   }
+  try {
+    await services?.prepareToQuit();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'The configured backup could not run.';
+    const options = {
+      type: 'warning' as const,
+      title: 'Backup failed before quit',
+      message: 'Forgeboard could not create the configured quit backup.',
+      detail: `${detail}\n\nYour canvas save completed, but no fresh database backup was verified.`,
+      buttons: ['Cancel quit', 'Quit without a fresh backup'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    };
+    const decision =
+      window && !window.isDestroyed()
+        ? await dialog.showMessageBox(window, options)
+        : await dialog.showMessageBox(options);
+    if (decision.response !== 1) return false;
+  }
   await disposeApplication();
   return true;
 }
@@ -135,6 +155,10 @@ function createWindow(
   window.on('close', (event) => {
     if (quitReady || approvedWindowCloses.has(window)) return;
     event.preventDefault();
+    if (process.platform !== 'darwin') {
+      app.quit();
+      return;
+    }
     void coordinator.requestSave(window).then((canClose) => {
       if (!canClose || window.isDestroyed()) return;
       approvedWindowCloses.add(window);

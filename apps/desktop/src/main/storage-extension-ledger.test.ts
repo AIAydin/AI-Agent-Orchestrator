@@ -229,7 +229,7 @@ describe('LocalStore trusted extension ledger', () => {
     );
   });
 
-  it('never exports or imports active trust and rejects injected ledger payloads', () => {
+  it('keeps device-local trust out of exports and preserves it across replace imports', () => {
     const source = openStore();
     const active = ledgerRecord({
       state: 'active',
@@ -248,11 +248,17 @@ describe('LocalStore trusted extension ledger', () => {
       }),
     );
     destination.importData(exported, { replaceExisting: true });
-    expect(destination.listTrustedExtensions()).toEqual([]);
+    expect(destination.listTrustedExtensions()).toEqual([
+      ledgerRecord({
+        extensionId: 'dev.forgeboard.previously-trusted',
+        state: 'active',
+        updatedAt: '2026-07-14T16:01:00.000Z',
+      }),
+    ]);
 
     const injected = { ...exported, trustedExtensions: [active] };
     expect(() => destination.importData(injected, { replaceExisting: true })).toThrow();
-    expect(destination.listTrustedExtensions()).toEqual([]);
+    expect(destination.listTrustedExtensions()).toHaveLength(1);
   });
 
   it('purges the trusted ledger during complete local-data deletion', async () => {

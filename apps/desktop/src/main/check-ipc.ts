@@ -39,6 +39,7 @@ export interface CheckRuntimeOperations {
   cancel(ownerId: number, input: CheckCancelInput): Promise<CheckExecutionView>;
   stopOwner(ownerId: number): Promise<void>;
   resetForPrivacy(): Promise<void>;
+  pauseForDataMutation(): void;
   resumeAfterPrivacyReset(): void;
   dispose(): void | Promise<void>;
 }
@@ -55,11 +56,13 @@ interface PendingPlan {
 }
 
 export class CheckIpcService {
+  readonly #operations = new Set<Promise<unknown>>();
   readonly #runtime: CheckRuntimeOperations;
   readonly #registeredChannels: string[] = [];
   readonly #trackedOwners = new Set<number>();
   readonly #plans = new Map<string, PendingPlan>();
   #disposed = false;
+  #paused = false;
 
   public constructor(
     private readonly dialog: Pick<Dialog, 'showMessageBox'>,
@@ -115,11 +118,34 @@ export class CheckIpcService {
   }
 
   public async resetForPrivacy(): Promise<void> {
+    this.#paused = true;
+    await this.#drainOperations();
     this.#plans.clear();
     await this.#runtime.resetForPrivacy();
   }
 
+  public pauseForDataMutation(): void {
+    this.#paused = true;
+    if (this.#plans.size > 0) {
+      this.#paused = false;
+      throw new Error('Cancel every pending project-check approval before merging local data.');
+    }
+    try {
+      this.#runtime.pauseForDataMutation();
+    } catch (error) {
+      this.#paused = false;
+      throw error;
+    }
+  }
+
+  public async pauseForShutdown(): Promise<void> {
+    if (this.#disposed) throw new Error('The project-check service has been disposed.');
+    this.#paused = true;
+    await this.#drainOperations();
+  }
+
   public resumeAfterPrivacyReset(): void {
+    this.#paused = false;
     this.#runtime.resumeAfterPrivacyReset();
   }
 
@@ -130,6 +156,7 @@ export class CheckIpcService {
     this.#registeredChannels.length = 0;
     this.#plans.clear();
     this.#trackedOwners.clear();
+    await this.#drainOperations();
     await this.#runtime.dispose();
   }
 
@@ -209,13 +236,15 @@ export class CheckIpcService {
       for (const [planId, pending] of this.#plans) {
         if (pending.ownerId === ownerId) this.#plans.delete(planId);
       }
-      void this.#runtime.stopOwner(ownerId).catch(() => {
+      if (this.#disposed) return;
+      const stopping = this.#runtime.stopOwner(ownerId).catch(() => {
         try {
           this.store.appendAudit('check', 'owner-close', 'failed', { ownerId });
         } catch {
           // The application may already be closing its local store.
         }
       });
+      void this.#trackOperation(stopping);
     });
   }
 
@@ -245,31 +274,59 @@ export class CheckIpcService {
     operation: (event: IpcMainInvokeEvent, ...args: Args) => Output | Promise<Output>,
   ): void {
     this.#registeredChannels.push(channel);
-    ipcMain.handle(channel, async (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
-      try {
-        if (this.#disposed) throw new Error('The project-check service has been disposed.');
-        const args = inputSchema.parse(rawArgs);
-        const value = outputSchema.parse(await operation(event, ...args));
-        const result: IpcResult<Output> = { ok: true, value };
-        ipcResultSchema(outputSchema).parse(result);
-        return result;
-      } catch (error) {
-        const validation = error instanceof z.ZodError;
-        const result = {
-          ok: false as const,
-          error: {
-            code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
-            message: validation
-              ? 'Forgeboard rejected an invalid project-check request.'
-              : error instanceof Error
-                ? error.message
-                : 'The project-check operation failed.',
-          },
-        };
-        ipcResultSchema(outputSchema).parse(result);
-        return result;
-      }
-    });
+    ipcMain.handle(
+      channel,
+      (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> =>
+        this.#trackOperation(this.#invoke(event, rawArgs, inputSchema, outputSchema, operation)),
+    );
+  }
+
+  async #invoke<Args extends unknown[], Output>(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+    inputSchema: z.ZodType<Args>,
+    outputSchema: z.ZodType<Output>,
+    operation: (event: IpcMainInvokeEvent, ...args: Args) => Output | Promise<Output>,
+  ): Promise<IpcResult<Output>> {
+    try {
+      if (this.#disposed) throw new Error('The project-check service has been disposed.');
+      if (this.#paused) throw new Error('Project checks are paused while Forgeboard quits.');
+      const args = inputSchema.parse(rawArgs);
+      const value = outputSchema.parse(await operation(event, ...args));
+      const result: IpcResult<Output> = { ok: true, value };
+      ipcResultSchema(outputSchema).parse(result);
+      return result;
+    } catch (error) {
+      const validation = error instanceof z.ZodError;
+      const result = {
+        ok: false as const,
+        error: {
+          code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
+          message: validation
+            ? 'Forgeboard rejected an invalid project-check request.'
+            : error instanceof Error
+              ? error.message
+              : 'The project-check operation failed.',
+        },
+      };
+      ipcResultSchema(outputSchema).parse(result);
+      return result;
+    }
+  }
+
+  #trackOperation<Output>(operation: Promise<Output>): Promise<Output> {
+    this.#operations.add(operation);
+    void operation.then(
+      () => this.#operations.delete(operation),
+      () => this.#operations.delete(operation),
+    );
+    return operation;
+  }
+
+  async #drainOperations(): Promise<void> {
+    while (this.#operations.size > 0) {
+      await Promise.allSettled([...this.#operations]);
+    }
   }
 }
 

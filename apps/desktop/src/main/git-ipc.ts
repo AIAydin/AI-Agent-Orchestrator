@@ -97,6 +97,7 @@ export class GitIpcService {
   readonly #trackedOwners = new Set<number>();
   readonly #targets: GitTargetResolver;
   #disposed = false;
+  #disposePromise: Promise<void> | null = null;
   #privacyResetting = false;
   #operationTail: Promise<void> = Promise.resolve();
 
@@ -193,19 +194,29 @@ export class GitIpcService {
     );
   }
 
-  public dispose(): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
-    for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
-    this.#registeredChannels.length = 0;
-    this.#plans.clear();
-    this.#trackedOwners.clear();
+  public dispose(): Promise<void> {
+    if (!this.#disposed) {
+      this.#disposed = true;
+      this.#privacyResetting = true;
+      for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
+      this.#registeredChannels.length = 0;
+      this.#plans.clear();
+      this.#trackedOwners.clear();
+    }
+    this.#disposePromise ??= this.#operationTail;
+    return this.#disposePromise;
   }
 
   public async resetForPrivacy(): Promise<void> {
     if (this.#disposed) throw new Error('The Git review service has been disposed.');
     this.#privacyResetting = true;
     this.#plans.clear();
+    await this.#operationTail;
+  }
+
+  public async pauseForShutdown(): Promise<void> {
+    if (this.#disposed) throw new Error('The Git review service has been disposed.');
+    this.#privacyResetting = true;
     await this.#operationTail;
   }
 

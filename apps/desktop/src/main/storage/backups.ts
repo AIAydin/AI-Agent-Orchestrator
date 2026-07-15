@@ -16,6 +16,23 @@ interface FileDigest {
   ino: number;
 }
 
+interface SequencedBackupRow extends BackupRow {
+  readonly sequence: number;
+}
+
+export interface DeleteAllLocalDataOptions {
+  readonly approvedMissingBackupIds?: readonly string[];
+}
+
+export class MissingRecordedBackupsError extends Error {
+  public constructor(public readonly count: number) {
+    super(
+      `${count} recorded backup ${count === 1 ? 'file is' : 'files are'} unavailable. Reconnect the backup location or explicitly forget the missing ${count === 1 ? 'record' : 'records'}.`,
+    );
+    this.name = 'MissingRecordedBackupsError';
+  }
+}
+
 export async function createBackup(
   database: DatabaseSync,
   destinationDirectory: string,
@@ -101,17 +118,96 @@ export async function createBackup(
   }
 }
 
-export async function deleteAllLocalData(database: DatabaseSync): Promise<void> {
+export async function pruneBackups(
+  database: DatabaseSync,
+  retentionCount: number,
+  protectedBackupPath: string,
+): Promise<number> {
+  if (!Number.isInteger(retentionCount) || retentionCount < 1 || retentionCount > 365) {
+    throw new Error('Backup retention must be an integer from 1 through 365.');
+  }
+  const protectedBackup = database
+    .prepare('SELECT id FROM backup_records WHERE canonical_path = ?')
+    .get(protectedBackupPath) as { id: string } | undefined;
+  if (protectedBackup === undefined) {
+    throw new Error('The newly created backup is missing from the verified backup ledger.');
+  }
+  const protectedDirectory = dirname(protectedBackupPath);
+  const destinationRows = (
+    database
+      .prepare(
+        `SELECT rowid AS sequence, id, canonical_path, sha256, size_bytes
+       FROM backup_records
+       ORDER BY rowid DESC`,
+      )
+      .all() as unknown as SequencedBackupRow[]
+  ).filter((backup) => dirname(backup.canonical_path) === protectedDirectory);
+  const retainedIds = new Set<string>([protectedBackup.id]);
+  for (const backup of destinationRows) {
+    if (retainedIds.size >= retentionCount) break;
+    retainedIds.add(backup.id);
+  }
+  const rows = destinationRows
+    .filter((backup) => !retainedIds.has(backup.id))
+    .sort((left, right) => left.sequence - right.sequence);
+  let deleted = 0;
+  for (const backup of rows) {
+    if ((await removeRecordedBackup(backup)) === 'missing') {
+      throw new MissingRecordedBackupsError(1);
+    }
+    const result = database
+      .prepare(
+        `DELETE FROM backup_records
+         WHERE id = ? AND canonical_path = ? AND sha256 = ? AND size_bytes = ?`,
+      )
+      .run(backup.id, backup.canonical_path, backup.sha256, backup.size_bytes);
+    deleted += Number(result.changes);
+  }
+  return deleted;
+}
+
+export async function deleteAllLocalData(
+  database: DatabaseSync,
+  options: DeleteAllLocalDataOptions = {},
+): Promise<void> {
   const backups = database
     .prepare(
       'SELECT id, canonical_path, sha256, size_bytes FROM backup_records ORDER BY created_at',
     )
     .all() as unknown as BackupRow[];
-  for (const backup of backups) await removeRecordedBackup(backup);
+  const missingIds = new Set(await listMissingRecordedBackupIds(database, backups));
+  const approvedMissingIds = new Set(options.approvedMissingBackupIds ?? []);
+  const unapprovedMissingIds = [...missingIds].filter((id) => !approvedMissingIds.has(id));
+  if (unapprovedMissingIds.length > 0) {
+    throw new MissingRecordedBackupsError(unapprovedMissingIds.length);
+  }
+  for (const backup of backups) {
+    if (missingIds.has(backup.id)) continue;
+    const outcome = await removeRecordedBackup(backup);
+    if (outcome === 'missing' && !approvedMissingIds.has(backup.id)) {
+      throw new MissingRecordedBackupsError(1);
+    }
+  }
   transaction(database, () => clearAllTables(database));
   database.exec('PRAGMA wal_checkpoint(TRUNCATE);');
   database.exec('VACUUM;');
   database.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+}
+
+export async function listMissingRecordedBackupIds(
+  database: DatabaseSync,
+  suppliedBackups?: BackupRow[],
+): Promise<string[]> {
+  const backups =
+    suppliedBackups ??
+    (database
+      .prepare('SELECT id, canonical_path, sha256, size_bytes FROM backup_records ORDER BY rowid')
+      .all() as unknown as BackupRow[]);
+  const missingIds: string[] = [];
+  for (const backup of backups) {
+    if (await recordedBackupIsMissing(backup)) missingIds.push(backup.id);
+  }
+  return missingIds;
 }
 
 async function hashFile(path: string): Promise<FileDigest> {
@@ -236,7 +332,21 @@ async function cleanupBackupStagingDirectory(
   }
 }
 
-async function removeRecordedBackup(backup: BackupRow): Promise<void> {
+async function recordedBackupIsMissing(backup: BackupRow): Promise<boolean> {
+  const backupPath = assertRecordedBackupPath(backup);
+  try {
+    const stats = await lstat(backupPath);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      throw new Error('A recorded backup is no longer an ordinary file.');
+    }
+    return false;
+  } catch (error) {
+    if (isFileNotFound(error)) return true;
+    throw error;
+  }
+}
+
+function assertRecordedBackupPath(backup: BackupRow): string {
   const backupPath = backup.canonical_path;
   if (backupPath.includes('\0') || resolve(backupPath) !== backupPath) {
     throw new Error('A recorded backup path is not canonical.');
@@ -248,17 +358,22 @@ async function removeRecordedBackup(backup: BackupRow): Promise<void> {
   ) {
     throw new Error('A recorded backup path does not match its backup identity.');
   }
+  return backupPath;
+}
+
+async function removeRecordedBackup(backup: BackupRow): Promise<'removed' | 'missing'> {
+  const backupPath = assertRecordedBackupPath(backup);
+  const canonicalParent = dirname(backupPath);
   let backupStats: Stats;
   try {
     backupStats = await lstat(backupPath);
   } catch (error) {
-    if (isFileNotFound(error)) return;
+    if (isFileNotFound(error)) return 'missing';
     throw error;
   }
   if (!backupStats.isFile() || backupStats.isSymbolicLink()) {
     throw new Error('A recorded backup is no longer an ordinary file.');
   }
-  const canonicalParent = dirname(backupPath);
   await assertCanonicalPrivateDirectory(canonicalParent);
   if ((await realpath(backupPath)) !== backupPath) {
     throw new Error('A recorded backup path escaped its original directory.');
@@ -279,6 +394,7 @@ async function removeRecordedBackup(backup: BackupRow): Promise<void> {
     throw new Error('A recorded backup changed before it could be removed.');
   }
   await unlink(backupPath);
+  return 'removed';
 }
 
 function isFileNotFound(error: unknown): boolean {

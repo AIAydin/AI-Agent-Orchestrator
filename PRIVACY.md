@@ -12,6 +12,7 @@ analytics, crash upload, session recording, model proxy, or cloud dependency.
 - agent transcripts and normalized events
 - project-check status and bounded raw output
 - canvas data, project settings, audit records, and local snapshots
+- verified SQLite backups when local backups are enabled
 
 An enabled third-party coding-agent CLI may transmit the prompt and files that the user explicitly
 attaches to that CLI's provider. Forgeboard shows the receiving adapter/provider and exact attachment
@@ -29,7 +30,20 @@ server. It never sends repository files, file contents, diffs, prompts, terminal
 values, secrets, or transcripts.
 
 The Data & Privacy screen exposes database and transcript locations, retention, connected providers,
-outbound integrations, collaboration status, export, and deletion of Forgeboard-managed local data.
-Deletion does not remove repository/build artifacts or separately exported files. The **Transcript
-retention (days)** setting also removes old terminal project-check histories while preserving queued
-or running records for recovery.
+outbound integrations, collaboration status, export/import, recovery, and deletion of
+Forgeboard-managed local data. A user can choose a backup folder, automatic interval, bounded backup
+cleanup target per folder, and whether changed local data is backed up on quit. SQLite backups contain a copy of the
+local Forgeboard database and should be protected accordingly. Direct restore of a SQLite backup is
+not yet available in the UI.
+
+Portable JSON export/import covers Forgeboard settings, projects, canvases, agent runs, check
+executions, snapshots, and audit history. It never embeds repository files or extension source
+folders. Import is an explicit merge-or-replace action with a renderer disclosure and native
+confirmation; the selected file is validated again before the transaction. Deletion does not remove
+repository/build artifacts or separately exported portable JSON files. It does remove every
+Forgeboard-recorded SQLite backup from current and previously selected backup folders after
+revalidating each recorded file's identity. If a recorded file is unavailable, Forgeboard requires
+a separate cancel-default native choice to either reconnect it or explicitly forget the missing
+record and continue. The warning explains that a forgotten copy may still exist on a detached drive
+or network location and will no longer be tracked. The **Transcript retention (days)** setting also
+removes old terminal project-check histories while preserving queued or running records for recovery.

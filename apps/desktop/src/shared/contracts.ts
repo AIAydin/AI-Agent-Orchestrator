@@ -226,6 +226,9 @@ export const AppSettingsSchema = z
     autosaveIntervalMs: z.number().int().min(250).max(60_000).default(2000),
     backupsEnabled: z.boolean().default(true),
     backupDirectory: z.string().max(32_768).default(''),
+    backupIntervalHours: z.number().int().min(1).max(168).default(24),
+    backupOnQuit: z.boolean().default(true),
+    backupRetentionCount: z.number().int().min(1).max(365).default(30),
     collaborationEnabled: z.boolean(),
     collaborationUrl: z.string(),
     collaborationDisplayName: z.string().min(1).max(200).default('Local user'),
@@ -822,6 +825,22 @@ export const BackupResultSchema = z
   .strict();
 export type BackupResult = z.infer<typeof BackupResultSchema>;
 
+export const BackupHealthSchema = z
+  .object({
+    lastAttemptAt: z.string().datetime().nullable(),
+    lastAttemptOutcome: z.enum(['verified', 'failed']).nullable(),
+    lastError: z.string().max(4_096).nullable(),
+    lastVerifiedAt: z.string().datetime().nullable(),
+    lastVerifiedSizeBytes: z.number().int().positive().nullable(),
+    lastVerifiedSha256Prefix: z
+      .string()
+      .regex(/^[a-f0-9]{12}$/u)
+      .nullable(),
+    verifiedBackupCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type BackupHealth = z.infer<typeof BackupHealthSchema>;
+
 export const AppCloseRequestSchema = z
   .object({
     requestId: z.string().uuid(),
@@ -886,6 +905,7 @@ export const IPC_CHANNELS = Object.freeze({
   privacyExport: 'privacy:export',
   privacyDelete: 'privacy:delete',
   storageCreateBackup: 'storage:create-backup',
+  storageBackupHealth: 'storage:backup-health',
   dockerCheck: 'docker:check',
   dockerPull: 'docker:pull',
   runsPrepare: 'runs:prepare',

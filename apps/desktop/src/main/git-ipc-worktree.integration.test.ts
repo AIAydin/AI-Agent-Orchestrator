@@ -141,7 +141,7 @@ describe('GitIpcService agent-worktree target', () => {
         worktreeId: ownership.id,
       }),
     );
-    service.dispose();
+    await service.dispose();
   });
 });
 
