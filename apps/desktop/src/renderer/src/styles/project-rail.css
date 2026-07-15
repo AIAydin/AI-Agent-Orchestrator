@@ -94,6 +94,36 @@
   color: var(--text-soft);
   font-size: 8px;
 }
+.repository-summary > .repository-initialize {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+.repository-initialize p,
+.repository-initialize small {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.45;
+}
+.repository-initialize button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 9px;
+}
+.repository-initialize button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
 .template-section {
   min-height: 0;
   display: flex;

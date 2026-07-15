@@ -62,7 +62,16 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
 );
 
 const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function WorkspaceInner(
-  { project, settings, agents, extensionDiscovery, onClose, onOpenSettings, onError },
+  {
+    project,
+    settings,
+    agents,
+    extensionDiscovery,
+    onClose,
+    onProjectUpdated,
+    onOpenSettings,
+    onError,
+  },
   ref,
 ) {
   const [canvas, setCanvas] = useState<CanvasDocument | null>(null);
@@ -75,6 +84,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [gitReviewTarget, setGitReviewTarget] = useState<GitTargetInput | null>(null);
+  const [initializingGit, setInitializingGit] = useState(false);
   const [search, setSearch] = useState('');
   const [instance, setInstance] = useState<ReactFlowInstance<WorkshopNode, WorkshopEdge> | null>(
     null,
@@ -198,6 +208,23 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const closeProject = useCallback(async () => {
     if (await flushCanvas()) onClose();
   }, [flushCanvas, onClose]);
+
+  const initializeGit = useCallback(async () => {
+    setInitializingGit(true);
+    try {
+      const updated = unwrap(await window.forgeboard.projects.initializeGit(project.id));
+      if (updated) {
+        await onProjectUpdated(updated);
+        setEvents((items) =>
+          ['Initialized Git without staging existing files.', ...items].slice(0, 30),
+        );
+      }
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : 'Git could not be initialized.');
+    } finally {
+      setInitializingGit(false);
+    }
+  }, [onError, onProjectUpdated, project.id]);
 
   const record = useCallback(() => {
     setPast((items) => [...items.slice(-49), { nodes, edges }]);
@@ -572,10 +599,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           templates={filteredTemplates}
           extensionTemplates={filteredExtensionTemplates}
           nodes={filteredNodes}
+          initializingGit={initializingGit}
           onTabChange={setRailTab}
           onSearchChange={setSearch}
           onAddNode={addNode}
           onAddExtensionNode={addExtensionNode}
+          onInitializeGit={() => void initializeGit()}
           onSelectNode={(node) => {
             setSelectedNodeId(node.id);
             void instance?.setCenter(node.position.x, node.position.y, {

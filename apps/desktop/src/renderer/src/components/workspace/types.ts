@@ -26,6 +26,7 @@ export interface WorkspaceProps {
   agents: AgentDetection[];
   extensionDiscovery: ExtensionDiscoveryView;
   onClose: () => void;
+  onProjectUpdated: (project: Project) => Promise<void>;
   onOpenSettings: () => void;
   onError: (message: string) => void;
 }

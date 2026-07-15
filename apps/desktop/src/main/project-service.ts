@@ -382,6 +382,77 @@ export class ProjectService {
     this.store.appendAudit('project', 'create-demo', 'allowed', { version: 1 });
     return this.open(target);
   }
+
+  async initializeGit(projectId: string): Promise<Project | null> {
+    const project = await this.initializableProject(projectId);
+    const decision = await this.dialog.showMessageBox({
+      type: 'question',
+      buttons: ['Cancel', 'Initialize Git'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'Initialize Git repository?',
+      message: `Initialize Git in ${project.name}?`,
+      detail: [
+        project.path,
+        '',
+        'Forgeboard will create Git metadata with main as the initial branch. Existing files are not changed, staged, or committed; Git will report them as untracked until you review them.',
+      ].join('\n'),
+    });
+    if (decision.response !== 1) {
+      this.store.appendAudit('git', 'initialize', 'denied', {
+        projectId,
+        repositoryName: project.name,
+        reason: 'native-confirmation-cancelled',
+      });
+      return null;
+    }
+
+    try {
+      const current = await this.initializableProject(projectId);
+      if (current.path !== project.path) {
+        throw new Error('The project location changed after approval. Review it again.');
+      }
+      await this.repositories.git.run(['init', '--initial-branch=main'], { cwd: current.path });
+      const health = await scanRepository(current.path, this.repositories);
+      if (!health.isGitRepository) {
+        throw new Error('Git initialization finished without creating a readable repository.');
+      }
+      const updated = this.store.saveProject({ ...current, health });
+      this.store.appendAudit('git', 'initialize', 'allowed', {
+        projectId,
+        repositoryName: updated.name,
+        branch: updated.health.branch,
+        existingFilesPreserved: true,
+      });
+      return updated;
+    } catch (error) {
+      this.store.appendAudit('git', 'initialize', 'failed', {
+        projectId,
+        repositoryName: project.name,
+        reason: error instanceof Error ? error.message : 'unknown error',
+      });
+      throw error;
+    }
+  }
+
+  private async initializableProject(projectId: string): Promise<Project> {
+    await this.refreshRecentProjects();
+    const project = this.store.getProject(projectId);
+    if (!project || project.missing) {
+      throw new Error('The selected project is no longer available.');
+    }
+    const canonicalPath = await realpath(resolve(project.path));
+    if (canonicalPath !== project.path || !(await stat(canonicalPath)).isDirectory()) {
+      throw new Error('The selected project location changed. Reopen it before continuing.');
+    }
+    const health = await scanRepository(canonicalPath, this.repositories);
+    if (health.isGitRepository) {
+      this.store.saveProject({ ...project, health });
+      throw new Error('This project is already a Git repository.');
+    }
+    return { ...project, health };
+  }
 }
 
 export async function detectAgents(

@@ -63,6 +63,10 @@ behavior. Source and config-file edits are optional for these flows. Lint, typec
 and custom project checks can likewise be configured, approved, run, cancelled, and inspected
 entirely in the UI.
 
+Existing folders can be opened without Git. Forgeboard then offers an **Initialize Git** action in
+the project rail. A cancel-default native confirmation names the exact folder before Forgeboard
+creates Git metadata; existing files are left untouched, unstaged, and uncommitted.
+
 The Data & Privacy screen can browse and create canvas snapshots, restore an exact reviewed
 snapshot after native confirmation, and import a validated portable JSON export in merge or replace
 mode. Import revalidates the selected file's exact-byte SHA-256 digest immediately before its

@@ -64,7 +64,7 @@ not be reclassified as future work.
 
 ## Git and change management
 
-- [ ] Repository open/clone/create/init, health scan, recent list, and missing-path recovery.
+- [x] Repository open/clone/create/init, health scan, recent list, and missing-path recovery.
 - [x] Collision-safe per-writable-run branches/worktrees outside the checkout with ownership records.
 - [ ] Dirty-primary protection and worktree branch/ahead/behind/dirty UI.
 - [ ] Diff parsing, file navigation, unified/split views, whitespace controls, line comments, and stats.
@@ -287,3 +287,15 @@ unchecked when only a subset of their required behavior has proof.
   plus structural-complexity import bounds.
 - 2026-07-15: `corepack pnpm audit --prod --audit-level high` reported no known production
   dependency vulnerabilities on the recovery checkpoint.
+- 2026-07-15: existing non-Git folders gained a project-rail initialization flow with cancel-default
+  native confirmation, exact-path revalidation after approval, preserved unstaged files, refreshed
+  repository health, and allowed/denied/failed audit outcomes. Focused unit/UI coverage passed 17
+  tests, and an Electron E2E flow proved cancellation, approval, durable Git metadata, unchanged
+  existing content, UI branch refresh, and zero external requests.
+- 2026-07-15: `corepack pnpm verify` passed on the existing-folder onboarding checkpoint: the
+  structure gate kept all 315 checked files at or below 2,000 lines; formatting, lint, strict
+  typecheck, 387 unit tests across 67 files, 63 integration tests across 10 files, and every
+  production build succeeded.
+- 2026-07-15: all 9 Electron Playwright E2E tests passed, including the new existing-folder Git
+  initialization flow and the prior onboarding, canvas persistence, agent, check, preview, recovery,
+  primary Git review, and managed-worktree review flows.

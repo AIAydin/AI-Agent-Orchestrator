@@ -128,6 +128,7 @@ describe('Workspace Git review targeting', () => {
           invalid: [],
         }}
         onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,

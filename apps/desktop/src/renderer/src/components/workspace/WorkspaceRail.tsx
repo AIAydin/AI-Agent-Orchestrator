@@ -11,10 +11,12 @@ interface WorkspaceRailProps {
   templates: NodeKind[];
   extensionTemplates: ExtensionTemplate[];
   nodes: WorkshopNode[];
+  initializingGit: boolean;
   onTabChange: (tab: 'project' | 'nodes') => void;
   onSearchChange: (value: string) => void;
   onAddNode: (kind: NodeKind) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
+  onInitializeGit: () => void;
   onSelectNode: (node: WorkshopNode) => void;
 }
 
@@ -25,10 +27,12 @@ export function WorkspaceRail({
   templates,
   extensionTemplates,
   nodes,
+  initializingGit,
   onTabChange,
   onSearchChange,
   onAddNode,
   onAddExtensionNode,
+  onInitializeGit,
   onSelectNode,
 }: WorkspaceRailProps) {
   return (
@@ -66,8 +70,10 @@ export function WorkspaceRail({
           project={project}
           templates={templates}
           extensionTemplates={extensionTemplates}
+          initializingGit={initializingGit}
           onAddNode={onAddNode}
           onAddExtensionNode={onAddExtensionNode}
+          onInitializeGit={onInitializeGit}
         />
       ) : (
         <CanvasNodeList nodes={nodes} onSelectNode={onSelectNode} />
@@ -83,16 +89,20 @@ interface ProjectTemplatesProps {
   project: Project;
   templates: NodeKind[];
   extensionTemplates: ExtensionTemplate[];
+  initializingGit: boolean;
   onAddNode: (kind: NodeKind) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
+  onInitializeGit: () => void;
 }
 
 function ProjectTemplates({
   project,
   templates,
   extensionTemplates,
+  initializingGit,
   onAddNode,
   onAddExtensionNode,
+  onInitializeGit,
 }: ProjectTemplatesProps) {
   return (
     <>
@@ -111,6 +121,16 @@ function ProjectTemplates({
           />
         </header>
         <small>{project.path}</small>
+        {!project.health.isGitRepository && (
+          <div className="repository-initialize">
+            <p>Agent worktrees and reviewed commits require Git metadata.</p>
+            <button type="button" disabled={initializingGit} onClick={onInitializeGit}>
+              <GitBranch size={14} aria-hidden="true" />
+              {initializingGit ? 'Initializing…' : 'Initialize Git…'}
+            </button>
+            <small>Existing files stay untouched and uncommitted.</small>
+          </div>
+        )}
         {project.health.frameworks.length > 0 && (
           <div>
             {project.health.frameworks.map((framework) => (

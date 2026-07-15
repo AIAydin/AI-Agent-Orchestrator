@@ -110,6 +110,8 @@ const api: ForgeboardApi = {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsCreate, input),
     clone: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsClone, input),
     demo: () => ipcRenderer.invoke(IPC_CHANNELS.projectsDemo),
+    initializeGit: (projectId) =>
+      invokeValidated(IPC_CHANNELS.projectsInitializeGit, ProjectSchema.nullable(), projectId),
   },
   canvas: {
     load: (projectId) => ipcRenderer.invoke(IPC_CHANNELS.canvasLoad, projectId),

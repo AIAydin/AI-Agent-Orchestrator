@@ -136,6 +136,10 @@ export function App() {
           agents={bootstrap.agents}
           extensionDiscovery={bootstrap.extensions}
           onClose={() => setActiveProject(null)}
+          onProjectUpdated={async (project) => {
+            setActiveProject(project);
+            await loadBootstrap();
+          }}
           onOpenSettings={() => setShowSettings(true)}
           onError={setError}
         />

@@ -337,6 +337,12 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     z.tuple([]),
     async () => await runDataOperation(async () => await projects.createDemo()),
   );
+  handle(
+    IPC_CHANNELS.projectsInitializeGit,
+    z.tuple([z.string().uuid()]),
+    async (projectId) =>
+      await runDataOperation(async () => await projects.initializeGit(projectId)),
+  );
 
   handle(
     IPC_CHANNELS.canvasLoad,

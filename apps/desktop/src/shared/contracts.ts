@@ -900,6 +900,7 @@ export const IPC_CHANNELS = Object.freeze({
   projectsCreate: 'projects:create',
   projectsClone: 'projects:clone',
   projectsDemo: 'projects:demo',
+  projectsInitializeGit: 'projects:initialize-git',
   canvasLoad: 'canvas:load',
   canvasSave: 'canvas:save',
   privacyExport: 'privacy:export',

@@ -94,6 +94,7 @@ describe('Workspace persistence boundary', () => {
           invalid: [],
         }}
         onClose={onClose}
+        onProjectUpdated={vi.fn()}
         onOpenSettings={vi.fn()}
         onError={vi.fn()}
       />,

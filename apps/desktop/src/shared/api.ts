@@ -100,6 +100,7 @@ export interface ForgeboardApi {
     }): Promise<IpcResult<Project>>;
     clone(input: { remoteUrl: string; destinationPath: string }): Promise<IpcResult<Project>>;
     demo(): Promise<IpcResult<Project>>;
+    initializeGit(projectId: string): Promise<IpcResult<Project | null>>;
   };
   canvas: {
     load(projectId: string): Promise<IpcResult<CanvasDocument>>;

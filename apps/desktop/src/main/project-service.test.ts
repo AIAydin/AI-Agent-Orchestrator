@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { access, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -133,6 +133,92 @@ describe('ProjectService moved-project recovery', () => {
       health: { isGitRepository: true, branch: 'main', dirty: false },
     });
     expect((await repositories.git.run(['--version'])).executable).toContain('dugite');
+  });
+
+  it('initializes an existing folder only after native approval and preserves every file', async () => {
+    const root = temporaryRoot();
+    const repositoryPath = join(root, 'existing-project');
+    mkdirSync(repositoryPath);
+    const existingFile = join(repositoryPath, 'keep-me.txt');
+    writeFileSync(existingFile, 'preserve this exact content\n');
+    const store = openStore(root);
+    const repositories = createBundledGitRepositoryService();
+    const showMessageBox = vi
+      .fn()
+      .mockResolvedValueOnce({ response: 0 })
+      .mockResolvedValueOnce({ response: 1 });
+    const service = new ProjectService(
+      {} as App,
+      { showMessageBox } as unknown as Dialog,
+      store,
+      repositories,
+    );
+    const opened = await service.open(repositoryPath);
+
+    await expect(service.initializeGit(opened.id)).resolves.toBeNull();
+    await expect(access(join(repositoryPath, '.git'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(store.listAuditEvents(1)[0]).toMatchObject({
+      category: 'git',
+      action: 'initialize',
+      outcome: 'denied',
+    });
+
+    const initialized = await service.initializeGit(opened.id);
+    expect(initialized).toMatchObject({
+      id: opened.id,
+      health: { isGitRepository: true, branch: 'main', dirty: true },
+    });
+    expect(readFileSync(existingFile, 'utf8')).toBe('preserve this exact content\n');
+    const status = await repositories.git.run(['status', '--porcelain=v1'], {
+      cwd: repositoryPath,
+    });
+    expect(status.stdout).toContain('?? keep-me.txt');
+    expect(showMessageBox).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        buttons: ['Cancel', 'Initialize Git'],
+        defaultId: 0,
+        cancelId: 0,
+      }),
+    );
+    expect(store.listAuditEvents(1)[0]).toMatchObject({
+      category: 'git',
+      action: 'initialize',
+      outcome: 'allowed',
+    });
+    expect(store.exportData().audit.at(-1)?.metadata).toMatchObject({
+      existingFilesPreserved: true,
+    });
+  });
+
+  it('revalidates the project location after approval before creating Git metadata', async () => {
+    const root = temporaryRoot();
+    const repositoryPath = join(root, 'project-before-approval');
+    const movedPath = join(root, 'project-after-approval');
+    mkdirSync(repositoryPath);
+    const store = openStore(root);
+    const repositories = createBundledGitRepositoryService();
+    const service = new ProjectService(
+      {} as App,
+      {
+        showMessageBox: vi.fn().mockImplementation(() => {
+          renameSync(repositoryPath, movedPath);
+          return Promise.resolve({ response: 1 });
+        }),
+      } as unknown as Dialog,
+      store,
+      repositories,
+    );
+    const opened = await service.open(repositoryPath);
+
+    await expect(service.initializeGit(opened.id)).rejects.toThrow(
+      'selected project is no longer available',
+    );
+    await expect(access(join(movedPath, '.git'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(store.listAuditEvents(1)[0]).toMatchObject({
+      category: 'git',
+      action: 'initialize',
+      outcome: 'failed',
+    });
   });
 
   it('marks a missing path and explicitly rebinds the same project to a vetted directory', async () => {
