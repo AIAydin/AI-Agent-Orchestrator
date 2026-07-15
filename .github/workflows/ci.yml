@@ -22,12 +22,12 @@ jobs:
           node-version: 22.17.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node scripts/verify-release-metadata.mjs
+      - run: node scripts/release/verify-metadata.mjs
       - run: >-
           node --test
-          scripts/checksums.test.mjs
-          scripts/release-metadata.test.mjs
-          scripts/start-from-source.test.mjs
+          scripts/release/checksums.test.mjs
+          scripts/release/metadata.test.mjs
+          scripts/startup/start-from-source.test.mjs
       - run: pnpm check:structure
       - run: pnpm format:check
       - run: pnpm lint

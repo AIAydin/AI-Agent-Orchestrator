@@ -8,7 +8,7 @@ import {
   type AppSettings,
   type CanvasDocument,
   type Project,
-} from '../../shared/contracts.js';
+} from '../../shared/application/contracts.js';
 import {
   CanvasSnapshotSchema,
   StoredRunRecordSchema,
@@ -21,10 +21,10 @@ import {
   canvasContentHash,
   type JsonRow,
   parseJson,
-  redact,
   sanitizeCanvasDocument,
   sanitizeProject,
 } from './values.js';
+import { appendChainedAudit } from './security/audit-integrity.js';
 
 export function writeSettings(database: DatabaseSync, settings: AppSettings): void {
   database
@@ -261,10 +261,5 @@ export function writeAudit(
   outcome: 'allowed' | 'denied' | 'failed',
   metadata: Record<string, unknown>,
 ): void {
-  database
-    .prepare(
-      `INSERT INTO audit_events(occurred_at, category, action, outcome, metadata_json)
-       VALUES(?, ?, ?, ?, ?)`,
-    )
-    .run(occurredAt, category, action, outcome, JSON.stringify(redact(metadata)));
+  appendChainedAudit(database, occurredAt, category, action, outcome, metadata);
 }

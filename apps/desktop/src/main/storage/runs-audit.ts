@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import { AuditEventSchema, type AuditEvent } from '../../shared/contracts.js';
+import { AuditEventSchema, type AuditEvent } from '../../shared/application/contracts.js';
 import {
   StoredRunRecordSchema,
   type InterruptedRunRecoveryReport,

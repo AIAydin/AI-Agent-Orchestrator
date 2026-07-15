@@ -2,7 +2,7 @@ import {
   CustomPermissionProfileSettingsSchema,
   type AppSettings,
   type PermissionProfile,
-} from '../../../../shared/contracts.js';
+} from '../../../../shared/application/contracts.js';
 
 export const PERMISSION_PROFILE_OPTIONS: readonly {
   value: PermissionProfile;

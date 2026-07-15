@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AppSettings } from '../../shared/contracts.js';
+import type { AppSettings } from '../../shared/application/contracts.js';
 import { createDefaultAgentAdapterPlanner } from './adapter-planner.js';
 import type { AgentExecutionRequest } from './contracts.js';
 
@@ -60,6 +60,15 @@ describe('default agent adapter planner launch binding', () => {
       repositoryPath,
       dockerSettings(dockerExecutable),
       '123fae6e-e213-4a10-a0db-0f85b791f7e9',
+      {
+        authorize: (executable, arguments_) => {
+          expect(executable).toBe(dockerExecutable);
+          expect([
+            ['version', '--format', '{{.Server.Version}}'],
+            ['image', 'inspect', 'local/test:1'],
+          ]).toContainEqual(arguments_);
+        },
+      },
     );
     const preparationInvocations = await readFile(logPath, 'utf8');
     expect(preparationInvocations).toContain('version --format {{.Server.Version}}');
@@ -68,6 +77,29 @@ describe('default agent adapter planner launch binding', () => {
 
     await writeFile(replaceMarker, 'replace on the next version probe\n');
     await expect(planned.revalidateBeforeLaunch?.()).rejects.toThrow(/launch file changed/iu);
+  });
+
+  it('fails closed before a Docker preparation probe without explicit process authority', async () => {
+    if (process.platform === 'win32') return;
+    const repositoryPath = await temporaryDirectory();
+    const dockerExecutable = path.join(repositoryPath, 'docker');
+    const logPath = path.join(repositoryPath, 'docker-argv.log');
+    await writeFile(dockerExecutable, dockerClientScript(false));
+    await chmod(dockerExecutable, 0o700);
+    const planner = createDefaultAgentAdapterPlanner({
+      getTrustedAdapter: () => Promise.resolve(undefined),
+      resolveTestAgentCliPath: () => Promise.reject(new Error('not used')),
+    });
+
+    await expect(
+      planner(
+        { ...request(), adapterId: 'codex', permissionProfile: 'docker-isolated' },
+        repositoryPath,
+        dockerSettings(dockerExecutable),
+        '123fae6e-e213-4a10-a0db-0f85b791f7e9',
+      ),
+    ).rejects.toThrow(/owner-bound native probe approval/iu);
+    await expect(readFile(logPath, 'utf8')).rejects.toThrow();
   });
 });
 

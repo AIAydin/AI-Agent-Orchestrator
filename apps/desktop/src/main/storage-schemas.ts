@@ -6,8 +6,12 @@ import {
   SemanticVersionSchema,
 } from '@forgeboard/extension-runtime';
 
-import { AppSettingsSchema, CanvasDocumentSchema, ProjectSchema } from '../shared/contracts.js';
-import { CheckExecutionViewSchema, type CheckExecutionView } from '../shared/check-contracts.js';
+import {
+  AppSettingsSchema,
+  CanvasDocumentSchema,
+  ProjectSchema,
+} from '../shared/application/contracts.js';
+import { CheckExecutionViewSchema, type CheckExecutionView } from '../shared/checks/contracts.js';
 
 export const StoredCheckExecutionRecordSchema = CheckExecutionViewSchema;
 export type StoredCheckExecutionRecord = CheckExecutionView;

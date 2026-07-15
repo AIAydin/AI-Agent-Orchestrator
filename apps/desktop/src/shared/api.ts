@@ -24,9 +24,15 @@ import type {
   PreviewStartInput,
   Project,
   ProjectRecoveryAssessment,
-  RunDisclosure,
+  RunApprovalView,
   RunEventEnvelope,
-} from './contracts.js';
+} from './application/contracts.js';
+import type { AgentReadinessRequest, AgentReadinessResult } from './readiness/contracts.js';
+import type {
+  ApprovalListInput,
+  ApprovalRevocationInput,
+  ApprovalView,
+} from './approvals/contracts.js';
 import type {
   CheckCancelInput,
   CheckEventEnvelope,
@@ -35,12 +41,12 @@ import type {
   CheckPlanConfirmationInput,
   CheckPlanView,
   CheckPrepareInput,
-} from './check-contracts.js';
+} from './checks/contracts.js';
 import type {
   DockerPullResult,
   DockerReadiness,
   DockerReadinessInput,
-} from './docker-contracts.js';
+} from './docker/contracts.js';
 import type {
   GitCommitPlanInput,
   GitCommitPlanView,
@@ -51,7 +57,8 @@ import type {
   GitPlanConfirmationInput,
   GitReviewView,
   GitTargetInput,
-} from './git-contracts.js';
+} from './git/contracts.js';
+import type { IntegrityCheckInput, IntegrityCheckResult } from './integrity/contracts.js';
 import type {
   RecoveryImportChooseInput,
   RecoveryImportCounts,
@@ -63,7 +70,7 @@ import type {
   RecoverySnapshotPrepareRestoreInput,
   RecoverySnapshotRestorePlan,
   RecoverySnapshotSummary,
-} from './recovery-contracts.js';
+} from './recovery/contracts.js';
 import type {
   WorkflowApproveHumanDecisionInput,
   WorkflowApproveNodeInput,
@@ -78,7 +85,7 @@ import type {
   WorkflowResolveRevisionEscapeInput,
   WorkflowReviewDecisionInput,
   WorkflowStartInput,
-} from './workflow-contracts.js';
+} from './workflow/contracts.js';
 
 export interface ForgeboardApi {
   app: {
@@ -92,9 +99,16 @@ export interface ForgeboardApi {
     export(): Promise<IpcResult<string | null>>;
     import(): Promise<IpcResult<AppSettings | null>>;
   };
-  agents: { detect(): Promise<IpcResult<AgentDetection[]>> };
+  agents: {
+    detect(): Promise<IpcResult<AgentDetection[]>>;
+    checkReadiness(input: AgentReadinessRequest): Promise<IpcResult<AgentReadinessResult | null>>;
+  };
+  approvals: {
+    list(input: ApprovalListInput): Promise<IpcResult<ApprovalView[]>>;
+    revoke(input: ApprovalRevocationInput): Promise<IpcResult<ApprovalView>>;
+  };
   docker: {
-    check(input: DockerReadinessInput): Promise<IpcResult<DockerReadiness>>;
+    check(input: DockerReadinessInput): Promise<IpcResult<DockerReadiness | null>>;
     pull(input: DockerReadinessInput): Promise<IpcResult<DockerPullResult>>;
   };
   projects: {
@@ -113,7 +127,10 @@ export interface ForgeboardApi {
       name: string;
       initializeGit: boolean;
     }): Promise<IpcResult<Project>>;
-    clone(input: { remoteUrl: string; destinationPath: string }): Promise<IpcResult<Project>>;
+    clone(input: {
+      remoteUrl: string;
+      destinationPath: string;
+    }): Promise<IpcResult<Project | null>>;
     demo(): Promise<IpcResult<Project>>;
     initializeGit(projectId: string): Promise<IpcResult<Project | null>>;
   };
@@ -122,7 +139,7 @@ export interface ForgeboardApi {
     save(document: CanvasDocument): Promise<IpcResult<CanvasDocument>>;
   };
   runs: {
-    prepare(input: PrepareRunInput): Promise<IpcResult<RunDisclosure>>;
+    prepare(input: PrepareRunInput): Promise<IpcResult<RunApprovalView | null>>;
     approve(runId: string): Promise<IpcResult<boolean>>;
     sendInput(runId: string, data: string): Promise<IpcResult<boolean>>;
     interrupt(runId: string): Promise<IpcResult<boolean>>;
@@ -130,8 +147,8 @@ export interface ForgeboardApi {
     onEvent(listener: (event: RunEventEnvelope) => void): () => void;
   };
   previews: {
-    start(input: PreviewStartInput): Promise<IpcResult<PreviewSessionSnapshot>>;
-    restart(input: PreviewStartInput): Promise<IpcResult<PreviewSessionSnapshot>>;
+    start(input: PreviewStartInput): Promise<IpcResult<PreviewSessionSnapshot | null>>;
+    restart(input: PreviewStartInput): Promise<IpcResult<PreviewSessionSnapshot | null>>;
     stop(input: PreviewNodeKey): Promise<IpcResult<PreviewSessionSnapshot | null>>;
     get(input: PreviewNodeKey): Promise<IpcResult<PreviewSessionSnapshot | null>>;
     navigate(input: PreviewNavigateInput): Promise<IpcResult<string>>;
@@ -191,6 +208,7 @@ export interface ForgeboardApi {
   storage: {
     createBackup(): Promise<IpcResult<BackupResult>>;
     getBackupHealth(): Promise<IpcResult<BackupHealth>>;
+    checkIntegrity(input: IntegrityCheckInput): Promise<IpcResult<IntegrityCheckResult>>;
   };
   recovery: {
     listSnapshots(input: RecoverySnapshotListInput): Promise<IpcResult<RecoverySnapshotSummary[]>>;

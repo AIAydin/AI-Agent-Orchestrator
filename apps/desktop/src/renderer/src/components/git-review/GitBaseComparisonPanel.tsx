@@ -1,8 +1,8 @@
 import { CheckCircle2, FileCode2, GitCommitHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
-import type { GitAgentBaseComparisonView } from '../../../../shared/git-contracts.js';
-import { GitDiffViewer } from './GitDiffViewer.js';
+import type { GitAgentBaseComparisonView } from '../../../../shared/git/contracts.js';
+import { GitDiffViewer } from './diff/GitDiffViewer.js';
 import type { GitDiffDisplayFile } from './git-review-model.js';
 import { GIT_BASE_PANEL_ID, GIT_BASE_TAB_ID } from './GitReviewModeTabs.js';
 

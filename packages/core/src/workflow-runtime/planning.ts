@@ -1,4 +1,4 @@
-import { CanvasSchema, type Canvas, type CanvasEdge, type CanvasNode } from '../domain.js';
+import { CanvasSchema, type Canvas, type CanvasEdge, type CanvasNode } from '../model/domain.js';
 import {
   NodeRunStateSchema,
   WorkflowRunSchema,
@@ -6,7 +6,7 @@ import {
   createRevisionLoopState,
   planWorkflow,
   validateWorkflow,
-} from '../workflow.js';
+} from '../workflow/model.js';
 
 import type {
   RuntimeCreationOptions,

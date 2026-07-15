@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   CustomPermissionProfileSettingsSchema,
   type CustomPermissionProfileSettings,
-} from '../../shared/contracts.js';
+} from '../../shared/application/contracts.js';
 import {
   assertCustomAttachmentsWithinReadRoots,
   resolveCustomDockerPermission,

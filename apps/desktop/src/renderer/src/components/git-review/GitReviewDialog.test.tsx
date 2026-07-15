@@ -3,13 +3,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { IpcResult } from '../../../../shared/contracts.js';
+import type { IpcResult } from '../../../../shared/application/contracts.js';
 import type {
   GitCommitPlanView,
   GitDiscardPlanView,
   GitReviewView,
   GitTargetInput,
-} from '../../../../shared/git-contracts.js';
+} from '../../../../shared/git/contracts.js';
 import { GitReviewDialog } from './GitReviewDialog.js';
 
 const projectId = '11111111-1111-4111-8111-111111111111';

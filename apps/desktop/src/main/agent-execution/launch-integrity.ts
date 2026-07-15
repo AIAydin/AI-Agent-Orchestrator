@@ -1,5 +1,5 @@
-import { constants as fsConstants, createReadStream } from 'node:fs';
-import { access, realpath, stat } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { access, open, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
@@ -34,36 +34,37 @@ export async function captureLaunchFileIdentity(
   if (!pathsEqual(canonical, filePath)) {
     throw new Error('The reviewed launch file must use its canonical path.');
   }
-  const before = await stat(canonical);
-  if (!before.isFile()) throw new Error('The reviewed launch file is not an ordinary file.');
-  await access(
-    canonical,
-    executable && process.platform !== 'win32' ? fsConstants.X_OK : fsConstants.F_OK,
-  );
-  const digest = await sha256File(canonical);
-  const after = await stat(canonical);
-  const identity = {
-    path: canonical,
-    executable,
-    device: after.dev,
-    inode: after.ino,
-    size: after.size,
-    modifiedAtMs: after.mtimeMs,
-    changedAtMs: after.ctimeMs,
-    mode: after.mode,
-    digest,
-  };
-  if (
-    before.dev !== after.dev ||
-    before.ino !== after.ino ||
-    before.size !== after.size ||
-    before.mtimeMs !== after.mtimeMs ||
-    before.ctimeMs !== after.ctimeMs ||
-    before.mode !== after.mode
-  ) {
-    throw new Error('The launch file changed while Forgeboard verified it.');
+  const flags =
+    process.platform === 'win32'
+      ? fsConstants.O_RDONLY
+      : fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW;
+  const handle = await open(canonical, flags);
+  try {
+    const before = await handle.stat();
+    if (!before.isFile()) throw new Error('The reviewed launch file is not an ordinary file.');
+    await access(
+      canonical,
+      executable && process.platform !== 'win32' ? fsConstants.X_OK : fsConstants.F_OK,
+    );
+    const digest = await sha256FileHandle(handle);
+    const [after, pathAfter] = await Promise.all([handle.stat(), stat(canonical)]);
+    if (!sameFileIdentity(before, after) || !sameFileIdentity(after, pathAfter)) {
+      throw new Error('The launch file changed while Forgeboard verified it.');
+    }
+    return {
+      path: canonical,
+      executable,
+      device: after.dev,
+      inode: after.ino,
+      size: after.size,
+      modifiedAtMs: after.mtimeMs,
+      changedAtMs: after.ctimeMs,
+      mode: after.mode,
+      digest,
+    };
+  } finally {
+    await handle.close();
   }
-  return identity;
 }
 
 export async function assertLaunchExecutableIdentity(
@@ -97,12 +98,29 @@ function pathsEqual(left: string, right: string): boolean {
     : path.resolve(left) === path.resolve(right);
 }
 
-async function sha256File(filePath: string): Promise<string> {
-  return await new Promise((resolve, reject) => {
-    const hash = createHash('sha256');
-    const stream = createReadStream(filePath);
-    stream.on('data', (chunk: Buffer | string) => hash.update(chunk));
-    stream.once('error', reject);
-    stream.once('end', () => resolve(hash.digest('hex')));
-  });
+function sameFileIdentity(
+  left: Awaited<ReturnType<FileHandle['stat']>>,
+  right: Awaited<ReturnType<FileHandle['stat']>>,
+): boolean {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs &&
+    left.mode === right.mode
+  );
+}
+
+async function sha256FileHandle(handle: FileHandle): Promise<string> {
+  const hash = createHash('sha256');
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  let position = 0;
+  while (true) {
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+    if (bytesRead === 0) break;
+    hash.update(buffer.subarray(0, bytesRead));
+    position += bytesRead;
+  }
+  return hash.digest('hex');
 }

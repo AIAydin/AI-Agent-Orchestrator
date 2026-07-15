@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
 }));
 
-vi.mock('./components/Workspace.js', async () => {
+vi.mock('./components/workspace/shell/Workspace.js', async () => {
   const { forwardRef, useImperativeHandle } = await import('react');
   return {
     Workspace: forwardRef(function MockWorkspace(
@@ -23,7 +23,7 @@ vi.mock('./components/Workspace.js', async () => {
   };
 });
 
-vi.mock('./components/Welcome.js', () => ({
+vi.mock('./components/onboarding/Welcome.js', () => ({
   Welcome: ({ onOpenRecent }: { onOpenRecent: (path: string) => void }) => (
     <button type="button" onClick={() => onOpenRecent('/tmp/project')}>
       Open project
@@ -31,8 +31,8 @@ vi.mock('./components/Welcome.js', () => ({
   ),
 }));
 
-vi.mock('./components/SettingsPanel.js', () => ({ SettingsPanel: () => null }));
-vi.mock('./components/SetupWizard.js', () => ({ SetupWizard: () => null }));
+vi.mock('./components/settings/shell/SettingsPanel.js', () => ({ SettingsPanel: () => null }));
+vi.mock('./components/onboarding/SetupWizard.js', () => ({ SetupWizard: () => null }));
 
 let closeListener: (() => boolean | Promise<boolean>) | null = null;
 

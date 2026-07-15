@@ -1,10 +1,16 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './electron.js';
+import { launchDesktop, watchExternalRequests } from './support/electron.js';
+import {
+  approveNextNativePreviewLaunch,
+  type NativePreviewConfirmationBinding,
+} from './support/preview-confirmation.js';
 
 test('web and mobile preview nodes run a sandboxed loopback server from UI configuration', async () => {
   const userDataDirectory = await mkdtemp(joinPath(tmpdir(), 'forgeboard-preview-e2e-'));
@@ -13,24 +19,28 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
 
   try {
     const session = await launchDesktop(userDataDirectory);
-    electronApp = session.app;
+    const app = session.app;
+    electronApp = app;
     const page = session.page;
+    const previewServerPath = resolve(import.meta.dirname, 'scripts', 'preview-server.mjs');
     watchExternalRequests(page, externalRequests);
 
     await page.getByRole('button', { name: 'Use safe defaults' }).click();
 
     await test.step('the development command and preview network range are configured in Settings', async () => {
       await expect(
-        page.getByRole('heading', { name: /Build software in a visual workshop/i }),
+        page.getByRole('heading', {
+          name: /Build software in a visual workshop/i,
+        }),
       ).toBeVisible();
       await page.getByRole('button', { name: 'Settings' }).click();
       const settings = page.locator('.settings-modal');
       await settings.getByRole('button', { name: /Git & previews/ }).click();
-      const command = settings.getByRole('group', { name: 'Development server' });
+      const command = settings.getByRole('group', {
+        name: 'Development server',
+      });
       await command.getByLabel('Executable').fill(process.execPath);
-      await command
-        .getByLabel('Arguments')
-        .fill(resolve(import.meta.dirname, 'scripts', 'preview-server.mjs'));
+      await command.getByLabel('Arguments').fill(previewServerPath);
       await settings.getByLabel('Preview port start').fill('44000');
       await settings.getByLabel('Preview port end').fill('44050');
       await settings.getByLabel('Trusted preview hosts').fill('127.0.0.1, localhost');
@@ -43,7 +53,9 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
       .locator('.template-section')
       .getByRole('button', { name: /^Web preview/ })
       .click();
-    const webNode = page.getByRole('article', { name: 'Web preview: Web preview' });
+    const webNode = page.getByRole('article', {
+      name: 'Web preview: Web preview',
+    });
     await expect(webNode).toBeVisible();
     await webNode.click();
     const preview = page.getByRole('region', { name: 'Preview configuration' });
@@ -51,9 +63,25 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
     await preview.getByLabel('Project folder').fill('.');
     await preview.getByLabel('Readiness path').fill('/health');
     await preview.getByLabel('Initial URL path').fill('/initial');
+    const projectRoot = await realpath(joinPath(userDataDirectory, 'demo', 'forgeboard-demo'));
+    const executable = await realpath(process.execPath);
+    const launchBinding = {
+      projectRoot,
+      cwd: projectRoot,
+      source: 'Development command configured in Settings',
+      executable,
+      executableSha256: await sha256File(executable),
+      arguments: [previewServerPath],
+      portRange: { start: 44_000, end: 44_050 },
+      trustedHosts: ['127.0.0.1', 'localhost'],
+    } satisfies Omit<NativePreviewConfirmationBinding, 'action'>;
 
     await test.step('start waits for real readiness and opens the sandboxed surface', async () => {
-      await preview.getByRole('button', { name: 'Start preview' }).click();
+      await approveNextNativePreviewLaunch(
+        app,
+        { action: 'start', ...launchBinding },
+        async () => await preview.getByRole('button', { name: 'Start preview' }).click(),
+      );
       await expect(preview.locator('.preview-runtime-state')).toHaveText('ready', {
         timeout: 20_000,
       });
@@ -83,7 +111,11 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
     });
 
     await test.step('the same node can restart and stop without leaving a fake running state', async () => {
-      await preview.getByRole('button', { name: 'Restart' }).click();
+      await approveNextNativePreviewLaunch(
+        app,
+        { action: 'restart', ...launchBinding },
+        async () => await preview.getByRole('button', { name: 'Restart' }).click(),
+      );
       await expect(preview.locator('.preview-runtime-state')).toHaveText('ready', {
         timeout: 20_000,
       });
@@ -106,7 +138,9 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
       await expect(
         page.getByRole('article', { name: 'Mobile preview: Mobile preview' }),
       ).toBeVisible();
-      const mobilePreview = page.getByRole('region', { name: 'Preview configuration' });
+      const mobilePreview = page.getByRole('region', {
+        name: 'Preview configuration',
+      });
       await expect(mobilePreview.getByLabel('Device viewport')).toHaveValue('iphone');
       await mobilePreview.getByRole('button', { name: 'Rotate' }).click();
       await mobilePreview.getByLabel('Side by side').check();
@@ -127,4 +161,12 @@ function joinPath(...parts: string[]): string {
 
 function formatCommandPart(value: string): string {
   return /^[A-Za-z0-9_./:=@+{}-]+$/u.test(value) ? value : JSON.stringify(value);
+}
+
+async function sha256File(path: string): Promise<string> {
+  const digest = createHash('sha256');
+  for await (const chunk of createReadStream(path) as AsyncIterable<Uint8Array>) {
+    digest.update(chunk);
+  }
+  return digest.digest('hex');
 }

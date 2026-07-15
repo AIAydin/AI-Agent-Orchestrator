@@ -1,9 +1,9 @@
 import { Play, ShieldCheck } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import type { CheckPlanView } from '../../../../shared/check-contracts.js';
-import { formatCommand } from './helpers.js';
-import './project-checks.css';
+import type { CheckPlanView } from '../../../../shared/checks/contracts.js';
+import { formatCommand } from './model/helpers.js';
+import './checks/project-checks.css';
 
 interface CheckApprovalDialogProps {
   plan: CheckPlanView;
@@ -92,10 +92,12 @@ export function CheckApprovalDialog({
             <ShieldCheck size={19} aria-hidden="true" />
           </span>
           <div>
-            <span className="eyebrow">Executable approval gate</span>
+            <span className="eyebrow">Exact command authorization</span>
             <h2 id="check-approval-title">Review the exact {plan.label} command</h2>
             <p id="check-approval-description">
-              No process has started. Continue only if every disclosed value is expected.
+              No process has started. Continue only if every disclosed value is expected. An active
+              saved grant must match this exact fingerprint; otherwise Forgeboard opens a native
+              confirmation.
             </p>
           </div>
         </header>
@@ -136,6 +138,12 @@ export function CheckApprovalDialog({
                 : 'No inherited variables'}
             </dd>
           </div>
+          <div className="wide">
+            <dt>Exact approval fingerprint</dt>
+            <dd>
+              <code>{plan.approvalFingerprint}</code>
+            </dd>
+          </div>
         </dl>
         <footer>
           <button
@@ -154,8 +162,7 @@ export function CheckApprovalDialog({
             disabled={busy}
             onClick={onContinue}
           >
-            <Play size={14} aria-hidden="true" />{' '}
-            {busy ? 'Opening approval…' : 'Continue to native approval'}
+            <Play size={14} aria-hidden="true" /> {busy ? 'Authorizing…' : 'Authorize exact check'}
           </button>
         </footer>
       </section>

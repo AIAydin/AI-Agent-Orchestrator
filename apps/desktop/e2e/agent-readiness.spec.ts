@@ -1,0 +1,96 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { expect, test, type ElectronApplication } from '@playwright/test';
+
+import { launchDesktop, watchExternalRequests } from './support/electron.js';
+
+test('first-run CLI readiness is remediated and completed entirely in the UI', async () => {
+  const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-readiness-e2e-'));
+  const externalRequests: string[] = [];
+  let electronApp: ElectronApplication | null = null;
+
+  try {
+    const session = await launchDesktop(userDataDirectory);
+    electronApp = session.app;
+    const page = session.page;
+    watchExternalRequests(page, externalRequests);
+    const executable = await electronApp.evaluate(() => process.execPath);
+    const missingExecutable = join(userDataDirectory, 'missing-custom-agent');
+
+    const setup = page.getByRole('dialog');
+    await expect(setup).toHaveAccessibleName(/Ready to build without wiring config files/i);
+    await setup.getByRole('button', { name: /Set up Forgeboard/ }).click();
+    const customCli = setup.getByRole('radio', { name: /Custom CLI/ });
+    await setup.getByText('Custom CLI', { exact: true }).click();
+    await expect(customCli).toBeChecked();
+
+    const executableField = setup.getByLabel(/^Executable\b/);
+    await executableField.fill(missingExecutable);
+    const refresh = setup.getByRole('button', { name: /Refresh Custom CLI readiness/ });
+    await refresh.click();
+    await expect(setup.getByText('Selected executable needs attention')).toBeVisible();
+    await expect(setup.getByRole('button', { name: /Continue/ })).toBeDisabled();
+
+    await electronApp.evaluate(({ dialog }) => {
+      const state = globalThis as typeof globalThis & {
+        __forgeboardReadinessDialogCalls?: number;
+      };
+      state.__forgeboardReadinessDialogCalls = 0;
+      Object.defineProperty(dialog, 'showMessageBox', {
+        configurable: true,
+        value: () => {
+          state.__forgeboardReadinessDialogCalls =
+            (state.__forgeboardReadinessDialogCalls ?? 0) + 1;
+          return Promise.resolve({ response: 1, checkboxChecked: false });
+        },
+      });
+    });
+    await executableField.fill(executable);
+    await refresh.click();
+    await expect(setup.getByText('Selected executable is ready')).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          await electronApp?.evaluate(() => {
+            const state = globalThis as typeof globalThis & {
+              __forgeboardReadinessDialogCalls?: number;
+            };
+            return state.__forgeboardReadinessDialogCalls ?? 0;
+          }),
+      )
+      .toBe(1);
+    await expect(setup.getByRole('button', { name: /Continue/ })).toBeEnabled();
+    await setup.getByRole('button', { name: /Continue/ }).click();
+
+    const readOnlyProfile = setup.getByRole('radio', { name: /Plan \/ read-only/ });
+    await setup.getByText('Plan / read-only', { exact: true }).click();
+    await expect(readOnlyProfile).toBeChecked();
+    await setup.getByRole('button', { name: /Continue/ }).click();
+    await setup.getByLabel('Test command executable').fill('node');
+    await setup
+      .getByLabel(
+        'Test command arguments, one non-empty literal argument per line; empty lines ignored',
+      )
+      .fill('-e\nprocess.stdout.write("READY")');
+    await setup.getByRole('button', { name: /Continue/ }).click();
+    await expect(setup.getByText('Your local workshop is ready')).toBeVisible();
+    await expect(setup).toContainText('Custom CLI');
+    await setup.getByRole('button', { name: /Open Forgeboard/ }).click();
+
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const settings = page.locator('.settings-modal');
+    await settings.getByRole('button', { name: /Agents & runtime/ }).click();
+    await expect(settings.getByLabel('Default agent')).toHaveValue('custom');
+    await expect(settings.getByLabel('Executable', { exact: true })).toHaveValue(executable);
+    await settings.getByRole('button', { name: 'Checks', exact: true }).click();
+    const tests = settings.getByRole('group', { name: 'Tests command' });
+    await expect(tests.getByLabel('Executable')).toHaveValue('node');
+    await expect(tests.getByLabel('Arguments')).toHaveValue('-e\nprocess.stdout.write("READY")');
+    expect(externalRequests).toEqual([]);
+  } finally {
+    await electronApp?.close().catch(() => undefined);
+    await rm(userDataDirectory, { recursive: true, force: true });
+  }
+});

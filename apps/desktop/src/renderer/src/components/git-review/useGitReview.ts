@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { IpcResult } from '../../../../shared/contracts.js';
+import type { IpcResult } from '../../../../shared/application/contracts.js';
 import type {
   GitCommitPlanView,
   GitCommitResultView,
   GitDiscardPlanView,
   GitReviewView,
   GitTargetInput,
-} from '../../../../shared/git-contracts.js';
+} from '../../../../shared/git/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 
 function errorMessage(error: unknown): string {

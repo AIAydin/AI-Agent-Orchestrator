@@ -20,7 +20,7 @@ import {
   type AppSettings,
   type RunDisclosure,
   type RunEventEnvelope,
-} from '../../shared/contracts.js';
+} from '../../shared/application/contracts.js';
 import type { StoredRunRecord } from '../storage.js';
 import { createDefaultAgentAdapterPlanner } from './adapter-planner.js';
 import {
@@ -36,6 +36,7 @@ import {
   type AgentExecutionOperations,
   type AgentExecutionRequest,
   type AgentExecutionStore,
+  type AgentPreparationProcessAuthorization,
   type AgentSessionLauncher,
   type PreparedAgentExecution,
   type PreparedRunState,
@@ -180,7 +181,11 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     );
   }
 
-  public prepare(ownerId: string, input: AgentExecutionRequest): Promise<PreparedAgentExecution> {
+  public prepare(
+    ownerId: string,
+    input: AgentExecutionRequest,
+    processAuthorization?: AgentPreparationProcessAuthorization,
+  ): Promise<PreparedAgentExecution> {
     let parsedOwnerId: string;
     let parsedInput: AgentExecutionRequest;
     let reservation: symbol;
@@ -193,9 +198,11 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     } catch (error) {
       return Promise.reject(asError(error));
     }
-    const operation = this.#prepare(parsedOwnerId, parsedInput).finally(() => {
-      this.#prepareReservations.delete(reservation);
-    });
+    const operation = this.#prepare(parsedOwnerId, parsedInput, processAuthorization).finally(
+      () => {
+        this.#prepareReservations.delete(reservation);
+      },
+    );
     return this.#trackOwnerOperation(parsedOwnerId, operation);
   }
 
@@ -203,6 +210,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     ownerId: string,
     planId: string,
     disclosureFingerprintValue: string,
+    authorizeLaunch?: () => void,
   ): Promise<AgentExecutionLaunchHandle> {
     let parsedOwnerId: string;
     let fingerprint: string;
@@ -216,9 +224,11 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     } catch (error) {
       return Promise.reject(asError(error));
     }
-    const operation = this.#launch(parsedOwnerId, planId, fingerprint).finally(() => {
-      this.#launchReservations.delete(planId);
-    });
+    const operation = this.#launch(parsedOwnerId, planId, fingerprint, authorizeLaunch).finally(
+      () => {
+        this.#launchReservations.delete(planId);
+      },
+    );
     return this.#trackOwnerOperation(parsedOwnerId, operation);
   }
 
@@ -384,7 +394,11 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     if (!this.#disposed) this.#privacyResetting = false;
   }
 
-  async #prepare(ownerId: string, input: AgentExecutionRequest): Promise<PreparedAgentExecution> {
+  async #prepare(
+    ownerId: string,
+    input: AgentExecutionRequest,
+    processAuthorization?: AgentPreparationProcessAuthorization,
+  ): Promise<PreparedAgentExecution> {
     const generation = this.#generation;
     const project = this.#store.getProject(input.projectId);
     if (project === undefined || project.missing) {
@@ -431,7 +445,13 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
           ? input.context
           : await remapContextIntoWorktree(input.context, repositoryPath, cwd);
       const effectiveInput: AgentExecutionRequest = { ...input, context: effectiveContext };
-      const planned = await this.#planAdapter(effectiveInput, cwd, settings, runId);
+      const planned = await this.#planAdapter(
+        effectiveInput,
+        cwd,
+        settings,
+        runId,
+        processAuthorization,
+      );
       const warnings = [...planned.plan.disclosure.warnings, ...planned.detectionWarnings];
       if (primaryWasDirty && worktree !== null) {
         warnings.push(
@@ -593,6 +613,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     ownerId: string,
     planId: string,
     fingerprint: string,
+    authorizeLaunch?: () => void,
   ): Promise<AgentExecutionLaunchHandle> {
     const prepared = this.#ownedPending(ownerId, planId);
     const currentFingerprint = disclosureFingerprint({
@@ -646,7 +667,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       await this.#revalidateWorkspace(prepared);
       await revalidateContextAttachments(prepared.context, prepared.record.cwd);
       await prepared.revalidateBeforeLaunch?.();
-      const session = await this.#launchPrepared(prepared);
+      const session = await this.#launchPrepared(prepared, authorizeLaunch);
       const ownerStopped = this.#stoppingOwners.has(prepared.ownerId);
       if (prepared.generation !== this.#generation || ownerStopped) {
         try {
@@ -792,7 +813,10 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     return true;
   }
 
-  async #launchPrepared(prepared: PreparedRunState): Promise<AgentSession> {
+  async #launchPrepared(
+    prepared: PreparedRunState,
+    authorizeLaunch?: () => void,
+  ): Promise<AgentSession> {
     this.#assertOwnerAccepting(prepared.ownerId);
     if (prepared.trustedExtensionAdapter) {
       const currentManifest = await this.#getTrustedAdapter(prepared.adapterId);
@@ -806,10 +830,17 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       }
     }
     this.#assertOwnerAccepting(prepared.ownerId);
-    const launch = async (): Promise<AgentSession> =>
-      this.#launchSession === undefined
-        ? await prepared.adapter.launch(prepared.plan)
-        : await this.#launchSession(prepared.adapter, prepared.plan);
+    const launch = async (): Promise<AgentSession> => {
+      this.#assertOwnerAccepting(prepared.ownerId);
+      if (this.#launchSession === undefined) {
+        return await prepared.adapter.launch(prepared.plan, () => {
+          this.#assertOwnerAccepting(prepared.ownerId);
+          authorizeLaunch?.();
+        });
+      }
+      authorizeLaunch?.();
+      return await this.#launchSession(prepared.adapter, prepared.plan);
+    };
     if (!prepared.trustedExtensionAdapter || this.#launchTrustedAdapter === undefined) {
       return await launch();
     }
@@ -1170,16 +1201,21 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       if (before.paths.get(candidate) !== after.paths.get(candidate)) changed.add(candidate);
     }
     if (before.headOid !== null && after.headOid !== null && before.headOid !== after.headOid) {
-      const committed = await this.#repositories.git.run([
-        '-C',
-        cwd,
-        'diff',
-        '--name-only',
-        '-z',
-        before.headOid,
-        after.headOid,
-        '--',
-      ]);
+      const committed = await this.#repositories.git.runGuarded(
+        [
+          '-C',
+          cwd,
+          'diff',
+          '--no-ext-diff',
+          '--no-textconv',
+          '--name-only',
+          '-z',
+          before.headOid,
+          after.headOid,
+          '--',
+        ],
+        { repositoryPath: cwd, operation: 'object-inspection' },
+      );
       for (const candidate of committed.stdout.split('\0')) {
         if (candidate !== '') changed.add(candidate);
       }

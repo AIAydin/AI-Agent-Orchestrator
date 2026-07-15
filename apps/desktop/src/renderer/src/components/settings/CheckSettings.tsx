@@ -6,7 +6,7 @@ import type {
   CommandConfiguration,
   CustomCheckConfiguration,
   Project,
-} from '../../../../shared/contracts.js';
+} from '../../../../shared/application/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 import { CommandEditor, SettingsSection, type AsyncSettingsProps } from './shared.js';
 

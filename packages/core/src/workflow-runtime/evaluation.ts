@@ -1,5 +1,5 @@
-import type { CanvasEdge, CanvasNode } from '../domain.js';
-import { isTerminalRunStatus } from '../workflow.js';
+import type { CanvasEdge, CanvasNode } from '../model/domain.js';
+import { isTerminalRunStatus } from '../workflow/model.js';
 
 import {
   assertPlannedEdge,

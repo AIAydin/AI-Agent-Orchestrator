@@ -1,6 +1,6 @@
 import { AlertTriangle, Container, ShieldCheck } from 'lucide-react';
 
-import type { AppSettings, PermissionProfile } from '../../../../shared/contracts.js';
+import type { AppSettings, PermissionProfile } from '../../../../shared/application/contracts.js';
 import {
   configuredFilesystemLabel,
   permissionProfileLabel,

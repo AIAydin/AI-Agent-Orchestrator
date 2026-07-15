@@ -3,14 +3,18 @@ import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
-import { app, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
 
+import {
+  ApprovalListInputSchema,
+  ApprovalRevocationInputSchema,
+  ApprovalViewSchema,
+} from '../shared/approvals/contracts.js';
 import {
   AuditListInputSchema,
   BackupHealthSchema,
   CanvasDocumentSchema,
-  CloneProjectInputSchema,
   ConfirmProjectRecoveryInputSchema,
   CreateProjectInputSchema,
   IPC_CHANNELS,
@@ -18,25 +22,34 @@ import {
   LocateProjectRecoveryInputSchema,
   type AppSettings,
   type IpcResult,
-} from '../shared/contracts.js';
-import { AutomaticBackupCoordinator } from './automatic-backup-coordinator.js';
-import { CheckIpcService } from './check-ipc.js';
-import { CheckRuntime } from './check-runtime.js';
-import { detectAgents, ProjectService } from './project-service.js';
-import { DockerIpcService } from './docker-ipc.js';
-import { ExtensionIpcService } from './extension-ipc.js';
-import { GitIpcService } from './git-ipc.js';
-import { createBundledGitRepositoryService } from './git-runtime.js';
+} from '../shared/application/contracts.js';
+import { IntegrityCheckInputSchema } from '../shared/integrity/contracts.js';
+import { ApprovalService } from './approvals/approval-service.js';
+import { AutomaticBackupCoordinator } from './backups/automatic-backup-coordinator.js';
+import { CheckIpcService } from './checks/check-ipc.js';
+import { CheckRuntime } from './checks/check-runtime.js';
+import { detectAgents, ProjectService } from './projects/project-service.js';
+import { DockerIpcService } from './docker/docker-ipc.js';
+import { ExtensionIpcService } from './extensions/extension-ipc.js';
+import { GitIpcService } from './git/git-ipc.js';
+import { createNativeGitDelegateAuthorizer } from './git/delegates/native-confirmation.js';
+import { createBundledGitRepositoryService } from './git/git-runtime.js';
+import { IntegrityService } from './integrity/service.js';
 import { DataOperationGate } from './lifecycle/data-operation-gate.js';
 import { performPrivacyDeletion } from './lifecycle/privacy-deletion.js';
-import { PreviewIpcService } from './preview-ipc.js';
-import { prepareReversibleQuitBackup } from './quit-backup-preparation.js';
-import { RecoveryIpcService } from './recovery-ipc.js';
-import { RunService } from './run-service.js';
-import { SettingsIpcService } from './settings-ipc.js';
+import { OutboundActionGate } from './outbound/outbound-action-gate.js';
+import { PreviewIpcService } from './previews/preview-ipc.js';
+import { ProjectCloneIpcService } from './projects/project-clone-ipc.js';
+import { AgentReadinessIpcService } from './readiness/ipc.js';
+import { AgentReadinessService } from './readiness/service.js';
+import { prepareReversibleQuitBackup } from './backups/quit-backup-preparation.js';
+import { RecoveryIpcService } from './recovery/recovery-ipc.js';
+import { RunService } from './runs/run-service.js';
+import { SettingsIpcService } from './settings/settings-ipc.js';
 import type { LocalStore } from './storage.js';
-import { createWorkflowRuntimeComposition } from './workflow/workflow-composition.js';
-import { WorkflowIpcService } from './workflow/workflow-ipc.js';
+import { createWorkflowRuntimeComposition } from './workflow/host/composition.js';
+import { WorkflowIpcService } from './workflow/host/ipc.js';
+import { assertLiveMainFrame } from './security/ipc-authority.js';
 
 const PathSchema = z.string().min(1).max(32_768);
 const ProjectIdSchema = z.string().uuid();
@@ -136,6 +149,8 @@ export function createDefaultSettings(): AppSettings {
 
 export interface ApplicationServices {
   settings: SettingsIpcService;
+  readiness: AgentReadinessIpcService;
+  projectClones: ProjectCloneIpcService;
   docker: DockerIpcService;
   runs: RunService;
   previews: PreviewIpcService;
@@ -162,13 +177,37 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     if (failure !== undefined) throw failure.reason;
   };
   const repositories = createBundledGitRepositoryService();
+  const withProjectGitAuthorization = async <Output>(
+    event: IpcMainInvokeEvent,
+    operation: (authority: {
+      readonly parent: BrowserWindow;
+      assertCurrent(): void;
+    }) => Promise<Output>,
+  ): Promise<Output> => {
+    const authority = requireIpcWindowAuthority(event, 'project operation');
+    const value = await repositories.git.withDelegateAuthorization(
+      createNativeGitDelegateAuthorizer({
+        assertCurrent: () => authority.assertCurrent(),
+        show: async (options) => (await dialog.showMessageBox(authority.parent, options)).response,
+      }),
+      async () => await operation(authority),
+    );
+    authority.assertCurrent();
+    return value;
+  };
   const projects = new ProjectService(app, dialog, store, repositories);
+  const outbound = new OutboundActionGate(store);
+  const projectClones = new ProjectCloneIpcService(dialog, projects, outbound, runDataOperation);
   const transcripts = join(app.getPath('userData'), 'transcripts');
   const testAgentPath = app.isPackaged
     ? join(process.resourcesPath, 'test-agent', 'cli.js')
     : resolve(process.cwd(), '../../packages/test-agent/dist/cli.js');
+  const agentReadiness = new AgentReadinessService(testAgentPath);
+  const readiness = new AgentReadinessIpcService(dialog, agentReadiness, store, runDataOperation);
+  const integrity = new IntegrityService(store);
+  const approvals = new ApprovalService(store);
   const extensions = new ExtensionIpcService(app, dialog, store);
-  const docker = new DockerIpcService(dialog, store);
+  const docker = new DockerIpcService(dialog, store, undefined, outbound);
   const backups = new AutomaticBackupCoordinator(
     store,
     () => store.getSettings(createDefaultSettings()),
@@ -203,8 +242,12 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     async (adapterId, expectedManifest, launch) =>
       await extensions.launchTrustedAdapter(adapterId, expectedManifest, launch),
     repositories,
+    undefined,
+    dialog,
   );
-  const previews = new PreviewIpcService(store, () => store.getSettings(createDefaultSettings()));
+  const previews = new PreviewIpcService(dialog, store, () =>
+    store.getSettings(createDefaultSettings()),
+  );
   const git = new GitIpcService(dialog, store, repositories, () =>
     store.getSettings(createDefaultSettings()),
   );
@@ -212,6 +255,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     dialog,
     store,
     (emit) => new CheckRuntime(store, () => store.getSettings(createDefaultSettings()), emit),
+    approvals,
   );
   const workflowRuntime = createWorkflowRuntimeComposition({
     store,
@@ -222,9 +266,13 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const workflows = new WorkflowIpcService(dialog, store, workflowRuntime.createHost, {
     resetRuntime: workflowRuntime.resetForPrivacy,
     disposeRuntime: workflowRuntime.dispose,
+    withGitDelegateAuthorization: async (authorize, operation) =>
+      await repositories.git.withDelegateAuthorization(authorize, operation),
   });
   const resumeDataServices = (): void => {
     recovery.resumeAfterExternalDataMutation();
+    readiness.resume();
+    projectClones.resume();
     docker.resumeAfterShutdownPause();
     git.resumeAfterPrivacyReset();
     extensions.resumeAfterPrivacyReset();
@@ -246,6 +294,8 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       runs.pauseForShutdown(),
       previews.pauseForShutdown(),
       checks.pauseForShutdown(),
+      readiness.pauseForShutdown(),
+      projectClones.pauseForShutdown(),
       docker.pauseForShutdown(),
       extensions.pauseForShutdown(),
       git.pauseForShutdown(),
@@ -314,79 +364,149 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     });
   });
   handle(
+    IPC_CHANNELS.approvalsList,
+    z.tuple([ApprovalListInputSchema]),
+    async (input) =>
+      await runDataOperation(() => ApprovalViewSchema.array().parse(approvals.list(input))),
+  );
+  handleWithEvent(
+    IPC_CHANNELS.approvalsRevoke,
+    z.tuple([ApprovalRevocationInputSchema]),
+    async (event, input) =>
+      await runDataOperation(() => {
+        requireIpcWindowAuthority(event, 'Saved approval revocation').assertCurrent();
+        const revoked = ApprovalViewSchema.parse(approvals.revoke(input));
+        store.appendAudit('permission', 'saved-approval-revoke', 'allowed', {
+          approvalId: revoked.record.id,
+          projectId: revoked.record.scope.projectId,
+          action: revoked.record.scope.action,
+          resourceFingerprint: revoked.record.scope.resourceFingerprint,
+        });
+        return revoked;
+      }),
+  );
+  handleWithEvent(
     IPC_CHANNELS.projectsRecent,
     z.tuple([]),
-    async () => await runDataOperation(() => projects.refreshRecentProjects()),
+    async (event) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(() => projects.refreshRecentProjects(authority)),
+      ),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsPick,
     z.tuple([]),
-    async () => await runDataOperation(async () => await projects.pickRepository()),
+    async (event) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.pickRepository(authority)),
+      ),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsPickParent,
     z.tuple([]),
-    async () => await runDataOperation(async () => await projects.pickParent()),
+    async (event) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.pickParent(authority)),
+      ),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsPickExecutable,
     z.tuple([]),
-    async () => await runDataOperation(async () => await projects.pickExecutable()),
+    async (event) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.pickExecutable(authority)),
+      ),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsPickReferences,
     z.tuple([LocalReferenceSelectionInputSchema]),
-    async (input) => await runDataOperation(async () => await projects.pickReferences(input)),
+    async (event, input) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.pickReferences(input, authority)),
+      ),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsLocateMoved,
     z.tuple([LocateProjectRecoveryInputSchema]),
-    async (input) =>
-      await runDataOperation(async () => await projects.selectMovedProject(input.projectId)),
+    async (event, input) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(
+            async () => await projects.selectMovedProject(input.projectId, authority),
+          ),
+      ),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsConfirmMoved,
     z.tuple([ConfirmProjectRecoveryInputSchema]),
-    async (input) => await runDataOperation(async () => await projects.confirmMovedProject(input)),
+    async (event, input) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.confirmMovedProject(input, authority)),
+      ),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsOpen,
     z.tuple([PathSchema]),
-    async (path) => await runDataOperation(async () => await projects.open(path)),
+    async (event, path) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.open(path, authority)),
+      ),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsCreate,
     z.tuple([CreateProjectInputSchema]),
-    async (input) =>
-      await runDataOperation(
-        async () => await projects.create(input.parentPath, input.name, input.initializeGit),
+    async (event, input) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(
+            async () =>
+              await projects.create(input.parentPath, input.name, input.initializeGit, authority),
+          ),
       ),
   );
-  handle(
-    IPC_CHANNELS.projectsClone,
-    z.tuple([CloneProjectInputSchema]),
-    async (input) =>
-      await runDataOperation(
-        async () => await projects.clone(input.remoteUrl, input.destinationPath),
-      ),
-  );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsDemo,
     z.tuple([]),
-    async () => await runDataOperation(async () => await projects.createDemo()),
+    async (event) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.createDemo(authority)),
+      ),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.projectsInitializeGit,
     z.tuple([z.string().uuid()]),
-    async (projectId) =>
-      await runDataOperation(async () => await projects.initializeGit(projectId)),
+    async (event, projectId) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.initializeGit(projectId, authority)),
+      ),
   );
 
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.canvasLoad,
     z.tuple([ProjectIdSchema]),
-    async (projectId) =>
+    async (event, projectId) =>
       await runDataOperation(() => {
+        requireIpcWindowAuthority(event, 'Canvas load').assertCurrent();
         if (!store.listProjects().some((project) => project.id === projectId && !project.missing)) {
           throw new Error('The selected project is no longer available.');
         }
@@ -403,11 +523,12 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         });
       }),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.canvasSave,
     z.tuple([CanvasDocumentSchema]),
-    async (document) =>
+    async (event, document) =>
       await runDataOperation(() => {
+        requireIpcWindowAuthority(event, 'Canvas save').assertCurrent();
         if (
           !store
             .listProjects()
@@ -425,31 +546,35 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     async (input) => await runDataOperation(() => store.listAuditEvents(input.limit)),
   );
 
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.privacyExport,
     z.tuple([]),
-    async () =>
+    async (event) =>
       await runDataOperation(async () => {
-        const selection = await dialog.showSaveDialog({
+        const authority = requireIpcWindowAuthority(event, 'Local-data export');
+        const selection = await dialog.showSaveDialog(authority.parent, {
           title: 'Export portable Forgeboard data',
           defaultPath: 'forgeboard-local-data.json',
           filters: [{ name: 'JSON', extensions: ['json'] }],
         });
+        authority.assertCurrent();
         if (selection.canceled || !selection.filePath) return null;
         await writeFile(selection.filePath, `${JSON.stringify(store.exportData(), null, 2)}\n`, {
           mode: 0o600,
         });
+        authority.assertCurrent();
         store.appendAudit('export', 'local-data', 'allowed', {
           fileName: 'forgeboard-local-data.json',
         });
         return selection.filePath;
       }),
   );
-  handle(
+  handleWithEvent(
     IPC_CHANNELS.storageCreateBackup,
     z.tuple([]),
-    async () =>
+    async (event) =>
       await runDataOperation(async () => {
+        const authority = requireIpcWindowAuthority(event, 'Manual backup');
         const currentSettings = store.getSettings(createDefaultSettings());
         if (!currentSettings.backupsEnabled) {
           throw new Error('Enable local backups in Settings first.');
@@ -460,6 +585,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         }
         backups.markDataChanged();
         const outcome = await backups.flush();
+        authority.assertCurrent();
         if (outcome.status !== 'created') {
           throw new Error('Forgeboard could not create the requested backup.');
         }
@@ -481,17 +607,25 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     BackupHealthSchema.parse(await runDataOperation(() => store.getBackupHealth())),
   );
   handle(
+    IPC_CHANNELS.storageCheckIntegrity,
+    z.tuple([IntegrityCheckInputSchema]),
+    async (input) => await runDataOperation(() => integrity.check(input)),
+  );
+  handleWithEvent(
     IPC_CHANNELS.privacyDelete,
     z.tuple([z.literal('DELETE ALL LOCAL DATA')]),
-    async (confirmation) => {
+    async (event, confirmation) => {
+      const authority = requireIpcWindowAuthority(event, 'Local-data deletion');
       if (confirmation !== 'DELETE ALL LOCAL DATA') throw new Error('Deletion was not confirmed.');
       await dataOperations.beginMutation('delete');
       try {
+        authority.assertCurrent();
         return await performPrivacyDeletion({
           pauseBackups: async () => await backups.pause(),
           listMissingBackupIds: async () => await store.listMissingRecordedBackupIds(),
           confirmForgetMissingBackups: async (count) => {
-            const decision = await dialog.showMessageBox({
+            authority.assertCurrent();
+            const decision = await dialog.showMessageBox(authority.parent, {
               type: 'warning',
               title: 'Recorded backups are unavailable',
               message: `${count} recorded backup ${count === 1 ? 'file is' : 'files are'} unavailable.`,
@@ -502,6 +636,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
               cancelId: 0,
               noLink: true,
             });
+            authority.assertCurrent();
             return decision.response === 1;
           },
           resetDataServices: async () => {
@@ -516,8 +651,12 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
               recovery.pauseForExternalDataMutation(),
             ]);
           },
-          deleteData: async (approvedMissingBackupIds) =>
-            await store.deleteAllLocalData({ approvedMissingBackupIds }),
+          deleteData: async (approvedMissingBackupIds) => {
+            authority.assertCurrent();
+            const outcome = await store.deleteAllLocalData({ approvedMissingBackupIds });
+            authority.assertCurrent();
+            return outcome;
+          },
         });
       } finally {
         recovery.clearPendingPlans();
@@ -527,6 +666,8 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   );
 
   settings.registerIpcHandlers();
+  readiness.registerIpcHandler();
+  projectClones.registerIpcHandler();
   runs.registerIpcHandlers();
   previews.registerIpcHandlers();
   extensions.registerIpcHandlers();
@@ -537,6 +678,8 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   recovery.registerIpcHandlers();
   return {
     settings,
+    readiness,
+    projectClones,
     docker,
     runs,
     previews,
@@ -578,7 +721,9 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       const workflowStopped = await Promise.allSettled([workflows.dispose()]);
       const stopped = await Promise.allSettled([
         docker.dispose(),
+        projectClones.dispose(),
         checks.dispose(),
+        readiness.dispose(),
         previews.dispose(),
         runs.dispose(),
         extensions.dispose(),
@@ -607,10 +752,13 @@ function handle<Args extends unknown[], Output>(
   schema: z.ZodType<Args>,
   operation: (...args: Args) => Output | Promise<Output>,
 ): void {
-  ipcMain.handle(channel, async (_event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
+  ipcMain.handle(channel, async (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
     try {
+      const authority = requireIpcWindowAuthority(event, 'Forgeboard request');
       const args = schema.parse(rawArgs);
-      return { ok: true, value: await operation(...args) };
+      const value = await operation(...args);
+      authority.assertCurrent();
+      return { ok: true, value };
     } catch (error) {
       const validation = error instanceof z.ZodError;
       return {
@@ -626,4 +774,54 @@ function handle<Args extends unknown[], Output>(
       };
     }
   });
+}
+
+function handleWithEvent<Args extends unknown[], Output>(
+  channel: string,
+  schema: z.ZodType<Args>,
+  operation: (event: IpcMainInvokeEvent, ...args: Args) => Output | Promise<Output>,
+): void {
+  ipcMain.handle(channel, async (event, ...rawArgs: unknown[]): Promise<IpcResult<Output>> => {
+    try {
+      const authority = requireIpcWindowAuthority(event, 'Forgeboard request');
+      const args = schema.parse(rawArgs);
+      const value = await operation(event, ...args);
+      authority.assertCurrent();
+      return { ok: true, value };
+    } catch (error) {
+      const validation = error instanceof z.ZodError;
+      return {
+        ok: false,
+        error: {
+          code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
+          message: validation
+            ? 'Forgeboard rejected an invalid request.'
+            : error instanceof Error
+              ? error.message
+              : 'The operation failed.',
+        },
+      };
+    }
+  });
+}
+
+function requireIpcWindowAuthority(
+  event: IpcMainInvokeEvent,
+  operation: string,
+): {
+  readonly parent: BrowserWindow;
+  assertCurrent(): void;
+} {
+  assertLiveMainFrame(event, operation);
+  const parent = BrowserWindow.fromWebContents(event.sender);
+  if (parent === null || parent.isDestroyed()) {
+    throw new Error(`${operation} requires a live Forgeboard window.`);
+  }
+  const assertCurrent = (): void => {
+    assertLiveMainFrame(event, operation);
+    if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
+      throw new Error('The originating Forgeboard window changed or closed.');
+    }
+  };
+  return { parent, assertCurrent };
 }

@@ -8,6 +8,10 @@ UI-configured project checks with persisted output. Completed writable runs can 
 authoritative, isolated agent-worktree reviews without entering a path or editing configuration.
 The permission centre exposes Plan/read-only, Worktree write, Docker isolated, and a reusable
 Custom profile with complete host/Docker controls and honest enforcement disclosures.
+The first-run agent step requires main-process readiness evidence for the selected bundled,
+detected, overridden, or custom CLI before setup can continue. Only an exact fingerprinted project
+check can optionally be remembered for 30 days; saved check approvals can be revoked immediately
+under **Settings → Permissions** and do not authorize agent launches or other actions.
 Data & Privacy also provides UI-configured scheduled and quit-time SQLite backups with a per-folder
 retention target, canvas snapshot recovery, and reviewed portable JSON export/import. The interactive
 terminal node and other unchecked surfaces in the implementation ledger are still under
@@ -28,8 +32,8 @@ configuration; broader unfinished product areas remain listed below and in the c
 - Repository contents, paths, prompts, transcripts, terminal output, and diffs stay local by
   default.
 - Forgeboard uses its bundled Git runtime and launches the user's installed Codex, Claude Code,
-  Gemini CLI, OpenCode, or custom
-  CLI. Those tools may send selected context to their providers under their own terms.
+  Gemini CLI, OpenCode, or custom CLI. Those tools may send selected context to their providers
+  under their own terms.
 - There is no telemetry, analytics, crash upload, model proxy, or automatic log collection.
 - The optional collaboration protocol/server accepts approved canvas metadata only, never
   repository files or raw transcripts. Its desktop client is not complete yet.
@@ -47,7 +51,23 @@ packages/
   git-engine/       Safe Git repository/worktree/change services
   ui/               Accessible shared component system
   test-agent/       Deterministic local agent used by tests and the demo
+config/
+  tooling/          Shared TypeScript, lint, formatting, and test configuration
+scripts/
+  startup/          One-command source bootstrap
+  structure/        Line-count and folder-density enforcement
+  release/          Release metadata, sources, and checksum tooling
+docs/
+  design/           Architecture documentation
+  policies/         Privacy and operating policies
+  legal/            Third-party notices
+.github/
+  workflows/        Cross-platform verification and release automation
 ```
+
+Only standard repository entry files remain at the top level. Maintained folders are limited to 12
+direct hand-written files of any type, and the structure gate requires a named feature/domain
+subfolder before that limit is exceeded.
 
 ## Current availability
 
@@ -66,9 +86,29 @@ and custom project checks can likewise be configured, approved, run, cancelled, 
 entirely in the UI. See [Permission profiles](docs/PERMISSIONS.md) for the exact technical and
 disclosure-only boundaries.
 
+The selected first-run CLI must have current ready evidence from the trusted process: Forgeboard
+resolves the exact executable and runs its bounded version/capability probe, while missing,
+mismatched, or invalid configurations keep **Continue** disabled. Checking a draft executable does
+not silently save it or approve a later launch.
+
+Project checks normally retain their cancel-default native launch confirmation. That dialog can
+optionally remember only the exact main-resolved project/check fingerprint for 30 days. The
+fingerprint binds the project, check identity and kind, executable and arguments, working directory,
+inherited environment-variable names, repository-root identity, executable identity, and relevant
+package-script bytes. Drift produces a different fingerprint and requires a new confirmation.
+Remembered approvals are listed and immediately revocable in **Settings → Permissions → Scoped
+approvals**. Agent launches, selected/expanded context, Docker pulls, external sends, and destructive
+Git actions never reuse this check grant.
+
 Existing folders can be opened without Git. Forgeboard then offers an **Initialize Git** action in
 the project rail. A cancel-default native confirmation names the exact folder before Forgeboard
 creates Git metadata; existing files are left untouched, unstaged, and uncommitted.
+
+Repository clone and Docker image pull use a separate main-owned outbound gate. Each native dialog
+shows the exact action, transport, credential-free endpoint/resource, and destination details. Its
+short-lived approval is owner-bound and single-use; Forgeboard rebuilds the disclosure after the
+dialog and refuses execution if anything changed. The low-level clone and pull executors require the
+gate-issued permit, so a renderer response alone is not authority to send data.
 
 The Data & Privacy screen can browse and create canvas snapshots, restore an exact reviewed
 snapshot after native confirmation, and import a validated portable JSON export in merge or replace
@@ -76,11 +116,19 @@ mode. Import revalidates the selected file's exact-byte SHA-256 digest immediate
 transaction. Portable exports include Forgeboard settings, projects, canvases, runs, checks,
 snapshots, and audit history; they do not embed repository files or extension source folders.
 
+Desktop audit metadata is redacted before storage and linked by SHA-256 previous/event hashes.
+Forgeboard verifies the chain and its required immutability triggers at startup and when validating
+a backup. Audit retention removes only a verified leading prefix and writes a chained checkpoint,
+so it never punches an unverifiable hole through later events. This is tamper-evident local storage,
+not an externally anchored signature: a privileged actor able to rewrite the whole database can
+recompute an unkeyed chain, and raw subprocess output is not made safe by audit redaction.
+
 Docker isolation is optional. Forgeboard does not bundle or silently choose an agent image: select
 the Docker executable, exact image, and in-image agent executable in the UI. Forgeboard checks that
-combination locally and requires a native confirmation before any explicit image download. Agent
-run planning performs only bounded Docker daemon/image metadata preflight, pins the approved launch
-to an immutable image ID, and does not execute the in-image agent until exact launch approval.
+combination locally and requires the exact single-use native outbound confirmation before any
+explicit image download. Agent run planning performs only bounded Docker daemon/image metadata
+preflight, pins the approved launch to an immutable image ID, and does not execute the in-image agent
+until exact launch approval.
 
 The release workflow is designed to emit clearly identified unsigned development artifacts until
 the optional signing secrets documented in the release guide are configured. Such artifacts may
@@ -132,10 +180,12 @@ corepack pnpm smoke:packaged
 integration tests, and production builds. Packaging commands do not by themselves prove that every
 platform installer has been generated and installed successfully.
 
-See [Architecture](ARCHITECTURE.md), [Security](SECURITY.md), [Privacy](PRIVACY.md),
-[Releases and signing](docs/RELEASES.md), [Local extensions](docs/EXTENSIONS.md), and
-[Contributing](CONTRIBUTING.md) for design and policy details. Installer third-party licenses and
-corresponding-source details are in [Third-party notices](THIRD_PARTY_NOTICES.md).
+See [Architecture](docs/design/ARCHITECTURE.md), [Security](.github/SECURITY.md),
+[Privacy](docs/policies/PRIVACY.md),
+[Permission profiles](docs/PERMISSIONS.md), [Releases and signing](docs/RELEASES.md),
+[Local extensions](docs/EXTENSIONS.md), and [Contributing](.github/CONTRIBUTING.md) for design and
+policy details. Installer third-party licenses and corresponding-source details are in
+[Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md).
 
 ## License
 

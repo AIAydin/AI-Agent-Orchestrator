@@ -6,8 +6,12 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import type { IpcResult, Project } from '../src/shared/contracts.js';
-import { launchDesktop, watchExternalRequests } from './electron.js';
+import type { IpcResult, Project } from '../src/shared/application/contracts.js';
+import {
+  approveNextNativeAgentLaunch,
+  launchDesktop,
+  watchExternalRequests,
+} from './support/electron.js';
 
 const COMMIT_IDENTITY = {
   name: 'Forgeboard Worktree E2E',
@@ -60,7 +64,14 @@ test('an agent worktree can be reviewed and committed without changing the prima
     const launchDisclosure = page.getByRole('dialog', { name: 'Review the exact agent launch' });
     await expect(launchDisclosure).toContainText('Test agent in a dedicated worktree');
     await expect(launchDisclosure).toContainText('Network: provider-controlled');
-    await launchDisclosure.getByRole('button', { name: 'Approve & launch' }).click();
+    await approveNextNativeAgentLaunch(
+      firstSession.app,
+      launchDisclosure,
+      'test-agent',
+      async () => {
+        await launchDisclosure.getByRole('button', { name: 'Approve & launch' }).click();
+      },
+    );
     await expect(page.locator('.run-history')).toContainText('succeeded · 1 changed file', {
       timeout: 20_000,
     });

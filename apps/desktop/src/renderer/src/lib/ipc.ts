@@ -1,4 +1,4 @@
-import type { IpcResult } from '../../../shared/contracts.js';
+import type { IpcResult } from '../../../shared/application/contracts.js';
 
 export function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message);

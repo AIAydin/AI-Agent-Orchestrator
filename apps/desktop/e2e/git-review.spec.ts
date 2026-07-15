@@ -5,8 +5,8 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import type { IpcResult, Project } from '../src/shared/contracts.js';
-import { launchDesktop, watchExternalRequests } from './electron.js';
+import type { IpcResult, Project } from '../src/shared/application/contracts.js';
+import { launchDesktop, watchExternalRequests } from './support/electron.js';
 
 test('authoritative Git review stages, unstages, and discloses the exact local commit', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-git-review-e2e-'));

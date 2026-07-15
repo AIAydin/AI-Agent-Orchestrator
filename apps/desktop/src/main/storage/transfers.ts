@@ -1,7 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 
-import { ProjectSchema, type CanvasDocument, type Project } from '../../shared/contracts.js';
+import {
+  ProjectSchema,
+  type CanvasDocument,
+  type Project,
+} from '../../shared/application/contracts.js';
 import {
   LocalDataExportSchema,
   type ImportResult,

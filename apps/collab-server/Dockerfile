@@ -3,7 +3,8 @@ FROM node:22.17.0-bookworm-slim AS build
 WORKDIR /workspace
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json vitest.config.ts ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY config/tooling ./config/tooling
 COPY apps/collab-server/package.json apps/collab-server/tsconfig.json ./apps/collab-server/
 RUN --mount=type=cache,id=forgeboard-pnpm-store,target=/pnpm/store \
   pnpm config set store-dir /pnpm/store \

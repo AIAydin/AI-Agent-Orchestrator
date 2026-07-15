@@ -1,6 +1,11 @@
-import { CheckResultSchema, type CanvasEdge, type CheckResult, type RunStatus } from '../domain.js';
-import { ReviewerAssessmentSchema, type ReviewerAssessment } from '../workflow-gates.js';
-import { NodeRunStateSchema } from '../workflow.js';
+import {
+  CheckResultSchema,
+  type CanvasEdge,
+  type CheckResult,
+  type RunStatus,
+} from '../model/domain.js';
+import { ReviewerAssessmentSchema, type ReviewerAssessment } from '../workflow/gates.js';
+import { NodeRunStateSchema } from '../workflow/model.js';
 
 import {
   approvalRequestUnchecked,

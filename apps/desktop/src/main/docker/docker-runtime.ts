@@ -1,0 +1,343 @@
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
+import { access, realpath } from 'node:fs/promises';
+import path from 'node:path';
+
+import { detectDockerRuntime } from '@forgeboard/agent-adapters';
+
+import {
+  DockerReadinessInputSchema,
+  DockerReadinessSchema,
+  type DockerReadiness,
+  type DockerReadinessInput,
+  type DockerReadinessStatus,
+} from '../../shared/docker/contracts.js';
+
+const DEFAULT_CHECK_TIMEOUT_MS = 5_000;
+const DEFAULT_PULL_TIMEOUT_MS = 10 * 60_000;
+const MAX_CHECK_OUTPUT = 16_384;
+const MAX_PULL_OUTPUT = 131_072;
+
+interface CommandResult {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  reason?: string;
+}
+
+interface RuntimeLimits {
+  checkTimeoutMs?: number;
+  pullTimeoutMs?: number;
+  probeContainerName?: string;
+}
+
+export type BeforeDockerCommand = () => void | Promise<void>;
+
+export interface DockerPullExecution {
+  executable: string;
+  image: string;
+  output: string;
+}
+
+export async function resolveDockerExecutable(configured: string): Promise<string> {
+  const command = configured.trim();
+  if (command === '' || command.includes('\0') || /[\r\n]/u.test(command)) {
+    throw new Error('The Docker executable setting is invalid.');
+  }
+  if (path.isAbsolute(command)) {
+    const canonical = await realpath(command);
+    if (process.platform !== 'win32') await access(canonical, fsConstants.X_OK);
+    return canonical;
+  }
+  if (command.includes('/') || command.includes('\\')) {
+    throw new Error('Choose an absolute Docker executable or a command name such as docker.');
+  }
+
+  const pathEntries = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
+  const extensions =
+    process.platform === 'win32'
+      ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
+      : [''];
+  for (const directory of pathEntries) {
+    for (const extension of extensions) {
+      const candidate = path.join(
+        directory,
+        process.platform === 'win32' && path.extname(command) === ''
+          ? `${command}${extension}`
+          : command,
+      );
+      try {
+        const canonical = await realpath(candidate);
+        if (process.platform !== 'win32') await access(canonical, fsConstants.X_OK);
+        return canonical;
+      } catch {
+        // Keep searching the configured PATH without invoking a shell.
+      }
+    }
+  }
+  throw new Error('Docker was not found. Choose its executable in Settings.');
+}
+
+export async function checkDockerReadiness(
+  input: DockerReadinessInput,
+  limits: RuntimeLimits = {},
+  beforeCommand?: BeforeDockerCommand,
+): Promise<DockerReadiness> {
+  const configuration = DockerReadinessInputSchema.parse(input);
+  const checkedAt = new Date().toISOString();
+  let executable: string;
+  try {
+    executable = await resolveDockerExecutable(configuration.dockerExecutable);
+  } catch (error) {
+    return readinessResult(configuration, {
+      executable: configuration.dockerExecutable,
+      checkedAt,
+      status: 'executable-unavailable',
+      reason: safeText(error instanceof Error ? error.message : String(error)),
+    });
+  }
+
+  const runtime = await detectDockerRuntime(
+    {
+      dockerExecutable: executable,
+      image: configuration.image,
+      timeoutMs: boundedTimeout(limits.checkTimeoutMs, DEFAULT_CHECK_TIMEOUT_MS, 100, 30_000),
+    },
+    beforeCommand === undefined ? {} : { beforeProbe: beforeCommand },
+  );
+  if (!runtime.available) {
+    return readinessResult(configuration, {
+      executable,
+      checkedAt: runtime.checkedAt,
+      executableAvailable: runtime.executableAvailable,
+      daemonAvailable: runtime.daemonAvailable,
+      imageAvailable: runtime.imageAvailable,
+      imageCompatible: runtime.imageCompatible,
+      status: runtimeStatus(runtime),
+      ...(runtime.daemonVersion === undefined ? {} : { daemonVersion: runtime.daemonVersion }),
+      ...(runtime.imageId === undefined ? {} : { imageId: runtime.imageId }),
+      reason: safeText(runtime.reason ?? 'Docker readiness check failed.'),
+    });
+  }
+
+  const containerName = limits.probeContainerName ?? `forgeboard-readiness-${randomUUID()}`;
+  const probe = await runBoundedCommand(
+    executable,
+    [
+      'run',
+      '--rm',
+      '--pull',
+      'never',
+      '--name',
+      containerName,
+      '--network',
+      'none',
+      '--read-only',
+      '--cap-drop',
+      'ALL',
+      '--security-opt',
+      'no-new-privileges:true',
+      '--pids-limit',
+      '32',
+      '--memory',
+      '256m',
+      '--cpus',
+      '0.5',
+      '--user',
+      '65534:65534',
+      '--tmpfs',
+      '/tmp:rw,noexec,nosuid,size=16m',
+      '--entrypoint',
+      configuration.containerExecutable,
+      configuration.image,
+      '--version',
+    ],
+    boundedTimeout(limits.checkTimeoutMs, DEFAULT_CHECK_TIMEOUT_MS, 100, 30_000),
+    MAX_CHECK_OUTPUT,
+    beforeCommand,
+  );
+  if (probe.timedOut) await removeProbeContainer(executable, containerName, beforeCommand);
+
+  const version = safeText([probe.stdout, probe.stderr].filter(Boolean).join(' '), 2_048);
+  if (probe.exitCode !== 0) {
+    const detail =
+      probe.reason ?? (version || `The version probe exited with code ${String(probe.exitCode)}.`);
+    return readinessResult(configuration, {
+      executable,
+      checkedAt,
+      executableAvailable: true,
+      daemonAvailable: true,
+      imageAvailable: true,
+      imageCompatible: true,
+      status: 'agent-unavailable',
+      daemonVersion: runtime.daemonVersion,
+      imageId: runtime.imageId,
+      reason: `The configured agent executable could not start in the constrained image: ${safeText(detail)}`,
+    });
+  }
+
+  return readinessResult(configuration, {
+    executable,
+    checkedAt,
+    executableAvailable: true,
+    daemonAvailable: true,
+    imageAvailable: true,
+    imageCompatible: true,
+    containerExecutableAvailable: true,
+    available: true,
+    status: 'ready',
+    daemonVersion: runtime.daemonVersion,
+    imageId: runtime.imageId,
+    ...(version === '' ? {} : { agentVersion: version }),
+  });
+}
+
+export async function pullDockerImage(
+  input: DockerReadinessInput,
+  limits: RuntimeLimits = {},
+  beforeCommand?: BeforeDockerCommand,
+): Promise<DockerPullExecution> {
+  const configuration = DockerReadinessInputSchema.parse(input);
+  const executable = await resolveDockerExecutable(configuration.dockerExecutable);
+  const result = await runBoundedCommand(
+    executable,
+    ['pull', configuration.image],
+    boundedTimeout(limits.pullTimeoutMs, DEFAULT_PULL_TIMEOUT_MS, 1_000, DEFAULT_PULL_TIMEOUT_MS),
+    MAX_PULL_OUTPUT,
+    beforeCommand,
+  );
+  if (result.exitCode !== 0) {
+    const detail = result.reason ?? safeText([result.stderr, result.stdout].join(' '));
+    throw new Error(
+      `Docker could not pull ${configuration.image}: ${detail || `exit ${String(result.exitCode)}`}`,
+    );
+  }
+  return {
+    executable,
+    image: configuration.image,
+    output: safeText([result.stdout, result.stderr].filter(Boolean).join(' '), MAX_PULL_OUTPUT),
+  };
+}
+
+function readinessResult(
+  configuration: DockerReadinessInput,
+  values: Partial<DockerReadiness> & Pick<DockerReadiness, 'executable' | 'checkedAt' | 'status'>,
+): DockerReadiness {
+  return DockerReadinessSchema.parse({
+    executable: values.executable,
+    image: configuration.image,
+    containerExecutable: configuration.containerExecutable,
+    executableAvailable: values.executableAvailable ?? false,
+    daemonAvailable: values.daemonAvailable ?? false,
+    imageAvailable: values.imageAvailable ?? false,
+    imageCompatible: values.imageCompatible ?? false,
+    containerExecutableAvailable: values.containerExecutableAvailable ?? false,
+    available: values.available ?? false,
+    status: values.status,
+    checkedAt: values.checkedAt,
+    ...(values.daemonVersion === undefined ? {} : { daemonVersion: values.daemonVersion }),
+    ...(values.imageId === undefined ? {} : { imageId: values.imageId }),
+    ...(values.agentVersion === undefined ? {} : { agentVersion: values.agentVersion }),
+    ...(values.reason === undefined ? {} : { reason: values.reason }),
+  });
+}
+
+function runtimeStatus(runtime: {
+  executableAvailable: boolean;
+  daemonAvailable: boolean;
+  imageAvailable: boolean;
+  imageCompatible: boolean;
+}): DockerReadinessStatus {
+  if (!runtime.executableAvailable) return 'executable-unavailable';
+  if (!runtime.daemonAvailable) return 'daemon-unavailable';
+  if (!runtime.imageAvailable) return 'image-missing';
+  return runtime.imageCompatible ? 'agent-unavailable' : 'image-incompatible';
+}
+
+async function removeProbeContainer(
+  executable: string,
+  name: string,
+  beforeCommand?: BeforeDockerCommand,
+): Promise<void> {
+  await runBoundedCommand(executable, ['rm', '--force', name], 2_000, 2_048, beforeCommand).catch(
+    () => undefined,
+  );
+}
+
+async function runBoundedCommand(
+  executable: string,
+  arguments_: readonly string[],
+  timeoutMs: number,
+  maximumOutput: number,
+  beforeCommand?: BeforeDockerCommand,
+): Promise<CommandResult> {
+  await beforeCommand?.();
+  return await new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const environment: NodeJS.ProcessEnv = {};
+    if (process.platform === 'win32' && process.env['SYSTEMROOT'] !== undefined) {
+      environment['SYSTEMROOT'] = process.env['SYSTEMROOT'];
+    }
+    const child = spawn(executable, [...arguments_], {
+      env: environment,
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    const finish = (result: CommandResult): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+    const timeout = setTimeout(() => {
+      child.kill('SIGKILL');
+      finish({
+        exitCode: null,
+        stdout,
+        stderr,
+        timedOut: true,
+        reason: 'Docker command timed out.',
+      });
+    }, timeoutMs);
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (stdout.length < maximumOutput) {
+        stdout += chunk.toString('utf8').slice(0, maximumOutput - stdout.length);
+      }
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (stderr.length < maximumOutput) {
+        stderr += chunk.toString('utf8').slice(0, maximumOutput - stderr.length);
+      }
+    });
+    child.on('error', (error) =>
+      finish({ exitCode: null, stdout, stderr, timedOut: false, reason: error.message }),
+    );
+    child.on('close', (exitCode) => finish({ exitCode, stdout, stderr, timedOut: false }));
+  });
+}
+
+function boundedTimeout(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  return value === undefined ? fallback : Math.max(minimum, Math.min(maximum, value));
+}
+
+function safeText(value: string, maximumLength = 4_096): string {
+  return [...value]
+    .map((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint <= 31 || (codePoint >= 127 && codePoint <= 159) ? ' ' : character;
+    })
+    .join('')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, maximumLength);
+}

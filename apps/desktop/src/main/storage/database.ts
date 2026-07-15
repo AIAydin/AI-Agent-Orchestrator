@@ -2,6 +2,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { resetAuditChain } from './security/audit-integrity.js';
+
 export const MIGRATIONS = [
   `
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -175,6 +177,60 @@ export const MIGRATIONS = [
     CREATE INDEX IF NOT EXISTS idx_workflow_node_bindings_revision
       ON workflow_node_bindings(execution_id, execution_revision, node_id);
   `,
+  `
+    ALTER TABLE audit_events ADD COLUMN previous_hash TEXT;
+    ALTER TABLE audit_events ADD COLUMN event_hash TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_events_hash
+      ON audit_events(event_hash) WHERE event_hash IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS audit_chain_state (
+      singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+      initialized_at TEXT NOT NULL,
+      last_sequence INTEGER NOT NULL CHECK(last_sequence >= 0),
+      last_event_hash TEXT NOT NULL CHECK(length(last_event_hash) = 64)
+    );
+    CREATE TABLE IF NOT EXISTS audit_chain_checkpoints (
+      checkpoint_sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      first_pruned_sequence INTEGER NOT NULL CHECK(first_pruned_sequence > 0),
+      pruned_through_sequence INTEGER NOT NULL CHECK(
+        pruned_through_sequence >= first_pruned_sequence
+      ),
+      pruned_through_hash TEXT NOT NULL CHECK(length(pruned_through_hash) = 64),
+      event_count INTEGER NOT NULL CHECK(event_count > 0),
+      pruned_at TEXT NOT NULL,
+      previous_checkpoint_hash TEXT NOT NULL CHECK(length(previous_checkpoint_hash) = 64),
+      checkpoint_hash TEXT NOT NULL UNIQUE CHECK(length(checkpoint_hash) = 64)
+    );
+
+    CREATE TABLE IF NOT EXISTS approval_records (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      action TEXT NOT NULL CHECK(action IN (
+        'agent-launch', 'command-execute', 'sensitive-file-override', 'git-push',
+        'pull-request-create', 'git-merge', 'git-squash', 'git-rebase',
+        'git-cherry-pick', 'git-destructive', 'worktree-remove', 'branch-delete',
+        'external-open', 'collaboration-join', 'data-export', 'external-send',
+        'permission-expand'
+      )),
+      resource_fingerprint TEXT NOT NULL CHECK(length(resource_fingerprint) BETWEEN 16 AND 512),
+      agent_id TEXT,
+      run_id TEXT,
+      decision TEXT NOT NULL CHECK(decision IN ('approved', 'denied')),
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      consumed_at TEXT,
+      single_use INTEGER NOT NULL CHECK(single_use IN (0, 1)),
+      value_json TEXT NOT NULL CHECK(length(value_json) <= 1048576),
+      FOREIGN KEY(project_id) REFERENCES recent_projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_approval_records_project_created
+      ON approval_records(project_id, created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_approval_records_exact_scope
+      ON approval_records(
+        project_id, action, resource_fingerprint, agent_id, run_id, created_at DESC
+      );
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {
@@ -232,13 +288,14 @@ export function clearAllTables(database: DatabaseSync): void {
   database.prepare('DELETE FROM workflow_executions').run();
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM trusted_extension_ledger').run();
+  database.prepare('DELETE FROM approval_records').run();
   database.prepare('DELETE FROM canvas_snapshots').run();
   database.prepare('DELETE FROM canvas_documents').run();
   database.prepare('DELETE FROM project_path_history').run();
   database.prepare('DELETE FROM recent_projects').run();
   database.prepare('DELETE FROM agent_runs').run();
   database.prepare('DELETE FROM app_settings').run();
-  database.prepare('DELETE FROM audit_events').run();
+  resetAuditChain(database);
   database.prepare('DELETE FROM backup_records').run();
 }
 
@@ -254,13 +311,14 @@ export function clearPortableTables(database: DatabaseSync): void {
   // canvases they bind to so a replace import cannot retain orphaned runtime state.
   database.prepare('DELETE FROM workflow_executions').run();
   database.prepare('DELETE FROM check_executions').run();
+  database.prepare('DELETE FROM approval_records').run();
   database.prepare('DELETE FROM canvas_snapshots').run();
   database.prepare('DELETE FROM canvas_documents').run();
   database.prepare('DELETE FROM project_path_history').run();
   database.prepare('DELETE FROM recent_projects').run();
   database.prepare('DELETE FROM agent_runs').run();
   database.prepare('DELETE FROM app_settings').run();
-  database.prepare('DELETE FROM audit_events').run();
+  resetAuditChain(database);
 }
 
 export interface TransactionalAuditEvent {

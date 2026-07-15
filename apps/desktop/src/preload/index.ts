@@ -2,12 +2,14 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { z } from 'zod';
 
 import type { ForgeboardApi } from '../shared/api.js';
+import { AgentReadinessResultSchema } from '../shared/readiness/contracts.js';
+import { ApprovalViewSchema } from '../shared/approvals/contracts.js';
 import {
   CheckEventEnvelopeSchema,
   CheckExecutionViewSchema,
   CheckPlanViewSchema,
-} from '../shared/check-contracts.js';
-import type { IpcResult } from '../shared/contracts.js';
+} from '../shared/checks/contracts.js';
+import type { IpcResult } from '../shared/application/contracts.js';
 import {
   AppCloseRequestSchema,
   AppCloseResponseSchema,
@@ -20,16 +22,18 @@ import {
   PreviewEventEnvelopeSchema,
   ProjectRecoveryAssessmentSchema,
   ProjectSchema,
+  RunApprovalViewSchema,
   RunEventEnvelopeSchema,
   ipcResultSchema,
-} from '../shared/contracts.js';
-import { DockerPullResultSchema, DockerReadinessSchema } from '../shared/docker-contracts.js';
+} from '../shared/application/contracts.js';
+import { DockerPullResultSchema, DockerReadinessSchema } from '../shared/docker/contracts.js';
 import {
   GitCommitPlanViewSchema,
   GitCommitResultViewSchema,
   GitDiscardPlanViewSchema,
   GitReviewViewSchema,
-} from '../shared/git-contracts.js';
+} from '../shared/git/contracts.js';
+import { IntegrityCheckResultSchema } from '../shared/integrity/contracts.js';
 import {
   RECOVERY_IPC_CHANNELS,
   RecoveryImportCountsSchema,
@@ -37,7 +41,7 @@ import {
   RecoveryRestoredCanvasSchema,
   RecoverySnapshotRestorePlanSchema,
   RecoverySnapshotSummarySchema,
-} from '../shared/recovery-contracts.js';
+} from '../shared/recovery/contracts.js';
 import {
   WORKFLOW_IPC_CHANNELS,
   WorkflowApproveHumanDecisionInputSchema,
@@ -53,7 +57,7 @@ import {
   WorkflowResolveRevisionEscapeInputSchema,
   WorkflowReviewDecisionInputSchema,
   WorkflowStartInputSchema,
-} from '../shared/workflow-contracts.js';
+} from '../shared/workflow/contracts.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -98,9 +102,20 @@ const api: ForgeboardApi = {
   },
   agents: {
     detect: () => ipcRenderer.invoke(IPC_CHANNELS.agentsDetect),
+    checkReadiness: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.agentsCheckReadiness,
+        AgentReadinessResultSchema.nullable(),
+        input,
+      ),
+  },
+  approvals: {
+    list: (input) => invokeValidated(IPC_CHANNELS.approvalsList, ApprovalViewSchema.array(), input),
+    revoke: (input) => invokeValidated(IPC_CHANNELS.approvalsRevoke, ApprovalViewSchema, input),
   },
   docker: {
-    check: (input) => invokeValidated(IPC_CHANNELS.dockerCheck, DockerReadinessSchema, input),
+    check: (input) =>
+      invokeValidated(IPC_CHANNELS.dockerCheck, DockerReadinessSchema.nullable(), input),
     pull: (input) => invokeValidated(IPC_CHANNELS.dockerPull, DockerPullResultSchema, input),
   },
   projects: {
@@ -134,7 +149,8 @@ const api: ForgeboardApi = {
     save: (document) => ipcRenderer.invoke(IPC_CHANNELS.canvasSave, document),
   },
   runs: {
-    prepare: (input) => ipcRenderer.invoke(IPC_CHANNELS.runsPrepare, input),
+    prepare: (input) =>
+      invokeValidated(IPC_CHANNELS.runsPrepare, RunApprovalViewSchema.nullable(), input),
     approve: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsApprove, runId),
     sendInput: (runId, data) => ipcRenderer.invoke(IPC_CHANNELS.runsInput, runId, data),
     interrupt: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsInterrupt, runId),
@@ -293,6 +309,8 @@ const api: ForgeboardApi = {
   storage: {
     createBackup: () => invokeValidated(IPC_CHANNELS.storageCreateBackup, BackupResultSchema),
     getBackupHealth: () => invokeValidated(IPC_CHANNELS.storageBackupHealth, BackupHealthSchema),
+    checkIntegrity: (input) =>
+      invokeValidated(IPC_CHANNELS.storageCheckIntegrity, IntegrityCheckResultSchema, input),
   },
   recovery: {
     listSnapshots: (input) =>

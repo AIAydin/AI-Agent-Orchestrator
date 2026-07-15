@@ -1,4 +1,4 @@
-import type { CanvasNode } from '../domain.js';
+import type { CanvasNode } from '../model/domain.js';
 import {
   NodeRunStateSchema,
   WorkflowRunSchema,
@@ -10,7 +10,7 @@ import {
   type InternalExecutionReference,
   type NodeRunState,
   type WorkflowExecutionReference,
-} from '../workflow.js';
+} from '../workflow/model.js';
 
 import { nodeById, reviewGateEvaluation } from './evidence-state.js';
 import { evaluateNodeReadiness } from './evaluation.js';

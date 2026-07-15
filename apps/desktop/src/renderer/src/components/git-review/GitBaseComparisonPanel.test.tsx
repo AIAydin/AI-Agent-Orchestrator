@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { GitAgentBaseComparisonView } from '../../../../shared/git-contracts.js';
+import type { GitAgentBaseComparisonView } from '../../../../shared/git/contracts.js';
 import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
 import {
   GIT_BASE_PANEL_ID,

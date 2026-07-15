@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './electron.js';
+import { launchDesktop, watchExternalRequests } from './support/electron.js';
 
 test('project checks configure, approve, execute, cancel, and persist entirely through the UI', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-checks-e2e-'));
@@ -21,7 +21,7 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     await configureChecks(page);
     await page.getByRole('button', { name: /Explore the safe demo/i }).click();
 
-    await approveCheckDialogs(electronApp);
+    await approveCheckDialogs(electronApp, { rememberFirst: true });
     await openChecksDrawer(page);
 
     const lint = checkCard(page, 'Lint');
@@ -33,17 +33,47 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     await expect(lintDisclosure).toContainText('node');
     await expect(lintDisclosure).toContainText('FORGEBOARD_CHECK_E2E');
     await expect(lintDisclosure).toContainText('No process has started');
-    await lintDisclosure.getByRole('button', { name: /Continue to native approval/ }).click();
+    await lintDisclosure.getByRole('button', { name: /Authorize exact check/ }).click();
     await expect(lint).toContainText('passed');
     await expect(lint).toContainText('FORGEBOARD_CHECK_E2E');
     await expect(lint).toContainText('Exit 0');
+    expect(await nativeDialogCount(electronApp)).toBe(1);
+
+    await test.step('an exact remembered grant skips native re-prompting and can be revoked', async () => {
+      await lint.getByRole('button', { name: 'Run Lint' }).click();
+      const repeatedDisclosure = page.getByRole('dialog', {
+        name: 'Review the exact Lint command',
+      });
+      await expect(repeatedDisclosure).toContainText(/Exact approval fingerprint/);
+      await repeatedDisclosure.getByRole('button', { name: /Authorize exact check/ }).click();
+      await expect(lint).toContainText('passed');
+      expect(await nativeDialogCount(electronApp!)).toBe(1);
+
+      await page.getByRole('button', { name: 'Settings' }).click();
+      const settings = page.locator('.settings-modal');
+      await settings.getByRole('button', { name: 'Permissions', exact: true }).click();
+      await expect(settings.getByText('Saved approvals', { exact: true })).toBeVisible();
+      await settings.getByRole('button', { name: 'Revoke Command execute' }).click();
+      await expect(
+        settings.getByText('No active saved approvals exist for this project.'),
+      ).toBeVisible();
+      await settings.getByRole('button', { name: 'Close settings' }).click();
+
+      await lint.getByRole('button', { name: 'Run Lint' }).click();
+      await page
+        .getByRole('dialog', { name: 'Review the exact Lint command' })
+        .getByRole('button', { name: /Authorize exact check/ })
+        .click();
+      await expect(lint).toContainText('passed');
+      expect(await nativeDialogCount(electronApp!)).toBe(2);
+    });
 
     const tests = checkCard(page, 'Tests');
     await tests.getByRole('button', { name: 'Run Tests' }).click();
     const testDisclosure = page.getByRole('dialog', {
       name: 'Review the exact Tests command',
     });
-    await testDisclosure.getByRole('button', { name: /Continue to native approval/ }).click();
+    await testDisclosure.getByRole('button', { name: /Authorize exact check/ }).click();
     await expect(tests).toContainText('passed');
     await expect(tests).toContainText('FORGEBOARD_TEST_E2E');
     await expect(tests.getByRole('group', { name: 'Tests parsed test summary' })).toContainText(
@@ -57,7 +87,7 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     const buildDisclosure = page.getByRole('dialog', {
       name: 'Review the exact Build command',
     });
-    await buildDisclosure.getByRole('button', { name: /Continue to native approval/ }).click();
+    await buildDisclosure.getByRole('button', { name: /Authorize exact check/ }).click();
     await expect(build.getByRole('button', { name: 'Cancel Build' })).toBeVisible();
     await expect(build).toContainText('FORGEBOARD_CANCEL_E2E');
     await build.getByRole('button', { name: 'Cancel Build' }).click();
@@ -84,7 +114,7 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     await restartedBuild.getByRole('button', { name: 'Run Build' }).click();
     await page
       .getByRole('dialog', { name: 'Review the exact Build command' })
-      .getByRole('button', { name: /Continue to native approval/ })
+      .getByRole('button', { name: /Authorize exact check/ })
       .click();
     await expect(restartedBuild.getByRole('button', { name: 'Cancel Build' })).toBeVisible();
     const heartbeat = join(
@@ -134,12 +164,30 @@ async function configureChecks(page: Page): Promise<void> {
   await expect(settings).toBeHidden();
 }
 
-async function approveCheckDialogs(electronApp: ElectronApplication): Promise<void> {
-  await electronApp.evaluate(({ dialog }) => {
+async function approveCheckDialogs(
+  electronApp: ElectronApplication,
+  options: { rememberFirst?: boolean } = {},
+): Promise<void> {
+  await electronApp.evaluate(({ dialog }, rememberFirst) => {
+    const state = globalThis as typeof globalThis & { __forgeboardCheckDialogCalls?: number };
+    state.__forgeboardCheckDialogCalls = 0;
     Object.defineProperty(dialog, 'showMessageBox', {
       configurable: true,
-      value: () => Promise.resolve({ response: 1, checkboxChecked: false }),
+      value: () => {
+        state.__forgeboardCheckDialogCalls = (state.__forgeboardCheckDialogCalls ?? 0) + 1;
+        return Promise.resolve({
+          response: 1,
+          checkboxChecked: rememberFirst && state.__forgeboardCheckDialogCalls === 1,
+        });
+      },
     });
+  }, options.rememberFirst === true);
+}
+
+async function nativeDialogCount(electronApp: ElectronApplication): Promise<number> {
+  return await electronApp.evaluate(() => {
+    const state = globalThis as typeof globalThis & { __forgeboardCheckDialogCalls?: number };
+    return state.__forgeboardCheckDialogCalls ?? 0;
   });
 }
 

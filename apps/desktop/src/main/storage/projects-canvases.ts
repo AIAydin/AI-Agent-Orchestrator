@@ -6,7 +6,7 @@ import {
   ProjectSchema,
   type CanvasDocument,
   type Project,
-} from '../../shared/contracts.js';
+} from '../../shared/application/contracts.js';
 import { CanvasSnapshotSchema, type CanvasSnapshot } from '../storage-schemas.js';
 import { transaction, type TransactionalAuditEvent } from './database.js';
 import {

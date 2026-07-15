@@ -1,6 +1,6 @@
-import type { Canvas, CanvasEdge, CheckResult, RunStatus } from '../domain.js';
-import type { ReviewGateEvaluation, ReviewerAssessment } from '../workflow-gates.js';
-import type { WorkflowPlan, WorkflowRun } from '../workflow.js';
+import type { Canvas, CanvasEdge, CheckResult, RunStatus } from '../model/domain.js';
+import type { ReviewGateEvaluation, ReviewerAssessment } from '../workflow/gates.js';
+import type { WorkflowPlan, WorkflowRun } from '../workflow/model.js';
 
 export type WorkflowRunScope =
   | { readonly kind: 'node'; readonly nodeId: string; readonly includeUpstream?: boolean }

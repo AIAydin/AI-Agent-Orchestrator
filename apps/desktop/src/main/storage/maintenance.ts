@@ -1,15 +1,17 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 
-import { CanvasDocumentSchema, ProjectSchema, type AppSettings } from '../../shared/contracts.js';
+import {
+  CanvasDocumentSchema,
+  ProjectSchema,
+  type AppSettings,
+} from '../../shared/application/contracts.js';
 import { CanvasSnapshotSchema, type RetentionResult } from '../storage-schemas.js';
 import { transaction } from './database.js';
 import {
   canvasContentHash,
-  isRecord,
   type JsonRow,
   parseJson,
-  redact,
   safeParseJson,
   sanitizeCanvasDocument,
   sanitizeCanvasSnapshot,
@@ -19,6 +21,7 @@ import {
   validateSettings,
 } from './values.js';
 import { writeCanvas, writeSnapshot } from './writes.js';
+import { pruneAuditPrefix } from './security/audit-integrity.js';
 
 export function redactStoredSecrets(database: DatabaseSync): void {
   transaction(database, () => {
@@ -34,20 +37,6 @@ export function redactStoredSecrets(database: DatabaseSync): void {
         database
           .prepare('UPDATE recent_projects SET value_json = ? WHERE id = ?')
           .run(value, row.id);
-      }
-    }
-
-    const auditRows = database
-      .prepare('SELECT sequence, metadata_json FROM audit_events')
-      .all() as unknown as { sequence: number; metadata_json: string }[];
-    for (const row of auditRows) {
-      const metadata = safeParseJson(row.metadata_json);
-      if (!isRecord(metadata)) continue;
-      const value = JSON.stringify(redact(metadata));
-      if (value !== row.metadata_json) {
-        database
-          .prepare('UPDATE audit_events SET metadata_json = ? WHERE sequence = ?')
-          .run(value, row.sequence);
       }
     }
   });
@@ -104,9 +93,7 @@ export function applyRetention(
         )
         .run(runCutoff).changes,
     );
-    const deletedAuditEvents = Number(
-      database.prepare('DELETE FROM audit_events WHERE occurred_at < ?').run(auditCutoff).changes,
-    );
+    const deletedAuditEvents = pruneAuditPrefix(database, auditCutoff, now);
     const deletedSnapshots = Number(
       database
         .prepare(

@@ -4,7 +4,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CheckExecutionView, CheckPlanView } from '../../../../shared/check-contracts.js';
+import type { CheckExecutionView, CheckPlanView } from '../../../../shared/checks/contracts.js';
 import { useProjectChecks } from './useProjectChecks.js';
 
 const PROJECT_A = '30000000-0000-4000-8000-000000000001';
@@ -154,6 +154,7 @@ function plan(projectId: string): CheckPlanView {
     arguments: ['--version'],
     cwd: '/tmp/project',
     environmentVariableNames: ['PATH'],
+    approvalFingerprint: 'a'.repeat(64),
     expiresAt: '2099-07-15T00:05:00.000Z',
   };
 }

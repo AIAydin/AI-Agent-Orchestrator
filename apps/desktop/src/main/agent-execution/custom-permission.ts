@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import type { ContextAttachment, PermissionProfile } from '@forgeboard/agent-adapters';
 
-import type { CustomPermissionProfileSettings } from '../../shared/contracts.js';
+import type { CustomPermissionProfileSettings } from '../../shared/application/contracts.js';
 
 export interface ResolvedCustomPermission {
   readonly profile: PermissionProfile;

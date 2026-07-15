@@ -12,12 +12,12 @@ import type {
   GitCommitPlanView,
   GitDiscardPlanView,
   GitTargetInput,
-} from '../../../../shared/git-contracts.js';
+} from '../../../../shared/git/contracts.js';
 import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
-import { GitCommitDisclosure, GitDiscardDisclosure } from './GitActionDisclosure.js';
-import { GitCommitPanel } from './GitCommitPanel.js';
-import { GitDiffViewer } from './GitDiffViewer.js';
-import { GitFileSidebar } from './GitFileSidebar.js';
+import { GitCommitDisclosure, GitDiscardDisclosure } from './actions/GitActionDisclosure.js';
+import { GitCommitPanel } from './actions/GitCommitPanel.js';
+import { GitDiffViewer } from './diff/GitDiffViewer.js';
+import { GitFileSidebar } from './diff/GitFileSidebar.js';
 import {
   buildReviewGroups,
   findReviewFile,

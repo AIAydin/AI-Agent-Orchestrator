@@ -9,12 +9,16 @@
       "default": "./src/index.ts"
     },
     "./domain": {
-      "types": "./src/domain.ts",
-      "default": "./src/domain.ts"
+      "types": "./src/model/domain.ts",
+      "default": "./src/model/domain.ts"
+    },
+    "./permissions": {
+      "types": "./src/permissions/contracts.ts",
+      "default": "./src/permissions/contracts.ts"
     },
     "./workflow-runtime": {
-      "types": "./src/workflow-runtime.ts",
-      "default": "./src/workflow-runtime.ts"
+      "types": "./src/workflow-runtime/index.ts",
+      "default": "./src/workflow-runtime/index.ts"
     }
   },
   "scripts": {

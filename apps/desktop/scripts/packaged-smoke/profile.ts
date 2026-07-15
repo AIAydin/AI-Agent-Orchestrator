@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 
 import {
   PACKAGED_SMOKE_PROFILE_FILE,
   PACKAGED_SMOKE_ROOT_ARGUMENT,
   PACKAGED_SMOKE_TOKEN_ARGUMENT,
-} from '../../src/shared/packaged-smoke.js';
+} from '../../src/shared/smoke/contracts.js';
 
 export interface IsolatedSmokeProfile {
   readonly root: string;
@@ -19,15 +19,20 @@ export async function createIsolatedSmokeProfile(root: string): Promise<Isolated
   await mkdir(root, { mode: 0o700 });
   const canonicalRoot = await realpath(root);
   const canonicalTemporaryDirectory = await realpath(tmpdir());
-  const temporaryRelativePath = relative(canonicalTemporaryDirectory, canonicalRoot);
+  const canonicalParent = await realpath(dirname(canonicalRoot));
+  const temporaryRelativePath = relative(canonicalTemporaryDirectory, canonicalParent);
   if (
     temporaryRelativePath === '' ||
     temporaryRelativePath === '..' ||
     temporaryRelativePath.startsWith(`..${sep}`) ||
-    isAbsolute(temporaryRelativePath)
+    isAbsolute(temporaryRelativePath) ||
+    temporaryRelativePath.includes(sep)
   ) {
-    throw new Error('Packaged smoke profiles must be fresh children of the system temp directory.');
+    throw new Error(
+      'Packaged smoke launchers must use a direct mkdtemp child of the system temp directory.',
+    );
   }
+  const profileKind = launcherProfileKind(canonicalParent, canonicalRoot);
   const directories = [
     'session',
     'documents',
@@ -51,7 +56,14 @@ export async function createIsolatedSmokeProfile(root: string): Promise<Isolated
   const token = randomUUID();
   await writeFile(
     join(canonicalRoot, PACKAGED_SMOKE_PROFILE_FILE),
-    `${JSON.stringify({ schemaVersion: 1, token })}\n`,
+    `${JSON.stringify({
+      schemaVersion: 2,
+      token,
+      profileRoot: canonicalRoot,
+      profileParent: canonicalParent,
+      systemTempRoot: canonicalTemporaryDirectory,
+      profileKind,
+    })}\n`,
     { encoding: 'utf8', flag: 'wx', mode: 0o600 },
   );
   const home = join(canonicalRoot, 'home');
@@ -81,4 +93,25 @@ export async function createIsolatedSmokeProfile(root: string): Promise<Isolated
       ELECTRON_ENABLE_LOGGING: '1',
     },
   };
+}
+
+function launcherProfileKind(
+  profileParent: string,
+  profileRoot: string,
+): 'packaged-runtime' | 'installer' {
+  const parentName = basename(profileParent);
+  const rootName = basename(profileRoot);
+  if (
+    /^forgeboard-packaged-runtime-smoke-[A-Za-z0-9]{6}$/u.test(parentName) &&
+    rootName === 'user-data'
+  ) {
+    return 'packaged-runtime';
+  }
+  if (
+    /^forgeboard-installer-smoke-[A-Za-z0-9]{6}$/u.test(parentName) &&
+    /^user-data-(?:appimage|deb|dmg|nsis)$/u.test(rootName)
+  ) {
+    return 'installer';
+  }
+  throw new Error('Packaged smoke profile path does not match a launcher-owned temporary layout.');
 }

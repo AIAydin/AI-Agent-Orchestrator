@@ -373,3 +373,53 @@ unchecked when only a subset of their required behavior has proof.
   deterministic write with zero external requests. Fresh unsigned macOS arm64 app, ZIP, and DMG
   artifacts built successfully; packaged-app and native DMG installer launch smokes passed.
   `corepack pnpm audit --prod --audit-level high` reported no known production vulnerabilities.
+- 2026-07-15: scoped approvals gained durable SQLite persistence, strict exact-scope lookup,
+  expiry, revocation, and atomic single-use consumption. Audit events are redacted before a
+  SHA-256 previous/event hash is committed, verified at startup and backup time, protected against
+  row updates by validated SQLite triggers, and retained only through chained prefix checkpoints.
+  Legacy audit rows upgrade transactionally, while explicit replace/privacy resets discard the
+  chain and device-local grants. Focused storage and service verification passed 53 tests; the full
+  unit suite passed 667 tests across 120 files, alongside desktop strict typecheck, focused
+  lint/format checks, `git diff --check`, and the repository structure gate. The broader
+  approval/impact-confirmation and all-required-events audit checklist items remain unchecked
+  pending complete consumer and event-coverage evidence.
+- 2026-07-15: the unpacked packaged-app smoke now drives the token-bound renderer to apply
+  `Use safe defaults` and open `Explore the safe demo`, then proves the isolated demo project and
+  Workshop canvas are usable. It launches the packaged deterministic test agent through the stable
+  main-process run seam, requires a real child process and successful durable run, verifies the
+  packaged executable/resource/worktree paths, and reopens SQLite after exit to prove settings,
+  recent-project, canvas, run, and SHA-256-bound output persistence. A build-time sandbox policy
+  rejects `node:crypto`, filesystem, or path resolution from the generated preload, and the fresh
+  Node 22 macOS arm64 package plus real packaged smoke passed. Seventeen focused smoke/policy tests,
+  core strict typecheck, focused lint/format checks, and the 478-file structure gate passed. This
+  evidence does not observe or prove zero outbound traffic, so that broader checklist item remains
+  unchecked.
+- 2026-07-15: repository organization now enforces both the 2,000-line ceiling and a maximum of 12
+  direct hand-written files per maintained folder, plus an explicit loose-root allowlist. Main,
+  renderer, shared contracts, storage, workflow, Git-engine, E2E support, documentation, tooling,
+  startup, and release code are grouped by feature/domain. The final gate covered 489 code and
+  configuration files. A relocation audit found and fixed an over-broad `release/` basename ignore;
+  all six hand-written `scripts/release` files are now tracked and covered by Git, ESLint, Prettier,
+  Vitest, and the structure gate. A 453-file relative-import scan and 13-file local-document-link
+  scan found no missing targets.
+- 2026-07-15: renderer-triggered native operations now retain exact main-frame, WebContents, and
+  parent-window authority across asynchronous dialogs and final execution boundaries. Agent launch
+  review exposes a strict, non-recursive disclosure SHA-256 and canonical expiry, while the native
+  cancel-default confirmation is bound to those exact values. Active Git clean/smudge/process
+  filters require an exact owner-bound native approval; aliases, external helpers/diffs, textconv,
+  pagers, configured editors, signing, hooks, fsmonitor, custom merge drivers, and filtered hunk
+  staging fail closed or are neutralized as appropriate. Workflow recovery persists
+  `waiting-delegate-approval` and retries only from a fresh live renderer authorization rather than
+  failing terminally or inheriting stale IPC authority.
+- 2026-07-15: the final frozen verification passed formatting, full zero-warning lint, recursive
+  strict workspace typecheck, explicit strict E2E typecheck, 766 unit tests across 127 files, 137
+  integration tests across 17 files, 11 standalone startup/release tests, all 11 Electron Playwright
+  scenarios, every workspace production build, the 489-file structure gate, and `git diff --check`.
+  Token-scoped E2E native-dialog harnesses validate exact agent and preview disclosures, cancel all
+  mismatches, and prove descriptor/token cleanup on success, rejection, timeout, installation
+  failure, and later-owner replacement. `corepack pnpm audit --prod --audit-level high` reported no
+  known production dependency vulnerabilities.
+- 2026-07-15: a fresh unsigned macOS arm64 app, ZIP, and DMG were generated from the final source.
+  The packaged-app smoke passed its UI-driven safe-default/demo/real-child-process/durable-SQLite
+  proof, and the native DMG mount/install/launch smoke returned `FORGEBOARD_SMOKE_OK`. GitHub Release
+  publication, signing/notarization, and fresh Windows/Linux installer proof remain unchecked.

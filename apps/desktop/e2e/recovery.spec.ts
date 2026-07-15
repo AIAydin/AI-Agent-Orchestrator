@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './electron.js';
+import { launchDesktop, watchExternalRequests } from './support/electron.js';
 
 test('canvas recovery, portable import, and automatic backups work entirely in the UI', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-recovery-e2e-'));
@@ -15,7 +15,8 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
 
   try {
     const session = await launchDesktop(userDataDirectory);
-    electronApp = session.app;
+    const app = session.app;
+    electronApp = app;
     const page = session.page;
     watchExternalRequests(page, externalRequests);
 
@@ -54,7 +55,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
     ).toHaveCount(0);
     await closeProject(page);
 
-    await approveNativeConfirmations(electronApp);
+    await approveNativeConfirmations(app);
     await test.step('snapshot restoration is disclosed, natively approved, and durable', async () => {
       const settings = await openDataSettings(page);
       const manualSnapshot = settings.locator('.recovery-snapshot-row').filter({
@@ -75,7 +76,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
     });
 
     await test.step('portable data exports and replace-imports through native file selection', async () => {
-      await chooseExportPath(electronApp, exportPath);
+      await chooseExportPath(app, exportPath);
       let settings = await openDataSettings(page);
       await settings.getByRole('button', { name: 'Export portable local data' }).click();
       await expect(settings.getByText(`Local data exported to ${exportPath}`)).toBeVisible();
@@ -87,7 +88,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
       await page.locator('.inspector').getByRole('button', { name: 'Delete' }).click();
       await closeProject(page);
 
-      await chooseImportPath(electronApp, exportPath);
+      await chooseImportPath(app, exportPath);
       settings = await openDataSettings(page);
       await settings.getByLabel('Import behavior').selectOption('replace');
       await settings.getByRole('button', { name: 'Choose data export' }).click();
@@ -103,7 +104,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
       ).toBeVisible();
     });
 
-    await electronApp.close();
+    await app.close();
     electronApp = null;
     await expect
       .poll(async () => await readdir(backupDirectory), {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
-import type { CheckExecutionView, CheckPlanView } from '../../../../shared/check-contracts.js';
+import type { CheckExecutionView, CheckPlanView } from '../../../../shared/checks/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 
 interface UseProjectChecksInput {

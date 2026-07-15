@@ -2,7 +2,7 @@ import { createCustomCliAdapter, type PermissionProfile } from '@forgeboard/agen
 import { TEST_AGENT_MANIFEST } from '@forgeboard/test-agent';
 import { describe, expect, it } from 'vitest';
 
-import { RunDisclosureSchema, type RunDisclosure } from '../../shared/contracts.js';
+import { RunDisclosureSchema, type RunDisclosure } from '../../shared/application/contracts.js';
 import { disclosureFingerprint } from './evidence.js';
 
 const RUN_ID = '123fae6e-e213-4a10-a0db-0f85b791f7e9';

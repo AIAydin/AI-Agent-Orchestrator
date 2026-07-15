@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Locator } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './electron.js';
+import {
+  approveNextNativeAgentLaunch,
+  launchDesktop,
+  watchExternalRequests,
+} from './support/electron.js';
 
 test('a UI-configured Custom host profile persists and governs deterministic runs', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-custom-permission-e2e-'));
@@ -15,6 +19,7 @@ test('a UI-configured Custom host profile persists and governs deterministic run
   try {
     const firstSession = await launchDesktop(userDataDirectory);
     electronApp = firstSession.app;
+    let activeElectronApp = firstSession.app;
     let page = firstSession.page;
     watchExternalRequests(page, externalRequests);
 
@@ -54,6 +59,7 @@ test('a UI-configured Custom host profile persists and governs deterministic run
 
       const secondSession = await launchDesktop(userDataDirectory);
       electronApp = secondSession.app;
+      activeElectronApp = secondSession.app;
       page = secondSession.page;
       watchExternalRequests(page, externalRequests);
 
@@ -73,7 +79,9 @@ test('a UI-configured Custom host profile persists and governs deterministic run
         'selected-agent-only',
       );
       await expect(
-        settings.getByRole('checkbox', { name: /Ask the agent to allow tests/ }),
+        settings.getByRole('checkbox', {
+          name: /Ask the agent to allow tests/,
+        }),
       ).toBeChecked();
       await settings.getByRole('button', { name: 'Close settings' }).click();
     });
@@ -87,7 +95,9 @@ test('a UI-configured Custom host profile persists and governs deterministic run
     const agentNode = page.getByRole('article', { name: 'Agent: Agent' });
     await expect(agentNode).toBeVisible();
     await agentNode.click();
-    const runConfiguration = page.getByRole('region', { name: 'Agent run configuration' });
+    const runConfiguration = page.getByRole('region', {
+      name: 'Agent run configuration',
+    });
     const permissionSelection = runConfiguration.getByLabel('Permission profile');
 
     await test.step('Custom is an ordinary selectable Agent-node profile', async () => {
@@ -109,7 +119,9 @@ test('a UI-configured Custom host profile persists and governs deterministic run
 
     await test.step('exact approval discloses the full Custom policy and cancel starts no agent', async () => {
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
-      const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
+      const dialog = page.getByRole('dialog', {
+        name: 'Review the exact agent launch',
+      });
       await expect(dialog).toBeVisible();
       await expect(
         dialog.getByText(
@@ -143,9 +155,13 @@ test('a UI-configured Custom host profile persists and governs deterministic run
 
     await test.step('approval honors the configured read-only behavior', async () => {
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
-      const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
+      const dialog = page.getByRole('dialog', {
+        name: 'Review the exact agent launch',
+      });
       await assertReadOnlyCustomDisclosure(dialog);
-      await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+      await approveNextNativeAgentLaunch(activeElectronApp, dialog, 'test-agent', async () => {
+        await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+      });
 
       const history = page.locator('.run-history');
       await expect(history).toContainText('Forgeboard deterministic agent started.', {
@@ -154,7 +170,9 @@ test('a UI-configured Custom host profile persists and governs deterministic run
       await expect(history).toContainText('Read-only plan completed without filesystem writes.', {
         timeout: 20_000,
       });
-      await expect(history).toContainText('succeeded · no file changes', { timeout: 20_000 });
+      await expect(history).toContainText('succeeded · no file changes', {
+        timeout: 20_000,
+      });
       await expect(page.locator('.event-stream')).not.toContainText('Agent wrote');
     });
 
@@ -172,21 +190,29 @@ test('a UI-configured Custom host profile persists and governs deterministic run
       await runConfiguration.getByLabel('Prompt').fill(writePrompt);
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
 
-      const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
+      const dialog = page.getByRole('dialog', {
+        name: 'Review the exact agent launch',
+      });
       await expect(dialog.getByText(writePrompt, { exact: true })).toBeVisible();
-      const permission = dialog.getByRole('region', { name: 'Effective permission profile' });
+      const permission = dialog.getByRole('region', {
+        name: 'Effective permission profile',
+      });
       await expect(permission).toContainText('Custom host (read/write) · custom · disclosure-only');
       await expect(permission).toContainText('Assigned worktree · read and write');
       await expect(permission).toContainText('Write:');
       await expect(permission).not.toContainText('Write: none');
       await expect(permission).toContainText('Network: provider-controlled');
-      await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+      await approveNextNativeAgentLaunch(activeElectronApp, dialog, 'test-agent', async () => {
+        await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+      });
 
       const history = page.locator('.run-history');
       await expect(history).toContainText('Forgeboard deterministic agent started.', {
         timeout: 20_000,
       });
-      await expect(history).toContainText('succeeded · 1 changed file', { timeout: 20_000 });
+      await expect(history).toContainText('succeeded · 1 changed file', {
+        timeout: 20_000,
+      });
       await expect(page.locator('.event-stream')).toContainText(
         'Agent wrote forgeboard-agent-output-',
       );
@@ -201,7 +227,9 @@ test('a UI-configured Custom host profile persists and governs deterministic run
 });
 
 async function assertReadOnlyCustomDisclosure(dialog: Locator): Promise<void> {
-  const permission = dialog.getByRole('region', { name: 'Effective permission profile' });
+  const permission = dialog.getByRole('region', {
+    name: 'Effective permission profile',
+  });
   await expect(permission).toContainText(
     'Custom host (read-only intent) · custom · disclosure-only',
   );

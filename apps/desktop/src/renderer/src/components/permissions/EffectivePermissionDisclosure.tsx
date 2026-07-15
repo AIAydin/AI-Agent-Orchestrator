@@ -1,4 +1,4 @@
-import type { RunDisclosure } from '../../../../shared/contracts.js';
+import type { RunDisclosure } from '../../../../shared/application/contracts.js';
 import { configuredFilesystemLabel } from './permission-profile-ui.js';
 import './permissions.css';
 

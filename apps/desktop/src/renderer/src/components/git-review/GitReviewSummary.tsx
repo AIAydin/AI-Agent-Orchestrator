@@ -1,6 +1,6 @@
 import { CircleAlert, GitBranch, GitCompareArrows, UserRoundCheck, UserRoundX } from 'lucide-react';
 
-import type { GitReviewView } from '../../../../shared/git-contracts.js';
+import type { GitReviewView } from '../../../../shared/git/contracts.js';
 
 function identitySource(source: GitReviewView['identity']['nameSource']): string {
   if (source === 'git-config') return 'Git config';

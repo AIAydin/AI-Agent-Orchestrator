@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { ApprovalRecord } from '@forgeboard/core';
 
 import type {
   AppSettings,
@@ -6,8 +7,8 @@ import type {
   BackupHealth,
   CanvasDocument,
   Project,
-} from '../shared/contracts.js';
-import type { CheckExecutionView } from '../shared/check-contracts.js';
+} from '../shared/application/contracts.js';
+import type { CheckExecutionView } from '../shared/checks/contracts.js';
 import {
   type BackupResult,
   type CanvasSnapshot,
@@ -23,18 +24,27 @@ import {
   type TrustedExtensionState,
 } from './storage-schemas.js';
 import {
+  consumeApproval as consumeDatabaseApproval,
+  findApprovalsByScope as findDatabaseApprovalsByScope,
+  getApproval as getDatabaseApproval,
+  listApprovals as listDatabaseApprovals,
+  revokeApproval as revokeDatabaseApproval,
+  saveApproval as saveDatabaseApproval,
+} from './storage/security/approvals.js';
+import { initializeAuditIntegrity } from './storage/security/audit-integrity.js';
+import {
   backupAttemptFromResult,
   getBackupHealth as getDatabaseBackupHealth,
   recordBackupAttempt as recordDatabaseBackupAttempt,
   type BackupAttempt,
-} from './storage/backup-health.js';
+} from './storage/backup/health.js';
 import {
   createBackup as createDatabaseBackup,
   deleteAllLocalData as deleteDatabaseData,
   type DeleteAllLocalDataOptions,
   listMissingRecordedBackupIds as listDatabaseMissingRecordedBackupIds,
   pruneBackups as pruneDatabaseBackups,
-} from './storage/backups.js';
+} from './storage/backup/operations.js';
 import {
   getCheckExecution as getDatabaseCheckExecution,
   listCheckExecutions as listDatabaseCheckExecutions,
@@ -99,7 +109,7 @@ import {
   listWorkflowExecutionEvents as listDatabaseWorkflowExecutionEvents,
   listWorkflowNodeBindings as listDatabaseWorkflowNodeBindings,
   mutateWorkflowExecution as mutateDatabaseWorkflowExecution,
-} from './storage/workflow-executions.js';
+} from './storage/workflow/executions.js';
 import type {
   WorkflowExecutionEvent,
   WorkflowExecutionMutationInput,
@@ -108,7 +118,7 @@ import type {
   WorkflowExecutionRecordInput,
   WorkflowEventPageRequest,
   WorkflowNodeBinding,
-} from './storage/workflow-contracts.js';
+} from './storage/workflow/contracts.js';
 import { writeSettings } from './storage/writes.js';
 
 export type {
@@ -124,7 +134,7 @@ export type { PortableImportOptions } from './storage/transfers.js';
 export {
   WorkflowExecutionEventReplayConflictError,
   WorkflowExecutionRevisionConflictError,
-} from './storage/workflow-executions.js';
+} from './storage/workflow/executions.js';
 export {
   WORKFLOW_BINDING_MAX_BYTES,
   WORKFLOW_EVENT_PAYLOAD_MAX_BYTES,
@@ -158,7 +168,7 @@ export {
   type WorkflowNodeBindingUpdate,
   type WorkflowRuntimeEnvelope,
   type WorkflowSnapshotEnvelope,
-} from './storage/workflow-contracts.js';
+} from './storage/workflow/contracts.js';
 
 /**
  * Stable storage boundary for the Electron main process.
@@ -184,6 +194,7 @@ export class LocalStore {
     this.database = openDatabase(databasePath);
     try {
       migrate(this.database);
+      initializeAuditIntegrity(this.database);
       redactStoredSecrets(this.database);
       sanitizeStoredExtensionData(this.database);
       assertIntegrity(this.database);
@@ -325,6 +336,44 @@ export class LocalStore {
 
   listAuditEvents(limit: number): AuditEvent[] {
     return listDatabaseAuditEvents(this.database, limit);
+  }
+
+  saveApproval(record: ApprovalRecord): ApprovalRecord {
+    const saved = saveDatabaseApproval(this.database, record);
+    this.notifyDurableChange();
+    return saved;
+  }
+
+  getApproval(approvalId: string): ApprovalRecord | undefined {
+    return getDatabaseApproval(this.database, approvalId);
+  }
+
+  listApprovals(input: {
+    readonly projectId?: string;
+    readonly action?: ApprovalRecord['scope']['action'];
+    readonly limit: number;
+  }): ApprovalRecord[] {
+    return listDatabaseApprovals(this.database, input);
+  }
+
+  findApprovalsByScope(scope: ApprovalRecord['scope']): ApprovalRecord[] {
+    return findDatabaseApprovalsByScope(this.database, scope);
+  }
+
+  consumeApproval(
+    approvalId: string,
+    expectedScope: ApprovalRecord['scope'],
+    consumedAt: Date,
+  ): ApprovalRecord {
+    const consumed = consumeDatabaseApproval(this.database, approvalId, expectedScope, consumedAt);
+    this.notifyDurableChange();
+    return consumed;
+  }
+
+  revokeApproval(approvalId: string, revokedAt: Date): ApprovalRecord {
+    const revoked = revokeDatabaseApproval(this.database, approvalId, revokedAt);
+    this.notifyDurableChange();
+    return revoked;
   }
 
   saveRun(record: StoredRunRecord): StoredRunRecord {

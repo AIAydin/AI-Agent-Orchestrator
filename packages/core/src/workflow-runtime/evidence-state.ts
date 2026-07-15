@@ -1,10 +1,10 @@
-import type { CanvasEdge, CanvasNode, CheckResult, RunStatus } from '../domain.js';
+import type { CanvasEdge, CanvasNode, CheckResult, RunStatus } from '../model/domain.js';
 import {
   evaluateReviewGate,
   type ReviewGateEvaluation,
   type ReviewerAssessment,
-} from '../workflow-gates.js';
-import { isTerminalRunStatus } from '../workflow.js';
+} from '../workflow/gates.js';
+import { isTerminalRunStatus } from '../workflow/model.js';
 
 import { WorkflowHumanApprovalRequestSchema } from './schemas.js';
 import type {

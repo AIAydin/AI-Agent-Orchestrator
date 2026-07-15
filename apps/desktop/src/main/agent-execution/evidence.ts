@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { PreparedAgentLaunch } from '@forgeboard/agent-adapters';
 import type { WorktreeOwnership } from '@forgeboard/git-engine';
 
-import type { RunDisclosure } from '../../shared/contracts.js';
+import type { RunDisclosure } from '../../shared/application/contracts.js';
 import type { AgentExecutionContextRequest, WorkspaceSnapshot } from './contracts.js';
 
 export function stableSha256(value: unknown): string {

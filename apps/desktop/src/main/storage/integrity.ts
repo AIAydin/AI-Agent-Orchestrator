@@ -6,7 +6,7 @@ import {
   AuditEventSchema,
   CanvasDocumentSchema,
   ProjectSchema,
-} from '../../shared/contracts.js';
+} from '../../shared/application/contracts.js';
 import {
   CanvasSnapshotSchema,
   StoredCheckExecutionRecordSchema,
@@ -35,7 +35,9 @@ import {
   type TrustedExtensionLedgerRow,
   validateSettings,
 } from './values.js';
-import { workflowStorageIntegrityMessages } from './workflow-executions.js';
+import { workflowStorageIntegrityMessages } from './workflow/executions.js';
+import { approvalIntegrityMessages } from './security/approvals.js';
+import { auditIntegrityMessages } from './security/audit-integrity.js';
 
 interface IntegrityRow {
   integrity_check?: string;
@@ -77,6 +79,8 @@ export function checkDatabaseIntegrity(
       messages.push(`SQLite reported ${foreignKeyFailures.length} foreign-key violation(s).`);
     }
     validateStoredJson(database, messages);
+    messages.push(...approvalIntegrityMessages(database));
+    messages.push(...auditIntegrityMessages(database));
     messages.push(...workflowStorageIntegrityMessages(database));
   } catch (error) {
     messages.push(error instanceof Error ? error.message : 'Unknown integrity-check failure.');

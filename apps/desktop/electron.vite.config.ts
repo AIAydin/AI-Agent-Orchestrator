@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 
+import { sandboxedPreloadPolicyPlugin } from './scripts/packaged-smoke/preload-policy.js';
+
 export default defineConfig({
   main: {
     plugins: [
@@ -29,7 +31,7 @@ export default defineConfig({
   preload: {
     // Sandboxed preload scripts cannot resolve arbitrary Node packages at runtime. Bundle the
     // narrow bridge and its validation schemas into the generated CommonJS file.
-    plugins: [],
+    plugins: [sandboxedPreloadPolicyPlugin()],
     build: {
       outDir: 'dist/preload',
       rollupOptions: {

@@ -5,7 +5,7 @@ checkout, or config-file edits. Each tagged release builds native installers on 
 Windows, and Linux runners, executes the verification and packaged-app smoke suites, and publishes
 platform-and-architecture-specific SHA-256 checksums. Releases also attach the immutable
 corresponding source archives for the bundled Git toolchain; see
-[`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).
+[`THIRD_PARTY_NOTICES.md`](legal/THIRD_PARTY_NOTICES.md).
 
 ## Installing Forgeboard
 

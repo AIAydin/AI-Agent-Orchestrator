@@ -2,7 +2,7 @@ import type {
   GitDiffFileView,
   GitReviewView,
   GitStatusEntryView,
-} from '../../../../shared/git-contracts.js';
+} from '../../../../shared/git/contracts.js';
 
 export type GitReviewArea = 'staged' | 'unstaged' | 'untracked';
 

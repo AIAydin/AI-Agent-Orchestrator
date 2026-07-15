@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './electron.js';
+import {
+  approveNextNativeAgentLaunch,
+  launchDesktop,
+  watchExternalRequests,
+} from './support/electron.js';
 
 test('the deterministic agent requires approval and reports its real local work', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-agent-e2e-'));
@@ -22,7 +26,9 @@ test('the deterministic agent requires approval and reports its real local work'
 
     await test.step('the writable worktree location is configured in the UI', async () => {
       await expect(
-        page.getByRole('heading', { name: /Build software in a visual workshop/i }),
+        page.getByRole('heading', {
+          name: /Build software in a visual workshop/i,
+        }),
       ).toBeVisible();
       await page.getByRole('button', { name: 'Settings' }).click();
       const settings = page.locator('.settings-modal');
@@ -42,7 +48,9 @@ test('the deterministic agent requires approval and reports its real local work'
     const agentNode = page.getByRole('article', { name: 'Agent: Agent' });
     await expect(agentNode).toBeVisible();
     await agentNode.click();
-    const runConfiguration = page.getByRole('region', { name: 'Agent run configuration' });
+    const runConfiguration = page.getByRole('region', {
+      name: 'Agent run configuration',
+    });
     await expect(runConfiguration.getByText('Approval required')).toBeVisible();
     await runConfiguration.getByLabel('Installed adapter').selectOption('test-agent');
     await runConfiguration.getByLabel('Permission profile').selectOption('worktree-write');
@@ -51,7 +59,9 @@ test('the deterministic agent requires approval and reports its real local work'
 
     await test.step('preflight reveals the exact launch and cancellation starts no process', async () => {
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
-      const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
+      const dialog = page.getByRole('dialog', {
+        name: 'Review the exact agent launch',
+      });
       await expect(dialog).toBeVisible();
       await expect(
         dialog.getByText(
@@ -80,16 +90,22 @@ test('the deterministic agent requires approval and reports its real local work'
 
     await test.step('approval streams real output and reports the changed worktree file', async () => {
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
-      const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
+      const dialog = page.getByRole('dialog', {
+        name: 'Review the exact agent launch',
+      });
       await expect(dialog).toBeVisible();
-      await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+      await approveNextNativeAgentLaunch(session.app, dialog, 'test-agent', async () => {
+        await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+      });
       await expect(dialog).toBeHidden();
 
       const history = page.locator('.run-history');
       await expect(history).toContainText('Forgeboard deterministic agent started.', {
         timeout: 20_000,
       });
-      await expect(history).toContainText('succeeded · 1 changed file', { timeout: 20_000 });
+      await expect(history).toContainText('succeeded · 1 changed file', {
+        timeout: 20_000,
+      });
       await expect(page.locator('.event-stream')).toContainText(
         'Agent wrote forgeboard-agent-output-',
       );
@@ -102,17 +118,23 @@ test('the deterministic agent requires approval and reports its real local work'
         .getByLabel('Prompt')
         .fill('Produce the deterministic read-only plan without writing files.');
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
-      const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
+      const dialog = page.getByRole('dialog', {
+        name: 'Review the exact agent launch',
+      });
       await expect(dialog).toContainText('Test agent read-only plan');
       await expect(dialog).toContainText('Write: none');
       await expect(dialog).toContainText('Network: provider-controlled');
-      await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+      await approveNextNativeAgentLaunch(session.app, dialog, 'test-agent', async () => {
+        await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+      });
 
       const history = page.locator('.run-history');
       await expect(history).toContainText('Read-only plan completed without filesystem writes.', {
         timeout: 20_000,
       });
-      await expect(history).toContainText('succeeded · no file changes', { timeout: 20_000 });
+      await expect(history).toContainText('succeeded · no file changes', {
+        timeout: 20_000,
+      });
     });
 
     expect(externalRequests).toEqual([]);

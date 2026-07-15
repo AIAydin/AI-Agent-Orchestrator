@@ -8,8 +8,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest --root ../.. --config vitest.config.ts run --project unit apps/collab-server",
-    "test:integration": "vitest --root ../.. --config vitest.config.ts run --project integration apps/collab-server"
+    "test": "vitest --root ../.. --config config/tooling/vitest.config.ts run --project unit apps/collab-server",
+    "test:integration": "vitest --root ../.. --config config/tooling/vitest.config.ts run --project integration apps/collab-server"
   },
   "dependencies": {
     "@hocuspocus/server": "3.4.4",

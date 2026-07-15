@@ -1,4 +1,4 @@
-import type { AppSettings } from '../../../shared/contracts.js';
+import type { AppSettings } from '../../../shared/application/contracts.js';
 
 type KeyboardPreset = AppSettings['keyboardPreset'];
 

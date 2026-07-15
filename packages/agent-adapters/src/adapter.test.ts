@@ -222,6 +222,36 @@ describe('launch preparation and execution', () => {
     await expect(access(marker)).rejects.toThrow();
   });
 
+  it('runs final authorization at the exact pipe spawn boundary', async () => {
+    const cwd = await temporaryDirectory();
+    const marker = path.join(cwd, 'must-not-spawn');
+    const base = nodeManifest();
+    const manifest = nodeManifest({
+      invocation: {
+        ...base.invocation,
+        launchArguments: [
+          '-e',
+          `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'spawned')`,
+          '{extraArgs}',
+          '{prompt}',
+        ],
+      },
+    });
+    const plan = prepareAgentLaunch(manifest, {
+      prompt: 'test',
+      cwd,
+      permissionProfile: permission(cwd),
+      environment: { inherit: 'none', variables: {}, unset: [] },
+    });
+
+    await expect(
+      launchPreparedAgent(plan, () => {
+        throw new Error('launch authority revoked');
+      }),
+    ).rejects.toThrow('launch authority revoked');
+    await expect(access(marker)).rejects.toThrow();
+  });
+
   it('normalizes JSON-lines without discarding raw output or session metadata', async () => {
     const cwd = await temporaryDirectory();
     const manifest = nodeManifest({

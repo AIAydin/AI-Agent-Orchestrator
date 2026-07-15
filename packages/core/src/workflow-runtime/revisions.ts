@@ -1,4 +1,4 @@
-import type { ReviewGateEvaluation, ReviewerAssessment } from '../workflow-gates.js';
+import type { ReviewGateEvaluation, ReviewerAssessment } from '../workflow/gates.js';
 import {
   NodeRunStateSchema,
   WorkflowRunSchema,
@@ -8,7 +8,7 @@ import {
   transitionNodeRun,
   type NodeRunState,
   type RevisionLoopState,
-} from '../workflow.js';
+} from '../workflow/model.js';
 
 import {
   currentHumanReviewDecision,

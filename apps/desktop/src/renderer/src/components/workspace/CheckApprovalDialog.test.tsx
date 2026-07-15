@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { CheckPlanView } from '../../../../shared/check-contracts.js';
+import type { CheckPlanView } from '../../../../shared/checks/contracts.js';
 import { CheckApprovalDialog } from './CheckApprovalDialog.js';
 
 afterEach(cleanup);
@@ -19,7 +19,7 @@ describe('CheckApprovalDialog', () => {
     );
     const dialog = screen.getByRole('dialog', { name: /Review the exact Lint command/u });
     const cancelButton = screen.getByRole('button', { name: 'Cancel before launch' });
-    const continueButton = screen.getByRole('button', { name: 'Continue to native approval' });
+    const continueButton = screen.getByRole('button', { name: 'Authorize exact check' });
     const details = screen.getByLabelText('Exact check launch details');
 
     expect(document.activeElement).toBe(cancelButton);
@@ -32,6 +32,7 @@ describe('CheckApprovalDialog', () => {
       ),
     ).toBeTruthy();
     expect(screen.getByText(/Raw output is retained unredacted/u)).toBeTruthy();
+    expect(screen.getByText(PLAN.approvalFingerprint)).toBeTruthy();
 
     details.focus();
     fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
@@ -67,5 +68,6 @@ const PLAN: CheckPlanView = {
   arguments: ['--version'],
   cwd: '/tmp/project',
   environmentVariableNames: ['PATH'],
+  approvalFingerprint: 'a'.repeat(64),
   expiresAt: '2099-07-15T00:05:00.000Z',
 };

@@ -17,12 +17,13 @@ import {
   type TestAgentAction,
 } from '@forgeboard/test-agent';
 
-import type { AppSettings } from '../../shared/contracts.js';
-import { customAgentManifest } from '../custom-agent.js';
-import { resolveDockerExecutable } from '../docker-runtime.js';
+import type { AppSettings } from '../../shared/application/contracts.js';
+import { customAgentManifest } from '../custom-agent/custom-agent.js';
+import { resolveDockerExecutable } from '../docker/docker-runtime.js';
 import type {
   AgentAdapterPlanner,
   AgentExecutionRequest,
+  AgentPreparationProcessAuthorization,
   AgentRuntimeAdapterPlan,
   TrustedAdapterLookup,
 } from './contracts.js';
@@ -50,11 +51,18 @@ export function createDefaultAgentAdapterPlanner({
   getTrustedAdapter,
   resolveTestAgentCliPath,
 }: DefaultAgentAdapterPlannerOptions): AgentAdapterPlanner {
-  return async (input, cwd, settings, runId) =>
-    await prepareAdapter(input, cwd, settings, runId, {
-      getTrustedAdapter,
-      resolveTestAgentCliPath,
-    });
+  return async (input, cwd, settings, runId, processAuthorization) =>
+    await prepareAdapter(
+      input,
+      cwd,
+      settings,
+      runId,
+      {
+        getTrustedAdapter,
+        resolveTestAgentCliPath,
+      },
+      processAuthorization,
+    );
 }
 
 async function prepareAdapter(
@@ -63,6 +71,7 @@ async function prepareAdapter(
   settings: AppSettings,
   runId: string,
   dependencies: DefaultAgentAdapterPlannerOptions,
+  processAuthorization?: AgentPreparationProcessAuthorization,
 ): Promise<AgentRuntimeAdapterPlan> {
   const environment = allowedEnvironment(settings.envAllowlist);
   if (input.adapterId === 'test-agent') {
@@ -144,6 +153,7 @@ async function prepareAdapter(
       settings,
       environment,
       trustedManifest !== undefined,
+      processAuthorization,
     );
   }
 
@@ -209,7 +219,13 @@ async function prepareDockerAdapter(
   settings: AppSettings,
   environment: Record<string, string>,
   trustedExtensionAdapter: boolean,
+  processAuthorization?: AgentPreparationProcessAuthorization,
 ): Promise<AgentRuntimeAdapterPlan> {
+  if (processAuthorization === undefined) {
+    throw new Error(
+      'Docker agent preparation requires an owner-bound native probe approval before any configured executable can run.',
+    );
+  }
   if (!settings.dockerEnabled) {
     throw new Error('Enable and configure Docker isolation in Settings before using it.');
   }
@@ -232,11 +248,14 @@ async function prepareDockerAdapter(
   }
   const dockerExecutable = await resolveDockerExecutable(settings.dockerExecutable);
   const dockerExecutableIdentity = await captureLaunchExecutableIdentity(dockerExecutable);
-  const runtime = await detectDockerRuntime({
-    dockerExecutable,
-    image: settings.dockerImage,
-    timeoutMs: 5_000,
-  });
+  const runtime = await detectDockerRuntime(
+    {
+      dockerExecutable,
+      image: settings.dockerImage,
+      timeoutMs: 5_000,
+    },
+    dockerProbeHooks(processAuthorization),
+  );
   if (!runtime.available) {
     throw new Error(`Docker isolation is unavailable: ${runtime.reason ?? 'probe failed'}`);
   }
@@ -326,17 +345,33 @@ async function prepareDockerAdapter(
     trustedExtensionAdapter,
     revalidateBeforeLaunch: async () => {
       await assertLaunchExecutableIdentity(dockerExecutableIdentity);
-      const current = await detectDockerRuntime({
-        dockerExecutable: runtime.executable,
-        image: settings.dockerImage,
-        timeoutMs: 5_000,
-      });
+      const current = await detectDockerRuntime(
+        {
+          dockerExecutable: runtime.executable,
+          image: settings.dockerImage,
+          timeoutMs: 5_000,
+        },
+        dockerProbeHooks(processAuthorization),
+      );
       if (!current.available || current.imageId !== approvedImageId) {
         throw new Error('The reviewed Docker image changed. Review a fresh launch.');
       }
       await assertLaunchExecutableIdentity(dockerExecutableIdentity);
     },
   };
+}
+
+function dockerProbeHooks(authorization: AgentPreparationProcessAuthorization | undefined) {
+  return authorization === undefined
+    ? {}
+    : {
+        beforeProbe: async (probe: {
+          readonly executable: string;
+          readonly arguments: readonly string[];
+        }) => {
+          await authorization.authorize(probe.executable, probe.arguments);
+        },
+      };
 }
 
 function allowedEnvironment(names: readonly string[]): Record<string, string> {

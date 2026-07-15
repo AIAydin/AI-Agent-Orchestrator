@@ -15,7 +15,7 @@ import {
   type AppSettings,
   type RunDisclosure,
   type RunEventEnvelope,
-} from '../../shared/contracts.js';
+} from '../../shared/application/contracts.js';
 import type { StoredRunRecord } from '../storage.js';
 
 export const AgentExecutionContextRequestSchema = z
@@ -129,7 +129,12 @@ export type AgentAdapterPlanner = (
   cwd: string,
   settings: AppSettings,
   runId: string,
+  processAuthorization?: AgentPreparationProcessAuthorization,
 ) => Promise<AgentRuntimeAdapterPlan>;
+
+export interface AgentPreparationProcessAuthorization {
+  authorize(executable: string, arguments_: readonly string[]): void | Promise<void>;
+}
 
 export type TrustedAdapterLookup = (adapterId: string) => Promise<AgentAdapterManifest | undefined>;
 
@@ -162,11 +167,16 @@ export interface AgentExecutionStore {
 }
 
 export interface AgentExecutionOperations {
-  prepare(ownerId: string, input: AgentExecutionRequest): Promise<PreparedAgentExecution>;
+  prepare(
+    ownerId: string,
+    input: AgentExecutionRequest,
+    processAuthorization?: AgentPreparationProcessAuthorization,
+  ): Promise<PreparedAgentExecution>;
   launch(
     ownerId: string,
     planId: string,
     disclosureFingerprint: string,
+    authorizeLaunch?: () => void,
   ): Promise<AgentExecutionLaunchHandle>;
   sendInput(ownerId: string, runId: string, data: string): boolean;
   interrupt(ownerId: string, runId: string): boolean;

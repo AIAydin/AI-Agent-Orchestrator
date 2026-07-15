@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './electron.js';
+import { launchDesktop, watchExternalRequests } from './support/electron.js';
 
 const shortcutModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
@@ -321,8 +321,9 @@ async function exposedHandlePoint(
 ): Promise<{ x: number; y: number }> {
   const result = await handle.evaluate((element) => {
     const box = element.getBoundingClientRect();
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     const candidates = [
-      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+      center,
       { x: box.x + box.width * 0.25, y: box.y + box.height / 2 },
       { x: box.x + box.width * 0.75, y: box.y + box.height / 2 },
     ];
@@ -330,7 +331,7 @@ async function exposedHandlePoint(
       const hit = document.elementFromPoint(point.x, point.y);
       if (hit === element || element.contains(hit)) return { point, obstruction: '' };
     }
-    const hit = document.elementFromPoint(candidates[0].x, candidates[0].y);
+    const hit = document.elementFromPoint(center.x, center.y);
     return {
       point: null,
       obstruction: hit ? `${hit.nodeName}.${hit.getAttribute('class') ?? ''}` : 'nothing',

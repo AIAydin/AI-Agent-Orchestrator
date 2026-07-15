@@ -21,7 +21,7 @@ import type {
 import { TEST_AGENT_MANIFEST } from '@forgeboard/test-agent';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AppSettings } from '../../shared/contracts.js';
+import type { AppSettings } from '../../shared/application/contracts.js';
 import type { StoredRunRecord } from '../storage.js';
 import type {
   AgentAdapterPlanner,
@@ -564,6 +564,19 @@ describe('AgentExecutionRuntime admission limits', () => {
 });
 
 describe('AgentExecutionRuntime approval binding', () => {
+  it('lets final synchronous authorization abort before the launch seam is invoked', async () => {
+    const harness = createHarness();
+    const prepared = await harness.runtime.prepare('owner-a', request());
+
+    await expect(
+      harness.runtime.launch('owner-a', prepared.planId, prepared.disclosureFingerprint, () => {
+        throw new Error('originating window changed');
+      }),
+    ).rejects.toThrow('originating window changed');
+    expect(harness.launchSession).not.toHaveBeenCalled();
+    await harness.runtime.dispose();
+  });
+
   it('keeps prepared plans owner-bound without consuming them on a denied owner', async () => {
     const harness = createHarness();
     const prepared = await harness.runtime.prepare('owner-a', request());
@@ -828,6 +841,7 @@ describe('AgentExecutionRuntime launch handles', () => {
       REPOSITORY_PATH,
       expect.any(Object),
       expect.any(String),
+      undefined,
     );
   });
 

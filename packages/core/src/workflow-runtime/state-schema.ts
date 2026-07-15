@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
-import { CanvasSchema, CheckResultSchema, EntityIdSchema } from '../domain.js';
-import { ReviewerAssessmentSchema } from '../workflow-gates.js';
-import { WorkflowPlanSchema, WorkflowPlanStageSchema, WorkflowRunSchema } from '../workflow.js';
+import { CanvasSchema, CheckResultSchema, EntityIdSchema } from '../model/domain.js';
+import { ReviewerAssessmentSchema } from '../workflow/gates.js';
+import {
+  WorkflowPlanSchema,
+  WorkflowPlanStageSchema,
+  WorkflowRunSchema,
+} from '../workflow/model.js';
 import {
   ContextResolutionSchema,
   OutputPublicationSchema,

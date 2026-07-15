@@ -5,7 +5,7 @@ import {
   CheckCancelInputSchema,
   CheckListInputSchema,
   type CheckExecutionView,
-} from '../../shared/check-contracts.js';
+} from '../../shared/checks/contracts.js';
 import {
   StoredCheckExecutionRecordSchema,
   type InterruptedCheckRecoveryReport,

@@ -1,6 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react';
 
-import type { AppSettings, CommandConfiguration } from '../../../../shared/contracts.js';
+import type {
+  AppSettings,
+  CommandConfiguration,
+} from '../../../../shared/application/contracts.js';
 import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../lib/literal-arguments.js';
 
 export interface SettingsDraftProps {

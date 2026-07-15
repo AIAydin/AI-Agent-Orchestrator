@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle2, Container, MonitorCog } from 'lucide-react';
 
-import type { AppSettings, Project } from '../../../../shared/contracts.js';
+import type { AppSettings, Project } from '../../../../shared/application/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 import { ExecutableAllowlistEditor } from './ExecutableAllowlistEditor.js';
 import { PermissionRootEditor } from './PermissionRootEditor.js';

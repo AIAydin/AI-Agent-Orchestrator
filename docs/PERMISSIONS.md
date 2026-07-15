@@ -5,6 +5,19 @@ setup. Agent nodes can then choose a profile from the inspector. Normal use does
 editing source files, JSON, environment files, or adapter manifests; settings export/import is an
 optional portability feature.
 
+## Selected-agent readiness is a setup gate
+
+The first-run agent step cannot continue until the currently selected CLI has ready evidence from
+Electron main. Forgeboard resolves the bundled executable, detected command, UI-selected override,
+or complete custom-CLI draft, then runs only that candidate's bounded version and capability probes.
+An invalid custom configuration, missing executable, failed probe, adapter mismatch, or unrecognized
+version keeps **Continue** disabled and shows an actionable reason. A successful result includes the
+validated executable and version.
+
+Readiness is not launch approval. Checking a draft override does not persist it, and completing setup
+does not let the renderer start that executable. Every later agent run still uses the exact
+cancel-default launch review described below.
+
 Every agent run has a cancel-default review step. The review shows the exact top-level executable,
 arguments, working directory, inherited environment-variable names, selected context, context
 hashes, effective permission profile, and known limitations. Cancelling releases the prepared run
@@ -73,6 +86,43 @@ as agent context.
 The exact in-container entrypoint is disclosed separately from the outer Docker client. The launch
 uses the Custom network and resource limits shown in the approval dialog and never mounts host CLI
 credentials.
+
+## Remembered project-check approvals
+
+Remembered approvals are deliberately limited to project checks. After reviewing a lint, typecheck,
+test, build, or custom check, the native confirmation can optionally remember that exact check for
+30 days. Electron main creates and later selects the grant; the renderer never supplies the approval
+identity that authorizes execution.
+
+The SHA-256 resource fingerprint binds all of the following:
+
+- project, stored check identity, label, and check kind;
+- resolved executable, literal argument array, and canonical working directory;
+- inherited environment-variable names, but not their values;
+- repository-root filesystem identity; and
+- executable/shim identities and relevant package-script content.
+
+The grant also carries its project and `command-execute` action scope. Any command, path, executable,
+package-script, or identity drift stops the match and restores the native confirmation. The current
+UI creates reusable check records only for the fixed 30-day window; it does not expose general grant
+creation.
+
+**Settings → Permissions → Scoped approvals** lists active and inactive local records and revokes an
+active grant immediately. This list is live security state, not part of the unsaved Settings draft.
+Saved approvals are device-local and are not a general permission-profile setting.
+
+## Per-use actions and outbound approval
+
+A remembered check never authorizes an agent launch, a context attachment or sensitive-file
+override, a Docker pull, a Git clone, another external send, or a destructive Git action. Those
+implemented operations retain their own per-use review or confirmation.
+
+Git clone and Docker image pull pass through a main-owned outbound gate. The cancel-default native
+dialog displays the exact action, transport, credential-free endpoint/resource, and local or Docker
+details. The plan is bound to the originating window, expires after a short interval, and is consumed
+once. After approval, Forgeboard rebuilds and fingerprints the disclosure; changed destinations or
+actions fail closed. Only the gate can mint the opaque permit accepted by the low-level clone and
+pull executors.
 
 ## Context is separately approved
 

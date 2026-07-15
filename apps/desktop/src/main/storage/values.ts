@@ -8,8 +8,8 @@ import {
   type AppSettings,
   type CanvasDocument,
   type Project,
-} from '../../shared/contracts.js';
-import { sanitizeCanvasExtensionData } from '../../shared/extension-values.js';
+} from '../../shared/application/contracts.js';
+import { sanitizeCanvasExtensionData } from '../../shared/extensions/values.js';
 import {
   canonicalCanvasFromLegacy,
   legacySurfaceFromCanonical,

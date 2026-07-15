@@ -8,12 +8,12 @@ import type {
   AppSettings,
   ExtensionDiscoveryView,
   Project,
-} from '../../shared/contracts.js';
-import { SettingsPanel } from './components/SettingsPanel.js';
-import { SetupWizard } from './components/SetupWizard.js';
-import { Welcome } from './components/Welcome.js';
-import { Workspace } from './components/Workspace.js';
-import type { WorkspaceHandle } from './components/workspace/types.js';
+} from '../../shared/application/contracts.js';
+import { SettingsPanel } from './components/settings/shell/SettingsPanel.js';
+import { SetupWizard } from './components/onboarding/SetupWizard.js';
+import { Welcome } from './components/onboarding/Welcome.js';
+import { Workspace } from './components/workspace/shell/Workspace.js';
+import type { WorkspaceHandle } from './components/workspace/model/types.js';
 import { unwrap } from './lib/ipc.js';
 
 interface BootstrapState {
@@ -108,6 +108,9 @@ export function App() {
         <SetupWizard
           settings={bootstrap.settings}
           agents={bootstrap.agents}
+          checkAgentReadiness={async (input) =>
+            unwrap(await window.forgeboard.agents.checkReadiness(input))
+          }
           onComplete={async (settings) => {
             unwrap(
               await window.forgeboard.settings.update({

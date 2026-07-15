@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './electron.js';
+import { launchDesktop, watchExternalRequests } from './support/electron.js';
 
 test('immediate app and project closes preserve the latest canvas revision', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-close-persistence-e2e-'));

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { EntityIdSchema, TimestampSchema } from '../domain.js';
+import { EntityIdSchema, TimestampSchema } from '../model/domain.js';
 
 export const OutputPublicationSchema = z
   .object({

@@ -1,0 +1,83 @@
+.agent-readiness {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+
+.agent-readiness.ready {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--line));
+}
+
+.agent-readiness.attention {
+  border-color: color-mix(in srgb, var(--yellow) 48%, var(--line));
+}
+
+.agent-readiness > header,
+.agent-readiness > header > span,
+.agent-readiness > header > button {
+  display: flex;
+  align-items: center;
+}
+
+.agent-readiness > header {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-readiness > header > span,
+.agent-readiness > header > button {
+  gap: 6px;
+}
+
+.agent-readiness > header > span {
+  color: var(--text-soft);
+  font-size: 9px;
+}
+
+.agent-readiness.ready > header > span {
+  color: var(--green);
+}
+
+.agent-readiness > header > button {
+  min-height: 29px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 8px;
+}
+
+.agent-readiness p,
+.agent-readiness small {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.agent-readiness small {
+  color: var(--text-faint);
+}
+
+.agent-readiness code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 8px;
+}
+
+.agent-readiness-result {
+  display: grid;
+  gap: 5px;
+}
+
+.agent-readiness-result > [role='alert'],
+.agent-readiness-unavailable,
+.agent-readiness-warning {
+  color: var(--yellow) !important;
+}

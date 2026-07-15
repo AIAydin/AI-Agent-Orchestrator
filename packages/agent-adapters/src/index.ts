@@ -32,6 +32,7 @@ export {
   type DockerLaunchOptions,
   type DockerNetworkPolicy,
   type DockerRuntimeDetection,
+  type DockerRuntimeDetectionHooks,
   type DockerRuntimeDetectionOptions,
   type ParsedDockerLaunchOptions,
 } from './docker.js';

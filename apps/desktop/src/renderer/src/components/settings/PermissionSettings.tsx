@@ -1,4 +1,4 @@
-import type { AppSettings, Project } from '../../../../shared/contracts.js';
+import type { AppSettings, Project } from '../../../../shared/application/contracts.js';
 import { ConfiguredPermissionSummary } from '../permissions/ConfiguredPermissionSummary.js';
 import { CustomPermissionProfileEditor } from '../permissions/CustomPermissionProfileEditor.js';
 import {
@@ -6,6 +6,7 @@ import {
   permissionProfileNeedsDocker,
 } from '../permissions/permission-profile-ui.js';
 import { SettingsSection, type AsyncSettingsProps } from './shared.js';
+import { SavedApprovalsSettings } from './SavedApprovalsSettings.js';
 
 interface PermissionSettingsProps extends AsyncSettingsProps {
   activeProject: Project | null;
@@ -82,6 +83,12 @@ export function PermissionSettings({
           busy={busy}
           onError={onError}
         />
+      </SettingsSection>
+      <SettingsSection
+        title="Scoped approvals"
+        description="Inspect and revoke durable local grants. This list is effective immediately and is not part of the unsaved settings draft."
+      >
+        <SavedApprovalsSettings activeProject={activeProject} busy={busy} onError={onError} />
       </SettingsSection>
     </>
   );

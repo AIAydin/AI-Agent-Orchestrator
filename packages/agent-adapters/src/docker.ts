@@ -161,6 +161,14 @@ export interface DockerRuntimeDetection {
   reason?: string;
 }
 
+export interface DockerRuntimeDetectionHooks {
+  /** Revalidates main-process authority immediately before each Docker subprocess starts. */
+  readonly beforeProbe?: (probe: {
+    readonly executable: string;
+    readonly arguments: readonly string[];
+  }) => void | Promise<void>;
+}
+
 export type DockerHostPathStyle = 'posix' | 'win32';
 
 export class DockerLaunchValidationError extends Error {
@@ -814,6 +822,7 @@ function probeFailureOutput(probe: ProbeResult): string {
 
 export async function detectDockerRuntime(
   optionsInput: DockerRuntimeDetectionOptions,
+  hooks: DockerRuntimeDetectionHooks = {},
 ): Promise<DockerRuntimeDetection> {
   const options = DockerRuntimeDetectionOptionsSchema.parse(optionsInput);
   const checkedAt = new Date().toISOString();
@@ -837,11 +846,9 @@ export async function detectDockerRuntime(
     };
   }
 
-  const version = await runProbe(
-    canonicalExecutable,
-    ['version', '--format', '{{.Server.Version}}'],
-    options.timeoutMs,
-  );
+  const versionArguments = ['version', '--format', '{{.Server.Version}}'] as const;
+  await hooks.beforeProbe?.({ executable: canonicalExecutable, arguments: versionArguments });
+  const version = await runProbe(canonicalExecutable, versionArguments, options.timeoutMs);
   if (version.exitCode !== 0) {
     return {
       executable: canonicalExecutable,
@@ -858,11 +865,9 @@ export async function detectDockerRuntime(
     };
   }
 
-  const image = await runProbe(
-    canonicalExecutable,
-    ['image', 'inspect', options.image],
-    options.timeoutMs,
-  );
+  const imageArguments = ['image', 'inspect', options.image] as const;
+  await hooks.beforeProbe?.({ executable: canonicalExecutable, arguments: imageArguments });
+  const image = await runProbe(canonicalExecutable, imageArguments, options.timeoutMs);
   if (image.exitCode !== 0) {
     return {
       executable: canonicalExecutable,

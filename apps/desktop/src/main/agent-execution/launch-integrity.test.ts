@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, realpath, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -49,6 +49,18 @@ describe('agent launch executable identity', () => {
 
     await writeFile(script, 'process.exit(7);\n');
     await expect(assertLaunchFileIdentity(identity)).rejects.toThrow(/changed/iu);
+  });
+
+  it('rejects a same-size replacement even when its modified time is restored', async () => {
+    const executable = await fixtureExecutable();
+    const identity = await captureLaunchExecutableIdentity(executable);
+    const before = await stat(executable);
+
+    await writeFile(executable, '#!/bin/sh\nexit 9\n');
+    await chmod(executable, 0o700);
+    await utimes(executable, before.atime, before.mtime);
+
+    await expect(assertLaunchExecutableIdentity(identity)).rejects.toThrow(/changed/iu);
   });
 });
 

@@ -303,7 +303,8 @@ function extractSessionId(payload: unknown): string | undefined {
   return undefined;
 }
 
-function createPipeRuntime(plan: PreparedAgentLaunch): RuntimeProcess {
+function createPipeRuntime(plan: PreparedAgentLaunch, beforeSpawn?: () => void): RuntimeProcess {
+  beforeSpawn?.();
   const child: ChildProcessWithoutNullStreams = spawn(
     plan.disclosure.executable,
     plan.disclosure.arguments,
@@ -364,9 +365,13 @@ function createPipeRuntime(plan: PreparedAgentLaunch): RuntimeProcess {
   };
 }
 
-async function createPtyRuntime(plan: PreparedAgentLaunch): Promise<RuntimeProcess> {
+async function createPtyRuntime(
+  plan: PreparedAgentLaunch,
+  beforeSpawn?: () => void,
+): Promise<RuntimeProcess> {
   await ensureNodePtySpawnHelper();
   const pty = await import('node-pty');
+  beforeSpawn?.();
   const terminal = pty.spawn(plan.disclosure.executable, plan.disclosure.arguments, {
     cwd: plan.disclosure.cwd,
     env: plan.environment,
@@ -652,10 +657,15 @@ export function prepareAgentResume(
   return prepare(manifest, request, true);
 }
 
-export async function launchPreparedAgent(planInput: PreparedAgentLaunch): Promise<AgentSession> {
+export async function launchPreparedAgent(
+  planInput: PreparedAgentLaunch,
+  beforeSpawn?: () => void,
+): Promise<AgentSession> {
   const plan = PreparedAgentLaunchSchema.parse(planInput);
   const runtime =
-    plan.disclosure.runtime === 'pty' ? await createPtyRuntime(plan) : createPipeRuntime(plan);
+    plan.disclosure.runtime === 'pty'
+      ? await createPtyRuntime(plan, beforeSpawn)
+      : createPipeRuntime(plan, beforeSpawn);
   return new ProcessAgentSession(plan.manifest, runtime, plan.initialStdin);
 }
 
@@ -841,11 +851,16 @@ function effectiveCapabilities(
 
 export async function detectAgent(
   manifestInput: AgentAdapterManifest,
-  options: { executable?: string; signal?: AbortSignal } = {},
+  options: {
+    executable?: string;
+    signal?: AbortSignal;
+    beforeProbe?: () => void | Promise<void>;
+  } = {},
 ): Promise<AgentDetectionResult> {
   const manifest = AgentAdapterManifestSchema.parse(manifestInput);
   const executable = options.executable ?? manifest.executable.command;
   const checkedAt = new Date().toISOString();
+  await options.beforeProbe?.();
   const versionProbe = await runExecutableProbe(
     executable,
     manifest.executable.versionArguments,
@@ -881,6 +896,7 @@ export async function detectAgent(
       permissionModes: [...manifest.capabilities.permissionModes],
     };
   } else {
+    await options.beforeProbe?.();
     const helpProbe = await runExecutableProbe(
       executable,
       capabilityProbe.arguments,
@@ -943,13 +959,13 @@ export class CliAgentAdapter {
     return prepareAgentResume(this.manifest, request);
   }
 
-  public launch(plan: PreparedAgentLaunch): Promise<AgentSession> {
+  public launch(plan: PreparedAgentLaunch, beforeSpawn?: () => void): Promise<AgentSession> {
     if (plan.manifest.id !== this.manifest.id) {
       throw new AgentLaunchValidationError(
         `Prepared launch belongs to ${plan.manifest.id}, not ${this.manifest.id}.`,
       );
     }
-    return launchPreparedAgent(plan);
+    return launchPreparedAgent(plan, beforeSpawn);
   }
 
   #assertDetectedCapabilities(

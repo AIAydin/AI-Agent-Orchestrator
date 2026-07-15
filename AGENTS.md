@@ -10,7 +10,10 @@
   not a design target.
 - Prefer small folders organized by feature and responsibility over catch-all files. Keep Electron
   main-process policy, validated shared contracts, preload transport, and renderer presentation in
-  separate modules.
+  separate modules. Maintained folders under apps, packages, scripts, config, docs, and .github may
+  contain at most 12 direct hand-written files of any type; create a named feature or domain
+  subfolder before adding a thirteenth. Keep only the standard entry files allowlisted by the
+  structure gate at the repository root; place everything else in a named subfolder.
 - Run `corepack pnpm check:structure` with the normal verification suite. Do not bypass the structure
   gate by minifying files, combining logical lines, or moving hand-written code into generated paths.
 - Maintain `IMPLEMENTATION_CHECKLIST.md` as an evidence-backed ledger. Do not mark an item complete
