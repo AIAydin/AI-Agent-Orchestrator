@@ -13,12 +13,26 @@ const OidSchema = z
   .regex(/^[a-f0-9]{40,64}$/u)
   .nullable();
 
-export const GitTargetInputSchema = z.object({ projectId: ProjectIdSchema }).strict();
+const GitPrimaryTargetInputSchema = z
+  .object({ kind: z.literal('primary'), projectId: ProjectIdSchema })
+  .strict();
+const GitAgentWorktreeTargetInputSchema = z
+  .object({
+    kind: z.literal('agent-worktree'),
+    projectId: ProjectIdSchema,
+    runId: z.string().uuid(),
+  })
+  .strict();
+
+export const GitTargetInputSchema = z.discriminatedUnion('kind', [
+  GitPrimaryTargetInputSchema,
+  GitAgentWorktreeTargetInputSchema,
+]);
 export type GitTargetInput = z.infer<typeof GitTargetInputSchema>;
 
 export const GitPathSelectionInputSchema = z
   .object({
-    projectId: ProjectIdSchema,
+    target: GitTargetInputSchema,
     paths: z.array(GitPathSchema).min(1).max(512),
   })
   .strict();
@@ -26,7 +40,7 @@ export type GitPathSelectionInput = z.infer<typeof GitPathSelectionInputSchema>;
 
 export const GitHunkSelectionInputSchema = z
   .object({
-    projectId: ProjectIdSchema,
+    target: GitTargetInputSchema,
     hunkIds: z.array(HunkIdSchema).min(1).max(2_048),
   })
   .strict();
@@ -34,7 +48,7 @@ export type GitHunkSelectionInput = z.infer<typeof GitHunkSelectionInputSchema>;
 
 export const GitCommitPlanInputSchema = z
   .object({
-    projectId: ProjectIdSchema,
+    target: GitTargetInputSchema,
     message: z
       .string()
       .trim()
@@ -114,9 +128,26 @@ export const GitIdentityViewSchema = z
   .strict();
 export type GitIdentityView = z.infer<typeof GitIdentityViewSchema>;
 
+export const GitReviewTargetViewSchema = z.discriminatedUnion('kind', [
+  GitPrimaryTargetInputSchema,
+  z
+    .object({
+      kind: z.literal('agent-worktree'),
+      projectId: ProjectIdSchema,
+      runId: z.string().uuid(),
+      nodeId: z.string().min(1).max(512),
+      worktreeId: z.string().uuid(),
+      agentId: z.string().min(1).max(512),
+      baseRef: z.string().min(1).max(4_096),
+      baseCommit: z.string().regex(/^[a-f0-9]{40,64}$/u),
+    })
+    .strict(),
+]);
+export type GitReviewTargetView = z.infer<typeof GitReviewTargetViewSchema>;
+
 export const GitReviewViewSchema = z
   .object({
-    projectId: ProjectIdSchema,
+    target: GitReviewTargetViewSchema,
     branch: z.string().max(4_096).nullable(),
     detached: z.boolean(),
     headOid: OidSchema,
@@ -139,7 +170,7 @@ export const GitCommitPlanViewSchema = z
     kind: z.literal('commit'),
     planId: PlanIdSchema,
     expiresAt: z.string().datetime(),
-    projectId: ProjectIdSchema,
+    target: GitReviewTargetViewSchema,
     message: z.string().min(1).max(16_384),
     branch: z.string().max(4_096).nullable(),
     headOid: OidSchema,
@@ -156,7 +187,7 @@ export const GitDiscardPlanViewSchema = z
     kind: z.literal('discard-hunks'),
     planId: PlanIdSchema,
     expiresAt: z.string().datetime(),
-    projectId: ProjectIdSchema,
+    target: GitReviewTargetViewSchema,
     branch: z.string().max(4_096).nullable(),
     headOid: OidSchema,
     hunkIds: z.array(HunkIdSchema).min(1).max(2_048),

@@ -10,17 +10,25 @@ import {
 
 const PROJECT_ID = '0f159605-28ef-42e0-86df-69e15365ac12';
 const PLAN_ID = '91e64eaf-9108-4d77-bf8a-62e6756bb19c';
+const RUN_ID = '22cf1ef5-8f8b-4e34-9a36-1b6606b6b22c';
 const HUNK_ID = '0123456789abcdefabcd';
+const PRIMARY_TARGET = { kind: 'primary' as const, projectId: PROJECT_ID };
+const WORKTREE_TARGET = {
+  kind: 'agent-worktree' as const,
+  projectId: PROJECT_ID,
+  runId: RUN_ID,
+};
 
 describe('Git renderer request contracts', () => {
-  it('accepts only project identifiers as Git targets', () => {
-    expect(GitTargetInputSchema.parse({ projectId: PROJECT_ID })).toEqual({
-      projectId: PROJECT_ID,
-    });
+  it('accepts only primary or opaque agent-run targets without filesystem authority', () => {
+    expect(GitTargetInputSchema.parse(PRIMARY_TARGET)).toEqual(PRIMARY_TARGET);
+    expect(GitTargetInputSchema.parse(WORKTREE_TARGET)).toEqual(WORKTREE_TARGET);
 
     expect(
       GitTargetInputSchema.safeParse({
+        kind: 'agent-worktree',
         projectId: PROJECT_ID,
+        runId: RUN_ID,
         repositoryPath: '/tmp/renderer-selected-repository',
       }).success,
     ).toBe(false);
@@ -31,7 +39,7 @@ describe('Git renderer request contracts', () => {
       name: 'path selection with a repository path',
       parse: () =>
         GitPathSelectionInputSchema.safeParse({
-          projectId: PROJECT_ID,
+          target: PRIMARY_TARGET,
           paths: ['src/index.ts'],
           repositoryPath: '/tmp/renderer-selected-repository',
         }),
@@ -40,7 +48,7 @@ describe('Git renderer request contracts', () => {
       name: 'path selection with a raw patch',
       parse: () =>
         GitPathSelectionInputSchema.safeParse({
-          projectId: PROJECT_ID,
+          target: WORKTREE_TARGET,
           paths: ['src/index.ts'],
           rawPatch: 'diff --git a/src/index.ts b/src/index.ts',
         }),
@@ -49,7 +57,7 @@ describe('Git renderer request contracts', () => {
       name: 'hunk selection with approval material',
       parse: () =>
         GitHunkSelectionInputSchema.safeParse({
-          projectId: PROJECT_ID,
+          target: WORKTREE_TARGET,
           hunkIds: [HUNK_ID],
           approved: true,
           expectedHead: 'a'.repeat(40),
@@ -62,7 +70,7 @@ describe('Git renderer request contracts', () => {
       name: 'commit plan with a renderer-selected snapshot',
       parse: () =>
         GitCommitPlanInputSchema.safeParse({
-          projectId: PROJECT_ID,
+          target: WORKTREE_TARGET,
           message: 'Safe message',
           approved: true,
           expectedHead: 'b'.repeat(40),
@@ -85,22 +93,22 @@ describe('Git renderer request contracts', () => {
   it('accepts bounded intent-only path, hunk, commit, and confirmation requests', () => {
     expect(
       GitPathSelectionInputSchema.safeParse({
-        projectId: PROJECT_ID,
+        target: PRIMARY_TARGET,
         paths: ['src/index.ts'],
       }).success,
     ).toBe(true);
     expect(
       GitHunkSelectionInputSchema.safeParse({
-        projectId: PROJECT_ID,
+        target: WORKTREE_TARGET,
         hunkIds: [HUNK_ID],
       }).success,
     ).toBe(true);
     expect(
       GitCommitPlanInputSchema.parse({
-        projectId: PROJECT_ID,
+        target: WORKTREE_TARGET,
         message: '  Commit reviewed changes  ',
       }),
-    ).toEqual({ projectId: PROJECT_ID, message: 'Commit reviewed changes' });
+    ).toEqual({ target: WORKTREE_TARGET, message: 'Commit reviewed changes' });
     expect(GitPlanConfirmationInputSchema.safeParse({ planId: PLAN_ID }).success).toBe(true);
   });
 });

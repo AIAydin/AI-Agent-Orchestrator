@@ -822,6 +822,21 @@ export const BackupResultSchema = z
   .strict();
 export type BackupResult = z.infer<typeof BackupResultSchema>;
 
+export const AppCloseRequestSchema = z
+  .object({
+    requestId: z.string().uuid(),
+  })
+  .strict();
+export type AppCloseRequest = z.infer<typeof AppCloseRequestSchema>;
+
+export const AppCloseResponseSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    saved: z.boolean(),
+  })
+  .strict();
+export type AppCloseResponse = z.infer<typeof AppCloseResponseSchema>;
+
 export type IpcResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } };
@@ -847,6 +862,8 @@ export function ipcResultSchema<Schema extends z.ZodTypeAny>(
 
 export const IPC_CHANNELS = Object.freeze({
   appInfo: 'app:get-info',
+  appCloseRequested: 'app:close-requested',
+  appCloseResponse: 'app:close-response',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   settingsReset: 'settings:reset',

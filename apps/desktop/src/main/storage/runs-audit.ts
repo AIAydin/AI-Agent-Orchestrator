@@ -45,6 +45,28 @@ export function saveRun(database: DatabaseSync, record: StoredRunRecord): Stored
   return parsed;
 }
 
+export function getRun(database: DatabaseSync, runId: string): StoredRunRecord | undefined {
+  const row = database.prepare('SELECT value_json FROM agent_runs WHERE id = ?').get(runId) as
+    | JsonRow
+    | undefined;
+  return row === undefined ? undefined : StoredRunRecordSchema.parse(JSON.parse(row.value_json));
+}
+
+export function listProjectRuns(
+  database: DatabaseSync,
+  projectId: string,
+  limit = 200,
+): StoredRunRecord[] {
+  const boundedLimit = Math.max(1, Math.min(1_000, Math.trunc(limit)));
+  const rows = database
+    .prepare(
+      `SELECT value_json FROM agent_runs
+       WHERE project_id = ? ORDER BY updated_at DESC, id DESC LIMIT ?`,
+    )
+    .all(projectId, boundedLimit) as unknown as JsonRow[];
+  return rows.map((row) => StoredRunRecordSchema.parse(JSON.parse(row.value_json)));
+}
+
 export function recoverInterruptedRuns(
   database: DatabaseSync,
   now = new Date(),

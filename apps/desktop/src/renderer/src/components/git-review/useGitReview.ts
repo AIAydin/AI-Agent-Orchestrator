@@ -6,6 +6,7 @@ import type {
   GitCommitResultView,
   GitDiscardPlanView,
   GitReviewView,
+  GitTargetInput,
 } from '../../../../shared/git-contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 
@@ -30,7 +31,7 @@ interface GitReviewController {
 }
 
 export function useGitReview(
-  projectId: string,
+  target: GitTargetInput,
   onError?: (message: string) => void,
 ): GitReviewController {
   const [review, setReview] = useState<GitReviewView | null>(null);
@@ -48,7 +49,7 @@ export function useGitReview(
     setLoading(true);
     setError(null);
     void window.forgeboard.git
-      .review({ projectId })
+      .review(target)
       .then(unwrap)
       .then((nextReview) => {
         if (active) setReview(nextReview);
@@ -66,7 +67,7 @@ export function useGitReview(
       active = false;
       mounted.current = false;
     };
-  }, [projectId]);
+  }, [target]);
 
   const perform = useCallback(
     async <T>(label: string, operation: () => Promise<IpcResult<T>>): Promise<T | undefined> => {
@@ -97,51 +98,51 @@ export function useGitReview(
   );
 
   const refresh = useCallback(async () => {
-    await applyMutation('Refreshing changes', () => window.forgeboard.git.review({ projectId }));
-  }, [applyMutation, projectId]);
+    await applyMutation('Refreshing changes', () => window.forgeboard.git.review(target));
+  }, [applyMutation, target]);
 
   const stagePaths = useCallback(
     async (paths: readonly string[]) => {
       await applyMutation('Staging file', () =>
-        window.forgeboard.git.stagePaths({ projectId, paths: [...paths] }),
+        window.forgeboard.git.stagePaths({ target, paths: [...paths] }),
       );
     },
-    [applyMutation, projectId],
+    [applyMutation, target],
   );
 
   const stageHunks = useCallback(
     async (hunkIds: readonly string[]) => {
       await applyMutation('Staging hunk', () =>
-        window.forgeboard.git.stageHunks({ projectId, hunkIds: [...hunkIds] }),
+        window.forgeboard.git.stageHunks({ target, hunkIds: [...hunkIds] }),
       );
     },
-    [applyMutation, projectId],
+    [applyMutation, target],
   );
 
   const unstagePaths = useCallback(
     async (paths: readonly string[]) => {
       await applyMutation('Unstaging file', () =>
-        window.forgeboard.git.unstagePaths({ projectId, paths: [...paths] }),
+        window.forgeboard.git.unstagePaths({ target, paths: [...paths] }),
       );
     },
-    [applyMutation, projectId],
+    [applyMutation, target],
   );
 
   const unstageHunks = useCallback(
     async (hunkIds: readonly string[]) => {
       await applyMutation('Unstaging hunk', () =>
-        window.forgeboard.git.unstageHunks({ projectId, hunkIds: [...hunkIds] }),
+        window.forgeboard.git.unstageHunks({ target, hunkIds: [...hunkIds] }),
       );
     },
-    [applyMutation, projectId],
+    [applyMutation, target],
   );
 
   const prepareDiscard = useCallback(
     (hunkIds: readonly string[]) =>
       perform('Preparing discard review', () =>
-        window.forgeboard.git.prepareDiscard({ projectId, hunkIds: [...hunkIds] }),
+        window.forgeboard.git.prepareDiscard({ target, hunkIds: [...hunkIds] }),
       ),
-    [perform, projectId],
+    [perform, target],
   );
 
   const confirmDiscard = useCallback(
@@ -160,9 +161,9 @@ export function useGitReview(
   const prepareCommit = useCallback(
     (message: string) =>
       perform('Preparing commit review', () =>
-        window.forgeboard.git.prepareCommit({ projectId, message }),
+        window.forgeboard.git.prepareCommit({ target, message }),
       ),
-    [perform, projectId],
+    [perform, target],
   );
 
   const confirmCommit = useCallback(

@@ -69,14 +69,15 @@ describe('GitIpcService with a real repository', () => {
     harness.service.registerIpcHandlers();
 
     await writeFile(join(fixture.repository, 'story.txt'), changedStory(fixture.originalStory));
-    const result = await requiredHandler(IPC_CHANNELS.gitReview)(liveEvent(11), {
-      projectId: harness.project().id,
-    });
+    const result = await requiredHandler(IPC_CHANNELS.gitReview)(
+      liveEvent(11),
+      primaryTarget(harness),
+    );
 
     expect(result).toMatchObject({
       ok: true,
       value: {
-        projectId: harness.project().id,
+        target: primaryTarget(harness),
         branch: 'main',
         dirty: true,
         entries: [{ kind: 'ordinary', path: 'story.txt', worktree: 'M' }],
@@ -90,13 +91,15 @@ describe('GitIpcService with a real repository', () => {
     expect(harness.project().health).toMatchObject({ branch: 'main', dirty: true });
 
     const rejected = await requiredHandler(IPC_CHANNELS.gitReview)(liveEvent(11), {
+      kind: 'primary',
       projectId: harness.project().id,
       repositoryPath: fixture.root,
     });
     expect(rejected).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
-    const rejectedFrame = await requiredHandler(IPC_CHANNELS.gitReview)(subframeEvent(11), {
-      projectId: harness.project().id,
-    });
+    const rejectedFrame = await requiredHandler(IPC_CHANNELS.gitReview)(
+      subframeEvent(11),
+      primaryTarget(harness),
+    );
     expect(rejectedFrame).toMatchObject({
       ok: false,
       error: { code: 'OPERATION_FAILED' },
@@ -111,12 +114,12 @@ describe('GitIpcService with a real repository', () => {
     const modified = changedStory(fixture.originalStory);
     await writeFile(join(fixture.repository, 'story.txt'), modified);
 
-    const initial = await harness.service.review({ projectId: harness.project().id });
+    const initial = await harness.service.review(primaryTarget(harness));
     const initialHunks = initial.unstaged.files[0]?.hunks ?? [];
     expect(initialHunks).toHaveLength(2);
 
     const partiallyStaged = await harness.service.stageHunks({
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       hunkIds: [requiredHunkId(initialHunks, 0)],
     });
     expect(partiallyStaged.staged.additions).toBe(1);
@@ -124,7 +127,7 @@ describe('GitIpcService with a real repository', () => {
     expect(await readFile(join(fixture.repository, 'story.txt'), 'utf8')).toBe(modified);
 
     const fullyStaged = await harness.service.stagePaths({
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       paths: ['story.txt'],
     });
     expect(fullyStaged.staged.additions).toBe(2);
@@ -132,14 +135,14 @@ describe('GitIpcService with a real repository', () => {
 
     const stagedHunks = fullyStaged.staged.files[0]?.hunks ?? [];
     const partiallyUnstaged = await harness.service.unstageHunks({
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       hunkIds: [requiredHunkId(stagedHunks, 0)],
     });
     expect(partiallyUnstaged.staged.additions).toBe(1);
     expect(partiallyUnstaged.unstaged.additions).toBe(1);
 
     const fullyUnstaged = await harness.service.unstagePaths({
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       paths: ['story.txt'],
     });
     expect(fullyUnstaged.staged.files).toEqual([]);
@@ -154,10 +157,13 @@ describe('GitIpcService with a real repository', () => {
     const harness = createHarness(fixture, [0]);
     const event = liveEvent(21);
     await writeFile(join(fixture.repository, 'story.txt'), changedStory(fixture.originalStory));
-    await harness.service.stagePaths({ projectId: harness.project().id, paths: ['story.txt'] });
+    await harness.service.stagePaths({
+      target: primaryTarget(harness),
+      paths: ['story.txt'],
+    });
     const headBefore = await runGit(fixture.repository, ['rev-parse', 'HEAD']);
     const plan = await harness.service.prepareCommit(event.sender.id, {
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       message: 'Cancelled commit\nIdentity: forged disclosure',
     });
 
@@ -195,10 +201,13 @@ describe('GitIpcService with a real repository', () => {
     const owner = liveEvent(31);
     const otherOwner = liveEvent(32);
     await writeFile(join(fixture.repository, 'story.txt'), changedStory(fixture.originalStory));
-    await harness.service.stagePaths({ projectId: harness.project().id, paths: ['story.txt'] });
+    await harness.service.stagePaths({
+      target: primaryTarget(harness),
+      paths: ['story.txt'],
+    });
 
     const wrongOwnerPlan = await harness.service.prepareCommit(owner.sender.id, {
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       message: 'Owner-bound commit',
     });
     await expect(harness.service.confirmCommit(otherOwner, wrongOwnerPlan.planId)).rejects.toThrow(
@@ -210,7 +219,7 @@ describe('GitIpcService with a real repository', () => {
     expect(harness.showMessageBox).not.toHaveBeenCalled();
 
     const stalePlan = await harness.service.prepareCommit(owner.sender.id, {
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       message: 'Stale commit',
     });
     await writeFile(
@@ -223,7 +232,7 @@ describe('GitIpcService with a real repository', () => {
     );
 
     const currentPlan = await harness.service.prepareCommit(owner.sender.id, {
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       message: 'Use reviewed identity',
     });
     const committed = await harness.service.confirmCommit(owner, currentPlan.planId);
@@ -248,18 +257,18 @@ describe('GitIpcService with a real repository', () => {
     const event = liveEvent(41);
     const modified = fixture.originalStory.replace('line 2\n', 'line two\n');
     await writeFile(join(fixture.repository, 'story.txt'), modified);
-    const review = await harness.service.review({ projectId: harness.project().id });
+    const review = await harness.service.review(primaryTarget(harness));
     const hunkId = requiredHunkId(review.unstaged.files[0]?.hunks ?? [], 0);
 
     const cancelledPlan = await harness.service.prepareDiscard(event.sender.id, {
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       hunkIds: [hunkId],
     });
     await expect(harness.service.confirmDiscard(event, cancelledPlan.planId)).resolves.toBeNull();
     expect(await readFile(join(fixture.repository, 'story.txt'), 'utf8')).toBe(modified);
 
     const approvedPlan = await harness.service.prepareDiscard(event.sender.id, {
-      projectId: harness.project().id,
+      target: primaryTarget(harness),
       hunkIds: [hunkId],
     });
     const discarded = await harness.service.confirmDiscard(event, approvedPlan.planId);
@@ -293,6 +302,7 @@ function createHarness(fixture: RepositoryFixture, responses: readonly number[] 
     appendAudit,
     getProject: (projectId: string) => (project.id === projectId ? project : undefined),
     getProjectByPath: (projectPath: string) => (project.path === projectPath ? project : undefined),
+    getRun: () => undefined,
     saveProject: (nextProject: Project) => {
       project = nextProject;
       return project;
@@ -311,6 +321,10 @@ function createHarness(fixture: RepositoryFixture, responses: readonly number[] 
     () => window,
   );
   return { service, repositories, appendAudit, showMessageBox, project: () => project };
+}
+
+function primaryTarget(harness: TestHarness) {
+  return { kind: 'primary' as const, projectId: harness.project().id };
 }
 
 async function createRepository(): Promise<RepositoryFixture> {

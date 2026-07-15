@@ -8,7 +8,11 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { GitCommitPlanView, GitDiscardPlanView } from '../../../../shared/git-contracts.js';
+import type {
+  GitCommitPlanView,
+  GitDiscardPlanView,
+  GitTargetInput,
+} from '../../../../shared/git-contracts.js';
 import { GitCommitDisclosure, GitDiscardDisclosure } from './GitActionDisclosure.js';
 import { GitCommitPanel } from './GitCommitPanel.js';
 import { GitDiffViewer } from './GitDiffViewer.js';
@@ -23,19 +27,14 @@ import { GitReviewSummary } from './GitReviewSummary.js';
 import { useGitReview } from './useGitReview.js';
 
 export interface GitReviewDialogProps {
-  projectId: string;
+  target: GitTargetInput;
   projectName: string;
   onClose: () => void;
   onError?: (message: string) => void;
 }
 
-export function GitReviewDialog({
-  projectId,
-  projectName,
-  onClose,
-  onError,
-}: GitReviewDialogProps) {
-  const controller = useGitReview(projectId, onError);
+export function GitReviewDialog({ target, projectName, onClose, onError }: GitReviewDialogProps) {
+  const controller = useGitReview(target, onError);
   const [selection, setSelection] = useState<GitFileSelection | null>(null);
   const [discardPlan, setDiscardPlan] = useState<GitDiscardPlanView | null>(null);
   const [commitPlan, setCommitPlan] = useState<GitCommitPlanView | null>(null);
@@ -123,7 +122,11 @@ export function GitReviewDialog({
             <GitCompareArrows size={19} aria-hidden="true" />
           </span>
           <span>
-            <small>Authoritative primary checkout</small>
+            <small>
+              {target.kind === 'primary'
+                ? 'Authoritative primary checkout'
+                : 'Authoritative agent worktree'}
+            </small>
             <h2 id="git-review-title">Review changes in {projectName}</h2>
           </span>
           <button
@@ -164,6 +167,19 @@ export function GitReviewDialog({
           </GitReviewState>
         ) : (
           <>
+            {controller.review.target.kind === 'agent-worktree' && (
+              <section className="git-worktree-target" aria-label="Agent worktree target">
+                <strong>Isolated run {controller.review.target.runId.slice(0, 12)}</strong>
+                <span>
+                  Agent {controller.review.target.agentId} · base {controller.review.target.baseRef}{' '}
+                  @ <code>{controller.review.target.baseCommit.slice(0, 12)}</code>
+                </span>
+                <small>
+                  Stage, discard, and commit actions apply only to this managed worktree. The
+                  primary checkout remains untouched.
+                </small>
+              </section>
+            )}
             <GitReviewSummary review={controller.review} />
             {controller.review.conflicted && (
               <p className="git-conflict-banner" role="alert">

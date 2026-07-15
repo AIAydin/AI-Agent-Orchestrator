@@ -205,8 +205,9 @@ unchecked when only a subset of their required behavior has proof.
   stage/unstage, exact commit identity, owner-bound single-use stale-checked plans, cancel-default
   native commit/discard confirmation, and exact-hunk discard. The Electron flow configured identity
   entirely in the UI, reviewed a real file, staged/unstaged it, and stopped before native commit
-  approval while asserting zero external requests. Agent-worktree targeting and broader compare,
-  merge, push, PR, comments, split-diff, and conflict-resolution work remain unchecked.
+  approval while asserting zero external requests. At that checkpoint, agent-worktree targeting
+  and broader compare, merge, push, PR, comments, split-diff, and conflict-resolution work remained
+  unchecked.
 - 2026-07-14: GitHub Actions Verify run
   [29373978889](https://github.com/AIAydin/AI-Agent-Orchestrator/actions/runs/29373978889)
   passed at exact commit `64ff3905fb08ce6f5346fa88191abc0bdf8acdaf`: verification, the
@@ -245,3 +246,25 @@ unchecked when only a subset of their required behavior has proof.
   rejection, package-script content binding, literal metacharacter handling, bounded output,
   monotonic persisted state, retention/import/export/delete/recovery behavior, and cleanup after
   storage or audit failures.
+- 2026-07-15: `corepack pnpm verify` passed on the agent-worktree checkpoint: the structure gate
+  kept all 298 checked files at or below 2,000 lines; formatting, lint, strict typecheck, 321 unit
+  tests across 61 files, 62 integration tests across 10 files, and all workspace production builds
+  succeeded. `corepack pnpm audit --prod --audit-level high` reported no known production
+  dependency vulnerabilities.
+- 2026-07-15: all 7 Electron Playwright E2E tests passed. The added worktree-review flow configured
+  the managed root and commit identity entirely in the UI, ran the deterministic writable agent,
+  reviewed and staged its persisted owned worktree, completed renderer and native commit approval,
+  relaunched, rediscovered the clean committed worktree, hashed the unchanged primary checkout, and
+  observed zero external requests.
+- 2026-07-15: agent-worktree resolution rejects renderer paths and requires a terminal run plus an
+  immutable persisted repository/root/worktree/branch/base/agent/task binding that matches active
+  ownership and Git identity. Focused integration coverage proved restart recovery after the
+  configured root changes, cross-project/legacy/nonterminal/missing/mismatched rejection,
+  cancel-default discard, target-bound staging and commit, audit identity, and an unchanged primary
+  branch. Broader compare, merge, push, PR, comments, split-diff, and conflict-resolution surfaces
+  remain unchecked.
+- 2026-07-15: immediate-close E2E coverage proved serialized canvas flush before both native
+  application close and in-app project close, followed by successful relaunch/reopen recovery. Unit
+  coverage also proved latest-revision serialization, stale-response protection, retryable failure,
+  owner/request/main-frame-bound close responses, timeout handling, and cancel-default native
+  close-without-saving fallback.

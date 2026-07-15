@@ -4,9 +4,10 @@ Forgeboard is an open-source, local-first visual workshop for building software 
 installed coding-agent CLIs. The current desktop application combines a spatial canvas, isolated
 Git worktrees, streamed agent sessions, loopback web/mobile previews, and explicit launch and
 workflow approval gates, authoritative primary-checkout Git review, staging, and commits, plus
-UI-configured project checks with persisted output. Agent-worktree review targeting, the interactive
-terminal node, and other unchecked surfaces in the implementation ledger are still under
-construction.
+UI-configured project checks with persisted output. Completed writable runs can also be reopened as
+authoritative, isolated agent-worktree reviews without entering a path or editing configuration.
+The interactive terminal node and other unchecked surfaces in the implementation ledger are still
+under construction.
 
 > Forgeboard is under active construction. `IMPLEMENTATION_CHECKLIST.md` is the authoritative
 > status ledger; unchecked items are not claimed as complete.
@@ -67,10 +68,15 @@ The release workflow is designed to emit clearly identified unsigned development
 the optional signing secrets documented in the release guide are configured. Such artifacts may
 trigger the operating system's standard warning.
 
-Still unfinished are agent-worktree review targeting, agent comparison and merge/push flows, the
-interactive terminal node, collaboration client, updater, backup restore/full-data import UI, and
-complete wiring of every persisted setting. See `IMPLEMENTATION_CHECKLIST.md` for the complete
-evidence-backed status.
+Still unfinished are agent comparison and merge/push flows, the interactive terminal node,
+collaboration client, updater, backup restore/full-data import UI, and complete wiring of every
+persisted setting. See `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
+
+Git review is opened from the command bar for the primary checkout or from a completed run's entry
+in **Changes** for that run's managed worktree. Forgeboard resolves the worktree from its persisted
+run and ownership records; the UI never asks for or accepts a worktree path. The review header and
+every commit/discard disclosure identify the active target, and agent-worktree actions leave the
+primary checkout untouched.
 
 ## Development
 

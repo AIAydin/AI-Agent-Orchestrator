@@ -37,6 +37,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   color: string;
   adapterId?: string;
   permissionProfile?: 'plan-read-only' | 'worktree-write' | 'docker-isolated';
+  lastRunPermissionProfile?: 'plan-read-only' | 'worktree-write' | 'docker-isolated';
   prompt?: string;
   runId?: string;
   transcript?: string;

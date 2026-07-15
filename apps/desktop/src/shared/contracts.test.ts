@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AppCloseRequestSchema,
+  AppCloseResponseSchema,
   AuditEventSchema,
   AuditListInputSchema,
   BackupResultSchema,
@@ -18,6 +20,27 @@ import {
   PrepareRunInputSchema,
   ProjectRecoveryAssessmentSchema,
 } from './contracts.js';
+
+describe('save-before-close IPC contracts', () => {
+  const requestId = '123fae6e-e213-4a10-a0db-0f85b791f7e9';
+
+  it('binds strict renderer responses to one UUID request', () => {
+    expect(AppCloseRequestSchema.parse({ requestId })).toEqual({ requestId });
+    expect(AppCloseResponseSchema.parse({ requestId, saved: true })).toEqual({
+      requestId,
+      saved: true,
+    });
+    expect(AppCloseRequestSchema.safeParse({ requestId, reason: 'renderer-choice' }).success).toBe(
+      false,
+    );
+    expect(
+      AppCloseResponseSchema.safeParse({ requestId, saved: true, closeWindow: true }).success,
+    ).toBe(false);
+    expect(AppCloseResponseSchema.safeParse({ requestId: 'not-a-uuid', saved: true }).success).toBe(
+      false,
+    );
+  });
+});
 
 describe('agent-run target contracts', () => {
   it('accepts only a project ID and rejects renderer-selected repository paths', () => {

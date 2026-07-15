@@ -26,7 +26,7 @@ interface WorkspaceActivityDrawerProps {
   onPrepareCheck: (checkId: string) => void;
   onCancelCheck: (executionId: string) => void;
   onOpenSettings: () => void;
-  onOpenGitReview: () => void;
+  onOpenGitReview: (runId?: string) => void;
   onClose: () => void;
 }
 
@@ -189,7 +189,7 @@ function ChangesPanel({
   onOpenGitReview,
 }: {
   reports: ChangeReport[];
-  onOpenGitReview: () => void;
+  onOpenGitReview: (runId?: string) => void;
 }) {
   return (
     <div
@@ -206,28 +206,45 @@ function ChangesPanel({
         </div>
         <div className="drawer-panel-actions">
           <span>{reports.reduce((total, report) => total + report.files.length, 0)} files</span>
-          <button type="button" onClick={onOpenGitReview}>
+          <button type="button" onClick={() => onOpenGitReview()}>
             Review primary checkout
           </button>
         </div>
       </header>
       {reports.length ? (
         <div className="change-report-list">
-          {reports.map((report) => (
-            <article key={report.nodeId}>
-              <header>
-                <strong>{report.title}</strong>
-                <span className={`drawer-status ${report.status}`}>{report.status}</span>
-              </header>
-              <ul>
-                {report.files.map((file) => (
-                  <li key={file}>
-                    <FileCode2 size={12} aria-hidden="true" /> <code>{file}</code>
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ))}
+          {reports.map((report) => {
+            const reviewRunId =
+              report.nodeKind === 'agent' &&
+              report.runId !== null &&
+              report.runPermissionProfile !== null &&
+              report.runPermissionProfile !== 'plan-read-only' &&
+              ['succeeded', 'failed', 'cancelled'].includes(report.status)
+                ? report.runId
+                : null;
+            return (
+              <article key={report.nodeId}>
+                <header>
+                  <strong>{report.title}</strong>
+                  <span className={`drawer-status ${report.status}`}>{report.status}</span>
+                </header>
+                <ul>
+                  {report.files.map((file) => (
+                    <li key={file}>
+                      <FileCode2 size={12} aria-hidden="true" /> <code>{file}</code>
+                    </li>
+                  ))}
+                </ul>
+                {reviewRunId !== null && (
+                  <div className="drawer-panel-actions">
+                    <button type="button" onClick={() => onOpenGitReview(reviewRunId)}>
+                      Review this agent worktree
+                    </button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
         </div>
       ) : (
         <DrawerEmpty>No completed run has reported file changes.</DrawerEmpty>

@@ -1,8 +1,9 @@
 import { join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
 
+import { CloseCoordinator } from './close-coordinator.js';
 import { registerIpcHandlers } from './ipc.js';
 import type { ApplicationServices } from './ipc.js';
 import { verifyBundledGit } from './git-runtime.js';
@@ -11,8 +12,10 @@ import { LocalStore } from './storage.js';
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let services: ApplicationServices | null = null;
+let closeCoordinator: CloseCoordinator | null = null;
 let quitReady = false;
-let disposal: Promise<void> | null = null;
+let quitAttempt: Promise<boolean> | null = null;
+const approvedWindowCloses = new WeakSet<BrowserWindow>();
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
@@ -39,11 +42,13 @@ void app
       return;
     }
     services = registerIpcHandlers(store);
-    mainWindow = createWindow(services);
+    closeCoordinator = new CloseCoordinator(dialog, ipcMain);
+    mainWindow = createWindow(services, closeCoordinator);
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0 && services)
-        mainWindow = createWindow(services);
+      if (BrowserWindow.getAllWindows().length === 0 && services && closeCoordinator) {
+        mainWindow = createWindow(services, closeCoordinator);
+      }
     });
   })
   .catch((error: unknown) => {
@@ -60,10 +65,15 @@ app.on('window-all-closed', () => {
 app.on('before-quit', (event) => {
   if (quitReady) return;
   event.preventDefault();
-  if (disposal !== null) return;
-  disposal = disposeApplication();
-  void disposal.then(
-    () => {
+  if (quitAttempt !== null) return;
+  const attempt = attemptApplicationQuit();
+  quitAttempt = attempt;
+  void attempt.then(
+    (canQuit) => {
+      if (!canQuit) {
+        if (quitAttempt === attempt) quitAttempt = null;
+        return;
+      }
       quitReady = true;
       app.quit();
     },
@@ -77,15 +87,30 @@ app.on('before-quit', (event) => {
   );
 });
 
+async function attemptApplicationQuit(): Promise<boolean> {
+  const window = mainWindow;
+  if (window && !window.isDestroyed()) {
+    const coordinator = closeCoordinator;
+    if (coordinator === null || !(await coordinator.requestSave(window))) return false;
+  }
+  await disposeApplication();
+  return true;
+}
+
 async function disposeApplication(): Promise<void> {
   const applicationServices = services;
   services = null;
   if (applicationServices) await applicationServices.dispose();
+  closeCoordinator?.dispose();
+  closeCoordinator = null;
   store?.close();
   store = null;
 }
 
-function createWindow(applicationServices: ApplicationServices): BrowserWindow {
+function createWindow(
+  applicationServices: ApplicationServices,
+  coordinator: CloseCoordinator,
+): BrowserWindow {
   const window = new BrowserWindow({
     title: PRODUCT.name,
     width: 1500,
@@ -105,6 +130,19 @@ function createWindow(applicationServices: ApplicationServices): BrowserWindow {
       allowRunningInsecureContent: false,
       spellcheck: true,
     },
+  });
+
+  window.on('close', (event) => {
+    if (quitReady || approvedWindowCloses.has(window)) return;
+    event.preventDefault();
+    void coordinator.requestSave(window).then((canClose) => {
+      if (!canClose || window.isDestroyed()) return;
+      approvedWindowCloses.add(window);
+      window.close();
+    });
+  });
+  window.once('closed', () => {
+    if (mainWindow === window) mainWindow = null;
   });
 
   // This handler also receives requests from untrusted preview subframes. Never let page content

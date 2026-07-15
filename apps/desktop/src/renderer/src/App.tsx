@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { LoaderCircle } from 'lucide-react';
 
@@ -13,6 +13,7 @@ import { SettingsPanel } from './components/SettingsPanel.js';
 import { SetupWizard } from './components/SetupWizard.js';
 import { Welcome } from './components/Welcome.js';
 import { Workspace } from './components/Workspace.js';
+import type { WorkspaceHandle } from './components/workspace/types.js';
 import { unwrap } from './lib/ipc.js';
 
 interface BootstrapState {
@@ -29,6 +30,15 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const workspaceRef = useRef<WorkspaceHandle>(null);
+
+  useEffect(
+    () =>
+      window.forgeboard.app.onCloseRequested(
+        async () => (await workspaceRef.current?.flushCanvas()) ?? true,
+      ),
+    [],
+  );
 
   const loadBootstrap = useCallback(async () => {
     const [info, settings, agents, extensions, recent] = await Promise.all([
@@ -120,6 +130,7 @@ export function App() {
         />
       ) : activeProject ? (
         <Workspace
+          ref={workspaceRef}
           project={activeProject}
           settings={bootstrap.settings}
           agents={bootstrap.agents}

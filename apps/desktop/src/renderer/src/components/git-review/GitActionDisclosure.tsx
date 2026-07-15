@@ -1,9 +1,19 @@
 import { GitCommitHorizontal, ShieldAlert, Trash2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import type { GitCommitPlanView, GitDiscardPlanView } from '../../../../shared/git-contracts.js';
+import type {
+  GitCommitPlanView,
+  GitDiscardPlanView,
+  GitReviewTargetView,
+} from '../../../../shared/git-contracts.js';
 
 const MAX_VISIBLE_PATHS = 100;
+
+function targetLabel(target: GitReviewTargetView): string {
+  return target.kind === 'primary'
+    ? 'Primary checkout'
+    : `Isolated agent worktree · run ${target.runId.slice(0, 12)}`;
+}
 
 function PathList({ paths }: { paths: readonly string[] }) {
   const remaining = Math.max(0, paths.length - MAX_VISIBLE_PATHS);
@@ -125,6 +135,10 @@ export function GitDiscardDisclosure({
       onConfirm={onConfirm}
     >
       <dl>
+        <div className="wide">
+          <dt>Target</dt>
+          <dd>{targetLabel(plan.target)}</dd>
+        </div>
         <div>
           <dt>Scope</dt>
           <dd>
@@ -166,6 +180,10 @@ export function GitCommitDisclosure({
       onConfirm={onConfirm}
     >
       <dl>
+        <div className="wide">
+          <dt>Target</dt>
+          <dd>{targetLabel(plan.target)}</dd>
+        </div>
         <div>
           <dt>Branch</dt>
           <dd>{plan.branch ?? 'Unborn branch'}</dd>

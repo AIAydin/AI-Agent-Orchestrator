@@ -36,6 +36,31 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.git-worktree-target {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 12px;
+  align-items: baseline;
+  padding: 9px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line));
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  font-size: 10px;
+}
+.git-worktree-target strong {
+  color: var(--text);
+}
+.git-worktree-target span,
+.git-worktree-target small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-worktree-target small {
+  grid-column: 1 / -1;
+  color: var(--text-faint);
+}
 .git-review-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

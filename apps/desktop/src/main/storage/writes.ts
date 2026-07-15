@@ -152,7 +152,14 @@ export function writeRun(database: DatabaseSync, record: StoredRunRecord): void 
       existing.projectId !== record.projectId ||
       existing.nodeId !== record.nodeId ||
       existing.adapterId !== record.adapterId ||
-      existing.createdAt !== record.createdAt
+      existing.createdAt !== record.createdAt ||
+      existing.cwd !== record.cwd ||
+      existing.branch !== record.branch ||
+      existing.worktreeId !== record.worktreeId ||
+      existing.repositoryRoot !== record.repositoryRoot ||
+      existing.managedRoot !== record.managedRoot ||
+      existing.baseRef !== record.baseRef ||
+      existing.baseCommit !== record.baseCommit
     ) {
       throw new Error('A run record cannot change its persisted identity.');
     }

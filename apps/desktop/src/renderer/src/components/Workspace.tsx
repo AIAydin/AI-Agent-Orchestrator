@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   addEdge,
   applyEdgeChanges,
@@ -14,6 +22,7 @@ import {
 import { PanelBottomOpen } from 'lucide-react';
 
 import type { CanvasDocument, RunAdapterId } from '../../../shared/contracts.js';
+import type { GitTargetInput } from '../../../shared/git-contracts.js';
 import { unwrap } from '../lib/ipc.js';
 import { NODE_DEFINITIONS, NODE_KINDS, type NodeKind, type WorkshopNode } from './CanvasNode.js';
 import { CommandPalette } from './CommandPalette.js';
@@ -34,29 +43,28 @@ import type {
   ExtensionTemplate,
   Snapshot,
   WorkshopEdge,
+  WorkspaceHandle,
   WorkspaceProps,
 } from './workspace/types.js';
 import { useAgentRunController } from './workspace/useAgentRunController.js';
+import { useCanvasPersistence } from './workspace/useCanvasPersistence.js';
 import { useProjectChecks } from './workspace/useProjectChecks.js';
 import { useWorkspacePreviews } from './workspace/useWorkspacePreviews.js';
 
-export function Workspace(props: WorkspaceProps) {
-  return (
-    <ReactFlowProvider>
-      <WorkspaceInner {...props} />
-    </ReactFlowProvider>
-  );
-}
+export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
+  function Workspace(props, ref) {
+    return (
+      <ReactFlowProvider>
+        <WorkspaceInner {...props} ref={ref} />
+      </ReactFlowProvider>
+    );
+  },
+);
 
-function WorkspaceInner({
-  project,
-  settings,
-  agents,
-  extensionDiscovery,
-  onClose,
-  onOpenSettings,
-  onError,
-}: WorkspaceProps) {
+const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function WorkspaceInner(
+  { project, settings, agents, extensionDiscovery, onClose, onOpenSettings, onError },
+  ref,
+) {
   const [canvas, setCanvas] = useState<CanvasDocument | null>(null);
   const [nodes, setNodes] = useState<WorkshopNode[]>([]);
   const [edges, setEdges] = useState<WorkshopEdge[]>([]);
@@ -66,9 +74,8 @@ function WorkspaceInner({
   const [activityOpen, setActivityOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [gitReviewOpen, setGitReviewOpen] = useState(false);
+  const [gitReviewTarget, setGitReviewTarget] = useState<GitTargetInput | null>(null);
   const [search, setSearch] = useState('');
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
   const [instance, setInstance] = useState<ReactFlowInstance<WorkshopNode, WorkshopEdge> | null>(
     null,
   );
@@ -153,45 +160,44 @@ function WorkspaceInner({
 
   const previews = useWorkspacePreviews({ projectId: project.id, nodes, setNodes, setEvents });
 
-  useEffect(() => {
-    if (!canvas || !loaded.current) return;
-    setSaveState('saving');
-    const timer = window.setTimeout(() => {
-      const next: CanvasDocument = {
-        ...canvas,
-        nodes: nodes.map(({ id, position, width, height, data }) => ({
-          id,
-          type: data.kind,
-          position,
-          ...(width === null || width === undefined ? {} : { width }),
-          ...(height === null || height === undefined ? {} : { height }),
-          data,
-        })),
-        edges: edges.map((edge) => ({
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          ...(edge.sourceHandle === undefined || edge.sourceHandle === null
-            ? {}
-            : { sourceHandle: edge.sourceHandle }),
-          ...(edge.targetHandle === undefined || edge.targetHandle === null
-            ? {}
-            : { targetHandle: edge.targetHandle }),
-          type: edge.data?.edgeType ?? 'context',
-        })),
-        viewport: instance?.getViewport() ?? canvas.viewport,
-        updatedAt: new Date().toISOString(),
-      };
-      void window.forgeboard.canvas
-        .save(next)
-        .then((result) => {
-          unwrap(result);
-          setSaveState('saved');
-        })
-        .catch(() => setSaveState('error'));
-    }, settings.autosaveIntervalMs);
-    return () => window.clearTimeout(timer);
-  }, [canvas, edges, instance, nodes, settings.autosaveIntervalMs]);
+  const pendingCanvas = useMemo<CanvasDocument | null>(() => {
+    if (!canvas || !loaded.current) return null;
+    return {
+      ...canvas,
+      nodes: nodes.map(({ id, position, width, height, data }) => ({
+        id,
+        type: data.kind,
+        position,
+        ...(width === null || width === undefined ? {} : { width }),
+        ...(height === null || height === undefined ? {} : { height }),
+        data,
+      })),
+      edges: edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        ...(edge.sourceHandle === undefined || edge.sourceHandle === null
+          ? {}
+          : { sourceHandle: edge.sourceHandle }),
+        ...(edge.targetHandle === undefined || edge.targetHandle === null
+          ? {}
+          : { targetHandle: edge.targetHandle }),
+        type: edge.data?.edgeType ?? 'context',
+      })),
+      viewport: instance?.getViewport() ?? canvas.viewport,
+    };
+  }, [canvas, edges, instance, nodes]);
+  const { saveState, flushCanvas } = useCanvasPersistence({
+    projectId: project.id,
+    document: pendingCanvas,
+    autosaveIntervalMs: settings.autosaveIntervalMs,
+    onError,
+  });
+  useImperativeHandle(ref, () => ({ flushCanvas }), [flushCanvas]);
+
+  const closeProject = useCallback(async () => {
+    if (await flushCanvas()) onClose();
+  }, [flushCanvas, onClose]);
 
   const record = useCallback(() => {
     setPast((items) => [...items.slice(-49), { nodes, edges }]);
@@ -385,7 +391,17 @@ function WorkspaceInner({
   const changeReports = nodes.flatMap((node) => {
     const files = node.data.changedFiles ?? [];
     return files.length
-      ? [{ nodeId: node.id, title: node.data.title, status: node.data.status, files }]
+      ? [
+          {
+            nodeId: node.id,
+            nodeKind: node.data.kind,
+            title: node.data.title,
+            status: node.data.status,
+            files,
+            runId: node.data.runId ?? null,
+            runPermissionProfile: node.data.lastRunPermissionProfile ?? null,
+          },
+        ]
       : [];
   });
   const checkCommands: CheckCommand[] = [
@@ -498,7 +514,7 @@ function WorkspaceInner({
         id: 'git-review',
         label: 'Review Git changes',
         section: 'Project',
-        run: () => setGitReviewOpen(true),
+        run: () => setGitReviewTarget({ kind: 'primary', projectId: project.id }),
       },
       {
         id: 'settings',
@@ -507,15 +523,21 @@ function WorkspaceInner({
         shortcut: '⌘,',
         run: onOpenSettings,
       },
-      { id: 'close', label: 'Close project', section: 'Project', run: onClose },
+      {
+        id: 'close',
+        label: 'Close project',
+        section: 'Project',
+        run: () => void closeProject(),
+      },
     ],
     [
       addExtensionNode,
       addNode,
+      closeProject,
       extensionTemplates,
       instance,
-      onClose,
       onOpenSettings,
+      project.id,
       settings.reducedMotion,
     ],
   );
@@ -530,13 +552,13 @@ function WorkspaceInner({
         canUndo={past.length > 0}
         canRedo={future.length > 0}
         notificationsOpen={notificationsOpen}
-        onCloseProject={onClose}
+        onCloseProject={() => void closeProject()}
         onUndo={undo}
         onRedo={redo}
         onFitCanvas={() =>
           void instance?.fitView({ padding: 0.18, duration: settings.reducedMotion ? 0 : 240 })
         }
-        onOpenGitReview={() => setGitReviewOpen(true)}
+        onOpenGitReview={() => setGitReviewTarget({ kind: 'primary', projectId: project.id })}
         onOpenCommands={() => setPaletteOpen(true)}
         onToggleNotifications={() => setNotificationsOpen((open) => !open)}
         onOpenSettings={onOpenSettings}
@@ -641,7 +663,14 @@ function WorkspaceInner({
           onRunInputChange={runs.setRunInput}
           onSendRunInput={() => void runs.sendRunInput()}
           onControlRun={(action) => void runs.controlRun(action)}
-          onPrepareRun={() => void runs.prepareSelectedRun()}
+          onPrepareRun={() => {
+            updateSelected({
+              permissionProfile: selectedPermission,
+              lastRunPermissionProfile: selectedPermission,
+              changedFiles: [],
+            });
+            void runs.prepareSelectedRun();
+          }}
           onPreviewSession={(session) => {
             if (selectedNode) previews.updateSession(selectedNode.id, session);
           }}
@@ -657,7 +686,13 @@ function WorkspaceInner({
           onPrepareCheck={(checkId) => void checks.prepare(checkId)}
           onCancelCheck={(executionId) => void checks.cancel(executionId)}
           onOpenSettings={onOpenSettings}
-          onOpenGitReview={() => setGitReviewOpen(true)}
+          onOpenGitReview={(runId) =>
+            setGitReviewTarget(
+              runId === undefined
+                ? { kind: 'primary', projectId: project.id }
+                : { kind: 'agent-worktree', projectId: project.id, runId },
+            )
+          }
           onClose={() => setActivityOpen(false)}
         />
       </div>
@@ -673,11 +708,11 @@ function WorkspaceInner({
       {notificationsOpen && (
         <WorkspaceNotifications events={events} onClose={() => setNotificationsOpen(false)} />
       )}
-      {gitReviewOpen && (
+      {gitReviewTarget !== null && (
         <GitReviewDialog
-          projectId={project.id}
+          target={gitReviewTarget}
           projectName={project.name}
-          onClose={() => setGitReviewOpen(false)}
+          onClose={() => setGitReviewTarget(null)}
           onError={onError}
         />
       )}
@@ -704,4 +739,4 @@ function WorkspaceInner({
       )}
     </main>
   );
-}
+});

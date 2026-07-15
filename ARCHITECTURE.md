@@ -44,12 +44,16 @@ Agent runs start in dedicated application-managed worktrees. A launch preview di
 arguments, working directory, environment variable names, permission profile, provider, and exact
 context file list. Human approval produces a scoped audit record before the process starts.
 
-Primary-checkout Git review accepts only a stored project ID from the renderer. Electron main
-resolves that project's canonical repository, reads authoritative status/diffs, serializes index
-mutations, and audits each action. Destructive hunk discard and commit use owner-bound, expiring,
-single-use plans followed by a native confirmation. The Git engine rechecks HEAD and exact patch or
-staged-content digests immediately before mutation; Forgeboard commits also bind the reviewed author
-identity while disabling repository hooks and signing.
+Git review accepts either a stored project ID for the primary checkout or a stored project/run ID
+pair for an agent worktree. It never accepts a renderer-selected repository or worktree path.
+Electron main resolves primary roots canonically; agent targets additionally require a terminal
+persisted run, immutable run-to-worktree binding, active ownership record, matching branch and base,
+and shared Git common directory. It then reads authoritative status/diffs, serializes mutations, and
+audits each action with its target identity. Destructive hunk discard and commit use owner-bound,
+expiring, single-use plans followed by a native confirmation. The Git engine rechecks HEAD and exact
+patch or staged-content digests immediately before mutation; Forgeboard commits also bind the
+reviewed author identity while disabling repository hooks and signing. Worktree review never writes
+primary-checkout health state.
 
 Project checks follow the same renderer-untrusted boundary. The renderer selects only a stored
 check identity. Electron main resolves the canonical project root and configured executable,
@@ -107,6 +111,11 @@ raw-transcript storage remains unchecked in the implementation ledger and is not
 complete. Project-check execution records and bounded raw output are persisted locally, recover
 interrupted processes as lost, transition through a validated monotonic state machine, and apply the
 configured retention period only to terminal records.
+
+Canvas changes use serialized revision-aware autosave. Internal project close and native
+window/application close explicitly flush the latest revision before renderer teardown or storage
+disposal. A failed or timed-out save keeps Forgeboard open by default and requires a separate native
+choice to close without saving.
 
 ## Collaboration
 

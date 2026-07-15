@@ -30,6 +30,10 @@ export interface WorkspaceProps {
   onError: (message: string) => void;
 }
 
+export interface WorkspaceHandle {
+  flushCanvas: () => Promise<boolean>;
+}
+
 export interface ExtensionTemplate {
   extension: InstalledExtensionView;
   definition: ExtensionCanvasNodeTypeView;
@@ -38,9 +42,12 @@ export interface ExtensionTemplate {
 
 export interface ChangeReport {
   nodeId: string;
+  nodeKind: WorkshopNode['data']['kind'];
   title: string;
   status: WorkshopNode['data']['status'];
   files: string[];
+  runId: string | null;
+  runPermissionProfile: WorkshopNode['data']['lastRunPermissionProfile'] | null;
 }
 
 export interface CheckCommand {

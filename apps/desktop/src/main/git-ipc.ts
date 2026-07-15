@@ -29,6 +29,7 @@ import {
   GitIdentityViewSchema,
   GitPathSelectionInputSchema,
   GitPlanConfirmationInputSchema,
+  GitReviewTargetViewSchema,
   GitReviewViewSchema,
   GitTargetInputSchema,
   type GitCommitPlanInput,
@@ -39,9 +40,11 @@ import {
   type GitHunkSelectionInput,
   type GitIdentityView,
   type GitPathSelectionInput,
+  type GitReviewTargetView,
   type GitReviewView,
   type GitTargetInput,
 } from '../shared/git-contracts.js';
+import { GitTargetResolver } from './git-target-resolver.js';
 import type { LocalStore } from './storage.js';
 
 const PLAN_TTL_MS = 5 * 60_000;
@@ -50,7 +53,7 @@ const MAX_PENDING_PLANS_PER_OWNER = 32;
 interface PendingPlanBase {
   readonly id: string;
   readonly ownerId: number;
-  readonly projectId: string;
+  readonly target: GitReviewTargetView;
   readonly repositoryRoot: string;
   readonly expiresAtMs: number;
 }
@@ -81,7 +84,7 @@ interface PendingDiscardPlan extends PendingPlanBase {
 type PendingPlan = PendingCommitPlan | PendingDiscardPlan;
 
 interface GitTarget {
-  readonly projectId: string;
+  readonly view: GitReviewTargetView;
   readonly repositoryRoot: string;
 }
 
@@ -92,6 +95,7 @@ export class GitIpcService {
   readonly #registeredChannels: string[] = [];
   readonly #plans = new Map<string, PendingPlan>();
   readonly #trackedOwners = new Set<number>();
+  readonly #targets: GitTargetResolver;
   #disposed = false;
   #privacyResetting = false;
   #operationTail: Promise<void> = Promise.resolve();
@@ -100,7 +104,7 @@ export class GitIpcService {
     private readonly dialog: Pick<Dialog, 'showMessageBox'>,
     private readonly store: Pick<
       LocalStore,
-      'appendAudit' | 'getProject' | 'getProjectByPath' | 'saveProject'
+      'appendAudit' | 'getProject' | 'getProjectByPath' | 'getRun' | 'saveProject'
     >,
     private readonly repositories: RepositoryService,
     private readonly getSettings: () => AppSettings,
@@ -108,6 +112,7 @@ export class GitIpcService {
       BrowserWindow.fromWebContents(event.sender),
   ) {
     this.#changes = new ChangeService(repositories);
+    this.#targets = new GitTargetResolver(store, repositories, getSettings);
   }
 
   public registerIpcHandlers(): void {
@@ -210,38 +215,38 @@ export class GitIpcService {
 
   public review(input: GitTargetInput): Promise<GitReviewView> {
     return this.#withOperation(async () => {
-      const target = await this.#resolveTarget(input.projectId);
+      const target = await this.#resolveTarget(input);
       return await this.#reviewUnlocked(target);
     });
   }
 
   public stagePaths(input: GitPathSelectionInput): Promise<GitReviewView> {
-    return this.#mutate(input.projectId, 'stage-paths', async (target) => {
+    return this.#mutate(input.target, 'stage-paths', async (target) => {
       await this.#changes.stagePaths(target.repositoryRoot, input.paths);
     });
   }
 
   public stageHunks(input: GitHunkSelectionInput): Promise<GitReviewView> {
-    return this.#mutate(input.projectId, 'stage-hunks', async (target) => {
+    return this.#mutate(input.target, 'stage-hunks', async (target) => {
       await this.#changes.stageHunks(target.repositoryRoot, input.hunkIds);
     });
   }
 
   public unstagePaths(input: GitPathSelectionInput): Promise<GitReviewView> {
-    return this.#mutate(input.projectId, 'unstage-paths', async (target) => {
+    return this.#mutate(input.target, 'unstage-paths', async (target) => {
       await this.#changes.unstagePaths(target.repositoryRoot, input.paths);
     });
   }
 
   public unstageHunks(input: GitHunkSelectionInput): Promise<GitReviewView> {
-    return this.#mutate(input.projectId, 'unstage-hunks', async (target) => {
+    return this.#mutate(input.target, 'unstage-hunks', async (target) => {
       await this.#changes.unstageHunks(target.repositoryRoot, input.hunkIds);
     });
   }
 
   public prepareCommit(ownerId: number, input: GitCommitPlanInput): Promise<GitCommitPlanView> {
     return this.#withOperation(async () => {
-      const target = await this.#resolveTarget(input.projectId);
+      const target = await this.#resolveTarget(input.target);
       const [snapshot, staged, identity] = await Promise.all([
         this.#changes.approvalSnapshot(target.repositoryRoot),
         this.#changes.diff(target.repositoryRoot, 'staged'),
@@ -257,7 +262,7 @@ export class GitIpcService {
         kind: 'commit',
         id: randomUUID(),
         ownerId,
-        projectId: target.projectId,
+        target: target.view,
         repositoryRoot: target.repositoryRoot,
         expiresAtMs: Date.now() + PLAN_TTL_MS,
         message: input.message.trim(),
@@ -279,7 +284,7 @@ export class GitIpcService {
     input: GitHunkSelectionInput,
   ): Promise<GitDiscardPlanView> {
     return this.#withOperation(async () => {
-      const target = await this.#resolveTarget(input.projectId);
+      const target = await this.#resolveTarget(input.target);
       const [snapshot, unstaged] = await Promise.all([
         this.#changes.approvalSnapshot(target.repositoryRoot),
         this.#changes.diff(target.repositoryRoot, 'unstaged'),
@@ -290,7 +295,7 @@ export class GitIpcService {
         kind: 'discard-hunks',
         id: randomUUID(),
         ownerId,
-        projectId: target.projectId,
+        target: target.view,
         repositoryRoot: target.repositoryRoot,
         expiresAtMs: Date.now() + PLAN_TTL_MS,
         branch: snapshot.branch,
@@ -318,7 +323,7 @@ export class GitIpcService {
       this.#assertLiveSender(event);
       if (decision.response !== 1) {
         this.store.appendAudit('git', 'commit', 'denied', {
-          projectId: plan.projectId,
+          ...auditTargetMetadata(plan.target),
           reason: 'native-confirmation-cancelled',
           stagedPathCount: plan.stagedPaths.length,
         });
@@ -340,11 +345,11 @@ export class GitIpcService {
         };
         const committed = await this.#changes.commit(plan.repositoryRoot, approval);
         const review = await this.#reviewUnlocked({
-          projectId: plan.projectId,
+          view: plan.target,
           repositoryRoot: plan.repositoryRoot,
         });
         this.store.appendAudit('git', 'commit', 'allowed', {
-          projectId: plan.projectId,
+          ...auditTargetMetadata(plan.target),
           branch: plan.branch,
           stagedPathCount: plan.stagedPaths.length,
           headBefore: committed.headBefore,
@@ -352,7 +357,7 @@ export class GitIpcService {
         });
         return { headBefore: committed.headBefore, headAfter: committed.headAfter, review };
       } catch (error) {
-        this.#auditFailure('commit', plan.projectId, error);
+        this.#auditFailure('commit', plan.target, error);
         throw error;
       }
     });
@@ -367,7 +372,7 @@ export class GitIpcService {
       this.#assertLiveSender(event);
       if (decision.response !== 1) {
         this.store.appendAudit('git', 'discard-hunks', 'denied', {
-          projectId: plan.projectId,
+          ...auditTargetMetadata(plan.target),
           reason: 'native-confirmation-cancelled',
           pathCount: plan.paths.length,
           hunkCount: plan.hunkIds.length,
@@ -387,39 +392,39 @@ export class GitIpcService {
         };
         await this.#changes.discardHunks(plan.repositoryRoot, plan.hunkIds, approval);
         const review = await this.#reviewUnlocked({
-          projectId: plan.projectId,
+          view: plan.target,
           repositoryRoot: plan.repositoryRoot,
         });
         this.store.appendAudit('git', 'discard-hunks', 'allowed', {
-          projectId: plan.projectId,
+          ...auditTargetMetadata(plan.target),
           pathCount: plan.paths.length,
           hunkCount: plan.hunkIds.length,
         });
         return review;
       } catch (error) {
-        this.#auditFailure('discard-hunks', plan.projectId, error);
+        this.#auditFailure('discard-hunks', plan.target, error);
         throw error;
       }
     });
   }
 
   async #mutate(
-    projectId: string,
+    targetInput: GitTargetInput,
     action: string,
     operation: (target: GitTarget) => Promise<void>,
   ): Promise<GitReviewView> {
     return this.#withOperation(async () => {
-      const target = await this.#resolveTarget(projectId);
+      const target = await this.#resolveTarget(targetInput);
       try {
         await operation(target);
         const review = await this.#reviewUnlocked(target);
         this.store.appendAudit('git', action, 'allowed', {
-          projectId,
+          ...auditTargetMetadata(target.view),
           changedPathCount: review.entries.length,
         });
         return review;
       } catch (error) {
-        this.#auditFailure(action, projectId, error);
+        this.#auditFailure(action, target.view, error);
         throw error;
       }
     });
@@ -432,15 +437,15 @@ export class GitIpcService {
       this.#changes.diff(target.repositoryRoot, 'unstaged'),
       this.#resolveIdentity(target.repositoryRoot),
     ]);
-    const project = this.store.getProject(target.projectId);
-    if (project !== undefined) {
+    const project = this.store.getProject(target.view.projectId);
+    if (target.view.kind === 'primary' && project !== undefined) {
       this.store.saveProject({
         ...project,
         health: { ...project.health, branch: status.branch, dirty: status.dirty },
       });
     }
     return GitReviewViewSchema.parse({
-      projectId: target.projectId,
+      target: target.view,
       branch: status.branch,
       detached: status.detached,
       headOid: status.headOid,
@@ -504,9 +509,23 @@ export class GitIpcService {
     return result.exitCode === 0 ? result.stdout.trim() : '';
   }
 
-  async #resolveTarget(projectId: string): Promise<GitTarget> {
+  async #resolveTarget(input: GitTargetInput): Promise<GitTarget> {
     this.#assertAvailable();
-    const project = this.store.getProject(projectId);
+    if (input.kind === 'agent-worktree') {
+      const resolved = await this.#targets.resolve(input);
+      const view = GitReviewTargetViewSchema.parse({
+        kind: 'agent-worktree',
+        projectId: input.projectId,
+        runId: input.runId,
+        nodeId: resolved.run.nodeId,
+        worktreeId: resolved.ownership.id,
+        agentId: resolved.ownership.agentId,
+        baseRef: resolved.ownership.baseRef,
+        baseCommit: resolved.ownership.baseCommit,
+      });
+      return { view, repositoryRoot: resolved.worktreeRepositoryPath };
+    }
+    const project = this.store.getProject(input.projectId);
     if (project === undefined || project.missing) {
       throw new Error('The selected project is no longer available.');
     }
@@ -516,16 +535,19 @@ export class GitIpcService {
     const repositoryRoot = await this.repositories.resolveRepositoryRoot(project.path);
     if (
       repositoryRoot !== project.path ||
-      this.store.getProjectByPath(repositoryRoot)?.id !== projectId
+      this.store.getProjectByPath(repositoryRoot)?.id !== input.projectId
     ) {
       throw new Error('Reopen this project from its canonical Git repository root.');
     }
-    return { projectId, repositoryRoot };
+    return { view: input, repositoryRoot };
   }
 
   async #assertPlanTarget(plan: PendingPlan): Promise<void> {
-    const target = await this.#resolveTarget(plan.projectId);
-    if (target.repositoryRoot !== plan.repositoryRoot) {
+    const target = await this.#resolveTarget(targetInput(plan.target));
+    if (
+      target.repositoryRoot !== plan.repositoryRoot ||
+      JSON.stringify(target.view) !== JSON.stringify(plan.target)
+    ) {
       throw new Error('The project repository changed after Git review. Prepare a new plan.');
     }
   }
@@ -542,7 +564,7 @@ export class GitIpcService {
     for (const [id, candidate] of this.#plans) {
       if (
         candidate.ownerId === plan.ownerId &&
-        candidate.projectId === plan.projectId &&
+        targetKey(candidate.target) === targetKey(plan.target) &&
         candidate.kind === plan.kind
       ) {
         this.#plans.delete(id);
@@ -625,9 +647,9 @@ export class GitIpcService {
     }
   }
 
-  #auditFailure(action: string, projectId: string, error: unknown): void {
+  #auditFailure(action: string, target: GitReviewTargetView, error: unknown): void {
     this.store.appendAudit('git', action, 'failed', {
-      projectId,
+      ...auditTargetMetadata(target),
       reason: error instanceof Error ? error.message.slice(0, 4_096) : 'unknown failure',
     });
   }
@@ -725,7 +747,7 @@ function commitPlanView(plan: PendingCommitPlan): GitCommitPlanView {
     kind: plan.kind,
     planId: plan.id,
     expiresAt: new Date(plan.expiresAtMs).toISOString(),
-    projectId: plan.projectId,
+    target: plan.target,
     message: plan.message,
     branch: plan.branch,
     headOid: plan.expectedHead === 'UNBORN' ? null : plan.expectedHead,
@@ -741,7 +763,7 @@ function discardPlanView(plan: PendingDiscardPlan): GitDiscardPlanView {
     kind: plan.kind,
     planId: plan.id,
     expiresAt: new Date(plan.expiresAtMs).toISOString(),
-    projectId: plan.projectId,
+    target: plan.target,
     branch: plan.branch,
     headOid: plan.expectedHead === 'UNBORN' ? null : plan.expectedHead,
     hunkIds: [...plan.hunkIds],
@@ -757,6 +779,7 @@ function commitConfirmation(plan: PendingCommitPlan): MessageBoxOptions {
     title: 'Commit staged changes',
     message: `Commit ${String(plan.stagedPaths.length)} staged path${plan.stagedPaths.length === 1 ? '' : 's'}?`,
     detail: [
+      `Target: ${targetDisclosure(plan.target)}`,
       `Branch: ${plan.branch ?? 'detached HEAD'}`,
       `Identity: ${displayBoundedLiteral(plan.identity.name, 512)} <${displayBoundedLiteral(plan.identity.email, 512)}>`,
       `Message: ${displayBoundedLiteral(plan.message, 2_048)}`,
@@ -780,6 +803,7 @@ function discardConfirmation(plan: PendingDiscardPlan): MessageBoxOptions {
     title: 'Discard working-tree changes',
     message: `Permanently discard ${String(plan.hunkIds.length)} selected hunk${plan.hunkIds.length === 1 ? '' : 's'}?`,
     detail: [
+      `Target: ${targetDisclosure(plan.target)}`,
       `Branch: ${plan.branch ?? 'detached HEAD'}`,
       `Diff removed: +${String(plan.additions)} / -${String(plan.deletions)}`,
       '',
@@ -804,4 +828,33 @@ function boundedPathDisclosure(paths: readonly string[]): string[] {
 function displayBoundedLiteral(value: string, maxLength: number): string {
   const encoded = JSON.stringify(value).slice(1, -1);
   return encoded.length > maxLength ? `${encoded.slice(0, maxLength)}…` : encoded;
+}
+
+function targetInput(target: GitReviewTargetView): GitTargetInput {
+  return target.kind === 'primary'
+    ? target
+    : { kind: target.kind, projectId: target.projectId, runId: target.runId };
+}
+
+function targetKey(target: GitReviewTargetView): string {
+  return target.kind === 'primary'
+    ? `primary:${target.projectId}`
+    : `agent-worktree:${target.projectId}:${target.runId}`;
+}
+
+function auditTargetMetadata(target: GitReviewTargetView): Record<string, unknown> {
+  return target.kind === 'primary'
+    ? { projectId: target.projectId, targetKind: target.kind }
+    : {
+        projectId: target.projectId,
+        targetKind: target.kind,
+        runId: target.runId,
+        worktreeId: target.worktreeId,
+      };
+}
+
+function targetDisclosure(target: GitReviewTargetView): string {
+  return target.kind === 'primary'
+    ? 'primary checkout'
+    : `agent worktree for run ${target.runId.slice(0, 12)} (base ${target.baseCommit.slice(0, 12)})`;
 }

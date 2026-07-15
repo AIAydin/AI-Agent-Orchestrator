@@ -162,6 +162,29 @@ function uuidFor(index: number): string {
   return `00000000-0000-4000-8000-${index.toString().padStart(12, '0')}`;
 }
 
+function storedRun(overrides: Partial<StoredRunRecord> = {}): StoredRunRecord {
+  return {
+    id: uuidFor(500),
+    projectId: PROJECT_ID,
+    nodeId: 'agent-1',
+    adapterId: 'test-agent',
+    status: 'succeeded',
+    cwd: '/tmp/forgeboard-worktrees/run-1',
+    branch: 'forgeboard/agent-1',
+    worktreeId: uuidFor(501),
+    repositoryRoot: '/tmp/forgeboard-project',
+    managedRoot: '/tmp/forgeboard-worktrees',
+    baseRef: 'HEAD',
+    baseCommit: '0123456789abcdef0123456789abcdef01234567',
+    startedAt: NOW,
+    endedAt: NOW,
+    exitCode: 0,
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  };
+}
+
 describe('LocalStore', () => {
   it('runs real SQLite migrations and starts with WAL and a healthy database', () => {
     const store = openStore();
@@ -385,6 +408,95 @@ describe('LocalStore', () => {
     expect(JSON.stringify(store.listAuditEvents(200))).not.toContain('must-not-reach-ui');
   });
 
+  it('gets runs by id and lists only the selected project newest first', () => {
+    const store = openStore();
+    const otherProjectId = uuidFor(99);
+    const older = storedRun({ id: uuidFor(510), updatedAt: '2026-07-14T15:00:00.000Z' });
+    const newer = storedRun({ id: uuidFor(511), updatedAt: '2026-07-14T17:00:00.000Z' });
+    const unrelated = storedRun({ id: uuidFor(512), projectId: otherProjectId });
+    store.saveRun(older);
+    store.saveRun(newer);
+    store.saveRun(unrelated);
+
+    expect(store.getRun(newer.id)).toEqual(newer);
+    expect(store.getRun(uuidFor(999))).toBeUndefined();
+    expect(store.listProjectRuns(PROJECT_ID).map((run) => run.id)).toEqual([newer.id, older.id]);
+    expect(store.listProjectRuns(PROJECT_ID, 1).map((run) => run.id)).toEqual([newer.id]);
+  });
+
+  it('freezes every identity-critical worktree field while allowing lifecycle updates', () => {
+    const store = openStore();
+    const record = storedRun({ status: 'running', endedAt: null, exitCode: null });
+    store.saveRun(record);
+    const replacements: ReadonlyArray<Partial<StoredRunRecord>> = [
+      { cwd: '/tmp/forgeboard-worktrees/replacement' },
+      { branch: 'forgeboard/replacement' },
+      { worktreeId: uuidFor(777) },
+      { repositoryRoot: '/tmp/different-project' },
+      { managedRoot: '/tmp/different-managed-root' },
+      { baseRef: 'main' },
+      { baseCommit: 'abcdefabcdefabcdefabcdefabcdefabcdefabcd' },
+    ];
+    for (const replacement of replacements) {
+      expect(() =>
+        store.saveRun({
+          ...record,
+          ...replacement,
+          updatedAt: '2026-07-14T16:01:00.000Z',
+        }),
+      ).toThrow('cannot change its persisted identity');
+    }
+
+    const completed = store.saveRun({
+      ...record,
+      status: 'succeeded',
+      endedAt: '2026-07-14T16:02:00.000Z',
+      exitCode: 0,
+      updatedAt: '2026-07-14T16:02:00.000Z',
+    });
+    expect(store.getRun(record.id)).toEqual(completed);
+  });
+
+  it('reads legacy run JSON with null durable-worktree fields', () => {
+    const databasePath = createDatabasePath();
+    const store = openStore(databasePath);
+    closeStore(store);
+    const legacy = storedRun();
+    const legacyJson: Record<string, unknown> = { ...legacy };
+    for (const field of ['repositoryRoot', 'managedRoot', 'baseRef', 'baseCommit']) {
+      Reflect.deleteProperty(legacyJson, field);
+    }
+    const database = new DatabaseSync(databasePath);
+    try {
+      database
+        .prepare(
+          `INSERT INTO agent_runs(
+             id, project_id, node_id, adapter_id, status, value_json, created_at, updated_at
+           ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          legacy.id,
+          legacy.projectId,
+          legacy.nodeId,
+          legacy.adapterId,
+          legacy.status,
+          JSON.stringify(legacyJson),
+          legacy.createdAt,
+          legacy.updatedAt,
+        );
+    } finally {
+      database.close();
+    }
+
+    const reopened = openStore(databasePath);
+    expect(reopened.getRun(legacy.id)).toMatchObject({
+      repositoryRoot: null,
+      managedRoot: null,
+      baseRef: null,
+      baseCommit: null,
+    });
+  });
+
   it('exports a versioned, portable shape containing every local data category', () => {
     const store = openStore();
     const savedSettings = settings();
@@ -436,6 +548,10 @@ describe('LocalStore', () => {
       cwd: '/tmp/forgeboard-worktrees/run-1',
       branch: 'forgeboard/agent-1',
       worktreeId: uuidFor(501),
+      repositoryRoot: '/tmp/forgeboard-project',
+      managedRoot: '/tmp/forgeboard-worktrees',
+      baseRef: 'HEAD',
+      baseCommit: '0123456789abcdef0123456789abcdef01234567',
       startedAt: NOW,
       endedAt: null,
       exitCode: null,

@@ -9,6 +9,8 @@ import {
 } from '../shared/check-contracts.js';
 import type { IpcResult } from '../shared/contracts.js';
 import {
+  AppCloseRequestSchema,
+  AppCloseResponseSchema,
   IPC_CHANNELS,
   BackupResultSchema,
   ExtensionDiscoveryViewSchema,
@@ -40,6 +42,27 @@ async function invokeValidated<Schema extends z.ZodTypeAny>(
 const api: ForgeboardApi = {
   app: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appInfo),
+    onCloseRequested: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const request = AppCloseRequestSchema.safeParse(payload);
+        if (!request.success) return;
+        void (async () => {
+          let saved = false;
+          try {
+            saved = (await listener()) === true;
+          } catch {
+            saved = false;
+          }
+          const response = AppCloseResponseSchema.parse({
+            requestId: request.data.requestId,
+            saved,
+          });
+          ipcRenderer.send(IPC_CHANNELS.appCloseResponse, response);
+        })();
+      };
+      ipcRenderer.on(IPC_CHANNELS.appCloseRequested, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.appCloseRequested, handler);
+    },
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),

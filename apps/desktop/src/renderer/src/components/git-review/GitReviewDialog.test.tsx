@@ -11,15 +11,19 @@ import type {
 import { GitReviewDialog } from './GitReviewDialog.js';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
+const runId = '44444444-4444-4444-8444-444444444444';
+const worktreeId = '55555555-5555-4555-8555-555555555555';
 const commitPlanId = '22222222-2222-4222-8222-222222222222';
 const discardPlanId = '33333333-3333-4333-8333-333333333333';
 const stagedHunkId = 'b'.repeat(20);
 const unstagedHunkId = 'a'.repeat(20);
 const headOid = 'c'.repeat(40);
 const nextHeadOid = 'd'.repeat(40);
+const primaryTarget = { kind: 'primary' as const, projectId };
+const worktreeTarget = { kind: 'agent-worktree' as const, projectId, runId };
 
 const review: GitReviewView = {
-  projectId,
+  target: primaryTarget,
   branch: 'feature/review',
   detached: false,
   headOid,
@@ -57,7 +61,7 @@ const discardPlan: GitDiscardPlanView = {
   kind: 'discard-hunks',
   planId: discardPlanId,
   expiresAt: '2026-07-14T18:05:00.000Z',
-  projectId,
+  target: primaryTarget,
   branch: review.branch,
   headOid,
   hunkIds: [unstagedHunkId],
@@ -70,7 +74,7 @@ const commitPlan: GitCommitPlanView = {
   kind: 'commit',
   planId: commitPlanId,
   expiresAt: '2026-07-14T18:05:00.000Z',
-  projectId,
+  target: primaryTarget,
   message: 'Describe the reviewed change',
   branch: review.branch,
   headOid,
@@ -142,7 +146,7 @@ describe('GitReviewDialog', () => {
     origin.focus();
     const onClose = vi.fn();
     const rendered = render(
-      <GitReviewDialog projectId={projectId} projectName="Workshop" onClose={onClose} />,
+      <GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={onClose} />,
     );
 
     const dialog = screen.getByRole('dialog', { name: 'Review changes in Workshop' });
@@ -155,11 +159,14 @@ describe('GitReviewDialog', () => {
     expect(await screen.findByText('updated line')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Stage src/app.ts' }));
     await waitFor(() => expect(stagePathsMock).toHaveBeenCalledTimes(1));
-    expect(stagePathsMock).toHaveBeenCalledWith({ projectId, paths: ['src/app.ts'] });
+    expect(stagePathsMock).toHaveBeenCalledWith({ target: primaryTarget, paths: ['src/app.ts'] });
 
     fireEvent.click(screen.getByRole('button', { name: 'Stage hunk' }));
     await waitFor(() => expect(stageHunksMock).toHaveBeenCalledTimes(1));
-    expect(stageHunksMock).toHaveBeenCalledWith({ projectId, hunkIds: [unstagedHunkId] });
+    expect(stageHunksMock).toHaveBeenCalledWith({
+      target: primaryTarget,
+      hunkIds: [unstagedHunkId],
+    });
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -168,7 +175,7 @@ describe('GitReviewDialog', () => {
   });
 
   it('requires renderer disclosure before invoking native discard confirmation', async () => {
-    render(<GitReviewDialog projectId={projectId} projectName="Workshop" onClose={vi.fn()} />);
+    render(<GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={vi.fn()} />);
     await screen.findByText('origin/feature/review');
     fireEvent.click(screen.getByRole('button', { name: /src\/app\.ts Modified/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Review discard for hunk in src/app.ts' }));
@@ -177,7 +184,7 @@ describe('GitReviewDialog', () => {
       name: 'Review permanent hunk discard',
     });
     expect(prepareDiscardMock).toHaveBeenCalledWith({
-      projectId,
+      target: primaryTarget,
       hunkIds: [unstagedHunkId],
     });
     expect(confirmDiscardMock).not.toHaveBeenCalled();
@@ -197,7 +204,7 @@ describe('GitReviewDialog', () => {
   });
 
   it('reviews the exact message, identity, and staged plan before commit confirmation', async () => {
-    render(<GitReviewDialog projectId={projectId} projectName="Workshop" onClose={vi.fn()} />);
+    render(<GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={vi.fn()} />);
     await screen.findByText('origin/feature/review');
     fireEvent.change(screen.getByLabelText('Commit message'), {
       target: { value: commitPlan.message },
@@ -208,7 +215,7 @@ describe('GitReviewDialog', () => {
       name: 'Review the exact local commit',
     });
     expect(prepareCommitMock).toHaveBeenCalledWith({
-      projectId,
+      target: primaryTarget,
       message: commitPlan.message,
     });
     expect(disclosure.textContent).toContain('Ada Developer <ada@example.test>');
@@ -220,6 +227,42 @@ describe('GitReviewDialog', () => {
     expect(
       await screen.findByText(`Created local commit ${nextHeadOid.slice(0, 12)}.`),
     ).toBeTruthy();
+  });
+
+  it('labels an agent run as an isolated authoritative worktree and preserves opaque targeting', async () => {
+    reviewMock.mockResolvedValueOnce(
+      success({
+        ...review,
+        target: {
+          ...worktreeTarget,
+          nodeId: 'agent-node-1',
+          worktreeId,
+          agentId: 'test-agent',
+          baseRef: 'refs/heads/main',
+          baseCommit: 'e'.repeat(40),
+        },
+        branch: 'forgeboard/agent-node-1',
+        upstream: null,
+        ahead: 1,
+        behind: 0,
+      }),
+    );
+
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    expect(await screen.findByText('Authoritative agent worktree')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Agent worktree target' }).textContent).toContain(
+      'The primary checkout remains untouched.',
+    );
+    expect(reviewMock).toHaveBeenCalledWith(worktreeTarget);
+
+    fireEvent.click(screen.getByRole('button', { name: /src\/app\.ts Modified/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stage src/app.ts' }));
+    await waitFor(() => expect(stagePathsMock).toHaveBeenCalledTimes(1));
+    expect(stagePathsMock).toHaveBeenCalledWith({
+      target: worktreeTarget,
+      paths: ['src/app.ts'],
+    });
   });
 });
 

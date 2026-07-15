@@ -49,7 +49,9 @@ import {
 } from './storage/projects-canvases.js';
 import {
   appendAudit as appendDatabaseAudit,
+  getRun as getDatabaseRun,
   listAuditEvents as listDatabaseAuditEvents,
+  listProjectRuns as listDatabaseProjectRuns,
   recoverInterruptedRuns as recoverDatabaseInterruptedRuns,
   saveRun as saveDatabaseRun,
 } from './storage/runs-audit.js';
@@ -197,6 +199,14 @@ export class LocalStore {
 
   saveRun(record: StoredRunRecord): StoredRunRecord {
     return saveDatabaseRun(this.database, record);
+  }
+
+  getRun(runId: string): StoredRunRecord | undefined {
+    return getDatabaseRun(this.database, runId);
+  }
+
+  listProjectRuns(projectId: string, limit = 200): StoredRunRecord[] {
+    return listDatabaseProjectRuns(this.database, projectId, limit);
   }
 
   saveCheckExecution(execution: CheckExecutionView): StoredCheckExecutionRecord {

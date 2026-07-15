@@ -53,7 +53,10 @@ import type {
 } from './git-contracts.js';
 
 export interface ForgeboardApi {
-  app: { getInfo(): Promise<IpcResult<AppInfo>> };
+  app: {
+    getInfo(): Promise<IpcResult<AppInfo>>;
+    onCloseRequested(listener: () => boolean | Promise<boolean>): () => void;
+  };
   settings: {
     get(): Promise<IpcResult<AppSettings>>;
     update(settings: AppSettings): Promise<IpcResult<AppSettings>>;

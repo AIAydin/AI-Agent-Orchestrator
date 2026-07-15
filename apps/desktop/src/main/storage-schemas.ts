@@ -32,6 +32,14 @@ export const StoredRunRecordSchema = z
     cwd: z.string().min(1),
     branch: z.string().nullable(),
     worktreeId: z.string().uuid().nullable(),
+    repositoryRoot: z.string().min(1).nullable().default(null),
+    managedRoot: z.string().min(1).nullable().default(null),
+    baseRef: z.string().min(1).nullable().default(null),
+    baseCommit: z
+      .string()
+      .regex(/^[0-9a-f]{7,64}$/iu)
+      .nullable()
+      .default(null),
     startedAt: z.string().datetime().nullable(),
     endedAt: z.string().datetime().nullable(),
     exitCode: z.number().int().nullable(),
