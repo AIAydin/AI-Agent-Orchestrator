@@ -181,7 +181,10 @@ export interface WorkflowValidationIssue {
     | 'RETRY_POLICY_MISMATCH'
     | 'UNACHIEVABLE_STOP_CONDITION'
     | 'INVALID_GROUP'
-    | 'RESOURCE_LIMIT';
+    | 'RESOURCE_LIMIT'
+    | 'MISSING_NODE_CONFIGURATION'
+    | 'MISSING_EDGE_CONFIGURATION'
+    | 'NODE_UNAVAILABLE';
   readonly message: string;
   readonly entityIds: readonly string[];
 }
@@ -246,6 +249,94 @@ function pushIssue(
   ...entityIds: string[]
 ): void {
   issues.push({ code, message, entityIds });
+}
+
+function missingNodeConfiguration(node: Canvas['nodes'][number]): readonly string[] {
+  switch (node.type) {
+    case 'agent':
+      return [
+        ...(node.data.adapterId === undefined ? ['agent adapter'] : []),
+        ...(node.data.permissionProfileId === undefined ? ['permission profile'] : []),
+      ];
+    case 'file':
+      return node.data.file === undefined ? ['project file'] : [];
+    case 'diff-review':
+      return [
+        ...(node.data.baseRef === undefined ? ['base ref'] : []),
+        ...(node.data.headRef === undefined ? ['head ref'] : []),
+        ...(node.data.worktreeId === undefined ? ['worktree'] : []),
+      ];
+    case 'terminal':
+      return node.data.permissionProfileId === undefined ? ['permission profile'] : [];
+    case 'web-preview':
+      return node.data.worktreeId === undefined ? ['worktree'] : [];
+    case 'mobile-preview':
+      return [
+        ...(node.data.worktreeId === undefined ? ['worktree'] : []),
+        ...(node.data.viewports.length === 0 ? ['preview viewport'] : []),
+      ];
+    case 'test':
+      return node.data.command === undefined ? ['check command'] : [];
+    case 'git-pr':
+      return [
+        ...(node.data.worktreeId === undefined ? ['worktree'] : []),
+        ...(node.data.branch === undefined ? ['branch'] : []),
+        ...(node.data.baseBranch === undefined ? ['base branch'] : []),
+      ];
+    default:
+      return [];
+  }
+}
+
+/**
+ * Validates only the operational fields needed to execute the requested nodes. Draft canvases stay
+ * schema-valid without fabricated paths, worktrees, commands, or branches; execution remains
+ * fail-closed once a plan selects one of those drafts.
+ */
+export function validateWorkflowExecutionConfiguration(
+  untrustedCanvas: unknown,
+  nodeIds?: readonly string[],
+): readonly WorkflowValidationIssue[] {
+  const canvas = CanvasSchema.parse(untrustedCanvas);
+  const selected = nodeIds === undefined ? undefined : new Set(nodeIds);
+  const issues: WorkflowValidationIssue[] = [];
+  for (const node of canvas.nodes) {
+    if (selected !== undefined && !selected.has(node.id)) continue;
+    const missing = missingNodeConfiguration(node);
+    if (missing.length > 0) {
+      pushIssue(
+        issues,
+        'MISSING_NODE_CONFIGURATION',
+        `${node.title} requires ${missing.join(', ')} before it can run`,
+        node.id,
+      );
+    }
+    if (node.type === 'extension' && node.data.availability !== 'active') {
+      pushIssue(
+        issues,
+        'NODE_UNAVAILABLE',
+        `${node.title} cannot run while its extension is ${node.data.availability}`,
+        node.id,
+      );
+    }
+  }
+  for (const edge of canvas.edges) {
+    if (
+      selected !== undefined &&
+      (!selected.has(edge.sourceNodeId) || !selected.has(edge.targetNodeId))
+    ) {
+      continue;
+    }
+    if (edge.type === 'revision' && edge.config.loopId === undefined) {
+      pushIssue(
+        issues,
+        'MISSING_EDGE_CONFIGURATION',
+        'Revision edge requires a bounded loop before it can run',
+        edge.id,
+      );
+    }
+  }
+  return issues;
 }
 
 export function validateWorkflow(untrustedCanvas: unknown): WorkflowValidationResult {
@@ -629,7 +720,11 @@ export function validateWorkflow(untrustedCanvas: unknown): WorkflowValidationRe
     }
   }
   for (const edge of canvas.edges) {
-    if (edge.type === 'revision' && !revisionEdgeOwners.has(edge.id)) {
+    if (
+      edge.type === 'revision' &&
+      edge.config.loopId !== undefined &&
+      !revisionEdgeOwners.has(edge.id)
+    ) {
       pushIssue(
         issues,
         'UNREGISTERED_REVISION_EDGE',
@@ -751,6 +846,8 @@ export function planWorkflow(untrustedCanvas: unknown, options: WorkflowPlanOpti
 
   const selected = collectSelectedNodeIds(canvas, options);
   const selectedIds = [...selected].sort((left, right) => left.localeCompare(right));
+  const configurationIssues = validateWorkflowExecutionConfiguration(canvas, selectedIds);
+  if (configurationIssues.length > 0) throw new WorkflowValidationError(configurationIssues);
   const selectedEdges = orderingEdges(canvas.edges).filter(
     (edge) => selected.has(edge.sourceNodeId) && selected.has(edge.targetNodeId),
   );

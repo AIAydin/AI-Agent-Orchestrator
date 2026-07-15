@@ -1,4 +1,5 @@
 import { NamespacedAgentAdapterIdSchema } from '@forgeboard/agent-adapters/identifiers';
+import { CanvasSchema as CanonicalCanvasSchema, type Canvas } from '@forgeboard/core/domain';
 import { z } from 'zod';
 
 import {
@@ -779,7 +780,13 @@ export const CanvasEdgeSchema = z.object({
   data: z.record(z.unknown()).optional(),
 });
 
+const EmbeddedCanonicalCanvasSchema = z.custom<Canvas>(
+  (value) => CanonicalCanvasSchema.safeParse(value).success,
+  'Invalid canonical canvas document',
+);
+
 export const CanvasDocumentSchema = z.object({
+  schemaVersion: z.literal(2).optional(),
   id: z.string().uuid(),
   projectId: z.string().uuid(),
   name: z.string().min(1),
@@ -787,6 +794,7 @@ export const CanvasDocumentSchema = z.object({
   edges: z.array(CanvasEdgeSchema),
   viewport: z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() }),
   updatedAt: z.string().datetime(),
+  canonical: EmbeddedCanonicalCanvasSchema.optional(),
 });
 export type CanvasDocument = z.infer<typeof CanvasDocumentSchema>;
 

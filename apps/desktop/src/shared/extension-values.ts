@@ -16,6 +16,22 @@ const ExtensionNodeDataSchema = z
     locked: z.boolean(),
     collapsed: z.boolean(),
     color: z.string().regex(/^#[0-9A-Fa-f]{6}$/u),
+    canonicalStatus: z
+      .enum([
+        'draft',
+        'ready',
+        'queued',
+        'running',
+        'waiting-for-approval',
+        'paused',
+        'cancelling',
+        'failed',
+        'succeeded',
+        'cancelled',
+        'lost',
+        'blocked',
+      ])
+      .optional(),
     extensionId: z.string().min(1).max(128),
     extensionVersion: z.string().min(1).max(128),
     extensionNodeTypeId: z.string().min(1).max(128),

@@ -11,6 +11,11 @@ import {
 } from '../../shared/contracts.js';
 import { sanitizeCanvasExtensionData } from '../../shared/extension-values.js';
 import {
+  canonicalCanvasFromLegacy,
+  legacySurfaceFromCanonical,
+  synchronizeCanvasDocument,
+} from '../../shared/canvas/adapter.js';
+import {
   CanvasSnapshotSchema,
   TrustedExtensionLedgerRecordSchema,
   type CanvasSnapshot,
@@ -141,19 +146,56 @@ export function validateSettings(value: unknown): AppSettings {
 }
 
 export function canvasContentHash(document: CanvasDocument): string {
-  const content = {
-    id: document.id,
-    projectId: document.projectId,
-    name: document.name,
-    nodes: document.nodes,
-    edges: document.edges,
-    viewport: document.viewport,
-  };
+  const content =
+    document.canonical === undefined
+      ? ({
+          id: document.id,
+          projectId: document.projectId,
+          name: document.name,
+          nodes: document.nodes,
+          edges: document.edges,
+          viewport: document.viewport,
+        } as const)
+      : canonicalCanvasContent(document.canonical);
   return createHash('sha256').update(JSON.stringify(content)).digest('hex');
 }
 
+function canonicalCanvasContent(canonical: NonNullable<CanvasDocument['canonical']>): unknown {
+  const canvas = withoutKeys(canonical, ['createdAt', 'updatedAt']);
+  return {
+    ...canvas,
+    nodes: canonical.nodes.map((node) => withoutKeys(node, ['createdAt', 'updatedAt'])),
+    edges: canonical.edges.map((edge) => withoutKeys(edge, ['createdAt'])),
+  };
+}
+
+function withoutKeys(value: object, keys: readonly string[]): Record<string, unknown> {
+  const excluded = new Set(keys);
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !excluded.has(key)));
+}
+
 export function sanitizeCanvasDocument(value: unknown): CanvasDocument {
-  return sanitizeCanvasExtensionData(CanvasDocumentSchema.parse(value));
+  const parsed = sanitizeCanvasExtensionData(CanvasDocumentSchema.parse(value));
+  const synchronized = synchronizeCanvasDocument(parsed);
+  if (!synchronized.ok) throw canvasMigrationError(synchronized.issues);
+  const sanitizedSurface = sanitizeCanvasExtensionData(
+    CanvasDocumentSchema.parse(synchronized.document),
+  );
+  const migrated = canonicalCanvasFromLegacy({
+    ...sanitizedSurface,
+    canonical: synchronized.document.canonical,
+  });
+  if (!migrated.ok) throw canvasMigrationError(migrated.issues);
+  return CanvasDocumentSchema.parse({
+    ...legacySurfaceFromCanonical(migrated.canvas),
+    schemaVersion: 2,
+    canonical: migrated.canvas,
+  });
+}
+
+function canvasMigrationError(issues: readonly { entityId: string; message: string }[]): Error {
+  const detail = issues.map((issue) => `${issue.entityId}: ${issue.message}`).join('; ');
+  return new Error(`Canvas data could not be migrated safely. ${detail}`);
 }
 
 export function sanitizeCanvasSnapshot(value: unknown): CanvasSnapshot {
@@ -249,7 +291,35 @@ export function scrubCanvasTranscripts(
     count += 1;
     return { ...node, data };
   });
+  const scrubbedNodeIds = new Set(
+    document.nodes.filter((node, index) => node !== nodes[index]).map((node) => node.id),
+  );
+  const canonical =
+    document.canonical === undefined
+      ? undefined
+      : {
+          ...document.canonical,
+          nodes: document.canonical.nodes.map((node) => {
+            if (!scrubbedNodeIds.has(node.id)) return node;
+            const legacyData = node.inspector['legacyData'];
+            if (!isRecord(legacyData)) return node;
+            const scrubbedLegacyData = { ...legacyData };
+            delete scrubbedLegacyData['transcript'];
+            delete scrubbedLegacyData['transcriptUpdatedAt'];
+            return {
+              ...node,
+              inspector: { ...node.inspector, legacyData: scrubbedLegacyData },
+            };
+          }),
+        };
   return count === 0
     ? { document, count }
-    : { document: CanvasDocumentSchema.parse({ ...document, nodes }), count };
+    : {
+        document: CanvasDocumentSchema.parse({
+          ...document,
+          nodes,
+          ...(canonical === undefined ? {} : { canonical }),
+        }),
+        count,
+      };
 }

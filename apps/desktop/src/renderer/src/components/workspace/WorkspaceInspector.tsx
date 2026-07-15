@@ -22,8 +22,9 @@ import type {
 import { NODE_DEFINITIONS, type WorkshopNode } from '../CanvasNode.js';
 import { DeclarativeExtensionInspector } from '../DeclarativeExtensionInspector.js';
 import { PreviewNodePanel } from '../PreviewNodePanel.js';
-import { edgeExplanation } from './helpers.js';
-import type { EdgeKind, WorkshopEdge } from './types.js';
+import { TypedEdgeInspector } from './TypedEdgeInspector.js';
+import type { WorkshopEdge } from './types.js';
+import type { WorkshopEdgeData } from './edge-config.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
 type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
@@ -32,6 +33,7 @@ interface WorkspaceInspectorProps {
   project: Project;
   settings: AppSettings;
   canvas: CanvasDocument | null;
+  nodes: readonly WorkshopNode[];
   selectedNode: WorkshopNode | null;
   selectedEdge: WorkshopEdge | null;
   runnableAgents: RunnableAgent[];
@@ -43,7 +45,8 @@ interface WorkspaceInspectorProps {
   onClearSelection: () => void;
   onRecord: () => void;
   onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
-  onUpdateEdgeType: (edgeType: EdgeKind) => void;
+  onUpdateEdgeType: (edgeType: WorkshopEdgeData['edgeType']) => void;
+  onUpdateEdgeData: (data: WorkshopEdgeData) => void;
   onDuplicateSelected: () => void;
   onDeleteSelected: () => void;
   onRunInputChange: (value: string) => void;
@@ -78,7 +81,12 @@ export function WorkspaceInspector(props: WorkspaceInspectorProps) {
       {selectedNode ? (
         <NodeInspector {...props} selectedNode={selectedNode} />
       ) : selectedEdge ? (
-        <EdgeInspector selectedEdge={selectedEdge} onUpdateEdgeType={props.onUpdateEdgeType} />
+        <TypedEdgeInspector
+          edge={selectedEdge}
+          nodes={props.nodes}
+          onChange={props.onUpdateEdgeData}
+          onUpdateType={props.onUpdateEdgeType}
+        />
       ) : (
         <CanvasInspector canvas={props.canvas} settings={props.settings} />
       )}
@@ -335,39 +343,6 @@ function AgentRunInspector(
         context, environment names, and permissions for approval.
       </p>
     </section>
-  );
-}
-
-function EdgeInspector({
-  selectedEdge,
-  onUpdateEdgeType,
-}: {
-  selectedEdge: WorkshopEdge;
-  onUpdateEdgeType: (edgeType: EdgeKind) => void;
-}) {
-  const edgeType = selectedEdge.data?.edgeType ?? 'context';
-  return (
-    <div className="inspector-content">
-      <label>
-        Connection behavior
-        <select
-          name={`edge-${selectedEdge.id}-connection-behavior`}
-          value={edgeType}
-          onChange={(event) => onUpdateEdgeType(event.target.value as EdgeKind)}
-        >
-          <option value="context">Context</option>
-          <option value="execute">Execute</option>
-          <option value="output">Output</option>
-          <option value="review">Review</option>
-          <option value="revision">Revision</option>
-          <option value="dependency">Dependency</option>
-        </select>
-      </label>
-      <div className="edge-explanation">
-        <strong>{edgeType}</strong>
-        <p>{edgeExplanation(edgeType)}</p>
-      </div>
-    </div>
   );
 }
 

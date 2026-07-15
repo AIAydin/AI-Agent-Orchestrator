@@ -36,6 +36,11 @@ import { WorkspaceCommandBar } from './workspace/WorkspaceCommandBar.js';
 import { WorkspaceInspector } from './workspace/WorkspaceInspector.js';
 import { WorkspaceNotifications } from './workspace/WorkspaceOverlays.js';
 import { WorkspaceRail } from './workspace/WorkspaceRail.js';
+import {
+  createEdgeData,
+  edgeDataForPersistence,
+  type WorkshopEdgeData,
+} from './workspace/edge-config.js';
 import { hydrateNodeData, isRunAdapterId, summarizeRunEvent } from './workspace/helpers.js';
 import type {
   CheckCommand,
@@ -122,7 +127,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             ...(edge.targetHandle === undefined ? {} : { targetHandle: edge.targetHandle }),
             type: 'smoothstep',
             markerEnd: { type: MarkerType.ArrowClosed },
-            data: { edgeType: edge.type },
+            data: createEdgeData(edge.type, edge.source, edge.data),
             label: edge.type,
           })),
         );
@@ -193,6 +198,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           ? {}
           : { targetHandle: edge.targetHandle }),
         type: edge.data?.edgeType ?? 'context',
+        data: edgeDataForPersistence(edge.data),
       })),
       viewport: instance?.getViewport() ?? canvas.viewport,
     };
@@ -508,7 +514,23 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     record();
     setEdges((items) =>
       items.map((edge) =>
-        edge.id === selectedEdge.id ? { ...edge, label: edgeType, data: { edgeType } } : edge,
+        edge.id === selectedEdge.id
+          ? {
+              ...edge,
+              label: edgeType,
+              data: createEdgeData(edgeType, edge.source, edge.data),
+            }
+          : edge,
+      ),
+    );
+  }
+
+  function updateEdgeData(data: WorkshopEdgeData) {
+    if (!selectedEdge) return;
+    record();
+    setEdges((items) =>
+      items.map((edge) =>
+        edge.id === selectedEdge.id ? { ...edge, label: data.edgeType, data } : edge,
       ),
     );
   }
@@ -637,7 +659,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
                   id: crypto.randomUUID(),
                   type: 'smoothstep',
                   markerEnd: { type: MarkerType.ArrowClosed },
-                  data: { edgeType: 'context' },
+                  data: createEdgeData('context', connection.source),
                   label: 'context',
                 },
                 items,
@@ -672,6 +694,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           project={project}
           settings={settings}
           canvas={canvas}
+          nodes={nodes}
           selectedNode={selectedNode}
           selectedEdge={selectedEdge}
           runnableAgents={runnableAgents}
@@ -687,6 +710,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onRecord={record}
           onUpdateSelected={updateSelected}
           onUpdateEdgeType={updateEdgeType}
+          onUpdateEdgeData={updateEdgeData}
           onDuplicateSelected={duplicateSelected}
           onDeleteSelected={deleteSelected}
           onRunInputChange={runs.setRunInput}

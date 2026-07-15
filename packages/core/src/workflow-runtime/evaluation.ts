@@ -365,6 +365,9 @@ export function evaluateExecutableEdge(
     };
   }
 
+  if (edge.config.loopId === undefined) {
+    throw new Error(`Revision edge is not configured: ${edge.id}`);
+  }
   const loop = runtime.run.revisionLoops[edge.config.loopId];
   if (loop === undefined) throw new Error(`Revision loop state is missing: ${edge.config.loopId}`);
   if (runtime.activeRevisionLoopIds.includes(loop.loopId)) {

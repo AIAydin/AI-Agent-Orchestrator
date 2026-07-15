@@ -141,9 +141,9 @@ export const AgentNodeSchema = createNodeSchema(
   'agent',
   z
     .object({
-      adapterId: EntityIdSchema,
+      adapterId: EntityIdSchema.optional(),
       model: z.string().min(1).max(200).optional(),
-      permissionProfileId: EntityIdSchema,
+      permissionProfileId: EntityIdSchema.optional(),
       worktreeId: EntityIdSchema.optional(),
       branch: z.string().min(1).max(1024).optional(),
       contextAttachmentIds: z.array(EntityIdSchema).default([]),
@@ -221,7 +221,7 @@ export const FileNodeSchema = createNodeSchema(
   'file',
   z
     .object({
-      file: LocalFileReferenceSchema,
+      file: LocalFileReferenceSchema.optional(),
       language: z.string().max(100).optional(),
       dirty: z.boolean().default(false),
       historyRefs: z.array(z.string().min(1).max(1024)).default([]),
@@ -235,9 +235,9 @@ export const DiffReviewNodeSchema = createNodeSchema(
   'diff-review',
   z
     .object({
-      baseRef: z.string().min(1).max(1024),
-      headRef: z.string().min(1).max(1024),
-      worktreeId: EntityIdSchema,
+      baseRef: z.string().min(1).max(1024).optional(),
+      headRef: z.string().min(1).max(1024).optional(),
+      worktreeId: EntityIdSchema.optional(),
       files: z.array(RelativePathSchema).default([]),
       viewMode: z.enum(['split', 'unified']).default('split'),
       ignoreWhitespace: z.boolean().default(false),
@@ -257,7 +257,7 @@ export const TerminalNodeSchema = createNodeSchema(
       processStatus: z
         .enum(['idle', 'starting', 'running', 'stopped', 'failed', 'lost'])
         .default('idle'),
-      permissionProfileId: EntityIdSchema,
+      permissionProfileId: EntityIdSchema.optional(),
       command: CommandSpecSchema.optional(),
       ptySessionId: EntityIdSchema.optional(),
       historyArtifactId: EntityIdSchema.optional(),
@@ -271,7 +271,7 @@ export const WebPreviewNodeSchema = createNodeSchema(
   z
     .object({
       serverId: EntityIdSchema.optional(),
-      worktreeId: EntityIdSchema,
+      worktreeId: EntityIdSchema.optional(),
       url: z.string().url().optional(),
       detectedUrl: z.boolean().default(false),
       viewport: SizeSchema.default({ width: 1440, height: 900 }),
@@ -299,9 +299,9 @@ export const MobilePreviewNodeSchema = createNodeSchema(
   z
     .object({
       serverId: EntityIdSchema.optional(),
-      worktreeId: EntityIdSchema,
+      worktreeId: EntityIdSchema.optional(),
       url: z.string().url().optional(),
-      viewports: z.array(MobileViewportSchema).min(1).max(12),
+      viewports: z.array(MobileViewportSchema).max(12).default([]),
       synchronizedNavigation: z.boolean().default(true),
       screenshotIds: z.array(EntityIdSchema).default([]),
     })
@@ -312,7 +312,7 @@ export const TestNodeSchema = createNodeSchema(
   'test',
   z
     .object({
-      command: CommandSpecSchema,
+      command: CommandSpecSchema.optional(),
       runIds: z.array(EntityIdSchema).default([]),
       summary: z
         .object({
@@ -341,7 +341,8 @@ export const ReviewGateNodeSchema = createNodeSchema(
           maximumIterations: z.number().int().min(1).max(100),
           backoffMs: z.number().int().min(0).max(86_400_000),
         })
-        .strict(),
+        .strict()
+        .default({ maximumIterations: 3, backoffMs: 0 }),
       gateState: z.enum(['pending', 'passed', 'failed', 'waiting-for-human']).default('pending'),
     })
     .strict(),
@@ -351,9 +352,9 @@ export const GitPullRequestNodeSchema = createNodeSchema(
   'git-pr',
   z
     .object({
-      worktreeId: EntityIdSchema,
-      branch: z.string().min(1).max(1024),
-      baseBranch: z.string().min(1).max(1024),
+      worktreeId: EntityIdSchema.optional(),
+      branch: z.string().min(1).max(1024).optional(),
+      baseBranch: z.string().min(1).max(1024).optional(),
       remote: z.string().min(1).max(1024).optional(),
       commitIds: z.array(z.string().regex(/^[0-9a-f]{7,64}$/i)).default([]),
       ahead: z.number().int().nonnegative().default(0),
@@ -383,7 +384,7 @@ export const WhiteboardMockupNodeSchema = createNodeSchema(
   'whiteboard-mockup',
   z
     .object({
-      excalidraw: JsonValueSchema,
+      excalidraw: JsonValueSchema.default({}),
       annotationIds: z.array(EntityIdSchema).default([]),
       exportArtifactIds: z.array(EntityIdSchema).default([]),
       contextSpecificationArtifactId: EntityIdSchema.optional(),
@@ -414,6 +415,20 @@ export const GroupFrameNodeSchema = createNodeSchema(
     .strict(),
 );
 
+export const ExtensionNodeSchema = createNodeSchema(
+  'extension',
+  z
+    .object({
+      extensionId: EntityIdSchema,
+      extensionVersion: z.string().min(1).max(128),
+      nodeTypeId: EntityIdSchema,
+      definition: JsonValueSchema,
+      values: z.record(JsonValueSchema).default({}),
+      availability: z.enum(['active', 'quarantined', 'unavailable']).default('active'),
+    })
+    .strict(),
+);
+
 export const CanvasNodeSchema = z.discriminatedUnion('type', [
   AgentNodeSchema,
   ProductBriefNodeSchema,
@@ -430,6 +445,7 @@ export const CanvasNodeSchema = z.discriminatedUnion('type', [
   WhiteboardMockupNodeSchema,
   NoteImageNodeSchema,
   GroupFrameNodeSchema,
+  ExtensionNodeSchema,
 ]);
 export type CanvasNode = z.infer<typeof CanvasNodeSchema>;
 export type CanvasNodeType = CanvasNode['type'];
@@ -442,6 +458,7 @@ const edgeBaseShape = {
   targetHandle: z.string().min(1).max(100).optional(),
   label: z.string().max(300).optional(),
   status: RunStatusSchema.optional(),
+  inspector: z.record(JsonValueSchema).default({}),
   createdAt: TimestampSchema,
 } as const;
 
@@ -509,7 +526,7 @@ export const RevisionEdgeSchema = createEdgeSchema(
   'revision',
   z
     .object({
-      loopId: EntityIdSchema,
+      loopId: EntityIdSchema.optional(),
       actionableFeedbackRequired: z.literal(true).default(true),
     })
     .strict(),

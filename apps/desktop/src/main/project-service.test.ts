@@ -15,6 +15,7 @@ import {
 import { createBundledGitRepositoryService } from './git-runtime.js';
 import { detectAgents, ProjectService } from './project-service.js';
 import { LocalStore, type StoredRunRecord } from './storage.js';
+import { sanitizeCanvasDocument } from './storage/values.js';
 
 const PROJECT_ID = '50000000-0000-4000-8000-000000000001';
 const CANVAS_ID = '50000000-0000-4000-8000-000000000002';
@@ -284,7 +285,7 @@ describe('ProjectService moved-project recovery', () => {
       missing: false,
       path: await realpath(movedPath),
     });
-    expect(store.loadCanvas(PROJECT_ID)).toEqual(canvas());
+    expect(store.loadCanvas(PROJECT_ID)).toEqual(sanitizeCanvasDocument(canvas()));
     expect(store.exportData().runs).toContainEqual(run);
     expect(store.listAuditEvents(1)[0]).toMatchObject({
       category: 'project',
@@ -391,7 +392,7 @@ describe('ProjectService moved-project recovery', () => {
 
     const reopened = await new ProjectService({} as App, {} as Dialog, store).open(repositoryPath);
     expect(reopened.id).toBe(PROJECT_ID);
-    expect(store.loadCanvas(PROJECT_ID)).toEqual(canvas());
+    expect(store.loadCanvas(PROJECT_ID)).toEqual(sanitizeCanvasDocument(canvas()));
     expect(store.exportData().runs).toContainEqual(run);
     expect(store.exportData().projects).toHaveLength(32);
   });

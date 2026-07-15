@@ -79,9 +79,12 @@ export function writeCanvas(
   document: CanvasDocument,
   capturePrevious: boolean,
   reason: 'autosave' | 'restore' | 'import',
-): void {
-  const sanitized = sanitizeCanvasDocument(document);
-  const existing = loadCanvas(database, sanitized.projectId);
+): CanvasDocument {
+  const existing = loadCanvas(database, document.projectId);
+  const sanitized = sanitizeCanvasDocument({
+    ...document,
+    canonical: document.canonical ?? existing?.canonical,
+  });
   if (capturePrevious && existing && canvasContentHash(existing) !== canvasContentHash(sanitized)) {
     insertCanvasSnapshot(database, existing, reason);
   }
@@ -92,6 +95,7 @@ export function writeCanvas(
        updated_at = excluded.updated_at`,
     )
     .run(sanitized.id, sanitized.projectId, JSON.stringify(sanitized), sanitized.updatedAt);
+  return sanitized;
 }
 
 export function insertCanvasSnapshot(

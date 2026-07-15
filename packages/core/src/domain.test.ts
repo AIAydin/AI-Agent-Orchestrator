@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CanvasEdgeSchema,
   CanvasNodeSchema,
   CanvasSchema,
   ExecuteEdgeSchema,
@@ -81,10 +82,22 @@ const nodeInputs: readonly Record<string, unknown>[] = [
   { ...baseNode, id: 'board-1', type: 'whiteboard-mockup', data: { excalidraw: { elements: [] } } },
   { ...baseNode, id: 'note-1', type: 'note-image', data: {} },
   { ...baseNode, id: 'frame-1', type: 'group-frame', data: { purpose: 'feature-area' } },
+  {
+    ...baseNode,
+    id: 'extension-1',
+    type: 'extension',
+    data: {
+      extensionId: 'example.tools',
+      extensionVersion: '1.0.0',
+      nodeTypeId: 'example-node',
+      definition: { displayName: 'Example node', fields: [] },
+      values: { enabled: true },
+    },
+  },
 ];
 
 describe('domain schemas', () => {
-  it('parses all 15 required node types and applies safe defaults', () => {
+  it('parses all 15 required node types plus declarative extensions and applies safe defaults', () => {
     const nodes = nodeInputs.map((node) => CanvasNodeSchema.parse(node));
     const types = nodes.map((node) => node.type).sort();
     const expected: CanvasNodeType[] = [
@@ -103,6 +116,7 @@ describe('domain schemas', () => {
       'whiteboard-mockup',
       'note-image',
       'group-frame',
+      'extension',
     ];
 
     expect(types).toEqual([...expected].sort());
@@ -117,6 +131,71 @@ describe('domain schemas', () => {
         repositoryFileContents: 'must not be accepted as accidental metadata',
       }),
     ).toThrow();
+  });
+
+  it('represents new operational nodes as honest drafts without fabricated local resources', () => {
+    const draftTypes = [
+      'agent',
+      'file',
+      'diff-review',
+      'terminal',
+      'web-preview',
+      'mobile-preview',
+      'test',
+      'git-pr',
+    ] as const;
+
+    for (const [index, type] of draftTypes.entries()) {
+      expect(
+        CanvasNodeSchema.parse({
+          ...baseNode,
+          id: `draft-${index}`,
+          type,
+          data: {},
+        }).type,
+      ).toBe(type);
+    }
+
+    expect(
+      CanvasNodeSchema.parse({ ...baseNode, id: 'gate-draft', type: 'review-gate', data: {} }),
+    ).toMatchObject({ data: { retryPolicy: { maximumIterations: 3, backoffMs: 0 } } });
+    expect(
+      CanvasNodeSchema.parse({
+        ...baseNode,
+        id: 'whiteboard-draft',
+        type: 'whiteboard-mockup',
+        data: {},
+      }),
+    ).toMatchObject({ data: { excalidraw: {} } });
+  });
+
+  it('preserves schema-safe legacy edge metadata outside typed execution configuration', () => {
+    expect(
+      CanvasEdgeSchema.parse({
+        id: 'edge-1',
+        sourceNodeId: 'source',
+        targetNodeId: 'target',
+        type: 'context',
+        config: {},
+        inspector: { legacyColor: '#ff00aa', nested: { enabled: true } },
+        createdAt: NOW,
+      }),
+    ).toMatchObject({
+      config: { attachmentMode: 'explicit', required: true, attachmentIds: [] },
+      inspector: { legacyColor: '#ff00aa', nested: { enabled: true } },
+    });
+    expect(
+      CanvasEdgeSchema.parse({
+        id: 'draft-revision',
+        sourceNodeId: 'review',
+        targetNodeId: 'implementation',
+        type: 'revision',
+        config: {},
+        createdAt: NOW,
+      }),
+    ).toMatchObject({
+      config: { actionableFeedbackRequired: true },
+    });
   });
 
   it('requires the project default canvas to be owned by the project', () => {

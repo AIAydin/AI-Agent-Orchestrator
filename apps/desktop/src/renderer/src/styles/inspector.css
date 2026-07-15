@@ -305,6 +305,79 @@
   text-transform: capitalize;
   color: var(--accent);
 }
+.edge-config-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+.edge-config-section h3,
+.edge-config-section p {
+  margin: 0;
+}
+.edge-config-section h3 {
+  font-size: 9px;
+}
+.edge-config-section p,
+.edge-config-section small {
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.5;
+}
+.edge-config-section > label:not(.checkbox-label) {
+  display: grid;
+  gap: 5px;
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 650;
+}
+.edge-config-section .checkbox-label,
+.edge-context-source,
+.edge-warning {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.edge-config-section .checkbox-label {
+  color: var(--text-soft);
+  font-size: 8px;
+  line-height: 1.4;
+}
+.edge-config-section .checkbox-label input {
+  flex: 0 0 auto;
+}
+.edge-context-source {
+  flex-wrap: wrap;
+  color: var(--text-soft);
+  font-size: 8px;
+}
+.edge-context-source code {
+  width: 100%;
+  padding: 5px 6px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface-raised);
+  color: var(--text-faint);
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.edge-warning {
+  align-items: flex-start;
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--line));
+  border-radius: 6px;
+  color: var(--amber);
+  font-size: 8px;
+  line-height: 1.45;
+}
+.edge-warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
 .inspector-empty {
   padding: 35px 20px;
   text-align: center;

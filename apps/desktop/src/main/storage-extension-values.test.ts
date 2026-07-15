@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { CanvasDocument, ExtensionCanvasNodeTypeView, Project } from '../shared/contracts.js';
 import { LocalStore } from './storage.js';
+import { canvasContentHash } from './storage/values.js';
 
 const PROJECT_ID = '70000000-0000-4000-8000-000000000001';
 const CANVAS_ID = '70000000-0000-4000-8000-000000000002';
@@ -274,18 +274,7 @@ function extensionData(document: CanvasDocument): Record<string, unknown> {
 }
 
 function canvasHash(document: CanvasDocument): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        id: document.id,
-        projectId: document.projectId,
-        name: document.name,
-        nodes: document.nodes,
-        edges: document.edges,
-        viewport: document.viewport,
-      }),
-    )
-    .digest('hex');
+  return canvasContentHash(document);
 }
 
 function awaitAtomicRejection(

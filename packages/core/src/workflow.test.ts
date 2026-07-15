@@ -11,6 +11,7 @@ import {
   requestWorkflowCancellation,
   transitionNodeRun,
   validateWorkflow,
+  validateWorkflowExecutionConfiguration,
 } from './workflow.js';
 
 const NOW = '2026-07-14T12:00:00.000Z';
@@ -123,6 +124,94 @@ function canvas(input: Record<string, unknown> & { nodes: unknown[]; edges: unkn
 }
 
 describe('workflow validation and planning', () => {
+  it('keeps draft canvases honest but blocks only selected unconfigured nodes at plan time', () => {
+    const draftAgent = {
+      ...agentNode('draft-agent'),
+      data: {},
+    };
+    const graph = canvas({ nodes: [taskNode('ready-task'), draftAgent], edges: [] });
+
+    expect(validateWorkflow(graph).valid).toBe(true);
+    expect(validateWorkflowExecutionConfiguration(graph, ['draft-agent'])).toEqual([
+      {
+        code: 'MISSING_NODE_CONFIGURATION',
+        message: 'draft-agent requires agent adapter, permission profile before it can run',
+        entityIds: ['draft-agent'],
+      },
+    ]);
+    expect(
+      planWorkflow(graph, {
+        planId: 'task-only-plan',
+        targetNodeIds: ['ready-task'],
+        includeUpstream: false,
+      }).nodeIds,
+    ).toEqual(['ready-task']);
+    expect(() => planWorkflow(graph, { planId: 'full-plan' })).toThrowError(
+      /Workflow validation failed with 1 issue/u,
+    );
+  });
+
+  it('blocks unavailable extension nodes when they are selected for execution', () => {
+    const graph = canvas({
+      nodes: [
+        {
+          id: 'extension-1',
+          type: 'extension',
+          title: 'Quarantined tool',
+          color: '#445566',
+          icon: 'box',
+          position: { x: 0, y: 0 },
+          size: { width: 300, height: 200 },
+          data: {
+            extensionId: 'example.tools',
+            extensionVersion: '1.0.0',
+            nodeTypeId: 'tool',
+            definition: {},
+            availability: 'quarantined',
+          },
+          createdAt: NOW,
+          updatedAt: NOW,
+        },
+      ],
+      edges: [],
+    });
+
+    expect(validateWorkflowExecutionConfiguration(graph)).toContainEqual({
+      code: 'NODE_UNAVAILABLE',
+      message: 'Quarantined tool cannot run while its extension is quarantined',
+      entityIds: ['extension-1'],
+    });
+    expect(() => planWorkflow(graph, { planId: 'extension-plan' })).toThrow(
+      WorkflowValidationError,
+    );
+  });
+
+  it('stores a draft revision edge but refuses to execute it without a bounded loop', () => {
+    const graph = canvas({
+      nodes: [taskNode('implementation'), taskNode('review')],
+      edges: [
+        {
+          id: 'draft-revision',
+          sourceNodeId: 'review',
+          targetNodeId: 'implementation',
+          type: 'revision',
+          config: {},
+          createdAt: NOW,
+        },
+      ],
+    });
+
+    expect(validateWorkflow(graph).valid).toBe(true);
+    expect(validateWorkflowExecutionConfiguration(graph)).toContainEqual({
+      code: 'MISSING_EDGE_CONFIGURATION',
+      message: 'Revision edge requires a bounded loop before it can run',
+      entityIds: ['draft-revision'],
+    });
+    expect(() => planWorkflow(graph, { planId: 'draft-revision-plan' })).toThrow(
+      WorkflowValidationError,
+    );
+  });
+
   it('produces stable dependency order and resource-bounded parallel stages', () => {
     const graph = canvas({
       nodes: [taskNode('task-c'), taskNode('task-b'), taskNode('task-a')],

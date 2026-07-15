@@ -326,14 +326,17 @@ describe('LocalStore', () => {
     });
 
     expect(store.loadCanvas(PROJECT_ID)).toBeUndefined();
-    expect(store.saveCanvas(initial)).toEqual(initial);
-    expect(store.loadCanvas(PROJECT_ID)).toEqual(initial);
-    expect(store.saveCanvas(updated)).toEqual(updated);
-    expect(store.loadCanvas(PROJECT_ID)).toEqual(updated);
+    const savedInitial = store.saveCanvas(initial);
+    expect(savedInitial).toMatchObject(initial);
+    expect(savedInitial).toMatchObject({ schemaVersion: 2, canonical: { schemaVersion: 1 } });
+    expect(store.loadCanvas(PROJECT_ID)).toEqual(savedInitial);
+    const savedUpdated = store.saveCanvas(updated);
+    expect(savedUpdated).toMatchObject(updated);
+    expect(store.loadCanvas(PROJECT_ID)).toEqual(savedUpdated);
     expect(rows(store, 'canvases')).toHaveLength(1);
 
     closeStore(store);
-    expect(openStore(databasePath).loadCanvas(PROJECT_ID)).toEqual(updated);
+    expect(openStore(databasePath).loadCanvas(PROJECT_ID)).toEqual(savedUpdated);
   });
 
   it('redacts nested audit secrets before they reach SQLite or an export', () => {
@@ -523,10 +526,10 @@ describe('LocalStore', () => {
     const store = openStore();
     const savedSettings = settings();
     const savedProject = project();
-    const savedCanvas = canvas();
+    const canvasInput = canvas();
     store.saveSettings(savedSettings);
     store.saveProject(savedProject);
-    store.saveCanvas(savedCanvas);
+    const savedCanvas = store.saveCanvas(canvasInput);
     store.appendAudit('privacy', 'export', 'allowed', { source: 'settings-ui' });
 
     const exported = store.exportData();

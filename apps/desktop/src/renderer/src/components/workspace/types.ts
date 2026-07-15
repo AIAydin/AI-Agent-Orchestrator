@@ -10,10 +10,11 @@ import type {
   Project,
 } from '../../../../shared/contracts.js';
 import type { WorkshopNode } from '../CanvasNode.js';
+import type { WorkshopEdgeData } from './edge-config.js';
 
-export type EdgeKind = 'context' | 'execute' | 'output' | 'review' | 'revision' | 'dependency';
+export type { EdgeKind } from './edge-config.js';
 
-export type WorkshopEdge = Edge<{ edgeType: EdgeKind }>;
+export type WorkshopEdge = Edge<WorkshopEdgeData>;
 
 export interface Snapshot {
   nodes: WorkshopNode[];

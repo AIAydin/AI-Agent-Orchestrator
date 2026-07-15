@@ -299,3 +299,19 @@ unchecked when only a subset of their required behavior has proof.
 - 2026-07-15: all 9 Electron Playwright E2E tests passed, including the new existing-folder Git
   initialization flow and the prior onboarding, canvas persistence, agent, check, preview, recovery,
   primary Git review, and managed-worktree review flows.
+- 2026-07-15: the desktop storage boundary now upgrades legacy renderer canvases into a versioned
+  canonical `@forgeboard/core` canvas while preserving renderer compatibility. All 15 built-in node
+  types plus declarative extension nodes round-trip without fabricated paths, commands, branches,
+  or worktrees; newer canonical revisions win deterministically, while newer renderer edits retain
+  canonical-only comments, resources, groups, workflow limits, and typed data. Draft operational
+  nodes and draft revision edges persist honestly but fail closed when selected for execution
+  without required configuration.
+- 2026-07-15: all six edge kinds now expose typed UI configuration and persist canonical config:
+  explicit Context attachments, Execute triggers and approval gates, Output kinds, Review
+  authority, bounded Revision IDs, and succeeded Task dependencies. Focused adapter, persistence,
+  accessibility, and inspector interaction tests cover migration, reconciliation, sanitation,
+  retention, snapshots, imports, and the visible controls.
+- 2026-07-15: `corepack pnpm verify` passed on the canonical-canvas checkpoint: the structure gate
+  kept all 325 checked files at or below 2,000 lines; formatting, lint, strict typecheck, 403 unit
+  tests across 70 files, 63 integration tests across 10 files, and every workspace production build
+  succeeded. All 9 Electron Playwright tests also passed in 1.9 minutes.

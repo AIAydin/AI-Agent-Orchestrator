@@ -21,7 +21,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { CheckExecutionView } from '../shared/check-contracts.js';
 import type { AppSettings, CanvasDocument, Project } from '../shared/contracts.js';
 import { LocalStore, type StoredRunRecord, type TrustedExtensionLedgerRecord } from './storage.js';
-import { canvasContentHash } from './storage/values.js';
+import { canvasContentHash, sanitizeCanvasDocument } from './storage/values.js';
 
 const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
 const CANVAS_ID = '10000000-0000-4000-8000-000000000002';
@@ -264,7 +264,7 @@ describe('LocalStore persistence and recovery', () => {
 
     const upgraded = openStore(databasePath);
     expect(upgraded.getProject(PROJECT_ID)).toEqual(project());
-    expect(upgraded.loadCanvas(PROJECT_ID)).toEqual(canvas());
+    expect(upgraded.loadCanvas(PROJECT_ID)).toEqual(sanitizeCanvasDocument(canvas()));
     const inspector = new DatabaseSync(databasePath, { readOnly: true });
     expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({ user_version: 7 });
     expect(
@@ -334,7 +334,7 @@ describe('LocalStore persistence and recovery', () => {
       }),
     ).toThrow('Invalid time value');
     expect(store.listCanvasSnapshots(PROJECT_ID)).toEqual([]);
-    expect(store.loadCanvas(PROJECT_ID)).toEqual(canvas());
+    expect(store.loadCanvas(PROJECT_ID)).toEqual(sanitizeCanvasDocument(canvas()));
   });
 
   it('saves a project and its canvas atomically when a database write fails', () => {
@@ -616,7 +616,9 @@ describe('LocalStore persistence and recovery', () => {
     const canvasCollision = structuredClone(projectCollision);
     canvasCollision.projects = [];
     canvasCollision.canvases = [
-      canvas({ id: '12000000-0000-4000-8000-000000000002', name: 'Imported overwrite' }),
+      sanitizeCanvasDocument(
+        canvas({ id: '12000000-0000-4000-8000-000000000002', name: 'Imported overwrite' }),
+      ),
     ];
     expect(() => store.importData(canvasCollision)).toThrow(
       'already has a canvas; merge imports cannot replace it',
@@ -642,9 +644,13 @@ describe('LocalStore persistence and recovery', () => {
     const duplicateCanvases = source.exportData(NOW);
     const importedCanvas = duplicateCanvases.canvases[0];
     if (!importedCanvas) throw new Error('Expected an exported canvas.');
+    const duplicateCanvasId = '13000000-0000-4000-8000-000000000002';
     duplicateCanvases.canvases.push({
       ...importedCanvas,
-      id: '13000000-0000-4000-8000-000000000002',
+      id: duplicateCanvasId,
+      ...(importedCanvas.canonical === undefined
+        ? {}
+        : { canonical: { ...importedCanvas.canonical, id: duplicateCanvasId } }),
     });
     expect(() =>
       destination.preflightImportData(duplicateCanvases, { replaceExisting: true }),
@@ -1015,7 +1021,7 @@ describe('LocalStore persistence and recovery', () => {
     });
     expect(store.relocateProject(relocated)).toEqual(relocated);
     expect(store.getProject(PROJECT_ID)).toEqual(relocated);
-    expect(store.loadCanvas(PROJECT_ID)).toEqual(canvas());
+    expect(store.loadCanvas(PROJECT_ID)).toEqual(sanitizeCanvasDocument(canvas()));
 
     const connection = new DatabaseSync(store.databasePath, { readOnly: true });
     expect(

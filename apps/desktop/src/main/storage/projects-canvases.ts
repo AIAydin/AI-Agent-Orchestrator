@@ -1,7 +1,12 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 
-import { ProjectSchema, type CanvasDocument, type Project } from '../../shared/contracts.js';
+import {
+  CanvasDocumentSchema,
+  ProjectSchema,
+  type CanvasDocument,
+  type Project,
+} from '../../shared/contracts.js';
 import { CanvasSnapshotSchema, type CanvasSnapshot } from '../storage-schemas.js';
 import { transaction, type TransactionalAuditEvent } from './database.js';
 import {
@@ -55,14 +60,13 @@ export function saveProjectAndCanvas(
   document: CanvasDocument,
 ): CanvasDocument {
   const parsedProject = sanitizeProject(ProjectSchema.parse(project));
-  const parsedDocument = sanitizeCanvasDocument(document);
+  const parsedDocument = CanvasDocumentSchema.parse(document);
   if (parsedDocument.projectId !== parsedProject.id) {
     throw new Error('Canvas project does not match the project being saved.');
   }
   return transaction(database, () => {
     writeProject(database, parsedProject);
-    writeCanvas(database, parsedDocument, true, 'autosave');
-    return parsedDocument;
+    return writeCanvas(database, parsedDocument, true, 'autosave');
   });
 }
 
@@ -106,11 +110,8 @@ export function relocateProject(database: DatabaseSync, project: Project): Proje
 }
 
 export function saveCanvas(database: DatabaseSync, document: CanvasDocument): CanvasDocument {
-  const parsed = sanitizeCanvasDocument(document);
-  return transaction(database, () => {
-    writeCanvas(database, parsed, true, 'autosave');
-    return parsed;
-  });
+  const parsed = CanvasDocumentSchema.parse(document);
+  return transaction(database, () => writeCanvas(database, parsed, true, 'autosave'));
 }
 
 export function createCanvasSnapshot(

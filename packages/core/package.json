@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./domain": {
+      "types": "./src/domain.ts",
+      "default": "./src/domain.ts"
     }
   },
   "scripts": {
