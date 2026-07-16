@@ -264,6 +264,41 @@ describe('ProjectFileService', () => {
     expect(rejected).not.toHaveProperty('cause');
   });
 
+  it('searches bounded approved UTF-8 content without exposing ignored, sensitive, or linked files', async () => {
+    await mkdir(path.join(projectRoot, 'src'));
+    await writeFile(path.join(projectRoot, '.gitignore'), 'ignored.txt\n');
+    await writeFile(path.join(projectRoot, 'src', 'first.ts'), 'const SearchNeedle = 1;\n');
+    await writeFile(
+      path.join(projectRoot, 'src', 'second.ts'),
+      '// searchneedle twice searchneedle\n',
+    );
+    await writeFile(path.join(projectRoot, 'ignored.txt'), 'searchneedle ignored\n');
+    await writeFile(path.join(projectRoot, '.env'), 'SEARCHNEEDLE=secret\n');
+    await writeFile(path.join(projectRoot, 'binary.bin'), Buffer.from([0, 1, 2, 3]));
+    await writeFile(path.join(outsideRoot, 'outside.txt'), 'searchneedle outside\n');
+    await symlink(path.join(outsideRoot, 'outside.txt'), path.join(projectRoot, 'outside-link'));
+    const service = new ProjectFileService(store, { search: { maxResults: 2 } });
+
+    const result = await service.search({ projectId: PROJECT_ID, query: 'SearchNeedle' });
+
+    expect(result).toMatchObject({
+      projectId: PROJECT_ID,
+      query: 'SearchNeedle',
+      truncated: true,
+    });
+    expect(result.skippedFiles).toBeGreaterThanOrEqual(1);
+    expect(result.matches).toHaveLength(2);
+    expect(result.matches[0]).toMatchObject({
+      relativePath: 'src/first.ts',
+      line: 1,
+      column: 7,
+    });
+    expect(result.matches.every((match) => match.relativePath.startsWith('src/'))).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('secret');
+    expect(JSON.stringify(result)).not.toContain('outside');
+    expect(JSON.stringify(result)).not.toContain('ignored');
+  });
+
   it('reverts by reloading disk and prepares reveal only for a canonical main-process target', async () => {
     const target = path.join(projectRoot, 'note.txt');
     await writeFile(target, 'one\n');
@@ -282,6 +317,14 @@ describe('ProjectFileService', () => {
     );
     expect(
       await service.prepareReveal({ projectId: PROJECT_ID, relativePath: 'note.txt' }),
+    ).toEqual({
+      projectId: PROJECT_ID,
+      relativePath: 'note.txt',
+      absolutePath: target,
+      kind: 'file',
+    });
+    expect(
+      await service.prepareOpenExternal({ projectId: PROJECT_ID, relativePath: 'note.txt' }),
     ).toEqual({
       projectId: PROJECT_ID,
       relativePath: 'note.txt',
@@ -308,6 +351,14 @@ describe('ProjectFileService', () => {
     );
     await expectCode(
       service.read({ projectId: PROJECT_ID, relativePath: 'ignored.txt' }),
+      'IGNORED_FILE',
+    );
+    await expectCode(
+      service.prepareOpenExternal({ projectId: PROJECT_ID, relativePath: '.env' }),
+      'SENSITIVE_FILE',
+    );
+    await expectCode(
+      service.prepareOpenExternal({ projectId: PROJECT_ID, relativePath: 'ignored.txt' }),
       'IGNORED_FILE',
     );
   });

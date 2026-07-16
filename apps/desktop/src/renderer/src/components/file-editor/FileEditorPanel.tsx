@@ -1,8 +1,12 @@
+import { useEffect, useState } from 'react';
+
+import { DiagnosticsSummary } from './diagnostics/DiagnosticsSummary.js';
+import type { FileDiagnosticsState } from './diagnostics/model.js';
 import type { MonacoLoader } from './monaco-loader.js';
-import { languageForFile } from './language.js';
+import { languageForFile, languageHasBundledDiagnostics } from './language.js';
 import { MonacoTextEditor } from './MonacoTextEditor.js';
 import type { FileEditorOperations } from './operations.js';
-import { useFileEditor } from './useFileEditor.js';
+import { useFileEditor, type FileEditorStatus } from './useFileEditor.js';
 import './FileEditorPanel.css';
 
 export interface FileEditorPanelProps {
@@ -12,6 +16,18 @@ export interface FileEditorPanelProps {
   readonly readOnly?: boolean;
   readonly monacoLoader?: MonacoLoader;
   readonly theme?: 'vs' | 'vs-dark' | 'hc-black' | 'hc-light';
+  readonly onRevealInTree?: () => void;
+  readonly onSessionStateChange?: (state: FileEditorSessionState) => void;
+  readonly initialPosition?: {
+    readonly requestId: number;
+    readonly line: number;
+    readonly column: number;
+  };
+}
+
+export interface FileEditorSessionState {
+  readonly status: FileEditorStatus;
+  readonly dirty: boolean;
 }
 
 export function FileEditorPanel({
@@ -21,11 +37,27 @@ export function FileEditorPanel({
   readOnly = false,
   monacoLoader,
   theme,
+  onRevealInTree,
+  onSessionStateChange,
+  initialPosition,
 }: FileEditorPanelProps) {
   const editor = useFileEditor(projectId, relativePath, operations, readOnly);
+  const [diagnostics, setDiagnostics] = useState<FileDiagnosticsState>({
+    availability: 'loading',
+    items: [],
+  });
   const effectiveReadOnly = readOnly || editor.document?.readOnly === true;
   const pathSegments = relativePath.split('/');
   const statusLabel = statusText(editor.status, editor.dirty, effectiveReadOnly);
+  const language = languageForFile(relativePath);
+
+  useEffect(() => {
+    setDiagnostics({ availability: 'loading', items: [] });
+  }, [projectId, relativePath]);
+
+  useEffect(() => {
+    onSessionStateChange?.({ status: editor.status, dirty: editor.dirty });
+  }, [editor.dirty, editor.status, onSessionStateChange]);
 
   return (
     <section className="file-editor-panel" aria-label={`File editor: ${relativePath}`}>
@@ -75,7 +107,24 @@ export function FileEditorPanel({
             disabled={editor.status === 'loading' || editor.activity !== null}
             onClick={() => void editor.reveal()}
           >
-            {editor.activity === 'reveal' ? 'Revealing…' : 'Reveal'}
+            {editor.activity === 'reveal' ? 'Showing…' : 'Show in file manager'}
+          </button>
+          {onRevealInTree !== undefined ? (
+            <button
+              type="button"
+              disabled={editor.status === 'loading' || editor.activity !== null}
+              onClick={onRevealInTree}
+            >
+              Reveal in tree
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={editor.status !== 'ready' || editor.activity !== null || editor.dirty}
+            title={editor.dirty ? 'Save or revert this tab before opening its disk version.' : ''}
+            onClick={() => void editor.openExternal()}
+          >
+            {editor.activity === 'external' ? 'Opening…' : 'Open externally'}
           </button>
           <button
             type="button"
@@ -125,13 +174,16 @@ export function FileEditorPanel({
         {editor.status === 'ready' && editor.document?.contentKind === 'text' ? (
           <MonacoTextEditor
             value={editor.buffer}
-            language={languageForFile(relativePath)}
+            language={language}
             readOnly={effectiveReadOnly}
             ariaLabel={`Editing ${relativePath}`}
             onChange={editor.setBuffer}
             onSave={effectiveReadOnly ? () => undefined : () => void editor.save()}
-            loader={monacoLoader}
-            theme={theme}
+            onDiagnosticsChange={setDiagnostics}
+            diagnosticsAvailable={languageHasBundledDiagnostics(language)}
+            {...(initialPosition === undefined ? {} : { position: initialPosition })}
+            {...(monacoLoader === undefined ? {} : { loader: monacoLoader })}
+            {...(theme === undefined ? {} : { theme })}
           />
         ) : null}
         {editor.status === 'ready' && editor.document?.contentKind !== 'text' ? (
@@ -140,13 +192,6 @@ export function FileEditorPanel({
               {editor.document?.contentKind === 'binary' ? 'Binary file' : 'File too large'}
             </strong>
             <p>{editor.document?.readOnlyReason}</p>
-            <button
-              type="button"
-              disabled={editor.activity !== null}
-              onClick={() => void editor.reveal()}
-            >
-              {editor.activity === 'reveal' ? 'Revealing…' : 'Reveal in file manager'}
-            </button>
           </div>
         ) : null}
       </div>
@@ -159,6 +204,16 @@ export function FileEditorPanel({
           {editor.document.sha256 !== null ? (
             <code title={editor.document.sha256}>{editor.document.sha256.slice(0, 12)}</code>
           ) : null}
+          <DiagnosticsSummary
+            state={
+              editor.document.contentKind === 'text'
+                ? diagnostics
+                : {
+                    availability: 'unavailable',
+                    items: [],
+                  }
+            }
+          />
         </footer>
       ) : null}
     </section>

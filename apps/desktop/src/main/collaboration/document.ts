@@ -18,10 +18,12 @@ const COLLABORATION_ROOTS = [
   'reviews',
 ] as const;
 
+export const COLLABORATION_LOCAL_METADATA_ORIGIN = Symbol('forgeboard-local-metadata');
+
 export function replaceCollaborationDocument(
   document: Y.Doc,
   input: CollaborationMetadataSnapshot,
-  origin: unknown = 'forgeboard-local-metadata',
+  origin: unknown = COLLABORATION_LOCAL_METADATA_ORIGIN,
 ): CollaborationMetadataSnapshot {
   const snapshot = deserializeCollaborationMetadataSnapshot(
     serializeCollaborationMetadataSnapshot(input),

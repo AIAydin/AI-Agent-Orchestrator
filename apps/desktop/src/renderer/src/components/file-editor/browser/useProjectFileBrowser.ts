@@ -5,6 +5,8 @@ import {
   FileTreeResultSchema,
   type FileDocument,
   type FileReadInput,
+  type FileSearchInput,
+  type FileSearchResult,
   type FileTreeEntry,
   type FileTreeInput,
   type FileTreeResult,
@@ -17,6 +19,7 @@ import {
 
 export interface ProjectFileBrowserOperations {
   readonly tree: (input: FileTreeInput) => Promise<FileTreeResult>;
+  readonly search: (input: FileSearchInput) => Promise<FileSearchResult>;
   readonly read: (input: FileReadInput) => Promise<FileDocument>;
 }
 

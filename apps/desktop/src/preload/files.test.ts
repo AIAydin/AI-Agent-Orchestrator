@@ -71,6 +71,45 @@ describe('createFileApi', () => {
       api.reveal({ projectId: PROJECT_ID, relativePath: 'src/index.ts' }),
     ).rejects.toBeTruthy();
   });
+
+  it('validates bounded search results and keeps external-open responses content-free', async () => {
+    const searchResult = {
+      projectId: PROJECT_ID,
+      query: 'needle',
+      matches: [{ relativePath: 'src/index.ts', line: 2, column: 4, preview: 'a needle here' }],
+      scannedFiles: 1,
+      skippedFiles: 0,
+      truncated: false,
+    };
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, value: searchResult })
+      .mockResolvedValueOnce({ ok: true, value: null });
+    const api = createFileApi(invoke);
+
+    await expect(api.search({ projectId: PROJECT_ID, query: 'needle' })).resolves.toEqual(
+      searchResult,
+    );
+    await expect(
+      api.openExternal({ projectId: PROJECT_ID, relativePath: 'src/index.ts' }),
+    ).resolves.toBeUndefined();
+    expect(invoke).toHaveBeenNthCalledWith(1, FILE_IPC_CHANNELS.search, {
+      projectId: PROJECT_ID,
+      query: 'needle',
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, FILE_IPC_CHANNELS.openExternal, {
+      projectId: PROJECT_ID,
+      relativePath: 'src/index.ts',
+    });
+
+    invoke.mockResolvedValueOnce({
+      ok: true,
+      value: { absolutePath: '/tmp/project/src/index.ts' },
+    });
+    await expect(
+      api.openExternal({ projectId: PROJECT_ID, relativePath: 'src/index.ts' }),
+    ).rejects.toBeTruthy();
+  });
 });
 
 function textDocument(): FileDocument {

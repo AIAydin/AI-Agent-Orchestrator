@@ -12,6 +12,7 @@ export interface CollaborationProviderCallbacks {
   readonly onSynced: () => void;
   readonly onDisconnect: () => void;
   readonly onAwarenessChange: () => void;
+  readonly onStateless: (payload: string) => void;
 }
 
 export interface CollaborationProviderFactoryInput extends CollaborationProviderCallbacks {
@@ -29,6 +30,7 @@ export interface CollaborationProviderHandle {
     readonly clientId: number;
     readonly state: unknown;
   }>;
+  sendStateless(payload: string): void;
   clearCredential(): void;
   destroy(): void;
 }
@@ -67,6 +69,7 @@ export const createHocuspocusCollaborationProvider: CollaborationProviderFactory
       input.onDisconnect();
     },
     onAwarenessChange: () => input.onAwarenessChange(),
+    onStateless: ({ payload }) => input.onStateless(payload),
   });
 
   return {
@@ -79,6 +82,7 @@ export const createHocuspocusCollaborationProvider: CollaborationProviderFactory
             clientId,
             state,
           })),
+    sendStateless: (payload) => provider?.sendStateless(payload),
     clearCredential: () => {
       if (provider !== undefined) provider.configuration.token = null;
     },

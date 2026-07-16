@@ -1,3 +1,7 @@
+export {
+  CollaborationPublishReceiptSchema,
+  type CollaborationPublishReceipt,
+} from '@forgeboard/core/collaboration-delivery';
 export * from './awareness.js';
 export * from './canvas-metadata.js';
 export * from './connection-contracts.js';

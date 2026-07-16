@@ -23,6 +23,7 @@ import {
   type CollaborationJoinInput,
   type CollaborationJoinResult,
   type CollaborationMetadataSnapshot,
+  type CollaborationPublishReceipt,
 } from '../../shared/collaboration/index.js';
 import type {
   OutboundActionDisclosure,
@@ -241,7 +242,10 @@ export class CollaborationIpcService {
     }
   }
 
-  #publish(event: IpcMainInvokeEvent, rawArgs: unknown[]): IpcResult<boolean> {
+  #publish(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): IpcResult<CollaborationPublishReceipt | null> {
     try {
       this.#assertAvailable();
       const [input] = z.tuple([CollaborationPublishInputSchema]).parse(rawArgs);

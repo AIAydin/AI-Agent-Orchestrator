@@ -10,6 +10,10 @@ import {
   type AppSettings,
   type Project,
 } from '../../../../../shared/application/contracts.js';
+import type {
+  CommandReadinessRequest,
+  CommandReadinessResult,
+} from '../../../../../shared/command-readiness/contracts.js';
 import { SettingsPanel } from './SettingsPanel.js';
 
 const savedSettings = settings({ theme: 'system', density: 'comfortable' });
@@ -50,6 +54,24 @@ const getBackupHealth = vi.fn(() =>
     },
   }),
 );
+const commandCheck = vi.fn((input: CommandReadinessRequest) =>
+  Promise.resolve({ ok: true as const, value: readyCommand(input) }),
+);
+
+function readyCommand(input: CommandReadinessRequest): CommandReadinessResult {
+  return {
+    schemaVersion: 1,
+    request: input,
+    state: 'ready',
+    ready: true,
+    validationScope: input.projectId ? 'project' : 'executable',
+    resolvedExecutable: `/resolved/${input.command.executable}`,
+    projectName: input.projectId ? 'Active project' : null,
+    checkedAt: '2026-07-15T18:00:00.000Z',
+    reason: null,
+    warning: null,
+  };
+}
 
 beforeEach(() => {
   updateSettings.mockClear();
@@ -60,6 +82,10 @@ beforeEach(() => {
   pickReferences.mockReset();
   pickReferences.mockResolvedValue({ ok: true, value: [] });
   getBackupHealth.mockClear();
+  commandCheck.mockReset();
+  commandCheck.mockImplementation((input) =>
+    Promise.resolve({ ok: true, value: readyCommand(input) }),
+  );
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -74,6 +100,7 @@ beforeEach(() => {
         pickReferences,
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
+      commands: { checkReadiness: commandCheck },
       privacy: {
         export: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
@@ -244,7 +271,9 @@ describe('SettingsPanel draft transactions', () => {
     );
     fireEvent.change(environment, { target: { value: 'PATH, NOT-VALID' } });
 
-    const save = screen.getByRole<HTMLButtonElement>('button', { name: 'Save settings' });
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
     expect(save.disabled).toBe(true);
     expect(
       screen
@@ -497,7 +526,11 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.change(within(lintEditor).getByLabelText(/Arguments/u), {
       target: { value: '  .  \n\n--max-warnings=0 ' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(save);
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0].lintCommand).toEqual({
@@ -506,12 +539,55 @@ describe('SettingsPanel draft transactions', () => {
     });
   });
 
+  it('validates changed commands before saving and gives dependency remediation in Settings', async () => {
+    commandCheck.mockImplementation((input) =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          schemaVersion: 1,
+          request: input,
+          state: 'executable-missing',
+          ready: false,
+          validationScope: 'none',
+          resolvedExecutable: null,
+          projectName: null,
+          checkedAt: '2026-07-15T18:00:00.000Z',
+          reason:
+            'The configured executable was not found. Use Browse or install the dependency and reopen Forgeboard.',
+          warning: null,
+        },
+      }),
+    );
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
+    const lintEditor = screen.getByRole('group', { name: 'Lint command' });
+    fireEvent.change(within(lintEditor).getByLabelText('Executable'), {
+      target: { value: 'missing-linter' },
+    });
+
+    expect(await screen.findAllByText(/configured executable was not found/u)).toHaveLength(2);
+    expect(
+      within(lintEditor).getByText(/install it and reopen Forgeboard, or use Browse/u),
+    ).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save settings' }).disabled).toBe(
+      true,
+    );
+    fireEvent.submit(screen.getByRole('dialog', { name: 'Settings' }));
+    expect(screen.getByText(/Settings were not saved/u)).toBeTruthy();
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
   it('adopts detected project checks as separate package-manager process and argv', async () => {
     render(<SettingsPanel {...props({ activeProject: project() })} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
     fireEvent.click(screen.getByRole('button', { name: 'Use all 4 detected scripts' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(save);
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     const saved = updateSettings.mock.calls[0]?.[0];
@@ -561,7 +637,11 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.change(within(commandEditor).getByLabelText(/Arguments/u), {
       target: { value: 'scan\n--production' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(save);
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     const firstSaved = updateSettings.mock.calls[0]?.[0];
@@ -580,7 +660,7 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove License scan' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add custom check' }));
     expect(screen.getByText('No custom checks configured.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    fireEvent.click(save);
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
     expect(updateSettings.mock.calls[1]?.[0].customChecks).toEqual([]);

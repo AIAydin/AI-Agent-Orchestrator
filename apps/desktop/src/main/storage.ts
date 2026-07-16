@@ -9,6 +9,12 @@ import type {
   Project,
 } from '../shared/application/contracts.js';
 import type { CheckExecutionView } from '../shared/checks/contracts.js';
+import type { GitTargetInput } from '../shared/git/contracts.js';
+import type {
+  GitReviewNoteDeleteInput,
+  GitReviewNoteUpdateInput,
+  StoredGitReviewNote,
+} from '../shared/git/reviews/contracts.js';
 import {
   type BackupResult,
   type CanvasSnapshot,
@@ -83,6 +89,13 @@ import {
   recoverInterruptedRuns as recoverDatabaseInterruptedRuns,
   saveRun as saveDatabaseRun,
 } from './storage/runs-audit.js';
+import {
+  createReviewNote as createDatabaseReviewNote,
+  deleteReviewNote as deleteDatabaseReviewNote,
+  listReviewNotes as listDatabaseReviewNotes,
+  updateReviewNote as updateDatabaseReviewNote,
+  type StoredReviewNotePage,
+} from './storage/reviews/repository.js';
 import {
   activateTrustedExtension as activateDatabaseTrustedExtension,
   getTrustedExtension as getDatabaseTrustedExtension,
@@ -388,6 +401,28 @@ export class LocalStore {
 
   listProjectRuns(projectId: string, limit = 200): StoredRunRecord[] {
     return listDatabaseProjectRuns(this.database, projectId, limit);
+  }
+
+  createReviewNote(note: StoredGitReviewNote): StoredGitReviewNote {
+    const saved = createDatabaseReviewNote(this.database, note);
+    this.notifyDurableChange();
+    return saved;
+  }
+
+  listReviewNotes(target: GitTargetInput, limit = 500): StoredReviewNotePage {
+    return listDatabaseReviewNotes(this.database, target, limit);
+  }
+
+  updateReviewNote(input: GitReviewNoteUpdateInput, updatedAt = new Date()): StoredGitReviewNote {
+    const saved = updateDatabaseReviewNote(this.database, { ...input, updatedAt });
+    this.notifyDurableChange();
+    return saved;
+  }
+
+  deleteReviewNote(input: GitReviewNoteDeleteInput): StoredGitReviewNote {
+    const deleted = deleteDatabaseReviewNote(this.database, input);
+    this.notifyDurableChange();
+    return deleted;
   }
 
   createWorkflowExecution(record: WorkflowExecutionRecordInput): WorkflowExecutionRecord {

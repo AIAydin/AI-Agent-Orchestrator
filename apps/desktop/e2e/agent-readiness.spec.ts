@@ -28,7 +28,9 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
 
     const executableField = setup.getByLabel(/^Executable\b/);
     await executableField.fill(missingExecutable);
-    const refresh = setup.getByRole('button', { name: /Refresh Custom CLI readiness/ });
+    const refresh = setup.getByRole('button', {
+      name: /Refresh Custom CLI readiness/,
+    });
     await refresh.click();
     await expect(setup.getByText('Selected executable needs attention')).toBeVisible();
     await expect(setup.getByRole('button', { name: /Continue/ })).toBeDisabled();
@@ -64,16 +66,30 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     await expect(setup.getByRole('button', { name: /Continue/ })).toBeEnabled();
     await setup.getByRole('button', { name: /Continue/ }).click();
 
-    const readOnlyProfile = setup.getByRole('radio', { name: /Plan \/ read-only/ });
+    const readOnlyProfile = setup.getByRole('radio', {
+      name: /Plan \/ read-only/,
+    });
     await setup.getByText('Plan / read-only', { exact: true }).click();
     await expect(readOnlyProfile).toBeChecked();
     await setup.getByRole('button', { name: /Continue/ }).click();
-    await setup.getByLabel('Test command executable').fill('node');
+    const testCommandExecutable = setup.getByLabel('Test command executable');
+    await testCommandExecutable.fill(missingExecutable);
+    const setupTestCommand = setup.getByRole('group', { name: 'Test command' });
+    await expect(setupTestCommand.getByRole('alert')).toContainText(
+      /configured check executable .* was not found/u,
+    );
+    await expect(setup.getByRole('button', { name: /Continue/ })).toBeDisabled();
+    await expect(setupTestCommand.getByRole('alert')).toContainText(
+      /Use Browse to select the executable/u,
+    );
+
+    await testCommandExecutable.fill(executable);
     await setup
       .getByLabel(
         'Test command arguments, one non-empty literal argument per line; empty lines ignored',
       )
       .fill('-e\nprocess.stdout.write("READY")');
+    await expect(setup.getByText(/Executable ready; the command was not run/u)).toBeVisible();
     await setup.getByRole('button', { name: /Continue/ }).click();
     await expect(setup.getByText('Your local workshop is ready')).toBeVisible();
     await expect(setup).toContainText('Custom CLI');
@@ -86,7 +102,7 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     await expect(settings.getByLabel('Executable', { exact: true })).toHaveValue(executable);
     await settings.getByRole('button', { name: 'Checks', exact: true }).click();
     const tests = settings.getByRole('group', { name: 'Tests command' });
-    await expect(tests.getByLabel('Executable')).toHaveValue('node');
+    await expect(tests.getByLabel('Executable')).toHaveValue(executable);
     await expect(tests.getByLabel('Arguments')).toHaveValue('-e\nprocess.stdout.write("READY")');
     expect(externalRequests).toEqual([]);
   } finally {

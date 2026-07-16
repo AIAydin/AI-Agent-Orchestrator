@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  CollaborationDeliveryAcknowledgementSchema,
+  CollaborationDeliveryRejectionSchema,
+} from '@forgeboard/core/collaboration-delivery';
 
 import { CollaborationAwarenessSnapshotSchema } from './awareness.js';
 import { CollaborationMetadataSnapshotSchema } from './metadata-contracts.js';
@@ -167,6 +171,7 @@ const CollaborationMetadataEventSchema = z
   .object({
     ...CollaborationEventBaseShape,
     type: z.literal('metadata-snapshot'),
+    source: z.enum(['local', 'remote']),
     snapshot: CollaborationMetadataSnapshotSchema,
   })
   .strict();
@@ -199,10 +204,30 @@ const CollaborationErrorEventSchema = z
   })
   .strict();
 
+const CollaborationDeliveryAcknowledgedEventSchema = z
+  .object({
+    ...CollaborationEventBaseShape,
+    type: z.literal('delivery-acknowledged'),
+    acknowledgement: CollaborationDeliveryAcknowledgementSchema,
+    reconciledAfterReconnect: z.boolean(),
+  })
+  .strict();
+
+const CollaborationDeliveryRejectedEventSchema = z
+  .object({
+    ...CollaborationEventBaseShape,
+    type: z.literal('delivery-rejected'),
+    rejection: CollaborationDeliveryRejectionSchema,
+    duringReconnect: z.boolean(),
+  })
+  .strict();
+
 export const CollaborationEventSchema = z.union([
   CollaborationStatusEventSchema,
   CollaborationMetadataEventSchema,
   CollaborationAwarenessEventSchema,
+  CollaborationDeliveryAcknowledgedEventSchema,
+  CollaborationDeliveryRejectedEventSchema,
   CollaborationErrorEventSchema,
 ]);
 export type CollaborationEvent = z.infer<typeof CollaborationEventSchema>;

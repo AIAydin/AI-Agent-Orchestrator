@@ -23,11 +23,13 @@ import {
   type AppSettings,
   type IpcResult,
 } from '../shared/application/contracts.js';
+import { CommandReadinessRequestSchema } from '../shared/command-readiness/contracts.js';
 import { IntegrityCheckInputSchema } from '../shared/integrity/contracts.js';
 import { ApprovalService } from './approvals/approval-service.js';
 import { AutomaticBackupCoordinator } from './backups/automatic-backup-coordinator.js';
 import { CheckIpcService } from './checks/check-ipc.js';
 import { CheckRuntime } from './checks/check-runtime.js';
+import { CommandReadinessService } from './command-readiness/service.js';
 import { CollaborationIpcService } from './collaboration/ipc.js';
 import { detectAgents, ProjectService } from './projects/project-service.js';
 import { DockerIpcService } from './docker/docker-ipc.js';
@@ -214,6 +216,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     : resolve(process.cwd(), '../../packages/test-agent/dist/cli.js');
   const agentReadiness = new AgentReadinessService(testAgentPath);
   const readiness = new AgentReadinessIpcService(dialog, agentReadiness, store, runDataOperation);
+  const commandReadiness = new CommandReadinessService(store, app.getPath('home'));
   const integrity = new IntegrityService(store);
   const approvals = new ApprovalService(store);
   const extensions = new ExtensionIpcService(app, dialog, store);
@@ -382,6 +385,17 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       );
     });
   });
+  handleWithEvent(
+    IPC_CHANNELS.commandsCheckReadiness,
+    z.tuple([CommandReadinessRequestSchema]),
+    async (event, input) =>
+      await runDataOperation(async () => {
+        const authority = requireIpcWindowAuthority(event, 'Command readiness check');
+        const result = await commandReadiness.check(input);
+        authority.assertCurrent();
+        return result;
+      }),
+  );
   handle(
     IPC_CHANNELS.approvalsList,
     z.tuple([ApprovalListInputSchema]),

@@ -108,8 +108,12 @@ export function App() {
         <SetupWizard
           settings={bootstrap.settings}
           agents={bootstrap.agents}
+          projects={bootstrap.recent}
           checkAgentReadiness={async (input) =>
             unwrap(await window.forgeboard.agents.checkReadiness(input))
+          }
+          checkCommandReadiness={async (input) =>
+            unwrap(await window.forgeboard.commands.checkReadiness(input))
           }
           onComplete={async (settings) => {
             unwrap(

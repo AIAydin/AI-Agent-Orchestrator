@@ -4,6 +4,8 @@ import {
   FileDocumentSchema,
   FileReadInputSchema,
   FileSaveInputSchema,
+  FileSearchInputSchema,
+  FileSearchResultSchema,
   FileTreeInputSchema,
 } from './contracts.js';
 
@@ -72,5 +74,31 @@ describe('project file contracts', () => {
     expect(
       FileDocumentSchema.safeParse({ ...base, contentKind: 'too-large', sha256: null }).success,
     ).toBe(true);
+  });
+
+  it('bounds project-content search inputs and project-relative result metadata', () => {
+    expect(FileSearchInputSchema.parse({ projectId: PROJECT_ID, query: '  needle  ' })).toEqual({
+      projectId: PROJECT_ID,
+      query: 'needle',
+    });
+    for (const query of ['x', 'bad\nquery', 'x'.repeat(257)]) {
+      expect(FileSearchInputSchema.safeParse({ projectId: PROJECT_ID, query }).success).toBe(false);
+    }
+
+    const result = {
+      projectId: PROJECT_ID,
+      query: 'needle',
+      matches: [{ relativePath: 'src/index.ts', line: 3, column: 8, preview: 'const needle = 1;' }],
+      scannedFiles: 4,
+      skippedFiles: 1,
+      truncated: false,
+    };
+    expect(FileSearchResultSchema.parse(result)).toEqual(result);
+    expect(
+      FileSearchResultSchema.safeParse({
+        ...result,
+        matches: [{ ...result.matches[0], relativePath: '../outside.txt' }],
+      }).success,
+    ).toBe(false);
   });
 });

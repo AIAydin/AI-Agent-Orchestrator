@@ -4,10 +4,13 @@ import type { ForgeboardApi } from '../shared/api.js';
 import {
   FILE_IPC_CHANNELS,
   FileDocumentSchema,
+  FileOpenExternalInputSchema,
   FileReadInputSchema,
   FileRevealInputSchema,
   FileRevertInputSchema,
   FileSaveInputSchema,
+  FileSearchInputSchema,
+  FileSearchResultSchema,
   FileTreeInputSchema,
   FileTreeResultSchema,
   fileIpcResultSchema,
@@ -26,6 +29,14 @@ export function createFileApi(invoke: FileIpcInvoker): ForgeboardApi['files'] {
         FILE_IPC_CHANNELS.tree,
         FileTreeInputSchema,
         FileTreeResultSchema,
+        input,
+      ),
+    search: async (input) =>
+      await invokeFile(
+        invoke,
+        FILE_IPC_CHANNELS.search,
+        FileSearchInputSchema,
+        FileSearchResultSchema,
         input,
       ),
     read: async (input) =>
@@ -54,6 +65,15 @@ export function createFileApi(invoke: FileIpcInvoker): ForgeboardApi['files'] {
       ),
     reveal: async (input) => {
       await invokeFile(invoke, FILE_IPC_CHANNELS.reveal, FileRevealInputSchema, z.null(), input);
+    },
+    openExternal: async (input) => {
+      await invokeFile(
+        invoke,
+        FILE_IPC_CHANNELS.openExternal,
+        FileOpenExternalInputSchema,
+        z.null(),
+        input,
+      );
     },
   };
 }

@@ -135,10 +135,39 @@ describe('CollaborationIpcService ownership and approval', () => {
     });
     await expect(invoke('snapshot', other.event)).resolves.toEqual({ ok: true, value: null });
   });
+
+  it('returns the durable delivery receipt only to the owning renderer', async () => {
+    const client = fakeClient();
+    const service = new CollaborationIpcService(
+      { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      { client },
+    );
+    service.registerIpcHandlers();
+    const owner = renderer(1);
+    const other = renderer(2);
+    electron.fromWebContents.mockImplementation((sender) =>
+      sender === owner.sender ? owner.parent : other.parent,
+    );
+    await invoke('join', owner.event, joinInput('owner-token'));
+
+    await expect(invoke('publish', owner.event, { snapshot: safeSnapshot() })).resolves.toEqual({
+      ok: true,
+      value: {
+        deliveryId: '00000000-0000-4000-8000-000000000099',
+        snapshotDigest: 'a'.repeat(64),
+        disposition: 'sent',
+      },
+    });
+    await expect(
+      invoke('publish', other.event, { snapshot: safeSnapshot() }),
+    ).resolves.toMatchObject({ ok: false });
+    expect(client.publish).toHaveBeenCalledOnce();
+  });
 });
 
 function invoke(
-  operation: 'join' | 'leave' | 'snapshot',
+  operation: 'join' | 'leave' | 'snapshot' | 'publish',
   event: unknown,
   ...args: unknown[]
 ): Promise<unknown> {
@@ -206,7 +235,11 @@ function fakeClient() {
       connection = null;
       return null;
     }),
-    publish: vi.fn(() => true),
+    publish: vi.fn(() => ({
+      deliveryId: '00000000-0000-4000-8000-000000000099',
+      snapshotDigest: 'a'.repeat(64),
+      disposition: 'sent' as const,
+    })),
     updateAwareness: vi.fn(() => true),
     onEvent: vi.fn((listener: (event: CollaborationEvent) => void) => {
       listeners.add(listener);

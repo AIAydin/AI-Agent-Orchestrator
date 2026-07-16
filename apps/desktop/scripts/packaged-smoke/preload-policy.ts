@@ -58,9 +58,19 @@ export function sandboxedPreloadPolicyPlugin(): Plugin {
       for (const [fileName, output] of Object.entries(bundle)) {
         if (output.type === 'chunk') {
           const runtimeImports = [...output.imports, ...output.dynamicImports];
-          if (runtimeImports.some((specifier) => specifier !== 'electron')) {
+          const forbiddenImports = runtimeImports.filter((specifier) => specifier !== 'electron');
+          if (forbiddenImports.length > 0) {
+            const importers = output.moduleIds
+              .flatMap((moduleId) => {
+                const imported = this.getModuleInfo(moduleId)?.importedIds ?? [];
+                const forbidden = imported.filter((specifier) =>
+                  forbiddenImports.includes(specifier),
+                );
+                return forbidden.length > 0 ? [`${moduleId} -> ${forbidden.join(', ')}`] : [];
+              })
+              .join('; ');
             throw new Error(
-              `Sandboxed preload chunk ${fileName} has a runtime dependency other than Electron.`,
+              `Sandboxed preload chunk ${fileName} has runtime dependencies other than Electron: ${forbiddenImports.join(', ')}.${importers ? ` Importers: ${importers}.` : ''}`,
             );
           }
           assertSandboxedPreloadBundle(output.code, fileName);

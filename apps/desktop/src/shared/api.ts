@@ -29,6 +29,10 @@ import type {
 } from './application/contracts.js';
 import type { AgentReadinessRequest, AgentReadinessResult } from './readiness/contracts.js';
 import type {
+  CommandReadinessRequest,
+  CommandReadinessResult,
+} from './command-readiness/contracts.js';
+import type {
   ApprovalListInput,
   ApprovalRevocationInput,
   ApprovalView,
@@ -49,6 +53,7 @@ import type {
   CollaborationJoinResult,
   CollaborationMetadataSnapshot,
   CollaborationPublishInput,
+  CollaborationPublishReceipt,
   CollaborationUpdateAwarenessInput,
 } from './collaboration/index.js';
 import type {
@@ -73,11 +78,21 @@ import type {
   GitShippingResultView,
 } from './git/shipping-contracts.js';
 import type {
+  GitReviewNoteCreateInput,
+  GitReviewNoteDeleteInput,
+  GitReviewNotesListInput,
+  GitReviewNotesView,
+  GitReviewNoteUpdateInput,
+} from './git/reviews/contracts.js';
+import type {
   FileDocument,
+  FileOpenExternalInput,
   FileReadInput,
   FileRevealInput,
   FileRevertInput,
   FileSaveInput,
+  FileSearchInput,
+  FileSearchResult,
   FileTreeInput,
   FileTreeResult,
 } from './files/contracts.js';
@@ -126,6 +141,9 @@ export interface ForgeboardApi {
     detect(): Promise<IpcResult<AgentDetection[]>>;
     checkReadiness(input: AgentReadinessRequest): Promise<IpcResult<AgentReadinessResult | null>>;
   };
+  commands: {
+    checkReadiness(input: CommandReadinessRequest): Promise<IpcResult<CommandReadinessResult>>;
+  };
   approvals: {
     list(input: ApprovalListInput): Promise<IpcResult<ApprovalView[]>>;
     revoke(input: ApprovalRevocationInput): Promise<IpcResult<ApprovalView>>;
@@ -163,17 +181,21 @@ export interface ForgeboardApi {
   };
   files: {
     tree(input: FileTreeInput): Promise<FileTreeResult>;
+    search(input: FileSearchInput): Promise<FileSearchResult>;
     read(input: FileReadInput): Promise<FileDocument>;
     save(input: FileSaveInput): Promise<FileDocument>;
     revert(input: FileRevertInput): Promise<FileDocument>;
     reveal(input: FileRevealInput): Promise<void>;
+    openExternal(input: FileOpenExternalInput): Promise<void>;
   };
   collaboration: {
     get(): Promise<IpcResult<CollaborationConnection | null>>;
     snapshot(): Promise<IpcResult<CollaborationMetadataSnapshot | null>>;
     join(input: CollaborationJoinInput): Promise<CollaborationJoinResult>;
     leave(): Promise<IpcResult<CollaborationConnection | null>>;
-    publish(input: CollaborationPublishInput): Promise<IpcResult<boolean>>;
+    publish(
+      input: CollaborationPublishInput,
+    ): Promise<IpcResult<CollaborationPublishReceipt | null>>;
     updateAwareness(input: CollaborationUpdateAwarenessInput): Promise<IpcResult<boolean>>;
     onEvent(listener: (event: CollaborationEvent) => void): () => void;
   };
@@ -243,6 +265,12 @@ export interface ForgeboardApi {
     confirmShipping(
       input: GitPlanConfirmationInput,
     ): Promise<IpcResult<GitShippingResultView | null>>;
+    reviewNotes: {
+      list(input: GitReviewNotesListInput): Promise<IpcResult<GitReviewNotesView>>;
+      create(input: GitReviewNoteCreateInput): Promise<IpcResult<GitReviewNotesView>>;
+      update(input: GitReviewNoteUpdateInput): Promise<IpcResult<GitReviewNotesView>>;
+      delete(input: GitReviewNoteDeleteInput): Promise<IpcResult<GitReviewNotesView>>;
+    };
   };
   privacy: {
     export(): Promise<IpcResult<string | null>>;

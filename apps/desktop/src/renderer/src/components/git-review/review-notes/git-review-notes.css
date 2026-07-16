@@ -1,0 +1,153 @@
+.git-line-comment-button {
+  width: 100%;
+  min-width: 25px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+.git-line-comment-button:hover,
+.git-line-comment-button:focus-visible,
+.git-line-comment-button.has-notes {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+.git-review-thread-row > td {
+  padding: 7px 10px 8px !important;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+.git-line-review-thread,
+.git-stale-review-notes > div {
+  display: grid;
+  gap: 7px;
+}
+.git-review-note {
+  display: grid;
+  gap: 5px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  white-space: normal;
+}
+.git-review-note.revision-request {
+  border-left-color: var(--orange);
+}
+.git-review-note.resolved {
+  opacity: 0.68;
+}
+.git-review-note > header,
+.git-review-note > footer,
+.git-review-note-composer > span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.git-review-note > header {
+  justify-content: space-between;
+}
+.git-review-note > header strong {
+  color: var(--text);
+  font-size: 9px;
+}
+.git-review-note > header span,
+.git-review-note-anchor {
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.git-review-note > p,
+.git-review-note-composer > p,
+.git-stale-review-notes > p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 9px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.git-review-note button,
+.git-review-note-composer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 8px;
+}
+.git-review-note button:hover:not(:disabled),
+.git-review-note-composer button:hover:not(:disabled) {
+  color: var(--text);
+}
+.git-review-note .danger-text {
+  color: var(--red);
+}
+.git-review-note-editor,
+.git-review-note-composer,
+.git-review-note-composer label {
+  display: grid;
+  gap: 5px;
+}
+.git-review-note-editor > span,
+.git-review-note-composer label > span {
+  color: var(--text-faint);
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.git-review-note textarea,
+.git-review-note-composer textarea {
+  width: 100%;
+  min-height: 58px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.git-review-note-composer {
+  padding: 7px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 6px;
+}
+.git-review-note-composer .revision-request {
+  border-color: color-mix(in srgb, var(--orange) 55%, var(--line));
+  color: var(--orange);
+}
+.git-stale-review-notes {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-subtle);
+}
+.git-stale-review-notes > summary {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 9px;
+}
+.git-stale-review-notes > p {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 7px 0;
+}
+.git-review-note-error {
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--red);
+  background: var(--red-soft);
+  font-size: 9px;
+}

@@ -111,7 +111,7 @@
 }
 
 .project-file-browser-summary span:not(:first-child) {
-  color: var(--amber);
+  color: var(--yellow);
 }
 
 .project-file-browser-error {
@@ -193,8 +193,8 @@
 .project-file-row em.policy-ignored,
 .project-file-row em.policy-sensitive,
 .project-file-row em.policy-symlink {
-  color: var(--amber);
-  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 14%, transparent);
 }
 
 .project-file-row small {

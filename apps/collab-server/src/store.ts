@@ -27,6 +27,7 @@ const AUDIT_DETAIL_KEYS = new Set([
   'expiresAt',
   'maxUses',
   'connections',
+  'deliveryId',
 ]);
 
 export type AuditOutcome = 'allowed' | 'denied' | 'failed';

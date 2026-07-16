@@ -112,12 +112,50 @@ describe('collaboration metadata privacy allowlist', () => {
     document.destroy();
   });
 
+  it("rejects reviewer takeover or deletion of another author's feedback", () => {
+    const document = createValidDocument();
+    document.getMap('comments').set('comment-1', {
+      id: 'comment-1',
+      nodeId: 'node-1',
+      authorId: 'reviewer-2',
+      body: 'Original feedback',
+      createdAt: NOW,
+    });
+    const takeover = updateFrom(document, (candidate) => {
+      candidate.getMap('comments').set('comment-1', {
+        id: 'comment-1',
+        nodeId: 'node-1',
+        authorId: 'reviewer-1',
+        body: 'Hijacked feedback',
+        createdAt: NOW,
+      });
+    });
+    const deletion = updateFrom(document, (candidate) => {
+      candidate.getMap('comments').delete('comment-1');
+    });
+
+    for (const update of [takeover, deletion]) {
+      expect(() =>
+        validateCollaborationUpdate({
+          document,
+          update,
+          role: 'reviewer',
+          subject: 'reviewer-1',
+          maxDocumentBytes: 100_000,
+        }),
+      ).toThrow('Reviewers can only modify their own review data.');
+    }
+    document.destroy();
+  });
+
   it('validates awareness identity and rejects arbitrary presence payloads before broadcast', () => {
     const context: CollaborationContext = {
       roomId: 'room-1',
       subject: 'editor-1',
       role: 'editor',
       accessTokenId: 'f5f1c46f-f4ee-483b-a165-f66c408b6573',
+      tokenVersion: 0,
+      accessTokenExpiresAt: 1_999_999_999,
       ipHash: 'a'.repeat(24),
     };
     const document = new Y.Doc();

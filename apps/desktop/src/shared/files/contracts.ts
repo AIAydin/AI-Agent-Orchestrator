@@ -3,13 +3,17 @@ import { z } from 'zod';
 
 export const FILE_TEXT_MAX_BYTES = 4 * 1024 * 1024;
 export const FILE_TREE_MAX_ENTRIES = 1_000;
+export const FILE_SEARCH_MAX_QUERY_CHARACTERS = 256;
+export const FILE_SEARCH_MAX_RESULTS = 200;
 
 export const FILE_IPC_CHANNELS = Object.freeze({
   tree: 'files:tree',
+  search: 'files:search',
   read: 'files:read',
   save: 'files:save',
   revert: 'files:revert',
   reveal: 'files:reveal',
+  openExternal: 'files:open-external',
 });
 
 export const ProjectFileIdSchema = z.string().uuid();
@@ -54,6 +58,44 @@ export type FileRevertInput = z.infer<typeof FileRevertInputSchema>;
 
 export const FileRevealInputSchema = FileReadInputSchema;
 export type FileRevealInput = z.infer<typeof FileRevealInputSchema>;
+
+export const FileOpenExternalInputSchema = FileReadInputSchema;
+export type FileOpenExternalInput = z.infer<typeof FileOpenExternalInputSchema>;
+
+export const FileSearchInputSchema = z
+  .object({
+    projectId: ProjectFileIdSchema,
+    query: z
+      .string()
+      .trim()
+      .min(2)
+      .max(FILE_SEARCH_MAX_QUERY_CHARACTERS)
+      .refine(hasNoControlCharacters, 'Search text contains control characters'),
+  })
+  .strict();
+export type FileSearchInput = z.infer<typeof FileSearchInputSchema>;
+
+export const FileSearchMatchSchema = z
+  .object({
+    relativePath: CanonicalFilePathSchema,
+    line: z.number().int().positive(),
+    column: z.number().int().positive(),
+    preview: z.string().max(500),
+  })
+  .strict();
+export type FileSearchMatch = z.infer<typeof FileSearchMatchSchema>;
+
+export const FileSearchResultSchema = z
+  .object({
+    projectId: ProjectFileIdSchema,
+    query: z.string().min(2).max(FILE_SEARCH_MAX_QUERY_CHARACTERS),
+    matches: z.array(FileSearchMatchSchema).max(FILE_SEARCH_MAX_RESULTS),
+    scannedFiles: z.number().int().nonnegative(),
+    skippedFiles: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+  })
+  .strict();
+export type FileSearchResult = z.infer<typeof FileSearchResultSchema>;
 
 export const FileEntryPolicySchema = z
   .object({
@@ -173,4 +215,12 @@ export function fileIpcResultSchema<Schema extends z.ZodTypeAny>(
     z.object({ ok: z.literal(true), value: valueSchema }).strict(),
     z.object({ ok: z.literal(false), error: FileIpcErrorSchema }).strict(),
   ]) as unknown as z.ZodType<FileIpcResult<z.output<Schema>>, z.ZodTypeDef, unknown>;
+}
+
+function hasNoControlCharacters(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== undefined && (codePoint <= 31 || codePoint === 127)) return false;
+  }
+  return true;
 }

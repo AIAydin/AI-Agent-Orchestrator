@@ -322,7 +322,7 @@ describe('LocalStore persistence and recovery', () => {
     expect(upgraded.loadCanvas(PROJECT_ID)).toEqual(sanitizeCanvasDocument(canvas()));
     const inspector = new DatabaseSync(databasePath, { readOnly: true });
     expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({
-      user_version: 9,
+      user_version: 10,
     });
     expect(
       inspector

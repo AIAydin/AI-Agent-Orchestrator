@@ -12,6 +12,8 @@ import {
 import type {
   FileDocument,
   FileReadInput,
+  FileSearchInput,
+  FileSearchResult,
   FileTreeEntry,
   FileTreeInput,
   FileTreeResult,
@@ -154,13 +156,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     Object.defineProperty(window, 'forgeboard', {
       configurable: true,
       value: {
-        files: {
-          tree: vi.fn(),
-          read,
-          save: vi.fn(),
-          revert: vi.fn(),
-          reveal: vi.fn(),
-        },
+        files: fileApi({ read }),
       },
     });
     const selectedNode = fileNode({ locked: true });
@@ -191,7 +187,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     Object.defineProperty(window, 'forgeboard', {
       configurable: true,
       value: {
-        files: { tree, read, save: vi.fn(), revert: vi.fn(), reveal: vi.fn() },
+        files: fileApi({ tree, read }),
       },
     });
     const selectedNode = unlinkedFileNode();
@@ -239,7 +235,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     Object.defineProperty(window, 'forgeboard', {
       configurable: true,
       value: {
-        files: { tree, read, save: vi.fn(), revert: vi.fn(), reveal: vi.fn() },
+        files: fileApi({ tree, read }),
       },
     });
     const selectedNode = fileNode({
@@ -269,6 +265,49 @@ describe('WorkspaceInspector Custom permissions', () => {
     });
     expect(JSON.stringify(tree.mock.calls)).not.toContain(project.path);
     expect(JSON.stringify(read.mock.calls)).not.toContain(project.path);
+  });
+
+  it('opens project-content matches in additional tabs without changing the File node reference', async () => {
+    const tree = vi.fn((input: FileTreeInput) =>
+      Promise.resolve(
+        input.directory === '.'
+          ? treeResult('.', [treeDirectory('src')])
+          : treeResult('src', [treeEntry('src/other.ts')]),
+      ),
+    );
+    const read = vi.fn((input: FileReadInput) => Promise.resolve(fileDocument(input.relativePath)));
+    const search = vi.fn((input: FileSearchInput) =>
+      Promise.resolve({
+        ...emptySearch(input.query),
+        scannedFiles: 2,
+        matches: [
+          {
+            relativePath: 'src/other.ts',
+            line: 4,
+            column: 2,
+            preview: ' needle();',
+          },
+        ],
+      }),
+    );
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: { files: fileApi({ tree, search, read }) },
+    });
+    const inspectorProps = props(settings(), fileNode({}));
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search text in project files' }), {
+      target: { value: 'needle' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Search contents' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open src/other.ts at 4:2' }));
+
+    await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(2));
+    expect(screen.getByRole('tab', { name: 'other.ts' })).toHaveProperty('ariaSelected', 'true');
+    expect(inspectorProps.onUpdateSelected).not.toHaveBeenCalled();
+    expect(read).toHaveBeenCalledWith({ projectId: project.id, relativePath: 'src/other.ts' });
   });
 });
 
@@ -358,6 +397,37 @@ function treeResult(directory: string, entries: FileTreeEntry[]): FileTreeResult
     directory,
     entries,
     truncated: false,
+  };
+}
+
+function emptySearch(query: string): FileSearchResult {
+  return {
+    projectId: project.id,
+    query,
+    matches: [],
+    scannedFiles: 0,
+    skippedFiles: 0,
+    truncated: false,
+  };
+}
+
+function fileApi({
+  tree = vi.fn(),
+  search = vi.fn((input: FileSearchInput) => Promise.resolve(emptySearch(input.query))),
+  read,
+}: {
+  readonly tree?: ReturnType<typeof vi.fn>;
+  readonly search?: ReturnType<typeof vi.fn>;
+  readonly read: ReturnType<typeof vi.fn>;
+}) {
+  return {
+    tree,
+    search,
+    read,
+    save: vi.fn(),
+    revert: vi.fn(),
+    reveal: vi.fn(),
+    openExternal: vi.fn(),
   };
 }
 

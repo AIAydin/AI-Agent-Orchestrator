@@ -30,7 +30,16 @@ vi.mock('electron', () => ({
 }));
 
 import type { AppSettings, Project } from '../../shared/application/contracts.js';
-import { IPC_CHANNELS } from '../../shared/application/contracts.js';
+import { IPC_CHANNELS, ipcResultSchema } from '../../shared/application/contracts.js';
+import type { GitTargetInput } from '../../shared/git/contracts.js';
+import {
+  GIT_REVIEW_NOTE_IPC_CHANNELS,
+  GitReviewNotesViewSchema,
+  StoredGitReviewNoteSchema,
+  type GitReviewNoteDeleteInput,
+  type GitReviewNoteUpdateInput,
+  type StoredGitReviewNote,
+} from '../../shared/git/reviews/contracts.js';
 import { GitIpcService } from './git-ipc.js';
 
 interface RepositoryFixture {
@@ -288,6 +297,108 @@ describe('GitIpcService with a real repository', () => {
     await harness.service.dispose();
   });
 
+  it('keeps revision requests target-bound, non-mutating, and stale instead of remapping them', async () => {
+    const fixture = await createRepository();
+    const harness = createHarness(fixture);
+    const target = primaryTarget(harness);
+    const event = liveEvent(45);
+    harness.service.registerIpcHandlers();
+    const modified = fixture.originalStory.replace('line 2\n', '');
+    await writeFile(join(fixture.repository, 'story.txt'), modified);
+    const headBefore = await runGit(fixture.repository, ['rev-parse', 'HEAD']);
+    const review = await harness.service.review(target);
+    const hunk = review.unstaged.files[0]?.hunks[0];
+    const deletion = hunk?.lines.find((line) => line.kind === 'deletion');
+    if (hunk === undefined || deletion?.oldLine === null || deletion?.oldLine === undefined) {
+      throw new Error('Fixture is missing its deleted line.');
+    }
+
+    const listed = ipcResultSchema(GitReviewNotesViewSchema).parse(
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, { target }),
+    );
+    if (!listed.ok) throw new Error(listed.error.message);
+    const revision = listed.value.revisions.find((candidate) => candidate.area === 'unstaged');
+    if (revision === undefined) throw new Error('Fixture is missing its unstaged revision.');
+
+    const body = 'Restore the deleted boundary check.';
+    const created = ipcResultSchema(GitReviewNotesViewSchema).parse(
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.create)(event, {
+        target,
+        kind: 'revision-request',
+        anchor: {
+          area: 'unstaged',
+          revisionId: revision.revisionId,
+          path: 'story.txt',
+          hunkId: hunk.id,
+          side: 'old',
+          line: deletion.oldLine,
+        },
+        body,
+      }),
+    );
+    expect(created).toMatchObject({
+      ok: true,
+      value: {
+        notes: [
+          {
+            kind: 'revision-request',
+            status: 'open',
+            anchorState: 'current',
+            anchor: { path: 'story.txt', side: 'old', line: deletion.oldLine },
+          },
+        ],
+      },
+    });
+    expect(await readFile(join(fixture.repository, 'story.txt'), 'utf8')).toBe(modified);
+    expect(await runGit(fixture.repository, ['rev-parse', 'HEAD'])).toBe(headBefore);
+    expect(await runGit(fixture.repository, ['diff', '--cached', '--name-only'])).toBe('');
+    expect(harness.showMessageBox).not.toHaveBeenCalled();
+    expect(harness.appendAudit).toHaveBeenCalledWith(
+      'git-review',
+      'record-revision-request',
+      'allowed',
+      expect.objectContaining({ projectId: harness.project().id, targetKind: 'primary' }),
+    );
+    expect(JSON.stringify(harness.appendAudit.mock.calls)).not.toContain(body);
+
+    await writeFile(
+      join(fixture.repository, 'story.txt'),
+      modified.replace('line 3\n', 'line three\n'),
+    );
+    const stale = ipcResultSchema(GitReviewNotesViewSchema).parse(
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, { target }),
+    );
+    expect(stale).toMatchObject({
+      ok: true,
+      value: { notes: [{ anchorState: 'stale-review', body }] },
+    });
+
+    const rejected = await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.create)(event, {
+      target,
+      kind: 'comment',
+      anchor: {
+        area: 'unstaged',
+        revisionId: revision.revisionId,
+        path: '../outside.txt',
+        hunkId: hunk.id,
+        side: 'old',
+        line: deletion.oldLine,
+      },
+      body: 'This must never be stored.',
+    });
+    expect(rejected).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    const unchanged = ipcResultSchema(GitReviewNotesViewSchema).parse(
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, { target }),
+    );
+    expect(unchanged).toMatchObject({ ok: true, value: { notes: [{ body }] } });
+
+    const wrongProject = await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, {
+      target: { kind: 'primary', projectId: randomUUID() },
+    });
+    expect(wrongProject).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    await harness.service.dispose();
+  });
+
   it('cancels an active Git filter in native UI before review can execute it', async () => {
     const fixture = await createRepository();
     const sentinel = await configureCleanFilter(fixture, 'git-review-filter');
@@ -355,6 +466,7 @@ function createHarness(
   let project = projectFor(fixture.repository);
   const remainingResponses = [...responses];
   const appendAudit = vi.fn();
+  const reviewNotes: StoredGitReviewNote[] = [];
   const showMessageBox = vi.fn(() => {
     options.onShow?.();
     return Promise.resolve({
@@ -367,6 +479,49 @@ function createHarness(
     getProject: (projectId: string) => (project.id === projectId ? project : undefined),
     getProjectByPath: (projectPath: string) => (project.path === projectPath ? project : undefined),
     getRun: () => undefined,
+    createReviewNote: (note: StoredGitReviewNote) => {
+      const parsed = StoredGitReviewNoteSchema.parse(note);
+      reviewNotes.unshift(parsed);
+      return parsed;
+    },
+    listReviewNotes: (target: GitTargetInput, limit = 500) => {
+      const matching = reviewNotes.filter((note) => sameReviewTarget(note.target, target));
+      return { notes: matching.slice(0, limit), truncated: matching.length > limit };
+    },
+    updateReviewNote: (input: GitReviewNoteUpdateInput, updatedAt = new Date()) => {
+      const index = reviewNoteIndex(reviewNotes, input.target, input.noteId);
+      const existing = reviewNotes[index];
+      if (existing === undefined) throw new Error('The selected review note no longer exists.');
+      if (existing.updatedAt !== input.expectedUpdatedAt) {
+        throw new Error('The review note changed in another window. Refresh before editing it.');
+      }
+      const status = input.status ?? existing.status;
+      const updatedAtText = updatedAt.toISOString();
+      const next = StoredGitReviewNoteSchema.parse({
+        ...existing,
+        ...(input.body === undefined ? {} : { body: input.body }),
+        status,
+        updatedAt: updatedAtText,
+        resolvedAt:
+          status === 'resolved'
+            ? existing.status === 'resolved'
+              ? existing.resolvedAt
+              : updatedAtText
+            : null,
+      });
+      reviewNotes.splice(index, 1, next);
+      return next;
+    },
+    deleteReviewNote: (input: GitReviewNoteDeleteInput) => {
+      const index = reviewNoteIndex(reviewNotes, input.target, input.noteId);
+      const existing = reviewNotes[index];
+      if (existing === undefined) throw new Error('The selected review note no longer exists.');
+      if (existing.updatedAt !== input.expectedUpdatedAt) {
+        throw new Error('The review note changed in another window. Refresh before deleting it.');
+      }
+      reviewNotes.splice(index, 1);
+      return existing;
+    },
     saveProject: (nextProject: Project) => {
       project = nextProject;
       return project;
@@ -385,6 +540,22 @@ function createHarness(
     options.resolveWindow ?? (() => window),
   );
   return { service, repositories, appendAudit, showMessageBox, project: () => project };
+}
+
+function reviewNoteIndex(
+  notes: readonly StoredGitReviewNote[],
+  target: GitTargetInput,
+  noteId: string,
+): number {
+  return notes.findIndex((note) => note.id === noteId && sameReviewTarget(note.target, target));
+}
+
+function sameReviewTarget(left: GitTargetInput, right: GitTargetInput): boolean {
+  return (
+    left.kind === right.kind &&
+    left.projectId === right.projectId &&
+    (left.kind === 'primary' || (right.kind === 'agent-worktree' && left.runId === right.runId))
+  );
 }
 
 async function configureCleanFilter(fixture: RepositoryFixture, driver: string): Promise<string> {

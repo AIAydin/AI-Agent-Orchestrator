@@ -4,15 +4,18 @@ import { ChevronRight, File, Folder, RefreshCw, Search, ShieldAlert } from 'luci
 import {
   FileDocumentSchema,
   FileDomainErrorCodeSchema,
+  FileTreeResultSchema,
   type FileDocument,
   type FileTreeEntry,
 } from '../../../../../shared/files/contracts.js';
 import {
   fileBrowserBreadcrumbs,
+  parentDirectory,
   policyLabel,
   QUICK_OPEN_VISIBLE_RESULTS,
   visibleTreeEntries,
 } from './tree-model.js';
+import { ProjectContentSearch } from '../search/ProjectContentSearch.js';
 import {
   fileBrowserError,
   useProjectFileBrowser,
@@ -24,12 +27,14 @@ export interface ProjectFileSelection {
   readonly projectId: string;
   readonly relativePath: string;
   readonly document: FileDocument;
+  readonly position?: { readonly line: number; readonly column: number };
 }
 
 export interface ProjectFileBrowserProps {
   readonly projectId: string;
   readonly operations: ProjectFileBrowserOperations;
   readonly selectedRelativePath?: string;
+  readonly revealRelativePath?: string;
   readonly assignmentDisabled?: boolean;
   readonly onSelect: (selection: ProjectFileSelection) => void;
   readonly onCancel?: () => void;
@@ -41,6 +46,7 @@ export function ProjectFileBrowser({
   projectId,
   operations,
   selectedRelativePath,
+  revealRelativePath,
   assignmentDisabled = false,
   onSelect,
   onCancel,
@@ -124,6 +130,54 @@ export function ProjectFileBrowser({
     }
   };
 
+  useEffect(() => {
+    if (revealRelativePath === undefined || browser.status === 'loading') return;
+    const directory = parentDirectory(revealRelativePath);
+    setCurrentDirectory(directory);
+    setQuery('');
+    const entry = browser.entries.find(
+      (candidateEntry) => candidateEntry.relativePath === revealRelativePath,
+    );
+    if (entry !== undefined) {
+      void inspectEntry(entry);
+      return;
+    }
+
+    const requestVersion = ++requestVersionRef.current;
+    void operations
+      .tree({ projectId, directory })
+      .then((rawResult) => {
+        if (requestVersionRef.current !== requestVersion) return;
+        const result = FileTreeResultSchema.parse(rawResult);
+        if (result.projectId !== projectId || result.directory !== directory) {
+          throw new Error('The file tree returned data for a different project location.');
+        }
+        const directEntry = result.entries.find(
+          (candidateEntry) => candidateEntry.relativePath === revealRelativePath,
+        );
+        if (directEntry !== undefined) {
+          void inspectEntry(directEntry);
+          return;
+        }
+        setCandidate(placeholderFileEntry(revealRelativePath));
+        setCandidateDocument(null);
+        setCandidateStatus('missing');
+        setCandidateMessage('The file is no longer listed in its project folder.');
+      })
+      .catch((cause: unknown) => {
+        if (requestVersionRef.current !== requestVersion) return;
+        const parsedCode = FileDomainErrorCodeSchema.safeParse(
+          (cause as { code?: unknown } | null)?.code,
+        );
+        setCandidate(placeholderFileEntry(revealRelativePath));
+        setCandidateDocument(null);
+        setCandidateStatus(
+          parsedCode.success && parsedCode.data === 'FILE_NOT_FOUND' ? 'missing' : 'error',
+        );
+        setCandidateMessage(fileBrowserError(cause, 'Forgeboard could not reveal this file.'));
+      });
+  }, [browser.status, revealRelativePath]);
+
   const firstQuickOpenFile = shownEntries.find(
     (entry) => entry.kind === 'file' && entry.canOpen && entry.policy.status === 'normal',
   );
@@ -163,6 +217,19 @@ export function ProjectFileBrowser({
           }}
         />
       </label>
+
+      <ProjectContentSearch
+        projectId={projectId}
+        operations={operations}
+        onOpen={(selection) =>
+          onSelect({
+            projectId: selection.projectId,
+            relativePath: selection.relativePath,
+            document: selection.document,
+            position: { line: selection.line, column: selection.column },
+          })
+        }
+      />
 
       <nav className="project-file-breadcrumbs" aria-label="Project file directory">
         {breadcrumbs.map((breadcrumb, index) => (
@@ -316,6 +383,18 @@ function CandidateDetails({
       ) : null}
     </section>
   );
+}
+
+function placeholderFileEntry(relativePath: string): FileTreeEntry {
+  return {
+    name: relativePath.split('/').at(-1) ?? relativePath,
+    relativePath,
+    kind: 'file',
+    sizeBytes: null,
+    modifiedAt: null,
+    policy: { status: 'normal', reason: null },
+    canOpen: true,
+  };
 }
 
 function formatBytes(bytes: number): string {

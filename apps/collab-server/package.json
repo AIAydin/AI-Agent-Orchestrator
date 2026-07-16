@@ -12,6 +12,7 @@
     "test:integration": "vitest --root ../.. --config config/tooling/vitest.config.ts run --project integration apps/collab-server"
   },
   "dependencies": {
+    "@forgeboard/core": "workspace:*",
     "@hocuspocus/server": "3.4.4",
     "y-protocols": "1.0.7",
     "yjs": "catalog:",

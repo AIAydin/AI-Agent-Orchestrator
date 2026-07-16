@@ -3,8 +3,9 @@ import { useState } from 'react';
 
 import type { GitDiffHunkView } from '../../../../../shared/git/contracts.js';
 import type { GitDiffDisplayArea, GitDiffDisplayFile } from '../git-review-model.js';
+import type { GitReviewNotesController } from '../review-notes/useGitReviewNotes.js';
 import { fileDiffStats } from '../git-review-model.js';
-import { GitDiffRows, type GitDiffViewMode } from './GitDiffRows.js';
+import { GitDiffRows, type GitDiffRowsReview, type GitDiffViewMode } from './GitDiffRows.js';
 import { GitDiffToolbar } from './GitDiffToolbar.js';
 
 interface GitDiffNavigation {
@@ -19,6 +20,7 @@ interface GitDiffViewerProps {
   busy: boolean;
   readOnly?: boolean;
   navigation?: GitDiffNavigation;
+  reviewNotes?: GitReviewNotesController;
   onStageHunk: (hunkId: string) => void;
   onUnstageHunk: (hunkId: string) => void;
   onPrepareDiscard: (hunkId: string) => void;
@@ -29,6 +31,7 @@ export function GitDiffViewer({
   busy,
   readOnly = false,
   navigation,
+  reviewNotes,
   onStageHunk,
   onUnstageHunk,
   onPrepareDiscard,
@@ -49,6 +52,29 @@ export function GitDiffViewer({
   const diff = file.diff;
   const stats = fileDiffStats(file);
   const hasTextDiff = diff !== undefined && !diff.binary && diff.hunks.length > 0;
+  const revision = reviewNotes?.context?.revisions.find(
+    (candidate) => candidate.area === file.area,
+  );
+  const currentNotes =
+    reviewNotes?.context?.notes.filter(
+      (note) =>
+        note.anchorState === 'current' &&
+        note.anchor.area === file.area &&
+        note.anchor.path === file.path,
+    ) ?? [];
+  const diffReview: GitDiffRowsReview | undefined =
+    reviewNotes === undefined || revision === undefined
+      ? undefined
+      : {
+          revision,
+          notes: currentNotes,
+          actions: {
+            busy: reviewNotes.busy,
+            onCreate: reviewNotes.create,
+            onUpdate: reviewNotes.update,
+            onDelete: reviewNotes.remove,
+          },
+        };
   return (
     <section className="git-diff-viewer" aria-label={`Diff for ${file.path}`}>
       <header>
@@ -124,6 +150,7 @@ export function GitDiffViewer({
               readOnly={readOnly}
               viewMode={viewMode}
               showWhitespace={showWhitespace}
+              review={diffReview}
               onStage={() => onStageHunk(hunk.id)}
               onUnstage={() => onUnstageHunk(hunk.id)}
               onDiscard={() => onPrepareDiscard(hunk.id)}
@@ -143,6 +170,7 @@ function GitDiffHunk({
   readOnly,
   viewMode,
   showWhitespace,
+  review,
   onStage,
   onUnstage,
   onDiscard,
@@ -154,6 +182,7 @@ function GitDiffHunk({
   readOnly: boolean;
   viewMode: GitDiffViewMode;
   showWhitespace: boolean;
+  review: GitDiffRowsReview | undefined;
   onStage: () => void;
   onUnstage: () => void;
   onDiscard: () => void;
@@ -187,7 +216,13 @@ function GitDiffHunk({
           )}
         </span>
       </header>
-      <GitDiffRows hunk={hunk} path={path} viewMode={viewMode} showWhitespace={showWhitespace} />
+      <GitDiffRows
+        hunk={hunk}
+        path={path}
+        viewMode={viewMode}
+        showWhitespace={showWhitespace}
+        {...(review === undefined ? {} : { review })}
+      />
     </article>
   );
 }

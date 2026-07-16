@@ -14,6 +14,7 @@ import type {
   GitShippingPlanView,
   GitShippingResultView,
 } from '../../../../shared/git/shipping-contracts.js';
+import type { GitReviewNotesView } from '../../../../shared/git/reviews/contracts.js';
 import { GitReviewDialog } from './GitReviewDialog.js';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
@@ -29,6 +30,11 @@ const nextHeadOid = 'd'.repeat(40);
 const baseOid = 'e'.repeat(40);
 const agentHeadOid = 'f'.repeat(40);
 const committedHunkId = '9'.repeat(20);
+const reviewNoteId = '77777777-7777-4777-8777-777777777777';
+const stagedRevisionId = '6'.repeat(64);
+const unstagedRevisionId = '7'.repeat(64);
+const baseRevisionId = '8'.repeat(64);
+const staleRevisionId = '5'.repeat(64);
 const primaryTarget = { kind: 'primary' as const, projectId };
 const worktreeTarget = { kind: 'agent-worktree' as const, projectId, runId };
 
@@ -175,6 +181,18 @@ const confirmCommitMock = vi.fn(() =>
 );
 const prepareShippingMock = vi.fn(() => Promise.resolve(success(shippingPlan)));
 const confirmShippingMock = vi.fn(() => Promise.resolve(success(shippingResult)));
+const reviewNotesListMock = vi.fn((input: { readonly target: GitTargetInput }) =>
+  Promise.resolve(success(reviewNotesFor(input.target))),
+);
+const reviewNoteCreateMock = vi.fn((input: { readonly target: GitTargetInput }) =>
+  Promise.resolve(success(reviewNotesFor(input.target))),
+);
+const reviewNoteUpdateMock = vi.fn((input: { readonly target: GitTargetInput }) =>
+  Promise.resolve(success(reviewNotesFor(input.target))),
+);
+const reviewNoteDeleteMock = vi.fn((input: { readonly target: GitTargetInput }) =>
+  Promise.resolve(success(reviewNotesFor(input.target))),
+);
 
 beforeEach(() => {
   for (const mock of [
@@ -189,6 +207,10 @@ beforeEach(() => {
     confirmCommitMock,
     prepareShippingMock,
     confirmShippingMock,
+    reviewNotesListMock,
+    reviewNoteCreateMock,
+    reviewNoteUpdateMock,
+    reviewNoteDeleteMock,
   ]) {
     mock.mockClear();
   }
@@ -207,6 +229,12 @@ beforeEach(() => {
         confirmCommit: confirmCommitMock,
         prepareShipping: prepareShippingMock,
         confirmShipping: confirmShippingMock,
+        reviewNotes: {
+          list: reviewNotesListMock,
+          create: reviewNoteCreateMock,
+          update: reviewNoteUpdateMock,
+          delete: reviewNoteDeleteMock,
+        },
       },
     },
   });
@@ -257,6 +285,43 @@ describe('GitReviewDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     rendered.unmount();
     expect(document.activeElement).toBe(origin);
+  });
+
+  it('keeps feedback for disappeared files reachable at the dialog level', async () => {
+    reviewNotesListMock.mockResolvedValueOnce(
+      success({
+        ...reviewNotesFor(primaryTarget),
+        notes: [
+          {
+            id: reviewNoteId,
+            projectId,
+            target: primaryTarget,
+            kind: 'revision-request',
+            anchor: {
+              area: 'unstaged',
+              revisionId: staleRevisionId,
+              path: 'src/deleted.ts',
+              hunkId: unstagedHunkId,
+              side: 'old',
+              line: 1,
+              lineContentSha256: '4'.repeat(64),
+            },
+            body: 'Restore the deleted guard.',
+            status: 'open',
+            createdAt: '2026-07-14T18:00:00.000Z',
+            updatedAt: '2026-07-14T18:00:00.000Z',
+            resolvedAt: null,
+            anchorState: 'stale-review',
+          },
+        ],
+      }),
+    );
+
+    render(<GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByText('1 note from an earlier diff'));
+    expect(screen.getByText(/src\/deleted\.ts · old line 1 · review/)).toBeTruthy();
+    expect(screen.getByText('Restore the deleted guard.')).toBeTruthy();
   });
 
   it('requires renderer disclosure before invoking native discard confirmation', async () => {
@@ -465,6 +530,38 @@ function diffFile(path: string, id: string, addition: string) {
         ],
       },
     ],
+  };
+}
+
+function reviewNotesFor(target: GitTargetInput): GitReviewNotesView {
+  return {
+    target,
+    revisions: [
+      ...(target.kind === 'agent-worktree'
+        ? [
+            {
+              area: 'base' as const,
+              revisionId: baseRevisionId,
+              baseCommit: baseOid,
+              headCommit: agentHeadOid,
+            },
+          ]
+        : []),
+      {
+        area: 'staged',
+        revisionId: stagedRevisionId,
+        baseCommit: target.kind === 'agent-worktree' ? baseOid : headOid,
+        headCommit: target.kind === 'agent-worktree' ? agentHeadOid : headOid,
+      },
+      {
+        area: 'unstaged',
+        revisionId: unstagedRevisionId,
+        baseCommit: target.kind === 'agent-worktree' ? baseOid : headOid,
+        headCommit: target.kind === 'agent-worktree' ? agentHeadOid : headOid,
+      },
+    ],
+    notes: [],
+    truncated: false,
   };
 }
 

@@ -40,6 +40,7 @@ describe('FileIpcService', () => {
   let outsideRoot: string;
   let service: FileIpcService;
   let showItemInFolder: ReturnType<typeof vi.fn>;
+  let openPath: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     electronMock.handlers.clear();
@@ -51,6 +52,7 @@ describe('FileIpcService', () => {
     await mkdir(projectRoot);
     await mkdir(outsideRoot);
     showItemInFolder = vi.fn();
+    openPath = vi.fn().mockResolvedValue('');
     service = new FileIpcService(
       new ProjectFileService({
         getProject: (projectId) =>
@@ -58,7 +60,7 @@ describe('FileIpcService', () => {
             ? { id: PROJECT_ID, path: projectRoot, missing: false }
             : undefined,
       }),
-      { showItemInFolder },
+      { showItemInFolder, openPath },
     );
     service.registerIpcHandlers();
   });
@@ -144,6 +146,45 @@ describe('FileIpcService', () => {
     expect(showItemInFolder).toHaveBeenCalledWith(target);
     expect(JSON.stringify(result)).not.toContain(projectRoot);
     expect(JSON.stringify(result)).not.toContain(target);
+  });
+
+  it('searches through the validated project service and opens externally without disclosing paths', async () => {
+    const target = path.join(projectRoot, 'note.txt');
+    await writeFile(target, 'find this needle safely\n');
+
+    const searched = await invoke(FILE_IPC_CHANNELS.search, liveEvent(), {
+      projectId: PROJECT_ID,
+      query: 'needle',
+    });
+    expect(searched).toMatchObject({
+      ok: true,
+      value: {
+        matches: [{ relativePath: 'note.txt', line: 1, column: 11 }],
+      },
+    });
+    expect(JSON.stringify(searched)).not.toContain(projectRoot);
+
+    const opened = await invoke(FILE_IPC_CHANNELS.openExternal, liveEvent(), {
+      projectId: PROJECT_ID,
+      relativePath: 'note.txt',
+    });
+    expect(opened).toEqual({ ok: true, value: null });
+    expect(openPath).toHaveBeenCalledWith(target);
+    expect(JSON.stringify(opened)).not.toContain(projectRoot);
+
+    openPath.mockResolvedValueOnce(`No application owns ${target}`);
+    expect(
+      await invoke(FILE_IPC_CHANNELS.openExternal, liveEvent(), {
+        projectId: PROJECT_ID,
+        relativePath: 'note.txt',
+      }),
+    ).toEqual({
+      ok: false,
+      error: {
+        code: 'IO_ERROR',
+        message: 'The operating system could not open this file in its default application.',
+      },
+    });
   });
 });
 

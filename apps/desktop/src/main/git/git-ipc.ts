@@ -52,6 +52,19 @@ import {
   type GitShippingPlanView,
   type GitShippingResultView,
 } from '../../shared/git/shipping-contracts.js';
+import {
+  GIT_REVIEW_NOTE_IPC_CHANNELS,
+  GitReviewNoteCreateInputSchema,
+  GitReviewNoteDeleteInputSchema,
+  GitReviewNotesListInputSchema,
+  GitReviewNotesViewSchema,
+  GitReviewNoteUpdateInputSchema,
+  type GitReviewNoteCreateInput,
+  type GitReviewNoteDeleteInput,
+  type GitReviewNotesListInput,
+  type GitReviewNotesView,
+  type GitReviewNoteUpdateInput,
+} from '../../shared/git/reviews/contracts.js';
 import { displayEscapedText } from '../../shared/text/display-literal.js';
 import { GitTargetResolver } from './git-target-resolver.js';
 import type { LocalStore } from '../storage.js';
@@ -62,6 +75,7 @@ import {
   type PendingGitShippingPlan,
 } from './shipping/git-shipping-service.js';
 import { shippingConfirmation } from './shipping/native-confirmation.js';
+import { GitReviewNotesService } from './reviews/review-notes-service.js';
 
 const PLAN_TTL_MS = 5 * 60_000;
 const MAX_PENDING_PLANS_PER_OWNER = 32;
@@ -122,6 +136,7 @@ export class GitIpcService {
   readonly #operationParents = new WeakMap<IpcMainInvokeEvent, BrowserWindow>();
   readonly #targets: GitTargetResolver;
   readonly #shipping: GitShippingService;
+  readonly #reviewNotes: GitReviewNotesService;
   #disposed = false;
   #disposePromise: Promise<void> | null = null;
   #privacyResetting = false;
@@ -131,7 +146,15 @@ export class GitIpcService {
     private readonly dialog: Pick<Dialog, 'showMessageBox'>,
     private readonly store: Pick<
       LocalStore,
-      'appendAudit' | 'getProject' | 'getProjectByPath' | 'getRun' | 'saveProject'
+      | 'appendAudit'
+      | 'createReviewNote'
+      | 'deleteReviewNote'
+      | 'getProject'
+      | 'getProjectByPath'
+      | 'getRun'
+      | 'listReviewNotes'
+      | 'saveProject'
+      | 'updateReviewNote'
     >,
     private readonly repositories: RepositoryService,
     private readonly getSettings: () => AppSettings,
@@ -141,6 +164,7 @@ export class GitIpcService {
     this.#changes = new ChangeService(repositories);
     this.#targets = new GitTargetResolver(store, repositories, getSettings);
     this.#shipping = new GitShippingService(this.#targets, repositories, this.#changes);
+    this.#reviewNotes = new GitReviewNotesService(store);
   }
 
   public registerIpcHandlers(): void {
@@ -234,6 +258,42 @@ export class GitIpcService {
       GitShippingResultViewSchema.nullable(),
       (event, input) => this.confirmShipping(event, input.planId),
     );
+    this.#handle(
+      GIT_REVIEW_NOTE_IPC_CHANNELS.list,
+      z.tuple([GitReviewNotesListInputSchema]),
+      GitReviewNotesViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.listReviewNotes(input);
+      },
+    );
+    this.#handle(
+      GIT_REVIEW_NOTE_IPC_CHANNELS.create,
+      z.tuple([GitReviewNoteCreateInputSchema]),
+      GitReviewNotesViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.createReviewNote(input);
+      },
+    );
+    this.#handle(
+      GIT_REVIEW_NOTE_IPC_CHANNELS.update,
+      z.tuple([GitReviewNoteUpdateInputSchema]),
+      GitReviewNotesViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.updateReviewNote(input);
+      },
+    );
+    this.#handle(
+      GIT_REVIEW_NOTE_IPC_CHANNELS.delete,
+      z.tuple([GitReviewNoteDeleteInputSchema]),
+      GitReviewNotesViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.deleteReviewNote(input);
+      },
+    );
   }
 
   public dispose(): Promise<void> {
@@ -270,6 +330,57 @@ export class GitIpcService {
     return this.#withOperation(async () => {
       const target = await this.#resolveTarget(input);
       return await this.#reviewUnlocked(target);
+    });
+  }
+
+  public listReviewNotes(input: GitReviewNotesListInput): Promise<GitReviewNotesView> {
+    return this.#withOperation(async () => {
+      const target = await this.#resolveTarget(input.target);
+      const review = await this.#reviewUnlocked(target);
+      return this.#reviewNotes.list(input.target, review);
+    });
+  }
+
+  public createReviewNote(input: GitReviewNoteCreateInput): Promise<GitReviewNotesView> {
+    return this.#mutateReviewNotes(input.target, 'create-review-note', (review) => {
+      const result = this.#reviewNotes.create(input, review);
+      this.store.appendAudit(
+        'git-review',
+        input.kind === 'revision-request' ? 'record-revision-request' : 'record-line-comment',
+        'allowed',
+        {
+          ...auditInputTargetMetadata(input.target),
+          area: input.anchor.area,
+          side: input.anchor.side,
+          line: input.anchor.line,
+          noteKind: input.kind,
+        },
+      );
+      return result;
+    });
+  }
+
+  public updateReviewNote(input: GitReviewNoteUpdateInput): Promise<GitReviewNotesView> {
+    return this.#mutateReviewNotes(input.target, 'update-review-note', (review) => {
+      const result = this.#reviewNotes.update(input, review);
+      this.store.appendAudit('git-review', 'update-review-note', 'allowed', {
+        ...auditInputTargetMetadata(input.target),
+        noteId: input.noteId,
+        bodyChanged: input.body !== undefined,
+        ...(input.status === undefined ? {} : { status: input.status }),
+      });
+      return result;
+    });
+  }
+
+  public deleteReviewNote(input: GitReviewNoteDeleteInput): Promise<GitReviewNotesView> {
+    return this.#mutateReviewNotes(input.target, 'delete-review-note', (review) => {
+      const result = this.#reviewNotes.delete(input, review);
+      this.store.appendAudit('git-review', 'delete-review-note', 'allowed', {
+        ...auditInputTargetMetadata(input.target),
+        noteId: input.noteId,
+      });
+      return result;
     });
   }
 
@@ -573,6 +684,26 @@ export class GitIpcService {
         return review;
       } catch (error) {
         this.#auditFailure(action, target.view, error);
+        throw error;
+      }
+    });
+  }
+
+  async #mutateReviewNotes(
+    targetInput: GitTargetInput,
+    action: string,
+    operation: (review: GitReviewView) => GitReviewNotesView | Promise<GitReviewNotesView>,
+  ): Promise<GitReviewNotesView> {
+    return this.#withOperation(async () => {
+      const target = await this.#resolveTarget(targetInput);
+      try {
+        const review = await this.#reviewUnlocked(target);
+        return await operation(review);
+      } catch (error) {
+        this.store.appendAudit('git-review', action, 'failed', {
+          ...auditInputTargetMetadata(targetInput),
+          reason: error instanceof Error ? error.message.slice(0, 4_096) : 'unknown failure',
+        });
         throw error;
       }
     });
@@ -1085,6 +1216,14 @@ function auditTargetMetadata(target: GitReviewTargetView): Record<string, unknow
         runId: target.runId,
         worktreeId: target.worktreeId,
       };
+}
+
+function auditInputTargetMetadata(target: GitTargetInput): Record<string, unknown> {
+  return {
+    projectId: target.projectId,
+    targetKind: target.kind,
+    ...(target.kind === 'agent-worktree' ? { runId: target.runId } : {}),
+  };
 }
 
 function targetDisclosure(target: GitReviewTargetView): string {

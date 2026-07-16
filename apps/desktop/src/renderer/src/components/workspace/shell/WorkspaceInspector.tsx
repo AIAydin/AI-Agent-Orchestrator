@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Bot,
   Copy,
@@ -34,8 +34,9 @@ import { canEditEdge } from '../canvas/interactions/lock-protection.js';
 import { GroupFrameInspector } from '../canvas/GroupFrameInspector.js';
 import { BuiltInContentInspector } from '../content/BuiltInContentInspector.js';
 import {
-  FileEditorPanel,
+  FileEditorWorkspace,
   ProjectFileBrowser,
+  type FileEditorTabRequest,
   type ProjectFileSelection,
 } from '../../file-editor/index.js';
 import { WorkflowNodeInspector } from '../workflows/WorkflowNodeInspector.js';
@@ -290,23 +291,43 @@ function FileNodeEditor({
   readonly onUpdate: (data: Partial<WorkshopNode['data']>) => void;
 }) {
   const reference = node.data.file;
-  const [browserOpen, setBrowserOpen] = useState(reference === undefined || reference.missing);
+  const requestSequenceRef = useRef(0);
+  const [browserMode, setBrowserMode] = useState<'assign' | 'open' | 'reveal' | null>(
+    reference === undefined || reference.missing ? 'assign' : null,
+  );
+  const [revealRelativePath, setRevealRelativePath] = useState<string | undefined>();
+  const [requestedTab, setRequestedTab] = useState<FileEditorTabRequest | undefined>();
   useEffect(() => {
-    setBrowserOpen(reference === undefined || reference.missing);
+    if (reference === undefined || reference.missing) setBrowserMode('assign');
   }, [node.id, reference?.missing, reference?.projectId, reference?.relativePath]);
+  useEffect(() => {
+    setRevealRelativePath(undefined);
+    setRequestedTab(undefined);
+  }, [node.id]);
 
   const selectFile = (selection: ProjectFileSelection): void => {
-    onRecord();
-    onUpdate({
-      file: {
-        projectId: selection.projectId,
-        relativePath: selection.relativePath,
-        kind: 'file',
-        missing: false,
-        ...(selection.document.sha256 === null ? {} : { lastKnownHash: selection.document.sha256 }),
-      },
+    requestSequenceRef.current += 1;
+    setRequestedTab({
+      projectId: selection.projectId,
+      relativePath: selection.relativePath,
+      requestId: requestSequenceRef.current,
+      ...(selection.position === undefined ? {} : { position: selection.position }),
     });
-    setBrowserOpen(false);
+    if (browserMode === 'assign' || reference === undefined || reference.missing) {
+      onRecord();
+      onUpdate({
+        file: {
+          projectId: selection.projectId,
+          relativePath: selection.relativePath,
+          kind: 'file',
+          missing: false,
+          ...(selection.document.sha256 === null
+            ? {}
+            : { lastKnownHash: selection.document.sha256 }),
+        },
+      });
+    }
+    setBrowserMode(null);
   };
 
   return (
@@ -320,7 +341,11 @@ function FileNodeEditor({
           <div>
             {reference.missing ? <em>Missing</em> : null}
             {reference.kind !== 'file' ? <em>Read-only {reference.kind}</em> : null}
-            <button type="button" disabled={node.data.locked} onClick={() => setBrowserOpen(true)}>
+            <button
+              type="button"
+              disabled={node.data.locked}
+              onClick={() => setBrowserMode('assign')}
+            >
               {reference.missing ? 'Choose replacement' : 'Change file'}
             </button>
           </div>
@@ -332,27 +357,43 @@ function FileNodeEditor({
         </p>
       )}
 
-      {browserOpen ? (
+      {browserMode !== null ? (
         <ProjectFileBrowser
           projectId={projectId}
           operations={window.forgeboard.files}
           {...(reference === undefined ? {} : { selectedRelativePath: reference.relativePath })}
-          assignmentDisabled={node.data.locked}
+          {...(browserMode === 'reveal' && revealRelativePath !== undefined
+            ? { revealRelativePath }
+            : {})}
+          assignmentDisabled={browserMode === 'assign' && node.data.locked}
           onSelect={selectFile}
-          {...(reference === undefined ? {} : { onCancel: () => setBrowserOpen(false) })}
+          {...(reference === undefined ? {} : { onCancel: () => setBrowserMode(null) })}
         />
-      ) : reference?.kind === 'directory' ? (
+      ) : null}
+
+      {reference?.kind === 'directory' ? (
         <p className="recovery-guidance warning" role="status">
           This File node references a directory. Choose an ordinary project file to edit its
           contents.
         </p>
       ) : reference !== undefined ? (
         <div className="inspector-file-editor">
-          <FileEditorPanel
-            projectId={reference.projectId}
-            relativePath={reference.relativePath}
+          <FileEditorWorkspace
+            primary={{
+              projectId: reference.projectId,
+              relativePath: reference.relativePath,
+            }}
+            requestedTab={requestedTab}
             operations={window.forgeboard.files}
             readOnly={node.data.locked || reference.missing || reference.kind !== 'file'}
+            onBrowseFiles={() => {
+              setRevealRelativePath(undefined);
+              setBrowserMode('open');
+            }}
+            onRevealInTree={(relativePath) => {
+              setRevealRelativePath(relativePath);
+              setBrowserMode('reveal');
+            }}
           />
         </div>
       ) : null}

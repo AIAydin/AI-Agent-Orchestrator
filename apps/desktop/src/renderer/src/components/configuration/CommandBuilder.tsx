@@ -1,6 +1,8 @@
 import type { CommandConfiguration } from '../../../../shared/application/contracts.js';
 import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../lib/literal-arguments.js';
+import { CommandReadinessEvidence } from './CommandReadinessEvidence.js';
 import { commandDependencyGuidance, type CommandPurpose } from './dependency-guidance.js';
+import type { CommandReadinessStatus } from './useCommandReadiness.js';
 import './configuration.css';
 
 interface CommandBuilderProps {
@@ -14,6 +16,7 @@ interface CommandBuilderProps {
   readonly variant?: 'settings' | 'compact';
   readonly executablePlaceholder?: string;
   readonly argumentsPlaceholder?: string;
+  readonly readiness?: CommandReadinessStatus | undefined;
 }
 
 export function CommandBuilder({
@@ -27,6 +30,7 @@ export function CommandBuilder({
   variant = 'settings',
   executablePlaceholder = 'Auto-detect or enter an executable',
   argumentsPlaceholder = 'run\ntest',
+  readiness,
 }: CommandBuilderProps) {
   const helpId = `${name}-arguments-help`;
   const guidanceId = `${name}-dependency-guidance`;
@@ -85,6 +89,7 @@ export function CommandBuilder({
       <small id={guidanceId} className="command-builder-guidance">
         {commandDependencyGuidance(value.executable, purpose)}
       </small>
+      <CommandReadinessEvidence status={readiness} />
     </fieldset>
   );
 }

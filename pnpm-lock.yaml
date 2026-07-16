@@ -125,6 +125,9 @@ importers:
 
   apps/collab-server:
     dependencies:
+      '@forgeboard/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@hocuspocus/server':
         specifier: 3.4.4
         version: 3.4.4(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27)

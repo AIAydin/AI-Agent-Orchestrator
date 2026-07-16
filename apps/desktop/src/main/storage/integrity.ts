@@ -38,6 +38,7 @@ import {
 import { workflowStorageIntegrityMessages } from './workflow/executions.js';
 import { approvalIntegrityMessages } from './security/approvals.js';
 import { auditIntegrityMessages } from './security/audit-integrity.js';
+import { reviewNoteIntegrityMessages } from './reviews/repository.js';
 
 interface IntegrityRow {
   integrity_check?: string;
@@ -82,6 +83,7 @@ export function checkDatabaseIntegrity(
     messages.push(...approvalIntegrityMessages(database));
     messages.push(...auditIntegrityMessages(database));
     messages.push(...workflowStorageIntegrityMessages(database));
+    messages.push(...reviewNoteIntegrityMessages(database));
   } catch (error) {
     messages.push(error instanceof Error ? error.message : 'Unknown integrity-check failure.');
   }

@@ -6,6 +6,7 @@ import type {
 } from '../../../../shared/application/contracts.js';
 import { CommandBuilder } from '../configuration/CommandBuilder.js';
 import type { CommandPurpose } from '../configuration/dependency-guidance.js';
+import type { CommandReadinessStatus } from '../configuration/useCommandReadiness.js';
 
 export interface SettingsDraftProps {
   draft: AppSettings;
@@ -44,6 +45,7 @@ export function CommandEditor({
   onChange,
   onBrowse,
   purpose = 'check',
+  readiness,
 }: {
   label: string;
   name: string;
@@ -51,6 +53,7 @@ export function CommandEditor({
   onChange: (value: CommandConfiguration) => void;
   onBrowse: () => void;
   purpose?: CommandPurpose;
+  readiness?: CommandReadinessStatus | undefined;
 }) {
   return (
     <CommandBuilder
@@ -60,6 +63,7 @@ export function CommandEditor({
       purpose={purpose}
       onChange={onChange}
       onBrowse={onBrowse}
+      readiness={readiness}
     />
   );
 }

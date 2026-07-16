@@ -52,6 +52,18 @@ const EXTENSION_LANGUAGES: Readonly<Record<string, string>> = {
   zsh: 'shell',
 };
 
+const BUNDLED_DIAGNOSTIC_LANGUAGES = new Set([
+  'css',
+  'scss',
+  'less',
+  'html',
+  'handlebars',
+  'razor',
+  'javascript',
+  'typescript',
+  'json',
+]);
+
 export function languageForFile(relativePath: string): string {
   const basename = relativePath.slice(relativePath.lastIndexOf('/') + 1);
   const exact = BASENAME_LANGUAGES[basename];
@@ -59,4 +71,8 @@ export function languageForFile(relativePath: string): string {
   const extensionIndex = basename.lastIndexOf('.');
   if (extensionIndex < 0) return 'plaintext';
   return EXTENSION_LANGUAGES[basename.slice(extensionIndex + 1).toLowerCase()] ?? 'plaintext';
+}
+
+export function languageHasBundledDiagnostics(language: string): boolean {
+  return BUNDLED_DIAGNOSTIC_LANGUAGES.has(language);
 }

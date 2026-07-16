@@ -245,7 +245,7 @@ describe('LocalStore', () => {
         quick_check: 'ok',
       });
       expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({
-        user_version: 9,
+        user_version: 10,
       });
       expect(
         inspector.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
@@ -259,6 +259,7 @@ describe('LocalStore', () => {
         { version: 7 },
         { version: 8 },
         { version: 9 },
+        { version: 10 },
       ]);
       expect(
         inspector
@@ -269,6 +270,7 @@ describe('LocalStore', () => {
                 'canvas_snapshots', 'project_path_history', 'backup_records', 'backup_health',
                 'trusted_extension_ledger', 'check_executions', 'workflow_executions',
                 'workflow_execution_events', 'workflow_node_bindings', 'approval_records',
+                'git_review_notes',
                 'audit_chain_state', 'audit_chain_checkpoints')
              ORDER BY name`,
           )
@@ -285,6 +287,7 @@ describe('LocalStore', () => {
         { name: 'canvas_documents' },
         { name: 'canvas_snapshots' },
         { name: 'check_executions' },
+        { name: 'git_review_notes' },
         { name: 'project_path_history' },
         { name: 'recent_projects' },
         { name: 'trusted_extension_ledger' },

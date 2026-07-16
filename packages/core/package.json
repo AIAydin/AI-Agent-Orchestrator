@@ -16,6 +16,14 @@
       "types": "./src/permissions/contracts.ts",
       "default": "./src/permissions/contracts.ts"
     },
+    "./collaboration-delivery": {
+      "types": "./src/collaboration/delivery-contracts.ts",
+      "default": "./src/collaboration/delivery-contracts.ts"
+    },
+    "./collaboration-delivery-codec": {
+      "types": "./src/collaboration/delivery-codec.ts",
+      "default": "./src/collaboration/delivery-codec.ts"
+    },
     "./workflow-runtime": {
       "types": "./src/workflow-runtime/index.ts",
       "default": "./src/workflow-runtime/index.ts"

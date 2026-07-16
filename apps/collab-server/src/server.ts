@@ -6,7 +6,16 @@ import {
   Server,
   type onAuthenticatePayload,
   type onConnectPayload,
+  type onStatelessPayload,
 } from '@hocuspocus/server';
+import {
+  COLLABORATION_DELIVERY_PROTOCOL,
+  CollaborationDeliveryAcknowledgementSchema,
+  CollaborationDeliveryRejectionSchema,
+  CollaborationDeliveryRequestSchema,
+  parseCollaborationDeliveryPayload,
+} from '@forgeboard/core/collaboration-delivery';
+import { decodeCollaborationStateVector } from '@forgeboard/core/collaboration-delivery-codec';
 import * as Y from 'yjs';
 import { z } from 'zod';
 
@@ -21,7 +30,12 @@ import {
 import { FixedWindowRateLimiter } from './rate-limit.js';
 import { CollaborationStore } from './store.js';
 import { CollaborationTokenService } from './tokens.js';
-import { CollaborationContextSchema, RoomIdSchema, type CollaborationContext } from './types.js';
+import {
+  CollaborationContextSchema,
+  ROLE_CAPABILITIES,
+  RoomIdSchema,
+  type CollaborationContext,
+} from './types.js';
 
 class CollaborationConnectionError extends Error {
   readonly code = 4403;
@@ -82,6 +96,7 @@ export class CollaborationService {
       },
       onConnect: (payload) => this.onConnect(payload),
       onAuthenticate: (payload) => this.onAuthenticate(payload),
+      onStateless: (payload) => this.onStateless(payload),
       connected: ({ context, documentName }) => {
         const collaboration = CollaborationContextSchema.parse(context);
         this.store.appendAudit({
@@ -100,6 +115,7 @@ export class CollaborationService {
       },
       beforeHandleMessage: ({ context, document, update }) => {
         const collaboration = CollaborationContextSchema.parse(context);
+        this.assertActiveConnection(collaboration);
         const rate = this.messageLimiter.consume(collaboration.accessTokenId);
         if (!rate.allowed) {
           this.auditRejection(collaboration, 'message.rate_limited', 'rate-limit');
@@ -254,6 +270,8 @@ export class CollaborationService {
         subject: claims.sub,
         role: membership.role,
         accessTokenId: claims.jti,
+        tokenVersion: claims.ver,
+        accessTokenExpiresAt: claims.exp,
         ipHash,
         ...(origin ? { origin } : {}),
       });
@@ -274,6 +292,87 @@ export class CollaborationService {
       if (error instanceof CollaborationConnectionError) throw error;
       throw new CollaborationConnectionError('permission-denied');
     }
+  }
+
+  private onStateless(payload: onStatelessPayload): Promise<void> {
+    const collaboration = CollaborationContextSchema.parse(payload.connection.context);
+    this.assertActiveConnection(collaboration);
+    let request: ReturnType<typeof CollaborationDeliveryRequestSchema.parse>;
+    try {
+      request = CollaborationDeliveryRequestSchema.parse(
+        parseCollaborationDeliveryPayload(payload.payload),
+      );
+    } catch {
+      this.auditRejection(collaboration, 'metadata.delivery_rejected', 'invalid-request');
+      throw new CollaborationConnectionError('privacy-allowlist');
+    }
+
+    const capability = ROLE_CAPABILITIES[collaboration.role];
+    if (!capability.writeMetadata && !capability.writeCommentsAndReviews) {
+      this.sendDeliveryRejection(payload, request, 'not-authorized');
+      this.auditRejection(collaboration, 'metadata.delivery_rejected', 'not-authorized');
+      return Promise.resolve();
+    }
+
+    const requestedStateVector = decodeCollaborationStateVector(request.stateVector);
+    if (!documentIncludesStateVector(payload.document, requestedStateVector)) {
+      this.sendDeliveryRejection(payload, request, 'state-not-applied');
+      this.auditRejection(collaboration, 'metadata.delivery_rejected', 'state-not-applied');
+      return Promise.resolve();
+    }
+
+    validateCollaborationDocument(payload.document);
+    const state = Y.encodeStateAsUpdate(payload.document);
+    if (state.byteLength > this.config.maxDocumentBytes) {
+      this.sendDeliveryRejection(payload, request, 'document-too-large');
+      this.auditRejection(collaboration, 'metadata.delivery_rejected', 'document-too-large');
+      return Promise.resolve();
+    }
+
+    const persistedAt = new Date().toISOString();
+    this.store.saveDocument(payload.documentName, state);
+    this.store.appendAudit({
+      category: 'document',
+      action: 'metadata.delivery_acknowledged',
+      outcome: 'allowed',
+      details: {
+        roomId: payload.documentName,
+        actorId: collaboration.subject,
+        role: collaboration.role,
+        deliveryId: request.deliveryId,
+        bytes: state.byteLength,
+      },
+    });
+    payload.connection.sendStateless(
+      JSON.stringify(
+        CollaborationDeliveryAcknowledgementSchema.parse({
+          protocol: COLLABORATION_DELIVERY_PROTOCOL,
+          type: 'delivery-acknowledged',
+          deliveryId: request.deliveryId,
+          stateVector: request.stateVector,
+          persistedAt,
+        }),
+      ),
+    );
+    return Promise.resolve();
+  }
+
+  private sendDeliveryRejection(
+    payload: onStatelessPayload,
+    request: ReturnType<typeof CollaborationDeliveryRequestSchema.parse>,
+    reason: 'not-authorized' | 'state-not-applied' | 'document-too-large',
+  ): void {
+    payload.connection.sendStateless(
+      JSON.stringify(
+        CollaborationDeliveryRejectionSchema.parse({
+          protocol: COLLABORATION_DELIVERY_PROTOCOL,
+          type: 'delivery-rejected',
+          deliveryId: request.deliveryId,
+          stateVector: request.stateVector,
+          reason,
+        }),
+      ),
+    );
   }
 
   private validateWireMessage(
@@ -302,9 +401,14 @@ export class CollaborationService {
       if (type === MessageType.Awareness) {
         validateAwarenessPayload(message.readVarUint8Array(), context);
       }
-      if (type === MessageType.Stateless || type === MessageType.BroadcastStateless) {
+      if (type === MessageType.Stateless) {
+        CollaborationDeliveryRequestSchema.parse(
+          parseCollaborationDeliveryPayload(message.readVarString()),
+        );
+      }
+      if (type === MessageType.BroadcastStateless) {
         throw new CollaborationPrivacyError(
-          'Stateless messages are disabled because they bypass the metadata allowlist.',
+          'Broadcast stateless messages are disabled because they bypass the metadata allowlist.',
         );
       }
     } catch (error) {
@@ -327,6 +431,31 @@ export class CollaborationService {
       },
     });
   }
+
+  private assertActiveConnection(context: CollaborationContext): void {
+    if (context.accessTokenExpiresAt <= Math.floor(Date.now() / 1_000)) {
+      this.auditRejection(context, 'connection.credential_rejected', 'access-token-expired');
+      throw new CollaborationConnectionError('access-token-expired');
+    }
+    const membership = this.store.getMembership(context.roomId, context.subject);
+    if (
+      membership === undefined ||
+      membership.revokedAt !== undefined ||
+      membership.role !== context.role ||
+      membership.tokenVersion !== context.tokenVersion
+    ) {
+      this.auditRejection(context, 'connection.credential_rejected', 'membership-denied');
+      throw new CollaborationConnectionError('membership-denied');
+    }
+  }
+}
+
+function documentIncludesStateVector(document: Y.Doc, requested: Uint8Array): boolean {
+  const current = Y.decodeStateVector(Y.encodeStateVector(document));
+  for (const [clientId, clock] of Y.decodeStateVector(requested)) {
+    if ((current.get(clientId) ?? 0) < clock) return false;
+  }
+  return true;
 }
 
 function firstHeader(value: string | string[] | undefined): string | undefined {

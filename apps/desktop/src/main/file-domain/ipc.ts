@@ -4,10 +4,13 @@ import { z } from 'zod';
 import {
   FILE_IPC_CHANNELS,
   FileDocumentSchema,
+  FileOpenExternalInputSchema,
   FileReadInputSchema,
   FileRevealInputSchema,
   FileRevertInputSchema,
   FileSaveInputSchema,
+  FileSearchInputSchema,
+  FileSearchResultSchema,
   FileTreeInputSchema,
   FileTreeResultSchema,
   type FileIpcResult,
@@ -18,7 +21,7 @@ import type { ProjectFileService } from './service.js';
 
 type FileOperations = Pick<
   ProjectFileService,
-  'tree' | 'read' | 'save' | 'revert' | 'prepareReveal'
+  'tree' | 'search' | 'read' | 'save' | 'revert' | 'prepareReveal' | 'prepareOpenExternal'
 >;
 
 export type FileOperationRunner = <Output>(
@@ -39,7 +42,7 @@ export class FileIpcService {
 
   public constructor(
     private readonly files: FileOperations,
-    private readonly nativeShell: Pick<Shell, 'showItemInFolder'>,
+    private readonly nativeShell: Pick<Shell, 'showItemInFolder' | 'openPath'>,
     private readonly runOperation: FileOperationRunner = async (operation) => await operation(),
   ) {}
 
@@ -50,6 +53,10 @@ export class FileIpcService {
     this.#handle(FILE_IPC_CHANNELS.tree, 'Project file tree', async (_authority, rawArgs) => {
       const [input] = z.tuple([FileTreeInputSchema]).parse(rawArgs);
       return FileTreeResultSchema.parse(await this.files.tree(input));
+    });
+    this.#handle(FILE_IPC_CHANNELS.search, 'Project file search', async (_authority, rawArgs) => {
+      const [input] = z.tuple([FileSearchInputSchema]).parse(rawArgs);
+      return FileSearchResultSchema.parse(await this.files.search(input));
     });
     this.#handle(FILE_IPC_CHANNELS.read, 'Project file read', async (_authority, rawArgs) => {
       const [input] = z.tuple([FileReadInputSchema]).parse(rawArgs);
@@ -71,6 +78,24 @@ export class FileIpcService {
       authority.assertCurrent();
       return null;
     });
+    this.#handle(
+      FILE_IPC_CHANNELS.openExternal,
+      'Project file external open',
+      async (authority, rawArgs) => {
+        const [input] = z.tuple([FileOpenExternalInputSchema]).parse(rawArgs);
+        const target = await this.files.prepareOpenExternal(input);
+        authority.assertCurrent();
+        const errorMessage = await this.nativeShell.openPath(target.absolutePath);
+        authority.assertCurrent();
+        if (errorMessage !== '') {
+          throw new FileDomainError(
+            'IO_ERROR',
+            'The operating system could not open this file in its default application.',
+          );
+        }
+        return null;
+      },
+    );
   }
 
   public async dispose(): Promise<void> {

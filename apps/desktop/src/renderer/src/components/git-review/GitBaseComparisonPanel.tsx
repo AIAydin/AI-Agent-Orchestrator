@@ -7,13 +7,16 @@ import { GitFilePageControls, useGitFilePage } from './diff/GitFilePagination.js
 import type { GitDiffDisplayFile } from './git-review-model.js';
 import { fileDiffStats } from './git-review-model.js';
 import { GIT_BASE_PANEL_ID, GIT_BASE_TAB_ID } from './GitReviewModeTabs.js';
+import type { GitReviewNotesController } from './review-notes/useGitReviewNotes.js';
 
 export function GitBaseComparisonPanel({
   comparison,
   footer,
+  reviewNotes,
 }: {
   comparison: GitAgentBaseComparisonView;
   footer?: React.ReactNode;
+  reviewNotes?: GitReviewNotesController;
 }) {
   const files = useMemo(() => comparisonFiles(comparison), [comparison]);
   const [selectedPath, setSelectedPath] = useState<string | null>(files[0]?.path ?? null);
@@ -129,6 +132,7 @@ export function GitBaseComparisonPanel({
             file={selected}
             busy={false}
             readOnly
+            {...(reviewNotes === undefined ? {} : { reviewNotes })}
             {...(selectedIndex < 0
               ? {}
               : {

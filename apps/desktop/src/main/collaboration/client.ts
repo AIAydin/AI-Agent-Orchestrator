@@ -1,5 +1,15 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
+import {
+  COLLABORATION_DELIVERY_PROTOCOL,
+  CollaborationDeliveryRequestSchema,
+  CollaborationDeliveryResponseSchema,
+  CollaborationPublishReceiptSchema,
+  parseCollaborationDeliveryPayload,
+  type CollaborationDeliveryRequest,
+  type CollaborationPublishReceipt,
+} from '@forgeboard/core/collaboration-delivery';
+import { encodeCollaborationStateVector } from '@forgeboard/core/collaboration-delivery-codec';
 import { z } from 'zod';
 import * as Y from 'yjs';
 
@@ -15,6 +25,7 @@ import {
   CollaborationRoleSchema,
   CollaborationRoomIdSchema,
   CollaborationSubjectSchema,
+  serializeCollaborationMetadataSnapshot,
   type CollaborationAwarenessUpdateInput,
   type CollaborationConnection,
   type CollaborationConnectionError,
@@ -24,7 +35,11 @@ import {
   type CollaborationMetadataSnapshot,
   type CollaborationRole,
 } from '../../shared/collaboration/index.js';
-import { collaborationSnapshotFromDocument, replaceCollaborationDocument } from './document.js';
+import {
+  COLLABORATION_LOCAL_METADATA_ORIGIN,
+  collaborationSnapshotFromDocument,
+  replaceCollaborationDocument,
+} from './document.js';
 import {
   createHocuspocusCollaborationProvider,
   type CollaborationProviderFactory,
@@ -33,6 +48,8 @@ import {
 } from './provider.js';
 
 const DEFAULT_JOIN_TIMEOUT_MS = 15_000;
+const DEFAULT_DELIVERY_ACKNOWLEDGEMENT_TIMEOUT_MS = 10_000;
+const MAX_PENDING_DELIVERIES = 256;
 
 const UnverifiedAccessClaimsSchema = z
   .object({
@@ -64,25 +81,36 @@ interface PendingJoin {
   synced: boolean;
 }
 
+interface PendingDelivery {
+  readonly request: CollaborationDeliveryRequest;
+  readonly snapshotDigest: string;
+  timeout: ReturnType<typeof setTimeout> | null;
+}
+
 export interface CollaborationClientOptions {
   readonly createProvider?: CollaborationProviderFactory;
   readonly createId?: () => string;
+  readonly createDeliveryId?: () => string;
   readonly now?: () => Date;
   readonly joinTimeoutMs?: number;
+  readonly deliveryAcknowledgementTimeoutMs?: number;
 }
 
 export class CollaborationClient {
   readonly #listeners = new Set<(event: CollaborationEvent) => void>();
   readonly #createProvider: CollaborationProviderFactory;
   readonly #createId: () => string;
+  readonly #createDeliveryId: () => string;
   readonly #now: () => Date;
   readonly #joinTimeoutMs: number;
+  readonly #deliveryAcknowledgementTimeoutMs: number;
   #connection: CollaborationConnection | null = null;
   #provider: CollaborationProviderHandle | null = null;
   #document: Y.Doc | null = null;
-  #documentUpdateListener: (() => void) | null = null;
+  #documentUpdateListener: ((update: Uint8Array, origin: unknown) => void) | null = null;
   #identity: CollaborationIdentity | null = null;
   #pendingJoin: PendingJoin | null = null;
+  readonly #pendingDeliveries = new Map<string, PendingDelivery>();
   #latestAwareness: CollaborationAwarenessUpdateInput = {};
   #awarenessClientIds = new Set<number>();
   #sequence = 0;
@@ -96,10 +124,19 @@ export class CollaborationClient {
   public constructor(options: CollaborationClientOptions = {}) {
     this.#createProvider = options.createProvider ?? createHocuspocusCollaborationProvider;
     this.#createId = options.createId ?? randomUUID;
+    this.#createDeliveryId = options.createDeliveryId ?? randomUUID;
     this.#now = options.now ?? (() => new Date());
     this.#joinTimeoutMs = options.joinTimeoutMs ?? DEFAULT_JOIN_TIMEOUT_MS;
+    this.#deliveryAcknowledgementTimeoutMs =
+      options.deliveryAcknowledgementTimeoutMs ?? DEFAULT_DELIVERY_ACKNOWLEDGEMENT_TIMEOUT_MS;
     if (!Number.isSafeInteger(this.#joinTimeoutMs) || this.#joinTimeoutMs <= 0) {
       throw new Error('The collaboration join timeout must be a positive safe integer.');
+    }
+    if (
+      !Number.isSafeInteger(this.#deliveryAcknowledgementTimeoutMs) ||
+      this.#deliveryAcknowledgementTimeoutMs <= 0
+    ) {
+      throw new Error('The collaboration delivery acknowledgement timeout must be positive.');
     }
   }
 
@@ -170,7 +207,8 @@ export class CollaborationClient {
 
     const document = new Y.Doc();
     this.#document = document;
-    const documentUpdateListener = (): void => this.#handleDocumentUpdate(generation);
+    const documentUpdateListener = (_update: Uint8Array, origin: unknown): void =>
+      this.#handleDocumentUpdate(generation, origin === COLLABORATION_LOCAL_METADATA_ORIGIN);
     this.#documentUpdateListener = documentUpdateListener;
     document.on('update', documentUpdateListener);
 
@@ -217,6 +255,7 @@ export class CollaborationClient {
         onSynced: () => this.#handleSynced(generation),
         onDisconnect: () => this.#handleDisconnect(generation),
         onAwarenessChange: () => this.#handleAwarenessChange(generation),
+        onStateless: (payload) => this.#handleStateless(generation, payload),
       });
       this.#completeJoinIfReady(generation);
     } catch {
@@ -238,6 +277,7 @@ export class CollaborationClient {
     if (previous === null && this.#provider === null && this.#pendingJoin === null) return null;
     const cancelled = connectionError('cancelled', 'The collaboration join was cancelled.', false);
     this.#resolvePending(joinFailure(cancelled.code, cancelled.message, cancelled.retryable));
+    this.#discardPendingDeliveries();
     this.#destroyTransport();
     this.#identity = null;
     this.#awarenessClientIds.clear();
@@ -267,12 +307,38 @@ export class CollaborationClient {
     return null;
   }
 
-  public publish(input: CollaborationMetadataSnapshot): boolean {
+  public publish(input: CollaborationMetadataSnapshot): CollaborationPublishReceipt | null {
     this.#assertAvailable();
     const snapshot = CollaborationMetadataSnapshotSchema.parse(input);
-    if (!this.#sharingReady() || this.#document === null) return false;
+    if (
+      !this.#canPublishMetadata() ||
+      this.#document === null ||
+      this.#pendingDeliveries.size >= MAX_PENDING_DELIVERIES
+    ) {
+      return null;
+    }
     replaceCollaborationDocument(this.#document, snapshot);
-    return true;
+    const snapshotDigest = createHash('sha256')
+      .update(serializeCollaborationMetadataSnapshot(snapshot))
+      .digest('hex');
+    const request = CollaborationDeliveryRequestSchema.parse({
+      protocol: COLLABORATION_DELIVERY_PROTOCOL,
+      type: 'confirm-delivery',
+      deliveryId: this.#createDeliveryId(),
+      stateVector: encodeCollaborationStateVector(Y.encodeStateVector(this.#document)),
+    });
+    this.#pendingDeliveries.set(request.deliveryId, {
+      request,
+      snapshotDigest,
+      timeout: null,
+    });
+    const online = this.#sharingReady();
+    if (online) this.#sendDeliveryConfirmation(request.deliveryId);
+    return CollaborationPublishReceiptSchema.parse({
+      deliveryId: request.deliveryId,
+      snapshotDigest,
+      disposition: online ? 'sent' : 'queued-offline',
+    });
   }
 
   public updateAwareness(input: CollaborationAwarenessUpdateInput): boolean {
@@ -337,6 +403,8 @@ export class CollaborationClient {
     }
     if (pending === null) {
       if (this.#hasConnected && connection.status === 'reconnecting') {
+        this.#sendPendingDeliveryConfirmations();
+        if (this.#pendingDeliveries.size > 0) return;
         this.#transition('connected');
         this.#applyLocalAwareness();
         this.#emitCurrentSnapshot();
@@ -373,6 +441,7 @@ export class CollaborationClient {
     if (status === 'connecting') {
       this.#authenticated = false;
       this.#synced = false;
+      this.#suspendDeliveryConfirmations();
       const alreadyReconnecting = this.#connection.status === 'reconnecting';
       this.#transition(this.#hasConnected ? 'reconnecting' : 'connecting', {
         reconnectAttempt:
@@ -385,6 +454,7 @@ export class CollaborationClient {
     if (!this.#isCurrent(generation) || this.#connection === null) return;
     this.#authenticated = false;
     this.#synced = false;
+    this.#suspendDeliveryConfirmations();
     if (this.#connection.reconnect) {
       const alreadyReconnecting = this.#connection.status === 'reconnecting';
       this.#transition('reconnecting', {
@@ -406,7 +476,7 @@ export class CollaborationClient {
     this.#transition('offline');
   }
 
-  #handleDocumentUpdate(generation: number): void {
+  #handleDocumentUpdate(generation: number, local: boolean): void {
     if (!this.#isCurrent(generation) || this.#document === null) return;
     try {
       const snapshot = collaborationSnapshotFromDocument(this.#document);
@@ -416,6 +486,7 @@ export class CollaborationClient {
         occurredAt: this.#timestamp(),
         connectionId: this.#requiredConnection().connectionId,
         roomId: this.#requiredConnection().roomId,
+        source: local ? 'local' : 'remote',
         snapshot,
       });
     } catch {
@@ -442,6 +513,7 @@ export class CollaborationClient {
         occurredAt: this.#timestamp(),
         connectionId: this.#requiredConnection().connectionId,
         roomId: this.#requiredConnection().roomId,
+        source: 'remote',
         snapshot,
       });
     } catch {
@@ -476,6 +548,107 @@ export class CollaborationClient {
       states: parsed.data,
       removedClientIds,
     });
+  }
+
+  #handleStateless(generation: number, payload: string): void {
+    if (!this.#isCurrent(generation) || this.#connection === null) return;
+    let response: ReturnType<typeof CollaborationDeliveryResponseSchema.parse>;
+    try {
+      response = CollaborationDeliveryResponseSchema.parse(
+        parseCollaborationDeliveryPayload(payload),
+      );
+    } catch {
+      this.#fail(
+        generation,
+        connectionError(
+          'privacy-rejected',
+          'The collaboration server sent an invalid delivery acknowledgement.',
+          false,
+        ),
+      );
+      return;
+    }
+    const pending = this.#pendingDeliveries.get(response.deliveryId);
+    if (pending === undefined || pending.request.stateVector !== response.stateVector) return;
+    if (pending.timeout !== null) clearTimeout(pending.timeout);
+    this.#pendingDeliveries.delete(response.deliveryId);
+    const duringReconnect = this.#connection.status === 'reconnecting';
+    if (response.type === 'delivery-acknowledged') {
+      this.#emit({
+        type: 'delivery-acknowledged',
+        sequence: this.#nextSequence(),
+        occurredAt: this.#timestamp(),
+        connectionId: this.#connection.connectionId,
+        roomId: this.#connection.roomId,
+        acknowledgement: response,
+        reconciledAfterReconnect: duringReconnect,
+      });
+    } else {
+      this.#emit({
+        type: 'delivery-rejected',
+        sequence: this.#nextSequence(),
+        occurredAt: this.#timestamp(),
+        connectionId: this.#connection.connectionId,
+        roomId: this.#connection.roomId,
+        rejection: response,
+        duringReconnect,
+      });
+    }
+    if (duringReconnect) this.#completeJoinIfReady(generation);
+  }
+
+  #sendPendingDeliveryConfirmations(): void {
+    if (!this.#authenticated || !this.#synced) return;
+    for (const deliveryId of this.#pendingDeliveries.keys()) {
+      this.#sendDeliveryConfirmation(deliveryId);
+    }
+  }
+
+  #sendDeliveryConfirmation(deliveryId: string): void {
+    const pending = this.#pendingDeliveries.get(deliveryId);
+    if (pending === undefined || pending.timeout !== null || this.#provider === null) return;
+    this.#provider.sendStateless(JSON.stringify(pending.request));
+    pending.timeout = setTimeout(
+      () => this.#expireDelivery(deliveryId),
+      this.#deliveryAcknowledgementTimeoutMs,
+    );
+    pending.timeout.unref();
+  }
+
+  #expireDelivery(deliveryId: string): void {
+    const pending = this.#pendingDeliveries.get(deliveryId);
+    const connection = this.#connection;
+    if (pending === undefined || connection === null) return;
+    this.#pendingDeliveries.delete(deliveryId);
+    const duringReconnect = connection.status === 'reconnecting';
+    this.#emit({
+      type: 'delivery-rejected',
+      sequence: this.#nextSequence(),
+      occurredAt: this.#timestamp(),
+      connectionId: connection.connectionId,
+      roomId: connection.roomId,
+      rejection: {
+        protocol: COLLABORATION_DELIVERY_PROTOCOL,
+        type: 'delivery-rejected',
+        deliveryId,
+        stateVector: pending.request.stateVector,
+        reason: 'state-not-applied',
+      },
+      duringReconnect,
+    });
+    if (duringReconnect) this.#completeJoinIfReady(this.#generation);
+  }
+
+  #suspendDeliveryConfirmations(): void {
+    for (const pending of this.#pendingDeliveries.values()) {
+      if (pending.timeout !== null) clearTimeout(pending.timeout);
+      pending.timeout = null;
+    }
+  }
+
+  #discardPendingDeliveries(): void {
+    this.#suspendDeliveryConfirmations();
+    this.#pendingDeliveries.clear();
   }
 
   #applyLocalAwareness(): boolean {
@@ -576,6 +749,7 @@ export class CollaborationClient {
     this.#provider?.clearCredential();
     this.#provider?.destroy();
     this.#provider = null;
+    this.#discardPendingDeliveries();
     this.#document?.destroy();
     this.#document = null;
     this.#documentUpdateListener = null;
@@ -619,6 +793,20 @@ export class CollaborationClient {
 
   #sharingReady(): boolean {
     return this.#authenticated && this.#synced && this.#connection?.status === 'connected';
+  }
+
+  #canPublishMetadata(): boolean {
+    const role = this.#identity?.role;
+    if (
+      this.#document === null ||
+      this.#provider === null ||
+      !this.#hasConnected ||
+      (role !== 'owner' && role !== 'editor')
+    ) {
+      return false;
+    }
+    if (this.#sharingReady()) return true;
+    return this.#connection?.status === 'reconnecting' && this.#connection.reconnect;
   }
 }
 

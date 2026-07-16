@@ -95,6 +95,8 @@ export interface CollaborationContext {
   subject: string;
   role: CollaborationRole;
   accessTokenId: string;
+  tokenVersion: number;
+  accessTokenExpiresAt: number;
   ipHash: string;
   origin?: string | undefined;
 }
@@ -105,6 +107,8 @@ export const CollaborationContextSchema = z
     subject: SubjectIdSchema,
     role: CollaborationRoleSchema,
     accessTokenId: z.string().uuid(),
+    tokenVersion: z.number().int().nonnegative(),
+    accessTokenExpiresAt: z.number().int().positive(),
     ipHash: z.string().length(24),
     origin: z.string().max(300).optional(),
   })

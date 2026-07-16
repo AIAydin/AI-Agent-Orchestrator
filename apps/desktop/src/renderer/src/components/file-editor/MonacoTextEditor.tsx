@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { editor as MonacoEditor } from 'monaco-editor';
 
+import { diagnosticsFromMonacoMarkers, type FileDiagnosticsState } from './diagnostics/model.js';
 import { loadMonacoEditor, type MonacoLoader } from './monaco-loader.js';
 
 export interface MonacoTextEditorProps {
@@ -10,6 +11,13 @@ export interface MonacoTextEditorProps {
   readonly ariaLabel: string;
   readonly onChange: (value: string) => void;
   readonly onSave: () => void;
+  readonly onDiagnosticsChange?: (state: FileDiagnosticsState) => void;
+  readonly position?: {
+    readonly requestId: number;
+    readonly line: number;
+    readonly column: number;
+  };
+  readonly diagnosticsAvailable?: boolean;
   readonly loader?: MonacoLoader | undefined;
   readonly theme?: 'vs' | 'vs-dark' | 'hc-black' | 'hc-light' | undefined;
 }
@@ -21,6 +29,9 @@ export function MonacoTextEditor({
   ariaLabel,
   onChange,
   onSave,
+  onDiagnosticsChange,
+  position,
+  diagnosticsAvailable = false,
   loader = loadMonacoEditor,
   theme = 'vs-dark',
 }: MonacoTextEditorProps) {
@@ -31,6 +42,8 @@ export function MonacoTextEditor({
   const languageRef = useRef(language);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
+  const onDiagnosticsChangeRef = useRef(onDiagnosticsChange);
+  const positionRef = useRef(position);
   const suppressChangeRef = useRef(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -39,6 +52,8 @@ export function MonacoTextEditor({
   languageRef.current = language;
   onChangeRef.current = onChange;
   onSaveRef.current = onSave;
+  onDiagnosticsChangeRef.current = onDiagnosticsChange;
+  positionRef.current = position;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -46,7 +61,9 @@ export function MonacoTextEditor({
     let active = true;
     let resizeObserver: ResizeObserver | undefined;
     let model: MonacoEditor.ITextModel | undefined;
+    let markerSubscription: { dispose(): void } | undefined;
     setLoadFailed(false);
+    onDiagnosticsChangeRef.current?.({ availability: 'loading', items: [] });
 
     void loader()
       .then((monaco) => {
@@ -67,29 +84,57 @@ export function MonacoTextEditor({
           tabSize: 2,
         });
         editorRef.current = editor;
+        if (
+          diagnosticsAvailable &&
+          typeof monaco.editor.getModelMarkers === 'function' &&
+          typeof monaco.editor.onDidChangeMarkers === 'function'
+        ) {
+          const publishMarkers = (): void => {
+            if (model === undefined) return;
+            onDiagnosticsChangeRef.current?.(
+              diagnosticsFromMonacoMarkers(monaco.editor.getModelMarkers({ resource: model.uri })),
+            );
+          };
+          publishMarkers();
+          markerSubscription = monaco.editor.onDidChangeMarkers((resources) => {
+            if (
+              model !== undefined &&
+              resources.some((resource) => resource.toString() === model?.uri.toString())
+            ) {
+              publishMarkers();
+            }
+          });
+        } else {
+          onDiagnosticsChangeRef.current?.({ availability: 'unavailable', items: [] });
+        }
         editor.onDidChangeModelContent(() => {
           if (!suppressChangeRef.current) onChangeRef.current(editor.getValue());
         });
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => onSaveRef.current());
         editor.layout();
+        navigateEditor(editor, positionRef.current);
         if (typeof ResizeObserver !== 'undefined') {
           resizeObserver = new ResizeObserver(() => editor.layout());
           resizeObserver.observe(container);
         }
       })
       .catch(() => {
-        if (active) setLoadFailed(true);
+        if (active) {
+          setLoadFailed(true);
+          onDiagnosticsChangeRef.current?.({ availability: 'unavailable', items: [] });
+        }
       });
 
     return () => {
       active = false;
       resizeObserver?.disconnect();
+      markerSubscription?.dispose();
       editorRef.current?.dispose();
       editorRef.current = null;
       monacoRef.current = null;
       model?.dispose();
     };
-  }, [ariaLabel, loadAttempt, loader, readOnly, theme]);
+  }, [ariaLabel, diagnosticsAvailable, loadAttempt, loader, readOnly, theme]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -109,6 +154,10 @@ export function MonacoTextEditor({
       monacoRef.current?.editor.setModelLanguage(model, language);
   }, [language]);
 
+  useEffect(() => {
+    navigateEditor(editorRef.current, position);
+  }, [position]);
+
   return (
     <div className="file-editor-monaco-shell">
       <div ref={containerRef} className="file-editor-monaco" data-testid="monaco-editor" />
@@ -122,4 +171,20 @@ export function MonacoTextEditor({
       ) : null}
     </div>
   );
+}
+
+function navigateEditor(
+  editor: MonacoEditor.IStandaloneCodeEditor | null,
+  position:
+    | { readonly requestId: number; readonly line: number; readonly column: number }
+    | undefined,
+): void {
+  if (editor === null || position === undefined) return;
+  const target = {
+    lineNumber: Math.max(1, position.line),
+    column: Math.max(1, position.column),
+  };
+  editor.setPosition(target);
+  editor.revealPositionInCenter(target);
+  editor.focus();
 }

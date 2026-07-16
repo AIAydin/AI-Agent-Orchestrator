@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   FileDocument,
   FileReadInput,
+  FileSearchInput,
+  FileSearchResult,
   FileTreeEntry,
   FileTreeInput,
   FileTreeResult,
@@ -32,9 +34,14 @@ describe('ProjectFileBrowser', () => {
       ),
     );
     const read = vi.fn(() => Promise.resolve(textDocument('src/index.ts')));
+    const search = vi.fn((input: FileSearchInput) => Promise.resolve(emptySearch(input.query)));
     const onSelect = vi.fn();
     render(
-      <ProjectFileBrowser projectId={PROJECT_ID} operations={{ tree, read }} onSelect={onSelect} />,
+      <ProjectFileBrowser
+        projectId={PROJECT_ID}
+        operations={{ tree, search, read }}
+        onSelect={onSelect}
+      />,
     );
 
     await waitFor(() =>
@@ -81,8 +88,13 @@ describe('ProjectFileBrowser', () => {
     const read = vi.fn((input: FileReadInput) =>
       Promise.resolve(input.relativePath === 'asset.bin' ? binaryDocument() : oversizedDocument()),
     );
+    const search = vi.fn((input: FileSearchInput) => Promise.resolve(emptySearch(input.query)));
     render(
-      <ProjectFileBrowser projectId={PROJECT_ID} operations={{ tree, read }} onSelect={vi.fn()} />,
+      <ProjectFileBrowser
+        projectId={PROJECT_ID}
+        operations={{ tree, search, read }}
+        onSelect={vi.fn()}
+      />,
     );
 
     await screen.findByText('Bounded results');
@@ -107,6 +119,7 @@ describe('ProjectFileBrowser', () => {
     });
     const operations: ProjectFileBrowserOperations = {
       tree: () => Promise.resolve(result('.', [entry('gone.ts', 'file')])),
+      search: (input) => Promise.resolve(emptySearch(input.query)),
       read: () => Promise.reject(missing),
     };
     render(
@@ -118,10 +131,112 @@ describe('ProjectFileBrowser', () => {
       'Missing · The selected project file no longer exists.',
     );
   });
+
+  it('opens bounded content-search matches with their line location and can reveal a tab in the tree', async () => {
+    const tree = vi.fn((input: FileTreeInput) =>
+      Promise.resolve(
+        input.directory === '.'
+          ? result('.', [entry('src', 'directory')])
+          : result('src', [entry('src/index.ts', 'file')]),
+      ),
+    );
+    const search = vi.fn((input: FileSearchInput) =>
+      Promise.resolve({
+        ...emptySearch(input.query),
+        matches: [
+          {
+            relativePath: 'src/index.ts',
+            line: 7,
+            column: 3,
+            preview: '  needle();',
+          },
+        ],
+        scannedFiles: 4,
+      }),
+    );
+    const read = vi.fn(() => Promise.resolve(textDocument('src/index.ts')));
+    const onSelect = vi.fn();
+    render(
+      <ProjectFileBrowser
+        projectId={PROJECT_ID}
+        operations={{ tree, search, read }}
+        revealRelativePath="src/index.ts"
+        onSelect={onSelect}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(read).toHaveBeenCalledWith({
+        projectId: PROJECT_ID,
+        relativePath: 'src/index.ts',
+      }),
+    );
+    expect(screen.getByRole('button', { name: 'Project' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'src' })).toHaveProperty('disabled', true);
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search text in project files' }), {
+      target: { value: 'needle' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Search contents' }));
+    expect(await screen.findByText('4 files scanned', { exact: false })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open src/index.ts at 7:3' }));
+
+    await waitFor(() =>
+      expect(onSelect).toHaveBeenCalledWith({
+        projectId: PROJECT_ID,
+        relativePath: 'src/index.ts',
+        document: textDocument('src/index.ts'),
+        position: { line: 7, column: 3 },
+      }),
+    );
+  });
+
+  it('reveals an open file by listing its exact parent when the bounded index omitted it', async () => {
+    const tree = vi.fn((input: FileTreeInput) =>
+      Promise.resolve(
+        input.directory === '.'
+          ? result('.', [], true)
+          : result('deep', [entry('deep/target.ts', 'file')]),
+      ),
+    );
+    const read = vi.fn(() => Promise.resolve(textDocument('deep/target.ts')));
+    render(
+      <ProjectFileBrowser
+        projectId={PROJECT_ID}
+        operations={{
+          tree,
+          search: (input) => Promise.resolve(emptySearch(input.query)),
+          read,
+        }}
+        revealRelativePath="deep/target.ts"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(tree).toHaveBeenCalledWith({ projectId: PROJECT_ID, directory: 'deep' }),
+    );
+    expect(await screen.findByRole('region', { name: 'Selected file details' })).toBeTruthy();
+    expect(read).toHaveBeenCalledWith({
+      projectId: PROJECT_ID,
+      relativePath: 'deep/target.ts',
+    });
+  });
 });
 
 function result(directory: string, entries: FileTreeEntry[], truncated = false): FileTreeResult {
   return { projectId: PROJECT_ID, directory, entries, truncated };
+}
+
+function emptySearch(query: string): FileSearchResult {
+  return {
+    projectId: PROJECT_ID,
+    query,
+    matches: [],
+    scannedFiles: 0,
+    skippedFiles: 0,
+    truncated: false,
+  };
 }
 
 function entry(

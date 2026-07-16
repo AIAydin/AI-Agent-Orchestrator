@@ -1,0 +1,112 @@
+.file-editor-workspace {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 380px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.file-editor-tabs {
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 5px;
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--line);
+}
+
+.file-editor-tabs [role='tablist'] {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.file-editor-tab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border-right: 1px solid var(--line);
+}
+
+.file-editor-tab.active {
+  background: var(--surface);
+  box-shadow: inset 0 -2px var(--accent);
+}
+
+.file-editor-tab button,
+.file-editor-tab-add,
+.file-editor-tabs-empty button {
+  min-height: 30px;
+  color: var(--text-soft);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.file-editor-tab [role='tab'] {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  max-width: 170px;
+  padding: 4px 5px 4px 9px;
+}
+
+.file-editor-tab [role='tab'] span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-editor-tab [role='tab'] em {
+  color: var(--yellow);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.file-editor-tab-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  padding: 0;
+}
+
+.file-editor-tab-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.file-editor-tab-add {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 5px;
+  align-items: center;
+  padding: 4px 8px;
+}
+
+.file-editor-tabs-message {
+  padding: 7px 10px;
+  margin: 0;
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.file-editor-tab-panels,
+.file-editor-tab-panel {
+  min-height: 0;
+  height: 100%;
+}
+
+.file-editor-tab-panel .file-editor-panel {
+  border: 0;
+  border-radius: 0;
+}
+
+.file-editor-tabs-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  height: 100%;
+  color: var(--text-faint);
+}

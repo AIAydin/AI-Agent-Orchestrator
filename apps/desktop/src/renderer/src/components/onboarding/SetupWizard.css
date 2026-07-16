@@ -394,6 +394,46 @@
   gap: 12px;
 }
 
+.setup-command-suggestions {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.setup-command-suggestions label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.setup-command-suggestions p,
+.setup-command-suggestions small,
+.setup-command-suggestion-actions > span {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.setup-command-suggestion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.setup-command-suggestion-actions .button {
+  min-height: 28px;
+  padding: 5px 9px;
+  font-size: 8px;
+}
+
 .setup-command-grid fieldset {
   display: grid;
   grid-template-columns: 1fr 1fr;

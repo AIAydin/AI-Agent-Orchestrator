@@ -1,0 +1,61 @@
+.file-diagnostics-status,
+.file-diagnostics summary {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.file-diagnostics {
+  position: relative;
+}
+
+.file-diagnostics summary {
+  cursor: pointer;
+}
+
+.file-diagnostics ol {
+  position: absolute;
+  right: 0;
+  bottom: 22px;
+  z-index: 20;
+  width: min(420px, 80vw);
+  max-height: 220px;
+  padding: 6px;
+  margin: 0;
+  overflow: auto;
+  list-style: none;
+  color: var(--text-soft);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgb(0 0 0 / 30%);
+}
+
+.file-diagnostics li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 6px;
+  border-radius: 5px;
+}
+
+.file-diagnostics li + li {
+  border-top: 1px solid var(--line);
+}
+
+.file-diagnostics li strong {
+  color: var(--red);
+  text-transform: capitalize;
+}
+
+.file-diagnostics li[data-severity='warning'] strong {
+  color: var(--yellow);
+}
+
+.file-diagnostics li span {
+  overflow-wrap: anywhere;
+}
+
+.file-diagnostics li code {
+  color: inherit;
+}

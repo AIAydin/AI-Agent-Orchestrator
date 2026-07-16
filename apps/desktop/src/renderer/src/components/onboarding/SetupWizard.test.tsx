@@ -7,9 +7,14 @@ import {
   AppSettingsSchema,
   type AgentDetection,
   type AppSettings,
+  type Project,
 } from '../../../../shared/application/contracts.js';
 import type { DockerReadiness } from '../../../../shared/docker/contracts.js';
 import type { AgentReadinessResult } from '../../../../shared/readiness/contracts.js';
+import type {
+  CommandReadinessRequest,
+  CommandReadinessResult,
+} from '../../../../shared/command-readiness/contracts.js';
 import { SetupWizard } from './SetupWizard.js';
 
 const settings = AppSettingsSchema.parse({
@@ -47,6 +52,25 @@ const agents: AgentDetection[] = [
   },
 ];
 
+const suggestionProject: Project = {
+  id: '10000000-0000-4000-8000-000000000001',
+  name: 'Known web app',
+  path: '/projects/known-web-app',
+  openedAt: '2026-07-15T17:00:00.000Z',
+  missing: false,
+  health: {
+    isGitRepository: true,
+    branch: 'main',
+    dirty: false,
+    remotes: [],
+    packageManager: 'pnpm',
+    frameworks: ['Vite'],
+    scripts: { dev: 'vite', test: 'vitest' },
+    hasSubmodules: false,
+    sensitiveWarnings: [],
+  },
+};
+
 const readyDocker: DockerReadiness = {
   executable: '/usr/local/bin/docker',
   image: 'registry.example/agent:1',
@@ -74,6 +98,29 @@ const dockerPull = vi.fn(() =>
 const pickExecutable = vi.fn(() =>
   Promise.resolve({ ok: true as const, value: null as string | null }),
 );
+const commandCheck = vi.fn((input: CommandReadinessRequest) =>
+  Promise.resolve({ ok: true as const, value: readyCommand(input) }),
+);
+
+function readyCommand(input: CommandReadinessRequest): CommandReadinessResult {
+  const projectValidated = input.projectId !== null;
+  const partial =
+    !projectValidated &&
+    ['npm', 'pnpm', 'yarn', 'bun'].includes(input.command.executable) &&
+    input.command.arguments[0] === 'run';
+  return {
+    schemaVersion: 1,
+    request: input,
+    state: partial ? 'ready-without-project' : 'ready',
+    ready: true,
+    validationScope: projectValidated ? 'project' : 'executable',
+    resolvedExecutable: `/resolved/${input.command.executable.split('/').at(-1) ?? 'command'}`,
+    projectName: projectValidated ? 'Example project' : null,
+    checkedAt: '2026-07-15T18:00:00.000Z',
+    reason: null,
+    warning: partial ? 'Open a project to validate the selected package script.' : null,
+  };
+}
 
 beforeEach(() => {
   dockerCheck.mockReset();
@@ -85,6 +132,10 @@ beforeEach(() => {
   });
   pickExecutable.mockReset();
   pickExecutable.mockResolvedValue({ ok: true, value: null });
+  commandCheck.mockReset();
+  commandCheck.mockImplementation((input) =>
+    Promise.resolve({ ok: true, value: readyCommand(input) }),
+  );
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -94,6 +145,7 @@ beforeEach(() => {
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
         pickReferences: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
       },
+      commands: { checkReadiness: commandCheck },
     },
   });
 });
@@ -101,6 +153,100 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('SetupWizard', () => {
+  it('adopts detected project scripts and passively validates them before completion', async () => {
+    const onComplete = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
+    render(
+      <SetupWizard
+        settings={settings}
+        agents={agents}
+        projects={[suggestionProject]}
+        onComplete={onComplete}
+        onSkip={() => Promise.resolve()}
+        onError={(message) => {
+          throw new Error(message);
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+
+    expect(screen.getByLabelText<HTMLSelectElement>('Project for command suggestions').value).toBe(
+      suggestionProject.id,
+    );
+    expect(screen.getByText('dev, test', { selector: 'code' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Use “dev” for preview/u }));
+    fireEvent.click(screen.getByRole('button', { name: /Use “test” for tests/u }));
+    await waitFor(() => expect(commandCheck).toHaveBeenCalledTimes(2));
+    expect(commandCheck.mock.calls.map(([input]) => input)).toEqual(
+      expect.arrayContaining([
+        {
+          purpose: 'preview',
+          command: { executable: 'pnpm', arguments: ['run', 'dev'] },
+          projectId: suggestionProject.id,
+        },
+        {
+          purpose: 'check',
+          command: { executable: 'pnpm', arguments: ['run', 'test'] },
+          projectId: suggestionProject.id,
+        },
+      ]),
+    );
+    expect(screen.getAllByText(/Executable and package context ready/u)).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Open Forgeboard/ }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(onComplete.mock.calls[0]?.[0]).toMatchObject({
+      developmentCommand: { executable: 'pnpm', arguments: ['run', 'dev'] },
+      testCommand: { executable: 'pnpm', arguments: ['run', 'test'] },
+    });
+  });
+
+  it('blocks a missing generic dependency and keeps its remediation in the UI', async () => {
+    commandCheck.mockImplementation((input) =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          schemaVersion: 1,
+          request: input,
+          state: 'executable-missing',
+          ready: false,
+          validationScope: 'none',
+          resolvedExecutable: null,
+          projectName: null,
+          checkedAt: '2026-07-15T18:00:00.000Z',
+          reason:
+            'The configured executable was not found. Use Browse or install the dependency and reopen Forgeboard.',
+          warning: null,
+        },
+      }),
+    );
+    render(
+      <SetupWizard
+        settings={settings}
+        agents={agents}
+        onComplete={() => Promise.resolve()}
+        onSkip={() => Promise.resolve()}
+        onError={(message) => {
+          throw new Error(message);
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    fireEvent.change(screen.getByLabelText('Development server executable'), {
+      target: { value: 'missing-preview-tool' },
+    });
+
+    expect(await screen.findAllByText(/configured executable was not found/u)).toHaveLength(2);
+    expect(screen.getByText(/install it and reopen Forgeboard, or use Browse/u)).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ }).disabled).toBe(true);
+  });
+
   it('completes agent, Docker, preview, and worktree setup entirely through controls', async () => {
     pickExecutable
       .mockResolvedValueOnce({ ok: true, value: '/usr/local/bin/pnpm' })
@@ -133,7 +279,9 @@ describe('SetupWizard', () => {
     await screen.findByText('Docker profile ready');
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
 
-    const developmentCommand = screen.getByRole('group', { name: 'Development server' });
+    const developmentCommand = screen.getByRole('group', {
+      name: 'Development server',
+    });
     fireEvent.click(
       within(developmentCommand).getByRole('button', {
         name: 'Browse executable for Development server',
@@ -177,6 +325,11 @@ describe('SetupWizard', () => {
     fireEvent.change(screen.getByLabelText('Branch prefix'), {
       target: { value: 'workshop/' },
     });
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ }).disabled).toBe(
+        false,
+      ),
+    );
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     fireEvent.click(screen.getByRole('button', { name: /Open Forgeboard/ }));
 
@@ -221,7 +374,10 @@ describe('SetupWizard', () => {
       warnings: [],
     };
     const checkAgentReadiness = vi.fn(() => Promise.resolve(readiness));
-    pickExecutable.mockResolvedValueOnce({ ok: true, value: '/chosen/bin/codex' });
+    pickExecutable.mockResolvedValueOnce({
+      ok: true,
+      value: '/chosen/bin/codex',
+    });
     const onComplete = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
     render(
       <SetupWizard
@@ -239,7 +395,9 @@ describe('SetupWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
     fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/ }));
     expect(screen.getByText(/Install OpenAI Codex CLI/u)).toBeTruthy();
-    const continueButton = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
+    const continueButton = screen.getByRole<HTMLButtonElement>('button', {
+      name: /Continue/,
+    });
     expect(continueButton.disabled).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
@@ -248,7 +406,11 @@ describe('SetupWizard', () => {
         '/chosen/bin/codex',
       ),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh OpenAI Codex CLI readiness' }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Refresh OpenAI Codex CLI readiness',
+      }),
+    );
 
     await screen.findByText('Selected executable is ready');
     expect(checkAgentReadiness).toHaveBeenCalledWith({
@@ -349,7 +511,9 @@ describe('SetupWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
-    const continueButton = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
+    const continueButton = screen.getByRole<HTMLButtonElement>('button', {
+      name: /Continue/,
+    });
 
     fireEvent.change(screen.getByLabelText('Environment variable names allowed into processes'), {
       target: { value: 'PATH, NOT-VALID' },

@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import type { ForgeboardApi } from '../shared/api.js';
 import { AgentReadinessResultSchema } from '../shared/readiness/contracts.js';
+import { CommandReadinessResultSchema } from '../shared/command-readiness/contracts.js';
 import { ApprovalViewSchema } from '../shared/approvals/contracts.js';
 import {
   CheckEventEnvelopeSchema,
@@ -17,6 +18,7 @@ import {
   CollaborationJoinResultSchema,
   CollaborationMetadataSnapshotSchema,
   CollaborationPublishInputSchema,
+  CollaborationPublishReceiptSchema,
   CollaborationUpdateAwarenessInputSchema,
 } from '../shared/collaboration/index.js';
 import type { IpcResult } from '../shared/application/contracts.js';
@@ -73,6 +75,7 @@ import {
   WorkflowStartInputSchema,
 } from '../shared/workflow/contracts.js';
 import { createFileApi } from './files.js';
+import { createGitReviewNotesApi } from './git-review-notes.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -123,6 +126,10 @@ const api: ForgeboardApi = {
         AgentReadinessResultSchema.nullable(),
         input,
       ),
+  },
+  commands: {
+    checkReadiness: (input) =>
+      invokeValidated(IPC_CHANNELS.commandsCheckReadiness, CommandReadinessResultSchema, input),
   },
   approvals: {
     list: (input) => invokeValidated(IPC_CHANNELS.approvalsList, ApprovalViewSchema.array(), input),
@@ -187,7 +194,7 @@ const api: ForgeboardApi = {
     publish: (input) =>
       invokeValidated(
         COLLABORATION_IPC_CHANNELS.publish,
-        z.boolean(),
+        CollaborationPublishReceiptSchema.nullable(),
         CollaborationPublishInputSchema.parse(input),
       ),
     updateAwareness: (input) =>
@@ -366,6 +373,10 @@ const api: ForgeboardApi = {
         GitShippingResultViewSchema.nullable(),
         input,
       ),
+    reviewNotes: createGitReviewNotesApi(async (channel, ...args) => {
+      const result: unknown = await ipcRenderer.invoke(channel, ...args);
+      return result;
+    }),
   },
   privacy: {
     export: () => ipcRenderer.invoke(IPC_CHANNELS.privacyExport),

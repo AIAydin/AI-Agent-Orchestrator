@@ -15,9 +15,17 @@ import { useCollaborationCanvas } from './useCollaborationCanvas.js';
 
 const NOW = '2026-07-15T12:00:00.000Z';
 const CONNECTION_ID = '00000000-0000-4000-8000-000000000010';
+let nextDelivery = 20;
 const publish = vi.fn((input: CollaborationPublishInput) => {
   void input;
-  return Promise.resolve({ ok: true as const, value: true });
+  return Promise.resolve({
+    ok: true as const,
+    value: {
+      deliveryId: deliveryId(nextDelivery++),
+      snapshotDigest: 'a'.repeat(64),
+      disposition: 'sent' as const,
+    },
+  });
 });
 const updateAwareness = vi.fn(() => Promise.resolve({ ok: true as const, value: true }));
 const readSnapshot = vi.fn(() =>
@@ -35,6 +43,7 @@ let eventListener: ((event: CollaborationEvent) => void) | null = null;
 
 beforeEach(() => {
   publish.mockClear();
+  nextDelivery = 20;
   updateAwareness.mockClear();
   readSnapshot.mockReset();
   readSnapshot.mockResolvedValue({ ok: true, value: null });
@@ -314,6 +323,39 @@ describe('useCollaborationCanvas', () => {
     expect(publish).toHaveBeenCalledOnce();
   });
 
+  it('ignores local Yjs echoes and continues publishing successive online edits', async () => {
+    const hook = renderHook(
+      ({ document }: { document: CanvasDocument }) =>
+        useCollaborationCanvas({
+          enabled: true,
+          document,
+          selectedNodeId: null,
+          onSnapshot,
+          onError,
+          debounceMs: 0,
+        }),
+      { initialProps: { document: canvas() } },
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    const baseline = publish.mock.calls[0]?.[0].snapshot;
+    if (baseline === undefined) throw new Error('Missing online baseline.');
+    act(() => eventListener?.(metadataEvent(baseline)));
+    act(() => eventListener?.(deliveryAcknowledgedEvent(20, false)));
+
+    hook.rerender({ document: changedCanvas('First online edit') });
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
+    const firstEdit = publish.mock.calls[1]?.[0].snapshot;
+    if (firstEdit === undefined) throw new Error('Missing first online edit.');
+    act(() => eventListener?.(metadataEvent(firstEdit, 'local')));
+    act(() => eventListener?.(deliveryAcknowledgedEvent(21, false)));
+
+    hook.rerender({ document: changedCanvas('Second online edit') });
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(3));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('applies a deliberate A to B to A remote rollback instead of suppressing historical state', async () => {
     const hook = renderHook(
       ({ document, debounceMs }: { document: CanvasDocument; debounceMs: number }) =>
@@ -347,7 +389,7 @@ describe('useCollaborationCanvas', () => {
     expect(onSnapshot).toHaveBeenLastCalledWith(stateA, { initial: false });
   });
 
-  it('pauses instead of resurrecting or overwriting nodes when a reconnect snapshot changed', async () => {
+  it('applies remote deletions after reconnect when the local graph stayed synchronized', async () => {
     renderHook(() =>
       useCollaborationCanvas({
         enabled: true,
@@ -378,13 +420,138 @@ describe('useCollaborationCanvas', () => {
 
     act(() => eventListener?.(statusEvent('reconnecting')));
     act(() => eventListener?.(statusEvent('connected')));
+    await waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(deleted, { initial: false }));
+    expect(onError).not.toHaveBeenCalled();
+    expect(publish).toHaveBeenCalledOnce();
+  });
+
+  it('queues an offline editor change and applies the acknowledged Yjs merge on reconnect', async () => {
+    const hook = renderHook(
+      ({ document }: { document: CanvasDocument }) =>
+        useCollaborationCanvas({
+          enabled: true,
+          document,
+          selectedNodeId: null,
+          onSnapshot,
+          onError,
+          debounceMs: 0,
+        }),
+      { initialProps: { document: canvas() } },
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    const baseline = publish.mock.calls[0]?.[0].snapshot;
+    if (baseline === undefined) throw new Error('Missing reconnect baseline.');
+    act(() => eventListener?.(metadataEvent(baseline)));
+    act(() => eventListener?.(deliveryAcknowledgedEvent(20, false)));
+
+    act(() => eventListener?.(statusEvent('reconnecting')));
+    hook.rerender({ document: changedCanvas('Offline editor title') });
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
+    const offlineProjection = publish.mock.calls[1]?.[0].snapshot;
+    if (offlineProjection === undefined) throw new Error('Missing offline projection.');
+    const merged = CollaborationMetadataSnapshotSchema.parse({
+      ...offlineProjection,
+      comments: {
+        'remote-comment': {
+          id: 'remote-comment',
+          nodeId: 'agent-1',
+          authorId: 'remote-editor',
+          body: 'Remote reconnect note',
+          resolved: false,
+          createdAt: NOW,
+        },
+      },
+    });
+    readSnapshot.mockResolvedValue({ ok: true, value: merged });
+    act(() => eventListener?.(deliveryAcknowledgedEvent(21, true)));
+    act(() => eventListener?.(statusEvent('connected')));
+
+    await waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(merged, { initial: false }));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('pauses when a same-field room edit wins over acknowledged offline intent', async () => {
+    const hook = renderHook(
+      ({ document }: { document: CanvasDocument }) =>
+        useCollaborationCanvas({
+          enabled: true,
+          document,
+          selectedNodeId: null,
+          onSnapshot,
+          onError,
+          debounceMs: 0,
+        }),
+      { initialProps: { document: canvas() } },
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    const baseline = publish.mock.calls[0]?.[0].snapshot;
+    if (baseline === undefined) throw new Error('Missing conflict baseline.');
+    act(() => eventListener?.(metadataEvent(baseline)));
+    act(() => eventListener?.(deliveryAcknowledgedEvent(20, false)));
+    onSnapshot.mockClear();
+
+    act(() => eventListener?.(statusEvent('reconnecting')));
+    hook.rerender({ document: changedCanvas('Offline intent') });
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
+    const offlineProjection = publish.mock.calls[1]?.[0].snapshot;
+    if (offlineProjection === undefined) throw new Error('Missing offline conflict projection.');
+    readSnapshot.mockResolvedValue({
+      ok: true,
+      value: CollaborationMetadataSnapshotSchema.parse({
+        ...offlineProjection,
+        canvas: { ...offlineProjection.canvas, title: 'Remote winner' },
+      }),
+    });
+    act(() => eventListener?.(deliveryAcknowledgedEvent(21, true)));
+    act(() => eventListener?.(statusEvent('connected')));
+
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(
-        'Collaboration paused because the room changed while disconnected and has no delivery acknowledgement to resolve it safely.',
+        'Collaboration paused because an offline edit conflicted with room changes during reconnect.',
       ),
     );
     expect(onSnapshot).not.toHaveBeenCalled();
-    expect(publish).toHaveBeenCalledOnce();
+  });
+
+  it('pauses when an offline editor change is not durably acknowledged', async () => {
+    const hook = renderHook(
+      ({ document }: { document: CanvasDocument }) =>
+        useCollaborationCanvas({
+          enabled: true,
+          document,
+          selectedNodeId: null,
+          onSnapshot,
+          onError,
+          debounceMs: 0,
+        }),
+      { initialProps: { document: canvas() } },
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    const baseline = publish.mock.calls[0]?.[0].snapshot;
+    if (baseline === undefined) throw new Error('Missing reconnect baseline.');
+    act(() => eventListener?.(metadataEvent(baseline)));
+    act(() => eventListener?.(deliveryAcknowledgedEvent(20, false)));
+    onSnapshot.mockClear();
+
+    act(() => eventListener?.(statusEvent('reconnecting')));
+    hook.rerender({ document: changedCanvas('Unacknowledged offline title') });
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
+    readSnapshot.mockResolvedValue({ ok: true, value: baseline });
+    act(() => eventListener?.(deliveryRejectedEvent(21)));
+    act(() => eventListener?.(statusEvent('connected')));
+
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        'Collaboration paused because offline metadata was not durably acknowledged after reconnect.',
+      ),
+    );
+    expect(onSnapshot).not.toHaveBeenCalled();
   });
 
   it('keeps reviewer and viewer roles presence-only and never publishes graph metadata', async () => {
@@ -574,14 +741,61 @@ function awarenessEntry(clientId: number, id: string, displayName: string) {
   };
 }
 
-function metadataEvent(snapshot: CollaborationMetadataSnapshot): CollaborationEvent {
+function metadataEvent(
+  snapshot: CollaborationMetadataSnapshot,
+  source: 'local' | 'remote' = 'remote',
+): CollaborationEvent {
   return {
     type: 'metadata-snapshot',
     sequence: 3,
     occurredAt: NOW,
     connectionId: CONNECTION_ID,
     roomId: 'launch-room',
+    source,
     snapshot,
+  };
+}
+
+function deliveryId(sequence: number): string {
+  return `00000000-0000-4000-8000-${String(sequence).padStart(12, '0')}`;
+}
+
+function deliveryAcknowledgedEvent(
+  sequence: number,
+  reconciledAfterReconnect: boolean,
+): CollaborationEvent {
+  return {
+    type: 'delivery-acknowledged',
+    sequence: 4,
+    occurredAt: NOW,
+    connectionId: CONNECTION_ID,
+    roomId: 'launch-room',
+    acknowledgement: {
+      protocol: 'forgeboard.delivery.v1',
+      type: 'delivery-acknowledged',
+      deliveryId: deliveryId(sequence),
+      stateVector: 'AQID',
+      persistedAt: NOW,
+    },
+    reconciledAfterReconnect,
+  };
+}
+
+function deliveryRejectedEvent(sequence: number): CollaborationEvent {
+  return {
+    type: 'delivery-rejected',
+    sequence: 5,
+    occurredAt: NOW,
+    connectionId: CONNECTION_ID,
+    roomId: 'launch-room',
+    rejection: {
+      protocol: 'forgeboard.delivery.v1',
+      type: 'delivery-rejected',
+      deliveryId: deliveryId(sequence),
+      stateVector: 'AQID',
+      reason: 'state-not-applied',
+    },
+    duringReconnect: true,
   };
 }
 

@@ -1,5 +1,6 @@
 import type {
   FileDocument,
+  FileOpenExternalInput,
   FileReadInput,
   FileRevealInput,
   FileRevertInput,
@@ -13,4 +14,6 @@ export interface FileEditorOperations {
   readonly revert: (input: FileRevertInput) => Promise<FileDocument>;
   /** Resolves only after the main process has actually invoked the native reveal action. */
   readonly reveal: (input: FileRevealInput) => Promise<void>;
+  /** Uses the OS file association after the main process validates the project-relative target. */
+  readonly openExternal: (input: FileOpenExternalInput) => Promise<void>;
 }

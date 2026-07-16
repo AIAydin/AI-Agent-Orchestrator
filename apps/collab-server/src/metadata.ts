@@ -324,9 +324,15 @@ function assertAuthoredRecords(
     const prior = before?.[id];
     const next = after?.[id];
     if (isDeepStrictEqual(prior, next)) continue;
-    const authoredBy = next?.[identityKey] ?? prior?.[identityKey];
-    if (authoredBy !== subject) {
+    if (prior === undefined) {
+      if (next?.[identityKey] === subject) continue;
       throw new CollaborationPrivacyError('Reviewers can only modify their own review data.');
+    }
+    if (prior[identityKey] !== subject) {
+      throw new CollaborationPrivacyError('Reviewers can only modify their own review data.');
+    }
+    if (next !== undefined && next[identityKey] !== prior[identityKey]) {
+      throw new CollaborationPrivacyError('Review ownership cannot be transferred.');
     }
   }
 }

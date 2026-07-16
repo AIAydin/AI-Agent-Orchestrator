@@ -31,6 +31,8 @@ import {
   type GitFileSelection,
 } from './git-review-model.js';
 import { GitReviewSummary } from './GitReviewSummary.js';
+import { GitStaleReviewNotes } from './review-notes/GitStaleReviewNotes.js';
+import { useGitReviewNotes } from './review-notes/useGitReviewNotes.js';
 import {
   GIT_WORKING_TREE_PANEL_ID,
   GIT_WORKING_TREE_TAB_ID,
@@ -50,6 +52,7 @@ export interface GitReviewDialogProps {
 
 export function GitReviewDialog({ target, projectName, onClose, onError }: GitReviewDialogProps) {
   const controller = useGitReview(target, onError);
+  const reviewNotes = useGitReviewNotes(target, controller.review?.refreshedAt ?? null, onError);
   const [selection, setSelection] = useState<GitFileSelection | null>(null);
   const [discardPlan, setDiscardPlan] = useState<GitDiscardPlanView | null>(null);
   const [commitPlan, setCommitPlan] = useState<GitCommitPlanView | null>(null);
@@ -71,6 +74,8 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
   const selectedFileIndex = reviewFiles.findIndex(
     (file) => file.area === selection?.area && file.path === selection.path,
   );
+  const staleReviewNotes =
+    reviewNotes.context?.notes.filter((note) => note.anchorState !== 'current') ?? [];
   const busy = controller.busyLabel !== null;
 
   useEffect(() => {
@@ -168,7 +173,7 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
         role="dialog"
         aria-modal="true"
         aria-labelledby="git-review-title"
-        aria-busy={busy}
+        aria-busy={busy || reviewNotes.busy}
       >
         <header className="git-review-header">
           <span className="modal-title-icon">
@@ -257,6 +262,25 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
                 {controller.busyLabel ?? controller.error ?? notice}
               </div>
             )}
+            {reviewNotes.error !== null && (
+              <p className="git-review-note-error" role="alert">
+                Review feedback unavailable: {reviewNotes.error}
+              </p>
+            )}
+            {reviewNotes.context?.truncated === true && (
+              <p className="git-review-note-error" role="status">
+                This target has more than 500 review notes. Resolve or delete older feedback to see
+                every note here.
+              </p>
+            )}
+            <GitStaleReviewNotes
+              notes={staleReviewNotes}
+              actions={{
+                busy: reviewNotes.busy,
+                onUpdate: reviewNotes.update,
+                onDelete: reviewNotes.remove,
+              }}
+            />
             {controller.review.target.kind === 'agent-worktree' &&
             reviewMode === 'base-comparison' ? (
               controller.review.baseComparison === undefined ? (
@@ -266,6 +290,7 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
               ) : (
                 <GitBaseComparisonPanel
                   comparison={controller.review.baseComparison}
+                  reviewNotes={reviewNotes}
                   footer={
                     <GitShippingPanel
                       review={controller.review}
@@ -310,6 +335,7 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
                   <GitDiffViewer
                     file={selectedFile}
                     busy={busy}
+                    reviewNotes={reviewNotes}
                     {...(selectedFileIndex < 0
                       ? {}
                       : {

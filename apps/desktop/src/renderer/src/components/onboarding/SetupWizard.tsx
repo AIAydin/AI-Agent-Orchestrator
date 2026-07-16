@@ -13,7 +13,12 @@ import {
   TerminalSquare,
 } from 'lucide-react';
 
-import type { AgentDetection, AppSettings } from '../../../../shared/application/contracts.js';
+import type {
+  AgentDetection,
+  AppSettings,
+  Project,
+} from '../../../../shared/application/contracts.js';
+import type { CheckCommandReadiness } from '../../../../shared/command-readiness/contracts.js';
 import type {
   AgentReadinessResult,
   CheckAgentReadiness,
@@ -25,6 +30,7 @@ import {
   EnvironmentAllowlistEditor,
   environmentAllowlistIssues,
 } from '../configuration/EnvironmentAllowlistEditor.js';
+import { useCommandReadiness } from '../configuration/useCommandReadiness.js';
 import { AgentReadinessPanel } from '../readiness/AgentReadinessPanel.js';
 import {
   currentReadinessResult,
@@ -34,6 +40,10 @@ import {
 } from '../readiness/readiness-ui.js';
 import { DockerConfiguration } from '../docker/DockerConfiguration.js';
 import { CustomPermissionProfileEditor } from '../permissions/CustomPermissionProfileEditor.js';
+import {
+  initialCommandSuggestionProjectId,
+  ProjectCommandSuggestions,
+} from './ProjectCommandSuggestions.js';
 import {
   customPermissionConfigurationIssues,
   permissionProfileLabel,
@@ -45,7 +55,9 @@ import './SetupWizard.css';
 interface SetupWizardProps {
   settings: AppSettings;
   agents: AgentDetection[];
+  projects?: Project[];
   checkAgentReadiness?: CheckAgentReadiness;
+  checkCommandReadiness?: CheckCommandReadiness;
   onComplete: (settings: AppSettings) => Promise<void>;
   onSkip: () => Promise<void>;
   onError: (message: string) => void;
@@ -60,6 +72,9 @@ export function SetupWizard(props: SetupWizardProps) {
   const [checkingAgent, setCheckingAgent] = useState(false);
   const [agentReadiness, setAgentReadiness] = useState<Record<string, AgentReadinessResult>>({});
   const [dockerReadiness, setDockerReadiness] = useState<DockerReadiness | null>(null);
+  const [commandProjectId, setCommandProjectId] = useState<string | null>(() =>
+    initialCommandSuggestionProjectId(props.projects ?? []),
+  );
   const availableAgents = useMemo(
     () => props.agents.filter((agent) => isCodingAgent(agent.id)),
     [props.agents],
@@ -86,6 +101,28 @@ export function SetupWizard(props: SetupWizardProps) {
   const selectedAgentReady =
     selectedReadiness?.ready === true ||
     (selectedReadiness === null && launchDetectionIsReady(selectedAgent, selectedReadinessDraft));
+  const setupCommands = useMemo(
+    () => [
+      {
+        id: 'development',
+        label: 'Development server',
+        purpose: 'preview' as const,
+        command: draft.developmentCommand,
+      },
+      {
+        id: 'test',
+        label: 'Test command',
+        purpose: 'check' as const,
+        command: draft.testCommand,
+      },
+    ],
+    [draft.developmentCommand, draft.testCommand],
+  );
+  const commandReadiness = useCommandReadiness(
+    setupCommands,
+    commandProjectId,
+    props.checkCommandReadiness ?? checkConfiguredCommand,
+  );
 
   const checkCurrentAgent: CheckAgentReadiness | undefined = props.checkAgentReadiness
     ? async (request) => {
@@ -239,7 +276,9 @@ export function SetupWizard(props: SetupWizardProps) {
                             defaultAgent: agent.id as AppSettings['defaultAgent'],
                             ...(agent.id === 'test-agent' &&
                             permissionProfileNeedsDocker(draft.defaultPermissionProfile, draft)
-                              ? { defaultPermissionProfile: 'worktree-write' as const }
+                              ? {
+                                  defaultPermissionProfile: 'worktree-write' as const,
+                                }
                               : {}),
                             ...(agent.id === 'custom'
                               ? {
@@ -330,7 +369,10 @@ export function SetupWizard(props: SetupWizardProps) {
                         onChange={(event) =>
                           setDraft({
                             ...draft,
-                            customAgent: { ...draft.customAgent, name: event.target.value },
+                            customAgent: {
+                              ...draft.customAgent,
+                              name: event.target.value,
+                            },
                           })
                         }
                       />
@@ -585,6 +627,16 @@ export function SetupWizard(props: SetupWizardProps) {
                 detected package script. Arguments are stored separately and never interpolated
                 through a shell.
               </p>
+              <ProjectCommandSuggestions
+                projects={props.projects ?? []}
+                selectedProjectId={commandProjectId}
+                busy={busy}
+                onSelectProject={setCommandProjectId}
+                onUseDevelopment={(developmentCommand) =>
+                  setDraft((current) => ({ ...current, developmentCommand }))
+                }
+                onUseTest={(testCommand) => setDraft((current) => ({ ...current, testCommand }))}
+              />
               <div className="setup-command-grid">
                 <CommandBuilder
                   label="Development server"
@@ -597,6 +649,7 @@ export function SetupWizard(props: SetupWizardProps) {
                   busy={busy}
                   onChange={(developmentCommand) => setDraft({ ...draft, developmentCommand })}
                   onBrowse={() => void chooseCommandExecutable('developmentCommand')}
+                  readiness={commandReadiness.statuses['development']}
                 />
                 <CommandBuilder
                   label="Test command"
@@ -609,8 +662,14 @@ export function SetupWizard(props: SetupWizardProps) {
                   busy={busy}
                   onChange={(testCommand) => setDraft({ ...draft, testCommand })}
                   onBrowse={() => void chooseCommandExecutable('testCommand')}
+                  readiness={commandReadiness.statuses['test']}
                 />
               </div>
+              {commandReadiness.blockingIssues[0] !== undefined && (
+                <span className="setup-validation" role="alert">
+                  {commandReadiness.blockingIssues[0]}
+                </span>
+              )}
               <EnvironmentAllowlistEditor
                 compact
                 name="setup-process-environment-allowlist"
@@ -724,7 +783,8 @@ export function SetupWizard(props: SetupWizardProps) {
                       (draft.defaultPermissionProfile === 'custom' &&
                         customPermissionIssues.length > 0) ||
                       (selectedPermissionNeedsDocker && dockerReadiness?.available !== true))) ||
-                  (step === 3 && environmentIssues.length > 0)
+                  (step === 3 &&
+                    (environmentIssues.length > 0 || commandReadiness.blockingIssues.length > 0))
                 }
                 onClick={() => setStep((current) => current + 1)}
               >
@@ -746,6 +806,9 @@ export function SetupWizard(props: SetupWizardProps) {
     </div>
   );
 }
+
+const checkConfiguredCommand: CheckCommandReadiness = async (input) =>
+  unwrap(await window.forgeboard.commands.checkReadiness(input));
 
 function ChoiceCard({
   title,

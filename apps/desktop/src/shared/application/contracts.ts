@@ -18,6 +18,7 @@ import {
   CustomPermissionProfileSettingsSchema,
   PermissionProfileSchema,
 } from '../permissions/contracts.js';
+import { CommandConfigurationSchema } from '../commands/configuration.js';
 
 export {
   CustomPermissionProfileSettingsSchema,
@@ -25,31 +26,13 @@ export {
   type CustomPermissionProfileSettings,
   type PermissionProfile,
 } from '../permissions/contracts.js';
+export {
+  CommandConfigurationSchema,
+  type CommandConfiguration,
+} from '../commands/configuration.js';
 
 export const ThemeSchema = z.enum(['system', 'light', 'dark']);
 export type Theme = z.infer<typeof ThemeSchema>;
-
-const MAX_COMMAND_VALUE_BYTES = 32_768;
-const CommandArgumentSchema = z
-  .string()
-  .max(MAX_COMMAND_VALUE_BYTES)
-  .refine(
-    (value) =>
-      !value.includes('\0') &&
-      new TextEncoder().encode(value).byteLength <= MAX_COMMAND_VALUE_BYTES,
-    { message: 'Command arguments cannot contain NUL bytes or exceed 32 KiB.' },
-  );
-const CommandExecutableSchema = CommandArgumentSchema.refine((value) => !/[\r\n]/u.test(value), {
-  message: 'Command executables cannot contain line breaks.',
-});
-
-export const CommandConfigurationSchema = z
-  .object({
-    executable: CommandExecutableSchema.default(''),
-    arguments: z.array(CommandArgumentSchema).max(512).default([]),
-  })
-  .strict();
-export type CommandConfiguration = z.infer<typeof CommandConfigurationSchema>;
 
 const EnvironmentAllowlistSchema = z
   .array(
@@ -1036,6 +1019,7 @@ export const IPC_CHANNELS = Object.freeze({
   settingsImport: 'settings:import',
   agentsDetect: 'agents:detect',
   agentsCheckReadiness: 'agents:check-readiness',
+  commandsCheckReadiness: 'commands:check-readiness',
   approvalsList: 'approvals:list',
   approvalsRevoke: 'approvals:revoke',
   projectsRecent: 'projects:recent',

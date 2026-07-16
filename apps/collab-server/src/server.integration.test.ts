@@ -3,6 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import {
+  COLLABORATION_DELIVERY_PROTOCOL,
+  CollaborationDeliveryAcknowledgementSchema,
+  CollaborationDeliveryRejectionSchema,
+} from '@forgeboard/core/collaboration-delivery';
+import { encodeCollaborationStateVector } from '@forgeboard/core/collaboration-delivery-codec';
 import * as Y from 'yjs';
 import { z } from 'zod';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -114,6 +120,8 @@ async function connectClient(
   token: string,
   document: Y.Doc,
   onDisconnected?: () => void,
+  onStateless?: (payload: string) => void,
+  onSynced?: () => void,
 ): Promise<HocuspocusProvider> {
   let provider: HocuspocusProvider | undefined;
   const connected = new Promise<HocuspocusProvider>((resolve, reject) => {
@@ -127,6 +135,7 @@ async function connectClient(
       document,
       token,
       onSynced: ({ state }) => {
+        if (state) onSynced?.();
         if (state && provider) {
           clearTimeout(timeout);
           resolve(provider);
@@ -137,6 +146,7 @@ async function connectClient(
         reject(new Error(`Authentication failed: ${reason}`));
       },
       onDisconnect: () => onDisconnected?.(),
+      onStateless: ({ payload }) => onStateless?.(payload),
     });
   });
   const result = await connected;
@@ -264,6 +274,205 @@ describe('optional collaboration service', () => {
             event.details.reason === 'privacy-allowlist',
         ),
     ).toBe(true);
+    ownerDocument.destroy();
+    editorDocument.destroy();
+  });
+
+  it('rejects the next message from a member revoked on an active connection', async () => {
+    const { address, adminToken, service } = await startService();
+    const ownerToken = await createRoom(address, adminToken);
+    const editorToken = await inviteAndRedeem(address, ownerToken, 'editor', 'editor-1');
+    const ownerDocument = initializeOwnerDocument();
+    const editorDocument = new Y.Doc();
+    await connectClient(address, ownerToken, ownerDocument);
+    await connectClient(address, editorToken, editorDocument);
+    await waitFor(() => editorDocument.getMap('nodes').toJSON()['node-1'] !== undefined);
+
+    const revoked = await requestJson(address, '/v1/rooms/launch-room/members/editor-1', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${ownerToken}` },
+    });
+    expect(revoked.status).toBe(204);
+    editorDocument.getMap('nodes').set('node-1', {
+      id: 'node-1',
+      type: 'task',
+      title: 'Revoked edit must not arrive',
+      position: { x: 0, y: 0 },
+      status: 'running',
+    });
+
+    await waitFor(() =>
+      service.store
+        .listAudit('launch-room', 0, 500)
+        .some(
+          (event) =>
+            event.action === 'connection.credential_rejected' &&
+            event.details.reason === 'membership-denied',
+        ),
+    );
+    expect(ownerDocument.getMap('nodes').toJSON()['node-1']).toEqual(
+      expect.objectContaining({ title: 'Initial task' }),
+    );
+    ownerDocument.destroy();
+    editorDocument.destroy();
+  });
+
+  it('durably acknowledges only a state vector already accepted by the authenticated room', async () => {
+    const { address, adminToken, service } = await startService();
+    const ownerToken = await createRoom(address, adminToken);
+    const document = initializeOwnerDocument();
+    const responses: string[] = [];
+    const provider = await connectClient(address, ownerToken, document, undefined, (payload) =>
+      responses.push(payload),
+    );
+
+    document.getMap('nodes').set('node-1', {
+      id: 'node-1',
+      type: 'task',
+      title: 'Durably delivered task',
+      position: { x: 0, y: 0 },
+      status: 'running',
+    });
+    const deliveryId = '00000000-0000-4000-8000-000000000099';
+    const stateVector = encodeCollaborationStateVector(Y.encodeStateVector(document));
+    provider.sendStateless(
+      JSON.stringify({
+        protocol: COLLABORATION_DELIVERY_PROTOCOL,
+        type: 'confirm-delivery',
+        deliveryId,
+        stateVector,
+      }),
+    );
+
+    await waitFor(() => responses.length === 1);
+    expect(
+      CollaborationDeliveryAcknowledgementSchema.parse(JSON.parse(responses[0] ?? '')),
+    ).toEqual(expect.objectContaining({ deliveryId, stateVector }));
+    const persisted = service.store.loadDocument('launch-room');
+    expect(persisted).not.toBeNull();
+    const restored = new Y.Doc();
+    Y.applyUpdate(restored, persisted ?? new Uint8Array());
+    expect(restored.getMap('nodes').toJSON()['node-1']).toEqual(
+      expect.objectContaining({ title: 'Durably delivered task' }),
+    );
+    expect(
+      service.store
+        .listAudit('launch-room', 0, 500)
+        .some(
+          (event) =>
+            event.action === 'metadata.delivery_acknowledged' &&
+            event.details.deliveryId === deliveryId,
+        ),
+    ).toBe(true);
+    restored.destroy();
+    document.destroy();
+  });
+
+  it('rejects a delivery state vector that the authenticated room has not accepted', async () => {
+    const { address, adminToken } = await startService();
+    const ownerToken = await createRoom(address, adminToken);
+    const document = initializeOwnerDocument();
+    const responses: string[] = [];
+    const provider = await connectClient(address, ownerToken, document, undefined, (payload) =>
+      responses.push(payload),
+    );
+    const unsubmitted = new Y.Doc();
+    unsubmitted.getMap('canvas').set('title', 'Never submitted');
+    const stateVector = encodeCollaborationStateVector(Y.encodeStateVector(unsubmitted));
+
+    provider.sendStateless(
+      JSON.stringify({
+        protocol: COLLABORATION_DELIVERY_PROTOCOL,
+        type: 'confirm-delivery',
+        deliveryId: '00000000-0000-4000-8000-000000000097',
+        stateVector,
+      }),
+    );
+    await waitFor(() => responses.length === 1);
+    expect(CollaborationDeliveryRejectionSchema.parse(JSON.parse(responses[0] ?? ''))).toEqual(
+      expect.objectContaining({ reason: 'state-not-applied', stateVector }),
+    );
+    unsubmitted.destroy();
+    document.destroy();
+  });
+
+  it('reconciles offline and remote Yjs edits before durably acknowledging reconnect delivery', async () => {
+    const { address, adminToken, service } = await startService();
+    const ownerToken = await createRoom(address, adminToken);
+    const editorToken = await inviteAndRedeem(address, ownerToken, 'editor', 'editor-1');
+    const ownerDocument = initializeOwnerDocument();
+    const editorDocument = new Y.Doc();
+    const responses: string[] = [];
+    let editorDisconnected = false;
+    let editorSyncCount = 0;
+
+    await connectClient(address, ownerToken, ownerDocument);
+    const editorProvider = await connectClient(
+      address,
+      editorToken,
+      editorDocument,
+      () => {
+        editorDisconnected = true;
+      },
+      (payload) => responses.push(payload),
+      () => {
+        editorSyncCount += 1;
+      },
+    );
+    await waitFor(() => editorDocument.getMap('nodes').toJSON()['node-1'] !== undefined);
+
+    editorProvider.disconnect();
+    await waitFor(() => editorDisconnected);
+    editorDocument.getMap('nodes').set('node-1', {
+      id: 'node-1',
+      type: 'task',
+      title: 'Edited while offline',
+      position: { x: 0, y: 0 },
+      status: 'running',
+    });
+    ownerDocument.getMap('nodes').set('node-2', {
+      id: 'node-2',
+      type: 'task',
+      title: 'Added by remote owner',
+      position: { x: 40, y: 80 },
+      status: 'idle',
+    });
+
+    await editorProvider.connect();
+    await waitFor(() => editorSyncCount >= 2);
+    await waitFor(() => {
+      const ownerNodes = ownerDocument.getMap('nodes').toJSON();
+      const editorNodes = editorDocument.getMap('nodes').toJSON();
+      return (
+        isObject(ownerNodes['node-1']) &&
+        ownerNodes['node-1'].title === 'Edited while offline' &&
+        isObject(editorNodes['node-2']) &&
+        editorNodes['node-2'].title === 'Added by remote owner'
+      );
+    });
+
+    const deliveryId = '00000000-0000-4000-8000-000000000098';
+    const stateVector = encodeCollaborationStateVector(Y.encodeStateVector(editorDocument));
+    editorProvider.sendStateless(
+      JSON.stringify({
+        protocol: COLLABORATION_DELIVERY_PROTOCOL,
+        type: 'confirm-delivery',
+        deliveryId,
+        stateVector,
+      }),
+    );
+    await waitFor(() => responses.length === 1);
+    expect(
+      CollaborationDeliveryAcknowledgementSchema.parse(JSON.parse(responses[0] ?? '')),
+    ).toEqual(expect.objectContaining({ deliveryId, stateVector }));
+
+    const restored = new Y.Doc();
+    Y.applyUpdate(restored, service.store.loadDocument('launch-room') ?? new Uint8Array());
+    expect(restored.getMap('nodes').toJSON()).toMatchObject({
+      'node-1': { title: 'Edited while offline' },
+      'node-2': { title: 'Added by remote owner' },
+    });
+    restored.destroy();
     ownerDocument.destroy();
     editorDocument.destroy();
   });

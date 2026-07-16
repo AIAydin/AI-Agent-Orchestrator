@@ -1,5 +1,6 @@
 export {
   ProjectFileService,
+  type FileNativeActionPreparation,
   type FileRevealPreparation,
   type ProjectFileServiceOptions,
 } from './service.js';

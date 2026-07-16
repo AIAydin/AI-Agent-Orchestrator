@@ -67,7 +67,7 @@ not be reclassified as future work.
 - [x] Repository open/clone/create/init, health scan, recent list, and missing-path recovery.
 - [x] Collision-safe per-writable-run branches/worktrees outside the checkout with ownership records.
 - [ ] Dirty-primary protection and worktree branch/ahead/behind/dirty UI.
-- [ ] Diff parsing, file navigation, unified/split views, whitespace controls, line comments, and stats.
+- [x] Diff parsing, file navigation, unified/split views, whitespace controls, line comments, and stats.
 - [x] Predictable accept/reject individual hunks while preserving unselected changes.
 - [ ] Commit, compare agents/base, rename, archive, external editor, and safe cleanup.
 - [ ] Merge, squash, rebase, cherry-pick, and visual conflict resolution with explicit approvals.
@@ -79,7 +79,7 @@ not be reclassified as future work.
 - [x] Welcome actions: open local, clone, create empty, and recent project.
 - [x] Setup wizard for default agent, permission profile, Docker, development-preview command, and
       Git worktree defaults.
-- [ ] Zero-code first run: sensible defaults, UI executable pickers/detection, UI command builders,
+- [x] Zero-code first run: sensible defaults, UI executable pickers/detection, UI command builders,
       UI permission/environment controls, and actionable missing-dependency guidance.
 - [x] Repository health scan and installed CLI/version detection.
 - [x] Responsive top command bar, left project rail, canvas, right inspector, and activity drawer.
@@ -120,7 +120,7 @@ not be reclassified as future work.
 
 ## Editors, previews, tests, and feedback
 
-- [ ] Ignore-aware tree, quick open, tabs, breadcrumbs, search, diagnostics, save/revert, and external
+- [x] Ignore-aware tree, quick open, tabs, breadcrumbs, search, diagnostics, save/revert, and external
       editor handoff with write protection outside the selected root.
 - [ ] Rich Markdown, Mermaid, and Excalidraw editing.
 - [x] Safe argument-array command configuration and common package script detection.
@@ -546,4 +546,59 @@ unchecked when only a subset of their required behavior has proof.
   three regressions cover reconnect, confirmed leave, and disabling collaboration. The production
   dependency audit found no known vulnerabilities. A fresh unsigned macOS arm64 app, ZIP, and DMG
   built successfully; packaged-app smoke passed, and the native DMG mount/copy/launch smoke returned
+  `FORGEBOARD_SMOKE_OK`. Signing remains inactive because this machine has no Developer ID identity.
+- 2026-07-15: the file editor now provides twenty bounded, live Monaco tabs whose buffers survive
+  tab switches, explicit dirty indicators, unsaved-close protection, optimistic hash-bound save,
+  recoverable revert/history, tree reveal with an exact-parent fallback when the bounded index omits
+  a file, and line/column navigation from bounded project-content search. Search runs in the main
+  process across at most 2,000 policy-approved UTF-8 files and 32 MiB, skips ignored, sensitive,
+  linked, binary, oversized, raced, or unreadable targets, and never returns an absolute path.
+  Diagnostics are shown only for Monaco languages with bundled diagnostic workers; unsupported
+  languages say they are unavailable. External handoff is an explicit UI action routed through a
+  strict project-relative preload contract, canonical main-process root/policy validation, and
+  `shell.openPath`; the renderer cannot select an executable or receive the absolute path. Twenty-
+  nine mapped unit tests and thirteen real file-domain integration tests passed with desktop strict
+  typecheck, zero-warning focused lint, focused formatting, the 637-file structure gate, and
+  `git diff --check`. The broader File-node entry remains unchecked because a real drag-to-agent-
+  context workflow is still absent; editor tabs do not claim to close that separate behavior.
+- 2026-07-15: zero-code setup now passively validates every configured preview, standard check,
+  and custom-check executable plus its exact literal argument vector before Continue or Settings
+  save; direct form submission fails closed as well. The main process resolves executable identity
+  without starting the command, checks the current package script when an authoritative project is
+  available, and returns no environment values. First-run setup displays bounded scripts from known
+  repositories and adopts likely development/test commands with one UI action. Missing executable,
+  missing script, unavailable-project, relative-path, orphaned-argument, stale-evidence, and bridge
+  failures all produce actionable in-app remediation. External dependencies remain user-installed;
+  Forgeboard gives provider/runtime-specific install-or-Browse guidance and intentionally performs
+  no surprise package installation. Fifty-five focused tests across six files, desktop strict
+  typecheck, the 637-file structure gate, targeted zero-warning lint/format checks, production build
+  with the sandboxed preload policy, `git diff --check`, and the real Electron first-run readiness
+  journey passed.
+- 2026-07-15: Git review now supports durable comments and explicit revision requests on exact old-
+  or new-side diff lines in unified and split views. Main resolves the authoritative primary or
+  managed-worktree target and current diff before accepting a bounded anchor; stored notes bind the
+  target, area, full revision digest, path, hunk, side, line, and line-content SHA-256. Changed or
+  deleted diffs preserve feedback as visibly stale instead of silently remapping it. Editing,
+  resolving, optimistic concurrency, two-step deletion, SQLite recovery/integrity, traversal
+  rejection, and real-repository IPC behavior are covered without running Git mutations, agents,
+  or native approvals. The broader Diff/review canvas-node item remains open because local revision
+  feedback is intentionally not an AI approval or execution gate.
+- 2026-07-15: collaboration reconnect delivery now uses a strict bounded non-broadcast stateless
+  protocol: a renderer receipt is correlated with a UUID, safe-snapshot SHA-256, and canonical Yjs
+  state vector; the authenticated server acknowledges only after that vector is present in the
+  allowlisted room document, the exact current Yjs state is persisted, and audit evidence is
+  appended. A real two-client test disconnects an editor, makes independent offline and remote
+  graph changes, reconnects, proves both changes converge, acknowledges, and reopens the persisted
+  merged state. Renderer three-way intent verification now detects a losing same-key offline edit,
+  while accepting disjoint merges; local Yjs echoes no longer masquerade as remote conflicts. Every
+  message revalidates live membership, role, token version, and expiry, and reviewer ownership of
+  existing comments and reviews is immutable. The broad entry remains open for restart-safe offline
+  intent recovery, ordinary shared-comment authoring, and an idle-collaborator avatar roster.
+- 2026-07-15: the zero-code readiness, Monaco editor, durable Git review feedback, and hardened
+  collaboration delivery checkpoint passed the 637-file modularity gate, repository-wide formatting
+  and zero-warning lint, every workspace strict typecheck, 970 unit tests across 169 files, 167 real
+  integration tests across 24 files, all 11 Electron Playwright journeys, all 18 standalone
+  release/startup tests, and every workspace production build. The production dependency audit
+  found no known vulnerabilities. A fresh unsigned macOS arm64 app, ZIP, and DMG built successfully;
+  packaged-app smoke passed, and the native DMG mount/copy/launch smoke returned
   `FORGEBOARD_SMOKE_OK`. Signing remains inactive because this machine has no Developer ID identity.

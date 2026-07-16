@@ -231,6 +231,33 @@ export const MIGRATIONS = [
         project_id, action, resource_fingerprint, agent_id, run_id, created_at DESC
       );
   `,
+  `
+    CREATE TABLE IF NOT EXISTS git_review_notes (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      target_kind TEXT NOT NULL CHECK(target_kind IN ('primary', 'agent-worktree')),
+      run_id TEXT,
+      kind TEXT NOT NULL CHECK(kind IN ('comment', 'revision-request')),
+      status TEXT NOT NULL CHECK(status IN ('open', 'resolved')),
+      revision_id TEXT NOT NULL CHECK(length(revision_id) = 64),
+      relative_path TEXT NOT NULL CHECK(length(relative_path) BETWEEN 1 AND 4096),
+      side TEXT NOT NULL CHECK(side IN ('old', 'new')),
+      line_number INTEGER NOT NULL CHECK(line_number BETWEEN 1 AND 10000000),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      value_json TEXT NOT NULL CHECK(length(value_json) <= 1048576),
+      CHECK(
+        (target_kind = 'primary' AND run_id IS NULL) OR
+        (target_kind = 'agent-worktree' AND run_id IS NOT NULL)
+      ),
+      FOREIGN KEY(project_id) REFERENCES recent_projects(id) ON DELETE CASCADE,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_git_review_notes_target_updated
+      ON git_review_notes(project_id, target_kind, run_id, updated_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_git_review_notes_revision_path
+      ON git_review_notes(revision_id, relative_path, side, line_number);
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {
@@ -285,6 +312,7 @@ export function migrate(database: DatabaseSync): void {
 
 export function clearAllTables(database: DatabaseSync): void {
   database.prepare('DELETE FROM backup_health').run();
+  database.prepare('DELETE FROM git_review_notes').run();
   database.prepare('DELETE FROM workflow_executions').run();
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM trusted_extension_ledger').run();
@@ -310,6 +338,7 @@ export function clearPortableTables(database: DatabaseSync): void {
   // Workflow recovery records are not part of portable export version 3. Clear them before the
   // canvases they bind to so a replace import cannot retain orphaned runtime state.
   database.prepare('DELETE FROM workflow_executions').run();
+  database.prepare('DELETE FROM git_review_notes').run();
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM approval_records').run();
   database.prepare('DELETE FROM canvas_snapshots').run();

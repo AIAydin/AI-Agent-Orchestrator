@@ -1,6 +1,7 @@
 @import '../../components/git-review/git-review-shell.css';
 @import '../../components/git-review/diff/git-review-files.css';
 @import '../../components/git-review/diff/git-review-diff.css';
+@import '../../components/git-review/review-notes/git-review-notes.css';
 @import '../../components/git-review/actions/git-review-actions.css';
 @import '../../components/git-review/git-base-comparison.css';
 @import '../../components/git-review/shipping/git-shipping.css';

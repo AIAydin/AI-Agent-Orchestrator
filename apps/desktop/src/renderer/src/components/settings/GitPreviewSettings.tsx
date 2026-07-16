@@ -1,7 +1,17 @@
 import { unwrap } from '../../lib/ipc.js';
+import type { CommandReadinessStatus } from '../configuration/useCommandReadiness.js';
 import { CommandEditor, SettingsSection, type AsyncSettingsProps } from './shared.js';
 
-export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsProps) {
+interface GitPreviewSettingsProps extends AsyncSettingsProps {
+  readonly developmentReadiness?: CommandReadinessStatus | undefined;
+}
+
+export function GitPreviewSettings({
+  draft,
+  setDraft,
+  perform,
+  developmentReadiness,
+}: GitPreviewSettingsProps) {
   async function chooseExecutable(onSelected: (path: string) => void) {
     await perform(async () => {
       const selected = unwrap(await window.forgeboard.projects.pickExecutable());
@@ -42,7 +52,11 @@ export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsPr
               onClick={() =>
                 void perform(async () => {
                   const selected = unwrap(await window.forgeboard.projects.pickParent());
-                  if (selected) setDraft((current) => ({ ...current, worktreeRoot: selected }));
+                  if (selected)
+                    setDraft((current) => ({
+                      ...current,
+                      worktreeRoot: selected,
+                    }));
                 })
               }
             >
@@ -59,7 +73,10 @@ export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsPr
             name="worktree-cleanup-policy"
             value={draft.worktreeCleanupPolicy}
             onChange={(event) =>
-              setDraft({ ...draft, worktreeCleanupPolicy: event.target.value as 'manual' })
+              setDraft({
+                ...draft,
+                worktreeCleanupPolicy: event.target.value as 'manual',
+              })
             }
             aria-describedby="worktree-cleanup-policy-help"
           >
@@ -148,10 +165,14 @@ export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsPr
             void chooseExecutable((executable) =>
               setDraft((current) => ({
                 ...current,
-                developmentCommand: { ...current.developmentCommand, executable },
+                developmentCommand: {
+                  ...current.developmentCommand,
+                  executable,
+                },
               })),
             )
           }
+          readiness={developmentReadiness}
         />
       </SettingsSection>
       <SettingsSection
@@ -168,7 +189,10 @@ export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsPr
               max="65534"
               value={draft.previewPortStart}
               onChange={(event) =>
-                setDraft({ ...draft, previewPortStart: event.target.valueAsNumber })
+                setDraft({
+                  ...draft,
+                  previewPortStart: event.target.valueAsNumber,
+                })
               }
             />
           </label>
@@ -181,7 +205,10 @@ export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsPr
               max="65535"
               value={draft.previewPortEnd}
               onChange={(event) =>
-                setDraft({ ...draft, previewPortEnd: event.target.valueAsNumber })
+                setDraft({
+                  ...draft,
+                  previewPortEnd: event.target.valueAsNumber,
+                })
               }
             />
           </label>

@@ -114,7 +114,7 @@ describe('FileEditorPanel', () => {
     expect(await screen.findByText('Binary file')).toBeTruthy();
     expect(monaco.created).not.toHaveBeenCalled();
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save' }).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Reveal in file manager' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show in file manager' }));
     await waitFor(() =>
       expect(operations.reveal).toHaveBeenCalledWith({
         projectId: PROJECT_ID,
@@ -122,6 +122,46 @@ describe('FileEditorPanel', () => {
       }),
     );
     expect(await screen.findByText('Revealed in the system file manager.')).toBeTruthy();
+  });
+
+  it('reports live Monaco diagnostics and uses only injected native handoff actions', async () => {
+    const monaco = fakeMonaco();
+    const operations = operationsFor(textDocument('const value = 1;\n', FIRST_HASH));
+    const onRevealInTree = vi.fn();
+    render(
+      <FileEditorPanel
+        projectId={PROJECT_ID}
+        relativePath={PATH}
+        operations={operations}
+        monacoLoader={monaco.loader}
+        onRevealInTree={onRevealInTree}
+      />,
+    );
+    await waitFor(() => expect(monaco.created).toHaveBeenCalledOnce());
+    act(() =>
+      monaco.publishDiagnostics([
+        { severity: 8, message: 'Unknown identifier.', startLineNumber: 1, startColumn: 7 },
+      ]),
+    );
+    expect(await screen.findByText(/Problems 1/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal in tree' }));
+    expect(onRevealInTree).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Open externally' }));
+    await waitFor(() =>
+      expect(operations.openExternal).toHaveBeenCalledWith({
+        projectId: PROJECT_ID,
+        relativePath: PATH,
+      }),
+    );
+    expect(
+      await screen.findByText('Opened the saved file in its default application.'),
+    ).toBeTruthy();
+
+    act(() => monaco.userEdit('unsaved\n'));
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Open externally' }).disabled,
+    ).toBe(true);
   });
 
   it('blocks Monaco edits and the save shortcut when the node is read-only', async () => {
@@ -204,6 +244,7 @@ function operationsFor(document: FileDocument): FileEditorOperations {
     save: vi.fn().mockResolvedValue(document),
     revert: vi.fn().mockResolvedValue(document),
     reveal: vi.fn().mockResolvedValue(undefined),
+    openExternal: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -242,11 +283,15 @@ function fakeMonaco(): {
   readonly created: ReturnType<typeof vi.fn>;
   readonly userEdit: (value: string) => void;
   readonly saveShortcut: () => void;
+  readonly publishDiagnostics: (markers: readonly FakeMarker[]) => void;
 } {
   let value = '';
   let saveShortcut: (() => void) | undefined;
   const listeners = new Set<() => void>();
-  const model = { dispose: vi.fn() };
+  const markerListeners = new Set<(resources: readonly { toString(): string }[]) => void>();
+  const uri = { toString: () => 'file:///src/index.ts' };
+  let markers: readonly FakeMarker[] = [];
+  const model = { dispose: vi.fn(), uri };
   const editor = {
     getValue: () => value,
     setValue: (next: string) => {
@@ -262,6 +307,9 @@ function fakeMonaco(): {
     }),
     updateOptions: vi.fn(),
     getModel: () => model,
+    setPosition: vi.fn(),
+    revealPositionInCenter: vi.fn(),
+    focus: vi.fn(),
     layout: vi.fn(),
     dispose: vi.fn(),
   };
@@ -277,6 +325,13 @@ function fakeMonaco(): {
       }),
       create: created,
       setModelLanguage: vi.fn(),
+      getModelMarkers: vi.fn(() => markers),
+      onDidChangeMarkers: vi.fn(
+        (listener: (resources: readonly { toString(): string }[]) => void) => {
+          markerListeners.add(listener);
+          return { dispose: () => markerListeners.delete(listener) };
+        },
+      ),
     },
     KeyMod: { CtrlCmd: 1 },
     KeyCode: { KeyS: 2 },
@@ -289,5 +344,16 @@ function fakeMonaco(): {
       for (const listener of listeners) listener();
     },
     saveShortcut: () => saveShortcut?.(),
+    publishDiagnostics: (next) => {
+      markers = next;
+      for (const listener of markerListeners) listener([uri]);
+    },
   };
+}
+
+interface FakeMarker {
+  readonly severity: number;
+  readonly message: string;
+  readonly startLineNumber: number;
+  readonly startColumn: number;
 }

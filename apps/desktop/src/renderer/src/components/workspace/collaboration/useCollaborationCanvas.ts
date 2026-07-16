@@ -7,6 +7,7 @@ import {
   serializeCollaborationMetadataSnapshot,
   type CollaborationAwarenessEntry,
   type CollaborationConnection,
+  type CollaborationEvent,
   type CollaborationMetadataSnapshot,
   type CollaborationRole,
 } from '../../../../../shared/collaboration/index.js';
@@ -15,6 +16,16 @@ import { preserveRemoteCollaborationMetadata } from './outgoing-snapshot.js';
 const CURSOR_INTERVAL_MS = 50;
 const MAX_RENDERED_COLLABORATORS = 64;
 const MAX_RENDERED_SELECTIONS = 16;
+const MAX_PENDING_DELIVERY_RECEIPTS = 256;
+
+type CollaborationDeliveryEvent = Extract<
+  CollaborationEvent,
+  { type: 'delivery-acknowledged' | 'delivery-rejected' }
+>;
+
+interface PendingDeliveryFingerprint {
+  readonly fingerprint: string;
+}
 
 interface UseCollaborationCanvasOptions {
   readonly enabled: boolean;
@@ -63,7 +74,11 @@ export function useCollaborationCanvas({
   const pendingRemoteSnapshotRef = useRef<CollaborationMetadataSnapshot | null>(null);
   const sessionConnectionIdRef = useRef<string | null>(null);
   const reconnectingActivationRef = useRef(false);
-  const lastSuccessfulPublishRef = useRef<string | null>(null);
+  const lastSynchronizedSnapshotRef = useRef<string | null>(null);
+  const lastSynchronizedMetadataRef = useRef<CollaborationMetadataSnapshot | null>(null);
+  const reconnectDeliveryRejectedRef = useRef(false);
+  const pendingDeliveryFingerprintsRef = useRef(new Map<string, PendingDeliveryFingerprint>());
+  const earlyDeliveryEventsRef = useRef(new Map<string, CollaborationDeliveryEvent>());
   const lastErrorRef = useRef<string | null>(null);
   const onErrorRef = useRef(onError);
   const onSnapshotRef = useRef(onSnapshot);
@@ -75,47 +90,32 @@ export function useCollaborationCanvas({
   const tryApplySnapshot = useCallback((snapshot: CollaborationMetadataSnapshot): boolean => {
     const fingerprint = serializeCollaborationMetadataSnapshot(snapshot);
     const previousRemote = lastRemoteSnapshotRef.current;
-    if (fingerprint === lastPublishedSnapshotRef.current) {
-      lastRemoteSnapshotRef.current = snapshot;
-      lastAppliedSnapshotRef.current = fingerprint;
-      lastSuccessfulPublishRef.current = fingerprint;
-      lastPublishedSnapshotRef.current = null;
-      initialSnapshotRef.current = false;
-      pendingRemoteSnapshotRef.current = null;
-      reconnectingActivationRef.current = false;
-      return true;
-    }
-    if (
-      reconnectingActivationRef.current &&
-      previousRemote !== null &&
-      fingerprint !== serializeCollaborationMetadataSnapshot(previousRemote)
-    ) {
-      pendingRemoteSnapshotRef.current = snapshot;
-      sessionReadyRef.current = false;
-      reportOnce(
-        lastErrorRef,
-        onErrorRef.current,
-        'Collaboration paused because the room changed while disconnected and has no delivery acknowledgement to resolve it safely.',
-      );
-      return false;
-    }
-    if (
-      previousRemote !== null &&
-      fingerprint !== serializeCollaborationMetadataSnapshot(previousRemote)
-    ) {
-      const baselineFingerprint =
-        lastSuccessfulPublishRef.current ?? serializeCollaborationMetadataSnapshot(previousRemote);
-      const currentFingerprint = collaborationDocumentFingerprint(
-        documentRef.current,
-        previousRemote,
-      );
-      if (currentFingerprint !== null && currentFingerprint !== baselineFingerprint) {
+    if (previousRemote !== null) {
+      const remoteChanged = fingerprint !== serializeCollaborationMetadataSnapshot(previousRemote);
+      const baseline = lastSynchronizedMetadataRef.current ?? previousRemote;
+      const baselineFingerprint = serializeCollaborationMetadataSnapshot(baseline);
+      const currentSnapshot = collaborationDocumentSnapshot(documentRef.current, previousRemote);
+      const currentFingerprint =
+        currentSnapshot === null ? null : serializeCollaborationMetadataSnapshot(currentSnapshot);
+      const localIntentSurvived =
+        currentSnapshot !== null && localChangesSurvive(baseline, currentSnapshot, snapshot);
+      if (
+        collaborationRoleCanEditGraph(connectionRef.current?.role) &&
+        currentFingerprint !== null &&
+        currentFingerprint !== baselineFingerprint &&
+        (remoteChanged || reconnectingActivationRef.current) &&
+        (!localIntentSurvived || reconnectDeliveryRejectedRef.current)
+      ) {
         pendingRemoteSnapshotRef.current = snapshot;
         sessionReadyRef.current = false;
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Collaboration paused because local and room metadata both changed since the last synchronized state.',
+          reconnectingActivationRef.current
+            ? reconnectDeliveryRejectedRef.current
+              ? 'Collaboration paused because offline metadata was not durably acknowledged after reconnect.'
+              : 'Collaboration paused because an offline edit conflicted with room changes during reconnect.'
+            : 'Collaboration paused because local and room metadata both changed since the last synchronized state.',
         );
         return false;
       }
@@ -131,7 +131,8 @@ export function useCollaborationCanvas({
         return false;
       }
       lastAppliedSnapshotRef.current = fingerprint;
-      lastSuccessfulPublishRef.current = fingerprint;
+      lastSynchronizedSnapshotRef.current = fingerprint;
+      lastSynchronizedMetadataRef.current = snapshot;
       initialSnapshotRef.current = false;
       pendingRemoteSnapshotRef.current = null;
       reconnectingActivationRef.current = false;
@@ -147,12 +148,53 @@ export function useCollaborationCanvas({
       return false;
     }
     lastAppliedSnapshotRef.current = fingerprint;
-    lastSuccessfulPublishRef.current = fingerprint;
+    lastSynchronizedSnapshotRef.current = fingerprint;
+    lastSynchronizedMetadataRef.current = snapshot;
     initialSnapshotRef.current = false;
     pendingRemoteSnapshotRef.current = null;
     reconnectingActivationRef.current = false;
     return true;
   }, []);
+
+  const settleDeliveryEvent = useCallback(
+    (event: CollaborationDeliveryEvent): void => {
+      const response =
+        event.type === 'delivery-acknowledged' ? event.acknowledgement : event.rejection;
+      const pending = pendingDeliveryFingerprintsRef.current.get(response.deliveryId);
+      if (pending === undefined) {
+        if (earlyDeliveryEventsRef.current.size >= MAX_PENDING_DELIVERY_RECEIPTS) {
+          const oldest = earlyDeliveryEventsRef.current.keys().next().value;
+          if (oldest !== undefined) earlyDeliveryEventsRef.current.delete(oldest);
+        }
+        earlyDeliveryEventsRef.current.set(response.deliveryId, event);
+        return;
+      }
+      pendingDeliveryFingerprintsRef.current.delete(response.deliveryId);
+      if (
+        lastPublishedSnapshotRef.current === pending.fingerprint &&
+        !hasPendingFingerprint(pendingDeliveryFingerprintsRef.current, pending.fingerprint)
+      ) {
+        lastPublishedSnapshotRef.current = null;
+      }
+      if (event.type === 'delivery-acknowledged') {
+        lastErrorRef.current = null;
+        const pendingRemote = pendingRemoteSnapshotRef.current;
+        if (connectionRef.current !== null && pendingRemote !== null) {
+          const ready = tryApplySnapshot(pendingRemote);
+          sessionReadyRef.current = ready;
+          setSessionReady(ready);
+        }
+        return;
+      }
+      if (event.duringReconnect) reconnectDeliveryRejectedRef.current = true;
+      reportOnce(
+        lastErrorRef,
+        onErrorRef.current,
+        deliveryRejectionMessage(event.rejection.reason, event.duringReconnect),
+      );
+    },
+    [tryApplySnapshot],
+  );
 
   const publishAwareness = useCallback(() => {
     const collaboration = window.forgeboard.collaboration;
@@ -206,6 +248,11 @@ export function useCollaborationCanvas({
     if (!enabled || collaboration === undefined) {
       sessionConnectionIdRef.current = null;
       setGraphAuthorityRole(null);
+      lastPublishedSnapshotRef.current = null;
+      lastSynchronizedMetadataRef.current = null;
+      reconnectDeliveryRejectedRef.current = false;
+      pendingDeliveryFingerprintsRef.current.clear();
+      earlyDeliveryEventsRef.current.clear();
       deactivateSession(
         connectionRef,
         sessionReadyRef,
@@ -235,7 +282,11 @@ export function useCollaborationCanvas({
         lastAppliedSnapshotRef.current = null;
         lastPublishedSnapshotRef.current = null;
         lastRemoteSnapshotRef.current = null;
-        lastSuccessfulPublishRef.current = null;
+        lastSynchronizedSnapshotRef.current = null;
+        lastSynchronizedMetadataRef.current = null;
+        reconnectDeliveryRejectedRef.current = false;
+        pendingDeliveryFingerprintsRef.current.clear();
+        earlyDeliveryEventsRef.current.clear();
       }
       pendingRemoteSnapshotRef.current = null;
       setConnection(next);
@@ -288,6 +339,9 @@ export function useCollaborationCanvas({
           void activate(event.connection);
         } else {
           const sameJoinedSession = sessionConnectionIdRef.current === event.connectionId;
+          if (sameJoinedSession && event.connection.status === 'reconnecting') {
+            reconnectDeliveryRejectedRef.current = false;
+          }
           activationGeneration += 1;
           deactivateSession(
             connectionRef,
@@ -299,6 +353,9 @@ export function useCollaborationCanvas({
             setSessionReady,
             setAwareness,
           );
+          if (sameJoinedSession && event.connection.status === 'reconnecting') {
+            setConnection(event.connection);
+          }
           if (!sameJoinedSession) {
             setGraphAuthorityRole(null);
           } else if (
@@ -328,9 +385,17 @@ export function useCollaborationCanvas({
         }
         return;
       }
+      if (
+        (event.type === 'delivery-acknowledged' || event.type === 'delivery-rejected') &&
+        sessionConnectionIdRef.current === event.connectionId
+      ) {
+        settleDeliveryEvent(event);
+        return;
+      }
       const active = connectionRef.current;
       if (active === null || active.connectionId !== event.connectionId) return;
       if (event.type === 'metadata-snapshot') {
+        if (event.source === 'local') return;
         const ready = tryApplySnapshot(event.snapshot);
         sessionReadyRef.current = ready;
         setSessionReady(ready);
@@ -376,7 +441,7 @@ export function useCollaborationCanvas({
         setAwareness,
       );
     };
-  }, [enabled, tryApplySnapshot]);
+  }, [enabled, settleDeliveryEvent, tryApplySnapshot]);
 
   useEffect(() => {
     const pending = pendingRemoteSnapshotRef.current;
@@ -388,11 +453,15 @@ export function useCollaborationCanvas({
 
   useEffect(() => {
     const collaboration = window.forgeboard.collaboration;
+    const canPublishOnline = connection?.status === 'connected' && sessionReady;
+    const canQueueOffline =
+      connection?.status === 'reconnecting' &&
+      sessionConnectionIdRef.current === connection.connectionId;
     if (
       !enabled ||
       connection === null ||
-      !collaborationRoleCanEditGraph(connection.role) ||
-      !sessionReady ||
+      !collaborationRoleCanEditGraph(connection.role ?? graphAuthorityRole ?? undefined) ||
+      (!canPublishOnline && !canQueueOffline) ||
       document === null ||
       collaboration === undefined
     ) {
@@ -416,8 +485,17 @@ export function useCollaborationCanvas({
         const fingerprint = serializeCollaborationMetadataSnapshot(snapshot);
         if (
           fingerprint === lastPublishedSnapshotRef.current ||
-          fingerprint === lastSuccessfulPublishRef.current
+          fingerprint === lastSynchronizedSnapshotRef.current ||
+          hasPendingFingerprint(pendingDeliveryFingerprintsRef.current, fingerprint)
         ) {
+          return;
+        }
+        if (pendingDeliveryFingerprintsRef.current.size >= MAX_PENDING_DELIVERY_RECEIPTS) {
+          reportOnce(
+            lastErrorRef,
+            onErrorRef.current,
+            'Collaboration is waiting for too many delivery confirmations; reconnect before making more shared edits.',
+          );
           return;
         }
         lastPublishedSnapshotRef.current = fingerprint;
@@ -425,16 +503,26 @@ export function useCollaborationCanvas({
           .publish({ snapshot })
           .then((result) => {
             if (result.ok && result.value) {
-              lastSuccessfulPublishRef.current = fingerprint;
-              if (lastPublishedSnapshotRef.current === fingerprint) {
-                lastPublishedSnapshotRef.current = null;
+              pendingDeliveryFingerprintsRef.current.set(result.value.deliveryId, {
+                fingerprint,
+              });
+              const early = earlyDeliveryEventsRef.current.get(result.value.deliveryId);
+              if (early !== undefined) {
+                earlyDeliveryEventsRef.current.delete(result.value.deliveryId);
+                settleDeliveryEvent(early);
               }
               lastErrorRef.current = null;
             } else {
               if (lastPublishedSnapshotRef.current === fingerprint) {
                 lastPublishedSnapshotRef.current = null;
               }
-              if (!result.ok) reportOnce(lastErrorRef, onErrorRef.current, result.error.message);
+              reportOnce(
+                lastErrorRef,
+                onErrorRef.current,
+                result.ok
+                  ? 'Forgeboard could not queue collaboration metadata for delivery.'
+                  : result.error.message,
+              );
             }
           })
           .catch(() => {
@@ -456,7 +544,15 @@ export function useCollaborationCanvas({
       }
     }, debounceMs);
     return () => window.clearTimeout(timer);
-  }, [connection, debounceMs, document, enabled, sessionReady]);
+  }, [
+    connection,
+    debounceMs,
+    document,
+    enabled,
+    graphAuthorityRole,
+    sessionReady,
+    settleDeliveryEvent,
+  ]);
 
   useEffect(() => {
     if (enabled && sessionReady) publishAwareness();
@@ -471,27 +567,103 @@ export function useCollaborationCanvas({
   };
 }
 
-function collaborationDocumentFingerprint(
+function collaborationDocumentSnapshot(
   document: CanvasDocument | null,
   remote: CollaborationMetadataSnapshot | null,
-): string | null {
+): CollaborationMetadataSnapshot | null {
   if (document === null) return null;
   const migrated = canonicalCanvasFromLegacy(document);
   if (!migrated.ok) return null;
   try {
-    return serializeCollaborationMetadataSnapshot(
-      preserveRemoteCollaborationMetadata(
-        collaborationMetadataSnapshotFromCanvas(migrated.canvas),
-        remote,
-      ),
+    return preserveRemoteCollaborationMetadata(
+      collaborationMetadataSnapshotFromCanvas(migrated.canvas),
+      remote,
     );
   } catch {
     return null;
   }
 }
 
+/** Accepts remote-only changes but requires every local change since the baseline to survive. */
+function localChangesSurvive(baseline: unknown, local: unknown, merged: unknown): boolean {
+  if (jsonValuesEqual(baseline, local)) return true;
+  if (Array.isArray(baseline) || Array.isArray(local) || Array.isArray(merged)) {
+    return jsonValuesEqual(local, merged);
+  }
+  if (isJsonRecord(baseline) && isJsonRecord(local) && isJsonRecord(merged)) {
+    const keys = new Set([...Object.keys(baseline), ...Object.keys(local)]);
+    for (const key of keys) {
+      const baselineHas = Object.hasOwn(baseline, key);
+      const localHas = Object.hasOwn(local, key);
+      const mergedHas = Object.hasOwn(merged, key);
+      if (baselineHas === localHas && jsonValuesEqual(baseline[key], local[key])) continue;
+      if (!localHas) {
+        if (mergedHas) return false;
+        continue;
+      }
+      if (!mergedHas) return false;
+      if (!baselineHas) {
+        if (!jsonValuesEqual(local[key], merged[key])) return false;
+        continue;
+      }
+      if (!localChangesSurvive(baseline[key], local[key], merged[key])) return false;
+    }
+    return true;
+  }
+  return jsonValuesEqual(local, merged);
+}
+
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return (
+      left.length === right.length &&
+      left.every((value, index) => jsonValuesEqual(value, right[index]))
+    );
+  }
+  if (isJsonRecord(left) && isJsonRecord(right)) {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    return (
+      leftKeys.length === rightKeys.length &&
+      leftKeys.every((key) => Object.hasOwn(right, key) && jsonValuesEqual(left[key], right[key]))
+    );
+  }
+  return false;
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function collaborationRoleCanEditGraph(role: CollaborationRole | undefined): boolean {
   return role === 'owner' || role === 'editor';
+}
+
+function hasPendingFingerprint(
+  pending: ReadonlyMap<string, PendingDeliveryFingerprint>,
+  fingerprint: string,
+): boolean {
+  for (const value of pending.values()) {
+    if (value.fingerprint === fingerprint) return true;
+  }
+  return false;
+}
+
+function deliveryRejectionMessage(
+  reason: 'invalid-request' | 'not-authorized' | 'state-not-applied' | 'document-too-large',
+  duringReconnect: boolean,
+): string {
+  if (reason === 'not-authorized') {
+    return "The collaboration server rejected this role's metadata delivery.";
+  }
+  if (reason === 'document-too-large') {
+    return 'The collaboration server rejected metadata that exceeds the room size limit.';
+  }
+  if (duringReconnect) {
+    return 'Collaboration paused because offline metadata was not durably acknowledged after reconnect.';
+  }
+  return 'The collaboration server did not durably acknowledge the latest metadata update.';
 }
 
 function renderableAwareness(

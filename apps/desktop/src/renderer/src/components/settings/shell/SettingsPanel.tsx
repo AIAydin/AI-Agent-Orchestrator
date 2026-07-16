@@ -33,6 +33,8 @@ import { PermissionSettings } from '../PermissionSettings.js';
 import { PrivacySettings } from '../privacy/PrivacySettings.js';
 import { customPermissionConfigurationIssues } from '../../permissions/permission-profile-ui.js';
 import { environmentAllowlistIssues } from '../../configuration/EnvironmentAllowlistEditor.js';
+import { useCommandReadiness } from '../../configuration/useCommandReadiness.js';
+import { settingsCommandDrafts } from './command-drafts.js';
 
 type SettingsTab =
   | 'appearance'
@@ -74,6 +76,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
   busyRef.current = busy;
   const permissionIssues = customPermissionConfigurationIssues(draft);
   const environmentIssues = environmentAllowlistIssues(draft.envAllowlist);
+  const commandDrafts = settingsCommandDrafts(draft);
+  const commandReadiness = useCommandReadiness(
+    commandDrafts,
+    props.activeProject?.id ?? null,
+    checkCommandReadiness,
+  );
 
   useEffect(() => {
     const previousFocus =
@@ -134,6 +142,17 @@ export function SettingsPanel(props: SettingsPanelProps) {
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
+    const validationIssue =
+      permissionIssues[0] ??
+      environmentIssues[0] ??
+      commandReadiness.blockingIssues[0] ??
+      (dockerConfigurationIncomplete(draft)
+        ? 'Complete the selected Docker configuration before saving.'
+        : undefined);
+    if (validationIssue !== undefined) {
+      setNotice(`Settings were not saved: ${validationIssue}`);
+      return;
+    }
     await perform(async () => {
       unwrap(await window.forgeboard.settings.update(draft));
       await props.onSaved();
@@ -257,7 +276,13 @@ export function SettingsPanel(props: SettingsPanelProps) {
               />
             )}
             {tab === 'git' && (
-              <GitPreviewSettings draft={draft} setDraft={setDraft} busy={busy} perform={perform} />
+              <GitPreviewSettings
+                draft={draft}
+                setDraft={setDraft}
+                busy={busy}
+                perform={perform}
+                developmentReadiness={commandReadiness.statuses['development']}
+              />
             )}
             {tab === 'checks' && (
               <CheckSettings
@@ -266,6 +291,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 setDraft={setDraft}
                 busy={busy}
                 perform={perform}
+                readiness={commandReadiness.statuses}
               />
             )}
             {tab === 'extensions' && (
@@ -321,6 +347,13 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 {environmentIssues[0]}
               </small>
             )}
+            {permissionIssues.length === 0 &&
+              environmentIssues.length === 0 &&
+              commandReadiness.blockingIssues[0] !== undefined && (
+                <small id="settings-command-validation" role="alert">
+                  {commandReadiness.blockingIssues[0]}
+                </small>
+              )}
           </span>
           <div>
             <button
@@ -344,15 +377,20 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 busy ||
                 dockerConfigurationIncomplete(draft) ||
                 permissionIssues.length > 0 ||
-                environmentIssues.length > 0
+                environmentIssues.length > 0 ||
+                commandReadiness.blockingIssues.length > 0
               }
-              title={permissionIssues[0] ?? environmentIssues[0]}
+              title={
+                permissionIssues[0] ?? environmentIssues[0] ?? commandReadiness.blockingIssues[0]
+              }
               aria-describedby={
                 permissionIssues.length > 0
                   ? 'settings-permission-validation'
                   : environmentIssues.length > 0
                     ? 'settings-environment-validation'
-                    : undefined
+                    : commandReadiness.blockingIssues.length > 0
+                      ? 'settings-command-validation'
+                      : undefined
               }
             >
               <Save size={15} /> Save settings
@@ -362,6 +400,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
       </form>
     </div>
   );
+}
+
+async function checkCommandReadiness(
+  input: Parameters<typeof window.forgeboard.commands.checkReadiness>[0],
+) {
+  return unwrap(await window.forgeboard.commands.checkReadiness(input));
 }
 
 function SettingsTabButton({

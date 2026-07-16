@@ -6,17 +6,23 @@ import {
   FILE_TEXT_MAX_BYTES,
   FILE_TREE_MAX_ENTRIES,
   FileDocumentSchema,
+  FileOpenExternalInputSchema,
   FileReadInputSchema,
   FileRevealInputSchema,
   FileRevertInputSchema,
   FileSaveInputSchema,
+  FileSearchInputSchema,
+  FileSearchResultSchema,
   FileTreeInputSchema,
   FileTreeResultSchema,
   type FileDocument,
+  type FileOpenExternalInput,
   type FileReadInput,
   type FileRevealInput,
   type FileRevertInput,
   type FileSaveInput,
+  type FileSearchInput,
+  type FileSearchResult,
   type FileTreeInput,
   type FileTreeResult,
 } from '../../shared/files/contracts.js';
@@ -28,29 +34,38 @@ import {
 import { FileDomainError, fileDomainBoundary } from './errors.js';
 import { assertFileContentAllowed } from './policy.js';
 import { readProjectDocument } from './reader.js';
+import {
+  defaultProjectFileSearchOptions,
+  searchProjectFiles,
+  type ProjectFileSearchOptions,
+} from './search.js';
 import { listProjectDirectory } from './tree.js';
 import { saveProjectDocument } from './writer.js';
 
 export interface ProjectFileServiceOptions {
   readonly maxTextBytes?: number;
   readonly maxDirectoryEntries?: number;
+  readonly search?: Partial<Omit<ProjectFileSearchOptions, 'maxDirectoryEntries'>>;
 }
 
-export interface FileRevealPreparation {
+export interface FileNativeActionPreparation {
   readonly projectId: string;
   readonly relativePath: string;
-  /** Main-process only. Call Electron shell.showItemInFolder here; never bridge this value. */
+  /** Main-process only. Execute the approved native shell action here; never bridge this value. */
   readonly absolutePath: string;
   readonly kind: 'file' | 'directory';
 }
 
+export type FileRevealPreparation = FileNativeActionPreparation;
+
 /**
- * Main-process file authority. Typed IPC should expose its JSON views and execute reveal natively;
- * renderer code must never receive project roots or FileRevealPreparation.absolutePath.
+ * Main-process file authority. Typed IPC exposes only JSON views and executes native handoffs;
+ * renderer code never receives project roots or FileNativeActionPreparation.absolutePath.
  */
 export class ProjectFileService {
   readonly #maxTextBytes: number;
   readonly #maxDirectoryEntries: number;
+  readonly #searchOptions: ProjectFileSearchOptions;
   readonly #saveTails = new Map<string, Promise<void>>();
 
   public constructor(
@@ -67,6 +82,7 @@ export class ProjectFileService {
       FILE_TREE_MAX_ENTRIES,
       FILE_TREE_MAX_ENTRIES,
     );
+    this.#searchOptions = normalizeSearchOptions(this.#maxDirectoryEntries, options.search);
   }
 
   public async tree(input: FileTreeInput): Promise<FileTreeResult> {
@@ -89,6 +105,23 @@ export class ProjectFileService {
     return await fileDomainBoundary(async () => {
       const parsed = FileReadInputSchema.parse(input);
       return await this.#readParsed(parsed);
+    });
+  }
+
+  public async search(input: FileSearchInput): Promise<FileSearchResult> {
+    return await fileDomainBoundary(async () => {
+      const parsed = FileSearchInputSchema.parse(input);
+      const root = await resolveProjectFileRoot(this.store, parsed.projectId);
+      const matcher = await loadProjectIgnoreMatcher(root);
+      return FileSearchResultSchema.parse(
+        await searchProjectFiles(
+          root,
+          parsed.projectId,
+          parsed.query,
+          matcher,
+          this.#searchOptions,
+        ),
+      );
     });
   }
 
@@ -149,6 +182,31 @@ export class ProjectFileService {
     });
   }
 
+  public async prepareOpenExternal(
+    input: FileOpenExternalInput,
+  ): Promise<FileNativeActionPreparation> {
+    return await fileDomainBoundary(async () => {
+      const parsed = FileOpenExternalInputSchema.parse(input);
+      const root = await resolveProjectFileRoot(this.store, parsed.projectId);
+      const matcher = await loadProjectIgnoreMatcher(root);
+      assertFileContentAllowed(matcher, parsed.relativePath);
+      const resolved = await resolveExactProjectPath(root, parsed.relativePath);
+      const targetStat = await lstat(resolved.path);
+      if (!targetStat.isFile() || targetStat.isSymbolicLink()) {
+        throw new FileDomainError(
+          'NOT_A_FILE',
+          'Only ordinary project files can be opened in an external application.',
+        );
+      }
+      return {
+        projectId: parsed.projectId,
+        relativePath: parsed.relativePath,
+        absolutePath: resolved.path,
+        kind: 'file',
+      };
+    });
+  }
+
   async #readParsed(input: FileReadInput): Promise<FileDocument> {
     const root = await resolveProjectFileRoot(this.store, input.projectId);
     const matcher = await loadProjectIgnoreMatcher(root);
@@ -176,6 +234,37 @@ export class ProjectFileService {
       if (this.#saveTails.get(key) === tail) this.#saveTails.delete(key);
     }
   }
+}
+
+function normalizeSearchOptions(
+  maxDirectoryEntries: number,
+  overrides: ProjectFileServiceOptions['search'],
+): ProjectFileSearchOptions {
+  const defaults = defaultProjectFileSearchOptions(maxDirectoryEntries);
+  return {
+    maxDirectoryEntries,
+    maxDirectories: boundedPositiveInteger(
+      overrides?.maxDirectories,
+      defaults.maxDirectories,
+      defaults.maxDirectories,
+    ),
+    maxFiles: boundedPositiveInteger(overrides?.maxFiles, defaults.maxFiles, defaults.maxFiles),
+    maxFileBytes: boundedPositiveInteger(
+      overrides?.maxFileBytes,
+      defaults.maxFileBytes,
+      defaults.maxFileBytes,
+    ),
+    maxTotalBytes: boundedPositiveInteger(
+      overrides?.maxTotalBytes,
+      defaults.maxTotalBytes,
+      defaults.maxTotalBytes,
+    ),
+    maxResults: boundedPositiveInteger(
+      overrides?.maxResults,
+      defaults.maxResults,
+      defaults.maxResults,
+    ),
+  };
 }
 
 function boundedPositiveInteger(

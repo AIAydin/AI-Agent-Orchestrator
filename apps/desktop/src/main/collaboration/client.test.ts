@@ -68,6 +68,21 @@ function snapshot() {
   });
 }
 
+function acknowledgeLatestDelivery(harness: ProviderHarness, persistedAt = NOW): void {
+  const rawRequest = harness.stateless.at(-1);
+  if (rawRequest === undefined) throw new Error('Expected a delivery confirmation request.');
+  const request = JSON.parse(rawRequest) as { deliveryId: string; stateVector: string };
+  harness.input?.onStateless(
+    JSON.stringify({
+      protocol: 'forgeboard.delivery.v1',
+      type: 'delivery-acknowledged',
+      deliveryId: request.deliveryId,
+      stateVector: request.stateVector,
+      persistedAt,
+    }),
+  );
+}
+
 interface ProviderHarness {
   readonly factory: ReturnType<
     typeof vi.fn<(input: CollaborationProviderFactoryInput) => CollaborationProviderHandle>
@@ -80,6 +95,7 @@ interface ProviderHarness {
     readonly clientId: number;
     readonly state: unknown;
   }>;
+  stateless: string[];
 }
 
 function providerHarness(): ProviderHarness {
@@ -87,6 +103,7 @@ function providerHarness(): ProviderHarness {
     input: null,
     localAwareness: null,
     awareness: [],
+    stateless: [],
     clearCredential: vi.fn(),
     destroy: vi.fn(),
     factory: vi.fn(),
@@ -99,6 +116,7 @@ function providerHarness(): ProviderHarness {
         harness.localAwareness = state;
       },
       awarenessStates: () => harness.awareness,
+      sendStateless: (payload) => harness.stateless.push(payload),
       clearCredential: harness.clearCredential,
       destroy: harness.destroy,
     };
@@ -140,8 +158,13 @@ describe('CollaborationClient', () => {
     expect(JSON.stringify({ result, connection: client.connection, events })).not.toContain(token);
     expect(client.snapshot).toBeNull();
 
-    expect(client.publish(snapshot())).toBe(true);
+    expect(client.publish(snapshot())).toMatchObject({ disposition: 'sent' });
+    expect(provider.stateless).toHaveLength(1);
     expect(client.snapshot).toEqual(snapshot());
+    expect(events.findLast((event) => event.type === 'metadata-snapshot')).toMatchObject({
+      type: 'metadata-snapshot',
+      source: 'local',
+    });
     expect(
       client.updateAwareness({
         selection: { nodeIds: ['task-1'] },
@@ -222,7 +245,72 @@ describe('CollaborationClient', () => {
     });
   });
 
-  it('never publishes metadata or awareness before secure sync or during reconnect', async () => {
+  it('queues offline editor metadata and waits for durable delivery acknowledgement on reconnect', async () => {
+    const provider = providerHarness();
+    const events: CollaborationEvent[] = [];
+    let deliverySequence = 20;
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      createDeliveryId: () =>
+        `00000000-0000-4000-8000-${String(deliverySequence++).padStart(12, '0')}`,
+      now: () => new Date(NOW),
+    });
+    client.onEvent((event) => events.push(event));
+    await connect(client, provider);
+
+    expect(client.publish(snapshot())).toMatchObject({ disposition: 'sent' });
+    acknowledgeLatestDelivery(provider);
+    expect(events.at(-1)).toMatchObject({
+      type: 'delivery-acknowledged',
+      reconciledAfterReconnect: false,
+    });
+
+    provider.input?.onDisconnect();
+    const offlineSnapshot = CollaborationMetadataSnapshotSchema.parse({
+      ...snapshot(),
+      canvas: { ...snapshot().canvas, title: 'Offline editor title' },
+    });
+    expect(client.publish(offlineSnapshot)).toMatchObject({ disposition: 'queued-offline' });
+    expect(client.snapshot).toBeNull();
+
+    provider.input?.onAuthenticated();
+    provider.input?.onSynced();
+    expect(client.connection).toMatchObject({ status: 'reconnecting' });
+    expect(provider.stateless).toHaveLength(2);
+
+    acknowledgeLatestDelivery(provider);
+    expect(client.connection).toMatchObject({ status: 'connected' });
+    expect(client.snapshot?.canvas.title).toBe('Offline editor title');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'delivery-acknowledged',
+        reconciledAfterReconnect: true,
+      }),
+    );
+  });
+
+  it('enforces viewer metadata read-only authority in the main process', async () => {
+    const provider = providerHarness();
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      now: () => new Date(NOW),
+    });
+    const pending = client.join(joinInput({ accessToken: accessToken({ role: 'viewer' }) }));
+    provider.input?.onAuthenticated();
+    provider.input?.onSynced();
+    await expect(pending).resolves.toMatchObject({
+      ok: true,
+      connection: { role: 'viewer' },
+    });
+    expect(client.publish(snapshot())).toBeNull();
+    provider.input?.onDisconnect();
+    expect(client.publish(snapshot())).toBeNull();
+    expect(provider.stateless).toEqual([]);
+  });
+
+  it('rejects pre-auth metadata and queues editable metadata safely during reconnect', async () => {
     const provider = providerHarness();
     const client = new CollaborationClient({
       createProvider: provider.factory,
@@ -233,24 +321,24 @@ describe('CollaborationClient', () => {
     const document = provider.input?.document;
     expect(document).toBeDefined();
 
-    expect(client.publish(snapshot())).toBe(false);
+    expect(client.publish(snapshot())).toBeNull();
     expect(client.updateAwareness({ selection: { nodeIds: ['task-1'] } })).toBe(false);
     expect(document?.toJSON()).toEqual({});
     expect(provider.localAwareness).toBeNull();
 
     provider.input?.onAuthenticated();
-    expect(client.publish(snapshot())).toBe(false);
+    expect(client.publish(snapshot())).toBeNull();
     expect(document?.toJSON()).toEqual({});
     provider.input?.onSynced();
     await expect(pending).resolves.toMatchObject({ ok: true });
     expect(provider.localAwareness).toMatchObject({ selection: { nodeIds: ['task-1'] } });
-    expect(client.publish(snapshot())).toBe(true);
+    expect(client.publish(snapshot())).toMatchObject({ disposition: 'sent' });
 
     const connectedDocument = structuredClone(document?.toJSON());
     const connectedAwareness = structuredClone(provider.localAwareness);
     provider.input?.onDisconnect();
     expect(client.connection).toMatchObject({ status: 'reconnecting' });
-    expect(client.publish(snapshot())).toBe(false);
+    expect(client.publish(snapshot())).toMatchObject({ disposition: 'queued-offline' });
     expect(client.updateAwareness({ selection: { nodeIds: ['other-task'] } })).toBe(false);
     expect(document?.toJSON()).toEqual(connectedDocument);
     expect(provider.localAwareness).toEqual(connectedAwareness);
@@ -264,7 +352,7 @@ describe('CollaborationClient', () => {
       now: () => new Date(NOW),
     });
     await connect(client, provider);
-    expect(client.publish(snapshot())).toBe(true);
+    expect(client.publish(snapshot())).toMatchObject({ disposition: 'sent' });
     expect(
       client.updateAwareness({
         selection: { nodeIds: ['task-1'] },

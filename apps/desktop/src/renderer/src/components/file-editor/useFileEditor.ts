@@ -18,8 +18,8 @@ export interface FileHistoryEntry {
   readonly sha256: string | null;
 }
 
-type FileEditorStatus = 'loading' | 'ready' | 'missing' | 'error';
-type FileEditorActivity = 'save' | 'revert' | 'reveal' | null;
+export type FileEditorStatus = 'loading' | 'ready' | 'missing' | 'error';
+type FileEditorActivity = 'save' | 'revert' | 'reveal' | 'external' | null;
 
 export interface UseFileEditorResult {
   readonly status: FileEditorStatus;
@@ -34,6 +34,7 @@ export interface UseFileEditorResult {
   readonly save: () => Promise<void>;
   readonly revert: () => Promise<void>;
   readonly reveal: () => Promise<void>;
+  readonly openExternal: () => Promise<void>;
   readonly restoreHistory: (entryId: string) => void;
 }
 
@@ -214,6 +215,24 @@ export function useFileEditor(
     }
   }, [operations, projectId, relativePath, targetKey]);
 
+  const openExternal = useCallback(async () => {
+    const operationTarget = targetKey;
+    setActivity('external');
+    setMessage(null);
+    try {
+      await operations.openExternal({ projectId, relativePath });
+      if (targetKeyRef.current !== operationTarget) return;
+      setMessage({ kind: 'success', text: 'Opened the saved file in its default application.' });
+    } catch (cause) {
+      if (targetKeyRef.current !== operationTarget) return;
+      const failure = operationFailure(cause, 'The file could not be opened externally.');
+      if (failure.code === 'FILE_NOT_FOUND') setStatus('missing');
+      setMessage({ kind: 'error', text: failure.message });
+    } finally {
+      if (targetKeyRef.current === operationTarget) setActivity(null);
+    }
+  }, [operations, projectId, relativePath, targetKey]);
+
   const restoreHistory = useCallback(
     (entryId: string) => {
       if (readOnly || document?.readOnly === true) return;
@@ -238,6 +257,7 @@ export function useFileEditor(
     save,
     revert,
     reveal,
+    openExternal,
     restoreHistory,
   };
 }

@@ -8,6 +8,7 @@ import type {
   Project,
 } from '../../../../shared/application/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
+import type { CommandReadinessStatus } from '../configuration/useCommandReadiness.js';
 import { CommandEditor, SettingsSection, type AsyncSettingsProps } from './shared.js';
 
 import './CheckSettings.css';
@@ -17,6 +18,7 @@ type PackageManager = Exclude<Project['health']['packageManager'], 'unknown'>;
 
 interface CheckSettingsProps extends AsyncSettingsProps {
   activeProject: Project | null;
+  readiness: Readonly<Record<string, CommandReadinessStatus>>;
 }
 
 const STANDARD_CHECKS: ReadonlyArray<{
@@ -57,6 +59,7 @@ export function CheckSettings({
   setDraft,
   busy,
   perform,
+  readiness,
 }: CheckSettingsProps) {
   const customChecks = readCustomChecks(draft);
   const addCustomCheckButton = useRef<HTMLButtonElement>(null);
@@ -181,6 +184,7 @@ export function CheckSettings({
                       })),
                     )
                   }
+                  readiness={readiness[`check-${check.id}`]}
                 />
               </article>
             );
@@ -263,7 +267,10 @@ export function CheckSettings({
                     name={`custom-check-${index}`}
                     value={check.command}
                     onChange={(command) =>
-                      updateCustomCheck(check.id, (current) => ({ ...current, command }))
+                      updateCustomCheck(check.id, (current) => ({
+                        ...current,
+                        command,
+                      }))
                     }
                     onBrowse={() =>
                       void chooseExecutable((executable) =>
@@ -273,6 +280,7 @@ export function CheckSettings({
                         })),
                       )
                     }
+                    readiness={readiness[`check-custom-${check.id}`]}
                   />
                 </article>
               );

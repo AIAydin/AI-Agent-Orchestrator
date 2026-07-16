@@ -9,6 +9,34 @@
   line-height: 1.45;
 }
 
+.command-readiness-evidence {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 5px;
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 620;
+  line-height: 1.45;
+}
+
+.command-readiness-evidence svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.command-readiness-evidence.ready {
+  color: var(--green);
+}
+
+.command-readiness-evidence.partial {
+  color: var(--orange);
+}
+
+.command-readiness-evidence.blocked {
+  color: var(--red);
+}
+
 .environment-editor {
   display: grid;
   gap: 6px;
