@@ -103,6 +103,7 @@ import type {
   FileTreeResult,
 } from './files/contracts.js';
 import type { IntegrityCheckInput, IntegrityCheckResult } from './integrity/contracts.js';
+import type { RunHistoryListInput, RunHistorySummary } from './runs/contracts.js';
 import type { FolderReadinessRequest, FolderReadinessResult } from './settings/folder-readiness.js';
 import type { SettingsRepairEvidence, SettingsRepairSummary } from './settings/repair/contracts.js';
 import type {
@@ -222,6 +223,7 @@ export interface ForgeboardApi {
     onEvent(listener: (event: CollaborationEvent) => void): () => void;
   };
   runs: {
+    list(input: RunHistoryListInput): Promise<IpcResult<RunHistorySummary[]>>;
     prepare(input: PrepareRunInput): Promise<IpcResult<RunApprovalView | null>>;
     approve(runId: string): Promise<IpcResult<boolean>>;
     sendInput(runId: string, data: string): Promise<IpcResult<boolean>>;

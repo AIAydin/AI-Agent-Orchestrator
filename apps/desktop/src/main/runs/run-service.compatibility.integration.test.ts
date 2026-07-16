@@ -27,6 +27,7 @@ import type {
 } from './context/persisted-agent-context.js';
 import { RunService } from './run-service.js';
 import type { LocalStore } from '../storage.js';
+import type { StoredRunRecord } from '../storage-schemas.js';
 
 const electronMock = vi.hoisted(() => ({
   handlers: new Map<
@@ -222,6 +223,100 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
 }
 
 describe('RunService Electron compatibility', () => {
+  it('lists only path-free terminal managed-worktree records for the current window', async () => {
+    const available = storedRun('00000000-0000-4000-8000-000000000091');
+    const legacy = storedRun('00000000-0000-4000-8000-000000000092', {
+      status: 'failed',
+      managedRoot: null,
+      repositoryRoot: null,
+      baseRef: null,
+      baseCommit: null,
+    });
+    const runtime = new FakeAgentExecutionRuntime();
+    const { listProjectRuns, service } = serviceHarness(runtime, {
+      runRecords: [
+        available,
+        legacy,
+        storedRun('00000000-0000-4000-8000-000000000093', {
+          status: 'running',
+          endedAt: null,
+        }),
+        storedRun('00000000-0000-4000-8000-000000000094', { worktreeId: null }),
+      ],
+    });
+    const owner = webContents(6);
+    const handler = requiredHandler(IPC_CHANNELS.runsList);
+
+    await expect(
+      handler(invokeEvent(owner.owner), { projectId: PROJECT_ID, limit: 20 }),
+    ).resolves.toEqual({
+      ok: true,
+      value: [
+        {
+          id: available.id,
+          projectId: PROJECT_ID,
+          nodeId: 'agent-node',
+          adapterId: 'test-agent',
+          status: 'succeeded',
+          branch: 'forgeboard/agent-node',
+          worktreeAvailable: true,
+          startedAt: '2026-07-15T12:00:00.000Z',
+          endedAt: '2026-07-15T12:01:00.000Z',
+          createdAt: '2026-07-15T11:59:00.000Z',
+          updatedAt: '2026-07-15T12:01:00.000Z',
+        },
+        expect.objectContaining({ id: legacy.id, worktreeAvailable: false }),
+      ],
+    });
+    expect(listProjectRuns).toHaveBeenCalledWith(PROJECT_ID, 20);
+    const result = await handler(invokeEvent(owner.owner), { projectId: PROJECT_ID, limit: 20 });
+    expect(JSON.stringify(result)).not.toMatch(
+      /cwd|repositoryRoot|managedRoot|worktreeId|\/repo/iu,
+    );
+
+    listProjectRuns.mockClear();
+    await expect(
+      handler(invokeEvent(owner.owner), { projectId: PROJECT_ID, limit: 201 }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    expect(listProjectRuns).not.toHaveBeenCalled();
+    await service.dispose();
+  });
+
+  it('rejects run-history subframes and a window replacement before returning storage data', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    const { listProjectRuns, service } = serviceHarness(runtime, {
+      runRecords: [storedRun('00000000-0000-4000-8000-000000000095')],
+    });
+    const owner = webContents(5);
+    const handler = requiredHandler(IPC_CHANNELS.runsList);
+    const subframe = invokeEvent(owner.owner);
+    Object.defineProperty(subframe, 'senderFrame', { value: {} });
+
+    await expect(handler(subframe, { projectId: PROJECT_ID, limit: 20 })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    expect(listProjectRuns).not.toHaveBeenCalled();
+
+    const originalParent = { isDestroyed: () => false };
+    const replacementParent = { isDestroyed: () => false };
+    electronMock.fromWebContents.mockReturnValue(originalParent);
+    listProjectRuns.mockImplementationOnce(() => {
+      electronMock.fromWebContents.mockReturnValue(replacementParent);
+      return [];
+    });
+    const replacedWindowResult = await handler(invokeEvent(owner.owner), {
+      projectId: PROJECT_ID,
+      limit: 20,
+    });
+    expect(replacedWindowResult).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    expect(JSON.stringify(replacedWindowResult)).toContain('changed or closed');
+    await service.dispose();
+  });
+
   it('delivers main-process execution events only to the exact opaque owner subscription', async () => {
     const runtime = new FakeAgentExecutionRuntime();
     const { emit, service } = serviceHarness(runtime);
@@ -700,14 +795,17 @@ function serviceHarness(
     readonly repositories?: RepositoryService;
     readonly settings?: AppSettings;
     readonly contextResolver?: AgentRunContextResolver;
+    readonly runRecords?: readonly StoredRunRecord[];
   } = {},
 ): {
   readonly appendAudit: ReturnType<typeof vi.fn>;
   readonly emit: AgentExecutionEventSink;
+  readonly listProjectRuns: ReturnType<typeof vi.fn<() => StoredRunRecord[]>>;
   readonly service: RunService;
   readonly showMessageBox: ReturnType<typeof vi.fn>;
 } {
   const appendAudit = vi.fn();
+  const listProjectRuns = vi.fn(() => [...(options.runRecords ?? [])]);
   const showMessageBox = vi.fn(() =>
     Promise.resolve({ response: options.nativeResponse ?? 1, checkboxChecked: false }),
   );
@@ -715,7 +813,7 @@ function serviceHarness(
   electronMock.fromWebContents.mockReset().mockReturnValue({ isDestroyed: () => false });
   let emit!: AgentExecutionEventSink;
   const service = new RunService(
-    { appendAudit } as unknown as LocalStore,
+    { appendAudit, listProjectRuns } as unknown as LocalStore,
     () => options.settings ?? ({} as AppSettings),
     () => Promise.resolve(undefined),
     undefined,
@@ -729,7 +827,30 @@ function serviceHarness(
     options.contextResolver ?? emptyContextResolver(),
   );
   service.registerIpcHandlers();
-  return { appendAudit, emit, service, showMessageBox };
+  return { appendAudit, emit, listProjectRuns, service, showMessageBox };
+}
+
+function storedRun(id: string, overrides: Partial<StoredRunRecord> = {}): StoredRunRecord {
+  return {
+    id,
+    projectId: PROJECT_ID,
+    nodeId: 'agent-node',
+    adapterId: 'test-agent',
+    status: 'succeeded',
+    cwd: '/repo/.forgeboard/worktrees/agent-node',
+    branch: 'forgeboard/agent-node',
+    worktreeId: '00000000-0000-4000-8000-000000000096',
+    repositoryRoot: '/repo',
+    managedRoot: '/repo/.forgeboard/worktrees',
+    baseRef: 'main',
+    baseCommit: 'a'.repeat(40),
+    startedAt: '2026-07-15T12:00:00.000Z',
+    endedAt: '2026-07-15T12:01:00.000Z',
+    exitCode: 0,
+    createdAt: '2026-07-15T11:59:00.000Z',
+    updatedAt: '2026-07-15T12:01:00.000Z',
+    ...overrides,
+  };
 }
 
 function emptyContextResolver(): AgentRunContextResolver {

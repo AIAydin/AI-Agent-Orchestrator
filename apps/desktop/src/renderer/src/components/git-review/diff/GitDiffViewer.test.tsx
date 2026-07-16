@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { GitDiffLineView } from '../../../../../shared/git/contracts.js';
@@ -76,6 +76,103 @@ describe('GitDiffViewer', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Previous changed file' }));
     expect(onPrevious).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses controlled node preferences and reports display-only changes', () => {
+    const onDisplayPreferencesChange = vi.fn();
+    render(
+      <GitDiffViewer
+        file={file}
+        busy={false}
+        displayPreferences={{ viewMode: 'split', showWhitespace: true }}
+        onDisplayPreferencesChange={onDisplayPreferencesChange}
+        onStageHunk={() => undefined}
+        onUnstageHunk={() => undefined}
+        onPrepareDiscard={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('table', { name: 'Split diff for src/example.ts' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Show whitespace characters' })).toHaveProperty(
+      'checked',
+      true,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Unified' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show whitespace characters' }));
+
+    expect(onDisplayPreferencesChange).toHaveBeenNthCalledWith(1, {
+      viewMode: 'unified',
+      showWhitespace: true,
+    });
+    expect(onDisplayPreferencesChange).toHaveBeenNthCalledWith(2, {
+      viewMode: 'split',
+      showWhitespace: false,
+    });
+  });
+
+  it('seeds local display controls from a locked node without persisting changes', () => {
+    render(
+      <GitDiffViewer
+        file={file}
+        busy={false}
+        displayPreferences={{ viewMode: 'split', showWhitespace: true }}
+        onStageHunk={() => undefined}
+        onUnstageHunk={() => undefined}
+        onPrepareDiscard={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('table', { name: 'Split diff for src/example.ts' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Unified' }));
+    expect(screen.getByRole('table', { name: 'Unified diff for src/example.ts' })).toBeTruthy();
+  });
+
+  it('keeps the latest controlled preferences when persistence becomes read-only', async () => {
+    const onDisplayPreferencesChange = vi.fn();
+    const rendered = render(
+      <GitDiffViewer
+        file={file}
+        busy={false}
+        displayPreferences={{ viewMode: 'split', showWhitespace: true }}
+        onDisplayPreferencesChange={onDisplayPreferencesChange}
+        onStageHunk={() => undefined}
+        onUnstageHunk={() => undefined}
+        onPrepareDiscard={() => undefined}
+      />,
+    );
+
+    rendered.rerender(
+      <GitDiffViewer
+        file={file}
+        busy={false}
+        displayPreferences={{ viewMode: 'unified', showWhitespace: false }}
+        onDisplayPreferencesChange={onDisplayPreferencesChange}
+        onStageHunk={() => undefined}
+        onUnstageHunk={() => undefined}
+        onPrepareDiscard={() => undefined}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: 'Unified diff for src/example.ts' })).toBeTruthy(),
+    );
+
+    rendered.rerender(
+      <GitDiffViewer
+        file={file}
+        busy={false}
+        displayPreferences={{ viewMode: 'unified', showWhitespace: false }}
+        onStageHunk={() => undefined}
+        onUnstageHunk={() => undefined}
+        onPrepareDiscard={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('table', { name: 'Unified diff for src/example.ts' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Show whitespace characters' })).toHaveProperty(
+      'checked',
+      false,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Split' }));
+    expect(screen.getByRole('table', { name: 'Split diff for src/example.ts' })).toBeTruthy();
   });
 });
 

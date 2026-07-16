@@ -53,6 +53,8 @@ import type {
   CollaborationRejectedCommentEntry,
 } from '../../../../../shared/collaboration/index.js';
 import { SharedComments } from '../collaboration/comments/SharedComments.js';
+import { DiffReviewNodeInspector, type DiffReviewOpenRequest } from '../diff-review/index.js';
+import type { DiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
 type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
@@ -87,6 +89,8 @@ interface WorkspaceInspectorProps {
   onControlRun: (action: 'interrupt' | 'terminate') => void;
   onPrepareRun: () => void;
   onPreviewSession: (session: PreviewSessionSnapshot | null) => void;
+  diffReview: DiffReviewNodeController;
+  onOpenDiffReview: (request: DiffReviewOpenRequest) => void;
   collaborationGraphReadOnly: boolean;
   onAttachAgentContext: (
     targetNodeId: string,
@@ -225,6 +229,33 @@ function NodeInspector(
           />
         )}
       </fieldset>
+      {selectedNode.data.kind === 'diff' && (
+        <DiffReviewNodeInspector
+          projectId={props.project.id}
+          projectName={props.project.name}
+          nodeId={selectedNode.id}
+          locked={selectedNode.data.locked}
+          configurationReadOnly={props.collaborationGraphReadOnly}
+          selectedTarget={selectedNode.data.reviewTarget}
+          agentRuns={props.diffReview.agentRuns}
+          agentRunsLoaded={props.diffReview.agentRunsLoaded}
+          agentRunsError={props.diffReview.agentRunsError}
+          preferences={{
+            viewMode: selectedNode.data.viewMode ?? 'split',
+            showWhitespace: selectedNode.data.showWhitespace ?? false,
+          }}
+          authority={props.diffReview.authority}
+          summary={props.diffReview.summary}
+          onRecord={onRecord}
+          onTargetChange={(reviewTarget) => onUpdateSelected({ reviewTarget })}
+          onPreferencesChange={({ viewMode, showWhitespace }) =>
+            onUpdateSelected({ viewMode, showWhitespace })
+          }
+          onRefreshAgentRuns={props.diffReview.refreshAgentRuns}
+          onRefreshSummary={props.diffReview.refreshSummary}
+          onOpenReview={props.onOpenDiffReview}
+        />
+      )}
       {selectedNode.data.kind === 'agent' && (
         <>
           <AgentRunInspector {...props} />

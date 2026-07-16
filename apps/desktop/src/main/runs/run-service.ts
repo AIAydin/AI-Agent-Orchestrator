@@ -28,6 +28,11 @@ import {
   type RunEventEnvelope,
 } from '../../shared/application/contracts.js';
 import {
+  RunHistoryListInputSchema,
+  type RunHistoryListInput,
+  type RunHistorySummary,
+} from '../../shared/runs/contracts.js';
+import {
   type AgentExecutionEventSink,
   type AgentExecutionOperations,
   type AgentPreparationProcessAuthorization,
@@ -48,6 +53,7 @@ import {
   type PersistedAgentContextAuthority,
   type PersistedAgentContextResolution,
 } from './context/persisted-agent-context.js';
+import { summarizePersistedRunHistory } from './history/summaries.js';
 
 const RunIdSchema = z.string().uuid();
 const InputSchema = z
@@ -93,7 +99,7 @@ export class RunService {
   readonly #registeredChannels: string[] = [];
   readonly #repositories: RepositoryService;
   readonly #runtime: AgentExecutionOperations;
-  readonly #store: Pick<LocalStore, 'appendAudit'>;
+  readonly #store: Pick<LocalStore, 'appendAudit' | 'listProjectRuns'>;
   readonly #contextResolver: AgentRunContextResolver;
   #disposed = false;
   #privacyResetting = false;
@@ -132,6 +138,9 @@ export class RunService {
   }
 
   public registerIpcHandlers(): void {
+    this.#handle(IPC_CHANNELS.runsList, z.tuple([RunHistoryListInputSchema]), (event, input) =>
+      this.#listPersistedRuns(event, input),
+    );
     this.#handle(
       IPC_CHANNELS.runsPrepare,
       z.tuple([PrepareRunInputSchema]),
@@ -160,6 +169,14 @@ export class RunService {
       this.#assertLiveMainFrame(event);
       return await this.#trackOperation(this.terminate(event.sender, runId));
     });
+  }
+
+  #listPersistedRuns(event: IpcMainInvokeEvent, input: RunHistoryListInput): RunHistorySummary[] {
+    this.#assertAvailable();
+    const parent = this.#requireLiveParent(event, 'Agent run history');
+    const records = this.#store.listProjectRuns(input.projectId, input.limit);
+    this.#assertCurrentWindow(event, parent);
+    return summarizePersistedRunHistory(records).slice(0, input.limit);
   }
 
   /** Main-process composition seam for durable workflow-owned agent runs. */
@@ -534,23 +551,29 @@ export class RunService {
     }
   }
 
-  #requireLiveParent(event: IpcMainInvokeEvent): BrowserWindow {
+  #requireLiveParent(
+    event: IpcMainInvokeEvent,
+    operation = 'Agent launch confirmation',
+  ): BrowserWindow {
     this.#assertLiveMainFrame(event);
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required to confirm an agent launch.');
+      throw new Error(`${operation} requires a live Forgeboard window.`);
     }
     return parent;
   }
 
-  #assertCurrent(event: IpcMainInvokeEvent, parent: BrowserWindow, ownerId: string): void {
+  #assertCurrentWindow(event: IpcMainInvokeEvent, parent: BrowserWindow): void {
     this.#assertAvailable();
     this.#assertLiveMainFrame(event);
-    if (
-      parent.isDestroyed() ||
-      BrowserWindow.fromWebContents(event.sender) !== parent ||
-      this.#owners.get(ownerId) !== event.sender
-    ) {
+    if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
+      throw new Error('The originating Forgeboard window changed or closed.');
+    }
+  }
+
+  #assertCurrent(event: IpcMainInvokeEvent, parent: BrowserWindow, ownerId: string): void {
+    this.#assertCurrentWindow(event, parent);
+    if (this.#owners.get(ownerId) !== event.sender) {
       throw new Error('The originating Forgeboard window changed or closed.');
     }
   }

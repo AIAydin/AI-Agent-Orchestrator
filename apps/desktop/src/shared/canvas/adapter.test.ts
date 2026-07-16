@@ -11,6 +11,7 @@ import type { LegacyCanvasDocument, LegacyCanvasNode } from './types.js';
 
 const T1 = '2026-07-15T12:00:00.000Z';
 const T2 = '2026-07-15T12:01:00.000Z';
+const AGENT_RUN_ID = '11111111-1111-4111-8111-111111111111';
 
 function node(id: string, kind: string, data: Record<string, unknown> = {}): LegacyCanvasNode {
   return {
@@ -219,6 +220,104 @@ describe('canonical desktop canvas adapter', () => {
         values: { enabled: true },
       },
     });
+  });
+
+  it('round-trips an opaque Diff review target and presentation preferences exactly', () => {
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('diff-1', 'diff', {
+            reviewTarget: { kind: 'agent-run', runId: AGENT_RUN_ID },
+            baseRef: 'main',
+            headRef: 'agent/feature',
+            viewMode: 'unified',
+            showWhitespace: true,
+            hunkDecisions: { 'hunk-1': 'accepted' },
+            lineCommentIds: ['comment-1'],
+            revisionRequest: 'Add a regression test for the changed behavior.',
+            approval: 'changes-requested',
+          }),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    const original = migrated.canvas.nodes[0];
+    expect(original).toMatchObject({
+      type: 'diff-review',
+      data: {
+        reviewTarget: { kind: 'agent-run', runId: AGENT_RUN_ID },
+        baseRef: 'main',
+        headRef: 'agent/feature',
+        viewMode: 'unified',
+        showWhitespace: true,
+        ignoreWhitespace: false,
+        hunkDecisions: { 'hunk-1': 'accepted' },
+        lineCommentIds: ['comment-1'],
+        revisionRequest: 'Add a regression test for the changed behavior.',
+        approval: 'changes-requested',
+      },
+    });
+
+    const surface = legacySurfaceFromCanonical(migrated.canvas);
+    expect(surface.nodes[0]?.data).toMatchObject({
+      reviewTarget: { kind: 'agent-run', runId: AGENT_RUN_ID },
+      viewMode: 'unified',
+      showWhitespace: true,
+      lineCommentIds: ['comment-1'],
+    });
+    const roundTripped = canonicalCanvasFromLegacy({
+      ...surface,
+      canonical: migrated.canvas,
+      updatedAt: T2,
+    });
+    expect(roundTripped.ok).toBe(true);
+    if (!roundTripped.ok || original?.type !== 'diff-review') return;
+    expect(roundTripped.canvas.nodes[0]?.data).toEqual(original.data);
+
+    const olderRendererSurface = {
+      ...surface,
+      nodes: surface.nodes.map((candidate) => ({
+        ...candidate,
+        data: Object.fromEntries(
+          Object.entries(candidate.data).filter(
+            ([key]) => !['reviewTarget', 'showWhitespace', 'lineCommentIds'].includes(key),
+          ),
+        ),
+      })),
+    };
+    const preserved = canonicalCanvasFromLegacy({
+      ...olderRendererSurface,
+      canonical: migrated.canvas,
+      updatedAt: T2,
+    });
+    expect(preserved.ok).toBe(true);
+    if (!preserved.ok) return;
+    expect(preserved.canvas.nodes[0]?.data).toMatchObject({
+      reviewTarget: { kind: 'agent-run', runId: AGENT_RUN_ID },
+      showWhitespace: true,
+      lineCommentIds: ['comment-1'],
+    });
+  });
+
+  it('fails closed on path-bearing or non-UUID Diff review targets', () => {
+    const invalidTargets = [
+      { kind: 'primary', root: '/private/repository' },
+      { kind: 'agent-run', runId: AGENT_RUN_ID, worktreePath: '/private/worktree' },
+      { kind: 'agent-run', runId: 'renderer-selected-folder' },
+    ];
+
+    for (const reviewTarget of invalidTargets) {
+      const migrated = canonicalCanvasFromLegacy(
+        legacy({ nodes: [node('diff-1', 'diff', { reviewTarget })], edges: [] }),
+      );
+      expect(migrated).toMatchObject({
+        ok: false,
+        issues: [{ code: 'INVALID_TYPED_NODE', entityId: 'diff-1' }],
+      });
+    }
   });
 
   it('persists UI-authored Task execution configuration without a source edit', () => {

@@ -46,6 +46,14 @@ export function initialWorkflowNodeData(
       gateState: 'pending',
     };
   }
+  if (kind === 'diff') {
+    return {
+      reviewTarget: { kind: 'primary' },
+      viewMode: 'split',
+      showWhitespace: false,
+      approval: 'pending',
+    };
+  }
   return {};
 }
 

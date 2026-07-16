@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, FileQuestion, Minus, Plus, RotateCcw } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { GitDiffHunkView } from '../../../../../shared/git/contracts.js';
 import type { GitDiffDisplayArea, GitDiffDisplayFile } from '../git-review-model.js';
@@ -15,12 +15,19 @@ interface GitDiffNavigation {
   readonly onNext: () => void;
 }
 
+export interface GitDiffDisplayPreferences {
+  readonly viewMode: GitDiffViewMode;
+  readonly showWhitespace: boolean;
+}
+
 interface GitDiffViewerProps {
   file: GitDiffDisplayFile | null;
   busy: boolean;
   readOnly?: boolean;
   navigation?: GitDiffNavigation;
   reviewNotes?: GitReviewNotesController;
+  displayPreferences?: GitDiffDisplayPreferences;
+  onDisplayPreferencesChange?: (preferences: GitDiffDisplayPreferences) => void;
   onStageHunk: (hunkId: string) => void;
   onUnstageHunk: (hunkId: string) => void;
   onPrepareDiscard: (hunkId: string) => void;
@@ -32,12 +39,30 @@ export function GitDiffViewer({
   readOnly = false,
   navigation,
   reviewNotes,
+  displayPreferences,
+  onDisplayPreferencesChange,
   onStageHunk,
   onUnstageHunk,
   onPrepareDiscard,
 }: GitDiffViewerProps) {
-  const [viewMode, setViewMode] = useState<GitDiffViewMode>('unified');
-  const [showWhitespace, setShowWhitespace] = useState(false);
+  const [localPreferences, setLocalPreferences] = useState<GitDiffDisplayPreferences>(
+    displayPreferences ?? { viewMode: 'unified', showWhitespace: false },
+  );
+  const incomingViewMode = displayPreferences?.viewMode;
+  const incomingShowWhitespace = displayPreferences?.showWhitespace;
+  const controlled = displayPreferences !== undefined && onDisplayPreferencesChange !== undefined;
+  const preferences = controlled ? displayPreferences : localPreferences;
+  useEffect(() => {
+    if (incomingViewMode === undefined || incomingShowWhitespace === undefined) return;
+    setLocalPreferences({
+      viewMode: incomingViewMode,
+      showWhitespace: incomingShowWhitespace,
+    });
+  }, [incomingShowWhitespace, incomingViewMode]);
+  const updatePreferences = (next: GitDiffDisplayPreferences): void => {
+    setLocalPreferences(next);
+    onDisplayPreferencesChange?.(next);
+  };
 
   if (file === null) {
     return (
@@ -120,10 +145,12 @@ export function GitDiffViewer({
       </header>
       {hasTextDiff && (
         <GitDiffToolbar
-          viewMode={viewMode}
-          showWhitespace={showWhitespace}
-          onViewModeChange={setViewMode}
-          onShowWhitespaceChange={setShowWhitespace}
+          viewMode={preferences.viewMode}
+          showWhitespace={preferences.showWhitespace}
+          onViewModeChange={(viewMode) => updatePreferences({ ...preferences, viewMode })}
+          onShowWhitespaceChange={(showWhitespace) =>
+            updatePreferences({ ...preferences, showWhitespace })
+          }
         />
       )}
       {file.area === 'untracked' ? (
@@ -148,8 +175,8 @@ export function GitDiffViewer({
               path={file.path}
               busy={busy}
               readOnly={readOnly}
-              viewMode={viewMode}
-              showWhitespace={showWhitespace}
+              viewMode={preferences.viewMode}
+              showWhitespace={preferences.showWhitespace}
               review={diffReview}
               onStage={() => onStageHunk(hunk.id)}
               onUnstage={() => onUnstageHunk(hunk.id)}

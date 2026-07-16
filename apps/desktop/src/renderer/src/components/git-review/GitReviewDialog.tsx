@@ -21,7 +21,7 @@ import type {
 import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
 import { GitCommitDisclosure, GitDiscardDisclosure } from './actions/GitActionDisclosure.js';
 import { GitCommitPanel } from './actions/GitCommitPanel.js';
-import { GitDiffViewer } from './diff/GitDiffViewer.js';
+import { GitDiffViewer, type GitDiffDisplayPreferences } from './diff/GitDiffViewer.js';
 import { GitFileSidebar } from './diff/GitFileSidebar.js';
 import {
   allReviewFiles,
@@ -46,11 +46,20 @@ import { GitShippingPanel } from './shipping/GitShippingPanel.js';
 export interface GitReviewDialogProps {
   target: GitTargetInput;
   projectName: string;
+  displayPreferences?: GitDiffDisplayPreferences;
+  onDisplayPreferencesChange?: (preferences: GitDiffDisplayPreferences) => void;
   onClose: () => void;
   onError?: (message: string) => void;
 }
 
-export function GitReviewDialog({ target, projectName, onClose, onError }: GitReviewDialogProps) {
+export function GitReviewDialog({
+  target,
+  projectName,
+  displayPreferences,
+  onDisplayPreferencesChange,
+  onClose,
+  onError,
+}: GitReviewDialogProps) {
   const controller = useGitReview(target, onError);
   const reviewNotes = useGitReviewNotes(target, controller.review?.refreshedAt ?? null, onError);
   const [selection, setSelection] = useState<GitFileSelection | null>(null);
@@ -291,6 +300,10 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
                 <GitBaseComparisonPanel
                   comparison={controller.review.baseComparison}
                   reviewNotes={reviewNotes}
+                  {...(displayPreferences === undefined ? {} : { displayPreferences })}
+                  {...(onDisplayPreferencesChange === undefined
+                    ? {}
+                    : { onDisplayPreferencesChange })}
                   footer={
                     <GitShippingPanel
                       review={controller.review}
@@ -336,6 +349,10 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
                     file={selectedFile}
                     busy={busy}
                     reviewNotes={reviewNotes}
+                    {...(displayPreferences === undefined ? {} : { displayPreferences })}
+                    {...(onDisplayPreferencesChange === undefined
+                      ? {}
+                      : { onDisplayPreferencesChange })}
                     {...(selectedFileIndex < 0
                       ? {}
                       : {

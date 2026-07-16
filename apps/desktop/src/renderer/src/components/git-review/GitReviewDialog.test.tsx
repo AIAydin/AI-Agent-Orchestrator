@@ -287,6 +287,30 @@ describe('GitReviewDialog', () => {
     expect(document.activeElement).toBe(origin);
   });
 
+  it('applies and reports display preferences supplied by a canvas review node', async () => {
+    const onDisplayPreferencesChange = vi.fn();
+    render(
+      <GitReviewDialog
+        target={primaryTarget}
+        projectName="Workshop"
+        displayPreferences={{ viewMode: 'split', showWhitespace: true }}
+        onDisplayPreferencesChange={onDisplayPreferencesChange}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole('table', { name: 'Split diff for src/staged.ts' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Show whitespace characters' })).toHaveProperty(
+      'checked',
+      true,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Unified' }));
+    expect(onDisplayPreferencesChange).toHaveBeenCalledWith({
+      viewMode: 'unified',
+      showWhitespace: true,
+    });
+  });
+
   it('keeps feedback for disappeared files reachable at the dialog level', async () => {
     reviewNotesListMock.mockResolvedValueOnce(
       success({

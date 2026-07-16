@@ -81,6 +81,15 @@ export interface WorkshopNodeData extends Record<string, unknown> {
     missing: boolean;
     lastKnownHash?: string;
   };
+  reviewTarget?: { kind: 'primary' } | { kind: 'agent-run'; runId: string };
+  files?: string[];
+  viewMode?: 'split' | 'unified';
+  showWhitespace?: boolean;
+  ignoreWhitespace?: boolean;
+  hunkDecisions?: Record<string, 'pending' | 'accepted' | 'rejected'>;
+  lineCommentIds?: string[];
+  revisionRequest?: string;
+  approval?: 'pending' | 'approved' | 'changes-requested';
   images?: Array<{
     projectId: string;
     relativePath: string;

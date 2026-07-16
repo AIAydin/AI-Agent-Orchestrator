@@ -2,7 +2,7 @@ import { CheckCircle2, FileCode2, GitCommitHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import type { GitAgentBaseComparisonView } from '../../../../shared/git/contracts.js';
-import { GitDiffViewer } from './diff/GitDiffViewer.js';
+import { GitDiffViewer, type GitDiffDisplayPreferences } from './diff/GitDiffViewer.js';
 import { GitFilePageControls, useGitFilePage } from './diff/GitFilePagination.js';
 import type { GitDiffDisplayFile } from './git-review-model.js';
 import { fileDiffStats } from './git-review-model.js';
@@ -13,10 +13,14 @@ export function GitBaseComparisonPanel({
   comparison,
   footer,
   reviewNotes,
+  displayPreferences,
+  onDisplayPreferencesChange,
 }: {
   comparison: GitAgentBaseComparisonView;
   footer?: React.ReactNode;
   reviewNotes?: GitReviewNotesController;
+  displayPreferences?: GitDiffDisplayPreferences;
+  onDisplayPreferencesChange?: (preferences: GitDiffDisplayPreferences) => void;
 }) {
   const files = useMemo(() => comparisonFiles(comparison), [comparison]);
   const [selectedPath, setSelectedPath] = useState<string | null>(files[0]?.path ?? null);
@@ -132,6 +136,8 @@ export function GitBaseComparisonPanel({
             file={selected}
             busy={false}
             readOnly
+            {...(displayPreferences === undefined ? {} : { displayPreferences })}
+            {...(onDisplayPreferencesChange === undefined ? {} : { onDisplayPreferencesChange })}
             {...(reviewNotes === undefined ? {} : { reviewNotes })}
             {...(selectedIndex < 0
               ? {}

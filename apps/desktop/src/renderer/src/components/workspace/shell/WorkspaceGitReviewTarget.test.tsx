@@ -9,7 +9,11 @@ import {
   type Project,
 } from '../../../../../shared/application/contracts.js';
 import type { GitTargetInput } from '../../../../../shared/git/contracts.js';
+import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import type { DiffReviewDisplayPreferences, DiffReviewOpenRequest } from '../diff-review/index.js';
 import { Workspace } from './Workspace.js';
+
+const collaborationMocks = vi.hoisted(() => ({ graphReadOnly: false }));
 
 vi.mock('../canvas/useCanvasPersistence.js', () => ({
   useCanvasPersistence: () => ({
@@ -17,16 +21,151 @@ vi.mock('../canvas/useCanvasPersistence.js', () => ({
     flushCanvas: vi.fn(() => Promise.resolve(true)),
   }),
 }));
+vi.mock('../collaboration/useCollaborationCanvas.js', () => ({
+  useCollaborationCanvas: () => ({
+    awareness: [],
+    rejectedComments: [],
+    rejectedCommentEntries: [],
+    graphReadOnly: collaborationMocks.graphReadOnly,
+    role: null,
+    canComment: false,
+    createComment: vi.fn().mockResolvedValue(null),
+    discardRejectedComment: vi.fn().mockResolvedValue(false),
+    updateCursor: vi.fn(),
+    clearCursor: vi.fn(),
+  }),
+}));
+vi.mock('../diff-review/useDiffReviewNodeController.js', () => ({
+  useDiffReviewNodeController: () => ({
+    agentRuns: [],
+    agentRunsLoaded: true,
+    agentRunsError: null,
+    authority: { state: 'ready' },
+    summary: null,
+    refreshAgentRuns: vi.fn(),
+    refreshSummary: vi.fn(),
+  }),
+}));
 vi.mock('./WorkspaceCommandBar.js', () => ({
-  WorkspaceCommandBar: ({ onOpenGitReview }: { onOpenGitReview: () => void }) => (
-    <button type="button" onClick={onOpenGitReview}>
-      Topbar Git review
-    </button>
+  WorkspaceCommandBar: ({
+    canUndo,
+    onUndo,
+    onOpenGitReview,
+  }: {
+    canUndo: boolean;
+    onUndo: () => void;
+    onOpenGitReview: () => void;
+  }) => (
+    <div>
+      <button type="button" onClick={onOpenGitReview}>
+        Topbar Git review
+      </button>
+      <button type="button" disabled={!canUndo} onClick={onUndo}>
+        Undo canvas
+      </button>
+    </div>
   ),
 }));
-vi.mock('../canvas/WorkspaceCanvas.js', () => ({ WorkspaceCanvas: () => null }));
+vi.mock('../canvas/WorkspaceCanvas.js', () => ({
+  WorkspaceCanvas: ({
+    nodes,
+    onSelectionChange,
+  }: {
+    nodes: WorkshopNode[];
+    onSelectionChange: (selection: { nodes: WorkshopNode[]; edges: [] }) => void;
+  }) => (
+    <div>
+      <output data-testid="workspace-node-state">
+        {JSON.stringify(
+          nodes.map((node) => ({
+            id: node.id,
+            kind: node.data.kind,
+            locked: node.data.locked,
+            reviewTarget: node.data.reviewTarget,
+            viewMode: node.data.viewMode,
+            showWhitespace: node.data.showWhitespace,
+          })),
+        )}
+      </output>
+      {nodes.map((node) => (
+        <button
+          key={node.id}
+          type="button"
+          onClick={() => onSelectionChange({ nodes: [node], edges: [] })}
+        >
+          Select {node.data.title}
+        </button>
+      ))}
+    </div>
+  ),
+}));
 vi.mock('./WorkspaceRail.js', () => ({ WorkspaceRail: () => null }));
-vi.mock('./WorkspaceInspector.js', () => ({ WorkspaceInspector: () => null }));
+vi.mock('./WorkspaceInspector.js', () => ({
+  WorkspaceInspector: ({
+    project,
+    selectedNode,
+    onRecord,
+    onUpdateSelected,
+    onOpenDiffReview,
+  }: {
+    project: Project;
+    selectedNode: WorkshopNode | null;
+    onRecord: () => void;
+    onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
+    onOpenDiffReview: (request: DiffReviewOpenRequest) => void;
+  }) => {
+    const isDiff = selectedNode?.data.kind === 'diff';
+    return (
+      <div>
+        <output data-testid="selected-node-id">{selectedNode?.id ?? ''}</output>
+        <button
+          type="button"
+          disabled={!isDiff}
+          onClick={() => {
+            if (!isDiff || selectedNode === null) return;
+            const configuredTarget = selectedNode.data.reviewTarget ?? { kind: 'primary' as const };
+            onOpenDiffReview({
+              target:
+                configuredTarget.kind === 'primary'
+                  ? { kind: 'primary', projectId: project.id }
+                  : {
+                      kind: 'agent-worktree',
+                      projectId: project.id,
+                      runId: configuredTarget.runId,
+                    },
+              preferences: {
+                viewMode: selectedNode.data.viewMode ?? 'split',
+                showWhitespace: selectedNode.data.showWhitespace ?? false,
+              },
+            });
+          }}
+        >
+          Open selected Diff review
+        </button>
+        <button
+          type="button"
+          disabled={!isDiff}
+          onClick={() => {
+            onRecord();
+            onUpdateSelected({ reviewTarget: { kind: 'agent-run', runId: RUN_ID } });
+          }}
+        >
+          Retarget selected Diff
+        </button>
+        <button
+          type="button"
+          disabled={!isDiff}
+          onClick={() => {
+            onRecord();
+            onUpdateSelected({ locked: true });
+          }}
+        >
+          Lock selected Diff
+        </button>
+      </div>
+    );
+  },
+}));
 vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
   WorkspaceActivityDrawer: ({
     changeReports,
@@ -65,9 +204,34 @@ vi.mock('../../shell/CommandPalette.js', () => ({
   ),
 }));
 vi.mock('../../git-review/GitReviewDialog.js', () => ({
-  GitReviewDialog: ({ target, onClose }: { target: GitTargetInput; onClose: () => void }) => (
+  GitReviewDialog: ({
+    target,
+    displayPreferences,
+    onDisplayPreferencesChange,
+    onClose,
+  }: {
+    target: GitTargetInput;
+    displayPreferences?: DiffReviewDisplayPreferences;
+    onDisplayPreferencesChange?: (preferences: DiffReviewDisplayPreferences) => void;
+    onClose: () => void;
+  }) => (
     <div role="dialog" aria-label="Git review target">
       <output data-testid="git-target">{JSON.stringify(target)}</output>
+      <output data-testid="git-display-preferences">
+        {JSON.stringify(displayPreferences ?? null)}
+      </output>
+      <button
+        type="button"
+        disabled={onDisplayPreferencesChange === undefined}
+        onClick={() =>
+          onDisplayPreferencesChange?.({
+            viewMode: displayPreferences?.viewMode === 'unified' ? 'split' : 'unified',
+            showWhitespace: !(displayPreferences?.showWhitespace ?? false),
+          })
+        }
+      >
+        Toggle dialog preferences
+      </button>
       <button type="button" onClick={onClose}>
         Close Git review
       </button>
@@ -126,6 +290,7 @@ vi.mock('../workflows/useWorkflowRuns.js', () => ({
 }));
 
 beforeEach(() => {
+  collaborationMocks.graphReadOnly = false;
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -178,13 +343,164 @@ describe('Workspace Git review targeting', () => {
       runId: RUN_ID,
     });
   });
+
+  it('persists both dialog preferences to the exact source Diff node and restores both with one undo', async () => {
+    renderWorkspace();
+    await selectNode('Source Diff', 'diff-source');
+    fireEvent.click(screen.getByRole('button', { name: 'Open selected Diff review' }));
+
+    expect(readDialogPreferences()).toEqual({ viewMode: 'split', showWhitespace: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle dialog preferences' }));
+
+    await waitFor(() =>
+      expect(readNodeState('diff-source')).toMatchObject({
+        viewMode: 'unified',
+        showWhitespace: true,
+      }),
+    );
+    expect(readNodeState('diff-other')).toMatchObject({
+      viewMode: 'split',
+      showWhitespace: false,
+    });
+    const undo = screen.getByRole('button', { name: 'Undo canvas' });
+    await waitFor(() => expect(undo).toHaveProperty('disabled', false));
+    fireEvent.click(undo);
+
+    await waitFor(() =>
+      expect(readNodeState('diff-source')).toMatchObject({
+        viewMode: 'split',
+        showWhitespace: false,
+      }),
+    );
+    expect(readNodeState('diff-other')).toMatchObject({
+      viewMode: 'split',
+      showWhitespace: false,
+    });
+    expect(undo).toHaveProperty('disabled', true);
+  });
+
+  it('keeps a dialog bound to its exact source when selection drifts to another Diff node', async () => {
+    renderWorkspace();
+    await selectNode('Source Diff', 'diff-source');
+    fireEvent.click(screen.getByRole('button', { name: 'Open selected Diff review' }));
+    await selectNode('Other Diff', 'diff-other');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle dialog preferences' }));
+    await waitFor(() =>
+      expect(readNodeState('diff-source')).toMatchObject({
+        viewMode: 'unified',
+        showWhitespace: true,
+      }),
+    );
+    expect(readNodeState('diff-other')).toMatchObject({
+      viewMode: 'split',
+      showWhitespace: false,
+    });
+  });
+
+  it.each([
+    ['retargeted', 'Retarget selected Diff'],
+    ['locked', 'Lock selected Diff'],
+  ])('does not write dialog preferences after the source node is %s', async (_state, action) => {
+    renderWorkspace();
+    await selectNode('Source Diff', 'diff-source');
+    fireEvent.click(screen.getByRole('button', { name: 'Open selected Diff review' }));
+    fireEvent.click(screen.getByRole('button', { name: action }));
+
+    const toggle = screen.getByRole('button', { name: 'Toggle dialog preferences' });
+    await waitFor(() => expect(toggle).toHaveProperty('disabled', true));
+    fireEvent.click(toggle);
+    expect(readNodeState('diff-source')).toMatchObject({
+      viewMode: 'split',
+      showWhitespace: false,
+    });
+    expect(readNodeState('diff-other')).toMatchObject({
+      viewMode: 'split',
+      showWhitespace: false,
+    });
+  });
+
+  it('does not write dialog preferences after collaboration becomes read-only', async () => {
+    const onError = vi.fn();
+    const view = render(workspaceElement(onError));
+    await selectNode('Source Diff', 'diff-source');
+    fireEvent.click(screen.getByRole('button', { name: 'Open selected Diff review' }));
+
+    collaborationMocks.graphReadOnly = true;
+    view.rerender(workspaceElement(onError));
+    const toggle = screen.getByRole('button', { name: 'Toggle dialog preferences' });
+    await waitFor(() => expect(toggle).toHaveProperty('disabled', true));
+    fireEvent.click(toggle);
+    expect(readNodeState('diff-source')).toMatchObject({
+      viewMode: 'split',
+      showWhitespace: false,
+    });
+    expect(readNodeState('diff-other')).toMatchObject({
+      viewMode: 'split',
+      showWhitespace: false,
+    });
+  });
 });
 
 const PROJECT_ID = '70000000-0000-4000-8000-000000000011';
 const RUN_ID = '70000000-0000-4000-8000-000000000012';
 
+interface DiffNodeState {
+  readonly id: string;
+  readonly kind: string;
+  readonly locked: boolean;
+  readonly reviewTarget?: { readonly kind: string; readonly runId?: string };
+  readonly viewMode?: string;
+  readonly showWhitespace?: boolean;
+}
+
+function renderWorkspace() {
+  return render(workspaceElement(vi.fn()));
+}
+
+function workspaceElement(onError: (message: string) => void) {
+  return (
+    <Workspace
+      project={project()}
+      settings={settings()}
+      agents={[]}
+      extensionDiscovery={{
+        registryPath: '/tmp/extensions.json',
+        installed: [],
+        quarantined: [],
+        invalid: [],
+      }}
+      onClose={vi.fn()}
+      onProjectUpdated={vi.fn()}
+      onOpenSettings={vi.fn()}
+      onError={onError}
+    />
+  );
+}
+
+async function selectNode(title: string, expectedId: string): Promise<void> {
+  const select = await screen.findByRole('button', { name: `Select ${title}` });
+  fireEvent.click(select);
+  await waitFor(() => expect(screen.getByTestId('selected-node-id').textContent).toBe(expectedId));
+}
+
 function readTarget(): GitTargetInput {
   return JSON.parse(screen.getByTestId('git-target').textContent ?? '') as GitTargetInput;
+}
+
+function readDialogPreferences(): DiffReviewDisplayPreferences | null {
+  return JSON.parse(
+    screen.getByTestId('git-display-preferences').textContent ?? 'null',
+  ) as DiffReviewDisplayPreferences | null;
+}
+
+function readNodeState(nodeId: string): DiffNodeState {
+  const states = JSON.parse(
+    screen.getByTestId('workspace-node-state').textContent ?? '[]',
+  ) as DiffNodeState[];
+  const state = states.find((candidate) => candidate.id === nodeId);
+  if (state === undefined) throw new Error(`Expected node state for ${nodeId}.`);
+  return state;
 }
 
 function readReports(): Array<{ runId: string | null; runPermissionProfile: string | null }> {
@@ -239,10 +555,32 @@ function canvas(): CanvasDocument {
           changedFiles: ['src/change.ts'],
         },
       },
+      diffNode('diff-source', 'Source Diff', 100),
+      diffNode('diff-other', 'Other Diff', 200),
     ],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 },
     updatedAt: '2026-07-15T12:00:00.000Z',
+  };
+}
+
+function diffNode(id: string, title: string, y: number): CanvasDocument['nodes'][number] {
+  return {
+    id,
+    type: 'diff',
+    position: { x: 300, y },
+    data: {
+      kind: 'diff',
+      title,
+      description: 'Review an authoritative Git target.',
+      status: 'idle',
+      locked: false,
+      collapsed: false,
+      color: '#7697c5',
+      reviewTarget: { kind: 'primary' },
+      viewMode: 'split',
+      showWhitespace: false,
+    },
   };
 }
 

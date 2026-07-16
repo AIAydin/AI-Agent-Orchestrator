@@ -235,15 +235,30 @@ export const FileNodeSchema = createNodeSchema(
     .strict(),
 );
 
+export const DiffReviewTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('primary') }).strict(),
+  z
+    .object({
+      kind: z.literal('agent-run'),
+      runId: z.string().uuid(),
+    })
+    .strict(),
+]);
+export type DiffReviewTarget = z.infer<typeof DiffReviewTargetSchema>;
+
 export const DiffReviewNodeSchema = createNodeSchema(
   'diff-review',
   z
     .object({
+      // The main process resolves this opaque identity. Persisted canvases never carry a checkout
+      // root or renderer-supplied worktree path as review authority.
+      reviewTarget: DiffReviewTargetSchema.optional(),
       baseRef: z.string().min(1).max(1024).optional(),
       headRef: z.string().min(1).max(1024).optional(),
       worktreeId: EntityIdSchema.optional(),
       files: z.array(RelativePathSchema).default([]),
       viewMode: z.enum(['split', 'unified']).default('split'),
+      showWhitespace: z.boolean().default(false),
       ignoreWhitespace: z.boolean().default(false),
       hunkDecisions: z.record(z.enum(['pending', 'accepted', 'rejected'])).default({}),
       lineCommentIds: z.array(EntityIdSchema).default([]),

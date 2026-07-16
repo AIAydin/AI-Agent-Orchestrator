@@ -29,7 +29,6 @@ import {
   type CollaborationMetadataSnapshot,
 } from '../../../../../shared/collaboration/index.js';
 import { FileDocumentSchema } from '../../../../../shared/files/contracts.js';
-import type { GitTargetInput } from '../../../../../shared/git/contracts.js';
 import type { WorkflowExecutionView } from '../../../../../shared/workflow/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
 import { commandPaletteShortcutLabel, opensCommandPalette } from '../../../lib/keyboard-preset.js';
@@ -96,6 +95,8 @@ import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
 import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
+import { useDiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
+import { useDiffReviewSession } from '../diff-review/useDiffReviewSession.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { linkProjectFileToAgent, removeProjectFileFromAgent } from '../context-dnd/linking.js';
 import {
@@ -215,7 +216,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const [activityOpen, setActivityOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [gitReviewTarget, setGitReviewTarget] = useState<GitTargetInput | null>(null);
   const [workflowDecision, setWorkflowDecision] = useState<WorkflowDecisionTarget | null>(null);
   const [initializingGit, setInitializingGit] = useState(false);
   const [search, setSearch] = useState('');
@@ -812,6 +812,22 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
 
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const workflowRevisionFingerprint = useMemo(
+    () =>
+      workflows.executions
+        .map((execution) => `${execution.id}:${String(execution.revision)}`)
+        .sort()
+        .join('|'),
+    [workflows.executions],
+  );
+  const diffReview = useDiffReviewNodeController({
+    project,
+    nodes,
+    agents,
+    selectedNode,
+    workflowRevisionFingerprint,
+    onError,
+  });
   const sharedComments = useMemo(
     () => collaborationCommentsForNode(pendingCanvas, selectedNodeId),
     [pendingCanvas, selectedNodeId],
@@ -871,6 +887,27 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       ),
     );
   }, []);
+  const readCurrentGraph = useCallback(
+    () => ({ nodes: nodesRef.current, edges: edgesRef.current }),
+    [],
+  );
+  const replaceCurrentNodes = useCallback((nextNodes: WorkshopNode[]) => {
+    nodesRef.current = nextNodes;
+    setNodes(nextNodes);
+  }, []);
+  const gitReview = useDiffReviewSession({
+    projectId: project.id,
+    nodes,
+    collaborationGraphReadOnly: collaborationCanvas.graphReadOnly,
+    readGraph: readCurrentGraph,
+    recordSnapshot,
+    replaceNodes: replaceCurrentNodes,
+    refreshSummary: diffReview.refreshSummary,
+  });
+  const openProjectGitReview = useCallback(
+    () => gitReview.openTarget({ kind: 'primary', projectId: project.id }),
+    [gitReview.openTarget, project.id],
+  );
   const runs = useAgentRunController({
     project,
     selectedNode,
@@ -1198,7 +1235,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         id: 'git-review',
         label: 'Review Git changes',
         section: 'Project',
-        run: () => setGitReviewTarget({ kind: 'primary', projectId: project.id }),
+        run: openProjectGitReview,
       },
       {
         id: 'settings',
@@ -1222,6 +1259,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       extensionTemplates,
       instance,
       onOpenSettings,
+      openProjectGitReview,
       project.id,
       selectedNode,
       selectedWorkflowScope,
@@ -1263,7 +1301,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           if (selectedWorkflowScope === undefined) return;
           void workflows.start(selectedWorkflowScope);
         }}
-        onOpenGitReview={() => setGitReviewTarget({ kind: 'primary', projectId: project.id })}
+        onOpenGitReview={openProjectGitReview}
         onOpenCommands={() => setPaletteOpen(true)}
         onToggleNotifications={() => setNotificationsOpen((open) => !open)}
         onOpenSettings={onOpenSettings}
@@ -1463,6 +1501,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onPreviewSession={(session) => {
             if (selectedNode) previews.updateSession(selectedNode.id, session);
           }}
+          diffReview={diffReview}
+          onOpenDiffReview={(request) => {
+            if (selectedNode?.data.kind !== 'diff') return;
+            gitReview.openNodeReview(selectedNode.id, selectedNode.data.reviewTarget, request);
+          }}
           collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
           onAttachAgentContext={attachProjectFileContext}
           onRemoveAgentContext={removeProjectFileContext}
@@ -1492,7 +1535,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onInterruptWorkflowNode={workflows.interrupt}
           onOpenSettings={onOpenSettings}
           onOpenGitReview={(runId) =>
-            setGitReviewTarget(
+            gitReview.openTarget(
               runId === undefined
                 ? { kind: 'primary', projectId: project.id }
                 : { kind: 'agent-worktree', projectId: project.id, runId },
@@ -1513,11 +1556,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       {notificationsOpen && (
         <WorkspaceNotifications events={events} onClose={() => setNotificationsOpen(false)} />
       )}
-      {gitReviewTarget !== null && (
+      {gitReview.session !== null && (
         <GitReviewDialog
-          target={gitReviewTarget}
+          target={gitReview.session.target}
           projectName={project.name}
-          onClose={() => setGitReviewTarget(null)}
+          {...(gitReview.session.source === null
+            ? {}
+            : { displayPreferences: gitReview.session.source.preferences })}
+          {...(gitReview.canPersistPreferences
+            ? { onDisplayPreferencesChange: gitReview.persistPreferences }
+            : {})}
+          onClose={gitReview.close}
           onError={onError}
         />
       )}
@@ -1543,7 +1592,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
               .then(() => setWorkflowDecision(null));
           }}
           onReviewChanges={(runId) => {
-            setGitReviewTarget({
+            gitReview.openTarget({
               kind: 'agent-worktree',
               projectId: project.id,
               runId,

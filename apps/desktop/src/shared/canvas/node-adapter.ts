@@ -188,13 +188,16 @@ function canonicalData(
     case 'diff-review':
       return compact({
         ...base,
+        reviewTarget: rendererValueOrPrevious(raw, previous, 'reviewTarget'),
         baseRef: stringValue(raw['baseRef']),
         headRef: stringValue(raw['headRef']),
         worktreeId: stringValue(raw['worktreeId']),
         files: stringArray(raw['files']) ?? stringArray(raw['changedFiles']),
         viewMode: raw['viewMode'],
+        showWhitespace: booleanValue(rendererValueOrPrevious(raw, previous, 'showWhitespace')),
         ignoreWhitespace: booleanValue(raw['ignoreWhitespace']),
         hunkDecisions: raw['hunkDecisions'],
+        lineCommentIds: stringArray(rendererValueOrPrevious(raw, previous, 'lineCommentIds')),
         revisionRequest:
           typeof raw['revisionRequest'] === 'string' ? raw['revisionRequest'] : undefined,
         approval: raw['approval'],
@@ -336,6 +339,14 @@ function commandValue(value: unknown): Record<string, unknown> | undefined {
 
 function compact(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([, child]) => child !== undefined));
+}
+
+function rendererValueOrPrevious(
+  raw: Readonly<Record<string, unknown>>,
+  previous: CanvasNode['data'] | undefined,
+  key: string,
+): unknown {
+  return Object.prototype.hasOwnProperty.call(raw, key) ? raw[key] : unknownRecord(previous)?.[key];
 }
 
 function positiveNumber(value: unknown): number | undefined {

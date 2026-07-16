@@ -4,12 +4,14 @@ import {
   CanvasEdgeSchema,
   CanvasNodeSchema,
   CanvasSchema,
+  DiffReviewTargetSchema,
   ExecuteEdgeSchema,
   ProjectSchema,
   type CanvasNodeType,
 } from './domain.js';
 
 const NOW = '2026-07-14T12:00:00.000Z';
+const AGENT_RUN_ID = '11111111-1111-4111-8111-111111111111';
 
 const baseNode = {
   title: 'Node',
@@ -122,6 +124,55 @@ describe('domain schemas', () => {
     expect(types).toEqual([...expected].sort());
     expect(nodes.every((node) => node.comments.length === 0)).toBe(true);
     expect(nodes.every((node) => node.resources.cpuUnits === 1)).toBe(true);
+  });
+
+  it('persists only opaque primary or agent-run Diff review targets', () => {
+    expect(DiffReviewTargetSchema.parse({ kind: 'primary' })).toEqual({ kind: 'primary' });
+    expect(DiffReviewTargetSchema.parse({ kind: 'agent-run', runId: AGENT_RUN_ID })).toEqual({
+      kind: 'agent-run',
+      runId: AGENT_RUN_ID,
+    });
+
+    const pathBearingTargets = [
+      { kind: 'primary', root: '/private/repository' },
+      { kind: 'primary', repositoryPath: 'C:\\repository' },
+      { kind: 'primary', projectId: '22222222-2222-4222-8222-222222222222' },
+      { kind: 'agent-run', runId: AGENT_RUN_ID, worktreePath: '/private/worktree' },
+      { kind: 'agent-run', runId: AGENT_RUN_ID, cwd: '../renderer-selected-root' },
+      { kind: 'agent-run', runId: AGENT_RUN_ID, worktreeId: 'renderer-worktree' },
+      {
+        kind: 'agent-worktree',
+        projectId: '22222222-2222-4222-8222-222222222222',
+        runId: AGENT_RUN_ID,
+      },
+      { kind: 'agent-run', runId: 'renderer-selected-folder' },
+    ];
+    for (const target of pathBearingTargets) {
+      expect(DiffReviewTargetSchema.safeParse(target).success).toBe(false);
+      expect(
+        CanvasNodeSchema.safeParse({
+          ...baseNode,
+          id: 'unsafe-diff',
+          type: 'diff-review',
+          data: { reviewTarget: target },
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('keeps legacy Diff drafts compatible while applying review presentation defaults', () => {
+    const parsed = CanvasNodeSchema.parse({
+      ...baseNode,
+      id: 'legacy-diff',
+      type: 'diff-review',
+      data: { baseRef: 'main', headRef: 'feature', worktreeId: 'legacy-worktree' },
+    });
+
+    expect(parsed).toMatchObject({
+      type: 'diff-review',
+      data: { viewMode: 'split', showWhitespace: false, ignoreWhitespace: false },
+    });
+    if (parsed.type === 'diff-review') expect(parsed.data.reviewTarget).toBeUndefined();
   });
 
   it('rejects unknown node fields instead of silently persisting them', () => {

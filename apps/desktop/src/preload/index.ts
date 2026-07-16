@@ -86,6 +86,7 @@ import {
 } from '../shared/workflow/contracts.js';
 import { createFileApi } from './files.js';
 import { createGitReviewNotesApi } from './git-review-notes.js';
+import { createRunHistoryApi } from './runs/history.js';
 import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
@@ -259,6 +260,7 @@ const api: ForgeboardApi = {
     },
   },
   runs: {
+    ...createRunHistoryApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     prepare: (input) =>
       invokeValidated(IPC_CHANNELS.runsPrepare, RunApprovalViewSchema.nullable(), input),
     approve: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsApprove, runId),

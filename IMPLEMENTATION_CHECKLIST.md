@@ -747,3 +747,20 @@ unchecked when only a subset of their required behavior has proof.
   the native read-only DMG mount/copy/launch smoke returned `FORGEBOARD_SMOKE_OK`. Signing remains
   inactive because this machine has no Developer ID identity; GitHub publication and fresh native
   Windows/Linux installer proof remain unchecked.
+- 2026-07-16: Diff nodes gained a first-class, zero-code inspector for explicitly pinning either the
+  primary checkout or an opaque persisted terminal agent run, choosing unified/split presentation,
+  showing whitespace, retrying bounded run history, and opening the existing authoritative Git
+  review. The renderer receives no repository, managed-root, worktree-ID, or cwd authority; preload
+  validates a path-free summary and main revalidates the selected run through its durable ownership
+  resolver. Exact summaries distinguish working-tree changes from committed Agent-vs-base paths and
+  line counts. Locked and collaboration-read-only nodes remain inspectable, while target and shared
+  preference edits are disabled. Dialog preference persistence stays bound to the node and target
+  that opened it, survives selection drift without retargeting, rejects stale writes after retarget,
+  lock, deletion, or role downgrade, and records one undo snapshot for both fields. The unsafe idea
+  of inferring this target from incomplete workflow decision evidence was removed; the pin is a
+  standalone/manual inspection choice and does not make a Diff node workflow-ready. Therefore the
+  broad Diff/review node checklist entry remains open for causal workflow binding, hunk decisions,
+  revision execution, and an approval gate. This checkpoint passed the 746-file structure gate,
+  repository-wide Prettier and zero-warning ESLint, all eight workspace strict typechecks, 1,278 unit
+  tests across 213 files, 181 integration tests across 25 files, all 11 Electron Playwright journeys,
+  every workspace production build, and `git diff --check`.
