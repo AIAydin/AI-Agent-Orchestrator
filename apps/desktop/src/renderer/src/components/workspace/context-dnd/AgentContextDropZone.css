@@ -1,0 +1,112 @@
+.agent-context-drop-zone {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.agent-context-drop-zone.dragging-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+}
+
+.agent-context-drop-zone.disabled {
+  border-style: solid;
+}
+
+.agent-context-drop-zone > header,
+.agent-context-drop-zone > header > div,
+.agent-context-drop-zone li {
+  display: flex;
+  align-items: center;
+}
+
+.agent-context-drop-zone > header {
+  justify-content: space-between;
+}
+
+.agent-context-drop-zone > header > div {
+  gap: 7px;
+}
+
+.agent-context-drop-zone h3,
+.agent-context-drop-zone p {
+  margin: 0;
+}
+
+.agent-context-drop-zone h3 {
+  font-size: 0.78rem;
+}
+
+.agent-context-drop-zone > header > span {
+  color: var(--text-soft);
+  font-size: 0.7rem;
+}
+
+.agent-context-drop-zone p,
+.agent-context-drop-zone small {
+  color: var(--text-soft);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.agent-context-drop-zone .agent-context-read-only {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.agent-context-drop-zone .agent-context-error,
+.agent-context-drop-zone li.unavailable small {
+  color: var(--red);
+}
+
+.agent-context-drop-zone ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-context-drop-zone li {
+  gap: 7px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+
+.agent-context-drop-zone li > span {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.agent-context-drop-zone li strong,
+.agent-context-drop-zone li code {
+  overflow: hidden;
+  font-size: 0.67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-context-drop-zone li code {
+  color: var(--text-soft);
+}
+
+.agent-context-drop-zone li button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}

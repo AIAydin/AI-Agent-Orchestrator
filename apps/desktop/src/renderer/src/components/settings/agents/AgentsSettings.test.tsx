@@ -13,6 +13,7 @@ import type {
   AgentReadinessResult,
   CheckAgentReadiness,
 } from '../../../../../shared/readiness/contracts.js';
+import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadiness.js';
 import { AgentsSettings } from './AgentsSettings.js';
 
 const baseSettings = AppSettingsSchema.parse({
@@ -51,7 +52,10 @@ const agents: AgentDetection[] = [
 ];
 
 const pickExecutable = vi.fn(() =>
-  Promise.resolve({ ok: true as const, value: '/chosen/bin/codex' as string | null }),
+  Promise.resolve({
+    ok: true as const,
+    value: '/chosen/bin/codex' as string | null,
+  }),
 );
 
 beforeEach(() => {
@@ -91,7 +95,11 @@ describe('AgentsSettings readiness', () => {
     fireEvent.click(within(field as HTMLElement).getByRole('button', { name: 'Browse' }));
     await waitFor(() => expect(override.value).toBe('/chosen/bin/codex'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh OpenAI Codex CLI readiness' }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Refresh OpenAI Codex CLI readiness',
+      }),
+    );
     await screen.findByText('Selected executable is ready');
 
     expect(checkAgentReadiness).toHaveBeenCalledWith({
@@ -99,6 +107,12 @@ describe('AgentsSettings readiness', () => {
       executableOverride: '/chosen/bin/codex',
     });
     expect(screen.getByText('2.4.0')).toBeTruthy();
+
+    fireEvent.change(override, { target: { value: '/other/bin/codex' } });
+    expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
+    fireEvent.change(override, { target: { value: '/chosen/bin/codex' } });
+    expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
+    expect(screen.queryByText('Selected executable is ready')).toBeNull();
   });
 
   it('keeps a failed probe visibly non-ready', async () => {
@@ -118,7 +132,11 @@ describe('AgentsSettings readiness', () => {
     );
     render(<Harness checkAgentReadiness={checkAgentReadiness} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh OpenAI Codex CLI readiness' }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Refresh OpenAI Codex CLI readiness',
+      }),
+    );
 
     await screen.findByText('The version output did not match the selected agent adapter.');
     expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
@@ -128,6 +146,7 @@ describe('AgentsSettings readiness', () => {
 
 function Harness({ checkAgentReadiness }: { readonly checkAgentReadiness: CheckAgentReadiness }) {
   const [draft, setDraft] = useState<AppSettings>(baseSettings);
+  const readiness = useSettingsAgentReadiness(draft, baseSettings, agents, checkAgentReadiness);
   return (
     <AgentsSettings
       agents={agents}
@@ -135,7 +154,7 @@ function Harness({ checkAgentReadiness }: { readonly checkAgentReadiness: CheckA
       setDraft={setDraft}
       busy={false}
       perform={async (operation) => await operation()}
-      checkAgentReadiness={checkAgentReadiness}
+      readiness={readiness}
       onError={(message) => {
         throw new Error(message);
       }}

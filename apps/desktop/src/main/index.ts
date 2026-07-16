@@ -4,8 +4,9 @@ import { PRODUCT } from '@forgeboard/core';
 import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
 
 import { PACKAGED_SMOKE_MARKER } from '../shared/smoke/contracts.js';
+import { attemptContextSnapshotStorageStartup } from './agent-execution/context/snapshot-store/startup.js';
 import { CloseCoordinator } from './lifecycle/close-coordinator.js';
-import { registerIpcHandlers } from './ipc.js';
+import { createDefaultSettings, registerIpcHandlers } from './ipc.js';
 import type { ApplicationServices } from './ipc.js';
 import { verifyBundledGit } from './git/git-runtime.js';
 import { configurePackagedSmokeProfile, runPackagedApplicationSmoke } from './smoke/packaged.js';
@@ -33,8 +34,23 @@ app.on('second-instance', () => {
 void app
   .whenReady()
   .then(async () => {
+    // A losing second process must never inspect the winning process's live snapshot lease.
+    if (!hasSingleInstanceLock) return;
     configureSessionSecurity();
-    store = new LocalStore(join(app.getPath('userData'), 'forgeboard.sqlite'));
+    const contextSnapshotStorage = await attemptContextSnapshotStorageStartup(
+      process.platform === 'win32' ? app.getPath('userData') : undefined,
+    );
+    if (!contextSnapshotStorage.ready) {
+      if (packagedSmokeProfile !== null) {
+        throw new Error(contextSnapshotStorage.reason, { cause: contextSnapshotStorage.error });
+      }
+      process.stderr.write(
+        `Forgeboard context startup deferred: ${contextSnapshotStorage.reason}\n`,
+      );
+    }
+    store = new LocalStore(join(app.getPath('userData'), 'forgeboard.sqlite'), {
+      legacySettingsDefaults: createDefaultSettings(),
+    });
     services = registerIpcHandlers(store);
     closeCoordinator = new CloseCoordinator(dialog, ipcMain);
     mainWindow = createWindow(services, closeCoordinator, packagedSmokeProfile === null);

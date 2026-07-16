@@ -9,9 +9,11 @@ import {
   type CommandReadinessRequest,
   type CommandReadinessResult,
 } from '../../shared/command-readiness/contracts.js';
+import { settingsCommandFingerprint } from '../../shared/settings/readiness-requests.js';
 import { canonicalProjectRoot, resolveCheckExecutable } from '../checks/check-process.js';
 
 const MAX_PACKAGE_JSON_BYTES = 2 * 1024 * 1024;
+const MAX_VERIFIED_SETTINGS_COMMANDS = 256;
 
 interface CommandReadinessStore {
   getProject(projectId: string): Project | undefined;
@@ -34,6 +36,7 @@ export class CommandReadinessService {
   readonly #canonicalizeProject: CanonicalizeProject;
   readonly #readScripts: ReadScripts;
   readonly #now: () => Date;
+  readonly #verifiedSettingsRequests = new Map<string, CommandReadinessRequest>();
 
   public constructor(
     private readonly store: CommandReadinessStore,
@@ -127,6 +130,51 @@ export class CommandReadinessService {
     } catch (error) {
       return this.#resolutionFailure(request, project, error);
     }
+  }
+
+  /** Re-runs the exact passive check previously requested by Settings, including its project. */
+  public async verifySettingsReadiness(
+    input: Pick<CommandReadinessRequest, 'purpose' | 'command'>,
+  ): Promise<CommandReadinessResult> {
+    const fingerprint = settingsCommandFingerprint(input);
+    const request = this.#verifiedSettingsRequests.get(fingerprint);
+    if (request === undefined) {
+      throw new Error('Wait for command readiness to finish for the current Settings draft.');
+    }
+    let result: CommandReadinessResult;
+    try {
+      result = await this.check(request);
+    } catch (error) {
+      this.#verifiedSettingsRequests.delete(fingerprint);
+      throw error;
+    }
+    if (!result.ready) {
+      this.#verifiedSettingsRequests.delete(fingerprint);
+      throw new Error(result.reason ?? 'The configured command is no longer ready.');
+    }
+    this.#verifiedSettingsRequests.delete(fingerprint);
+    this.#verifiedSettingsRequests.set(fingerprint, result.request);
+    return result;
+  }
+
+  /** Admits only a successful check whose IPC owner was revalidated after passive inspection. */
+  public recordVerifiedSettingsReadiness(rawResult: CommandReadinessResult): void {
+    const result = CommandReadinessResultSchema.parse(rawResult);
+    if (!result.ready) {
+      throw new Error('Only ready command evidence can authorize a Settings update.');
+    }
+    const fingerprint = settingsCommandFingerprint(result.request);
+    this.#verifiedSettingsRequests.delete(fingerprint);
+    this.#verifiedSettingsRequests.set(fingerprint, result.request);
+    while (this.#verifiedSettingsRequests.size > MAX_VERIFIED_SETTINGS_COMMANDS) {
+      const oldest = this.#verifiedSettingsRequests.keys().next().value;
+      if (oldest === undefined) return;
+      this.#verifiedSettingsRequests.delete(oldest);
+    }
+  }
+
+  public clearVerifiedSettingsReadiness(): void {
+    this.#verifiedSettingsRequests.clear();
   }
 
   async #checkExecutableOnly(

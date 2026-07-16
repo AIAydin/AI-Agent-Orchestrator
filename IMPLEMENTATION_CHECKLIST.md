@@ -66,7 +66,7 @@ not be reclassified as future work.
 
 - [x] Repository open/clone/create/init, health scan, recent list, and missing-path recovery.
 - [x] Collision-safe per-writable-run branches/worktrees outside the checkout with ownership records.
-- [ ] Dirty-primary protection and worktree branch/ahead/behind/dirty UI.
+- [x] Dirty-primary protection and worktree branch/ahead/behind/dirty UI.
 - [x] Diff parsing, file navigation, unified/split views, whitespace controls, line comments, and stats.
 - [x] Predictable accept/reject individual hunks while preserving unselected changes.
 - [ ] Commit, compare agents/base, rename, archive, external editor, and safe cleanup.
@@ -84,7 +84,7 @@ not be reclassified as future work.
 - [x] Repository health scan and installed CLI/version detection.
 - [x] Responsive top command bar, left project rail, canvas, right inspector, and activity drawer.
 - [x] Light/dark/system themes, density/motion controls, contrast, focus, labels, and reduced motion.
-- [ ] Guided first-run tour, searchable local documentation, shortcuts, privacy, and troubleshooting.
+- [x] Guided first-run tour, searchable local documentation, shortcuts, privacy, and troubleshooting.
 - [ ] Command palette, notifications, contextual menus, tooltips, and robust empty/error/loading states.
 
 ## Infinite canvas and nodes
@@ -96,7 +96,7 @@ not be reclassified as future work.
 - [ ] Agent node.
 - [ ] Product brief node with Markdown, checklists, attachments, criteria, versions, and variables.
 - [ ] Task node with priority, assignee, dependencies, criteria, files, status, and execution.
-- [ ] Live Monaco file node with history, dirty state, reveal, and context drag.
+- [x] Live Monaco file node with history, dirty state, reveal, and context drag.
 - [ ] Diff/review node with hunk decisions, comments, revision requests, and approval gate.
 - [ ] Interactive terminal node.
 - [ ] Isolated web preview node with logs/console/errors/navigation/viewports/screenshots.
@@ -132,7 +132,7 @@ not be reclassified as future work.
 ## Optional multiplayer
 
 - [x] Optional Hocuspocus/Yjs server; solo mode has no server dependency.
-- [ ] Offline/reconnect, shared graph, cursors, selection, presence, comments, and avatars.
+- [x] Offline/reconnect, shared graph, cursors, selection, presence, comments, and avatars.
 - [x] Owner/editor/reviewer/viewer authorization.
 - [x] Signed expiring invites, revocation, room authorization, rate limits, TLS, and audit trail.
 - [x] Schema/test proof that source, file contents, diffs, prompts, terminals, env, secrets, and
@@ -148,7 +148,7 @@ not be reclassified as future work.
       and imported through the UI without editing a file.
 - [ ] Documented validated extension API for local agent adapters and canvas node types, with
       explicit install/permissions and no renderer execution.
-- [ ] Drag/drop from tree/templates and node-to-agent context linking.
+- [x] Drag/drop from tree/templates and node-to-agent context linking.
 - [ ] Templates: single agent, parallel implementations, implement/review loop, bug investigation,
       and multi-screen product build.
 - [ ] Notifications, autosave/offline indicators, provider disclosure, and branch/worktree badges.
@@ -602,3 +602,148 @@ unchecked when only a subset of their required behavior has proof.
   found no known vulnerabilities. A fresh unsigned macOS arm64 app, ZIP, and DMG built successfully;
   packaged-app smoke passed, and the native DMG mount/copy/launch smoke returned
   `FORGEBOARD_SMOKE_OK`. Signing remains inactive because this machine has no Developer ID identity.
+- 2026-07-15: first-run Ready now includes an optional, non-blocking four-stop Getting started tour
+  for project entry, workspace navigation and the active command-palette shortcut, exact-launch and
+  local-review safety, and Help/Data & privacy/recovery paths. The same bundled tour is replayable
+  from Help & shortcuts; it has no links or configuration controls, explicitly distinguishes the
+  networked Clone action, and contacts no service itself. Existing searchable local guides cover
+  agent, Git, Docker, preview, keyboard, privacy, backup/recovery, missing-project, permission, and
+  run-failure troubleshooting entirely through app UI. Forty-two focused component/accessibility
+  tests across five files, desktop strict typecheck, targeted zero-warning lint and formatting, the
+  640-file structure gate, production build, `git diff --check`, and the real Electron first-run
+  journey with an empty external-request watcher passed. The broader command-palette/notification/
+  contextual-menu/tooltip/state entry remains unchecked.
+- 2026-07-16: optional multiplayer retains a strict metadata-only baseline, pending intent, and
+  exact per-delivery candidate ledger under the saved project/canvas plus authenticated server,
+  room, and subject. Receipt binding and staging are one SQLite transaction; highest-sequence
+  acknowledgement projection preserves accepted A while later rejected B remains the only recovery
+  addition, regardless of settlement order or restart. Migration 12 backfills migration-11 delivery
+  rows. Per-scope row and aggregate-byte limits, sliding 30-day inactivity expiry, digest/scope and
+  state-to-ledger projection integrity, checkpoints, and privacy cleanup fail closed without evicting
+  user work. Domain-aware three-way recovery ignores derived revision noise, reapplies disjoint
+  edits, pauses true same-field/entity conflicts, and retains intent after a role downgrade. Shared
+  comments stay hidden until their correlated durable acknowledgement; rejection quarantine covers
+  early IPC races, replies, review references, settlement-write retry, reconnect receipt reattachment,
+  and digest mismatch without losing pending callers. Exact-ledger recovery also restores a rejected
+  B quarantine beneath newer unsettled C, clears it only when an acknowledged baseline contains B,
+  and applies no room snapshot while a known rejection cannot be persisted. Reviewer comments are
+  main-authored with the authenticated identity while viewers remain read-only; live membership,
+  role, token version, and expiry are revalidated per message. A bounded idle-avatar roster
+  supplements cursors, selection, and presence. Nineteen focused unit files passed 158 tests, 41 additional SQLite migration/recovery
+  tests passed, and the real loopback server passed all eight authorization, privacy, receipt,
+  revocation, and offline-merge integration tests. Core, collaboration-server, and desktop strict
+  typechecks, focused zero-warning lint and formatting, the 695-file structure gate, and
+  `git diff --check` also passed.
+- 2026-07-16: Settings now fails closed on the exact unsaved draft for blank or invalid numeric
+  controls, non-loopback preview hosts, and bounded control-free machine values; restored and
+  imported drafts receive the same validation before Save. Every configured built-in provider and
+  enabled custom CLI must have evidence bound to its current executable/configuration, and edits
+  invalidate earlier evidence. Managed-worktree and enabled-backup destinations receive debounced,
+  passive main-process `stat`/`access` preflight through a purpose-bound validated IPC/preload
+  contract; it creates and starts nothing, returns no canonical path, and translates filesystem
+  errors without leaking OS-resolved paths. The trusted `settings:update` transaction now also
+  compares the parsed draft with persisted settings and independently revalidates each newly changed
+  agent configuration, configured preview/check command, worktree destination, and newly enabled or
+  changed backup destination before any save, retention, audit, or schedule-refresh effect. Agent
+  evidence is admitted only after native confirmation, probe completion, audit success, and a final
+  owner check; save-time verification re-resolves and re-hashes it without another subprocess. A
+  command check is likewise admitted only after its IPC owner survives passive inspection, then is
+  recomputed with the same project context. The bundled deterministic agent uses a passive
+  main-owned proof. At this checkpoint, changed-only persistence checks did not yet migrate unchanged
+  legacy configuration; the later 2026-07-16 upgrade-repair entry supersedes that limitation.
+  Thirteen focused UI and
+  contract files passed 71 tests; the follow-up persistence-boundary set passed 55 tests across eight
+  files. Desktop strict typecheck, focused zero-warning lint and formatting, and the 702-file
+  structure gate passed. The two broad Settings completeness entries remain unchecked because this
+  evidence closes only validation, readiness, and folder preflight, not every setting or integration
+  in the build goal.
+- 2026-07-16: dirty-primary protection is enforced by the real Git engine before integration, while
+  Repository status in an agent worktree visibly reports its managed branch, ahead/behind counts,
+  and dirty or clean state without changing the primary checkout. Eight focused Git review component
+  tests and the real-repository dirty-primary integration target passed; the prior Electron Git
+  journey covers the same UI flow.
+- 2026-07-16: project-tree files and File nodes can now be linked to an Agent through strict drag/drop
+  or keyboard target pickers. A configured File node whose center is moved onto an unlocked Agent
+  links that exact existing node; moving it elsewhere remains an ordinary canvas move, and locked,
+  read-only, directory, missing-file, and cross-project cases fail closed. Renderer drag data carries
+  only project identity, a relative path, and an optional semantic node ID. Before review preparation,
+  the renderer writes the current effective permission choice onto the Agent and requires the canvas
+  flush to finish. Main reloads the persisted Agent, rejects prompt/adapter/profile mismatches,
+  resolves and hashes current same-project File nodes, and verifies the exact disclosure. The renderer
+  flushes again before approval, after which main rechecks configuration and the attachment manifest.
+  Immediately before spawn it rechecks bytes, ignore and sensitive-file policy, symlinks, and hashes;
+  any drift consumes the plan and requires fresh review. Normal terminal and launch-failure paths
+  remove the immutable per-run copy. After a crash, startup under the winning Electron instance lock
+  scavenges only owner/marker-validated dead or over-age instances from the dedicated host store,
+  preserves recent live instances, refuses unknown/symlink children, and completes validated
+  interrupted quarantine cleanup. Normal startup now defers a storage warm-up failure while later
+  context-bearing launches retry and remain fail-closed. Windows stores Host and Docker snapshots in
+  separate SID-hash namespaces under per-user app data, binds the full SID in markers, revalidates
+  exact private directory/file DACLs at launch binding, and never puts Docker snapshot bytes in the
+  managed root. Marker reads are stable, no-follow, and capped at 4 KiB. Managed-root cleanup is lazy
+  and leaves checkout content untouched.
+  The earlier context-link checkpoint passed sixteen focused unit files with 141 tests and two
+  RunService integration files with 18 tests, alongside desktop strict typecheck, targeted
+  zero-warning lint, the 692-file structure gate, and `git diff --check`. Additional focused
+  regressions cover the direct File-node drop, profile-before-flush ordering, runtime cleanup, crash
+  restart, live-PID preservation, bounded PID-reuse aging, symlink refusal, managed-root isolation,
+  and interrupted-quarantine recovery. The broader per-file sensitive override UI remains open;
+  ordinary context linking intentionally accepts only files allowed by normal policy.
+- 2026-07-16: stored-settings upgrades now run an explicit field-by-field compatibility repair before
+  strict startup integrity validation. Known legacy executable, permission, command, preview-host,
+  Docker, worktree, terminal, and backup values are normalized, safely disabled, filtered, or
+  replaced with injected device defaults while unrelated settings remain intact; unknown corruption
+  still fails closed. Migration 13 adds a 20-record device-local immutable evidence ledger with full
+  original/repaired JSON, SHA-256 validation, redacted field-path-only audit metadata, complete-data
+  deletion, and no ordinary portable import/export participation. A startup disclosure and Data &
+  Privacy UI support review plus explicit evidence export without editing source or configuration
+  files. Current-version detection closes the crash window after schema migration. Legacy preview
+  hosts are deterministically reduced to the first 128 unique loopbacks, and evidence preserves
+  legacy settings beyond the previous 4 MiB test boundary. Each original/repaired JSON value now has
+  an independent 16 MiB UTF-8 cap in the shared schema, bounded SQLite reads, and BLOB-length table
+  constraints. The exact-boundary regression accepts 16 MiB and rejects one additional byte; an
+  oversized stored-settings row fails with recovery guidance before any repair-evidence row is
+  copied. Persisted Agent canvases retain every pre-existing context link above the 256 execution
+  limit without truncation; UI linking, direct runs, and workflow execution still reject overflow.
+  Focused planner, pre-current/current-version SQLite restart, evidence integrity/deletion, IPC,
+  settings UI, startup notice, and run-boundary regressions passed; final repository-wide
+  verification is recorded separately.
+- 2026-07-16: the Windows filesystem authority now reads the raw descriptor before trusting projected
+  ACL rules, rejects absent DACLs and callback/unsupported raw ACEs, and requires exact protected
+  current-SID/LocalSystem DACLs for Forgeboard-created private objects. Managed-worktree readiness
+  rejects destination and ancestor aliases; backup readiness checks and warns about the canonical
+  target. Backup creation protects a new destination and staging directory before SQLite writes,
+  protects the staged file, publishes the same inode by hard link, rechecks the final DACL and
+  identity, and does not rewrite a suspect recorded file's ACL before ledger verification. Seven
+  focused files passed all 62 tests covering the ACL authority, folder readiness, deferred context
+  startup, SID-bound snapshot storage and 4 KiB markers, immutable context, Windows backup creation
+  and deletion, and the exact 16 MiB settings-repair boundary. No broader checklist checkbox was
+  changed by this hardening evidence.
+- 2026-07-16: the complete zero-code editing, collaboration recovery, immutable-context, Settings
+  repair, and Windows privacy checkpoint passed the 727-file structure gate, repository-wide
+  formatting and zero-warning lint, all eight workspace strict typechecks, 1,224 unit tests across
+  206 files, 179 integration tests across 25 files, all 11 Electron Playwright journeys, the
+  production dependency audit with no known vulnerabilities, and every workspace production build.
+  A fresh unsigned macOS arm64 application, ZIP, and DMG packaged successfully; the packaged-app
+  smoke passed, and the native read-only DMG mount/copy/launch smoke returned
+  `FORGEBOARD_SMOKE_OK`. Signing remains inactive because this machine has no Developer ID identity.
+- 2026-07-16: rejected shared comments now retain an exact value plus rejected-delivery token and
+  expose an explicit two-step `Discard local copy` action from both the matching node and a global
+  deleted-node-safe notice. Device-local SQLite dismissals are subject-, scope-, digest-, sequence-,
+  TTL-, row-, and byte-bound; keep raw delivery evidence immutable; cascade replies and review
+  references in the effective view; and allow a later byte-identical rejection to reappear. Fully
+  dismissed recovery checkpoints only the stored baseline. A baseline-aware session overlay keeps
+  polluted Yjs values out of snapshots and remounts, while publish, comment creation, and replay
+  fail before reservation, journaling, mutation, or transport until the user leaves and rejoins a
+  stale room. Eleven focused files passed 125 tests, including viewer downgrade, crash recovery,
+  acknowledgement beneath a newer unsettled delivery, absent-versus-empty review normalization,
+  exact cutoff, cascade, quota, integrity, and no-resurrection cases.
+- 2026-07-16: the frozen checkpoint passed the 734-file structure gate, repository-wide Prettier,
+  zero-warning ESLint, all eight workspace strict typechecks, 1,248 unit tests across 209 files,
+  179 integration tests across 25 files, all 11 Electron Playwright journeys, every production
+  build, `git diff --check`, and the production dependency audit with no known vulnerabilities. An
+  isolated fresh package produced an unsigned macOS arm64 application, ZIP, DMG, and blockmaps; its
+  ASAR contains the declared main, preload, and renderer entries. The packaged-app smoke passed and
+  the native read-only DMG mount/copy/launch smoke returned `FORGEBOARD_SMOKE_OK`. Signing remains
+  inactive because this machine has no Developer ID identity; GitHub publication and fresh native
+  Windows/Linux installer proof remain unchecked.

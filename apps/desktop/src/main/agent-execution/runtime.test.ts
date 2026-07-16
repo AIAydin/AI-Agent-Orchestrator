@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -11,6 +11,7 @@ import {
   type AgentResultMetadata,
   type AgentSession,
   type PermissionProfile,
+  type PreparedAgentLaunch,
 } from '@forgeboard/agent-adapters';
 import type {
   RepositoryService,
@@ -682,6 +683,43 @@ describe('AgentExecutionRuntime approval binding', () => {
     }
   });
 
+  it('rejects a context file newly covered by .forgeboardignore after disclosure', async () => {
+    const temporaryRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), 'forgeboard-runtime-policy-')),
+    );
+    try {
+      const selectedFile = path.join(temporaryRoot, 'context.ts');
+      const approvedBytes = 'export const reviewed = true;\n';
+      await writeFile(selectedFile, approvedBytes);
+      const harness = createHarness({ repositoryPath: temporaryRoot });
+      const prepared = await harness.runtime.prepare('owner-a', {
+        ...request(),
+        context: {
+          attachments: [
+            {
+              path: selectedFile,
+              kind: 'file',
+              explicitlyApproved: true,
+              sha256: createHash('sha256').update(approvedBytes).digest('hex'),
+            },
+          ],
+          manifestId: 'policy-context-v1',
+          manifestDigest: 'c'.repeat(64),
+        },
+      });
+
+      await writeFile(path.join(temporaryRoot, '.forgeboardignore'), 'context.ts\n');
+      await expect(
+        harness.runtime.launch('owner-a', prepared.planId, prepared.disclosureFingerprint),
+      ).rejects.toThrow(/became ignored after disclosure/iu);
+      expect(harness.launchSession).not.toHaveBeenCalled();
+      expect(harness.records.get(prepared.runId)?.status).toBe('failed');
+      await harness.runtime.dispose();
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   it('revalidates the exact trusted extension manifest before launch', async () => {
     const adapterId = 'vendor.agent';
     let currentManifest: AgentAdapterManifest = AgentAdapterManifestSchema.parse({
@@ -764,6 +802,117 @@ describe('AgentExecutionRuntime approval binding', () => {
 });
 
 describe('AgentExecutionRuntime launch handles', () => {
+  it('launches only immutable approved context bytes and preserves class session methods', async () => {
+    const temporaryRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), 'forgeboard-runtime-snapshot-')),
+    );
+    const approvedBytes = 'approved context bytes\n';
+    const selectedFile = path.join(temporaryRoot, 'context.ts');
+    await writeFile(selectedFile, approvedBytes);
+    const session = new PrototypeAgentSession();
+    let launchedPlan: PreparedAgentLaunch | undefined;
+    let launchedBytes: string | undefined;
+    let snapshotPath: string | undefined;
+    const harness = createHarness({
+      adapterId: 'test.snapshot',
+      repositoryPath: temporaryRoot,
+      launchSession: async (_adapter, planInput) => {
+        const plan = planInput as PreparedAgentLaunch;
+        launchedPlan = plan;
+        snapshotPath = plan.disclosure.contextAttachments[0]?.path;
+        await writeFile(selectedFile, 'source replaced at the launch seam\n');
+        launchedBytes =
+          snapshotPath === undefined ? undefined : await readFile(snapshotPath, 'utf8');
+        return session;
+      },
+    });
+    try {
+      const prepared = await harness.runtime.prepare('owner-a', {
+        ...request('test.snapshot'),
+        context: {
+          attachments: [
+            {
+              path: selectedFile,
+              kind: 'file',
+              explicitlyApproved: true,
+              sha256: createHash('sha256').update(approvedBytes).digest('hex'),
+            },
+          ],
+          manifestId: 'immutable-launch-v1',
+          manifestDigest: 'd'.repeat(64),
+        },
+      });
+
+      expect(prepared.disclosure.contextAttachments[0]?.path).toBe(selectedFile);
+      const handle = await harness.runtime.launch(
+        'owner-a',
+        prepared.planId,
+        prepared.disclosureFingerprint,
+      );
+
+      expect(snapshotPath).toBeDefined();
+      expect(snapshotPath).not.toBe(selectedFile);
+      expect(launchedBytes).toBe(approvedBytes);
+      expect(launchContextFields(launchedPlan!).join('\n')).not.toContain(selectedFile);
+      handle.writeInput('continue');
+      handle.interrupt();
+      await handle.terminate();
+      expect(session.inputs).toEqual(['continue\n']);
+      expect(session.interruptCalls).toBe(1);
+      expect(session.terminateCalls).toBe(1);
+      await expect(handle.completion).resolves.toMatchObject({ status: 'terminated' });
+      await expect(access(snapshotPath!)).rejects.toThrow();
+    } finally {
+      await harness.runtime.dispose();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('removes the private context snapshot when the launch seam fails', async () => {
+    const temporaryRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), 'forgeboard-runtime-snapshot-failure-')),
+    );
+    const approvedBytes = 'approved failure-path context\n';
+    const selectedFile = path.join(temporaryRoot, 'context.ts');
+    await writeFile(selectedFile, approvedBytes);
+    let snapshotPath: string | undefined;
+    const harness = createHarness({
+      adapterId: 'test.snapshot',
+      repositoryPath: temporaryRoot,
+      launchSession: (_adapter, planInput) => {
+        snapshotPath = (planInput as PreparedAgentLaunch).disclosure.contextAttachments[0]?.path;
+        return Promise.reject(new Error('launch seam failed'));
+      },
+    });
+    try {
+      const prepared = await harness.runtime.prepare('owner-a', {
+        ...request('test.snapshot'),
+        context: {
+          attachments: [
+            {
+              path: selectedFile,
+              kind: 'file',
+              explicitlyApproved: true,
+              sha256: createHash('sha256').update(approvedBytes).digest('hex'),
+            },
+          ],
+          manifestId: 'immutable-launch-failure-v1',
+          manifestDigest: 'e'.repeat(64),
+        },
+      });
+
+      await expect(
+        harness.runtime.launch('owner-a', prepared.planId, prepared.disclosureFingerprint),
+      ).rejects.toThrow('launch seam failed');
+      expect(snapshotPath).toBeDefined();
+      await expect(access(snapshotPath!)).rejects.toThrow();
+      expect(harness.records.get(prepared.runId)?.status).toBe('failed');
+    } finally {
+      await harness.runtime.dispose();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     ['succeeded', 0],
     ['failed', 7],
@@ -903,6 +1052,46 @@ describe('AgentExecutionRuntime launch handles', () => {
     expect(harness.records.get(prepared.runId)?.status).toBe('terminated');
   });
 });
+
+class PrototypeAgentSession implements AgentSession {
+  public readonly pid = 8765;
+  public readonly events = emptyEvents();
+  public readonly result: Promise<AgentResultMetadata>;
+  public readonly inputs: string[] = [];
+  public interruptCalls = 0;
+  public terminateCalls = 0;
+
+  readonly #resolve: (value: AgentResultMetadata) => void;
+
+  public constructor() {
+    let resolveResult: ((value: AgentResultMetadata) => void) | undefined;
+    this.result = new Promise<AgentResultMetadata>((resolve) => {
+      resolveResult = resolve;
+    });
+    this.#resolve = (value) => resolveResult?.(value);
+  }
+
+  public writeInput(data: string): void {
+    this.inputs.push(data);
+  }
+
+  public interrupt(): void {
+    this.interruptCalls += 1;
+  }
+
+  public terminate(): void {
+    this.terminateCalls += 1;
+    this.#resolve(result('terminated'));
+  }
+}
+
+function launchContextFields(plan: PreparedAgentLaunch): string[] {
+  return [
+    ...plan.disclosure.arguments,
+    ...plan.disclosure.contextAttachments.map(({ path: attachmentPath }) => attachmentPath),
+    ...(plan.initialStdin === undefined ? [] : [plan.initialStdin]),
+  ];
+}
 
 function worktreeOwnership(): WorktreeOwnership {
   return {

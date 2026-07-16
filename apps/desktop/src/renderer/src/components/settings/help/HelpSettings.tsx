@@ -2,6 +2,7 @@ import { ChevronDown, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import type { AppSettings } from '../../../../../shared/application/contracts.js';
+import { FirstRunTour } from '../../help/tour/FirstRunTour.js';
 import { HELP_ARTICLES, searchHelpArticles } from './help-content.js';
 import './HelpSettings.css';
 
@@ -44,6 +45,11 @@ export function HelpSettings({
         </span>
         <kbd aria-label={paletteShortcutLabel}>{paletteShortcut}</kbd>
       </div>
+
+      <details className="help-tour-replay">
+        <summary>Replay Getting started tour</summary>
+        <FirstRunTour keyboardPreset={activeKeyboardPreset} headingLevel={4} />
+      </details>
 
       <label className="help-search">
         <span className="sr-only">Search local help</span>

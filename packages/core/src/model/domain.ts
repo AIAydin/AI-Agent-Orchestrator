@@ -137,6 +137,8 @@ export const AcceptanceCriterionSchema = z
   })
   .strict();
 
+export const AGENT_CONTEXT_ATTACHMENT_LIMIT = 256;
+
 export const AgentNodeSchema = createNodeSchema(
   'agent',
   z
@@ -146,6 +148,8 @@ export const AgentNodeSchema = createNodeSchema(
       permissionProfileId: EntityIdSchema.optional(),
       worktreeId: EntityIdSchema.optional(),
       branch: z.string().min(1).max(1024).optional(),
+      // Persisted canvases predate the execution cap and must remain openable without silently
+      // discarding selected context. UI linking and every run boundary enforce the limit above.
       contextAttachmentIds: z.array(EntityIdSchema).default([]),
       promptDraft: z.string().max(1_000_000).default(''),
       activeSessionId: EntityIdSchema.optional(),

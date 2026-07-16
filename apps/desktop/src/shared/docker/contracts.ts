@@ -1,13 +1,8 @@
 import { z } from 'zod';
 
-const safeSingleLine = (value: string): boolean => !value.includes('\0') && !/[\r\n]/u.test(value);
+import { MachineSpecificValueSchema } from '../settings/values.js';
 
-export const DockerExecutableSettingSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(32_768)
-  .refine(safeSingleLine, 'Docker executable paths cannot contain NUL or line breaks.');
+export const DockerExecutableSettingSchema = MachineSpecificValueSchema;
 
 export const DockerImageReferenceSchema = z
   .string()
@@ -20,12 +15,9 @@ export const DockerImageReferenceSchema = z
   )
   .refine((value) => !value.split('/').includes('..'), 'Docker image paths cannot traverse.');
 
-export const DockerContainerExecutableSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(4_096)
-  .refine(safeSingleLine, 'Container executable paths cannot contain NUL or line breaks.')
+export const DockerContainerExecutableSchema = MachineSpecificValueSchema.pipe(
+  z.string().max(4_096),
+)
   .refine((value) => value.startsWith('/'), 'Container executable must be an absolute path.')
   .refine((value) => {
     const segments = value.split('/').slice(1);

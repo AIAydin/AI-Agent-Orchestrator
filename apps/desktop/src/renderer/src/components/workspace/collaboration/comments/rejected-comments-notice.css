@@ -1,0 +1,44 @@
+.rejected-comments-notice {
+  display: grid;
+  gap: 6px;
+  margin: 8px 12px 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--amber) 8%, var(--surface-raised));
+}
+
+.rejected-comments-notice header {
+  display: flex;
+  justify-content: space-between;
+}
+
+.rejected-comments-notice > p,
+.rejected-comments-notice small {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.rejected-comments-notice ol {
+  display: grid;
+  gap: 6px;
+  max-height: 150px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.rejected-comments-notice li {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+}
+
+.rejected-comments-notice li p {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

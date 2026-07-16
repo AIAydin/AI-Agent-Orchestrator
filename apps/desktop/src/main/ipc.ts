@@ -25,6 +25,7 @@ import {
 } from '../shared/application/contracts.js';
 import { CommandReadinessRequestSchema } from '../shared/command-readiness/contracts.js';
 import { IntegrityCheckInputSchema } from '../shared/integrity/contracts.js';
+import { MachineSpecificValueSchema } from '../shared/settings/values.js';
 import { ApprovalService } from './approvals/approval-service.js';
 import { AutomaticBackupCoordinator } from './backups/automatic-backup-coordinator.js';
 import { CheckIpcService } from './checks/check-ipc.js';
@@ -51,6 +52,9 @@ import { prepareReversibleQuitBackup } from './backups/quit-backup-preparation.j
 import { RecoveryIpcService } from './recovery/recovery-ipc.js';
 import { RunService } from './runs/run-service.js';
 import { SettingsIpcService } from './settings/settings-ipc.js';
+import { SettingsPersistenceReadinessVerifier } from './settings/persistence-readiness.js';
+import { FolderReadinessIpcService } from './settings/folder-readiness/ipc.js';
+import { FolderReadinessService } from './settings/folder-readiness/service.js';
 import type { LocalStore } from './storage.js';
 import { createWorkflowRuntimeComposition } from './workflow/host/composition.js';
 import { WorkflowIpcService } from './workflow/host/ipc.js';
@@ -61,6 +65,8 @@ const ProjectIdSchema = z.string().uuid();
 
 export function createDefaultSettings(): AppSettings {
   const documents = app.getPath('documents');
+  const platformShell = process.platform === 'win32' ? 'powershell.exe' : '/bin/zsh';
+  const environmentShell = MachineSpecificValueSchema.safeParse(process.env.SHELL);
   return {
     onboardingCompleted: false,
     theme: 'system',
@@ -114,8 +120,7 @@ export function createDefaultSettings(): AppSettings {
     gitIdentityName: '',
     gitIdentityEmail: '',
     gitRemote: 'origin',
-    terminalShell:
-      process.env.SHELL ?? (process.platform === 'win32' ? 'powershell.exe' : '/bin/zsh'),
+    terminalShell: environmentShell.success ? environmentShell.data : platformShell,
     envAllowlist: ['PATH', 'HOME', 'LANG', 'TERM', 'COLORTERM'],
     developmentCommand: { executable: '', arguments: [] },
     testCommand: { executable: '', arguments: [] },
@@ -156,6 +161,7 @@ export function createDefaultSettings(): AppSettings {
 
 export interface ApplicationServices {
   settings: SettingsIpcService;
+  folderReadiness: FolderReadinessIpcService;
   readiness: AgentReadinessIpcService;
   projectClones: ProjectCloneIpcService;
   docker: DockerIpcService;
@@ -208,7 +214,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const projectFiles = new ProjectFileService(store);
   const files = new FileIpcService(projectFiles, shell, runDataOperation);
   const outbound = new OutboundActionGate(store);
-  const collaboration = new CollaborationIpcService(dialog, outbound);
+  const collaboration = new CollaborationIpcService(dialog, outbound, { store });
   const projectClones = new ProjectCloneIpcService(dialog, projects, outbound, runDataOperation);
   const transcripts = join(app.getPath('userData'), 'transcripts');
   const testAgentPath = app.isPackaged
@@ -217,6 +223,12 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const agentReadiness = new AgentReadinessService(testAgentPath);
   const readiness = new AgentReadinessIpcService(dialog, agentReadiness, store, runDataOperation);
   const commandReadiness = new CommandReadinessService(store, app.getPath('home'));
+  const folderReadinessService = new FolderReadinessService();
+  const settingsPersistenceReadiness = new SettingsPersistenceReadinessVerifier(
+    agentReadiness,
+    folderReadinessService,
+    commandReadiness,
+  );
   const integrity = new IntegrityService(store);
   const approvals = new ApprovalService(store);
   const extensions = new ExtensionIpcService(app, dialog, store);
@@ -244,9 +256,11 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     dialog,
     store,
     createDefaultSettings,
+    async (current, next) => await settingsPersistenceReadiness.verify(current, next),
     () => backups.refreshSchedule(),
     runDataOperation,
   );
+  const folderReadiness = new FolderReadinessIpcService(folderReadinessService, runDataOperation);
   const runs = new RunService(
     store,
     () => store.getSettings(createDefaultSettings()),
@@ -393,6 +407,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         const authority = requireIpcWindowAuthority(event, 'Command readiness check');
         const result = await commandReadiness.check(input);
         authority.assertCurrent();
+        if (result.ready) commandReadiness.recordVerifiedSettingsReadiness(result);
         return result;
       }),
   );
@@ -673,6 +688,8 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
             return decision.response === 1;
           },
           resetDataServices: async () => {
+            agentReadiness.clearVerifiedSettingsReadiness();
+            commandReadiness.clearVerifiedSettingsReadiness();
             await workflows.resetForPrivacy();
             await awaitDataServices([
               runs.resetForPrivacy(),
@@ -702,6 +719,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   );
 
   settings.registerIpcHandlers();
+  folderReadiness.registerIpcHandler();
   readiness.registerIpcHandler();
   projectClones.registerIpcHandler();
   runs.registerIpcHandlers();
@@ -716,6 +734,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   recovery.registerIpcHandlers();
   return {
     settings,
+    folderReadiness,
     readiness,
     projectClones,
     docker,
@@ -742,6 +761,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     dispose: async () => {
       dataOperations.beginShutdown();
       settings.dispose();
+      folderReadiness.dispose();
       await files.dispose();
       await recovery.dispose();
       if (dataOperations.mutationKind !== null && dataOperations.mutationKind !== 'quit') {

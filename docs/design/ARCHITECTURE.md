@@ -40,10 +40,51 @@ the main process. The renderer requests an operation over validated IPC; the mai
 the project root, checks canonical paths and permissions, performs the operation, appends a redacted
 audit event, and returns serializable data.
 
-Agent runs start in dedicated application-managed worktrees. A launch preview displays executable,
-arguments, working directory, environment variable names, permission profile, provider, and exact
-context file list. The trusted runtime records redacted allowed, denied, and failed audit outcomes
-around the supervised launch; a project-check saved grant is never accepted as agent-run approval.
+Writable agent runs start in dedicated application-managed worktrees. A launch preview displays
+executable, arguments, working directory, environment variable names, permission profile, provider,
+and exact context file list. The trusted runtime records redacted allowed, denied, and failed audit
+outcomes around the supervised launch; a project-check saved grant is never accepted as agent-run
+approval.
+
+Renderer drag payloads contain only a strict project ID, project-relative path, and optional source
+File-node ID. They are not launch authority. A configured File-node center dropped on an unlocked
+Agent links that exact existing node, while a drop elsewhere remains a normal canvas move; locked,
+read-only, directory, missing, and cross-project cases fail closed. Before preparation, the renderer
+synchronously stores the current effective permission profile on the Agent and requires the canvas
+flush to succeed. Main reloads the persisted Agent and requires its prompt, adapter, and permission
+profile to match the request before resolving its opaque context links through current
+ignore/sensitive/symlink policy and building a hashed manifest. The renderer flushes again before
+approval. After native approval, main reloads and fingerprints the Agent configuration and manifest
+again; the runtime then rechecks current policy, canonical identity, and bytes immediately before
+spawn.
+
+The runtime opens each approved ordinary file without following symlinks, copies the exact
+digest-matching bytes into a private per-run snapshot through that stable handle, verifies the
+snapshot, and rebinds the actual main-owned launch arguments, initial input, and context list to the
+snapshot rather than the mutable source path. The renderer and review retain only the logical paths
+and hashes. Host launches use randomized private paths; Docker adds one separate read-only
+`/forgeboard-context` snapshot mount while leaving the approved whole-worktree mount and its access
+policy unchanged. Main retains the snapshot through the supervised session and removes it on a
+terminal result or launch failure. On Windows, both Host and Docker snapshots are created below the
+per-user application-data directory in separate host/managed namespaces whose names include a
+domain-separated SHA-256 of the current token SID. The full SID is bound inside the root and instance
+markers. The managed-worktree root still receives its structural ACL check, but it does not contain
+the private Docker snapshot bytes. Before every snapshot creation and launch bind, main revalidates
+the base, parent, instance, per-run directory, marker identity, snapshot-file identity, and exact
+current-SID/LocalSystem private DACLs.
+
+Snapshot crash recovery is confined to Forgeboard's dedicated marker-owned stores. Only after
+Electron wins its single-instance lock does host startup inspect direct prior instance/quarantine
+children, validate ownership, markers, containment, and directory identity, and atomically quarantine
+an eligible instance before deletion. Recent live-PID instances are preserved; dead instances and
+instances older than the bounded lease age are eligible so PID reuse cannot retain them forever.
+Unknown, malformed, and symlink entries are not followed or removed, and a later startup can finish
+validated quarantine cleanup interrupted by another crash. Managed-Docker-root scavenging runs
+lazily on first use of that root and inspects only its dedicated store, never checkout/worktree
+content. Marker reads are bounded to 4 KiB, require an ordinary single-link file, use a no-follow
+handle, and require stable identity across open and read. Host-store warm-up failure is contained in
+normal desktop startup: the UI and non-context surfaces open, while a later context-bearing launch
+retries the same checks and fails closed until protected storage is available.
 
 Git review accepts either a stored project ID for the primary checkout or a stored project/run ID
 pair for an agent worktree. It never accepts a renderer-selected repository or worktree path.
@@ -80,16 +121,47 @@ The settings database is the canonical configuration source. Implemented desktop
 agent discovery and executable pickers, custom CLI setup, permission profiles, argument-array
 preview and project-check commands, worktree locations, Docker profiles, extensions, and local
 storage/retention. Backup settings cover the destination picker, automatic interval, quit-time
-behavior, and a per-folder retention target. The optional Git commit identity override is active and falls
-back to repository/global Git config when both UI fields are blank. Several persisted settings are
-not yet connected to a complete runtime surface, including Git remote behavior, terminal,
-collaboration, and updates. Direct SQLite backup restore UI remains unfinished; its presence in a
-schema is not treated as implemented behavior.
+behavior, and a per-folder retention target. The optional Git commit identity override is active and
+falls back to repository/global Git config when both UI fields are blank. Collaboration connection
+settings drive the explicit desktop join/leave boundary; its access token remains volatile and is
+not persisted with those settings. Several persisted settings are not yet connected to a complete
+runtime surface, including Git remote behavior, terminal, and updates. Direct SQLite backup restore
+UI remains unfinished; its presence in a schema is not treated as implemented behavior.
 
 First-run setup treats agent readiness as a trusted gate. Main resolves and probes only the selected
 bundled, detected, overridden, or custom executable and returns strict ready/failure evidence;
 missing, mismatched, invalid, or unrecognized candidates keep the renderer's **Continue** action
 disabled. Readiness does not persist a draft override or mint launch authority.
+
+The Settings renderer requires current, fingerprint-bound readiness for every configured built-in
+or custom agent and every configured preview/check command. The trusted `settings:update`
+transaction does not rely on that renderer state: before saving, main independently revalidates
+newly changed agent executables/configurations and commands against main-admitted evidence, then
+passively re-resolves the executable identity or command in its original project context. Newly
+changed worktree destinations and newly enabled or changed backup destinations receive a direct
+main-process `stat`/`access` preflight in the same transaction. These changed-only persistence checks
+prevent a new UI or IPC draft from bypassing readiness. Startup separately handles pre-current
+stored settings: after schema migration and audit initialization but before strict integrity
+validation, a known legacy-only field can be normalized, disabled, or replaced with the injected
+device default. The repair and immutable original/current JSON evidence are one transaction with a
+redacted audit event. A current-version row is checked too, closing the crash window between schema
+migration and repair; unknown corruption is never treated as legacy. Numeric drafts, loopback-only
+preview hosts, bounded absolute destinations, and imported settings are parsed before persistence.
+Folder preflight does not create a directory, write a probe file, start a process, or return
+canonical host paths and raw filesystem error paths to the renderer. Managed-worktree readiness
+rejects a symbolic-link or noncanonical alias at the selected folder or nearest existing parent.
+Backup readiness instead resolves and checks the canonical target, returns only a warning rather than
+the target path, and backup creation publishes and records files at that canonical destination.
+
+On Windows, these folder checks, context storage, and backup creation share a bounded main-process
+ACL authority. It invokes the absolute system PowerShell executable without a shell and passes target
+paths only through environment values. The fixed script inspects the raw security descriptor to
+require a DACL and detect callback or otherwise unsupported raw ACEs before projecting rules into an
+exact versioned JSON report. Missing identity/inspection services, absent DACLs, unsupported ACEs,
+unexpected report fields, and malformed values fail closed. Structural parents reject untrusted
+write/delete/permission/ownership authority; confidential backup parents also reject untrusted
+read/list/traverse; Forgeboard-created private objects require protected current-SID and LocalSystem
+DACLs.
 
 Docker configuration starts blank rather than guessing that a generic image contains an agent CLI.
 The renderer can request a readiness check, but only the main process resolves Docker, validates the
@@ -104,8 +176,9 @@ whole-worktree bind and discloses its exact network/resource policy. Docker run 
 identity-bound client only for bounded daemon/image metadata, pins actual argv to a strict immutable
 image ID, and leaves the first in-image agent execution behind the exact approval gate. Selected
 context carries resolver-supplied manifest evidence plus a separately enforced per-file SHA-256;
-primary and remapped worktree bytes are checked against that digest during preparation and again
-immediately before spawn.
+primary and remapped worktree bytes are checked against that digest during preparation. Immediately
+before spawn, main rechecks current policy and source identity while copying through stable file
+handles, then launches only the verified private snapshot bytes described above.
 
 Local extension manifests are author-facing packages, not ordinary user configuration. Users select
 an extension folder or manifest in Settings with a native picker; the trusted process validates its
@@ -139,6 +212,17 @@ complete. Project-check execution records and bounded raw output are persisted l
 interrupted processes as lost, transition through a validated monotonic state machine, and apply the
 configured retention period only to terminal records.
 
+The bounded settings-repair ledger keeps at most 20 device-local records with immutable rows,
+full-source and repaired SHA-256 checks, strict JSON/schema validation, and redacted audit linkage.
+Each source and repaired JSON value has an independent 16 MiB UTF-8 cap enforced by both the schema
+and SQLite `length(CAST(... AS BLOB))`. Queries select the full value only when its byte count is in
+range, so corrupt oversized settings or evidence fail with explicit recovery guidance before a large
+allocation or partial evidence copy. The ledger is omitted from ordinary portable merge/replace
+exports and remains available only through the Data & Privacy review and explicit evidence export.
+Complete local-data deletion clears it. The persisted canvas schema deliberately remains able to
+read legacy Agent nodes with more than 256 context links without truncation; ordinary UI linking and
+both direct-run and workflow execution boundaries reject additions/execution above 256.
+
 Scoped approval records are device-local SQLite state. The current creation path stores only exact
 30-day project-check grants; list/revoke contracts are renderer-visible, while creation, exact-scope
 selection, and consumption stay in Electron main. Replace import and privacy deletion clear these
@@ -160,13 +244,17 @@ scheduled, manual, and quit-time SQLite backups. The UI selects a destination, a
 through 168 hours, whether to back up changed data on quit, and a retention count from 1 through 365
 files. On POSIX systems Forgeboard requires a current-user-owned destination that is not writable by
 group/other users, creates a `0700` staging directory, and publishes a `0600` backup file. On
-Windows it validates canonical ordinary paths, inherits the selected folder's ACL,
-and warns the user to choose a folder limited to their Windows account. Each backup is staged,
-integrity-checked, SHA-256 verified while stable, published as an ordinary file, and recorded before
-older verified records in that destination are pruned. A cleanup failure is persisted in Backup
-health while the newly verified backup remains recorded, so the selected count is a cleanup target
-rather than a reason to discard a successful backup. Forgeboard does not yet provide a UI to restore
-one of these SQLite backup files.
+Windows an existing canonical destination must pass the confidential-parent ACL check. A missing
+destination is created only after the nearest existing canonical parent passes the structural check,
+then receives an exact protected private DACL. Every staging directory is protected before SQLite
+writes, the staged database receives and revalidates an exact private file DACL, and publication uses
+a hard link to that same protected inode before rechecking its path, DACL, digest, size, and identity.
+Each backup is integrity-checked and recorded before older verified records in that destination are
+pruned. Removal never rewrites a recorded file's ACL before canonical path, ordinary-file identity,
+size, and digest match its ledger row. A cleanup failure is persisted in Backup health while the
+newly verified backup remains recorded, so the selected count is a cleanup target rather than a
+reason to discard a successful backup. Forgeboard does not yet provide a UI to restore one of these
+SQLite backup files.
 
 Canvas recovery and portable data import use a separate main-process service. Snapshot listings
 expose bounded summaries rather than complete canvas documents. A restore plan is window-owned,
@@ -183,5 +271,18 @@ runs, checks, snapshots, and audit history, not repository files or extension so
 
 Yjs documents contain canvas layout, non-sensitive node metadata, task state, comments, presence,
 and workflow status. Schemas reject file contents, prompts, diffs, terminal output, environment
-values, secrets, and transcripts at both client and server boundaries. The optional server and
-privacy schemas exist, but the Forgeboard desktop collaboration client remains unfinished.
+values, secrets, and transcripts at both client and server boundaries. The desktop joins only after
+an explicit native network confirmation and keeps the access token in volatile main-process memory
+for that session and its approved reconnects. Owner/editor graph writes and reviewer-safe comment
+writes are role-separated and receipt-bound; viewers remain read-only.
+
+Main atomically stores a bounded, expiring baseline, pending metadata intent, and exact candidate
+for each outstanding receipt under the local project/canvas and authenticated server/room/subject
+tuple. Highest-sequence acknowledgements advance the durable baseline without letting later rejected
+intent disappear; row, aggregate-byte, schema, digest, and state-to-ledger projection checks fail
+closed. Storage derives rejected comment IDs across intermediate ledger rows so a newer unsettled
+candidate cannot mask their renderer quarantine; failed rejection persistence pauses recovery.
+On reconnect or restart, a three-way merge reapplies disjoint intent, stops on same-field conflicts,
+and retains rather than publishes intent after a role downgrade. Presence is ephemeral;
+the renderer displays cursors, selection, activity, and a bounded idle-collaborator roster without
+persisting access tokens or repository content.

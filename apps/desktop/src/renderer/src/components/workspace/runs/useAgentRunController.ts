@@ -1,4 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
+import { flushSync } from 'react-dom';
 
 import type {
   Project,
@@ -14,6 +15,7 @@ interface UseAgentRunControllerInput {
   selectedAdapter: RunAdapterId;
   selectedPermission: NonNullable<WorkshopNode['data']['permissionProfile']>;
   permissionUnavailableReason: string | null;
+  flushCanvas: () => Promise<boolean>;
   updateNodeData: (nodeId: string, data: Partial<WorkshopNode['data']>) => void;
   setEvents: Dispatch<SetStateAction<string[]>>;
   onError: (message: string) => void;
@@ -25,6 +27,7 @@ export function useAgentRunController({
   selectedAdapter,
   selectedPermission,
   permissionUnavailableReason,
+  flushCanvas,
   updateNodeData,
   setEvents,
   onError,
@@ -32,6 +35,7 @@ export function useAgentRunController({
   const [disclosure, setDisclosure] = useState<RunApprovalView | null>(null);
   const [preparingRun, setPreparingRun] = useState(false);
   const [approvingRun, setApprovingRun] = useState(false);
+  const [reviewedPrompt, setReviewedPrompt] = useState<string | null>(null);
   const [runInput, setRunInput] = useState('');
 
   async function prepareSelectedRun() {
@@ -45,24 +49,34 @@ export function useAgentRunController({
       onError('Add a prompt before reviewing this run.');
       return;
     }
+    const nodeId = selectedNode.id;
     setPreparingRun(true);
-    updateNodeData(selectedNode.id, {
-      status: 'queued',
-      transcript: '',
-      transcriptUpdatedAt: new Date().toISOString(),
-      lastRunSummary: '',
-    });
     try {
+      flushSync(() => {
+        updateNodeData(nodeId, { permissionProfile: selectedPermission });
+      });
+      if (!(await flushCanvas())) {
+        onError('Save the current canvas before reviewing this Agent run.');
+        return;
+      }
+      updateNodeData(nodeId, {
+        lastRunPermissionProfile: selectedPermission,
+        changedFiles: [],
+        status: 'queued',
+        transcript: '',
+        transcriptUpdatedAt: new Date().toISOString(),
+        lastRunSummary: '',
+      });
       const result = await window.forgeboard.runs.prepare({
         projectId: project.id,
-        nodeId: selectedNode.id,
+        nodeId,
         adapterId: selectedAdapter,
         prompt,
         permissionProfile: selectedPermission,
       });
       const next = unwrap(result);
       if (next === null) {
-        updateNodeData(selectedNode.id, { status: 'cancelled' });
+        updateNodeData(nodeId, { status: 'cancelled' });
         setEvents((items) =>
           ['Cancelled Docker preparation before any configured executable ran.', ...items].slice(
             0,
@@ -71,13 +85,14 @@ export function useAgentRunController({
         );
         return;
       }
-      updateNodeData(selectedNode.id, { runId: next.runId, status: 'waiting' });
+      updateNodeData(nodeId, { runId: next.runId, status: 'waiting' });
+      setReviewedPrompt(prompt);
       setDisclosure(next);
       setEvents((items) =>
         [`Prepared ${next.provider}; waiting for explicit launch approval.`, ...items].slice(0, 80),
       );
     } catch (cause) {
-      updateNodeData(selectedNode.id, { status: 'failed' });
+      updateNodeData(nodeId, { status: 'failed' });
       onError(cause instanceof Error ? cause.message : 'Could not prepare the agent run.');
     } finally {
       setPreparingRun(false);
@@ -88,10 +103,15 @@ export function useAgentRunController({
     if (!disclosure) return;
     setApprovingRun(true);
     try {
+      if (!(await flushCanvas())) {
+        onError('Save the current canvas before approving this Agent run.');
+        return;
+      }
       const launched = unwrap(await window.forgeboard.runs.approve(disclosure.runId));
       if (!launched) {
         updateNodeData(disclosure.nodeId, { status: 'cancelled' });
         setDisclosure(null);
+        setReviewedPrompt(null);
         setEvents((items) =>
           [
             'Cancelled the native launch confirmation before the agent process ran.',
@@ -108,8 +128,11 @@ export function useAgentRunController({
         ),
       );
       setDisclosure(null);
+      setReviewedPrompt(null);
     } catch (cause) {
       updateNodeData(disclosure.nodeId, { status: 'failed' });
+      setDisclosure(null);
+      setReviewedPrompt(null);
       onError(cause instanceof Error ? cause.message : 'The approved agent could not launch.');
     } finally {
       setApprovingRun(false);
@@ -122,6 +145,7 @@ export function useAgentRunController({
       unwrap(await window.forgeboard.runs.terminate(disclosure.runId));
       updateNodeData(disclosure.nodeId, { status: 'cancelled' });
       setDisclosure(null);
+      setReviewedPrompt(null);
       setEvents((items) => ['Cancelled the prepared run before launch.', ...items].slice(0, 80));
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : 'Could not cancel the prepared run.');
@@ -157,6 +181,7 @@ export function useAgentRunController({
 
   return {
     disclosure,
+    reviewedPrompt,
     preparingRun,
     approvingRun,
     runInput,

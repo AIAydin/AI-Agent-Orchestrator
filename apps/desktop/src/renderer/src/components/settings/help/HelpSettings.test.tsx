@@ -19,6 +19,9 @@ describe('HelpSettings', () => {
     expect(screen.getByRole('status').textContent).toBe(`${HELP_ARTICLES.length} local guides`);
     expect(screen.getByText('Run your first agent')).toBeTruthy();
     expect(screen.getByText('Understand what can leave this device')).toBeTruthy();
+    fireEvent.click(screen.getByText('Replay Getting started tour'));
+    expect(screen.getByRole('heading', { name: 'Getting started tour', level: 4 })).toBeTruthy();
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
     expect(view.container.querySelectorAll('a')).toHaveLength(0);
   });
 

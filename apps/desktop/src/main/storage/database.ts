@@ -2,6 +2,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { SETTINGS_REPAIR_EVIDENCE_MAX_BYTES } from '../../shared/settings/repair/contracts.js';
+import { COLLABORATION_REJECTED_DISMISSAL_MAX_COMMENT_BYTES } from './collaboration/rejected-comment-dismissals.js';
 import { resetAuditChain } from './security/audit-integrity.js';
 
 export const MIGRATIONS = [
@@ -258,6 +260,130 @@ export const MIGRATIONS = [
     CREATE INDEX IF NOT EXISTS idx_git_review_notes_revision_path
       ON git_review_notes(revision_id, relative_path, side, line_number);
   `,
+  `
+    CREATE TABLE IF NOT EXISTS collaboration_sync_states (
+      project_id TEXT NOT NULL,
+      canvas_id TEXT NOT NULL,
+      server_url TEXT NOT NULL CHECK(length(server_url) BETWEEN 1 AND 2048),
+      room_id TEXT NOT NULL CHECK(length(room_id) BETWEEN 1 AND 80),
+      subject TEXT NOT NULL CHECK(length(subject) BETWEEN 1 AND 120),
+      baseline_json TEXT,
+      pending_json TEXT NOT NULL CHECK(length(pending_json) <= 8388608),
+      delivery_id TEXT,
+      snapshot_digest TEXT,
+      disposition TEXT NOT NULL CHECK(disposition IN (
+        'staged', 'sent', 'queued-offline', 'acknowledged', 'rejected', 'synchronized'
+      )),
+      updated_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      PRIMARY KEY(project_id, canvas_id, server_url, room_id, subject),
+      CHECK(baseline_json IS NULL OR length(baseline_json) <= 8388608),
+      CHECK(delivery_id IS NULL OR length(delivery_id) = 36),
+      CHECK(snapshot_digest IS NULL OR length(snapshot_digest) = 64),
+      FOREIGN KEY(project_id) REFERENCES recent_projects(id) ON DELETE CASCADE,
+      FOREIGN KEY(canvas_id) REFERENCES canvas_documents(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_collaboration_sync_expiry
+      ON collaboration_sync_states(expires_at, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_collaboration_sync_delivery
+      ON collaboration_sync_states(delivery_id) WHERE delivery_id IS NOT NULL;
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS collaboration_sync_deliveries (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      delivery_id TEXT NOT NULL UNIQUE CHECK(length(delivery_id) = 36),
+      project_id TEXT NOT NULL,
+      canvas_id TEXT NOT NULL,
+      server_url TEXT NOT NULL CHECK(length(server_url) BETWEEN 1 AND 2048),
+      room_id TEXT NOT NULL CHECK(length(room_id) BETWEEN 1 AND 80),
+      subject TEXT NOT NULL CHECK(length(subject) BETWEEN 1 AND 120),
+      baseline_json TEXT,
+      candidate_json TEXT NOT NULL CHECK(length(candidate_json) <= 8388608),
+      snapshot_digest TEXT NOT NULL CHECK(length(snapshot_digest) = 64),
+      disposition TEXT NOT NULL CHECK(disposition IN (
+        'sent', 'queued-offline', 'acknowledged', 'rejected'
+      )),
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      CHECK(baseline_json IS NULL OR length(baseline_json) <= 8388608),
+      FOREIGN KEY(project_id, canvas_id, server_url, room_id, subject)
+        REFERENCES collaboration_sync_states(
+          project_id, canvas_id, server_url, room_id, subject
+        ) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_collaboration_delivery_scope_sequence
+      ON collaboration_sync_deliveries(
+        project_id, canvas_id, server_url, room_id, subject, sequence
+      );
+    CREATE INDEX IF NOT EXISTS idx_collaboration_delivery_expiry
+      ON collaboration_sync_deliveries(expires_at, sequence);
+    INSERT OR IGNORE INTO collaboration_sync_deliveries(
+      delivery_id, project_id, canvas_id, server_url, room_id, subject, baseline_json,
+      candidate_json, snapshot_digest, disposition, created_at, expires_at
+    )
+    SELECT delivery_id, project_id, canvas_id, server_url, room_id, subject, baseline_json,
+           pending_json, snapshot_digest, disposition, updated_at, expires_at
+    FROM collaboration_sync_states
+    WHERE delivery_id IS NOT NULL AND snapshot_digest IS NOT NULL
+      AND disposition IN ('sent', 'queued-offline', 'acknowledged', 'rejected');
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS settings_repair_history (
+      id TEXT PRIMARY KEY CHECK(length(id) = 36),
+      repaired_at TEXT NOT NULL,
+      source_database_version INTEGER NOT NULL CHECK(source_database_version >= 0),
+      repaired_fields_json TEXT NOT NULL CHECK(length(repaired_fields_json) <= 16384),
+      source_settings_sha256 TEXT NOT NULL CHECK(length(source_settings_sha256) = 64),
+      repaired_settings_sha256 TEXT NOT NULL CHECK(length(repaired_settings_sha256) = 64),
+      source_settings_json TEXT NOT NULL CHECK(
+        length(CAST(source_settings_json AS BLOB)) <= ${SETTINGS_REPAIR_EVIDENCE_MAX_BYTES}
+      ),
+      repaired_settings_json TEXT NOT NULL CHECK(
+        length(CAST(repaired_settings_json AS BLOB)) <= ${SETTINGS_REPAIR_EVIDENCE_MAX_BYTES}
+      )
+    );
+    CREATE INDEX IF NOT EXISTS idx_settings_repair_history_repaired
+      ON settings_repair_history(repaired_at DESC, id DESC);
+    CREATE TRIGGER IF NOT EXISTS settings_repair_history_no_update
+    BEFORE UPDATE ON settings_repair_history
+    BEGIN
+      SELECT RAISE(ABORT, 'settings repair evidence is immutable');
+    END;
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS collaboration_rejected_comment_dismissals (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id TEXT NOT NULL,
+      canvas_id TEXT NOT NULL,
+      server_url TEXT NOT NULL CHECK(length(server_url) BETWEEN 1 AND 2048),
+      room_id TEXT NOT NULL CHECK(length(room_id) BETWEEN 1 AND 80),
+      subject TEXT NOT NULL CHECK(length(subject) BETWEEN 1 AND 120),
+      comment_id TEXT NOT NULL CHECK(length(comment_id) BETWEEN 1 AND 120),
+      comment_json TEXT NOT NULL CHECK(
+        length(CAST(comment_json AS BLOB)) <= ${COLLABORATION_REJECTED_DISMISSAL_MAX_COMMENT_BYTES}
+      ),
+      comment_digest TEXT NOT NULL CHECK(length(comment_digest) = 64),
+      rejected_through_sequence INTEGER NOT NULL,
+      dismissed_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      UNIQUE(
+        project_id, canvas_id, server_url, room_id, subject, comment_id,
+        comment_digest, rejected_through_sequence
+      ),
+      FOREIGN KEY(project_id, canvas_id, server_url, room_id, subject)
+        REFERENCES collaboration_sync_states(
+          project_id, canvas_id, server_url, room_id, subject
+        ) ON DELETE CASCADE,
+      FOREIGN KEY(rejected_through_sequence)
+        REFERENCES collaboration_sync_deliveries(sequence) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_collaboration_rejected_dismissal_scope
+      ON collaboration_rejected_comment_dismissals(
+        project_id, canvas_id, server_url, room_id, subject, comment_id
+      );
+    CREATE INDEX IF NOT EXISTS idx_collaboration_rejected_dismissal_expiry
+      ON collaboration_rejected_comment_dismissals(expires_at, sequence);
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {
@@ -311,8 +437,12 @@ export function migrate(database: DatabaseSync): void {
 }
 
 export function clearAllTables(database: DatabaseSync): void {
+  database.prepare('DELETE FROM settings_repair_history').run();
   database.prepare('DELETE FROM backup_health').run();
   database.prepare('DELETE FROM git_review_notes').run();
+  database.prepare('DELETE FROM collaboration_rejected_comment_dismissals').run();
+  database.prepare('DELETE FROM collaboration_sync_deliveries').run();
+  database.prepare('DELETE FROM collaboration_sync_states').run();
   database.prepare('DELETE FROM workflow_executions').run();
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM trusted_extension_ledger').run();
@@ -339,6 +469,9 @@ export function clearPortableTables(database: DatabaseSync): void {
   // canvases they bind to so a replace import cannot retain orphaned runtime state.
   database.prepare('DELETE FROM workflow_executions').run();
   database.prepare('DELETE FROM git_review_notes').run();
+  database.prepare('DELETE FROM collaboration_rejected_comment_dismissals').run();
+  database.prepare('DELETE FROM collaboration_sync_deliveries').run();
+  database.prepare('DELETE FROM collaboration_sync_states').run();
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM approval_records').run();
   database.prepare('DELETE FROM canvas_snapshots').run();

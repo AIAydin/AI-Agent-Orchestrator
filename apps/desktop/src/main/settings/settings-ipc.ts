@@ -10,6 +10,11 @@ import {
   type AppSettings,
   type IpcResult,
 } from '../../shared/application/contracts.js';
+import {
+  SettingsRepairEvidenceExportSchema,
+  SettingsRepairEvidenceSchema,
+  SettingsRepairSummarySchema,
+} from '../../shared/settings/repair/contracts.js';
 import type { LocalStore } from '../storage.js';
 import { assertLiveMainFrame } from '../security/ipc-authority.js';
 
@@ -23,10 +28,16 @@ const SettingsImportSchema = z
 
 type SettingsStore = Pick<
   LocalStore,
-  'appendAudit' | 'applyRetention' | 'getSettings' | 'saveSettings'
+  | 'appendAudit'
+  | 'applyRetention'
+  | 'getSettings'
+  | 'saveSettings'
+  | 'listSettingsRepairs'
+  | 'getSettingsRepair'
 >;
 
 type SettingsOperationGate = <Output>(operation: () => Output | Promise<Output>) => Promise<Output>;
+type SettingsUpdateVerifier = (current: AppSettings, next: AppSettings) => Promise<void>;
 
 /**
  * Owns the settings IPC transaction boundary.
@@ -42,9 +53,14 @@ export class SettingsIpcService {
     private readonly dialog: Pick<Dialog, 'showOpenDialog' | 'showSaveDialog'>,
     private readonly store: SettingsStore,
     private readonly createDefaultSettings: () => AppSettings,
+    private readonly verifyUpdate: SettingsUpdateVerifier,
     private readonly onSettingsSaved: (settings: AppSettings) => void = () => undefined,
     private readonly runOperation: SettingsOperationGate = async (operation) => await operation(),
-  ) {}
+  ) {
+    if (typeof verifyUpdate !== 'function') {
+      throw new Error('Settings persistence requires a trusted main-process verifier.');
+    }
+  }
 
   public registerIpcHandlers(): void {
     this.#handle(IPC_CHANNELS.settingsGet, z.tuple([]), AppSettingsSchema, () =>
@@ -54,8 +70,14 @@ export class SettingsIpcService {
       IPC_CHANNELS.settingsUpdate,
       z.tuple([AppSettingsSchema]),
       AppSettingsSchema,
-      (_event, settings) => {
-        const saved = this.store.saveSettings(AppSettingsSchema.parse(settings));
+      async (event, settings) => {
+        const next = AppSettingsSchema.parse(settings);
+        const current = AppSettingsSchema.parse(
+          this.store.getSettings(this.createDefaultSettings()),
+        );
+        await this.verifyUpdate(current, next);
+        assertLiveMainFrame(event, 'Settings update');
+        const saved = this.store.saveSettings(next);
         const retention = this.store.applyRetention(saved);
         this.store.appendAudit('settings', 'update', 'allowed', {
           keys: Object.keys(saved),
@@ -111,6 +133,51 @@ export class SettingsIpcService {
         const imported = SettingsImportSchema.parse(JSON.parse(await readFile(path, 'utf8')));
         assertSettingsParent(event, parent);
         return AppSettingsSchema.parse(imported.settings);
+      },
+    );
+    this.#handle(
+      IPC_CHANNELS.settingsRepairList,
+      z.tuple([]),
+      SettingsRepairSummarySchema.array(),
+      () => this.store.listSettingsRepairs(),
+    );
+    this.#handle(
+      IPC_CHANNELS.settingsRepairGet,
+      z.tuple([z.string().uuid()]),
+      SettingsRepairEvidenceSchema,
+      (_event, repairId) => {
+        const evidence = this.store.getSettingsRepair(repairId);
+        if (evidence === undefined) throw new Error('The settings repair record no longer exists.');
+        this.store.appendAudit('settings', 'repair-evidence-review', 'allowed', { repairId });
+        return evidence;
+      },
+    );
+    this.#handle(
+      IPC_CHANNELS.settingsRepairExport,
+      z.tuple([z.string().uuid()]),
+      z.string().nullable(),
+      async (event, repairId) => {
+        const evidence = this.store.getSettingsRepair(repairId);
+        if (evidence === undefined) throw new Error('The settings repair record no longer exists.');
+        const parent = requireSettingsParent(event);
+        const selection = await this.dialog.showSaveDialog(parent, {
+          title: 'Export settings recovery evidence',
+          defaultPath: `forgeboard-settings-repair-${repairId}.json`,
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+        });
+        assertSettingsParent(event, parent);
+        if (selection.canceled || !selection.filePath) return null;
+        const exported = SettingsRepairEvidenceExportSchema.parse({
+          format: 'forgeboard-settings-repair-evidence',
+          version: 1,
+          repair: evidence,
+        });
+        await writeFile(selection.filePath, `${JSON.stringify(exported, null, 2)}\n`, {
+          mode: 0o600,
+        });
+        assertSettingsParent(event, parent);
+        this.store.appendAudit('export', 'settings-repair-evidence', 'allowed', { repairId });
+        return selection.filePath;
       },
     );
   }

@@ -44,6 +44,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   lastRunPermissionProfile?: PermissionProfile;
   prompt?: string;
   model?: string;
+  contextAttachmentIds?: string[];
   markdown?: string;
   checklist?: Array<{
     id: string;

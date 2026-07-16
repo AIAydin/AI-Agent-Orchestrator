@@ -1,9 +1,13 @@
 import { unwrap } from '../../lib/ipc.js';
 import type { CommandReadinessStatus } from '../configuration/useCommandReadiness.js';
+import { numericDraftValue } from './fields/numeric-draft.js';
+import { FolderReadinessEvidence } from './readiness/FolderReadinessEvidence.js';
+import type { FolderReadinessStatus } from './readiness/useSettingsFolderReadiness.js';
 import { CommandEditor, SettingsSection, type AsyncSettingsProps } from './shared.js';
 
 interface GitPreviewSettingsProps extends AsyncSettingsProps {
   readonly developmentReadiness?: CommandReadinessStatus | undefined;
+  readonly managedWorktreeReadiness?: FolderReadinessStatus | undefined;
 }
 
 export function GitPreviewSettings({
@@ -11,6 +15,7 @@ export function GitPreviewSettings({
   setDraft,
   perform,
   developmentReadiness,
+  managedWorktreeReadiness,
 }: GitPreviewSettingsProps) {
   async function chooseExecutable(onSelected: (path: string) => void) {
     await perform(async () => {
@@ -66,6 +71,7 @@ export function GitPreviewSettings({
           <small>
             Forgeboard never cleans a worktree or branch without an impact-specific confirmation.
           </small>
+          <FolderReadinessEvidence status={managedWorktreeReadiness} />
         </div>
         <label>
           Cleanup policy
@@ -187,7 +193,7 @@ export function GitPreviewSettings({
               name="preview-port-start"
               min="1024"
               max="65534"
-              value={draft.previewPortStart}
+              value={numericDraftValue(draft.previewPortStart)}
               onChange={(event) =>
                 setDraft({
                   ...draft,
@@ -203,7 +209,7 @@ export function GitPreviewSettings({
               name="preview-port-end"
               min="1025"
               max="65535"
-              value={draft.previewPortEnd}
+              value={numericDraftValue(draft.previewPortEnd)}
               onChange={(event) =>
                 setDraft({
                   ...draft,

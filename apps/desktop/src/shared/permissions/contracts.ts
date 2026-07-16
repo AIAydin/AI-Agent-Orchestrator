@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+import { MachineSpecificPathSchema } from '../settings/values.js';
+
+function hasNoControlCharacters(value: string): boolean {
+  return [...value].every((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code > 31 && code !== 127;
+  });
+}
+
 export const PermissionProfileSchema = z.enum([
   'plan-read-only',
   'worktree-write',
@@ -10,10 +19,13 @@ export type PermissionProfile = z.infer<typeof PermissionProfileSchema>;
 
 const RelativePermissionRootSchema = z
   .string()
-  .trim()
   .min(1)
   .max(4_096)
-  .refine((value) => !value.includes('\0'), 'Permission roots cannot contain NUL bytes.')
+  .refine(
+    (value) => value === value.trim(),
+    'Permission roots cannot start or end with whitespace.',
+  )
+  .refine(hasNoControlCharacters, 'Permission roots cannot contain control characters.')
   .refine((value) => !value.includes('\\'), 'Use forward slashes in permission roots.')
   .refine(
     (value) => value === '.' || (!value.startsWith('/') && !/^[A-Za-z]:\//u.test(value)),
@@ -42,19 +54,7 @@ const PermissionRootListSchema = z
     }
   });
 
-const LaunchExecutableSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(32_768)
-  .refine(
-    (value) => !value.includes('\0') && !/[\r\n]/u.test(value),
-    'Launch executable entries cannot contain NUL bytes or line breaks.',
-  )
-  .refine(
-    (value) => value.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(value) || value.startsWith('\\\\'),
-    'Launch allowlist entries must be absolute executable paths.',
-  );
+const LaunchExecutableSchema = MachineSpecificPathSchema;
 
 function rootContains(parent: string, candidate: string): boolean {
   return parent === '.' || candidate === parent || candidate.startsWith(`${parent}/`);

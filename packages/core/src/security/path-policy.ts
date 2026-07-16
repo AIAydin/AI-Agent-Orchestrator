@@ -464,6 +464,13 @@ export async function buildAttachmentManifest(
     const canonical = await resolveCanonicalPath(input.projectRoot, relativePath, {
       mustExist: true,
     });
+    if (canonical.relativePath !== relativePath) {
+      throw new AttachmentPolicyError(
+        'NOT_A_FILE',
+        relativePath,
+        'Symbolic-link aliases cannot be attached as agent context',
+      );
+    }
     const fileStat = await stat(canonical.path);
     if (!fileStat.isFile()) {
       throw new AttachmentPolicyError(

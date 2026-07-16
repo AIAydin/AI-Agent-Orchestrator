@@ -126,7 +126,7 @@ describe('CommandReadinessService', () => {
       scripts: ['test'],
     }).readiness.check({
       purpose: 'check',
-      command: { executable: ' pnpm ', arguments: ['run', ' test '] },
+      command: { executable: 'pnpm', arguments: ['run', ' test '] },
       projectId: PROJECT_ID,
     });
     expect(exactScript).toMatchObject({
@@ -181,5 +181,58 @@ describe('CommandReadinessService', () => {
       ready: false,
     });
     expect(missingScriptArgument.reason).toMatch(/adopt a detected script in the UI/u);
+  });
+
+  it('binds Settings only to an owner-admitted exact check and recomputes it passively', async () => {
+    const options: {
+      project?: Project;
+      scripts?: string[];
+      resolveError?: Error;
+    } = { project, scripts: ['dev'] };
+    const fixture = service(options);
+    const request = {
+      purpose: 'preview' as const,
+      command: { executable: 'pnpm', arguments: ['run', 'dev'] },
+      projectId: PROJECT_ID,
+    };
+
+    const result = await fixture.readiness.check(request);
+    await expect(
+      fixture.readiness.verifySettingsReadiness({
+        purpose: request.purpose,
+        command: request.command,
+      }),
+    ).rejects.toThrow(/Wait for command readiness/u);
+
+    fixture.readiness.recordVerifiedSettingsReadiness(result);
+    await expect(
+      fixture.readiness.verifySettingsReadiness({
+        purpose: request.purpose,
+        command: request.command,
+      }),
+    ).resolves.toMatchObject({ ready: true, request });
+    expect(fixture.resolveCommand).toHaveBeenCalledTimes(2);
+
+    await expect(
+      fixture.readiness.verifySettingsReadiness({
+        purpose: 'preview',
+        command: { executable: 'pnpm', arguments: ['run', 'other'] },
+      }),
+    ).rejects.toThrow(/Wait for command readiness/u);
+    expect(fixture.resolveCommand).toHaveBeenCalledTimes(2);
+
+    options.resolveError = new Error('The configured executable was not found.');
+    await expect(
+      fixture.readiness.verifySettingsReadiness({
+        purpose: request.purpose,
+        command: request.command,
+      }),
+    ).rejects.toThrow(/not found/u);
+    await expect(
+      fixture.readiness.verifySettingsReadiness({
+        purpose: request.purpose,
+        command: request.command,
+      }),
+    ).rejects.toThrow(/Wait for command readiness/u);
   });
 });

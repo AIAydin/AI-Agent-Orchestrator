@@ -6,6 +6,10 @@ import {
   type AgentReadinessResult,
   type ReadinessAgentId,
 } from '../../../../shared/readiness/contracts.js';
+import {
+  agentReadinessRequestCandidate,
+  readinessRequestFingerprint,
+} from '../../../../shared/settings/readiness-requests.js';
 
 export interface AgentReadinessDraft {
   readonly request: AgentReadinessRequest | null;
@@ -21,16 +25,7 @@ export function readinessDraftForAgent(
   settings: AppSettings,
   agentId: ReadinessAgentId,
 ): AgentReadinessDraft {
-  const executableOverride = settings.agentExecutableOverrides[agentId]?.trim();
-  const candidate =
-    agentId === 'custom'
-      ? { agentId, configuration: settings.customAgent }
-      : agentId === 'test-agent'
-        ? { agentId }
-        : {
-            agentId,
-            ...(executableOverride ? { executableOverride } : {}),
-          };
+  const candidate = agentReadinessRequestCandidate(settings, agentId);
   const parsed = AgentReadinessRequestSchema.safeParse(candidate);
   if (!parsed.success) {
     return {
@@ -41,7 +36,7 @@ export function readinessDraftForAgent(
   }
   return {
     request: parsed.data,
-    fingerprint: JSON.stringify(parsed.data),
+    fingerprint: readinessRequestFingerprint(parsed.data),
     issue: null,
   };
 }

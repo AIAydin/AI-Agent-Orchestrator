@@ -42,6 +42,12 @@ describe('agent readiness contracts', () => {
     ).toBe(false);
     expect(
       AgentReadinessRequestSchema.safeParse({
+        agentId: 'codex',
+        executableOverride: 'codex\t--dangerous',
+      }).success,
+    ).toBe(false);
+    expect(
+      AgentReadinessRequestSchema.safeParse({
         agentId: 'test-agent',
         executableOverride: '/tmp/not-the-bundled-agent',
       }).success,

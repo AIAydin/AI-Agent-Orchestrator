@@ -54,6 +54,26 @@
   white-space: nowrap;
 }
 
+.help-tour-replay {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.help-tour-replay > summary {
+  padding: 10px 12px;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.help-tour-replay > .first-run-tour {
+  width: auto;
+  margin: 0 10px 10px;
+}
+
 .help-search {
   display: flex;
   align-items: center;

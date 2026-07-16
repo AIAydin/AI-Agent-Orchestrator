@@ -12,11 +12,22 @@ analytics, crash upload, session recording, model proxy, or cloud dependency.
 - agent transcripts and normalized events
 - project-check status and bounded raw output
 - canvas data, project settings, scoped approval records, audit records, and local snapshots
+- device-local settings-repair evidence when an upgrade replaces an unsafe legacy value, with each
+  original or repaired JSON value capped at 16 MiB of UTF-8 data
 - verified SQLite backups when local backups are enabled
 
 An enabled third-party coding-agent CLI may transmit the prompt and files that the user explicitly
 attaches to that CLI's provider. Forgeboard shows the receiving adapter/provider and exact attachment
 list before launch. Provider processing is governed by that provider's terms.
+
+Selected context is copied immediately before launch into a randomized, per-run private snapshot;
+the provider receives those verified bytes rather than mutable source paths. On Windows, Host and
+Docker snapshots stay inside Forgeboard's per-user application-data directory under separate
+scope-and-SID-hash namespaces. Their markers bind the full current SID, are limited to 4 KiB, and are
+read with stable no-follow handles. Exact current-SID/LocalSystem DACLs on the private directories and
+files are revalidated before the launch bind. A normal startup permission failure does not prevent
+the privacy and recovery UI from opening, but context-bearing launches remain blocked while the
+protected store cannot be verified.
 
 An approved project check is an ordinary, unsandboxed user process. It can read or change files and
 contact external services according to operating-system permissions and the repository tooling's
@@ -38,20 +49,38 @@ impact-specific confirmation.
 
 Optional collaboration sends only collaboration-safe canvas metadata to the configured self-hosted
 server. It never sends repository files, file contents, diffs, prompts, terminal output, environment
-values, secrets, or transcripts.
+values, secrets, or transcripts. The session access token is never written to settings or SQLite; it
+is held only in volatile main-process memory for the active session and approved reconnect, then
+cleared on leave, privacy reset, or quit. Bounded local recovery rows contain only the allowlisted
+baseline, pending metadata intent, and exact delivery candidates, scoped to the project, canvas,
+server, room, and subject. Per-scope row and byte caps fail closed, and the journal expires after 30
+days without activity. Rejected comment IDs are derived from those existing allowlisted snapshots;
+they do not add another content store. Human-authored titles and comments are not content-redacted,
+so users must not paste secrets or source code into shared text fields.
 
 The Data & Privacy screen exposes database and transcript locations, retention, connected providers,
 outbound integrations, collaboration status, export/import, recovery, and deletion of
 Forgeboard-managed local data. A user can choose a backup folder, automatic interval, bounded backup
-cleanup target per folder, and whether changed local data is backed up on quit. SQLite backups contain a copy of the
-local Forgeboard database and should be protected accordingly. Direct restore of a SQLite backup is
-not yet available in the UI.
+cleanup target per folder, and whether changed local data is backed up on quit. A managed-worktree
+folder alias is rejected; a backup alias is instead disclosed and resolved to the canonical
+destination used for publication and the backup ledger. On Windows, a raw-DACL authority fails closed
+if ACL inspection is unavailable or sees an absent or unsupported DACL. An existing destination must
+exclude untrusted read/discovery as well as content mutation. New destinations, staging directories,
+and backup files receive protected current-SID/LocalSystem DACLs before private bytes are published,
+and the published hard link is rechecked. SQLite backups contain a copy of the local Forgeboard
+database and should be protected accordingly. Direct restore of a SQLite backup is not yet available
+in the UI.
 
 Portable JSON export/import covers Forgeboard settings, projects, canvases, agent runs, check
 executions, snapshots, and audit history. It never embeds repository files or extension source
-folders. Saved approvals are device-local and are not exported; a replace import clears them. Import
-is an explicit merge-or-replace action with a renderer disclosure and native confirmation; the
-selected file is validated again before the transaction. Deletion does not remove repository/build
+folders. Saved approvals and settings-repair evidence are device-local and are not included in this
+ordinary export. Repair evidence can be reviewed and explicitly exported only from **Settings → Data
+& privacy**; complete local-data deletion clears it, while portable merge/replace leaves the local
+evidence ledger intact. SQLite and IPC enforce the 16 MiB UTF-8 boundary before loading or exporting
+either full JSON value; an over-limit legacy setting fails with recovery guidance and no partial
+evidence row. A replace import clears saved approvals. Import is an explicit
+merge-or-replace action with a renderer disclosure and native confirmation; the selected file is
+validated again before the transaction. Deletion does not remove repository/build
 artifacts or separately exported portable JSON files. It does remove every
 Forgeboard-recorded SQLite backup from current and previously selected backup folders after
 revalidating each recorded file's identity. If a recorded file is unavailable, Forgeboard requires

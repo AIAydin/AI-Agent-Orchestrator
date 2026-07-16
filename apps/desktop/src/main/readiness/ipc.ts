@@ -19,7 +19,10 @@ import type {
   AgentReadinessService,
 } from './service.js';
 
-export type AgentReadinessOperations = Pick<AgentReadinessService, 'prepare' | 'probe'>;
+export type AgentReadinessOperations = Pick<
+  AgentReadinessService,
+  'prepare' | 'probe' | 'recordVerifiedSettingsReadiness'
+>;
 
 interface ReadinessAuditSink {
   appendAudit(
@@ -155,7 +158,11 @@ export class AgentReadinessIpcService {
     const result = AgentReadinessResultSchema.parse(
       await this.readiness.probe(plan, assertCurrent),
     );
-    return this.#recordResult(result);
+    assertCurrent();
+    const recorded = this.#recordResult(result);
+    assertCurrent();
+    if (recorded.ready) this.readiness.recordVerifiedSettingsReadiness(plan, recorded);
+    return recorded;
   }
 
   #recordResult(result: AgentReadinessResult): AgentReadinessResult {

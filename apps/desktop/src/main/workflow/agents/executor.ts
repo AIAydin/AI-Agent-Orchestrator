@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 
-import { WorkflowExecutionReferenceSchema, contextAttachmentsForNode } from '@forgeboard/core';
+import {
+  AGENT_CONTEXT_ATTACHMENT_LIMIT,
+  WorkflowExecutionReferenceSchema,
+  contextAttachmentsForNode,
+} from '@forgeboard/core';
 import type { CanvasNode } from '@forgeboard/core/domain';
 import { z } from 'zod';
 
@@ -375,8 +379,10 @@ export class WorkflowAgentExecutor implements WorkflowNodeExecutor {
     context: WorkflowExecutorContext,
     attachmentIds: readonly string[],
   ): Promise<AgentExecutionContextRequest> {
-    if (attachmentIds.length > 256) {
-      throw new Error('Agent workflow nodes support at most 256 context attachments.');
+    if (attachmentIds.length > AGENT_CONTEXT_ATTACHMENT_LIMIT) {
+      throw new Error(
+        `Agent workflow nodes support at most ${String(AGENT_CONTEXT_ATTACHMENT_LIMIT)} context attachments.`,
+      );
     }
     const uniqueIds = new Set(attachmentIds);
     if (uniqueIds.size !== attachmentIds.length) {

@@ -40,8 +40,19 @@ import {
   type ProjectFileSelection,
 } from '../../file-editor/index.js';
 import { WorkflowNodeInspector } from '../workflows/WorkflowNodeInspector.js';
+import { AgentContextDropZone } from '../context-dnd/AgentContextDropZone.js';
+import { FileContextTargetPicker } from '../context-dnd/targets/FileContextTargetPicker.js';
+import {
+  writeWorkspaceContextDrag,
+  type WorkspaceContextDragPayload,
+} from '../context-dnd/contracts.js';
 import type { WorkshopEdge } from '../model/types.js';
 import type { WorkshopEdgeData } from '../model/edge-config.js';
+import type {
+  CollaborationCommentMetadata,
+  CollaborationRejectedCommentEntry,
+} from '../../../../../shared/collaboration/index.js';
+import { SharedComments } from '../collaboration/comments/SharedComments.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
 type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
@@ -59,6 +70,11 @@ interface WorkspaceInspectorProps {
   previewSession: PreviewSessionSnapshot | null;
   runInput: string;
   preparingRun: boolean;
+  sharedComments: readonly CollaborationCommentMetadata[];
+  rejectedSharedCommentEntries?: readonly CollaborationRejectedCommentEntry[];
+  canComment: boolean;
+  onCreateComment: (body: string) => Promise<boolean>;
+  onDiscardRejectedComment: (entry: CollaborationRejectedCommentEntry) => Promise<boolean>;
   onClearSelection: () => void;
   onRecord: () => void;
   onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
@@ -71,6 +87,12 @@ interface WorkspaceInspectorProps {
   onControlRun: (action: 'interrupt' | 'terminate') => void;
   onPrepareRun: () => void;
   onPreviewSession: (session: PreviewSessionSnapshot | null) => void;
+  collaborationGraphReadOnly: boolean;
+  onAttachAgentContext: (
+    targetNodeId: string,
+    payload: WorkspaceContextDragPayload,
+  ) => Promise<void>;
+  onRemoveAgentContext: (targetNodeId: string, attachmentNodeId: string) => void;
   onOpenSettings: () => void;
   onError: (message: string) => void;
 }
@@ -203,7 +225,20 @@ function NodeInspector(
           />
         )}
       </fieldset>
-      {selectedNode.data.kind === 'agent' && <AgentRunInspector {...props} />}
+      {selectedNode.data.kind === 'agent' && (
+        <>
+          <AgentRunInspector {...props} />
+          <AgentContextDropZone
+            agent={selectedNode}
+            nodes={props.nodes}
+            readOnly={selectedNode.data.locked || props.collaborationGraphReadOnly}
+            onAttach={(payload) => props.onAttachAgentContext(selectedNode.id, payload)}
+            onRemove={(attachmentNodeId) =>
+              props.onRemoveAgentContext(selectedNode.id, attachmentNodeId)
+            }
+          />
+        </>
+      )}
       {(selectedNode.data.kind === 'web-preview' ||
         selectedNode.data.kind === 'mobile-preview') && (
         <PreviewNodePanel
@@ -223,11 +258,21 @@ function NodeInspector(
       {selectedNode.data.kind === 'file' && (
         <FileNodeEditor
           node={selectedNode}
+          nodes={props.nodes}
           projectId={props.project.id}
+          collaborationGraphReadOnly={props.collaborationGraphReadOnly}
+          onAttachAgentContext={props.onAttachAgentContext}
           onRecord={onRecord}
           onUpdate={onUpdateSelected}
         />
       )}
+      <SharedComments
+        comments={props.sharedComments}
+        rejectedCommentEntries={props.rejectedSharedCommentEntries ?? []}
+        canComment={props.canComment}
+        onCreate={props.onCreateComment}
+        onDiscardRejected={props.onDiscardRejectedComment}
+      />
       <div className="inspector-actions">
         <button
           type="button"
@@ -253,16 +298,6 @@ function NodeInspector(
           Delete
         </button>
       </div>
-      <section className="context-box">
-        <header>
-          <h3>Context attachments</h3>
-          <span>0</span>
-        </header>
-        <p>
-          Drop an approved file, brief, diagram, or task onto this node. Exact attachments are
-          reviewed before any agent launch.
-        </p>
-      </section>
       <section className="run-history">
         <header>
           <History size={14} />
@@ -281,12 +316,21 @@ function NodeInspector(
 
 function FileNodeEditor({
   node,
+  nodes,
   projectId,
+  collaborationGraphReadOnly,
+  onAttachAgentContext,
   onRecord,
   onUpdate,
 }: {
   readonly node: WorkshopNode;
+  readonly nodes: readonly WorkshopNode[];
   readonly projectId: string;
+  readonly collaborationGraphReadOnly: boolean;
+  readonly onAttachAgentContext: (
+    targetNodeId: string,
+    payload: WorkspaceContextDragPayload,
+  ) => Promise<void>;
   readonly onRecord: () => void;
   readonly onUpdate: (data: Partial<WorkshopNode['data']>) => void;
 }) {
@@ -357,6 +401,14 @@ function FileNodeEditor({
         </p>
       )}
 
+      <FileContextTargetPicker
+        projectId={projectId}
+        source={node}
+        nodes={nodes}
+        readOnly={collaborationGraphReadOnly}
+        onAttach={onAttachAgentContext}
+      />
+
       {browserMode !== null ? (
         <ProjectFileBrowser
           projectId={projectId}
@@ -386,6 +438,27 @@ function FileNodeEditor({
             requestedTab={requestedTab}
             operations={window.forgeboard.files}
             readOnly={node.data.locked || reference.missing || reference.kind !== 'file'}
+            {...(node.data.locked || reference.missing || reference.kind !== 'file'
+              ? {}
+              : {
+                  onFileDragStart: (
+                    dataTransfer: DataTransfer,
+                    target: {
+                      readonly projectId: string;
+                      readonly relativePath: string;
+                    },
+                  ) =>
+                    writeWorkspaceContextDrag(dataTransfer, {
+                      schemaVersion: 1,
+                      kind: 'project-file',
+                      projectId: target.projectId,
+                      relativePath: target.relativePath,
+                      ...(target.projectId === reference.projectId &&
+                      target.relativePath === reference.relativePath
+                        ? { sourceNodeId: node.id }
+                        : {}),
+                    }),
+                })}
             onBrowseFiles={() => {
               setRevealRelativePath(undefined);
               setBrowserMode('open');
@@ -452,7 +525,9 @@ function AgentRunInspector(
           value={selectedPermission}
           disabled={running || selectedNode.data.locked}
           onChange={(event) =>
-            onUpdateSelected({ permissionProfile: event.target.value as PermissionProfile })
+            onUpdateSelected({
+              permissionProfile: event.target.value as PermissionProfile,
+            })
           }
         >
           {PERMISSION_PROFILE_OPTIONS.map((option) => (

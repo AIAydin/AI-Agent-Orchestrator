@@ -21,6 +21,10 @@ import type {
   AgentExecutionRequest,
   PreparedAgentExecution,
 } from '../agent-execution/contracts.js';
+import type {
+  AgentRunContextResolver,
+  PersistedAgentContextResolution,
+} from './context/persisted-agent-context.js';
 import { RunService } from './run-service.js';
 import type { LocalStore } from '../storage.js';
 
@@ -89,6 +93,7 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
   stopOwnerError: Error | undefined;
   beforeAuthorizeLaunch: (() => void) | undefined;
   prepareAction: (() => Promise<void>) | undefined;
+  omitContextDisclosure = false;
   #nextRun = 1;
 
   public async prepare(
@@ -114,7 +119,13 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
         cwd: '/repo',
         runtime: 'pipes',
         environmentVariableNames: [],
-        contextAttachments: [],
+        contextAttachments: this.omitContextDisclosure
+          ? []
+          : input.context.attachments.map((attachment) => ({
+              path: attachment.path,
+              kind: attachment.kind,
+              sha256: attachment.sha256!,
+            })),
         contextManifestId: input.context.manifestId ?? null,
         contextManifestDigest: input.context.manifestDigest ?? null,
         permissionProfile: {
@@ -247,6 +258,7 @@ describe('RunService Electron compatibility', () => {
       },
       { showMessageBox: () => Promise.resolve({ response: 1, checkboxChecked: false }) },
       () => new Date('2026-07-15T12:00:00.000Z'),
+      emptyContextResolver(),
     );
     const firstOwner = webContents(7);
     const secondOwner = webContents(8);
@@ -305,6 +317,101 @@ describe('RunService Electron compatibility', () => {
         IPC_CHANNELS.runsTerminate,
       ]),
     );
+  });
+
+  it('passes the exact persisted context manifest into ordinary preparation and disclosure', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    const resolution = linkedContextResolution();
+    const resolve = vi.fn().mockResolvedValue(resolution);
+    const { service, showMessageBox } = serviceHarness(runtime, { contextResolver: { resolve } });
+    const owner = webContents(9);
+
+    const disclosure = await service.prepare(owner.owner, PREPARE_INPUT);
+
+    expect(runtime.prepareCalls[0]?.input.context).toEqual(resolution.context);
+    expect(disclosure).toMatchObject({
+      contextAttachments: [
+        {
+          path: '/repo/src/context.ts',
+          kind: 'file',
+          sha256: 'd'.repeat(64),
+        },
+      ],
+      contextManifestId: 'manifest-1',
+      contextManifestDigest: 'e'.repeat(64),
+    });
+    expect(resolve).toHaveBeenCalledWith(PREPARE_INPUT, expect.anything());
+    await expect(
+      requiredHandler(IPC_CHANNELS.runsApprove)(invokeEvent(owner.owner), disclosure.runId),
+    ).resolves.toMatchObject({ ok: true });
+    expect(shownMessage(showMessageBox).detail).toContain('Context manifest ID: manifest-1');
+    expect(shownMessage(showMessageBox).detail).toContain(
+      `Context manifest SHA-256: ${'e'.repeat(64)}`,
+    );
+    await service.dispose();
+  });
+
+  it('terminates a prepared plan when the runtime omits reviewed context from disclosure', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    runtime.omitContextDisclosure = true;
+    const resolution = linkedContextResolution();
+    const { service } = serviceHarness(runtime, {
+      contextResolver: { resolve: () => Promise.resolve(resolution) },
+    });
+    const owner = webContents(10);
+
+    await expect(service.prepare(owner.owner, PREPARE_INPUT)).rejects.toThrow(
+      /attachment count changed/iu,
+    );
+    expect(runtime.launchCalls).toEqual([]);
+    expect(runtime.terminateCalls).toEqual([
+      expect.objectContaining({ runId: '00000000-0000-4000-8000-000000000001' }),
+    ]);
+    await service.dispose();
+  });
+
+  it('fails closed when a linked file changes after Review but before native approval', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    const resolve = vi
+      .fn()
+      .mockResolvedValueOnce(linkedContextResolution())
+      .mockResolvedValueOnce(
+        linkedContextResolution({ contentHash: 'f'.repeat(64), fingerprint: '1'.repeat(64) }),
+      );
+    const { service } = serviceHarness(runtime, { contextResolver: { resolve } });
+    const owner = webContents(11);
+    const disclosure = await service.prepare(owner.owner, PREPARE_INPUT);
+
+    await expect(
+      requiredHandler(IPC_CHANNELS.runsApprove)(invokeEvent(owner.owner), disclosure.runId),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(resolve).toHaveBeenCalledTimes(2);
+    expect(runtime.launchCalls).toEqual([]);
+    expect(runtime.terminateCalls).toEqual([expect.objectContaining({ runId: disclosure.runId })]);
+    await service.dispose();
+  });
+
+  it('fails closed when the persisted Agent configuration changes after Review', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    const resolve = vi
+      .fn()
+      .mockResolvedValueOnce(linkedContextResolution())
+      .mockRejectedValueOnce(
+        new Error('The saved Agent prompt changed. Save and review a fresh run.'),
+      );
+    const { service } = serviceHarness(runtime, { contextResolver: { resolve } });
+    const owner = webContents(12);
+    const disclosure = await service.prepare(owner.owner, PREPARE_INPUT);
+
+    await expect(
+      requiredHandler(IPC_CHANNELS.runsApprove)(invokeEvent(owner.owner), disclosure.runId),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    expect(runtime.launchCalls).toEqual([]);
+    expect(runtime.terminateCalls).toHaveLength(1);
+    await service.dispose();
   });
 
   it('keeps native launch cancellation non-executing and consumes the prepared run', async () => {
@@ -592,6 +699,7 @@ function serviceHarness(
     readonly nativeResponse?: number;
     readonly repositories?: RepositoryService;
     readonly settings?: AppSettings;
+    readonly contextResolver?: AgentRunContextResolver;
   } = {},
 ): {
   readonly appendAudit: ReturnType<typeof vi.fn>;
@@ -618,9 +726,57 @@ function serviceHarness(
     },
     { showMessageBox },
     () => new Date('2026-07-15T12:00:00.000Z'),
+    options.contextResolver ?? emptyContextResolver(),
   );
   service.registerIpcHandlers();
   return { appendAudit, emit, service, showMessageBox };
+}
+
+function emptyContextResolver(): AgentRunContextResolver {
+  return {
+    resolve: () =>
+      Promise.resolve({
+        context: { attachments: [] },
+        authority: {
+          attachmentIds: [],
+          canvasId: 'canvas-1',
+          fingerprint: 'c'.repeat(64),
+          manifestDigest: null,
+          relativePaths: [],
+        },
+      }),
+  };
+}
+
+function linkedContextResolution(
+  overrides: {
+    readonly contentHash?: string;
+    readonly fingerprint?: string;
+  } = {},
+): PersistedAgentContextResolution {
+  const contentHash = overrides.contentHash ?? 'd'.repeat(64);
+  return {
+    context: {
+      attachments: [
+        {
+          path: '/repo/src/context.ts',
+          kind: 'file',
+          label: 'Context file',
+          explicitlyApproved: true,
+          sha256: contentHash,
+        },
+      ],
+      manifestId: 'manifest-1',
+      manifestDigest: 'e'.repeat(64),
+    },
+    authority: {
+      attachmentIds: ['file-1'],
+      canvasId: 'canvas-1',
+      fingerprint: overrides.fingerprint ?? 'f'.repeat(64),
+      manifestDigest: 'e'.repeat(64),
+      relativePaths: ['src/context.ts'],
+    },
+  };
 }
 
 async function activeFilterRepository(): Promise<{

@@ -1,0 +1,72 @@
+.shared-comments {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.shared-comments > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shared-comments ol {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.shared-comments li {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+
+.shared-comments li span,
+.shared-comments time,
+.shared-comments-empty,
+.shared-comments form small {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.shared-comments li p {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.shared-comments form {
+  display: grid;
+  gap: 7px;
+}
+
+.shared-comments textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.shared-comments-rejected {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, var(--line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--amber) 8%, var(--surface-subtle));
+}
+
+.shared-comments-rejected > p {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.shared-comments-rejected button {
+  margin-top: 4px;
+}

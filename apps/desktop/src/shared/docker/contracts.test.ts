@@ -28,6 +28,16 @@ describe('Docker IPC contracts', () => {
         .success,
     ).toBe(false);
     expect(
+      DockerReadinessInputSchema.safeParse({ ...input, dockerExecutable: 'docker\t--host=remote' })
+        .success,
+    ).toBe(false);
+    expect(
+      DockerReadinessInputSchema.safeParse({
+        ...input,
+        containerExecutable: '/usr/local/bin/codex\u0007',
+      }).success,
+    ).toBe(false);
+    expect(
       DockerReadinessInputSchema.safeParse({ ...input, containerExecutable: '/' }).success,
     ).toBe(false);
     expect(DockerReadinessInputSchema.safeParse({ ...input, timeoutMs: 999_999 }).success).toBe(

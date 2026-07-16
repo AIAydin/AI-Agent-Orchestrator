@@ -1,0 +1,278 @@
+import { createHash } from 'node:crypto';
+
+import {
+  AGENT_CONTEXT_ATTACHMENT_LIMIT,
+  buildAttachmentManifest,
+  type AttachmentManifest,
+  type CanvasNode,
+} from '@forgeboard/core';
+
+import type { AppSettings, PrepareRunInput } from '../../../shared/application/contracts.js';
+import { synchronizeCanvasDocument } from '../../../shared/canvas/adapter.js';
+import type { AgentExecutionContextRequest } from '../../agent-execution/contracts.js';
+import {
+  AGENT_CONTEXT_FILE_MAX_BYTES,
+  AGENT_CONTEXT_TOTAL_MAX_BYTES,
+} from '../../agent-execution/context/limits.js';
+import { resolveProjectFileRoot } from '../../file-domain/authority.js';
+import type { LocalStore } from '../../storage.js';
+
+export type PersistedAgentContextStore = Pick<
+  LocalStore,
+  'appendAudit' | 'getProject' | 'loadCanvas'
+>;
+
+export interface PersistedAgentContextAuthority {
+  readonly attachmentIds: readonly string[];
+  readonly canvasId: string;
+  readonly fingerprint: string;
+  readonly manifestDigest: string | null;
+  readonly relativePaths: readonly string[];
+}
+
+export interface PersistedAgentContextResolution {
+  readonly authority: PersistedAgentContextAuthority;
+  readonly context: AgentExecutionContextRequest;
+}
+
+export interface AgentRunContextResolver {
+  resolve(input: PrepareRunInput, settings: AppSettings): Promise<PersistedAgentContextResolution>;
+}
+
+/** Main-only authority that turns persisted opaque File-node IDs into reviewed file bytes. */
+export class PersistedAgentRunContextResolver implements AgentRunContextResolver {
+  public constructor(private readonly store: PersistedAgentContextStore) {}
+
+  public async resolve(
+    input: PrepareRunInput,
+    settings: AppSettings,
+  ): Promise<PersistedAgentContextResolution> {
+    try {
+      const resolution = await this.#resolve(input, settings);
+      this.store.appendAudit('agent-run-context', 'resolve', 'allowed', {
+        projectId: input.projectId,
+        nodeId: input.nodeId,
+        adapterId: input.adapterId,
+        canvasId: resolution.authority.canvasId,
+        attachmentIds: [...resolution.authority.attachmentIds],
+        manifestDigest: resolution.authority.manifestDigest,
+      });
+      return resolution;
+    } catch (error) {
+      this.store.appendAudit('agent-run-context', 'resolve', 'denied', {
+        projectId: input.projectId,
+        nodeId: input.nodeId,
+        adapterId: input.adapterId,
+        reason: errorMessage(error),
+      });
+      throw error;
+    }
+  }
+
+  async #resolve(
+    input: PrepareRunInput,
+    settings: AppSettings,
+  ): Promise<PersistedAgentContextResolution> {
+    const projectRoot = await resolveProjectFileRoot(this.store, input.projectId);
+    const stored = this.store.loadCanvas(input.projectId);
+    if (stored === undefined) {
+      throw new Error('Save this canvas before reviewing an Agent run.');
+    }
+    const synchronized = synchronizeCanvasDocument(stored);
+    if (!synchronized.ok) {
+      throw new Error('The saved canvas is invalid. Repair it before reviewing an Agent run.');
+    }
+    const canvas = synchronized.document.canonical;
+    if (canvas.projectId !== input.projectId) {
+      throw new Error('The saved canvas belongs to another project.');
+    }
+    const agent = canvas.nodes.find((node) => node.id === input.nodeId);
+    if (agent === undefined || agent.type !== 'agent') {
+      throw new Error('Agent runs require an exact persisted Agent node.');
+    }
+    assertPreparedConfiguration(agent, input, settings);
+
+    const attachmentIds = [...agent.data.contextAttachmentIds];
+    if (attachmentIds.length > AGENT_CONTEXT_ATTACHMENT_LIMIT) {
+      throw new Error(
+        `Agent context supports at most ${String(AGENT_CONTEXT_ATTACHMENT_LIMIT)} files.`,
+      );
+    }
+    if (new Set(attachmentIds).size !== attachmentIds.length) {
+      throw new Error('Agent context contains duplicate File-node IDs.');
+    }
+    const files = attachmentIds.map((attachmentId) =>
+      requireFileNode(canvas.nodes, input.projectId, attachmentId),
+    );
+    const relativePaths = files.map((node) => node.data.file.relativePath);
+    if (new Set(relativePaths).size !== relativePaths.length) {
+      throw new Error('Agent context cannot contain two File nodes for the same project path.');
+    }
+
+    const manifest =
+      relativePaths.length === 0
+        ? null
+        : await buildAttachmentManifest({
+            projectId: input.projectId,
+            projectRoot,
+            receivingAdapterId: input.adapterId,
+            receivingProvider: input.adapterId,
+            relativePaths,
+          });
+    if (manifest !== null) assertContextSizeLimits(manifest);
+    const digest = manifest === null ? null : attachmentManifestDigest(manifest);
+    const context: AgentExecutionContextRequest =
+      manifest === null
+        ? { attachments: [] }
+        : {
+            attachments: files.map((node, index) => {
+              const selected = manifest.files[index];
+              if (selected === undefined || selected.relativePath !== relativePaths[index]) {
+                throw new Error(`The context manifest omitted File node "${node.id}".`);
+              }
+              return {
+                path: selected.canonicalPath,
+                kind: 'file' as const,
+                label: node.title,
+                explicitlyApproved: true as const,
+                sha256: selected.sha256,
+              };
+            }),
+            manifestId: manifest.id,
+            manifestDigest: attachmentManifestDigest(manifest),
+          };
+    const authority: PersistedAgentContextAuthority = {
+      attachmentIds,
+      canvasId: canvas.id,
+      manifestDigest: digest,
+      relativePaths,
+      fingerprint: stableDigest({
+        schemaVersion: 1,
+        projectId: input.projectId,
+        canvasId: canvas.id,
+        nodeId: input.nodeId,
+        adapterId: input.adapterId,
+        permissionProfile: input.permissionProfile,
+        promptDigest: stableDigest(input.prompt),
+        attachmentIds,
+        files:
+          manifest?.files.map((file, index) => ({
+            attachmentId: attachmentIds[index],
+            label: files[index]?.title,
+            kind: 'file',
+            relativePath: file.relativePath,
+            sizeBytes: file.sizeBytes,
+            sha256: file.sha256,
+            policy: file.policy,
+            overrideApprovalId: file.overrideApprovalId ?? null,
+          })) ?? [],
+        manifestDigest: digest,
+      }),
+    };
+    return { authority, context };
+  }
+}
+
+function assertPreparedConfiguration(
+  agent: Extract<CanvasNode, { type: 'agent' }>,
+  input: PrepareRunInput,
+  settings: AppSettings,
+): void {
+  const prompt = persistedAgentPrompt(agent);
+  const adapterId = agent.data.adapterId ?? settings.defaultAgent;
+  const permissionProfile = agent.data.permissionProfileId ?? settings.defaultPermissionProfile;
+  if (prompt !== input.prompt) {
+    throw new Error('The saved Agent prompt changed. Save and review a fresh run.');
+  }
+  if (adapterId !== input.adapterId) {
+    throw new Error('The saved Agent adapter changed. Save and review a fresh run.');
+  }
+  if (permissionProfile !== input.permissionProfile) {
+    throw new Error('The saved Agent permission profile changed. Save and review a fresh run.');
+  }
+}
+
+function persistedAgentPrompt(agent: Extract<CanvasNode, { type: 'agent' }>): string {
+  const typedPrompt = agent.data.promptDraft.trim();
+  if (typedPrompt.length > 0) return typedPrompt;
+  const legacyData = agent.inspector['legacyData'];
+  if (legacyData === null || typeof legacyData !== 'object' || Array.isArray(legacyData)) {
+    return typedPrompt;
+  }
+  const record = legacyData as Readonly<Record<string, unknown>>;
+  if (typeof record['prompt'] === 'string') return record['prompt'].trim();
+  return typeof record['description'] === 'string' ? record['description'].trim() : typedPrompt;
+}
+
+function requireFileNode(
+  nodes: readonly CanvasNode[],
+  projectId: string,
+  attachmentId: string,
+): ConfiguredFileNode {
+  const node = nodes.find((candidate) => candidate.id === attachmentId);
+  if (node === undefined) {
+    throw new Error(`Agent context attachment "${attachmentId}" no longer exists.`);
+  }
+  if (node.type !== 'file' || node.data.file === undefined) {
+    throw new Error(`Agent context attachment "${attachmentId}" must be a configured File node.`);
+  }
+  if (node.data.file.projectId !== projectId) {
+    throw new Error(`Agent context attachment "${attachmentId}" belongs to another project.`);
+  }
+  if (node.data.file.missing) {
+    throw new Error(`Agent context attachment "${attachmentId}" is marked as missing.`);
+  }
+  if (node.data.file.kind !== 'file') {
+    throw new Error(`Agent context attachment "${attachmentId}" must be an ordinary file.`);
+  }
+  return node as ConfiguredFileNode;
+}
+
+type ConfiguredFileNode = Extract<CanvasNode, { type: 'file' }> & {
+  readonly data: Extract<CanvasNode, { type: 'file' }>['data'] & {
+    readonly file: NonNullable<Extract<CanvasNode, { type: 'file' }>['data']['file']>;
+  };
+};
+
+function attachmentManifestDigest(manifest: AttachmentManifest): string {
+  return stableDigest(
+    [...manifest.files]
+      .sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+      .map((file) => ({
+        relativePath: file.relativePath,
+        sizeBytes: file.sizeBytes,
+        sha256: file.sha256,
+        policy: file.policy,
+        overrideApprovalId: file.overrideApprovalId ?? null,
+      })),
+  );
+}
+
+function assertContextSizeLimits(manifest: AttachmentManifest): void {
+  let totalBytes = 0;
+  for (const file of manifest.files) {
+    if (file.sizeBytes > AGENT_CONTEXT_FILE_MAX_BYTES) {
+      throw new Error(
+        `Agent context file "${file.relativePath}" exceeds the ${formatBytes(AGENT_CONTEXT_FILE_MAX_BYTES)} per-file limit.`,
+      );
+    }
+    totalBytes += file.sizeBytes;
+    if (totalBytes > AGENT_CONTEXT_TOTAL_MAX_BYTES) {
+      throw new Error(
+        `Agent context exceeds the ${formatBytes(AGENT_CONTEXT_TOTAL_MAX_BYTES)} aggregate limit.`,
+      );
+    }
+  }
+}
+
+function formatBytes(bytes: number): string {
+  return `${String(bytes / (1024 * 1024))} MiB`;
+}
+
+function stableDigest(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message.slice(0, 20_000) : 'Unknown context error';
+}

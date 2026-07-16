@@ -12,7 +12,45 @@ curl http://127.0.0.1:1234/healthz
 
 In development, a missing signing key creates an ephemeral key and prints a warning. Existing access and invite tokens consequently stop working when that process restarts. The server binds to `127.0.0.1`, permits room bootstrap only from loopback, and persists metadata in `./data/forgeboard-collab.sqlite`. Production mode refuses to start without explicit signing and administrator secrets.
 
-The desktop client remains the intended place to create rooms, invite collaborators, and manage access. The HTTP endpoints below exist so those actions require no code configuration; deployment environment variables are only for operators of this optional service.
+The desktop client configures and controls an ordinary room session without source, environment, or
+manifest edits. Room creation, invitations, membership changes, and deployment administration use
+the authenticated management API described below; deployment environment variables are only for
+operators of this optional service. This checkpoint does not yet claim desktop UI for room creation,
+invite issuance/revocation, or membership administration; those broader integration/settings items
+remain open in the implementation ledger.
+
+## Desktop connection and recovery
+
+In **Settings → Connectivity**, enable collaboration and enter the server URL, room, collaborator
+identity, display name, color, and a current access token. **Connect** remains disabled until those
+fields are valid. The access token field clears after every attempt; the token is held only in
+volatile main-process memory for the approved session and automatic reconnect, and is cleared on
+leave, privacy reset, or quit. A native confirmation identifies the exact network destination before
+the first connection.
+
+Authenticated roles are enforced in both the desktop and server. Owners and editors can publish
+graph metadata. Reviewers can add their own node comments through a separate main-owned operation
+without gaining graph-write authority. Viewers remain read-only. A comment appears as shared only
+after the server's correlated durable acknowledgement; rejected or timed-out delivery is shown as a
+failure. Shared cursors, selections, active presence, and idle collaborator avatars are rendered as
+metadata-only state.
+
+For offline and restart recovery, the desktop stores only a bounded baseline, pending allowlisted
+metadata intent, and an exact per-delivery candidate ledger in its local SQLite database, scoped to
+the project, canvas, server, room, and authenticated subject. Staging plus receipt binding is one
+transaction. Out-of-order acknowledgements therefore cannot erase an earlier accepted candidate or
+misclassify a later rejection. Row and aggregate-byte limits fail closed, and the scope journal
+expires after 30 days without activity. Reconnect performs a three-way merge: disjoint edits are
+reapplied, same-field conflicts pause for review, and pending intent is retained rather than
+replayed if the current role no longer permits it. Rejected comment additions remain quarantined
+even beneath a newer unsettled delivery. A later acknowledged candidate containing the exact value
+clears its quarantine. The UI also lets the user restore its text to the editor or explicitly
+discard that exact device-local copy using its rejected-delivery token; a later identical rejection
+is treated as new and appears again. Discarding does not mutate or delete server state. Because the
+stale Yjs document still carries the rejected update clock, Forgeboard blocks further shared
+publishing in that session and tells the user to leave and rejoin first. Recovery pauses without
+applying a room snapshot if a known rejection cannot be persisted. Solo mode does not create a
+journal entry or contact this service.
 
 ## What can and cannot leave a device
 

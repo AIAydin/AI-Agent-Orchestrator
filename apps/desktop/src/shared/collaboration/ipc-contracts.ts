@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { CollaborationAwarenessUpdateInputSchema } from './awareness.js';
-import { CollaborationMetadataSnapshotSchema } from './metadata-contracts.js';
+import { CollaborationDurablePublishInputSchema } from './sync/contracts.js';
 
 export const COLLABORATION_IPC_CHANNELS = Object.freeze({
   get: 'collaboration:get',
@@ -9,13 +9,15 @@ export const COLLABORATION_IPC_CHANNELS = Object.freeze({
   join: 'collaboration:join',
   leave: 'collaboration:leave',
   publish: 'collaboration:publish',
+  recover: 'collaboration:recover',
+  checkpoint: 'collaboration:checkpoint',
+  discardRejectedComment: 'collaboration:discard-rejected-comment',
+  createComment: 'collaboration:create-comment',
   updateAwareness: 'collaboration:update-awareness',
   event: 'collaboration:event',
 } as const);
 
-export const CollaborationPublishInputSchema = z
-  .object({ snapshot: CollaborationMetadataSnapshotSchema })
-  .strict();
+export const CollaborationPublishInputSchema = CollaborationDurablePublishInputSchema;
 export type CollaborationPublishInput = z.infer<typeof CollaborationPublishInputSchema>;
 
 export const CollaborationUpdateAwarenessInputSchema = z

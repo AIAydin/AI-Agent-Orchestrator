@@ -63,6 +63,12 @@ describe('AgentReadinessService', () => {
       version: '1.2.3',
       reason: null,
     });
+    await expect(
+      service.verifySettingsReadiness({
+        agentId: 'codex',
+        executableOverride: '/chosen/bin/codex',
+      }),
+    ).rejects.toThrow(/Refresh readiness/u);
   });
 
   it('does not run a version probe for a missing executable', async () => {
@@ -201,6 +207,34 @@ describe('AgentReadinessService', () => {
     });
   });
 
+  it('proves the bundled Settings agent passively without starting its subprocess', async () => {
+    const locateExecutable = vi.fn(() =>
+      Promise.resolve(
+        detection({
+          adapterId: 'test-agent',
+          executable: '/canonical/bundled/test-agent',
+          version: undefined,
+        }),
+      ),
+    );
+    const probeAgent = vi.fn<ProbeAgent>();
+    const service = new AgentReadinessService('/bundled/test-agent', {
+      locateExecutable,
+      probeAgent,
+      identifyExecutable,
+    });
+
+    await expect(service.verifySettingsReadiness({ agentId: 'test-agent' })).resolves.toMatchObject(
+      {
+        ready: true,
+        source: 'bundled',
+        executable: '/canonical/bundled/test-agent',
+      },
+    );
+    expect(locateExecutable).toHaveBeenCalledTimes(2);
+    expect(probeAgent).not.toHaveBeenCalled();
+  });
+
   it('refuses executable drift at the final per-process authorization boundary', async () => {
     let processStarted = false;
     const changedIdentity = { ...EXECUTABLE_IDENTITY, sha256: 'b'.repeat(64) };
@@ -228,5 +262,104 @@ describe('AgentReadinessService', () => {
       reason: 'The selected executable changed after approval. Review it again.',
     });
     expect(processStarted).toBe(false);
+  });
+
+  it('binds Settings evidence only after a successful exact probe and rechecks identity', async () => {
+    let identity = EXECUTABLE_IDENTITY;
+    const locateExecutable = vi.fn(() => Promise.resolve(detection()));
+    const probeAgent = vi.fn<ProbeAgent>(() => Promise.resolve(detection()));
+    const service = new AgentReadinessService('/bundled/test-agent', {
+      locateExecutable,
+      identifyExecutable: () => Promise.resolve(identity),
+      probeAgent,
+    });
+    const request: AgentReadinessRequest = {
+      agentId: 'codex',
+      executableOverride: '/chosen/bin/codex',
+    };
+
+    await expect(service.verifySettingsReadiness(request)).rejects.toThrow(/Refresh readiness/u);
+    const prepared = await service.prepare(request);
+    if (prepared.outcome !== 'probe') throw new Error('Expected an executable probe plan.');
+    const result = await service.probe(prepared.plan);
+    service.recordVerifiedSettingsReadiness(prepared.plan, result);
+
+    await expect(service.verifySettingsReadiness(request)).resolves.toMatchObject({
+      agentId: 'codex',
+      ready: true,
+      executable: '/canonical/bin/codex',
+    });
+    expect(probeAgent).toHaveBeenCalledTimes(1);
+
+    identity = { ...EXECUTABLE_IDENTITY, sha256: 'b'.repeat(64) };
+    await expect(service.verifySettingsReadiness(request)).rejects.toThrow(
+      /changed after readiness/u,
+    );
+    expect(probeAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let readiness for executable override A authorize changed override B', async () => {
+    const locateExecutable = vi.fn(() => Promise.resolve(detection()));
+    const service = new AgentReadinessService('/bundled/test-agent', {
+      locateExecutable,
+      identifyExecutable,
+      probeAgent: vi.fn<ProbeAgent>(() => Promise.resolve(detection())),
+    });
+    const approved: AgentReadinessRequest = {
+      agentId: 'codex',
+      executableOverride: '/chosen/bin/codex-a',
+    };
+    const changed: AgentReadinessRequest = {
+      agentId: 'codex',
+      executableOverride: '/chosen/bin/codex-b',
+    };
+    const prepared = await service.prepare(approved);
+    if (prepared.outcome !== 'probe') throw new Error('Expected an executable probe plan.');
+    const result = await service.probe(prepared.plan);
+    service.recordVerifiedSettingsReadiness(prepared.plan, result);
+
+    await expect(service.verifySettingsReadiness(changed)).rejects.toThrow(/Refresh readiness/u);
+    expect(locateExecutable).not.toHaveBeenCalledWith(expect.anything(), {
+      executable: '/chosen/bin/codex-b',
+    });
+  });
+
+  it('binds enabled custom-agent evidence to every configuration field', async () => {
+    const customDetection = detection({
+      adapterId: 'custom',
+      executable: '/canonical/bin/custom-agent',
+    });
+    const locateExecutable = vi.fn(() => Promise.resolve(customDetection));
+    const service = new AgentReadinessService('/bundled/test-agent', {
+      locateExecutable,
+      identifyExecutable,
+      probeAgent: vi.fn<ProbeAgent>(() => Promise.resolve(customDetection)),
+    });
+    const configuration = {
+      enabled: true,
+      name: 'Custom CLI',
+      providerName: 'Custom provider',
+      providerDisclosure: 'This CLI may use its configured provider.',
+      sendsContextOffDevice: true,
+      executable: '/chosen/custom-agent',
+      versionArguments: ['--version'],
+      launchArguments: ['run'],
+      promptTransport: 'argument' as const,
+      runtime: 'pipes' as const,
+      output: 'text' as const,
+    };
+    const request: AgentReadinessRequest = { agentId: 'custom', configuration };
+    const prepared = await service.prepare(request);
+    if (prepared.outcome !== 'probe') throw new Error('Expected an executable probe plan.');
+    const result = await service.probe(prepared.plan);
+    service.recordVerifiedSettingsReadiness(prepared.plan, result);
+
+    await expect(
+      service.verifySettingsReadiness({
+        agentId: 'custom',
+        configuration: { ...configuration, launchArguments: ['run', '--changed'] },
+      }),
+    ).rejects.toThrow(/Refresh readiness/u);
+    expect(locateExecutable).toHaveBeenCalledTimes(2);
   });
 });

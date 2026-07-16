@@ -5,7 +5,7 @@ import type {
   PreparedAgentLaunch,
 } from '@forgeboard/agent-adapters';
 import { ContextAttachmentSchema } from '@forgeboard/agent-adapters';
-import type { ProcessReference } from '@forgeboard/core';
+import { AGENT_CONTEXT_ATTACHMENT_LIMIT, type ProcessReference } from '@forgeboard/core';
 import type { WorktreeOwnership } from '@forgeboard/git-engine';
 import { z } from 'zod';
 
@@ -20,7 +20,7 @@ import type { StoredRunRecord } from '../storage.js';
 
 export const AgentExecutionContextRequestSchema = z
   .object({
-    attachments: z.array(ContextAttachmentSchema).max(256).default([]),
+    attachments: z.array(ContextAttachmentSchema).max(AGENT_CONTEXT_ATTACHMENT_LIMIT).default([]),
     manifestId: z.string().min(1).max(128).optional(),
     manifestDigest: z
       .string()

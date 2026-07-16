@@ -20,6 +20,13 @@ import type { AppSettings, CanvasDocument } from '../../../../../shared/applicat
 import type { CollaborationAwarenessEntry } from '../../../../../shared/collaboration/index.js';
 import { NODE_KINDS, WORKSHOP_NODE_TYPES, type NodeKind, type WorkshopNode } from './CanvasNode.js';
 import { CollaborationPresence } from '../collaboration/CollaborationPresence.js';
+import { CollaboratorRoster } from '../collaboration/presence/CollaboratorRoster.js';
+import {
+  hasWorkspaceContextDrag,
+  readWorkspaceContextDrag,
+  type WorkspaceContextDragPayload,
+} from '../context-dnd/contracts.js';
+import { resolveFileNodeContextDrop } from '../context-dnd/node-drag-link.js';
 import type { ExtensionTemplate, WorkshopEdge } from '../model/types.js';
 import { AlignmentGuides } from './interactions/AlignmentGuides.js';
 import {
@@ -51,6 +58,11 @@ interface WorkspaceCanvasProps {
   onSelectionChange: (selection: OnSelectionChangeParams<WorkshopNode, WorkshopEdge>) => void;
   onAddNode: (kind: NodeKind, position?: { x: number; y: number }) => void;
   onAddExtensionNode: (template: ExtensionTemplate, position?: { x: number; y: number }) => void;
+  onAttachAgentContext: (
+    targetNodeId: string,
+    payload: WorkspaceContextDragPayload,
+  ) => Promise<void>;
+  onContextDropError: (message: string) => void;
   collaborationAwareness: readonly CollaborationAwarenessEntry[];
   onCollaborationCursorMove: (position: { readonly x: number; readonly y: number }) => void;
   onCollaborationCursorLeave: () => void;
@@ -73,13 +85,18 @@ export function WorkspaceCanvas({
   onSelectionChange,
   onAddNode,
   onAddExtensionNode,
+  onAttachAgentContext,
+  onContextDropError,
   collaborationAwareness,
   onCollaborationCursorMove,
   onCollaborationCursorLeave,
   collaborationGraphReadOnly,
 }: WorkspaceCanvasProps) {
   const [alignmentGuides, setAlignmentGuides] = useState<CanvasAlignmentGuides>({});
-  const [keyboardAnnouncement, setKeyboardAnnouncement] = useState({ message: '', sequence: 0 });
+  const [keyboardAnnouncement, setKeyboardAnnouncement] = useState({
+    message: '',
+    sequence: 0,
+  });
   const onNodeDrag: OnNodeDrag<WorkshopNode> = (_event, node, draggedNodes) => {
     const activeNodes = (draggedNodes.length > 0 ? draggedNodes : [node]).filter(
       (activeNode) => !activeNode.data.locked,
@@ -87,24 +104,95 @@ export function WorkspaceCanvas({
     const zoom = instance?.getZoom() ?? 1;
     setAlignmentGuides(alignmentGuidesForDrag(activeNodes, nodes, 6 / Math.max(zoom, 0.01)));
   };
+  const onNodeDragStop: OnNodeDrag<WorkshopNode> = (_event, node, draggedNodes) => {
+    setAlignmentGuides({});
+    if (canvas === null || collaborationGraphReadOnly) return;
+    const resolution = resolveFileNodeContextDrop({
+      projectId: canvas.projectId,
+      source: node,
+      draggedNodes,
+      nodes,
+    });
+    if (resolution === null) return;
+    if (!resolution.ok) {
+      onContextDropError(resolution.message);
+      return;
+    }
+    void Promise.resolve()
+      .then(() => onAttachAgentContext(resolution.targetNodeId, resolution.payload))
+      .catch((cause: unknown) => {
+        onContextDropError(
+          cause instanceof Error ? cause.message : 'The File node could not be attached.',
+        );
+      });
+  };
 
   return (
     <section
       className="canvas-region"
       onPointerMove={(event) => {
-        const position = instance?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        const position = instance?.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
         if (position !== undefined) onCollaborationCursorMove(position);
       }}
       onPointerLeave={onCollaborationCursorLeave}
       onDragOver={(event) => {
+        if (hasWorkspaceContextDrag(event.dataTransfer)) {
+          const target = contextDropTarget(event.target, nodes);
+          if (
+            collaborationGraphReadOnly ||
+            target === null ||
+            target.data.kind !== 'agent' ||
+            target.data.locked
+          ) {
+            return;
+          }
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          return;
+        }
         event.preventDefault();
         event.dataTransfer.dropEffect = 'copy';
       }}
       onDrop={(event) => {
+        if (hasWorkspaceContextDrag(event.dataTransfer)) {
+          if (collaborationGraphReadOnly) {
+            onContextDropError('This collaboration role cannot edit the shared graph.');
+            return;
+          }
+          const payload = readWorkspaceContextDrag(event.dataTransfer);
+          if (payload === null) {
+            onContextDropError('That drag did not contain a valid Forgeboard project file.');
+            return;
+          }
+          const target = contextDropTarget(event.target, nodes);
+          if (target === null || target.data.kind !== 'agent') {
+            onContextDropError('Project files can only be attached to an Agent node.');
+            return;
+          }
+          if (target.data.locked) {
+            onContextDropError('Unlock the Agent node before changing its context.');
+            return;
+          }
+          event.preventDefault();
+          void Promise.resolve()
+            .then(() => onAttachAgentContext(target.id, payload))
+            .catch((cause: unknown) => {
+              onContextDropError(
+                cause instanceof Error ? cause.message : 'The file could not be attached.',
+              );
+            });
+          return;
+        }
         event.preventDefault();
         if (collaborationGraphReadOnly) return;
         const extensionKey = event.dataTransfer.getData('application/x-forgeboard-extension-node');
-        const position = instance?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        const position = instance?.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
         if (extensionKey) {
           const template = extensionTemplates.find(({ key }) => key === extensionKey);
           if (template) onAddExtensionNode(template, position);
@@ -130,7 +218,7 @@ export function WorkspaceCanvas({
             onNodeDragStart();
           }}
           onNodeDrag={onNodeDrag}
-          onNodeDragStop={() => setAlignmentGuides({})}
+          onNodeDragStop={onNodeDragStop}
           onSelectionChange={onSelectionChange}
           onKeyDownCapture={(event) => {
             const target = event.target;
@@ -236,6 +324,9 @@ export function WorkspaceCanvas({
               {nodes.length} nodes · {edges.length} connections
             </small>
           </Panel>
+          <Panel position="top-right">
+            <CollaboratorRoster awareness={collaborationAwareness} />
+          </Panel>
           <Panel
             position="bottom-center"
             className="canvas-keyboard-hint"
@@ -282,4 +373,15 @@ export function WorkspaceCanvas({
       )}
     </section>
   );
+}
+
+function contextDropTarget(
+  eventTarget: EventTarget | null,
+  nodes: readonly WorkshopNode[],
+): WorkshopNode | null {
+  if (!(eventTarget instanceof Element)) return null;
+  const nodeElement = eventTarget.closest('.react-flow__node[data-id]');
+  const nodeId = nodeElement?.getAttribute('data-id');
+  if (nodeId === null || nodeId === undefined) return null;
+  return nodes.find((node) => node.id === nodeId) ?? null;
 }

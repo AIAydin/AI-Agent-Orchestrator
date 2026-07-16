@@ -12,9 +12,13 @@ import './AgentReadinessPanel.css';
 
 interface AgentReadinessPanelProps {
   readonly agent: AgentDetection | undefined;
+  readonly agentLabel?: string;
+  readonly statusSubject?: string;
   readonly draft: AgentReadinessDraft;
   readonly result: AgentReadinessResult | null;
   readonly checking: boolean;
+  readonly disabled?: boolean;
+  readonly launchDetectionReady?: boolean;
   readonly checkReadiness: CheckAgentReadiness | undefined;
   readonly onResult: (result: AgentReadinessResult) => void;
   readonly onError: (message: string) => void;
@@ -22,16 +26,20 @@ interface AgentReadinessPanelProps {
 
 export function AgentReadinessPanel({
   agent,
+  agentLabel,
+  statusSubject = 'Selected executable',
   draft,
   result,
   checking,
+  disabled = false,
+  launchDetectionReady,
   checkReadiness,
   onResult,
   onError,
 }: AgentReadinessPanelProps) {
-  const launchReady = launchDetectionIsReady(agent, draft);
+  const launchReady = launchDetectionReady ?? launchDetectionIsReady(agent, draft);
   const ready = result?.ready === true || (result === null && launchReady);
-  const label = agent?.label ?? draft.request?.agentId ?? 'selected agent';
+  const label = agentLabel ?? agent?.label ?? draft.request?.agentId ?? 'selected agent';
 
   async function refresh(): Promise<void> {
     if (checkReadiness === undefined || draft.request === null) return;
@@ -49,12 +57,12 @@ export function AgentReadinessPanel({
         <span>
           {ready ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
           <strong>
-            {ready ? 'Selected executable is ready' : 'Selected executable needs attention'}
+            {ready ? `${statusSubject} is ready` : `${statusSubject} needs attention`}
           </strong>
         </span>
         <button
           type="button"
-          disabled={checking || checkReadiness === undefined || draft.request === null}
+          disabled={disabled || checking || checkReadiness === undefined || draft.request === null}
           onClick={() => void refresh()}
           aria-label={`Refresh ${label} readiness`}
         >

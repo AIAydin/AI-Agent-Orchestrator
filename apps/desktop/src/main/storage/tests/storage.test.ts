@@ -11,6 +11,7 @@ import type {
   Project,
 } from '../../../shared/application/contracts.js';
 import { LocalStore, type StoredRunRecord } from '../../storage.js';
+import { MIGRATIONS } from '../database.js';
 
 const NOW = '2026-07-14T16:00:00.000Z';
 const PROJECT_ID = '00000000-0000-4000-8000-000000000001';
@@ -245,22 +246,11 @@ describe('LocalStore', () => {
         quick_check: 'ok',
       });
       expect(inspector.prepare('PRAGMA user_version;').get()).toMatchObject({
-        user_version: 10,
+        user_version: MIGRATIONS.length,
       });
       expect(
         inspector.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
-      ).toEqual([
-        { version: 1 },
-        { version: 2 },
-        { version: 3 },
-        { version: 4 },
-        { version: 5 },
-        { version: 6 },
-        { version: 7 },
-        { version: 8 },
-        { version: 9 },
-        { version: 10 },
-      ]);
+      ).toEqual(MIGRATIONS.map((_migration, index) => ({ version: index + 1 })));
       expect(
         inspector
           .prepare(
@@ -270,8 +260,9 @@ describe('LocalStore', () => {
                 'canvas_snapshots', 'project_path_history', 'backup_records', 'backup_health',
                 'trusted_extension_ledger', 'check_executions', 'workflow_executions',
                 'workflow_execution_events', 'workflow_node_bindings', 'approval_records',
-                'git_review_notes',
-                'audit_chain_state', 'audit_chain_checkpoints')
+                'git_review_notes', 'collaboration_sync_states', 'collaboration_sync_deliveries',
+                'collaboration_rejected_comment_dismissals',
+                'audit_chain_state', 'audit_chain_checkpoints', 'settings_repair_history')
              ORDER BY name`,
           )
           .all(),
@@ -287,9 +278,13 @@ describe('LocalStore', () => {
         { name: 'canvas_documents' },
         { name: 'canvas_snapshots' },
         { name: 'check_executions' },
+        { name: 'collaboration_rejected_comment_dismissals' },
+        { name: 'collaboration_sync_deliveries' },
+        { name: 'collaboration_sync_states' },
         { name: 'git_review_notes' },
         { name: 'project_path_history' },
         { name: 'recent_projects' },
+        { name: 'settings_repair_history' },
         { name: 'trusted_extension_ledger' },
         { name: 'workflow_execution_events' },
         { name: 'workflow_executions' },

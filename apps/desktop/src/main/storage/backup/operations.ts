@@ -4,6 +4,10 @@ import { chmod, link, lstat, mkdir, open, realpath, rmdir, unlink } from 'node:f
 import { basename, dirname, join, resolve } from 'node:path';
 import { backup as sqliteBackup, type DatabaseSync } from 'node:sqlite';
 
+import {
+  windowsFilesystemSecurity,
+  type WindowsFilesystemSecurity,
+} from '../../security/windows/filesystem-acl.js';
 import type { BackupResult } from '../../storage-schemas.js';
 import { clearAllTables, transaction } from '../database.js';
 import { assertBackupIntegrity } from '../integrity.js';
@@ -24,6 +28,21 @@ export interface DeleteAllLocalDataOptions {
   readonly approvedMissingBackupIds?: readonly string[];
 }
 
+export interface BackupFilesystemSecurityDependencies {
+  readonly platform?: NodeJS.Platform;
+  readonly windowsSecurity?: WindowsFilesystemSecurity;
+}
+
+interface ActiveBackupFilesystemSecurity {
+  readonly platform: NodeJS.Platform;
+  readonly windows:
+    | {
+        readonly authority: WindowsFilesystemSecurity;
+        readonly sid: string;
+      }
+    | undefined;
+}
+
 export class MissingRecordedBackupsError extends Error {
   public constructor(public readonly count: number) {
     super(
@@ -37,19 +56,25 @@ export async function createBackup(
   database: DatabaseSync,
   destinationDirectory: string,
   now = new Date(),
+  securityDependencies: BackupFilesystemSecurityDependencies = {},
 ): Promise<BackupResult> {
+  const security = await resolveBackupFilesystemSecurity(securityDependencies);
   const requestedDirectory = resolve(destinationDirectory);
-  await mkdir(requestedDirectory, { recursive: true, mode: 0o700 });
-  const canonicalDirectory = await realpath(requestedDirectory);
-  await assertCanonicalPrivateDirectory(canonicalDirectory);
+  const canonicalDirectory = await prepareBackupDestination(requestedDirectory, security);
   const timestamp = now.toISOString().replace(/[:.]/g, '-');
   const backupId = randomUUID();
   const target = join(canonicalDirectory, `forgeboard-${timestamp}-${backupId}.sqlite3`);
   const stagingDirectory = join(canonicalDirectory, `.forgeboard-backup-${backupId}`);
-  await mkdir(stagingDirectory, { mode: 0o700 });
   let targetCreated = false;
   try {
-    await assertCanonicalPrivateDirectory(canonicalDirectory);
+    await assertCanonicalPrivateDirectory(canonicalDirectory, security);
+    await mkdir(stagingDirectory, { mode: 0o700 });
+    if (security.windows !== undefined) {
+      await security.windows.authority.protectPrivateDirectory(
+        stagingDirectory,
+        security.windows.sid,
+      );
+    }
     const canonicalStagingDirectory = await realpath(stagingDirectory);
     if (
       canonicalStagingDirectory !== stagingDirectory ||
@@ -57,7 +82,7 @@ export async function createBackup(
     ) {
       throw new Error('The backup staging path escaped the selected destination.');
     }
-    await assertCanonicalPrivateDirectory(canonicalStagingDirectory);
+    await assertCanonicalPrivateDirectory(canonicalStagingDirectory, security, true);
     const stagedTarget = join(canonicalStagingDirectory, 'backup.sqlite3');
     await sqliteBackup(database, stagedTarget);
     const stagedStats = await lstat(stagedTarget);
@@ -65,6 +90,9 @@ export async function createBackup(
       throw new Error('SQLite did not create an ordinary backup file.');
     }
     await chmod(stagedTarget, 0o600);
+    if (security.windows !== undefined) {
+      await security.windows.authority.protectPrivateFile(stagedTarget, security.windows.sid);
+    }
     const canonicalStagedTarget = await realpath(stagedTarget);
     if (
       canonicalStagedTarget !== stagedTarget ||
@@ -74,14 +102,23 @@ export async function createBackup(
     }
     assertBackupIntegrity(canonicalStagedTarget);
     const stagedDigest = await hashFile(canonicalStagedTarget);
-    await assertCanonicalPrivateDirectory(canonicalDirectory);
-    await assertCanonicalPrivateDirectory(canonicalStagingDirectory);
+    await assertCanonicalPrivateDirectory(canonicalDirectory, security);
+    await assertCanonicalPrivateDirectory(canonicalStagingDirectory, security, true);
+    if (security.windows !== undefined) {
+      await security.windows.authority.assertPrivateFile(
+        canonicalStagedTarget,
+        security.windows.sid,
+      );
+    }
     await link(canonicalStagedTarget, target);
     targetCreated = true;
-    await assertCanonicalPrivateDirectory(canonicalDirectory);
+    await assertCanonicalPrivateDirectory(canonicalDirectory, security);
     const canonicalTarget = await realpath(target);
     if (canonicalTarget !== target || dirname(canonicalTarget) !== canonicalDirectory) {
       throw new Error('The backup path escaped the selected destination.');
+    }
+    if (security.windows !== undefined) {
+      await security.windows.authority.assertPrivateFile(canonicalTarget, security.windows.sid);
     }
     const digest = await hashFile(canonicalTarget);
     if (
@@ -101,7 +138,7 @@ export async function createBackup(
     // A read-only integrity connection can still create SQLite WAL/SHM sidecars. Remove the
     // private staging tree before recording success so callers never observe a completed backup
     // alongside Forgeboard's transient files.
-    await cleanupBackupStagingDirectory(stagingDirectory, canonicalDirectory);
+    await cleanupBackupStagingDirectory(stagingDirectory, canonicalDirectory, security);
     database
       .prepare(
         `INSERT INTO backup_records(id, canonical_path, created_at, sha256, size_bytes)
@@ -110,10 +147,25 @@ export async function createBackup(
       .run(backupId, result.path, result.createdAt, result.sha256, result.sizeBytes);
     return result;
   } catch (error) {
-    if (targetCreated) await removeContainedOrdinaryFile(target, canonicalDirectory);
-    await cleanupBackupStagingDirectory(stagingDirectory, canonicalDirectory).catch(
-      () => undefined,
-    );
+    const cleanupErrors: unknown[] = [];
+    if (targetCreated) {
+      try {
+        await removeContainedOrdinaryFile(target, canonicalDirectory, security);
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+    }
+    try {
+      await cleanupBackupStagingDirectory(stagingDirectory, canonicalDirectory, security);
+    } catch (cleanupError) {
+      cleanupErrors.push(cleanupError);
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...cleanupErrors],
+        'Backup creation failed and its private temporary data could not be fully removed.',
+      );
+    }
     throw error;
   }
 }
@@ -122,7 +174,9 @@ export async function pruneBackups(
   database: DatabaseSync,
   retentionCount: number,
   protectedBackupPath: string,
+  securityDependencies: BackupFilesystemSecurityDependencies = {},
 ): Promise<number> {
+  const security = await resolveBackupFilesystemSecurity(securityDependencies);
   if (!Number.isInteger(retentionCount) || retentionCount < 1 || retentionCount > 365) {
     throw new Error('Backup retention must be an integer from 1 through 365.');
   }
@@ -152,7 +206,7 @@ export async function pruneBackups(
     .sort((left, right) => left.sequence - right.sequence);
   let deleted = 0;
   for (const backup of rows) {
-    if ((await removeRecordedBackup(backup)) === 'missing') {
+    if ((await removeRecordedBackup(backup, security)) === 'missing') {
       throw new MissingRecordedBackupsError(1);
     }
     const result = database
@@ -169,21 +223,28 @@ export async function pruneBackups(
 export async function deleteAllLocalData(
   database: DatabaseSync,
   options: DeleteAllLocalDataOptions = {},
+  securityDependencies: BackupFilesystemSecurityDependencies = {},
 ): Promise<void> {
   const backups = database
     .prepare(
       'SELECT id, canonical_path, sha256, size_bytes FROM backup_records ORDER BY created_at',
     )
     .all() as unknown as BackupRow[];
-  const missingIds = new Set(await listMissingRecordedBackupIds(database, backups));
+  const missingIds = new Set(await listMissingRecordedBackupIdsFromRows(backups));
   const approvedMissingIds = new Set(options.approvedMissingBackupIds ?? []);
   const unapprovedMissingIds = [...missingIds].filter((id) => !approvedMissingIds.has(id));
   if (unapprovedMissingIds.length > 0) {
     throw new MissingRecordedBackupsError(unapprovedMissingIds.length);
   }
+  const availableBackups = backups.filter((backup) => !missingIds.has(backup.id));
+  const security =
+    availableBackups.length > 0
+      ? await resolveBackupFilesystemSecurity(securityDependencies)
+      : undefined;
   for (const backup of backups) {
     if (missingIds.has(backup.id)) continue;
-    const outcome = await removeRecordedBackup(backup);
+    if (security === undefined) throw new Error('Backup filesystem security was not initialized.');
+    const outcome = await removeRecordedBackup(backup, security);
     if (outcome === 'missing' && !approvedMissingIds.has(backup.id)) {
       throw new MissingRecordedBackupsError(1);
     }
@@ -203,6 +264,10 @@ export async function listMissingRecordedBackupIds(
     (database
       .prepare('SELECT id, canonical_path, sha256, size_bytes FROM backup_records ORDER BY rowid')
       .all() as unknown as BackupRow[]);
+  return await listMissingRecordedBackupIdsFromRows(backups);
+}
+
+async function listMissingRecordedBackupIdsFromRows(backups: readonly BackupRow[]) {
   const missingIds: string[] = [];
   for (const backup of backups) {
     if (await recordedBackupIsMissing(backup)) missingIds.push(backup.id);
@@ -252,8 +317,8 @@ async function hashFile(path: string): Promise<FileDigest> {
   }
 }
 
-function assertPrivateDirectory(stats: Stats): void {
-  if (process.platform === 'win32') return;
+function assertPrivateDirectory(stats: Stats, platform = process.platform): void {
+  if (platform === 'win32') return;
   if ((stats.mode & 0o022) !== 0) {
     throw new Error('The backup destination must not be writable by group or other users.');
   }
@@ -262,7 +327,75 @@ function assertPrivateDirectory(stats: Stats): void {
   }
 }
 
-async function assertCanonicalPrivateDirectory(path: string): Promise<void> {
+async function resolveBackupFilesystemSecurity(
+  dependencies: BackupFilesystemSecurityDependencies,
+): Promise<ActiveBackupFilesystemSecurity> {
+  const platform = dependencies.platform ?? process.platform;
+  if (platform !== 'win32') return { platform, windows: undefined };
+  const authority = dependencies.windowsSecurity ?? windowsFilesystemSecurity;
+  const sid = await authority.currentUserSid();
+  return { platform, windows: { authority, sid } };
+}
+
+async function prepareBackupDestination(
+  requestedDirectory: string,
+  security: ActiveBackupFilesystemSecurity,
+): Promise<string> {
+  if (security.windows !== undefined && !(await pathExists(requestedDirectory))) {
+    const existingParent = await nearestExistingCanonicalDirectory(dirname(requestedDirectory));
+    await security.windows.authority.assertSafeParent(existingParent, security.windows.sid);
+  }
+
+  const firstCreatedDirectory = await mkdir(requestedDirectory, { recursive: true, mode: 0o700 });
+  const canonicalDirectory = await realpath(requestedDirectory);
+  if (security.windows !== undefined && firstCreatedDirectory !== undefined) {
+    await security.windows.authority.protectPrivateDirectory(
+      canonicalDirectory,
+      security.windows.sid,
+    );
+    await assertCanonicalPrivateDirectory(canonicalDirectory, security, true);
+    return canonicalDirectory;
+  }
+  await assertCanonicalPrivateDirectory(canonicalDirectory, security);
+  return canonicalDirectory;
+}
+
+async function nearestExistingCanonicalDirectory(start: string): Promise<string> {
+  let candidate = start;
+  while (true) {
+    try {
+      const canonicalCandidate = await realpath(candidate);
+      const stats = await lstat(canonicalCandidate);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        throw new Error('A parent of the backup destination is not an ordinary directory.');
+      }
+      return canonicalCandidate;
+    } catch (error) {
+      if (!isFileNotFound(error)) throw error;
+    }
+    const parent = dirname(candidate);
+    if (parent === candidate) {
+      throw new Error('Forgeboard could not find an existing backup destination parent.');
+    }
+    candidate = parent;
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (isFileNotFound(error)) return false;
+    throw error;
+  }
+}
+
+async function assertCanonicalPrivateDirectory(
+  path: string,
+  security: ActiveBackupFilesystemSecurity,
+  requireExactWindowsPrivacy = false,
+): Promise<void> {
   const stats = await lstat(path);
   if (!stats.isDirectory() || stats.isSymbolicLink()) {
     throw new Error('The backup destination is not an ordinary directory.');
@@ -270,12 +403,29 @@ async function assertCanonicalPrivateDirectory(path: string): Promise<void> {
   if ((await realpath(path)) !== path) {
     throw new Error('The backup destination is no longer canonical.');
   }
-  assertPrivateDirectory(stats);
+  if (security.windows !== undefined) {
+    if (requireExactWindowsPrivacy) {
+      await security.windows.authority.assertPrivateDirectory(path, security.windows.sid);
+    } else {
+      await security.windows.authority.assertConfidentialParent(path, security.windows.sid);
+    }
+    return;
+  }
+  assertPrivateDirectory(stats, security.platform);
 }
 
-async function removeContainedOrdinaryFile(path: string, expectedParent: string): Promise<void> {
+async function removeContainedOrdinaryFile(
+  path: string,
+  expectedParent: string,
+  security: ActiveBackupFilesystemSecurity,
+  requireExactWindowsParentPrivacy = false,
+): Promise<void> {
   try {
-    await assertCanonicalPrivateDirectory(expectedParent);
+    await assertCanonicalPrivateDirectory(
+      expectedParent,
+      security,
+      requireExactWindowsParentPrivacy,
+    );
     const stats = await lstat(path);
     if (!stats.isFile() || stats.isSymbolicLink()) return;
     const canonicalPath = await realpath(path);
@@ -298,8 +448,9 @@ async function removeContainedOrdinaryFile(path: string, expectedParent: string)
 async function cleanupBackupStagingDirectory(
   stagingDirectory: string,
   expectedParent: string,
+  security: ActiveBackupFilesystemSecurity,
 ): Promise<void> {
-  await assertCanonicalPrivateDirectory(expectedParent);
+  await assertCanonicalPrivateDirectory(expectedParent, security);
   let canonicalStagingDirectory: string;
   try {
     canonicalStagingDirectory = await realpath(stagingDirectory);
@@ -313,7 +464,7 @@ async function cleanupBackupStagingDirectory(
   ) {
     return;
   }
-  await assertCanonicalPrivateDirectory(canonicalStagingDirectory);
+  await assertCanonicalPrivateDirectory(canonicalStagingDirectory, security, true);
   for (const name of [
     'backup.sqlite3',
     'backup.sqlite3-wal',
@@ -323,6 +474,8 @@ async function cleanupBackupStagingDirectory(
     await removeContainedOrdinaryFile(
       join(canonicalStagingDirectory, name),
       canonicalStagingDirectory,
+      security,
+      true,
     );
   }
   try {
@@ -361,7 +514,10 @@ function assertRecordedBackupPath(backup: BackupRow): string {
   return backupPath;
 }
 
-async function removeRecordedBackup(backup: BackupRow): Promise<'removed' | 'missing'> {
+async function removeRecordedBackup(
+  backup: BackupRow,
+  security: ActiveBackupFilesystemSecurity,
+): Promise<'removed' | 'missing'> {
   const backupPath = assertRecordedBackupPath(backup);
   const canonicalParent = dirname(backupPath);
   let backupStats: Stats;
@@ -374,7 +530,7 @@ async function removeRecordedBackup(backup: BackupRow): Promise<'removed' | 'mis
   if (!backupStats.isFile() || backupStats.isSymbolicLink()) {
     throw new Error('A recorded backup is no longer an ordinary file.');
   }
-  await assertCanonicalPrivateDirectory(canonicalParent);
+  await assertCanonicalPrivateDirectory(canonicalParent, security);
   if ((await realpath(backupPath)) !== backupPath) {
     throw new Error('A recorded backup path escaped its original directory.');
   }
@@ -382,7 +538,7 @@ async function removeRecordedBackup(backup: BackupRow): Promise<'removed' | 'mis
   if (digest.sha256 !== backup.sha256 || digest.sizeBytes !== backup.size_bytes) {
     throw new Error('A recorded backup changed after Forgeboard created it.');
   }
-  await assertCanonicalPrivateDirectory(canonicalParent);
+  await assertCanonicalPrivateDirectory(canonicalParent, security);
   const finalStats = await lstat(backupPath);
   if (
     !finalStats.isFile() ||

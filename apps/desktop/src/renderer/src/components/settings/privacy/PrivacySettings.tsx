@@ -10,8 +10,12 @@ import type {
 } from '../../../../../shared/application/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
 import { RecoverySettings } from './RecoverySettings.js';
+import { numericDraftValue } from '../fields/numeric-draft.js';
+import { FolderReadinessEvidence } from '../readiness/FolderReadinessEvidence.js';
+import type { FolderReadinessStatus } from '../readiness/useSettingsFolderReadiness.js';
 import { InfoPath, SettingsSection, type AsyncSettingsProps } from '../shared.js';
 import { TrustCenter } from '../../integrity/TrustCenter.js';
+import { SettingsRepairHistory } from './repair/SettingsRepairHistory.js';
 
 interface PrivacySettingsProps extends AsyncSettingsProps {
   info: AppInfo;
@@ -26,6 +30,7 @@ interface PrivacySettingsProps extends AsyncSettingsProps {
   onDeleteAll: (confirmation: string) => Promise<void>;
   onFlushActiveCanvas: () => Promise<boolean>;
   onRecoveryApplied: () => Promise<void>;
+  backupReadiness?: FolderReadinessStatus | undefined;
 }
 
 export function PrivacySettings({
@@ -45,6 +50,7 @@ export function PrivacySettings({
   onDeleteAll,
   onFlushActiveCanvas,
   onRecoveryApplied,
+  backupReadiness,
 }: PrivacySettingsProps) {
   const [backupHealth, setBackupHealth] = useState<BackupHealth | null>(null);
   const [backupHealthError, setBackupHealthError] = useState<string | null>(null);
@@ -71,6 +77,7 @@ export function PrivacySettings({
     draft.backupRetentionCount !== savedSettings.backupRetentionCount;
   return (
     <>
+      <SettingsRepairHistory onError={onError} onNotice={setNotice} />
       <SettingsSection
         title="Providers & outbound integrations"
         description="Forgeboard has no model proxy or telemetry. Installed CLIs connect only when you approve their exact local launch."
@@ -115,9 +122,12 @@ export function PrivacySettings({
             name="transcript-retention-days"
             min="1"
             max="3650"
-            value={draft.transcriptRetentionDays}
+            value={numericDraftValue(draft.transcriptRetentionDays)}
             onChange={(event) =>
-              setDraft({ ...draft, transcriptRetentionDays: event.target.valueAsNumber })
+              setDraft({
+                ...draft,
+                transcriptRetentionDays: event.target.valueAsNumber,
+              })
             }
           />
         </label>
@@ -129,9 +139,12 @@ export function PrivacySettings({
               name="audit-retention-days"
               min="1"
               max="3650"
-              value={draft.auditRetentionDays}
+              value={numericDraftValue(draft.auditRetentionDays)}
               onChange={(event) =>
-                setDraft({ ...draft, auditRetentionDays: event.target.valueAsNumber })
+                setDraft({
+                  ...draft,
+                  auditRetentionDays: event.target.valueAsNumber,
+                })
               }
             />
           </label>
@@ -142,9 +155,12 @@ export function PrivacySettings({
               name="snapshot-retention-count"
               min="1"
               max="10000"
-              value={draft.snapshotRetentionCount}
+              value={numericDraftValue(draft.snapshotRetentionCount)}
               onChange={(event) =>
-                setDraft({ ...draft, snapshotRetentionCount: event.target.valueAsNumber })
+                setDraft({
+                  ...draft,
+                  snapshotRetentionCount: event.target.valueAsNumber,
+                })
               }
             />
           </label>
@@ -156,9 +172,12 @@ export function PrivacySettings({
               min="250"
               max="60000"
               step="250"
-              value={draft.autosaveIntervalMs}
+              value={numericDraftValue(draft.autosaveIntervalMs)}
               onChange={(event) =>
-                setDraft({ ...draft, autosaveIntervalMs: event.target.valueAsNumber })
+                setDraft({
+                  ...draft,
+                  autosaveIntervalMs: event.target.valueAsNumber,
+                })
               }
             />
           </label>
@@ -187,9 +206,12 @@ export function PrivacySettings({
                   name="backup-interval-hours"
                   min="1"
                   max="168"
-                  value={draft.backupIntervalHours}
+                  value={numericDraftValue(draft.backupIntervalHours)}
                   onChange={(event) =>
-                    setDraft({ ...draft, backupIntervalHours: event.target.valueAsNumber })
+                    setDraft({
+                      ...draft,
+                      backupIntervalHours: event.target.valueAsNumber,
+                    })
                   }
                 />
               </label>
@@ -202,9 +224,12 @@ export function PrivacySettings({
                   aria-describedby="backup-retention-help"
                   min="1"
                   max="365"
-                  value={draft.backupRetentionCount}
+                  value={numericDraftValue(draft.backupRetentionCount)}
                   onChange={(event) =>
-                    setDraft({ ...draft, backupRetentionCount: event.target.valueAsNumber })
+                    setDraft({
+                      ...draft,
+                      backupRetentionCount: event.target.valueAsNumber,
+                    })
                   }
                 />
                 <small id="backup-retention-help">
@@ -240,7 +265,10 @@ export function PrivacySettings({
                     void perform(async () => {
                       const selected = unwrap(await window.forgeboard.projects.pickParent());
                       if (selected) {
-                        setDraft((current) => ({ ...current, backupDirectory: selected }));
+                        setDraft((current) => ({
+                          ...current,
+                          backupDirectory: selected,
+                        }));
                       }
                     })
                   }
@@ -254,6 +282,7 @@ export function PrivacySettings({
                   available only to your Windows account.
                 </small>
               )}
+              <FolderReadinessEvidence status={backupReadiness} />
             </div>
             <button
               type="button"

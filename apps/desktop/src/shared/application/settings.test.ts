@@ -69,6 +69,12 @@ describe('process settings', () => {
     ).toBe(false);
     expect(
       CommandConfigurationSchema.safeParse({
+        executable: 'node\t--version',
+        arguments: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      CommandConfigurationSchema.safeParse({
         executable: 'node',
         arguments: ['bad\0argument'],
       }).success,
@@ -168,6 +174,18 @@ describe('Custom permission settings', () => {
       CustomPermissionProfileSettingsSchema.safeParse({
         executablePolicy: 'allowlist',
         allowedExecutables: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      CustomPermissionProfileSettingsSchema.safeParse({
+        filesystem: 'explicit-paths',
+        readPaths: ['src\tprivate'],
+      }).success,
+    ).toBe(false);
+    expect(
+      CustomPermissionProfileSettingsSchema.safeParse({
+        executablePolicy: 'allowlist',
+        allowedExecutables: ['/usr/local/bin/codex\t--dangerous'],
       }).success,
     ).toBe(false);
     expect(

@@ -26,6 +26,7 @@ import type {
 import type { DockerReadiness } from '../../../../shared/docker/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 import { CommandBuilder } from '../configuration/CommandBuilder.js';
+import { FirstRunTour } from '../help/tour/FirstRunTour.js';
 import {
   EnvironmentAllowlistEditor,
   environmentAllowlistIssues,
@@ -745,6 +746,7 @@ export function SetupWizard(props: SetupWizardProps) {
                   </dd>
                 </div>
               </dl>
+              <FirstRunTour keyboardPreset={draft.keyboardPreset} headingLevel={2} />
             </div>
           )}
 

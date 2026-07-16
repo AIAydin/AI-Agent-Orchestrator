@@ -28,6 +28,23 @@ vi.mock('electron', () => ({
 }));
 
 import { IPC_CHANNELS, type AppSettings } from '../../shared/application/contracts.js';
+import type {
+  CommandReadinessRequest,
+  CommandReadinessResult,
+} from '../../shared/command-readiness/contracts.js';
+import type {
+  AgentReadinessRequest,
+  AgentReadinessResult,
+} from '../../shared/readiness/contracts.js';
+import type {
+  FolderReadinessRequest,
+  FolderReadinessResult,
+} from '../../shared/settings/folder-readiness.js';
+import type {
+  SettingsRepairEvidence,
+  SettingsRepairSummary,
+} from '../../shared/settings/repair/contracts.js';
+import { SettingsPersistenceReadinessVerifier } from './persistence-readiness.js';
 import { SettingsIpcService } from './settings-ipc.js';
 
 const temporaryDirectories: string[] = [];
@@ -54,6 +71,18 @@ afterEach(() => {
 });
 
 describe('SettingsIpcService transactions', () => {
+  it('refuses construction without a trusted save verifier', () => {
+    expect(
+      () =>
+        new SettingsIpcService(
+          {} as ConstructorParameters<typeof SettingsIpcService>[0],
+          {} as ConstructorParameters<typeof SettingsIpcService>[1],
+          () => settings(),
+          undefined as never,
+        ),
+    ).toThrow(/trusted main-process verifier/u);
+  });
+
   it('returns a validated default draft preserving onboarding without mutating storage', async () => {
     const current = settings({ onboardingCompleted: true, theme: 'dark' });
     const defaults = settings({ onboardingCompleted: false, theme: 'light' });
@@ -68,6 +97,7 @@ describe('SettingsIpcService transactions', () => {
     expect(fixture.store.getSettings).toHaveBeenCalledWith(defaults);
     expect(fixture.store.saveSettings).not.toHaveBeenCalled();
     expect(fixture.store.applyRetention).not.toHaveBeenCalled();
+    expect(fixture.onSettingsSaved).not.toHaveBeenCalled();
     expect(fixture.store.appendAudit).not.toHaveBeenCalled();
     fixture.service.dispose();
   });
@@ -88,6 +118,7 @@ describe('SettingsIpcService transactions', () => {
     });
     expect(fixture.store.saveSettings).not.toHaveBeenCalled();
     expect(fixture.store.applyRetention).not.toHaveBeenCalled();
+    expect(fixture.onSettingsSaved).not.toHaveBeenCalled();
     expect(fixture.store.appendAudit).not.toHaveBeenCalled();
     fixture.service.dispose();
   });
@@ -127,6 +158,287 @@ describe('SettingsIpcService transactions', () => {
     fixture.service.dispose();
   });
 
+  it('rejects a schema-valid configured-agent change without main-owned readiness evidence', async () => {
+    const current = settings();
+    const draft = settings({
+      agentExecutableOverrides: { codex: '/chosen/bin/codex' },
+      agentDefaultModels: { codex: 'gpt-5' },
+    });
+    const verifySettingsReadiness = vi.fn(() =>
+      Promise.reject(new Error('Refresh readiness for codex before saving.')),
+    );
+    const folderCheck = vi.fn();
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness },
+      { check: folderCheck },
+      { verifySettingsReadiness: vi.fn() },
+    );
+    const fixture = createFixture(
+      current,
+      settings(),
+      undefined,
+      undefined,
+      async (saved, next) => await readiness.verify(saved, next),
+    );
+
+    const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft);
+
+    expect(result).toMatchObject({ ok: false });
+    expect(verifySettingsReadiness).toHaveBeenCalledWith({
+      agentId: 'codex',
+      executableOverride: '/chosen/bin/codex',
+    });
+    expect(folderCheck).not.toHaveBeenCalled();
+    expect(fixture.store.saveSettings).not.toHaveBeenCalled();
+    expect(fixture.store.applyRetention).not.toHaveBeenCalled();
+    expect(fixture.onSettingsSaved).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
+  it('requires readiness when a previously configured built-in becomes the default', async () => {
+    const current = settings({ agentDefaultModels: { codex: 'gpt-5' } });
+    const draft = settings({
+      defaultAgent: 'codex',
+      agentDefaultModels: { codex: 'gpt-5' },
+    });
+    const verifySettingsReadiness = vi.fn(() =>
+      Promise.reject(new Error('Refresh readiness for codex before saving.')),
+    );
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness },
+      { check: vi.fn() },
+      { verifySettingsReadiness: vi.fn() },
+    );
+    const fixture = createFixture(
+      current,
+      settings(),
+      undefined,
+      undefined,
+      async (saved, next) => await readiness.verify(saved, next),
+    );
+
+    const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft);
+
+    expect(result).toMatchObject({ ok: false });
+    expect(verifySettingsReadiness).toHaveBeenCalledWith({ agentId: 'codex' });
+    expect(fixture.store.saveSettings).not.toHaveBeenCalled();
+    expect(fixture.onSettingsSaved).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
+  it('rejects a schema-valid changed folder when passive main preflight is not ready', async () => {
+    const current = settings();
+    const draft = settings({ worktreeRoot: '/tmp/changed-worktrees' });
+    const agentCheck = vi.fn();
+    const folderCheck = vi.fn((input: unknown) => {
+      const request = input as FolderReadinessRequest;
+      return Promise.resolve(folderReadiness(request, false));
+    });
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness: agentCheck },
+      { check: folderCheck },
+      { verifySettingsReadiness: vi.fn() },
+    );
+    const fixture = createFixture(
+      current,
+      settings(),
+      undefined,
+      undefined,
+      async (saved, next) => await readiness.verify(saved, next),
+    );
+
+    const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft);
+
+    expect(result).toMatchObject({ ok: false });
+    expect(folderCheck).toHaveBeenCalledWith({
+      purpose: 'managed-worktrees',
+      path: '/tmp/changed-worktrees',
+    });
+    expect(agentCheck).not.toHaveBeenCalled();
+    expect(fixture.store.saveSettings).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
+  it('rejects ready folder evidence that echoes a different path', async () => {
+    const current = settings();
+    const draft = settings({ worktreeRoot: '/tmp/changed-worktrees' });
+    const folderCheck = vi.fn((input: unknown) => {
+      const request = input as FolderReadinessRequest;
+      return Promise.resolve(folderReadiness({ ...request, path: '/tmp/other-folder' }, true));
+    });
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness: vi.fn() },
+      { check: folderCheck },
+      { verifySettingsReadiness: vi.fn() },
+    );
+    const fixture = createFixture(
+      current,
+      settings(),
+      undefined,
+      undefined,
+      async (saved, next) => await readiness.verify(saved, next),
+    );
+
+    await expect(
+      requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft),
+    ).resolves.toMatchObject({ ok: false });
+    expect(fixture.store.saveSettings).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
+  it('does not require a destination preflight when backups are being disabled', async () => {
+    const current = settings();
+    const draft = settings({
+      backupsEnabled: false,
+      backupDirectory: '/tmp/replacement-that-will-not-be-used',
+    });
+    const folderCheck = vi.fn();
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness: vi.fn() },
+      { check: folderCheck },
+      { verifySettingsReadiness: vi.fn() },
+    );
+    const fixture = createFixture(
+      current,
+      settings(),
+      undefined,
+      undefined,
+      async (saved, next) => await readiness.verify(saved, next),
+    );
+
+    await expect(requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft)).resolves.toEqual(
+      { ok: true, value: draft },
+    );
+    expect(folderCheck).not.toHaveBeenCalled();
+    expect(fixture.store.saveSettings).toHaveBeenCalledWith(draft);
+    expect(fixture.onSettingsSaved).toHaveBeenCalledWith(draft);
+    fixture.service.dispose();
+  });
+
+  it('rejects a schema-valid command change without main-bound passive readiness', async () => {
+    const current = settings();
+    const draft = settings({
+      lintCommand: { executable: '/usr/local/bin/eslint', arguments: ['--max-warnings=0'] },
+    });
+    const verifyCommand = vi.fn(() =>
+      Promise.reject(new Error('Wait for command readiness to finish for the current draft.')),
+    );
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness: vi.fn() },
+      { check: vi.fn() },
+      { verifySettingsReadiness: verifyCommand },
+    );
+    const fixture = createFixture(
+      current,
+      settings(),
+      undefined,
+      undefined,
+      async (saved, next) => await readiness.verify(saved, next),
+    );
+
+    const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft);
+
+    expect(result).toMatchObject({ ok: false });
+    expect(verifyCommand).toHaveBeenCalledWith({
+      purpose: 'check',
+      command: draft.lintCommand,
+    });
+    expect(fixture.store.saveSettings).not.toHaveBeenCalled();
+    expect(fixture.store.applyRetention).not.toHaveBeenCalled();
+    expect(fixture.onSettingsSaved).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
+  it('persists only after exact agent, command, and folder checks pass in main', async () => {
+    const current = settings();
+    const defaults = settings({ onboardingCompleted: false });
+    const draft = settings({
+      agentExecutableOverrides: { codex: '/chosen/bin/codex' },
+      agentDefaultModels: { codex: 'gpt-5' },
+      worktreeRoot: '/tmp/changed-worktrees',
+      backupDirectory: '/tmp/changed-backups',
+      lintCommand: { executable: '/usr/local/bin/eslint', arguments: ['--max-warnings=0'] },
+      customChecks: [
+        {
+          id: '10000000-0000-4000-8000-000000000001',
+          label: 'Security scan',
+          command: { executable: '/usr/local/bin/scan', arguments: ['--strict'] },
+        },
+      ],
+    });
+    const verifySettingsReadiness = vi.fn((input: unknown) =>
+      Promise.resolve(agentReadiness(input as AgentReadinessRequest)),
+    );
+    const folderCheck = vi.fn((input: unknown) =>
+      Promise.resolve(folderReadiness(input as FolderReadinessRequest, true)),
+    );
+    const verifyCommand = vi.fn((input: Pick<CommandReadinessRequest, 'purpose' | 'command'>) =>
+      Promise.resolve(commandReadiness(input)),
+    );
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness },
+      { check: folderCheck },
+      { verifySettingsReadiness: verifyCommand },
+    );
+    const fixture = createFixture(
+      current,
+      defaults,
+      undefined,
+      undefined,
+      async (saved, next) => await readiness.verify(saved, next),
+    );
+
+    const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft);
+
+    expect(result).toEqual({ ok: true, value: draft });
+    expect(verifySettingsReadiness).toHaveBeenCalledWith({
+      agentId: 'codex',
+      executableOverride: '/chosen/bin/codex',
+    });
+    expect(folderCheck.mock.calls.map(([request]) => request)).toEqual([
+      { purpose: 'managed-worktrees', path: '/tmp/changed-worktrees' },
+      { purpose: 'backup-destination', path: '/tmp/changed-backups' },
+    ]);
+    expect(verifyCommand.mock.calls.map(([request]) => request)).toEqual([
+      { purpose: 'check', command: draft.lintCommand },
+      { purpose: 'check', command: draft.customChecks?.[0]?.command },
+    ]);
+    const verificationOrders = [
+      verifySettingsReadiness.mock.invocationCallOrder[0],
+      ...verifyCommand.mock.invocationCallOrder,
+      ...folderCheck.mock.invocationCallOrder,
+    ].filter((order): order is number => order !== undefined);
+    expect(Math.max(...verificationOrders)).toBeLessThan(
+      fixture.store.saveSettings.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(fixture.store.saveSettings).toHaveBeenCalledWith(draft);
+    expect(fixture.onSettingsSaved).toHaveBeenCalledWith(draft);
+    fixture.service.dispose();
+  });
+
+  it('rechecks main-frame authority after save-time verification before persistence', async () => {
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const fixture = createFixture(settings(), settings(), undefined, undefined, async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    const event = liveEvent();
+    const resultPromise = requiredHandler(IPC_CHANNELS.settingsUpdate)(
+      event,
+      settings({
+        worktreeRoot: '/tmp/changed-worktrees',
+      }),
+    );
+    await entered.promise;
+    Object.defineProperty(event, 'senderFrame', { value: {} });
+    release.resolve();
+
+    await expect(resultPromise).resolves.toMatchObject({ ok: false });
+    expect(fixture.store.saveSettings).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
   it('exports persisted collaboration identity without a session credential', async () => {
     const current = settings({
       collaborationSubject: 'team-editor',
@@ -157,6 +469,52 @@ describe('SettingsIpcService transactions', () => {
     fixture.service.dispose();
   });
 
+  it('lists, reviews, and explicitly exports preserved settings repair evidence', async () => {
+    const fixture = createFixture(settings(), settings());
+    const evidence = repairEvidence();
+    fixture.store.listSettingsRepairs.mockReturnValueOnce([
+      {
+        id: evidence.id,
+        repairedAt: evidence.repairedAt,
+        sourceDatabaseVersion: evidence.sourceDatabaseVersion,
+        repairedFieldPaths: evidence.repairedFieldPaths,
+        sourceSettingsSha256: evidence.sourceSettingsSha256,
+        repairedSettingsSha256: evidence.repairedSettingsSha256,
+      },
+    ]);
+    fixture.store.getSettingsRepair.mockReturnValue(evidence);
+
+    await expect(requiredHandler(IPC_CHANNELS.settingsRepairList)(liveEvent())).resolves.toEqual({
+      ok: true,
+      value: [expect.objectContaining({ id: evidence.id })],
+    });
+    await expect(
+      requiredHandler(IPC_CHANNELS.settingsRepairGet)(liveEvent(), evidence.id),
+    ).resolves.toEqual({ ok: true, value: evidence });
+    expect(fixture.store.appendAudit).toHaveBeenCalledWith(
+      'settings',
+      'repair-evidence-review',
+      'allowed',
+      { repairId: evidence.id },
+    );
+
+    const directory = mkdtempSync(join(tmpdir(), 'forgeboard-settings-repair-ipc-'));
+    temporaryDirectories.push(directory);
+    const exportPath = join(directory, 'repair.json');
+    fixture.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: exportPath });
+    electronMock.fromWebContents.mockReturnValue(liveParent());
+    await expect(
+      requiredHandler(IPC_CHANNELS.settingsRepairExport)(liveEvent(), evidence.id),
+    ).resolves.toEqual({ ok: true, value: exportPath });
+    const exported = JSON.parse(readFileSync(exportPath, 'utf8')) as Record<string, unknown>;
+    expect(exported).toMatchObject({
+      format: 'forgeboard-settings-repair-evidence',
+      version: 1,
+      repair: { id: evidence.id, sourceSettingsJson: evidence.sourceSettingsJson },
+    });
+    fixture.service.dispose();
+  });
+
   it('keeps update as the sole save, retention, and applied-mutation audit path', async () => {
     const current = settings();
     const defaults = settings({ onboardingCompleted: false });
@@ -166,7 +524,8 @@ describe('SettingsIpcService transactions', () => {
     const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft);
 
     expect(result).toEqual({ ok: true, value: draft });
-    expect(fixture.store.getSettings).not.toHaveBeenCalled();
+    expect(fixture.store.getSettings).toHaveBeenCalledOnce();
+    expect(fixture.store.getSettings).toHaveBeenCalledWith(defaults);
     expect(fixture.store.saveSettings).toHaveBeenCalledTimes(1);
     expect(fixture.store.saveSettings).toHaveBeenCalledWith(draft);
     expect(fixture.store.applyRetention).toHaveBeenCalledTimes(1);
@@ -230,13 +589,16 @@ function createFixture(
   current: AppSettings,
   defaults: AppSettings,
   importPath?: string,
-  runOperation?: ConstructorParameters<typeof SettingsIpcService>[4],
+  runOperation?: ConstructorParameters<typeof SettingsIpcService>[5],
+  verifyUpdate: ConstructorParameters<typeof SettingsIpcService>[3] = () => Promise.resolve(),
 ) {
   const store = {
     getSettings: vi.fn(() => current),
     saveSettings: vi.fn((draft: AppSettings) => draft),
     applyRetention: vi.fn(() => retention),
     appendAudit: vi.fn(),
+    listSettingsRepairs: vi.fn((): SettingsRepairSummary[] => []),
+    getSettingsRepair: vi.fn((): SettingsRepairEvidence | undefined => undefined),
   };
   const dialog = {
     showOpenDialog: vi.fn(() =>
@@ -250,15 +612,89 @@ function createFixture(
       (): Promise<SaveDialogReturnValue> => Promise.resolve({ canceled: true, filePath: '' }),
     ),
   };
+  const onSettingsSaved = vi.fn();
   const service = new SettingsIpcService(
     dialog as unknown as ConstructorParameters<typeof SettingsIpcService>[0],
     store as unknown as ConstructorParameters<typeof SettingsIpcService>[1],
     () => defaults,
-    undefined,
+    verifyUpdate,
+    onSettingsSaved,
     runOperation,
   );
   service.registerIpcHandlers();
-  return { dialog, service, store };
+  return { dialog, onSettingsSaved, service, store };
+}
+
+function repairEvidence(): SettingsRepairEvidence {
+  const sourceSettingsJson = JSON.stringify({ worktreeRoot: 'relative' });
+  const repairedSettingsJson = JSON.stringify(settings());
+  return {
+    id: '30000000-0000-4000-8000-000000000001',
+    repairedAt: '2026-07-16T12:00:00.000Z',
+    sourceDatabaseVersion: 12,
+    repairedFieldPaths: ['worktreeRoot'],
+    sourceSettingsSha256: 'a'.repeat(64),
+    repairedSettingsSha256: 'b'.repeat(64),
+    sourceSettingsJson,
+    repairedSettingsJson,
+  };
+}
+
+function agentReadiness(request: AgentReadinessRequest): AgentReadinessResult {
+  const source =
+    request.agentId === 'test-agent'
+      ? 'bundled'
+      : request.agentId === 'custom'
+        ? 'custom'
+        : request.executableOverride === undefined
+          ? 'automatic'
+          : 'override';
+  return {
+    schemaVersion: 1,
+    agentId: request.agentId,
+    state: 'ready',
+    ready: true,
+    source,
+    executable:
+      request.agentId === 'custom'
+        ? request.configuration.executable
+        : request.agentId === 'test-agent'
+          ? '/bundled/test-agent'
+          : (request.executableOverride ?? `/usr/bin/${request.agentId}`),
+    version: '1.0.0',
+    checkedAt: '2026-07-15T12:00:00.000Z',
+    reason: null,
+    warnings: [],
+  };
+}
+
+function folderReadiness(request: FolderReadinessRequest, ready: boolean): FolderReadinessResult {
+  return {
+    schemaVersion: 1,
+    request,
+    state: ready ? 'ready-existing' : 'not-writable',
+    ready,
+    checkedAt: '2026-07-15T12:00:00.000Z',
+    reason: ready ? null : 'Choose a writable folder with Browse.',
+    warning: null,
+  };
+}
+
+function commandReadiness(
+  request: Pick<CommandReadinessRequest, 'purpose' | 'command'>,
+): CommandReadinessResult {
+  return {
+    schemaVersion: 1,
+    request: { ...request, projectId: null },
+    state: 'ready',
+    ready: true,
+    validationScope: 'executable',
+    resolvedExecutable: request.command.executable,
+    projectName: null,
+    checkedAt: '2026-07-15T12:00:00.000Z',
+    reason: null,
+    warning: null,
+  };
 }
 
 function requiredHandler(channel: string) {

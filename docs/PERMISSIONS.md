@@ -18,10 +18,48 @@ Readiness is not launch approval. Checking a draft override does not persist it,
 does not let the renderer start that executable. Every later agent run still uses the exact
 cancel-default launch review described below.
 
+The Settings UI applies the same rule to every explicitly configured provider, enabled custom CLI,
+preview command, and standard or custom check command. The save transaction independently enforces
+new changes: agent evidence must have been admitted by main after the exact confirmed probe and is
+re-hashed without another launch; command evidence must have come from a live main-frame request and
+is passively recomputed with the same project context. A changed worktree destination, or a newly
+enabled or changed backup destination, is checked directly by main before persistence. Imported
+drafts go through this same comparison when saved. During an upgrade, known legacy-only unsafe
+machine values are repaired before startup integrity validation, with unaffected fields preserved
+and device-local original/repaired evidence available in Data & Privacy. Unknown corruption still
+fails closed. Folder checks create or write nothing and return guidance without disclosing canonical
+or raw-error paths. Managed-worktree storage rejects an alias at either the destination or nearest
+existing parent. Backup storage may follow an alias only after checking the canonical target and
+showing that canonicalization as a warning; backup creation then uses and records the canonical
+destination.
+
 Every agent run has a cancel-default review step. The review shows the exact top-level executable,
 arguments, working directory, inherited environment-variable names, selected context, context
 hashes, effective permission profile, and known limitations. Cancelling releases the prepared run
 without starting the agent.
+
+Before main prepares that review, the renderer stores the current effective permission profile on
+the selected Agent and requires the exact canvas save to complete. Main reloads the persisted Agent
+and rejects a request whose prompt, adapter, or permission profile does not match it. A save failure
+therefore prevents preparation instead of running with transient renderer state or a fallback
+profile. The renderer saves again immediately before approval; after the native confirmation, main
+re-resolves the persisted configuration and context authority before launch.
+
+## Windows filesystem permission authority
+
+Windows folder and private-file decisions do not infer confidentiality from POSIX mode bits. Main
+invokes the system Windows PowerShell executable by absolute path, with no shell, a fixed encoded
+script, bounded output and time, and the target path passed only through an environment value. The
+authority reads the raw security descriptor to require a present DACL and to detect callback or
+otherwise unsupported raw ACEs before evaluating the exact bounded projected-rule report. A missing
+DACL, unsupported raw ACE, unexpected field or rule, unavailable identity/inspection service, or
+malformed report fails closed.
+
+The structural parent check rejects untrusted create, write, replace, delete, permission-change, and
+ownership-change authority while permitting read-only discovery. Existing backup destinations use a
+stricter confidential-parent check that also rejects untrusted read, list, and traverse access.
+Forgeboard-created private directories and files use protected DACLs owned by the current user SID
+with exactly current-SID and LocalSystem full-control rules; any later drift blocks the operation.
 
 ## Built-in profiles
 
@@ -129,8 +167,39 @@ pull executors.
 Permission to read visible worktree content is not permission to attach it to a provider prompt.
 Forgeboard context uses explicit File nodes and resolver-supplied manifest evidence. Each
 attachment carries its own SHA-256 digest; the source file, managed-worktree copy, and approved
-digest must match. Forgeboard rehashes attachments immediately before spawn. Ignored or sensitive
-files still require the existing exact per-file, high-friction override.
+digest must match. The review shows the logical selected paths and hashes; randomized runtime paths
+are intentionally not exposed to the renderer. Immediately before spawn, Electron main re-evaluates
+ignore and sensitive-path policy, opens each approved ordinary file without following symlinks, and
+copies its exact digest-bound bytes through a stable handle into a private per-run snapshot. The
+actual launch arguments, initial input, and context list use those snapshot files, not the mutable
+source paths.
+
+For Docker, Forgeboard adds one separate read-only snapshot mount at `/forgeboard-context`; the
+approved whole-worktree mount and its read/write policy do not change. Main retains the snapshot
+until the supervised session reaches a terminal result and removes it on completion or launch
+failure. On Windows, Host and Docker snapshots both remain under Forgeboard's per-user
+application-data folder in separate scope-and-SHA-256(SID) namespaces; the Docker managed root is
+still structurally checked, but never stores those private snapshot bytes. Root and instance markers
+bind the full current SID without placing it in the folder name. Snapshot parents, instances,
+per-run directories, and files are identity-checked and have their Windows DACLs revalidated when a
+snapshot is created and again immediately before the launch plan is bound.
+
+Normal startup warms and scavenges the host snapshot store only after Electron wins the
+single-instance lock. If that warm-up cannot verify the boundary, the desktop opens and retries when
+a context-bearing launch asks for storage; such a launch remains blocked until the checks pass. A
+fresh owner scans only direct children of the dedicated, marker-validated store. Ownership markers
+must be ordinary single-link files no larger than 4 KiB and are read through stable no-follow handles.
+The owner atomically quarantines and removes only validated dead or over-age prior instances,
+preserves recent live instances and foreign-SID entries, ignores unknown or symlink entries, and can
+finish a validated quarantine left by another crash. Managed-root validation is lazy and does not
+inspect project checkouts or arbitrary worktrees.
+
+Ordinary tree/File-node drag and keyboard linking accepts only normal, non-symlink files; ignored
+and sensitive files are not draggable. Directly moving a configured File-node center over an
+unlocked Agent links that exact existing node, while an ordinary move elsewhere remains a move.
+Read-only collaboration, locked nodes, directories, missing files, and cross-project targets fail
+closed. The broader exact per-file override UI remains unchecked rather than silently weakening this
+rule.
 
 ## Choosing a safe profile
 

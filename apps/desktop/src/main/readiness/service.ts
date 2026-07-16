@@ -6,7 +6,7 @@ import {
   type AgentAdapterManifest,
   type AgentDetectionResult,
 } from '@forgeboard/agent-adapters';
-import { TEST_AGENT_MANIFEST } from '@forgeboard/test-agent';
+import { TEST_AGENT_MANIFEST, TEST_AGENT_PACKAGE_VERSION } from '@forgeboard/test-agent';
 
 import {
   AgentReadinessRequestSchema,
@@ -14,6 +14,10 @@ import {
   type AgentReadinessRequest,
   type AgentReadinessResult,
 } from '../../shared/readiness/contracts.js';
+import {
+  expectedReadinessSource,
+  readinessRequestFingerprint,
+} from '../../shared/settings/readiness-requests.js';
 import { customAgentManifest } from '../custom-agent/custom-agent.js';
 import {
   readinessExecutableIdentity,
@@ -26,6 +30,13 @@ type ProbeAgent = typeof detectAgent;
 type IdentifyExecutable = typeof readinessExecutableIdentity;
 
 const READINESS_PLAN_TTL_MS = 5 * 60_000;
+const MAX_VERIFIED_SETTINGS_REQUESTS = 128;
+
+interface VerifiedSettingsReadiness {
+  readonly result: AgentReadinessResult;
+  readonly executable: string;
+  readonly executableIdentity: ReadinessExecutableIdentity;
+}
 
 export interface AgentReadinessServiceDependencies {
   readonly locateExecutable?: LocateExecutable;
@@ -63,6 +74,7 @@ export class AgentReadinessService {
   readonly #probeAgent: ProbeAgent;
   readonly #identifyExecutable: IdentifyExecutable;
   readonly #now: () => Date;
+  readonly #verifiedSettingsReadiness = new Map<string, VerifiedSettingsReadiness>();
 
   public constructor(
     private readonly testAgentPath: string,
@@ -82,7 +94,7 @@ export class AgentReadinessService {
   /** Performs validation and passive executable discovery without starting a process. */
   public async prepare(input: unknown): Promise<AgentReadinessPreparation> {
     const request = AgentReadinessRequestSchema.parse(input);
-    const source = readinessSource(request);
+    const source = expectedReadinessSource(request);
     let manifest: AgentAdapterManifest;
     try {
       manifest = manifestForRequest(request);
@@ -167,6 +179,7 @@ export class AgentReadinessService {
     authorizeProbe: (() => void) | undefined = undefined,
   ): Promise<AgentReadinessResult> {
     const { request, source, manifest } = plan;
+    this.#verifiedSettingsReadiness.delete(readinessRequestFingerprint(request));
     let located: AgentDetectionResult;
     try {
       located = await this.#locateExecutable(manifest, { executable: plan.executable });
@@ -236,12 +249,85 @@ export class AgentReadinessService {
         checkedAt: detection.checkedAt,
       });
     }
-    return this.#result(request, source, 'ready', {
+    const result = this.#result(request, source, 'ready', {
       executable: located.executable,
       version,
       warnings: detection.capabilityWarnings,
       checkedAt: detection.checkedAt,
     });
+    return result;
+  }
+
+  /** Admits evidence only after the IPC owner has been revalidated after the probe. */
+  public recordVerifiedSettingsReadiness(
+    plan: AgentReadinessProbePlan,
+    rawResult: AgentReadinessResult,
+  ): void {
+    const result = AgentReadinessResultSchema.parse(rawResult);
+    if (
+      !result.ready ||
+      result.agentId !== plan.request.agentId ||
+      result.source !== plan.source ||
+      result.executable !== plan.executable
+    ) {
+      throw new Error('Agent readiness evidence does not match its approved probe plan.');
+    }
+    this.#rememberSettingsReadiness(plan, result);
+  }
+
+  /** Re-resolves and re-hashes a prior successful probe without starting another process. */
+  public async verifySettingsReadiness(input: unknown): Promise<AgentReadinessResult> {
+    const request = AgentReadinessRequestSchema.parse(input);
+    const fingerprint = readinessRequestFingerprint(request);
+    let verified = this.#verifiedSettingsReadiness.get(fingerprint);
+    if (verified === undefined && request.agentId === 'test-agent') {
+      const prepared = await this.prepare(request);
+      if (prepared.outcome !== 'probe') {
+        throw new Error(
+          prepared.result.reason ?? 'The bundled deterministic agent is not ready for Settings.',
+        );
+      }
+      const bundled = this.#result(request, 'bundled', 'ready', {
+        executable: prepared.plan.executable,
+        version: TEST_AGENT_PACKAGE_VERSION,
+      });
+      this.#rememberSettingsReadiness(prepared.plan, bundled);
+      verified = this.#verifiedSettingsReadiness.get(fingerprint);
+    }
+    if (verified === undefined) {
+      throw new Error(
+        `Refresh readiness for ${request.agentId} from the current Settings draft before saving.`,
+      );
+    }
+    const prepared = await this.prepare(request);
+    if (prepared.outcome !== 'probe') {
+      this.#verifiedSettingsReadiness.delete(fingerprint);
+      throw new Error(
+        prepared.result.reason ??
+          `The current ${request.agentId} executable is no longer ready for Settings.`,
+      );
+    }
+    if (
+      prepared.plan.executable !== verified.executable ||
+      verified.result.executable !== verified.executable ||
+      verified.result.agentId !== request.agentId ||
+      verified.result.source !== prepared.plan.source ||
+      !verified.result.ready ||
+      !sameReadinessExecutable(prepared.plan.executableIdentity, verified.executableIdentity)
+    ) {
+      this.#verifiedSettingsReadiness.delete(fingerprint);
+      throw new Error(
+        `The ${request.agentId} executable changed after readiness was checked. Refresh readiness before saving.`,
+      );
+    }
+    // Refresh insertion order so actively used evidence wins bounded retention.
+    this.#verifiedSettingsReadiness.delete(fingerprint);
+    this.#verifiedSettingsReadiness.set(fingerprint, verified);
+    return AgentReadinessResultSchema.parse(verified.result);
+  }
+
+  public clearVerifiedSettingsReadiness(): void {
+    this.#verifiedSettingsReadiness.clear();
   }
 
   #result(
@@ -276,6 +362,20 @@ export class AgentReadinessService {
     if (!Number.isFinite(now.getTime())) throw new Error('Readiness time must be valid.');
     return now;
   }
+
+  #rememberSettingsReadiness(plan: AgentReadinessProbePlan, result: AgentReadinessResult): void {
+    const fingerprint = readinessRequestFingerprint(plan.request);
+    this.#verifiedSettingsReadiness.set(fingerprint, {
+      result: AgentReadinessResultSchema.parse(result),
+      executable: plan.executable,
+      executableIdentity: { ...plan.executableIdentity },
+    });
+    while (this.#verifiedSettingsReadiness.size > MAX_VERIFIED_SETTINGS_REQUESTS) {
+      const oldest = this.#verifiedSettingsReadiness.keys().next().value;
+      if (oldest === undefined) return;
+      this.#verifiedSettingsReadiness.delete(oldest);
+    }
+  }
 }
 
 function manifestForRequest(request: AgentReadinessRequest): AgentAdapterManifest {
@@ -296,12 +396,6 @@ function executableForRequest(
   if (request.agentId === 'test-agent') return testAgentPath;
   if (request.agentId === 'custom') return request.configuration.executable;
   return request.executableOverride ?? manifest.executable.command;
-}
-
-function readinessSource(request: AgentReadinessRequest): AgentReadinessResult['source'] {
-  if (request.agentId === 'test-agent') return 'bundled';
-  if (request.agentId === 'custom') return 'custom';
-  return request.executableOverride === undefined ? 'automatic' : 'override';
 }
 
 function validatedVersion(

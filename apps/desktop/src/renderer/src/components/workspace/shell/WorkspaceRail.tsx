@@ -1,7 +1,10 @@
 import { ChevronRight, Files, GitBranch, Layers3, Puzzle, Search } from 'lucide-react';
 
 import type { Project } from '../../../../../shared/application/contracts.js';
+import type { ProjectFileBrowserOperations } from '../../file-editor/browser/useProjectFileBrowser.js';
 import { NODE_DEFINITIONS, type NodeKind, type WorkshopNode } from '../canvas/CanvasNode.js';
+import { WorkspaceProjectTree } from '../context-dnd/WorkspaceProjectTree.js';
+import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import type { ExtensionTemplate } from '../model/types.js';
 
 interface WorkspaceRailProps {
@@ -11,13 +14,19 @@ interface WorkspaceRailProps {
   templates: NodeKind[];
   extensionTemplates: ExtensionTemplate[];
   nodes: WorkshopNode[];
+  fileOperations: ProjectFileBrowserOperations;
   initializingGit: boolean;
+  collaborationGraphReadOnly: boolean;
   onTabChange: (tab: 'project' | 'nodes') => void;
   onSearchChange: (value: string) => void;
   onAddNode: (kind: NodeKind) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
   onSelectNode: (node: WorkshopNode) => void;
+  onAttachAgentContext: (
+    targetNodeId: string,
+    payload: WorkspaceContextDragPayload,
+  ) => Promise<void>;
 }
 
 export function WorkspaceRail({
@@ -27,13 +36,16 @@ export function WorkspaceRail({
   templates,
   extensionTemplates,
   nodes,
+  fileOperations,
   initializingGit,
+  collaborationGraphReadOnly,
   onTabChange,
   onSearchChange,
   onAddNode,
   onAddExtensionNode,
   onInitializeGit,
   onSelectNode,
+  onAttachAgentContext,
 }: WorkspaceRailProps) {
   return (
     <aside className="project-rail">
@@ -66,15 +78,24 @@ export function WorkspaceRail({
         />
       </div>
       {tab === 'project' ? (
-        <ProjectTemplates
-          project={project}
-          templates={templates}
-          extensionTemplates={extensionTemplates}
-          initializingGit={initializingGit}
-          onAddNode={onAddNode}
-          onAddExtensionNode={onAddExtensionNode}
-          onInitializeGit={onInitializeGit}
-        />
+        <>
+          <WorkspaceProjectTree
+            projectId={project.id}
+            operations={fileOperations}
+            agentTargets={nodes}
+            readOnly={collaborationGraphReadOnly}
+            onAttach={onAttachAgentContext}
+          />
+          <ProjectTemplates
+            project={project}
+            templates={templates}
+            extensionTemplates={extensionTemplates}
+            initializingGit={initializingGit}
+            onAddNode={onAddNode}
+            onAddExtensionNode={onAddExtensionNode}
+            onInitializeGit={onInitializeGit}
+          />
+        </>
       ) : (
         <CanvasNodeList nodes={nodes} onSelectNode={onSelectNode} />
       )}

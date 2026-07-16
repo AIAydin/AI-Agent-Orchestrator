@@ -439,8 +439,21 @@ describe('parallel worktree change lifecycle', () => {
       'picked content\n',
     );
 
+    // A direct-child cherry-pick can recreate the source commit byte-for-byte when Git records the
+    // same identity and second-resolution timestamp. Advance main so moving source-change below is
+    // guaranteed to change its OID and exercises stale-source rejection rather than an empty pick.
+    await runGit(fixture.repository, [
+      'commit',
+      '--allow-empty',
+      '-m',
+      'Advance main before stale source check',
+    ]);
     const beforeStalePick = await changes.approvalSnapshot(fixture.repository);
+    expect(beforeStalePick.expectedHead).not.toBe(sourceCommit);
     await runGit(fixture.repository, ['branch', '-f', 'source-change', 'main']);
+    expect(await repositories.resolveRef(fixture.repository, 'source-change')).toBe(
+      beforeStalePick.expectedHead,
+    );
     await expect(
       changes.cherryPick(fixture.repository, {
         action: 'cherry-pick',

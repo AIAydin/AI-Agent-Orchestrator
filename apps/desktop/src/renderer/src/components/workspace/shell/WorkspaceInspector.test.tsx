@@ -19,6 +19,7 @@ import type {
   FileTreeResult,
 } from '../../../../../shared/files/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import { readWorkspaceContextDrag, WORKSPACE_CONTEXT_DRAG_MIME } from '../context-dnd/contracts.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
 
 afterEach(() => {
@@ -73,7 +74,9 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByText('Custom · host disclosure-only')).toBeTruthy();
     expect(screen.getByText(/Primary-branch review always required/u)).toBeTruthy();
     fireEvent.change(profileSelect, { target: { value: 'worktree-write' } });
-    expect(onUpdateSelected).toHaveBeenCalledWith({ permissionProfile: 'worktree-write' });
+    expect(onUpdateSelected).toHaveBeenCalledWith({
+      permissionProfile: 'worktree-write',
+    });
 
     const dockerSettings = settings({
       customPermissionProfile: {
@@ -108,9 +111,11 @@ describe('WorkspaceInspector Custom permissions', () => {
     const selectedNode = agentNode({ locked: true });
     render(<WorkspaceInspector {...props(settings(), selectedNode)} />);
 
-    expect(screen.getByRole('status').textContent).toMatch(/node is locked/u);
+    expect(screen.getByText(/This node is locked/u)).toBeTruthy();
     expect(
-      screen.getByRole<HTMLFieldSetElement>('group', { name: 'Node configuration' }),
+      screen.getByRole<HTMLFieldSetElement>('group', {
+        name: 'Node configuration',
+      }),
     ).toHaveProperty('disabled', true);
     expect(screen.getByLabelText<HTMLInputElement>('Title').matches(':disabled')).toBe(true);
     expect(screen.getByLabelText<HTMLTextAreaElement>('Description').matches(':disabled')).toBe(
@@ -174,6 +179,29 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
   });
 
+  it('drags a clean primary editor tab as its exact File-node identity', async () => {
+    const read = vi.fn().mockResolvedValue(fileDocument('src/index.ts'));
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: { files: fileApi({ read }) },
+    });
+    render(<WorkspaceInspector {...props(settings(), fileNode({}))} />);
+    const tab = screen.getByRole('tab', { name: 'index.ts' });
+    await waitFor(() => expect(tab.getAttribute('draggable')).toBe('true'));
+    const transfer = dataTransfer();
+
+    fireEvent.dragStart(tab, { dataTransfer: transfer });
+
+    expect(readWorkspaceContextDrag(transfer)).toEqual({
+      schemaVersion: 1,
+      kind: 'project-file',
+      projectId: project.id,
+      relativePath: 'src/index.ts',
+      sourceNodeId: 'file-1',
+    });
+    expect(transfer.getData(WORKSPACE_CONTEXT_DRAG_MIME)).not.toContain(project.path);
+  });
+
   it('assigns an unlinked File node from the bounded project-relative browser', async () => {
     const document = fileDocument('src/index.ts');
     const tree = vi.fn((input: FileTreeInput) =>
@@ -209,7 +237,10 @@ describe('WorkspaceInspector Custom permissions', () => {
         lastKnownHash: document.sha256,
       },
     });
-    expect(tree).toHaveBeenCalledWith({ projectId: project.id, directory: '.' });
+    expect(tree).toHaveBeenCalledWith({
+      projectId: project.id,
+      directory: '.',
+    });
     expect(read).toHaveBeenCalledWith({
       projectId: project.id,
       relativePath: 'src/index.ts',
@@ -251,7 +282,11 @@ describe('WorkspaceInspector Custom permissions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Change file' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open folder src' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Inspect file src/replacement.ts' }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Inspect file src/replacement.ts',
+      }),
+    );
     fireEvent.click(await screen.findByRole('button', { name: 'Open in editor' }));
 
     expect(inspectorProps.onUpdateSelected).toHaveBeenCalledWith({
@@ -305,9 +340,22 @@ describe('WorkspaceInspector Custom permissions', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open src/other.ts at 4:2' }));
 
     await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(2));
-    expect(screen.getByRole('tab', { name: 'other.ts' })).toHaveProperty('ariaSelected', 'true');
+    const otherTab = screen.getByRole('tab', { name: 'other.ts' });
+    expect(otherTab).toHaveProperty('ariaSelected', 'true');
+    await waitFor(() => expect(otherTab.getAttribute('draggable')).toBe('true'));
+    const transfer = dataTransfer();
+    fireEvent.dragStart(otherTab, { dataTransfer: transfer });
+    expect(readWorkspaceContextDrag(transfer)).toEqual({
+      schemaVersion: 1,
+      kind: 'project-file',
+      projectId: project.id,
+      relativePath: 'src/other.ts',
+    });
     expect(inspectorProps.onUpdateSelected).not.toHaveBeenCalled();
-    expect(read).toHaveBeenCalledWith({ projectId: project.id, relativePath: 'src/other.ts' });
+    expect(read).toHaveBeenCalledWith({
+      projectId: project.id,
+      relativePath: 'src/other.ts',
+    });
   });
 });
 
@@ -325,6 +373,11 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     previewSession: null,
     runInput: '',
     preparingRun: false,
+    sharedComments: [],
+    rejectedSharedCommentEntries: [],
+    canComment: false,
+    onCreateComment: vi.fn().mockResolvedValue(false),
+    onDiscardRejectedComment: vi.fn().mockResolvedValue(false),
     onClearSelection: vi.fn(),
     onRecord: vi.fn(),
     onUpdateSelected: vi.fn(),
@@ -337,6 +390,9 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     onControlRun: vi.fn(),
     onPrepareRun: vi.fn(),
     onPreviewSession: vi.fn(),
+    collaborationGraphReadOnly: false,
+    onAttachAgentContext: vi.fn().mockResolvedValue(undefined),
+    onRemoveAgentContext: vi.fn(),
     onOpenSettings: vi.fn(),
     onError: vi.fn(),
   };
@@ -483,4 +539,26 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     collaborationUrl: '',
     ...overrides,
   });
+}
+
+function dataTransfer(): DataTransfer {
+  const values = new Map<string, string>();
+  const transfer = {
+    effectAllowed: 'uninitialized',
+    dropEffect: 'none',
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    clearData: (format?: string) => {
+      if (format === undefined) values.clear();
+      else values.delete(format);
+    },
+    getData: (format: string) => values.get(format) ?? '',
+    setData: (format: string, value: string) => {
+      values.set(format, value);
+    },
+    setDragImage: () => undefined,
+  };
+  return Object.defineProperty(transfer, 'types', {
+    get: () => [...values.keys()],
+  }) as unknown as DataTransfer;
 }

@@ -7,6 +7,8 @@ import { createConnection, createServer } from 'node:net';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+import { normalizePreviewLoopbackHost } from '../../shared/settings/values.js';
+
 const LOOPBACK_HOST = '127.0.0.1';
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
 const DEFAULT_LOG_LIMIT_BYTES = 1024 * 1024;
@@ -532,7 +534,11 @@ export class PreviewService {
     const checks = readinessChecks(readiness, running.port);
     if (checks.length === 0) {
       running.status = 'ready';
-      this.emit({ type: 'process-ready', sessionId: session.id, processId: running.definition.id });
+      this.emit({
+        type: 'process-ready',
+        sessionId: session.id,
+        processId: running.definition.id,
+      });
       return;
     }
 
@@ -709,8 +715,8 @@ export async function canonicalPreviewCwd(
 export function validateTrustedHosts(hosts: readonly string[]): string[] {
   const normalized = new Set<string>([LOOPBACK_HOST]);
   for (const host of hosts) {
-    const value = normalizeHostname(host);
-    if (!isLoopbackHostname(value)) {
+    const value = normalizePreviewLoopbackHost(host);
+    if (value === null) {
       throw new Error(`Preview trusted host must be loopback-only: ${host}`);
     }
     normalized.add(value);
@@ -1081,7 +1087,10 @@ async function probeHttp(
       url,
       {
         agent: false,
-        headers: { connection: 'close', 'user-agent': 'Forgeboard-Preview-Readiness/1' },
+        headers: {
+          connection: 'close',
+          'user-agent': 'Forgeboard-Preview-Readiness/1',
+        },
       },
       (response) => {
         const status = response.statusCode ?? 0;
@@ -1204,7 +1213,10 @@ function snapshotSession(session: RunningSession): PreviewSessionSnapshot {
       exitCode: process.exitCode,
       exitSignal: process.exitSignal,
       retainedLogBytes: process.retainedLogBytes,
-      logs: process.logs.map((log) => ({ ...log, data: Buffer.from(log.data) })),
+      logs: process.logs.map((log) => ({
+        ...log,
+        data: Buffer.from(log.data),
+      })),
     })),
   };
 }

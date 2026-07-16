@@ -21,7 +21,7 @@ const COMMIT_MESSAGE = 'Commit isolated deterministic agent work';
 
 test('onboarding can run, review, commit, restart, and deliver isolated agent work to primary', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-worktree-review-e2e-'));
-  const managedWorktreeRoot = join(userDataDirectory, 'ui-configured-worktrees');
+  const managedWorktreeRoot = join(await realpath(userDataDirectory), 'ui-configured-worktrees');
   const externalRequests: string[] = [];
   let electronApp: ElectronApplication | null = null;
 

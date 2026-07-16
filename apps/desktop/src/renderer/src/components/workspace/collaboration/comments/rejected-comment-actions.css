@@ -1,0 +1,13 @@
+.rejected-comment-discard-confirmation {
+  display: grid;
+  gap: 5px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line);
+}
+
+.rejected-comment-discard-confirmation > span,
+.rejected-comment-discard-confirmation > small {
+  color: var(--text-faint);
+  font-size: 10px;
+}

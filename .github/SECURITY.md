@@ -83,22 +83,49 @@ while a Custom Docker whole-worktree bind technically exposes every file present
 Approved native checks remain ordinary user processes and can access other filesystem locations or
 the network according to operating-system permissions.
 
+On Windows, main uses a fixed, bounded script through the absolute system PowerShell executable with
+`shell: false`; an untrusted path is passed only as an environment value. The resulting exact-schema
+report requires a present raw DACL and separately flags callback or otherwise unsupported raw ACEs
+that projected access rules might omit. Missing identity or inspection services, an absent DACL,
+unsupported ACEs, excess/unexpected rules or fields, and malformed output all fail closed. Structural
+parents reject untrusted write, replace, delete, ACL-change, or ownership-change authority;
+confidential parents also reject untrusted read, list, and traverse access. Forgeboard-created private
+objects must have a protected DACL owned by the current SID with exactly current-SID and LocalSystem
+full-control rules.
+
+Managed-worktree settings reject a symbolic-link or noncanonical alias at the destination or nearest
+existing parent so later worktree identity cannot silently change. Backup settings deliberately
+canonicalize an alias, check the resolved target, and disclose the behavior without returning that
+host path through IPC; creation and ledger records then use the canonical destination.
+
+Immediately before an agent launch, selected context is copied through stable ordinary-file handles
+to a private per-run snapshot. On Windows, Host and Docker snapshots stay below the per-user app-data
+directory in scope-and-SID-hash namespaces; full-SID markers prevent cross-account ownership, while
+exact directory and file DACLs and stable identities are rechecked at bind time. Ownership markers
+are ordinary single-link files read through stable no-follow handles with a 4 KiB maximum. Normal
+startup defers a store warm-up failure so recovery UI remains available, but a context-bearing run
+retries and remains blocked until the protected store passes. Stale cleanup begins only after the
+single-instance lock and never follows unknown, symlink, malformed, or foreign-SID entries.
+
 ### Backups and recovery imports
 
 SQLite backup creation is main-owned and accepts only the UI-selected destination. Forgeboard
 requires a canonical ordinary directory, builds each backup in an isolated staging folder, rejects
 links and path changes, performs a SQLite integrity check, and verifies stable size and SHA-256
 content before recording success. POSIX builds require a current-user-owned destination that is not
-group/other writable, use a `0700` staging directory, and publish `0600` backup files. Windows builds
-inherit the chosen folder's ACL and show a warning to select a folder
-available only to the user's Windows account. Automatic interval, quit-time behavior, and the
-per-folder retention target are configured in the UI. Retention removes only recorded ordinary backup files whose
-canonical path, identity, size, and digest still match, and it applies separately to each selected
-destination. Cleanup failures remain visible in Backup health and do not invalidate the newly
-created backup. A missing recorded backup is never treated as proof of deletion; complete local-data
-deletion requires a separate cancel-default native choice before forgetting its record, with an
-explicit warning that a detached copy may survive. Direct SQLite backup restore is not implemented
-in the UI.
+group/other writable, use a `0700` staging directory, and publish `0600` backup files. On Windows, an
+existing destination must pass the confidential-parent ACL check. A missing destination is created
+only after its nearest existing canonical parent passes the structural ACL check, then the new folder
+is protected. Every staging directory is protected before SQLite writes; the staged file receives an
+exact private DACL, and publication hard-links that same protected inode before its final path, DACL,
+digest, size, and identity are rechecked. Automatic interval, quit-time behavior, and the per-folder
+retention target are configured in the UI. Retention removes only recorded ordinary backup files
+whose canonical path, identity, size, and digest still match, and it applies separately to each
+selected destination. Deletion does not rewrite a suspect file's ACL before that ledger proof.
+Cleanup failures remain visible in Backup health and do not invalidate the newly created backup. A
+missing recorded backup is never treated as proof of deletion; complete local-data deletion requires
+a separate cancel-default native choice before forgetting its record, with an explicit warning that
+a detached copy may survive. Direct SQLite backup restore is not implemented in the UI.
 
 Canvas restore and portable JSON import never accept renderer-supplied file contents. Pending
 actions are window-owned, expiring, bounded, and single-use, followed by a cancel-default native
@@ -110,6 +137,12 @@ SHA-256 digest. Immediately
 before a transactional merge or replacement, Forgeboard rereads the same stable file and requires
 its file name, size, digest, and disclosed record counts to match. Portable files do not contain
 repository files or extension source folders.
+
+Legacy settings repair preserves immutable original and repaired JSON with SHA-256 evidence, but
+each value is limited to exactly 16 MiB of UTF-8 bytes. The application schema and SQLite BLOB-length
+constraint enforce the same cap, and bounded reads omit the full value when its count is out of
+range. Oversized stored settings or evidence therefore stop with recovery guidance before a partial
+repair or export. The focused boundary test accepts exactly 16 MiB and rejects the next byte.
 
 ### Git and agent overreach
 
@@ -191,7 +224,16 @@ terminal, and check output is outside audit-metadata redaction and may still con
 
 The optional server enforces room roles, signed expiring invites, revocation, origin limits, rate
 limits, and an audit trail. Collaboration schemas cannot carry source, prompts, diffs, transcripts,
-terminal output, or environment values.
+terminal output, environment values, credentials, local paths, or access tokens. The desktop keeps
+the approved room token only in volatile main-process memory and clears it on leave, privacy reset,
+or quit; settings and restart-recovery rows do not contain it.
+
+Shared graph and reviewer-comment mutations are separated by authenticated role and correlated with
+a durable server receipt. Bounded local restart recovery contains allowlisted metadata only and is
+scoped to the exact project, canvas, server, room, and subject. Reconnect uses a three-way merge:
+same-field conflicts stop instead of taking an automatic winner, and a downgraded role retains local
+intent without replaying it. Titles and comments remain human-authored text, so users can still paste
+sensitive text voluntarily; the server has no repository-reading path that can do so automatically.
 
 ### Supply chain
 

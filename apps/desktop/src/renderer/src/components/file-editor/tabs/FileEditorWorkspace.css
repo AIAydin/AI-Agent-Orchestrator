@@ -53,6 +53,10 @@
   padding: 4px 5px 4px 9px;
 }
 
+.file-editor-tab [role='tab'][draggable='true'] {
+  cursor: grab;
+}
+
 .file-editor-tab [role='tab'] span {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -72,6 +72,35 @@ describe('FileEditorWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
     expect(onBrowseFiles).toHaveBeenCalledOnce();
   });
+
+  it('drags only a ready tab whose visible buffer matches its saved disk file', async () => {
+    const monaco = fakeMonacoLoader();
+    const onFileDragStart = vi.fn();
+    render(
+      <FileEditorWorkspace
+        primary={{ projectId: PROJECT_ID, relativePath: 'src/first.ts' }}
+        operations={operationsFor()}
+        onBrowseFiles={vi.fn()}
+        onRevealInTree={vi.fn()}
+        onFileDragStart={onFileDragStart}
+        monacoLoader={monaco.loader}
+      />,
+    );
+    const tab = screen.getByRole('tab', { name: 'first.ts' });
+    await waitFor(() => expect(tab.getAttribute('draggable')).toBe('true'));
+    const transfer = {} as DataTransfer;
+    fireEvent.dragStart(tab, { dataTransfer: transfer });
+    expect(onFileDragStart).toHaveBeenCalledWith(transfer, {
+      projectId: PROJECT_ID,
+      relativePath: 'src/first.ts',
+    });
+
+    act(() => monaco.editors[0]?.userEdit('unsaved\n'));
+    await waitFor(() => expect(tab.getAttribute('draggable')).toBe('false'));
+    fireEvent.dragStart(tab, { dataTransfer: transfer });
+    expect(onFileDragStart).toHaveBeenCalledOnce();
+    expect(tab.title).toMatch(/Save or revert/u);
+  });
 });
 
 function operationsFor(): FileEditorOperations {

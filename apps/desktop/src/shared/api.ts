@@ -48,12 +48,18 @@ import type {
 } from './checks/contracts.js';
 import type {
   CollaborationConnection,
+  CollaborationCreateCommentInput,
+  CollaborationCreateCommentResult,
   CollaborationEvent,
   CollaborationJoinInput,
   CollaborationJoinResult,
   CollaborationMetadataSnapshot,
   CollaborationPublishInput,
   CollaborationPublishReceipt,
+  CollaborationSyncCheckpointInput,
+  CollaborationDiscardRejectedCommentInput,
+  CollaborationSyncRecoverInput,
+  CollaborationSyncRecovery,
   CollaborationUpdateAwarenessInput,
 } from './collaboration/index.js';
 import type {
@@ -97,6 +103,8 @@ import type {
   FileTreeResult,
 } from './files/contracts.js';
 import type { IntegrityCheckInput, IntegrityCheckResult } from './integrity/contracts.js';
+import type { FolderReadinessRequest, FolderReadinessResult } from './settings/folder-readiness.js';
+import type { SettingsRepairEvidence, SettingsRepairSummary } from './settings/repair/contracts.js';
 import type {
   RecoveryImportChooseInput,
   RecoveryImportCounts,
@@ -136,6 +144,10 @@ export interface ForgeboardApi {
     reset(): Promise<IpcResult<AppSettings>>;
     export(): Promise<IpcResult<string | null>>;
     import(): Promise<IpcResult<AppSettings | null>>;
+    listRepairs(): Promise<IpcResult<SettingsRepairSummary[]>>;
+    getRepair(repairId: string): Promise<IpcResult<SettingsRepairEvidence>>;
+    exportRepair(repairId: string): Promise<IpcResult<string | null>>;
+    checkFolderReadiness(input: FolderReadinessRequest): Promise<IpcResult<FolderReadinessResult>>;
   };
   agents: {
     detect(): Promise<IpcResult<AgentDetection[]>>;
@@ -196,6 +208,16 @@ export interface ForgeboardApi {
     publish(
       input: CollaborationPublishInput,
     ): Promise<IpcResult<CollaborationPublishReceipt | null>>;
+    recover(
+      input: CollaborationSyncRecoverInput,
+    ): Promise<IpcResult<CollaborationSyncRecovery | null>>;
+    checkpoint(input: CollaborationSyncCheckpointInput): Promise<IpcResult<boolean>>;
+    discardRejectedComment(
+      input: CollaborationDiscardRejectedCommentInput,
+    ): Promise<IpcResult<CollaborationSyncRecovery | null>>;
+    createComment(
+      input: CollaborationCreateCommentInput,
+    ): Promise<IpcResult<CollaborationCreateCommentResult | null>>;
     updateAwareness(input: CollaborationUpdateAwarenessInput): Promise<IpcResult<boolean>>;
     onEvent(listener: (event: CollaborationEvent) => void): () => void;
   };

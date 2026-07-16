@@ -5,7 +5,11 @@ import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
 import type { AgentEvent, AgentSession } from '@forgeboard/agent-adapters';
-import { ProcessReferenceSchema } from '@forgeboard/core';
+import {
+  ProcessReferenceSchema,
+  findSensitivePath,
+  loadProjectIgnoreMatcher,
+} from '@forgeboard/core';
 import {
   RepositoryService,
   WorktreeService,
@@ -50,6 +54,13 @@ import {
   stableSha256,
   workspaceSnapshotDigest,
 } from './evidence.js';
+import {
+  createImmutableContextSnapshot,
+  IMMUTABLE_CONTEXT_DISCLOSURE,
+  IMMUTABLE_DOCKER_CONTEXT_DISCLOSURE,
+  type ImmutableContextSnapshot,
+} from './context/immutable-snapshot.js';
+import { withDockerContextBindFailureGuidance } from './context/docker-bind-guidance.js';
 
 const DEFAULT_PLAN_TTL_MS = 60_000;
 const MAX_PLAN_TTL_MS = 10 * 60_000;
@@ -452,7 +463,11 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         runId,
         processAuthorization,
       );
-      const warnings = [...planned.plan.disclosure.warnings, ...planned.detectionWarnings];
+      const warnings = contextSnapshotDisclosureWarnings(
+        [...planned.plan.disclosure.warnings, ...planned.detectionWarnings],
+        effectiveContext,
+        planned.plan.disclosure.permissionProfile.enforcement === 'docker',
+      );
       if (primaryWasDirty && worktree !== null) {
         warnings.push(
           'The primary checkout has uncommitted changes. This run starts from its committed HEAD, so those changes are not present in the dedicated worktree.',
@@ -662,12 +677,35 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
 
     this.#pending.delete(planId);
     this.#scheduleNextExpiry();
+    let contextSnapshot: ImmutableContextSnapshot | null = null;
     try {
       this.#assertGeneration(prepared.generation);
       await this.#revalidateWorkspace(prepared);
-      await revalidateContextAttachments(prepared.context, prepared.record.cwd);
       await prepared.revalidateBeforeLaunch?.();
-      const session = await this.#launchPrepared(prepared, authorizeLaunch);
+      contextSnapshot = await createImmutableContextSnapshot(
+        prepared.context,
+        prepared.record.cwd,
+        prepared.plan.disclosure.permissionProfile.enforcement === 'docker'
+          ? {
+              runtime: 'docker',
+              ...(prepared.worktree === null ? {} : { managedRoot: prepared.worktree.managedRoot }),
+            }
+          : { runtime: 'host' },
+      );
+      const launchedSession = await this.#launchPrepared(
+        prepared,
+        contextSnapshot,
+        authorizeLaunch,
+      );
+      const session =
+        contextSnapshot === null
+          ? launchedSession
+          : retainSnapshotThroughSession(
+              launchedSession,
+              contextSnapshot,
+              prepared.plan.disclosure.permissionProfile.enforcement === 'docker',
+            );
+      contextSnapshot = null;
       const ownerStopped = this.#stoppingOwners.has(prepared.ownerId);
       if (prepared.generation !== this.#generation || ownerStopped) {
         try {
@@ -750,8 +788,9 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         },
       };
     } catch (error) {
-      await this.#recordLaunchFailure(prepared, error);
-      throw error;
+      const launchError = await cleanupFailedSnapshot(contextSnapshot, error);
+      await this.#recordLaunchFailure(prepared, launchError);
+      throw launchError;
     }
   }
 
@@ -815,6 +854,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
 
   async #launchPrepared(
     prepared: PreparedRunState,
+    contextSnapshot: ImmutableContextSnapshot | null,
     authorizeLaunch?: () => void,
   ): Promise<AgentSession> {
     this.#assertOwnerAccepting(prepared.ownerId);
@@ -832,14 +872,17 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     this.#assertOwnerAccepting(prepared.ownerId);
     const launch = async (): Promise<AgentSession> => {
       this.#assertOwnerAccepting(prepared.ownerId);
+      const launchPlan =
+        contextSnapshot === null ? prepared.plan : await contextSnapshot.bind(prepared.plan);
+      this.#assertOwnerAccepting(prepared.ownerId);
       if (this.#launchSession === undefined) {
-        return await prepared.adapter.launch(prepared.plan, () => {
+        return await prepared.adapter.launch(launchPlan, () => {
           this.#assertOwnerAccepting(prepared.ownerId);
           authorizeLaunch?.();
         });
       }
       authorizeLaunch?.();
-      return await this.#launchSession(prepared.adapter, prepared.plan);
+      return await this.#launchSession(prepared.adapter, launchPlan);
     };
     if (!prepared.trustedExtensionAdapter || this.#launchTrustedAdapter === undefined) {
       return await launch();
@@ -1536,18 +1579,104 @@ export async function remapContextIntoWorktree(
   return AgentExecutionRequestSchema.shape.context.parse({ ...context, attachments });
 }
 
+function contextSnapshotDisclosureWarnings(
+  warnings: readonly string[],
+  context: AgentExecutionContextRequest,
+  docker: boolean,
+): string[] {
+  if (context.attachments.length === 0) return [...warnings];
+  const rewritten = warnings.map((warning) =>
+    docker
+      ? warning.replace(
+          'Forgeboard adds no host credential, Docker socket, SSH agent, keychain, or extra host-path mounts.',
+          'Forgeboard adds no host credential, Docker socket, SSH agent, or keychain mounts. Selected context uses one private read-only snapshot mount; the approved worktree bind policy is unchanged.',
+        )
+      : warning,
+  );
+  return [
+    ...new Set([
+      ...rewritten,
+      IMMUTABLE_CONTEXT_DISCLOSURE,
+      ...(docker ? [IMMUTABLE_DOCKER_CONTEXT_DISCLOSURE] : []),
+    ]),
+  ];
+}
+
+function retainSnapshotThroughSession(
+  session: AgentSession,
+  snapshot: ImmutableContextSnapshot,
+  docker: boolean,
+): AgentSession {
+  const result = session.result.then(
+    async (value) => {
+      await snapshot.cleanup();
+      return value;
+    },
+    async (error: unknown) => {
+      try {
+        await snapshot.cleanup();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'The agent session failed and its private context snapshot could not be removed.',
+        );
+      }
+      throw error;
+    },
+  );
+  return {
+    pid: session.pid,
+    events: docker
+      ? withDockerContextBindFailureGuidance(session.events, snapshot.rootPath)
+      : session.events,
+    result,
+    writeInput: (data) => session.writeInput(data),
+    interrupt: () => session.interrupt(),
+    terminate: () => session.terminate(),
+  };
+}
+
+async function cleanupFailedSnapshot(
+  snapshot: ImmutableContextSnapshot | null,
+  error: unknown,
+): Promise<Error> {
+  const original = asError(error);
+  if (snapshot === null) return original;
+  try {
+    await snapshot.cleanup();
+    return original;
+  } catch (cleanupError) {
+    return new AggregateError(
+      [original, cleanupError],
+      'The agent launch failed and its private context snapshot could not be removed.',
+    );
+  }
+}
+
 export async function revalidateContextAttachments(
   context: AgentExecutionContextRequest,
   checkoutPath: string,
 ): Promise<void> {
   if (context.attachments.length === 0) return;
   const canonicalCheckout = await realpath(path.resolve(checkoutPath));
+  const ignoreMatcher = await loadProjectIgnoreMatcher(canonicalCheckout);
   await Promise.all(
     context.attachments.map(async (attachment) => {
       if (attachment.kind !== 'file' || attachment.sha256 === undefined) {
         throw new Error('Approved context must contain only digest-bound ordinary files.');
       }
       const canonical = await canonicalRegularFile(attachment.path, canonicalCheckout, 'approved');
+      const relativePath = path.relative(canonicalCheckout, canonical).split(path.sep).join('/');
+      if (findSensitivePath(relativePath) !== undefined) {
+        throw new Error(
+          'An approved context file became sensitive after disclosure. Review a fresh launch.',
+        );
+      }
+      if (ignoreMatcher.evaluate(relativePath).ignored) {
+        throw new Error(
+          'An approved context file became ignored after disclosure. Review a fresh launch.',
+        );
+      }
       const digest = await stableFileDigest(canonical);
       if (digest !== attachment.sha256) {
         throw new Error(

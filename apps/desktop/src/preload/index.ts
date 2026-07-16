@@ -13,12 +13,18 @@ import {
 import {
   COLLABORATION_IPC_CHANNELS,
   CollaborationConnectionSchema,
+  CollaborationCreateCommentInputSchema,
+  CollaborationCreateCommentResultSchema,
   CollaborationEventSchema,
   CollaborationJoinInputSchema,
   CollaborationJoinResultSchema,
   CollaborationMetadataSnapshotSchema,
   CollaborationPublishInputSchema,
   CollaborationPublishReceiptSchema,
+  CollaborationSyncCheckpointInputSchema,
+  CollaborationDiscardRejectedCommentInputSchema,
+  CollaborationSyncRecoverInputSchema,
+  CollaborationSyncRecoverySchema,
   CollaborationUpdateAwarenessInputSchema,
 } from '../shared/collaboration/index.js';
 import type { IpcResult } from '../shared/application/contracts.js';
@@ -38,6 +44,10 @@ import {
   RunEventEnvelopeSchema,
   ipcResultSchema,
 } from '../shared/application/contracts.js';
+import {
+  SettingsRepairEvidenceSchema,
+  SettingsRepairSummarySchema,
+} from '../shared/settings/repair/contracts.js';
 import { DockerPullResultSchema, DockerReadinessSchema } from '../shared/docker/contracts.js';
 import {
   GitCommitPlanViewSchema,
@@ -76,6 +86,7 @@ import {
 } from '../shared/workflow/contracts.js';
 import { createFileApi } from './files.js';
 import { createGitReviewNotesApi } from './git-review-notes.js';
+import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -117,6 +128,17 @@ const api: ForgeboardApi = {
     reset: () => ipcRenderer.invoke(IPC_CHANNELS.settingsReset),
     export: () => ipcRenderer.invoke(IPC_CHANNELS.settingsExport),
     import: () => ipcRenderer.invoke(IPC_CHANNELS.settingsImport),
+    listRepairs: () =>
+      invokeValidated(IPC_CHANNELS.settingsRepairList, SettingsRepairSummarySchema.array()),
+    getRepair: (repairId) =>
+      invokeValidated(IPC_CHANNELS.settingsRepairGet, SettingsRepairEvidenceSchema, repairId),
+    exportRepair: (repairId) =>
+      invokeValidated(IPC_CHANNELS.settingsRepairExport, z.string().nullable(), repairId),
+    checkFolderReadiness: (input) =>
+      checkSettingsFolderReadiness(async (channel, ...args) => {
+        const result: unknown = await ipcRenderer.invoke(channel, ...args);
+        return result;
+      }, input),
   },
   agents: {
     detect: () => ipcRenderer.invoke(IPC_CHANNELS.agentsDetect),
@@ -196,6 +218,30 @@ const api: ForgeboardApi = {
         COLLABORATION_IPC_CHANNELS.publish,
         CollaborationPublishReceiptSchema.nullable(),
         CollaborationPublishInputSchema.parse(input),
+      ),
+    recover: (input) =>
+      invokeValidated(
+        COLLABORATION_IPC_CHANNELS.recover,
+        CollaborationSyncRecoverySchema.nullable(),
+        CollaborationSyncRecoverInputSchema.parse(input),
+      ),
+    checkpoint: (input) =>
+      invokeValidated(
+        COLLABORATION_IPC_CHANNELS.checkpoint,
+        z.boolean(),
+        CollaborationSyncCheckpointInputSchema.parse(input),
+      ),
+    discardRejectedComment: (input) =>
+      invokeValidated(
+        COLLABORATION_IPC_CHANNELS.discardRejectedComment,
+        CollaborationSyncRecoverySchema.nullable(),
+        CollaborationDiscardRejectedCommentInputSchema.parse(input),
+      ),
+    createComment: (input) =>
+      invokeValidated(
+        COLLABORATION_IPC_CHANNELS.createComment,
+        CollaborationCreateCommentResultSchema.nullable(),
+        CollaborationCreateCommentInputSchema.parse(input),
       ),
     updateAwareness: (input) =>
       invokeValidated(

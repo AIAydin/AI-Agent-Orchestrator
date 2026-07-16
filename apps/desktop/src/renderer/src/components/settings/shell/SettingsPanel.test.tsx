@@ -14,6 +14,14 @@ import type {
   CommandReadinessRequest,
   CommandReadinessResult,
 } from '../../../../../shared/command-readiness/contracts.js';
+import type {
+  AgentReadinessRequest,
+  AgentReadinessResult,
+} from '../../../../../shared/readiness/contracts.js';
+import type {
+  FolderReadinessRequest,
+  FolderReadinessResult,
+} from '../../../../../shared/settings/folder-readiness.js';
 import { SettingsPanel } from './SettingsPanel.js';
 
 const savedSettings = settings({ theme: 'system', density: 'comfortable' });
@@ -57,6 +65,12 @@ const getBackupHealth = vi.fn(() =>
 const commandCheck = vi.fn((input: CommandReadinessRequest) =>
   Promise.resolve({ ok: true as const, value: readyCommand(input) }),
 );
+const agentCheck = vi.fn((input: AgentReadinessRequest) =>
+  Promise.resolve({ ok: true as const, value: readyAgent(input) }),
+);
+const folderCheck = vi.fn((input: FolderReadinessRequest) =>
+  Promise.resolve({ ok: true as const, value: readyFolder(input) }),
+);
 
 function readyCommand(input: CommandReadinessRequest): CommandReadinessResult {
   return {
@@ -69,6 +83,52 @@ function readyCommand(input: CommandReadinessRequest): CommandReadinessResult {
     projectName: input.projectId ? 'Active project' : null,
     checkedAt: '2026-07-15T18:00:00.000Z',
     reason: null,
+    warning: null,
+  };
+}
+
+function readyAgent(input: AgentReadinessRequest): AgentReadinessResult {
+  return {
+    schemaVersion: 1,
+    agentId: input.agentId,
+    state: 'ready',
+    ready: true,
+    source:
+      input.agentId === 'test-agent'
+        ? 'bundled'
+        : input.agentId === 'custom'
+          ? 'custom'
+          : input.executableOverride === undefined
+            ? 'automatic'
+            : 'override',
+    executable: '/canonical/agent',
+    version: '2.4.0',
+    checkedAt: '2026-07-15T18:00:00.000Z',
+    reason: null,
+    warnings: [],
+  };
+}
+
+function readyFolder(input: FolderReadinessRequest): FolderReadinessResult {
+  return {
+    schemaVersion: 1,
+    request: input,
+    state: 'ready-existing',
+    ready: true,
+    checkedAt: '2026-07-15T18:00:00.000Z',
+    reason: null,
+    warning: null,
+  };
+}
+
+function blockedFolder(input: FolderReadinessRequest, reason: string): FolderReadinessResult {
+  return {
+    schemaVersion: 1,
+    request: input,
+    state: 'not-writable',
+    ready: false,
+    checkedAt: '2026-07-15T18:00:00.000Z',
+    reason,
     warning: null,
   };
 }
@@ -86,6 +146,12 @@ beforeEach(() => {
   commandCheck.mockImplementation((input) =>
     Promise.resolve({ ok: true, value: readyCommand(input) }),
   );
+  agentCheck.mockReset();
+  agentCheck.mockImplementation((input) => Promise.resolve({ ok: true, value: readyAgent(input) }));
+  folderCheck.mockReset();
+  folderCheck.mockImplementation((input) =>
+    Promise.resolve({ ok: true, value: readyFolder(input) }),
+  );
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -94,6 +160,10 @@ beforeEach(() => {
         reset: resetSettings,
         import: importSettings,
         export: vi.fn(() => Promise.resolve({ ok: true, value: null })),
+        listRepairs: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
+        getRepair: vi.fn(),
+        exportRepair: vi.fn(),
+        checkFolderReadiness: folderCheck,
       },
       projects: {
         pickExecutable,
@@ -101,6 +171,7 @@ beforeEach(() => {
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
       commands: { checkReadiness: commandCheck },
+      agents: { checkReadiness: agentCheck },
       privacy: {
         export: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
@@ -145,7 +216,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('SettingsPanel draft transactions', () => {
-  it('contains keyboard focus, supports Escape, and restores prior focus', () => {
+  it('contains keyboard focus, supports Escape, and restores prior focus', async () => {
     const trigger = document.createElement('button');
     document.body.append(trigger);
     trigger.focus();
@@ -155,6 +226,7 @@ describe('SettingsPanel draft transactions', () => {
     const saveButton = screen.getByRole('button', { name: 'Save settings' });
 
     expect(document.activeElement).toBe(closeButton);
+    await waitFor(() => expect(saveButton).toHaveProperty('disabled', false));
     fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(saveButton);
     fireEvent.keyDown(window, { key: 'Escape' });
@@ -241,7 +313,7 @@ describe('SettingsPanel draft transactions', () => {
     await screen.findByText('Defaults loaded as a draft. Review and save to apply them.');
     expect(updateSettings).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith(resetDraft));
     expect(onSaved).toHaveBeenCalledTimes(1);
@@ -256,13 +328,220 @@ describe('SettingsPanel draft transactions', () => {
     await screen.findByText('Settings loaded as a draft. Review and save to apply them.');
     expect(updateSettings).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith(importedDraft));
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps environment values out of settings and blocks invalid environment names', () => {
+  it('passively preflights every enabled machine folder before Save', async () => {
+    render(<SettingsPanel {...props()} />);
+
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    expect(save.disabled).toBe(true);
+    await waitFor(() => expect(folderCheck).toHaveBeenCalledTimes(2));
+    expect(folderCheck).toHaveBeenCalledWith({
+      purpose: 'managed-worktrees',
+      path: '/tmp/forgeboard-worktrees',
+    });
+    expect(folderCheck).toHaveBeenCalledWith({
+      purpose: 'backup-destination',
+      path: '/tmp/forgeboard-backups',
+    });
+    await waitFor(() => expect(save.disabled).toBe(false));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
+    expect(screen.getByText('Folder preflight is ready.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
+    expect(screen.getByText('Folder preflight is ready.')).toBeTruthy();
+  });
+
+  it('invalidates folder evidence on edit and blocks a non-writable worktree location', async () => {
+    folderCheck.mockImplementation((input) =>
+      Promise.resolve({
+        ok: true,
+        value:
+          input.path === '/tmp/blocked-worktrees'
+            ? blockedFolder(input, 'This folder is not writable by the current user.')
+            : readyFolder(input),
+      }),
+    );
+    render(<SettingsPanel {...props()} />);
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    await waitFor(() => expect(save.disabled).toBe(false));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
+    fireEvent.change(screen.getByLabelText('Managed worktree location'), {
+      target: { value: '/tmp/blocked-worktrees' },
+    });
+    expect(save.disabled).toBe(true);
+    await waitFor(() =>
+      expect(folderCheck).toHaveBeenCalledWith({
+        purpose: 'managed-worktrees',
+        path: '/tmp/blocked-worktrees',
+      }),
+    );
+    expect(await screen.findAllByText(/not writable by the current user/u)).not.toHaveLength(0);
+
+    fireEvent.submit(screen.getByRole('dialog', { name: 'Settings' }));
+    expect(screen.getByText(/Settings were not saved/u)).toBeTruthy();
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('rechecks imported folder paths against the exact imported draft', async () => {
+    importSettings.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        ...importedDraft,
+        worktreeRoot: '/tmp/imported-worktrees',
+        backupDirectory: '/tmp/imported-backups',
+      },
+    });
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Import settings' }));
+    await screen.findByText('Settings loaded as a draft. Review and save to apply them.');
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    expect(save.disabled).toBe(true);
+    await waitFor(() =>
+      expect(folderCheck).toHaveBeenCalledWith({
+        purpose: 'managed-worktrees',
+        path: '/tmp/imported-worktrees',
+      }),
+    );
+    await waitFor(() =>
+      expect(folderCheck).toHaveBeenCalledWith({
+        purpose: 'backup-destination',
+        path: '/tmp/imported-backups',
+      }),
+    );
+    await waitFor(() => expect(save.disabled).toBe(false));
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on an invalid numeric draft before settings IPC', () => {
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
+    fireEvent.change(screen.getByLabelText('Preview port start'), {
+      target: { value: '' },
+    });
+
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    expect(save.disabled).toBe(true);
+    expect(screen.getByRole('alert').textContent).toMatch(/Preview port start/u);
+    fireEvent.submit(screen.getByRole('dialog', { name: 'Settings' }));
+    expect(screen.getByText(/Settings were not saved: Preview port start/u)).toBeTruthy();
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('revalidates imported machine-specific values before allowing Save', async () => {
+    importSettings.mockResolvedValueOnce({
+      ok: true,
+      value: { ...importedDraft, backupsEnabled: true, backupDirectory: '' },
+    });
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Import settings' }));
+    await screen.findByText('Settings loaded as a draft. Review and save to apply them.');
+
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    expect(save.disabled).toBe(true);
+    expect(
+      screen
+        .getAllByRole('alert')
+        .some((alert) => /Backup destination/u.test(alert.textContent ?? '')),
+    ).toBe(true);
+    fireEvent.submit(screen.getByRole('dialog', { name: 'Settings' }));
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('requires current readiness evidence for a configured non-default agent', async () => {
+    const codex: AgentDetection = {
+      id: 'codex',
+      label: 'OpenAI Codex CLI',
+      installed: true,
+      executable: '/usr/local/bin/codex',
+      version: '2.4.0',
+      providerDisclosure: 'Uses the local CLI account.',
+    };
+    render(<SettingsPanel {...props({ agents: [...agents, codex] })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
+    fireEvent.change(screen.getByLabelText('Executable override'), {
+      target: { value: '/chosen/bin/codex' },
+    });
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    expect(save.disabled).toBe(true);
+    expect(
+      await screen.findAllByText(/Refresh readiness for the current executable/u),
+    ).toHaveLength(1);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Refresh OpenAI Codex CLI readiness',
+      }),
+    );
+    await waitFor(() => expect(save.disabled).toBe(false));
+    expect(agentCheck).toHaveBeenCalledWith({
+      agentId: 'codex',
+      executableOverride: '/chosen/bin/codex',
+    });
+
+    fireEvent.change(screen.getByLabelText('Executable override'), {
+      target: { value: '/other/bin/codex' },
+    });
+    expect(save.disabled).toBe(true);
+    expect(screen.getAllByText(/Refresh readiness for the current executable/u).length).toBe(1);
+  });
+
+  it('requires an exact readiness refresh after selecting a different detected default', async () => {
+    const codex: AgentDetection = {
+      id: 'codex',
+      label: 'OpenAI Codex CLI',
+      installed: true,
+      executable: '/usr/local/bin/codex',
+      version: '2.4.0',
+      providerDisclosure: 'Uses the local CLI account.',
+    };
+    render(<SettingsPanel {...props({ agents: [...agents, codex] })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
+    fireEvent.change(screen.getByLabelText('Default agent'), { target: { value: 'codex' } });
+    const save = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Save settings',
+    });
+    expect(save.disabled).toBe(true);
+    expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
+    expect(screen.queryByText('Selected executable is ready')).toBeNull();
+    expect(agentCheck).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Refresh OpenAI Codex CLI readiness',
+      }),
+    );
+
+    await screen.findByText('Selected executable is ready');
+    await waitFor(() => expect(save.disabled).toBe(false));
+    expect(agentCheck).toHaveBeenCalledWith({ agentId: 'codex' });
+  });
+
+  it('keeps environment values out of settings and blocks invalid environment names', async () => {
     render(<SettingsPanel {...props()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
@@ -283,7 +562,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(screen.getByText(/session values are not entered here/u)).toBeTruthy();
 
     fireEvent.change(environment, { target: { value: 'PATH, CI' } });
-    expect(save.disabled).toBe(false);
+    await waitFor(() => expect(save.disabled).toBe(false));
   });
 
   it('configures automatic local backup timing, shutdown protection, and retention in the UI', async () => {
@@ -301,7 +580,7 @@ describe('SettingsPanel draft transactions', () => {
         name: /Back up unsaved changes when quitting/u,
       }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
@@ -364,7 +643,7 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.change(screen.getByLabelText('Output format'), {
       target: { value: 'json-lines' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0].customAgent.output).toBe('json-lines');
@@ -420,7 +699,7 @@ describe('SettingsPanel draft transactions', () => {
       expect(within(executableGroup).getByDisplayValue('/usr/local/bin/codex')).toBeTruthy(),
     );
     fireEvent.click(screen.getByRole('checkbox', { name: /Ask the agent to allow tests/u }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
@@ -483,7 +762,12 @@ describe('SettingsPanel draft transactions', () => {
     });
     fireEvent.change(ignoredFiles, { target: { value: 'allow' } });
     fireEvent.change(sensitiveFiles, { target: { value: 'allow' } });
-    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', false);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty(
+        'disabled',
+        false,
+      ),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
     const dockerEnabled = screen.getByRole<HTMLInputElement>('checkbox', {
@@ -492,7 +776,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(dockerEnabled.checked).toBe(true);
     expect(dockerEnabled.disabled).toBe(true);
     expect(screen.getByText(/Switch Custom to Host in the Permissions centre/u)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
@@ -676,7 +960,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(
       screen.getByText('VS Code preset · unsaved; Standard preset remains active'),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0].keyboardPreset).toBe('vscode');
@@ -756,7 +1040,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(screen.getByText(/Manual update checks are unavailable/u)).toBeTruthy();
     expect(screen.getByText(/Not connected/u)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await clickSaveSettings();
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
       terminalShell: '/bin/sh',
@@ -782,7 +1066,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(cleanupPolicy.value).toBe('after-retention');
     expect(screen.getByText(/imported legacy policy is not executed automatically/u)).toBeTruthy();
     fireEvent.change(cleanupPolicy, { target: { value: 'manual' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0].worktreeCleanupPolicy).toBe('manual');
@@ -814,13 +1098,26 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.click(credentialMount);
     expect(credentialMount.checked).toBe(false);
     expect(credentialMount.disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', false);
-    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty(
+        'disabled',
+        false,
+      ),
+    );
+    await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0].dockerMountHostCredentials).toBe(false);
   });
 });
+
+async function clickSaveSettings(): Promise<void> {
+  const save = screen.getByRole<HTMLButtonElement>('button', {
+    name: 'Save settings',
+  });
+  await waitFor(() => expect(save.disabled).toBe(false));
+  fireEvent.click(save);
+}
 
 function props(
   overrides: Partial<ComponentProps<typeof SettingsPanel>> = {},
@@ -883,6 +1180,7 @@ function settings(overrides: Partial<AppSettings>): AppSettings {
     defaultAgent: 'test-agent',
     defaultPermissionProfile: 'worktree-write',
     worktreeRoot: '/tmp/forgeboard-worktrees',
+    backupDirectory: '/tmp/forgeboard-backups',
     terminalShell: '/bin/sh',
     envAllowlist: ['PATH'],
     previewPortStart: 41_000,

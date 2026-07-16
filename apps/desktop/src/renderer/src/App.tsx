@@ -9,7 +9,9 @@ import type {
   ExtensionDiscoveryView,
   Project,
 } from '../../shared/application/contracts.js';
-import { SettingsPanel } from './components/settings/shell/SettingsPanel.js';
+import type { SettingsRepairSummary } from '../../shared/settings/repair/contracts.js';
+import { SettingsPanel, type SettingsTab } from './components/settings/shell/SettingsPanel.js';
+import { StartupRepairNotice } from './components/settings/repair/StartupRepairNotice.js';
 import { SetupWizard } from './components/onboarding/SetupWizard.js';
 import { Welcome } from './components/onboarding/Welcome.js';
 import { Workspace } from './components/workspace/shell/Workspace.js';
@@ -22,12 +24,15 @@ interface BootstrapState {
   agents: AgentDetection[];
   extensions: ExtensionDiscoveryView;
   recent: Project[];
+  settingsRepairs: SettingsRepairSummary[];
 }
 
 export function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>('appearance');
+  const [dismissedRepairId, setDismissedRepairId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const workspaceRef = useRef<WorkspaceHandle>(null);
@@ -41,12 +46,13 @@ export function App() {
   );
 
   const loadBootstrap = useCallback(async () => {
-    const [info, settings, agents, extensions, recent] = await Promise.all([
+    const [info, settings, agents, extensions, recent, settingsRepairs] = await Promise.all([
       window.forgeboard.app.getInfo(),
       window.forgeboard.settings.get(),
       window.forgeboard.agents.detect(),
       window.forgeboard.extensions.list(),
       window.forgeboard.projects.recent(),
+      window.forgeboard.settings.listRepairs(),
     ]);
     setBootstrap({
       info: unwrap(info),
@@ -54,6 +60,7 @@ export function App() {
       agents: unwrap(agents),
       extensions: unwrap(extensions),
       recent: unwrap(recent),
+      settingsRepairs: unwrap(settingsRepairs),
     });
   }, []);
 
@@ -91,6 +98,11 @@ export function App() {
     },
     [loadBootstrap],
   );
+
+  const openSettings = useCallback((initialTab: SettingsTab = 'appearance') => {
+    setSettingsInitialTab(initialTab);
+    setShowSettings(true);
+  }, []);
 
   if (!bootstrap) {
     return (
@@ -147,7 +159,7 @@ export function App() {
             setActiveProject(project);
             await loadBootstrap();
           }}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenSettings={() => openSettings()}
           onError={setError}
         />
       ) : (
@@ -186,12 +198,13 @@ export function App() {
             void run(async () => unwrap(await window.forgeboard.projects.clone(input)))
           }
           onDemo={() => void run(async () => unwrap(await window.forgeboard.projects.demo()))}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenSettings={() => openSettings()}
         />
       )}
 
       {showSettings && (
         <SettingsPanel
+          initialTab={settingsInitialTab}
           info={bootstrap.info}
           settings={bootstrap.settings}
           agents={bootstrap.agents}
@@ -221,6 +234,16 @@ export function App() {
           }}
         />
       )}
+
+      {bootstrap.settingsRepairs[0] !== undefined &&
+        bootstrap.settingsRepairs[0].id !== dismissedRepairId &&
+        !showSettings && (
+          <StartupRepairNotice
+            repair={bootstrap.settingsRepairs[0]}
+            onReview={() => openSettings('privacy')}
+            onDismiss={() => setDismissedRepairId(bootstrap.settingsRepairs[0]?.id ?? null)}
+          />
+        )}
 
       {error && (
         <div className="toast error-toast" role="alert">

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,7 +12,7 @@ import {
 
 test('the deterministic agent requires approval and reports its real local work', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-agent-e2e-'));
-  const configuredWorktreeRoot = join(userDataDirectory, 'ui-configured-worktrees');
+  const configuredWorktreeRoot = join(await realpath(userDataDirectory), 'ui-configured-worktrees');
   let electronApp: ElectronApplication | null = null;
   const externalRequests: string[] = [];
 

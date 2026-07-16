@@ -22,7 +22,13 @@ import {
 import { PanelBottomOpen } from 'lucide-react';
 
 import type { CanvasDocument, RunAdapterId } from '../../../../../shared/application/contracts.js';
-import type { CollaborationMetadataSnapshot } from '../../../../../shared/collaboration/index.js';
+import { canonicalCanvasFromLegacy } from '../../../../../shared/canvas/adapter.js';
+import {
+  CollaborationCommentMetadataSchema,
+  type CollaborationCommentMetadata,
+  type CollaborationMetadataSnapshot,
+} from '../../../../../shared/collaboration/index.js';
+import { FileDocumentSchema } from '../../../../../shared/files/contracts.js';
 import type { GitTargetInput } from '../../../../../shared/git/contracts.js';
 import type { WorkflowExecutionView } from '../../../../../shared/workflow/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
@@ -44,6 +50,7 @@ import { CheckApprovalDialog } from '../CheckApprovalDialog.js';
 import { RunApprovalDialog } from '../runs/RunApprovalDialog.js';
 import { WorkspaceActivityDrawer } from '../activity/WorkspaceActivityDrawer.js';
 import { WorkspaceCanvas } from '../canvas/WorkspaceCanvas.js';
+import { RejectedCommentsNotice } from '../collaboration/comments/RejectedCommentsNotice.js';
 import {
   canConnectUnlocked,
   canEditEdge,
@@ -89,6 +96,8 @@ import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
 import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
+import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
+import { linkProjectFileToAgent, removeProjectFileFromAgent } from '../context-dnd/linking.js';
 import {
   runnableWorkflowNodeCount,
   workflowSelectionEligibility,
@@ -217,10 +226,15 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const [future, setFuture] = useState<Snapshot[]>([]);
   const [events, setEvents] = useState<string[]>(['Project health scan completed locally.']);
   const loaded = useRef(false);
+  const nodesRef = useRef<WorkshopNode[]>(nodes);
+  const edgesRef = useRef<WorkshopEdge[]>(edges);
+  const collaborationGraphReadOnlyRef = useRef(false);
   const pendingNodeSelection = useRef<string | null>(null);
   const canvasClipboard = useRef<CanvasClipboardSelection | null>(null);
   const pasteSequence = useRef(0);
   const extensionDiscoveryRef = useRef(extensionDiscovery);
+  nodesRef.current = nodes;
+  edgesRef.current = edges;
 
   useEffect(() => {
     loaded.current = false;
@@ -390,6 +404,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     onSnapshot: applyCollaborationSnapshot,
     onError,
   });
+  collaborationGraphReadOnlyRef.current = collaborationCanvas.graphReadOnly;
   const reportCollaborationReadOnly = useCallback(() => {
     setEvents((items) =>
       items[0] === 'This collaboration role cannot edit the shared graph.'
@@ -433,10 +448,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     }
   }, [onError, onProjectUpdated, project.id]);
 
+  const recordSnapshot = useCallback(
+    (snapshotNodes: WorkshopNode[], snapshotEdges: WorkshopEdge[]) => {
+      setPast((items) => [...items.slice(-49), { nodes: snapshotNodes, edges: snapshotEdges }]);
+      setFuture([]);
+    },
+    [],
+  );
+
   const record = useCallback(() => {
-    setPast((items) => [...items.slice(-49), { nodes, edges }]);
-    setFuture([]);
-  }, [edges, nodes]);
+    recordSnapshot(nodes, edges);
+  }, [edges, nodes, recordSnapshot]);
 
   const undo = useCallback(() => {
     if (collaborationCanvas.graphReadOnly) {
@@ -544,7 +566,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         const selectedNodeIds = nodes
           .filter((node) => node.selected === true)
           .map((node) => node.id);
-        return { selectedNodeIds, movedNodeIds: [], lockedNodeIds: selectedNodeIds };
+        return {
+          selectedNodeIds,
+          movedNodeIds: [],
+          lockedNodeIds: selectedNodeIds,
+        };
       }
       const result = moveSelectedCanvasNodes(nodes, movement);
       if (result.movedNodeIds.length > 0) {
@@ -705,8 +731,111 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     [collaborationCanvas.graphReadOnly, nodes.length, record, reportCollaborationReadOnly],
   );
 
+  const attachProjectFileContext = useCallback(
+    async (targetNodeId: string, payload: WorkspaceContextDragPayload): Promise<void> => {
+      if (collaborationGraphReadOnlyRef.current) {
+        reportCollaborationReadOnly();
+        throw new Error('This collaboration role cannot edit the shared graph.');
+      }
+      const target = nodesRef.current.find((node) => node.id === targetNodeId);
+      if (target === undefined || target.data.kind !== 'agent') {
+        throw new Error('Project files can only be attached to an Agent node.');
+      }
+      if (target.data.locked) {
+        throw new Error('Unlock the Agent node before changing its context.');
+      }
+      if (payload.projectId !== project.id) {
+        throw new Error('The dragged file belongs to another project.');
+      }
+      const document = FileDocumentSchema.parse(
+        await window.forgeboard.files.read({
+          projectId: payload.projectId,
+          relativePath: payload.relativePath,
+        }),
+      );
+      if (collaborationGraphReadOnlyRef.current) {
+        reportCollaborationReadOnly();
+        throw new Error('This collaboration role cannot edit the shared graph.');
+      }
+      const currentNodes = nodesRef.current;
+      const currentEdges = edgesRef.current;
+      const result = linkProjectFileToAgent({
+        projectId: project.id,
+        targetNodeId,
+        payload,
+        document,
+        nodes: currentNodes,
+        newNodeId: crypto.randomUUID(),
+      });
+      if (!result.ok) throw new Error(result.message);
+      if (!result.changed) {
+        setEvents((items) => ['That project file is already attached.', ...items].slice(0, 30));
+        return;
+      }
+      recordSnapshot(currentNodes, currentEdges);
+      nodesRef.current = result.nodes;
+      setNodes(result.nodes);
+      setEvents((items) =>
+        [
+          `${result.createdFileNode ? 'Created a File node and attached' : 'Attached'} verified project file context.`,
+          ...items,
+        ].slice(0, 30),
+      );
+    },
+    [project.id, recordSnapshot, reportCollaborationReadOnly],
+  );
+
+  const removeProjectFileContext = useCallback(
+    (targetNodeId: string, attachmentNodeId: string): void => {
+      if (collaborationGraphReadOnlyRef.current) {
+        reportCollaborationReadOnly();
+        return;
+      }
+      const currentNodes = nodesRef.current;
+      const result = removeProjectFileFromAgent({
+        targetNodeId,
+        attachmentNodeId,
+        nodes: currentNodes,
+      });
+      if (!result.ok) {
+        onError(result.message);
+        return;
+      }
+      if (!result.changed) return;
+      recordSnapshot(currentNodes, edgesRef.current);
+      nodesRef.current = result.nodes;
+      setNodes(result.nodes);
+      setEvents((items) => ['Removed a project file from Agent context.', ...items].slice(0, 30));
+    },
+    [onError, recordSnapshot, reportCollaborationReadOnly],
+  );
+
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+  const sharedComments = useMemo(
+    () => collaborationCommentsForNode(pendingCanvas, selectedNodeId),
+    [pendingCanvas, selectedNodeId],
+  );
+  const rejectedSharedCommentEntries = useMemo(
+    () =>
+      selectedNodeId === null
+        ? []
+        : collaborationCanvas.rejectedCommentEntries.filter(
+            (entry) => entry.comment.nodeId === selectedNodeId,
+          ),
+    [collaborationCanvas.rejectedCommentEntries, selectedNodeId],
+  );
+  const createSharedComment = useCallback(
+    async (body: string): Promise<boolean> => {
+      if (selectedNodeId === null) return false;
+      const comment = await collaborationCanvas.createComment(selectedNodeId, body);
+      if (comment === null) return false;
+      setCanvas((current) => appendCollaborationComment(current, selectedNodeId, comment));
+      setEvents((items) => ['Shared a collaboration comment.', ...items].slice(0, 80));
+      return true;
+    },
+    [collaborationCanvas.createComment, selectedNodeId],
+  );
   const selectedCanvasNodes = nodes.filter((node) => node.selected === true);
   const selectedWorkflowEligibility = workflowSelectionEligibility(
     selectedCanvasNodes.length > 0
@@ -748,6 +877,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     selectedAdapter,
     selectedPermission,
     permissionUnavailableReason: selectedPermissionUnavailableReason,
+    flushCanvas,
     updateNodeData,
     setEvents,
     onError,
@@ -1139,6 +1269,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         onOpenSettings={onOpenSettings}
       />
 
+      <RejectedCommentsNotice
+        entries={collaborationCanvas.rejectedCommentEntries}
+        onDiscard={collaborationCanvas.discardRejectedComment}
+      />
+
       <div className={`workspace-grid ${activityOpen ? '' : 'activity-closed'}`}>
         <WorkspaceRail
           project={project}
@@ -1146,13 +1281,16 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           search={search}
           templates={filteredTemplates}
           extensionTemplates={filteredExtensionTemplates}
-          nodes={filteredNodes}
+          nodes={railTab === 'nodes' ? filteredNodes : nodes}
+          fileOperations={window.forgeboard.files}
           initializingGit={initializingGit}
+          collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
           onTabChange={setRailTab}
           onSearchChange={setSearch}
           onAddNode={addNode}
           onAddExtensionNode={addExtensionNode}
           onInitializeGit={() => void initializeGit()}
+          onAttachAgentContext={attachProjectFileContext}
           onSelectNode={(node) => {
             setSelectedNodeId(node.id);
             setSelectedEdgeId(null);
@@ -1279,6 +1417,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onCollaborationCursorMove={collaborationCanvas.updateCursor}
           onCollaborationCursorLeave={collaborationCanvas.clearCursor}
           collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
+          onAttachAgentContext={attachProjectFileContext}
+          onContextDropError={onError}
         />
         <WorkspaceInspector
           project={project}
@@ -1293,6 +1433,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           previewSession={selectedNode ? (previews.sessions[selectedNode.id] ?? null) : null}
           runInput={runs.runInput}
           preparingRun={runs.preparingRun}
+          sharedComments={sharedComments}
+          rejectedSharedCommentEntries={rejectedSharedCommentEntries}
+          canComment={collaborationCanvas.canComment}
+          onCreateComment={createSharedComment}
+          onDiscardRejectedComment={collaborationCanvas.discardRejectedComment}
           onClearSelection={() => {
             setSelectedNodeId(null);
             setSelectedEdgeId(null);
@@ -1313,16 +1458,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
               onError(selectedPermissionUnavailableReason);
               return;
             }
-            updateSelected({
-              permissionProfile: selectedPermission,
-              lastRunPermissionProfile: selectedPermission,
-              changedFiles: [],
-            });
             void runs.prepareSelectedRun();
           }}
           onPreviewSession={(session) => {
             if (selectedNode) previews.updateSession(selectedNode.id, session);
           }}
+          collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
+          onAttachAgentContext={attachProjectFileContext}
+          onRemoveAgentContext={removeProjectFileContext}
           onOpenSettings={onOpenSettings}
           onError={onError}
         />
@@ -1412,11 +1555,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       {runs.disclosure && (
         <RunApprovalDialog
           disclosure={runs.disclosure}
-          prompt={
-            nodes.find((node) => node.id === runs.disclosure?.nodeId)?.data.prompt ??
-            nodes.find((node) => node.id === runs.disclosure?.nodeId)?.data.description ??
-            ''
-          }
+          prompt={runs.reviewedPrompt ?? ''}
           busy={runs.approvingRun}
           onCancel={() => void runs.cancelPreparedRun()}
           onApprove={() => void runs.approvePreparedRun()}
@@ -1433,3 +1572,62 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     </main>
   );
 });
+
+function collaborationCommentsForNode(
+  document: CanvasDocument | null,
+  nodeId: string | null,
+): CollaborationCommentMetadata[] {
+  if (document === null || nodeId === null) return [];
+  const migrated = canonicalCanvasFromLegacy(document);
+  if (!migrated.ok) return [];
+  const node = migrated.canvas.nodes.find((candidate) => candidate.id === nodeId);
+  if (node === undefined) return [];
+  return node.comments.flatMap((comment) => {
+    const parsed = CollaborationCommentMetadataSchema.safeParse({
+      id: comment.id,
+      nodeId,
+      authorId: comment.authorId,
+      body: comment.body,
+      createdAt: comment.createdAt,
+      ...(comment.updatedAt === undefined ? {} : { updatedAt: comment.updatedAt }),
+      ...(comment.resolvedAt === undefined ? {} : { resolved: true }),
+    });
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function appendCollaborationComment(
+  document: CanvasDocument | null,
+  nodeId: string,
+  comment: CollaborationCommentMetadata,
+): CanvasDocument | null {
+  if (document === null) return null;
+  const migrated = canonicalCanvasFromLegacy(document);
+  if (!migrated.ok) return document;
+  const now = new Date().toISOString();
+  return {
+    ...document,
+    canonical: {
+      ...migrated.canvas,
+      nodes: migrated.canvas.nodes.map((node) =>
+        node.id !== nodeId || node.comments.some((current) => current.id === comment.id)
+          ? node
+          : {
+              ...node,
+              comments: [
+                ...node.comments,
+                {
+                  id: comment.id,
+                  authorId: comment.authorId,
+                  body: comment.body,
+                  createdAt: comment.createdAt,
+                  ...(comment.updatedAt === undefined ? {} : { updatedAt: comment.updatedAt }),
+                  ...(comment.resolved ? { resolvedAt: comment.updatedAt ?? now } : {}),
+                },
+              ],
+            },
+      ),
+    },
+    updatedAt: now,
+  };
+}

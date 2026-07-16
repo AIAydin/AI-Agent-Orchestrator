@@ -1,5 +1,6 @@
 import type { AppSettings } from '../../../../../shared/application/contracts.js';
 import { DockerConfiguration } from '../../docker/DockerConfiguration.js';
+import { numericDraftValue } from '../fields/numeric-draft.js';
 import { SettingsSection, type AsyncSettingsProps } from '../shared.js';
 
 export function dockerConfigurationIncomplete(settings: AppSettings): boolean {
@@ -82,7 +83,7 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
             min="0.25"
             max="128"
             step="0.25"
-            value={draft.dockerCpuLimit}
+            value={numericDraftValue(draft.dockerCpuLimit)}
             onChange={(event) => setDraft({ ...draft, dockerCpuLimit: event.target.valueAsNumber })}
           />
         </label>
@@ -93,7 +94,7 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
             name="docker-memory-limit-mb"
             min="128"
             max="1048576"
-            value={draft.dockerMemoryMb}
+            value={numericDraftValue(draft.dockerMemoryMb)}
             onChange={(event) => setDraft({ ...draft, dockerMemoryMb: event.target.valueAsNumber })}
           />
         </label>

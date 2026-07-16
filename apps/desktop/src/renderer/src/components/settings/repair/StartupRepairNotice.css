@@ -1,0 +1,55 @@
+.startup-repair-notice {
+  position: fixed;
+  z-index: 1900;
+  right: 18px;
+  bottom: 18px;
+  width: min(520px, calc(100vw - 36px));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--amber);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.startup-repair-notice > svg {
+  color: var(--amber);
+}
+
+.startup-repair-notice > div {
+  display: grid;
+  gap: 3px;
+}
+
+.startup-repair-notice strong {
+  font-size: 11px;
+}
+
+.startup-repair-notice span {
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.startup-repair-notice button {
+  border: 0;
+  background: transparent;
+  color: var(--amber);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .startup-repair-notice {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .startup-repair-notice button {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

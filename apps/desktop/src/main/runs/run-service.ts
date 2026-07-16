@@ -42,6 +42,12 @@ import { AgentExecutionRuntime } from '../agent-execution/runtime.js';
 import { resolveDockerExecutable } from '../docker/docker-runtime.js';
 import { createNativeGitDelegateAuthorizer } from '../git/delegates/native-confirmation.js';
 import type { LocalStore } from '../storage.js';
+import {
+  PersistedAgentRunContextResolver,
+  type AgentRunContextResolver,
+  type PersistedAgentContextAuthority,
+  type PersistedAgentContextResolution,
+} from './context/persisted-agent-context.js';
 
 const RunIdSchema = z.string().uuid();
 const InputSchema = z
@@ -52,9 +58,11 @@ const InputSchema = z
   });
 
 interface PreparedApproval {
+  readonly contextAuthority: PersistedAgentContextAuthority;
   readonly disclosure: RunDisclosure;
   readonly disclosureFingerprint: string;
   readonly expiresAt: string;
+  readonly input: PrepareRunInput;
   readonly owner: WebContents;
   readonly ownerId: string;
   readonly planId: string;
@@ -86,6 +94,7 @@ export class RunService {
   readonly #repositories: RepositoryService;
   readonly #runtime: AgentExecutionOperations;
   readonly #store: Pick<LocalStore, 'appendAudit'>;
+  readonly #contextResolver: AgentRunContextResolver;
   #disposed = false;
   #privacyResetting = false;
   #shutdownPaused = false;
@@ -101,8 +110,10 @@ export class RunService {
     runtimeFactory?: RunServiceRuntimeFactory,
     private readonly dialog?: Pick<Dialog, 'showMessageBox'>,
     private readonly now: () => Date = () => new Date(),
+    contextResolver?: AgentRunContextResolver,
   ) {
     this.#store = store;
+    this.#contextResolver = contextResolver ?? new PersistedAgentRunContextResolver(store);
     this.#repositories = repositories;
     const emit: AgentExecutionEventSink = (ownerId, envelope) => {
       this.#emitExecutionEvent(ownerId, envelope);
@@ -187,27 +198,40 @@ export class RunService {
   ): Promise<RunApprovalView> {
     this.#assertAvailable();
     const ownerId = this.#ownerId(owner);
+    const contextResolution = await this.#contextResolver.resolve(input, this.getSettings());
     const prepared = await this.#runtime.prepare(
       ownerId,
       {
         ...input,
-        context: { attachments: [] },
+        context: contextResolution.context,
       },
       processAuthorization,
     );
-    if (owner.isDestroyed() || this.#owners.get(ownerId) !== owner) {
-      throw new Error('The originating Forgeboard window closed while preparing the agent run.');
-    }
     try {
+      if (owner.isDestroyed() || this.#owners.get(ownerId) !== owner) {
+        throw new Error('The originating Forgeboard window closed while preparing the agent run.');
+      }
       assertCurrent?.();
+      assertPreparedContextDisclosure(contextResolution, prepared.disclosure);
     } catch (error) {
-      await this.#runtime.terminate(ownerId, prepared.planId).catch(() => undefined);
+      const cleanupError = await this.#runtime
+        .terminate(ownerId, prepared.planId)
+        .then(() => undefined)
+        .catch((cause: unknown) => cause);
+      if (cleanupError !== undefined) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Run preparation became stale and its pending plan could not be terminated.',
+        );
+      }
       throw error;
     }
     this.#approvals.set(prepared.runId, {
+      contextAuthority: contextResolution.authority,
       disclosure: prepared.disclosure,
       disclosureFingerprint: prepared.disclosureFingerprint,
       expiresAt: prepared.expiresAt,
+      input: { ...input },
       owner,
       ownerId,
       planId: prepared.planId,
@@ -350,6 +374,37 @@ export class RunService {
             : 'native-confirmation-cancelled',
       });
       return false;
+    }
+    try {
+      const currentContext = await this.#contextResolver.resolve(
+        approval.input,
+        this.getSettings(),
+      );
+      assertCurrent();
+      if (currentContext.authority.fingerprint !== approval.contextAuthority.fingerprint) {
+        throw new Error(
+          'The Agent configuration or selected context changed after review. Review a fresh run.',
+        );
+      }
+    } catch (error) {
+      this.#approvals.delete(runId);
+      const cleanupError = await this.#runtime
+        .terminate(ownerId, approval.planId)
+        .then(() => undefined)
+        .catch((cause: unknown) => cause);
+      this.#store.appendAudit('agent-run', 'renderer-launch-confirmation', 'denied', {
+        runId,
+        adapterId: approval.disclosure.adapterId,
+        disclosureFingerprint: approval.disclosureFingerprint,
+        reason: 'persisted-run-authority-changed',
+      });
+      if (cleanupError !== undefined) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'The reviewed Agent context changed and its pending plan could not be terminated.',
+        );
+      }
+      throw error;
     }
     this.#approvals.delete(runId);
     await this.#runtime.launch(
@@ -595,6 +650,40 @@ export class RunService {
   }
 }
 
+function assertPreparedContextDisclosure(
+  resolution: PersistedAgentContextResolution,
+  disclosure: RunDisclosure,
+): void {
+  const expectedManifestId = resolution.context.manifestId ?? null;
+  const expectedManifestDigest = resolution.context.manifestDigest ?? null;
+  if (
+    disclosure.contextManifestId !== expectedManifestId ||
+    disclosure.contextManifestDigest !== expectedManifestDigest
+  ) {
+    throw new Error('The prepared Agent context manifest differs from the persisted selection.');
+  }
+  if (disclosure.contextAttachments.length !== resolution.context.attachments.length) {
+    throw new Error('The prepared Agent context attachment count changed before disclosure.');
+  }
+  disclosure.contextAttachments.forEach((attachment, index) => {
+    const expected = resolution.context.attachments[index];
+    const expectedRelativePath = resolution.authority.relativePaths[index];
+    if (
+      expected === undefined ||
+      expectedRelativePath === undefined ||
+      attachment.kind !== 'file' ||
+      attachment.sha256 !== expected.sha256 ||
+      portableRelativePath(disclosure.cwd, attachment.path) !== expectedRelativePath
+    ) {
+      throw new Error('The prepared Agent context differs from the persisted File-node selection.');
+    }
+  });
+}
+
+function portableRelativePath(root: string, candidate: string): string {
+  return path.relative(path.resolve(root), path.resolve(candidate)).split(path.sep).join('/');
+}
+
 async function testAgentCliPath(): Promise<string> {
   if (app.isPackaged) {
     const packagedPath = path.join(process.resourcesPath, 'test-agent', 'cli.js');
@@ -634,6 +723,8 @@ function runLaunchConfirmation(
       `Runtime: ${disclosure.runtime}`,
       `Environment variable names: ${JSON.stringify(disclosure.environmentVariableNames)}`,
       `Context attachments: ${JSON.stringify(disclosure.contextAttachments)}`,
+      `Context manifest ID: ${literal(disclosure.contextManifestId ?? 'none')}`,
+      `Context manifest SHA-256: ${literal(disclosure.contextManifestDigest ?? 'none')}`,
       `Permission profile: ${JSON.stringify(disclosure.permissionProfile)}`,
       `Branch: ${literal(disclosure.branch ?? 'none')}`,
       `Base commit: ${literal(disclosure.baseCommit ?? 'none')}`,

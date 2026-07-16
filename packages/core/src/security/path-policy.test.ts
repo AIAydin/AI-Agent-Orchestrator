@@ -244,4 +244,20 @@ describe('attachment manifests', () => {
       }),
     ).rejects.toMatchObject({ code: 'DUPLICATE' });
   });
+
+  it('rejects an in-project symbolic-link alias instead of silently changing its identity', async () => {
+    const { root } = await temporaryProject();
+    await writeFile(path.join(root, 'source.ts'), 'export const safe = true;\n');
+    await symlink(path.join(root, 'source.ts'), path.join(root, 'alias.ts'));
+
+    await expect(
+      buildAttachmentManifest({
+        projectId: 'project-1',
+        projectRoot: root,
+        receivingAdapterId: 'test-agent',
+        receivingProvider: 'Local',
+        relativePaths: ['alias.ts'],
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_A_FILE', relativePath: 'alias.ts' });
+  });
 });

@@ -278,7 +278,7 @@ describe('optional collaboration service', () => {
     editorDocument.destroy();
   });
 
-  it('rejects the next message from a member revoked on an active connection', async () => {
+  it('rejects the next shared comment after membership revocation on an active connection', async () => {
     const { address, adminToken, service } = await startService();
     const ownerToken = await createRoom(address, adminToken);
     const editorToken = await inviteAndRedeem(address, ownerToken, 'editor', 'editor-1');
@@ -293,10 +293,51 @@ describe('optional collaboration service', () => {
       headers: { Authorization: `Bearer ${ownerToken}` },
     });
     expect(revoked.status).toBe(204);
+    editorDocument.getMap('comments').set('revoked-comment', {
+      id: 'revoked-comment',
+      nodeId: 'node-1',
+      authorId: 'editor-1',
+      body: 'Revoked feedback must not arrive',
+      createdAt: '2026-07-15T12:00:00.000Z',
+    });
+
+    await waitFor(() =>
+      service.store
+        .listAudit('launch-room', 0, 500)
+        .some(
+          (event) =>
+            event.action === 'connection.credential_rejected' &&
+            event.details.reason === 'membership-denied',
+        ),
+    );
+    expect(ownerDocument.getMap('nodes').toJSON()['node-1']).toEqual(
+      expect.objectContaining({ title: 'Initial task' }),
+    );
+    expect(ownerDocument.getMap('comments').toJSON()['revoked-comment']).toBeUndefined();
+    ownerDocument.destroy();
+    editorDocument.destroy();
+  });
+
+  it('revalidates a live role downgrade before accepting the next graph message', async () => {
+    const { address, adminToken, service } = await startService();
+    const ownerToken = await createRoom(address, adminToken);
+    const editorToken = await inviteAndRedeem(address, ownerToken, 'editor', 'editor-1');
+    const ownerDocument = initializeOwnerDocument();
+    const editorDocument = new Y.Doc();
+    await connectClient(address, ownerToken, ownerDocument);
+    await connectClient(address, editorToken, editorDocument);
+    await waitFor(() => editorDocument.getMap('nodes').toJSON()['node-1'] !== undefined);
+
+    const changed = await requestJson(address, '/v1/rooms/launch-room/members/editor-1', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${ownerToken}` },
+      body: JSON.stringify({ role: 'viewer' }),
+    });
+    expect(changed.status).toBe(200);
     editorDocument.getMap('nodes').set('node-1', {
       id: 'node-1',
       type: 'task',
-      title: 'Revoked edit must not arrive',
+      title: 'Downgraded edit must not arrive',
       position: { x: 0, y: 0 },
       status: 'running',
     });
@@ -308,6 +349,49 @@ describe('optional collaboration service', () => {
           (event) =>
             event.action === 'connection.credential_rejected' &&
             event.details.reason === 'membership-denied',
+        ),
+    );
+    expect(ownerDocument.getMap('nodes').toJSON()['node-1']).toEqual(
+      expect.objectContaining({ title: 'Initial task' }),
+    );
+    ownerDocument.destroy();
+    editorDocument.destroy();
+  });
+
+  it('revalidates access-token expiry before accepting a message on an active connection', async () => {
+    const { address, adminToken, service } = await startService();
+    const ownerToken = await createRoom(address, adminToken);
+    await inviteAndRedeem(address, ownerToken, 'editor', 'editor-1');
+    const membership = service.store.getMembership('launch-room', 'editor-1');
+    if (membership === undefined) throw new Error('Missing integration membership.');
+    const expiringToken = service.tokens.createAccessToken({
+      roomId: membership.roomId,
+      subject: membership.subject,
+      role: membership.role,
+      tokenVersion: membership.tokenVersion,
+      expiresInSeconds: 1,
+    }).token;
+    const ownerDocument = initializeOwnerDocument();
+    const editorDocument = new Y.Doc();
+    await connectClient(address, ownerToken, ownerDocument);
+    await connectClient(address, expiringToken, editorDocument);
+    await waitFor(() => editorDocument.getMap('nodes').toJSON()['node-1'] !== undefined);
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+
+    editorDocument.getMap('nodes').set('node-1', {
+      id: 'node-1',
+      type: 'task',
+      title: 'Expired edit must not arrive',
+      position: { x: 0, y: 0 },
+      status: 'running',
+    });
+    await waitFor(() =>
+      service.store
+        .listAudit('launch-room', 0, 500)
+        .some(
+          (event) =>
+            event.action === 'connection.credential_rejected' &&
+            event.details.reason === 'access-token-expired',
         ),
     );
     expect(ownerDocument.getMap('nodes').toJSON()['node-1']).toEqual(

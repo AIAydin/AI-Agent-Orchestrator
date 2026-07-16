@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -9,6 +9,7 @@ import {
 } from '../../../../../shared/application/contracts.js';
 import type { WorkshopNode } from './CanvasNode.js';
 import { WorkspaceCanvas } from './WorkspaceCanvas.js';
+import { WORKSPACE_CONTEXT_DRAG_MIME } from '../context-dnd/contracts.js';
 
 const mocks = vi.hoisted(() => ({ reactFlowProps: null as unknown }));
 
@@ -35,14 +36,23 @@ vi.mock('@xyflow/react', () => ({
   Position: { Bottom: 'bottom', Left: 'left', Right: 'right', Top: 'top' },
   ReactFlow: (props: Record<string, unknown>) => {
     mocks.reactFlowProps = props;
+    const renderedNodes = props['nodes'] as WorkshopNode[];
     return (
       <div
         data-testid="react-flow"
         onKeyDownCapture={props['onKeyDownCapture'] as React.KeyboardEventHandler<HTMLDivElement>}
       >
-        <div className="react-flow__node" data-testid="focusable-node" tabIndex={0}>
-          <input name="node-editor" aria-label="Node editor" />
-        </div>
+        {renderedNodes.map((node, index) => (
+          <div
+            className="react-flow__node"
+            data-id={node.id}
+            data-testid={index === 0 ? 'focusable-node' : `canvas-node-${node.id}`}
+            key={node.id}
+            tabIndex={0}
+          >
+            {index === 0 ? <input name="node-editor" aria-label="Node editor" /> : null}
+          </div>
+        ))}
         {props['children'] as React.ReactNode}
       </div>
     );
@@ -74,7 +84,9 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     });
     expect(onKeyboardMove).toHaveBeenLastCalledWith({ x: 0, y: 1 }, false);
 
-    fireEvent.keyDown(screen.getByLabelText('Node editor'), { key: 'ArrowLeft' });
+    fireEvent.keyDown(screen.getByLabelText('Node editor'), {
+      key: 'ArrowLeft',
+    });
     expect(onKeyboardMove).toHaveBeenCalledTimes(2);
     fireEvent.keyDown(screen.getByTestId('focusable-node'), {
       key: 'ArrowLeft',
@@ -103,7 +115,7 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     const view = render(<WorkspaceCanvas {...props(vi.fn())} />);
     const flowProps = mocks.reactFlowProps as {
       onNodeDrag: (event: unknown, node: WorkshopNode, nodes: WorkshopNode[]) => void;
-      onNodeDragStop: () => void;
+      onNodeDragStop: (event: unknown, node: WorkshopNode, nodes: WorkshopNode[]) => void;
     };
     const [dragged] = nodes();
     if (dragged === undefined) throw new Error('Missing dragged test node.');
@@ -112,7 +124,7 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     expect(view.container.querySelector('.canvas-alignment-guide.vertical')).not.toBeNull();
     expect(view.container.querySelector('.canvas-alignment-guide.horizontal')).not.toBeNull();
 
-    act(() => flowProps.onNodeDragStop());
+    act(() => flowProps.onNodeDragStop({}, dragged, [dragged]));
     expect(view.container.querySelector('.canvas-alignment-guide')).toBeNull();
   });
 
@@ -127,9 +139,134 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     expect(flowProps.nodesDraggable).toBe(false);
     expect(flowProps.nodesConnectable).toBe(false);
     expect(flowProps.deleteKeyCode).toBeNull();
-    fireEvent.keyDown(screen.getByTestId('focusable-node'), { key: 'ArrowRight' });
+    fireEvent.keyDown(screen.getByTestId('focusable-node'), {
+      key: 'ArrowRight',
+    });
     expect(onKeyboardMove).not.toHaveBeenCalled();
     expect(screen.getByText(/cannot edit the shared graph/u)).toBeTruthy();
+  });
+});
+
+describe('WorkspaceCanvas Agent context drops', () => {
+  it('links a configured File node dropped directly on an Agent after preserving its move', async () => {
+    const onAttachAgentContext = vi.fn().mockResolvedValue(undefined);
+    const canvasProps = props(vi.fn());
+    const source = fileNode('source', 220, 115);
+    canvasProps.nodes = [source, node('agent', 200, 100, 'agent')];
+    canvasProps.onAttachAgentContext = onAttachAgentContext;
+    render(<WorkspaceCanvas {...canvasProps} />);
+    const flowProps = mocks.reactFlowProps as {
+      onNodeDragStop: (event: unknown, node: WorkshopNode, nodes: WorkshopNode[]) => void;
+    };
+
+    act(() => flowProps.onNodeDragStop({}, source, [source]));
+
+    await waitFor(() =>
+      expect(onAttachAgentContext).toHaveBeenCalledWith('agent', {
+        schemaVersion: 1,
+        kind: 'project-file',
+        projectId: canvas().projectId,
+        relativePath: 'src/context.ts',
+        sourceNodeId: 'source',
+      }),
+    );
+    expect(canvasProps.onNodesChange).not.toHaveBeenCalled();
+    expect(canvasProps.onContextDropError).not.toHaveBeenCalled();
+  });
+
+  it('attaches a strict project-file payload dropped on an unlocked Agent node', async () => {
+    const onAttachAgentContext = vi.fn().mockResolvedValue(undefined);
+    const canvasProps = props(vi.fn());
+    canvasProps.nodes = [node('source', 101, 99), node('agent', 100, 100, 'agent')];
+    canvasProps.onAttachAgentContext = onAttachAgentContext;
+    render(<WorkspaceCanvas {...canvasProps} />);
+    const dataTransfer = contextDataTransfer();
+    const target = screen.getByTestId('canvas-node-agent');
+
+    fireEvent.dragOver(target, { dataTransfer });
+    expect(dataTransfer.dropEffect).toBe('copy');
+    expect(fireEvent.drop(target, { dataTransfer })).toBe(false);
+
+    await waitFor(() =>
+      expect(onAttachAgentContext).toHaveBeenCalledWith('agent', contextPayload()),
+    );
+    expect(canvasProps.onContextDropError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: 'malformed payload',
+      configure: (canvasProps: ReturnType<typeof props>) => {
+        canvasProps.nodes = [node('source', 101, 99), node('agent', 100, 100, 'agent')];
+      },
+      dataTransfer: () => contextDataTransfer('{"schemaVersion":1,"kind":"project-file"}'),
+      target: 'canvas-node-agent',
+      message: /valid Forgeboard project file/u,
+    },
+    {
+      label: 'non-Agent target',
+      configure: (canvasProps: ReturnType<typeof props>) => {
+        canvasProps.nodes = [node('source', 101, 99), node('task', 100, 100)];
+      },
+      dataTransfer: () => contextDataTransfer(),
+      target: 'canvas-node-task',
+      message: /only be attached to an Agent node/u,
+    },
+    {
+      label: 'locked Agent',
+      configure: (canvasProps: ReturnType<typeof props>) => {
+        canvasProps.nodes = [
+          node('source', 101, 99),
+          {
+            ...node('agent', 100, 100, 'agent'),
+            data: { ...node('agent', 100, 100, 'agent').data, locked: true },
+          },
+        ];
+      },
+      dataTransfer: () => contextDataTransfer(),
+      target: 'canvas-node-agent',
+      message: /Unlock the Agent node/u,
+    },
+    {
+      label: 'read-only collaboration graph',
+      configure: (canvasProps: ReturnType<typeof props>) => {
+        canvasProps.nodes = [node('source', 101, 99), node('agent', 100, 100, 'agent')];
+        canvasProps.collaborationGraphReadOnly = true;
+      },
+      dataTransfer: () => contextDataTransfer(),
+      target: 'canvas-node-agent',
+      message: /cannot edit the shared graph/u,
+    },
+  ])('rejects a $label', async ({ configure, dataTransfer, target, message }) => {
+    const canvasProps = props(vi.fn());
+    configure(canvasProps);
+    render(<WorkspaceCanvas {...canvasProps} />);
+
+    expect(
+      fireEvent.drop(screen.getByTestId(target), {
+        dataTransfer: dataTransfer(),
+      }),
+    ).toBe(true);
+
+    expect(canvasProps.onAttachAgentContext).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(canvasProps.onContextDropError).toHaveBeenCalledWith(expect.stringMatching(message)),
+    );
+  });
+
+  it('reports asynchronous attachment failures', async () => {
+    const canvasProps = props(vi.fn());
+    canvasProps.nodes = [node('source', 101, 99), node('agent', 100, 100, 'agent')];
+    canvasProps.onAttachAgentContext = vi.fn().mockRejectedValue(new Error('File policy changed.'));
+    render(<WorkspaceCanvas {...canvasProps} />);
+
+    fireEvent.drop(screen.getByTestId('canvas-node-agent'), {
+      dataTransfer: contextDataTransfer(),
+    });
+
+    await waitFor(() =>
+      expect(canvasProps.onContextDropError).toHaveBeenCalledWith('File policy changed.'),
+    );
   });
 });
 
@@ -169,6 +306,8 @@ function props(
     onSelectionChange: vi.fn(),
     onAddNode: vi.fn(),
     onAddExtensionNode: vi.fn(),
+    onAttachAgentContext: vi.fn().mockResolvedValue(undefined),
+    onContextDropError: vi.fn(),
     collaborationAwareness: [],
     onCollaborationCursorMove: vi.fn(),
     onCollaborationCursorLeave: vi.fn(),
@@ -180,7 +319,12 @@ function nodes(): WorkshopNode[] {
   return [node('dragged', 101, 99), node('target', 100, 100)];
 }
 
-function node(id: string, x: number, y: number): WorkshopNode {
+function node(
+  id: string,
+  x: number,
+  y: number,
+  kind: WorkshopNode['data']['kind'] = 'task',
+): WorkshopNode {
   return {
     id,
     type: 'workshop',
@@ -188,7 +332,7 @@ function node(id: string, x: number, y: number): WorkshopNode {
     width: 100,
     height: 50,
     data: {
-      kind: 'task',
+      kind,
       title: id,
       description: id,
       status: 'idle',
@@ -197,6 +341,41 @@ function node(id: string, x: number, y: number): WorkshopNode {
       color: '#445566',
     },
   };
+}
+
+function fileNode(id: string, x: number, y: number): WorkshopNode {
+  return {
+    ...node(id, x, y, 'file'),
+    width: 60,
+    height: 40,
+    data: {
+      ...node(id, x, y, 'file').data,
+      file: {
+        projectId: canvas().projectId,
+        relativePath: 'src/context.ts',
+        kind: 'file',
+        missing: false,
+      },
+    },
+  };
+}
+
+function contextPayload() {
+  return {
+    schemaVersion: 1 as const,
+    kind: 'project-file' as const,
+    projectId: '70000000-0000-4000-8000-000000000001',
+    relativePath: 'docs/brief.md',
+    sourceNodeId: 'source',
+  };
+}
+
+function contextDataTransfer(serialized = JSON.stringify(contextPayload())): DataTransfer {
+  return {
+    types: [WORKSPACE_CONTEXT_DRAG_MIME],
+    getData: vi.fn((type: string) => (type === WORKSPACE_CONTEXT_DRAG_MIME ? serialized : '')),
+    dropEffect: 'none',
+  } as unknown as DataTransfer;
 }
 
 function canvas(): CanvasDocument {

@@ -19,6 +19,12 @@ import {
   PermissionProfileSchema,
 } from '../permissions/contracts.js';
 import { CommandConfigurationSchema } from '../commands/configuration.js';
+import {
+  MachineSpecificPathSchema,
+  OptionalMachineSpecificPathSchema,
+  OptionalMachineSpecificValueSchema,
+  PreviewTrustedHostsSchema,
+} from '../settings/values.js';
 
 export {
   CustomPermissionProfileSettingsSchema,
@@ -152,11 +158,7 @@ export const CustomAgentConfigurationSchema = z
         'This user-configured CLI may send the prompt and selected context to its configured provider.',
       ),
     sendsContextOffDevice: z.boolean().default(true),
-    executable: z
-      .string()
-      .max(32_768)
-      .refine((value) => !value.includes('\0') && !/[\r\n]/u.test(value))
-      .default(''),
+    executable: OptionalMachineSpecificValueSchema.default(''),
     versionArguments: z.array(CustomAgentArgumentSchema).min(1).max(16).default(['--version']),
     launchArguments: z.array(CustomAgentArgumentSchema).max(256).default([]),
     promptTransport: z.enum(['argument', 'stdin']).default('argument'),
@@ -177,11 +179,11 @@ export const AppSettingsSchema = z
     keyboardPreset: z.enum(['standard', 'vscode']).default('standard'),
     defaultAgent: z.enum(['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom']),
     defaultPermissionProfile: PermissionProfileSchema,
-    agentExecutableOverrides: z.record(z.string(), z.string().max(32_768)).default({}),
+    agentExecutableOverrides: z.record(z.string(), OptionalMachineSpecificValueSchema).default({}),
     agentDefaultModels: z.record(z.string(), z.string().max(512)).default({}),
     customAgent: CustomAgentConfigurationSchema.default({}),
     customPermissionProfile: CustomPermissionProfileSettingsSchema.default({}),
-    worktreeRoot: z.string(),
+    worktreeRoot: MachineSpecificPathSchema,
     worktreeCleanupPolicy: z.enum(['manual', 'after-merge', 'after-retention']).default('manual'),
     branchPrefix: BranchPrefixSchema.default('forgeboard/'),
     gitIdentityName: z
@@ -195,7 +197,7 @@ export const AppSettingsSchema = z
       .refine((value) => !containsControlCharacter(value))
       .default(''),
     gitRemote: z.string().min(1).max(512).default('origin'),
-    terminalShell: z.string(),
+    terminalShell: OptionalMachineSpecificValueSchema,
     envAllowlist: EnvironmentAllowlistSchema,
     developmentCommand: CommandConfigurationSchema.default({
       executable: '',
@@ -220,7 +222,7 @@ export const AppSettingsSchema = z
     customChecks: CustomChecksSchema.optional(),
     previewPortStart: z.number().int().min(1024).max(65534),
     previewPortEnd: z.number().int().min(1025).max(65535),
-    previewTrustedHosts: z.array(z.string().min(1).max(512)).default(['127.0.0.1', 'localhost']),
+    previewTrustedHosts: PreviewTrustedHostsSchema.default(['127.0.0.1', 'localhost']),
     dockerEnabled: z.boolean().default(false),
     dockerExecutable: DockerExecutableSettingSchema.default('docker'),
     dockerImage: z.union([z.literal(''), DockerImageReferenceSchema]).default(''),
@@ -236,7 +238,7 @@ export const AppSettingsSchema = z
     snapshotRetentionCount: z.number().int().min(1).max(10_000).default(100),
     autosaveIntervalMs: z.number().int().min(250).max(60_000).default(2000),
     backupsEnabled: z.boolean().default(true),
-    backupDirectory: z.string().max(32_768).default(''),
+    backupDirectory: OptionalMachineSpecificPathSchema.default(''),
     backupIntervalHours: z.number().int().min(1).max(168).default(24),
     backupOnQuit: z.boolean().default(true),
     backupRetentionCount: z.number().int().min(1).max(365).default(30),
@@ -1017,6 +1019,10 @@ export const IPC_CHANNELS = Object.freeze({
   settingsReset: 'settings:reset',
   settingsExport: 'settings:export',
   settingsImport: 'settings:import',
+  settingsRepairList: 'settings:repair-list',
+  settingsRepairGet: 'settings:repair-get',
+  settingsRepairExport: 'settings:repair-export',
+  settingsCheckFolderReadiness: 'settings:check-folder-readiness',
   agentsDetect: 'agents:detect',
   agentsCheckReadiness: 'agents:check-readiness',
   commandsCheckReadiness: 'commands:check-readiness',

@@ -3,11 +3,15 @@ import type * as Y from 'yjs';
 
 import {
   CollaborationMetadataSnapshotSchema,
+  CollaborationPublishReceiptSchema,
+  effectiveCollaborationSyncPending,
   type CollaborationAwarenessState,
   type CollaborationEvent,
   type CollaborationJoinInput,
+  type CollaborationMetadataSnapshot,
 } from '../../shared/collaboration/index.js';
 import { CollaborationClient } from './client.js';
+import { collaborationSnapshotFromDocument, replaceCollaborationDocument } from './document.js';
 import type { CollaborationProviderFactoryInput, CollaborationProviderHandle } from './provider.js';
 
 const NOW = '2026-07-15T12:00:00.000Z';
@@ -89,6 +93,7 @@ interface ProviderHarness {
   >;
   readonly clearCredential: ReturnType<typeof vi.fn>;
   readonly destroy: ReturnType<typeof vi.fn>;
+  readonly sendStateless: ReturnType<typeof vi.fn<(payload: string) => void>>;
   input: CollaborationProviderFactoryInput | null;
   localAwareness: CollaborationAwarenessState | null;
   awareness: ReadonlyArray<{
@@ -106,6 +111,7 @@ function providerHarness(): ProviderHarness {
     stateless: [],
     clearCredential: vi.fn(),
     destroy: vi.fn(),
+    sendStateless: vi.fn((payload: string) => harness.stateless.push(payload)),
     factory: vi.fn(),
   };
   harness.factory.mockImplementation((input) => {
@@ -116,7 +122,7 @@ function providerHarness(): ProviderHarness {
         harness.localAwareness = state;
       },
       awarenessStates: () => harness.awareness,
-      sendStateless: (payload) => harness.stateless.push(payload),
+      sendStateless: harness.sendStateless,
       clearCredential: harness.clearCredential,
       destroy: harness.destroy,
     };
@@ -290,6 +296,40 @@ describe('CollaborationClient', () => {
     );
   });
 
+  it('reports a lost delivery acknowledgement as an explicit retained-intent rejection', async () => {
+    vi.useFakeTimers();
+    const provider = providerHarness();
+    const events: CollaborationEvent[] = [];
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      createDeliveryId: () => '00000000-0000-4000-8000-000000000099',
+      now: () => new Date(NOW),
+      deliveryAcknowledgementTimeoutMs: 25,
+    });
+    try {
+      client.onEvent((event) => events.push(event));
+      await connect(client, provider);
+
+      expect(client.publish(snapshot())).toMatchObject({ disposition: 'sent' });
+      expect(provider.stateless).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(26);
+
+      expect(events.at(-1)).toMatchObject({
+        type: 'delivery-rejected',
+        duringReconnect: false,
+        rejection: {
+          deliveryId: '00000000-0000-4000-8000-000000000099',
+          reason: 'state-not-applied',
+        },
+      });
+      expect(client.snapshot).toEqual(snapshot());
+    } finally {
+      client.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it('enforces viewer metadata read-only authority in the main process', async () => {
     const provider = providerHarness();
     const client = new CollaborationClient({
@@ -308,6 +348,402 @@ describe('CollaborationClient', () => {
     provider.input?.onDisconnect();
     expect(client.publish(snapshot())).toBeNull();
     expect(provider.stateless).toEqual([]);
+  });
+
+  it('lets a reviewer add only an identity-bound comment without full graph publish authority', async () => {
+    const provider = providerHarness();
+    let sequence = 40;
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      createDeliveryId: () => `00000000-0000-4000-8000-${String(sequence++).padStart(12, '0')}`,
+      now: () => new Date(NOW),
+    });
+    const pending = client.join(joinInput({ accessToken: accessToken({ role: 'reviewer' }) }));
+    provider.input?.onAuthenticated();
+    provider.input?.onSynced();
+    await pending;
+    const document = provider.input?.document;
+    if (document === undefined) throw new Error('Missing collaboration document.');
+    replaceCollaborationDocument(document, snapshot(), Symbol('remote-room'));
+    const beforeApply = vi.fn(() => {
+      expect(client.snapshot?.comments).toEqual({});
+    });
+
+    expect(client.publish(snapshot())).toBeNull();
+    const result = client.createComment(
+      { nodeId: 'task-1', body: 'Reviewer feedback' },
+      beforeApply,
+    );
+
+    expect(beforeApply).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      comment: {
+        nodeId: 'task-1',
+        authorId: 'editor-1',
+        body: 'Reviewer feedback',
+      },
+      receipt: { disposition: 'sent' },
+    });
+    expect(client.snapshot).toMatchObject({
+      nodes: snapshot().nodes,
+      comments: {
+        [result?.comment.id ?? 'missing']: { authorId: 'editor-1', body: 'Reviewer feedback' },
+      },
+    });
+  });
+
+  it('reserves a delivery receipt before a comment mutation can fill the pending capacity', async () => {
+    const provider = providerHarness();
+    let sequence = 1_000;
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      createDeliveryId: () => `00000000-0000-4000-8000-${String(sequence++).padStart(12, '0')}`,
+      now: () => new Date(NOW),
+    });
+    const joining = client.join(joinInput({ accessToken: accessToken({ role: 'editor' }) }));
+    provider.input?.onAuthenticated();
+    provider.input?.onSynced();
+    await joining;
+    const document = provider.input?.document;
+    if (document === undefined) throw new Error('Missing collaboration document.');
+    replaceCollaborationDocument(document, snapshot(), Symbol('remote-room'));
+    let competingReceipts = 0;
+
+    const result = client.createComment(
+      { nodeId: 'task-1', body: 'Receipt-bound feedback' },
+      () => {
+        for (let index = 0; index < 300; index += 1) {
+          if (client.publish(snapshot()) !== null) competingReceipts += 1;
+        }
+      },
+    );
+
+    expect(competingReceipts).toBe(255);
+    expect(result).toMatchObject({
+      comment: { body: 'Receipt-bound feedback' },
+      receipt: { disposition: 'sent' },
+    });
+    expect(client.snapshot?.comments[result?.comment.id ?? 'missing']).toMatchObject({
+      body: 'Receipt-bound feedback',
+    });
+    expect(provider.stateless).toHaveLength(256);
+  });
+
+  it('does not mutate publish, comment, or replay state when durable receipt staging fails', async () => {
+    const provider = providerHarness();
+    let sequence = 2_000;
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      createDeliveryId: () => `00000000-0000-4000-8000-${String(sequence++).padStart(12, '0')}`,
+      now: () => new Date(NOW),
+    });
+    await connect(client, provider);
+    const document = provider.input?.document;
+    if (document === undefined) throw new Error('Missing collaboration document.');
+    const baseline = snapshot();
+    replaceCollaborationDocument(document, baseline, Symbol('remote-room'));
+    const failJournal = vi.fn((receipt: unknown) => {
+      const parsed = CollaborationPublishReceiptSchema.parse(receipt);
+      expect(parsed.deliveryId).toMatch(/^[a-f0-9-]{36}$/u);
+      expect(parsed.snapshotDigest).toMatch(/^[a-f0-9]{64}$/u);
+      expect(parsed.disposition).toBe('sent');
+      throw new Error('durable journal unavailable');
+    });
+
+    expect(() =>
+      client.publish(
+        { ...baseline, canvas: { ...baseline.canvas, title: 'Must not escape' } },
+        failJournal,
+      ),
+    ).toThrow(/durable journal unavailable/u);
+    expect(() =>
+      client.createComment(
+        { nodeId: 'task-1', body: 'Must not escape' },
+        (_candidate, _comment, receipt) => failJournal(receipt),
+      ),
+    ).toThrow(/durable journal unavailable/u);
+    expect(() =>
+      client.replayComments(
+        [
+          {
+            id: 'comment-restart',
+            nodeId: 'task-1',
+            authorId: 'editor-1',
+            body: 'Must not escape',
+            resolved: false,
+            createdAt: NOW,
+          },
+        ],
+        (_candidate, receipt) => failJournal(receipt),
+      ),
+    ).toThrow(/durable journal unavailable/u);
+
+    expect(failJournal).toHaveBeenCalledTimes(3);
+    expect(client.snapshot).toEqual(baseline);
+    expect(provider.stateless).toEqual([]);
+    expect(client.publish(baseline)).toMatchObject({ disposition: 'sent' });
+    expect(provider.stateless).toHaveLength(1);
+  });
+
+  it('keeps exact suppression local and requires a clean rejoin before later authoring', async () => {
+    const provider = providerHarness();
+    const events: CollaborationEvent[] = [];
+    let sequence = 3_000;
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      createDeliveryId: () => `00000000-0000-4000-8000-${String(sequence++).padStart(12, '0')}`,
+      now: () => new Date(NOW),
+    });
+    client.onEvent((event) => events.push(event));
+    await connect(client, provider);
+    const document = provider.input?.document;
+    if (document === undefined) throw new Error('Missing collaboration document.');
+    const rejected = {
+      id: 'comment-rejected',
+      nodeId: 'task-1',
+      authorId: 'editor-1',
+      body: 'Rejected local text',
+      createdAt: NOW,
+    };
+    const reply = {
+      ...rejected,
+      id: 'comment-reply',
+      body: 'Dependent reply',
+      replyToId: rejected.id,
+    };
+    const review = {
+      id: 'review-1',
+      nodeId: 'task-1',
+      reviewerId: 'editor-1',
+      status: 'changes-requested' as const,
+      createdAt: NOW,
+    };
+    const authoritative = CollaborationMetadataSnapshotSchema.parse({
+      ...snapshot(),
+      reviews: { [review.id]: review },
+    });
+    const polluted = CollaborationMetadataSnapshotSchema.parse({
+      ...authoritative,
+      comments: { [rejected.id]: rejected, [reply.id]: reply },
+      reviews: {
+        [review.id]: {
+          ...review,
+          commentIds: [rejected.id, reply.id],
+        },
+      },
+    });
+    replaceCollaborationDocument(document, polluted, Symbol('remote-room'));
+
+    client.setRejectedCommentSuppressions([rejected], authoritative);
+
+    expect(collaborationSnapshotFromDocument(document)).toEqual(polluted);
+    expect(client.snapshot).toEqual(
+      effectiveCollaborationSyncPending({
+        baseline: authoritative,
+        pending: polluted,
+        dismissedRejectedComments: [rejected],
+      }),
+    );
+    expect(client.snapshot?.comments).toEqual({});
+    expect(client.snapshot?.reviews[review.id]).toEqual(review);
+    expect(events.findLast((event) => event.type === 'metadata-snapshot')).toMatchObject({
+      type: 'metadata-snapshot',
+      snapshot: { comments: {}, reviews: { [review.id]: review } },
+    });
+
+    client.setRejectedCommentSuppressions([]);
+    expect(client.snapshot?.comments).toEqual(polluted.comments);
+    client.setRejectedCommentSuppressions([rejected], authoritative);
+
+    const staleJournal = vi.fn();
+    expect(() => client.publish(polluted, staleJournal)).toThrow(/stale collaboration view/u);
+    expect(staleJournal).not.toHaveBeenCalled();
+    const cleanJournal = vi.fn();
+    expect(() => client.publish(authoritative, cleanJournal)).toThrow(/Leave and rejoin/u);
+    expect(cleanJournal).not.toHaveBeenCalled();
+    expect(provider.stateless).toEqual([]);
+
+    const createdCandidate = vi.fn<(candidate: CollaborationMetadataSnapshot) => void>();
+    expect(() =>
+      client.createComment({ nodeId: 'task-1', body: 'Fresh feedback' }, (candidate) => {
+        createdCandidate(candidate);
+      }),
+    ).toThrow(/Leave and rejoin/u);
+    expect(createdCandidate).not.toHaveBeenCalled();
+    expect(collaborationSnapshotFromDocument(document)).toEqual(polluted);
+    expect(provider.stateless).toEqual([]);
+
+    expect(client.replayComments([rejected])).toBeNull();
+    expect(collaborationSnapshotFromDocument(document)).toEqual(polluted);
+    const replayed = {
+      id: 'comment-replayed',
+      nodeId: 'task-1',
+      authorId: 'editor-1',
+      body: 'Recovered independent feedback',
+      createdAt: NOW,
+    };
+    const replayCandidate = vi.fn<(candidate: CollaborationMetadataSnapshot) => void>();
+    expect(() =>
+      client.replayComments([rejected, replayed], (candidate) => {
+        replayCandidate(candidate);
+      }),
+    ).toThrow(/Leave and rejoin/u);
+    expect(replayCandidate).not.toHaveBeenCalled();
+    expect(collaborationSnapshotFromDocument(document)).toEqual(polluted);
+    expect(provider.stateless).toEqual([]);
+
+    const eventCountBeforeRejoin = events.length;
+    client.leave();
+    await connect(client, provider);
+    expect(
+      events
+        .slice(eventCountBeforeRejoin)
+        .some(
+          (event) =>
+            event.type === 'metadata-snapshot' &&
+            event.snapshot.comments[rejected.id] !== undefined,
+        ),
+    ).toBe(false);
+    const cleanDocument = provider.input?.document;
+    if (cleanDocument === undefined) throw new Error('Missing rejoined collaboration document.');
+    replaceCollaborationDocument(cleanDocument, authoritative, Symbol('remote-room'));
+    const created = client.createComment({ nodeId: 'task-1', body: 'Fresh feedback' });
+    expect(created).toMatchObject({
+      comment: {
+        id: '00000000-0000-4000-8000-000000003001',
+        body: 'Fresh feedback',
+      },
+      receipt: { disposition: 'sent' },
+    });
+    const replayApplied = vi.fn();
+    expect(
+      client.replayComments([replayed], (candidate) => {
+        expect(candidate.comments[replayed.id]).toEqual(replayed);
+        expect(candidate.reviews).toEqual({ [review.id]: review });
+        replayApplied();
+      }),
+    ).toMatchObject({ disposition: 'sent' });
+    expect(replayApplied).toHaveBeenCalledOnce();
+    expect(collaborationSnapshotFromDocument(cleanDocument)).toEqual(client.snapshot);
+    expect(client.snapshot?.comments).toMatchObject({ [replayed.id]: replayed });
+    expect(provider.stateless).toHaveLength(2);
+  });
+
+  it('does not turn a failing event listener into a post-mutation operation failure', async () => {
+    const provider = providerHarness();
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      now: () => new Date(NOW),
+    });
+    await connect(client, provider);
+    const observed: CollaborationEvent[] = [];
+    client.onEvent(() => {
+      throw new Error('renderer transport unavailable');
+    });
+    client.onEvent((event) => observed.push(event));
+
+    expect(() => client.publish(snapshot())).not.toThrow();
+    expect(provider.stateless).toHaveLength(1);
+    expect(observed).toContainEqual(expect.objectContaining({ type: 'metadata-snapshot' }));
+  });
+
+  it('retains a journaled receipt when the confirmation transport throws after mutation', async () => {
+    const provider = providerHarness();
+    provider.sendStateless.mockImplementationOnce(() => {
+      throw new Error('transport write failed');
+    });
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      now: () => new Date(NOW),
+    });
+    await connect(client, provider);
+    const journal = vi.fn();
+
+    expect(() => client.publish(snapshot(), journal)).not.toThrow();
+    expect(journal).toHaveBeenCalledOnce();
+    expect(client.snapshot).toEqual(snapshot());
+    expect(provider.sendStateless).toHaveBeenCalledOnce();
+  });
+
+  it('does not let a viewer create a shared comment', async () => {
+    const provider = providerHarness();
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      now: () => new Date(NOW),
+    });
+    const pending = client.join(joinInput({ accessToken: accessToken({ role: 'viewer' }) }));
+    provider.input?.onAuthenticated();
+    provider.input?.onSynced();
+    await pending;
+    const document = provider.input?.document;
+    if (document === undefined) throw new Error('Missing collaboration document.');
+    replaceCollaborationDocument(document, snapshot(), Symbol('remote-room'));
+
+    expect(client.createComment({ nodeId: 'task-1', body: 'Forbidden' })).toBeNull();
+    expect(client.snapshot?.comments).toEqual({});
+  });
+
+  it('replays retained reviewer comments with their original main-authored identity only', async () => {
+    const provider = providerHarness();
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      createDeliveryId: () => '00000000-0000-4000-8000-000000000078',
+      now: () => new Date(NOW),
+    });
+    const pending = client.join(joinInput({ accessToken: accessToken({ role: 'reviewer' }) }));
+    provider.input?.onAuthenticated();
+    provider.input?.onSynced();
+    await pending;
+    const document = provider.input?.document;
+    if (document === undefined) throw new Error('Missing collaboration document.');
+    replaceCollaborationDocument(document, snapshot(), Symbol('remote-room'));
+    const beforeApply = vi.fn(() => expect(client.snapshot?.comments).toEqual({}));
+
+    expect(
+      client.replayComments(
+        [
+          {
+            id: 'comment-restart',
+            nodeId: 'task-1',
+            authorId: 'editor-1',
+            body: 'Retained reviewer feedback',
+            resolved: false,
+            createdAt: NOW,
+          },
+        ],
+        beforeApply,
+      ),
+    ).toMatchObject({ disposition: 'sent' });
+    expect(beforeApply).toHaveBeenCalledOnce();
+    expect(client.snapshot).toMatchObject({
+      nodes: snapshot().nodes,
+      comments: {
+        'comment-restart': {
+          authorId: 'editor-1',
+          body: 'Retained reviewer feedback',
+        },
+      },
+    });
+    expect(() =>
+      client.replayComments([
+        {
+          id: 'forged-comment',
+          nodeId: 'task-1',
+          authorId: 'another-user',
+          body: 'Forged',
+          resolved: false,
+          createdAt: NOW,
+        },
+      ]),
+    ).toThrow(/authenticated collaborator/u);
   });
 
   it('rejects pre-auth metadata and queues editable metadata safely during reconnect', async () => {

@@ -9,6 +9,8 @@ import type {
   CollaborationConnection,
   CollaborationMetadataSnapshot,
   CollaborationPublishInput,
+  CollaborationSyncRecovery,
+  CollaborationCreateCommentResult,
 } from '../../../../../shared/collaboration/index.js';
 import { CollaborationMetadataSnapshotSchema } from '../../../../../shared/collaboration/index.js';
 import { useCollaborationCanvas } from './useCollaborationCanvas.js';
@@ -28,6 +30,25 @@ const publish = vi.fn((input: CollaborationPublishInput) => {
   });
 });
 const updateAwareness = vi.fn(() => Promise.resolve({ ok: true as const, value: true }));
+const recover = vi.fn(() =>
+  Promise.resolve({
+    ok: true as const,
+    value: null as CollaborationSyncRecovery | null,
+  }),
+);
+const checkpoint = vi.fn(() => Promise.resolve({ ok: true as const, value: true }));
+const createComment = vi.fn(() =>
+  Promise.resolve({
+    ok: true as const,
+    value: null as CollaborationCreateCommentResult | null,
+  }),
+);
+const discardRejectedComment = vi.fn(() =>
+  Promise.resolve({
+    ok: true as const,
+    value: null as CollaborationSyncRecovery | null,
+  }),
+);
 const readSnapshot = vi.fn(() =>
   Promise.resolve({
     ok: true as const,
@@ -37,7 +58,13 @@ const readSnapshot = vi.fn(() =>
 const getConnection = vi.fn<() => Promise<{ ok: true; value: CollaborationConnection | null }>>(
   () => Promise.resolve({ ok: true, value: null }),
 );
-const onSnapshot = vi.fn(() => true);
+const onSnapshot = vi.fn(
+  (snapshot: CollaborationMetadataSnapshot, context: { readonly initial: boolean }) => {
+    void snapshot;
+    void context;
+    return true;
+  },
+);
 const onError = vi.fn();
 let eventListener: ((event: CollaborationEvent) => void) | null = null;
 
@@ -45,6 +72,11 @@ beforeEach(() => {
   publish.mockClear();
   nextDelivery = 20;
   updateAwareness.mockClear();
+  recover.mockClear();
+  checkpoint.mockClear();
+  createComment.mockClear();
+  discardRejectedComment.mockReset();
+  discardRejectedComment.mockResolvedValue({ ok: true, value: null });
   readSnapshot.mockReset();
   readSnapshot.mockResolvedValue({ ok: true, value: null });
   getConnection.mockReset();
@@ -62,6 +94,10 @@ beforeEach(() => {
         join: vi.fn(),
         leave: vi.fn(),
         publish,
+        recover,
+        checkpoint,
+        discardRejectedComment,
+        createComment,
         updateAwareness,
         onEvent: vi.fn((listener: (event: CollaborationEvent) => void) => {
           eventListener = listener;
@@ -663,6 +699,280 @@ describe('useCollaborationCanvas', () => {
     hook.rerender({ enabled: false });
     await waitFor(() => expect(hook.result.current.graphReadOnly).toBe(false));
   });
+
+  it('restores a durable disjoint local intent against the authenticated room after restart', async () => {
+    const baseline = roomSnapshot();
+    const pending = CollaborationMetadataSnapshotSchema.parse({
+      ...baseline,
+      canvas: { ...baseline.canvas, updatedAt: '2026-07-15T12:01:00.000Z' },
+      nodes: {
+        ...baseline.nodes,
+        'agent-1': {
+          ...baseline.nodes['agent-1'],
+          title: 'Local restart title',
+        },
+      },
+    });
+    const remote = CollaborationMetadataSnapshotSchema.parse({
+      ...baseline,
+      canvas: {
+        ...baseline.canvas,
+        title: 'Remote canvas title',
+        updatedAt: '2026-07-15T12:02:00.000Z',
+      },
+    });
+    recover.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        baseline,
+        pending,
+        disposition: 'staged',
+        expiresAt: '2026-08-14T12:00:00.000Z',
+      },
+    });
+    readSnapshot.mockResolvedValueOnce({ ok: true, value: remote });
+    renderHook(() =>
+      useCollaborationCanvas({
+        enabled: true,
+        document: canvas(),
+        selectedNodeId: null,
+        onSnapshot,
+        onError,
+        debounceMs: 0,
+      }),
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+
+    await waitFor(() => expect(onSnapshot).toHaveBeenCalled());
+    const applied = onSnapshot.mock.calls.at(-1);
+    expect(applied?.[0].canvas.title).toBe('Remote canvas title');
+    expect(applied?.[0].nodes['agent-1']?.title).toBe('Local restart title');
+    expect(applied?.[1]).toEqual({ initial: false });
+    expect(onError).not.toHaveBeenCalledWith(expect.stringMatching(/conflict/u));
+  });
+
+  it('pauses a durable same-field restart conflict without checkpointing it away', async () => {
+    const baseline = roomSnapshot();
+    const pending = CollaborationMetadataSnapshotSchema.parse({
+      ...baseline,
+      canvas: { ...baseline.canvas, title: 'Local restart title' },
+    });
+    const remote = CollaborationMetadataSnapshotSchema.parse({
+      ...baseline,
+      canvas: { ...baseline.canvas, title: 'Remote restart title' },
+    });
+    recover.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        baseline,
+        pending,
+        disposition: 'staged',
+        expiresAt: '2026-08-14T12:00:00.000Z',
+      },
+    });
+    readSnapshot.mockResolvedValueOnce({ ok: true, value: remote });
+    renderHook(() =>
+      useCollaborationCanvas({
+        enabled: true,
+        document: canvas(),
+        selectedNodeId: null,
+        onSnapshot,
+        onError,
+        debounceMs: 0,
+      }),
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/conflict/u)));
+    expect(onSnapshot).not.toHaveBeenCalled();
+    expect(checkpoint).not.toHaveBeenCalled();
+  });
+
+  it('retains recovered graph intent locally after a role downgrade without replaying it', async () => {
+    const baseline = roomSnapshot();
+    const pending = CollaborationMetadataSnapshotSchema.parse({
+      ...baseline,
+      nodes: {
+        ...baseline.nodes,
+        'agent-1': {
+          ...baseline.nodes['agent-1'],
+          title: 'Privileged offline edit',
+        },
+      },
+    });
+    recover.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        baseline,
+        pending,
+        disposition: 'queued-offline',
+        deliveryId: deliveryId(89),
+        snapshotDigest: 'c'.repeat(64),
+        expiresAt: '2026-08-14T12:00:00.000Z',
+      },
+    });
+    readSnapshot.mockResolvedValueOnce({ ok: true, value: baseline });
+    renderHook(() =>
+      useCollaborationCanvas({
+        enabled: true,
+        document: canvas(),
+        selectedNodeId: null,
+        onSnapshot,
+        onError,
+        debounceMs: 0,
+      }),
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected', 'viewer')));
+
+    await waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(baseline, { initial: false }));
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/retained on this device/u));
+    expect(publish).not.toHaveBeenCalled();
+    expect(checkpoint).not.toHaveBeenCalled();
+  });
+
+  it('does not checkpoint an authenticated snapshot while its local delivery is unacknowledged', async () => {
+    readSnapshot.mockResolvedValue({ ok: true, value: roomSnapshot() });
+    const hook = renderHook(
+      ({ document }: { document: CanvasDocument }) =>
+        useCollaborationCanvas({
+          enabled: true,
+          document,
+          selectedNodeId: null,
+          onSnapshot,
+          onError,
+          debounceMs: 0,
+        }),
+      { initialProps: { document: canvas() } },
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    act(() => eventListener?.(deliveryAcknowledgedEvent(20, false)));
+    await waitFor(() => expect(readSnapshot).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(checkpoint).toHaveBeenCalled());
+    checkpoint.mockClear();
+    publish.mockClear();
+
+    hook.rerender({ document: changedCanvas('Pending local title') });
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    const published = publish.mock.calls[0]?.[0].snapshot;
+    if (published === undefined) throw new Error('Missing published snapshot.');
+    readSnapshot.mockResolvedValue({ ok: true, value: published });
+    act(() => eventListener?.(metadataEvent(published)));
+    await waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(published, { initial: false }));
+    expect(checkpoint).not.toHaveBeenCalled();
+
+    act(() => eventListener?.(deliveryAcknowledgedEvent(21, false)));
+    await waitFor(() =>
+      expect(checkpoint).toHaveBeenCalledWith(expect.objectContaining({ snapshot: published })),
+    );
+  });
+
+  it('reattaches an in-flight graph receipt by digest without confusing its serialized dedupe key', async () => {
+    const hook = renderHook(() =>
+      useCollaborationCanvas({
+        enabled: true,
+        document: canvas(),
+        selectedNodeId: null,
+        onSnapshot,
+        onError,
+        debounceMs: 0,
+      }),
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    const pending = publish.mock.calls[0]?.[0].snapshot;
+    if (pending === undefined) throw new Error('Missing graph delivery candidate.');
+    recover.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        baseline: null,
+        pending,
+        deliveryId: deliveryId(20),
+        snapshotDigest: 'a'.repeat(64),
+        disposition: 'sent',
+        expiresAt: '2026-08-14T12:00:00.000Z',
+        replayedReceipt: {
+          deliveryId: deliveryId(20),
+          snapshotDigest: 'a'.repeat(64),
+          disposition: 'sent',
+        },
+      },
+    });
+
+    act(() => eventListener?.(statusEvent('reconnecting')));
+    act(() => eventListener?.(statusEvent('connected')));
+
+    await waitFor(() => expect(recover).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(hook.result.current.canComment).toBe(true));
+    expect(onError).not.toHaveBeenCalledWith(
+      'Collaboration paused because a durable delivery receipt changed identity during recovery.',
+    );
+    act(() => eventListener?.(deliveryAcknowledgedEvent(20, true)));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('does not republish a recovered graph receipt after the renderer remounts', async () => {
+    const first = renderHook(() =>
+      useCollaborationCanvas({
+        enabled: true,
+        document: canvas(),
+        selectedNodeId: null,
+        onSnapshot,
+        onError,
+        debounceMs: 0,
+      }),
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+    await waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    const pending = publish.mock.calls[0]?.[0].snapshot;
+    if (pending === undefined) throw new Error('Missing graph delivery candidate.');
+    first.unmount();
+
+    recover.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        baseline: null,
+        pending,
+        deliveryId: deliveryId(20),
+        snapshotDigest: 'a'.repeat(64),
+        disposition: 'sent',
+        expiresAt: '2026-08-14T12:00:00.000Z',
+        replayedReceipt: {
+          deliveryId: deliveryId(20),
+          snapshotDigest: 'a'.repeat(64),
+          disposition: 'sent',
+        },
+      },
+    });
+    readSnapshot.mockResolvedValueOnce({ ok: true, value: pending });
+    const remounted = renderHook(() =>
+      useCollaborationCanvas({
+        enabled: true,
+        document: canvas(),
+        selectedNodeId: null,
+        onSnapshot,
+        onError,
+        debounceMs: 0,
+      }),
+    );
+    await waitFor(() => expect(eventListener).not.toBeNull());
+    act(() => eventListener?.(statusEvent('connected')));
+
+    await waitFor(() => expect(recover).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(remounted.result.current.canComment).toBe(true));
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+    expect(publish).toHaveBeenCalledOnce();
+    act(() => eventListener?.(deliveryAcknowledgedEvent(20, false)));
+    expect(onError).not.toHaveBeenCalled();
+  });
 });
 
 function canvas(): CanvasDocument {
@@ -781,7 +1091,15 @@ function deliveryAcknowledgedEvent(
   };
 }
 
-function deliveryRejectedEvent(sequence: number): CollaborationEvent {
+function deliveryRejectedEvent(
+  sequence: number,
+  reason:
+    | 'invalid-request'
+    | 'not-authorized'
+    | 'state-not-applied'
+    | 'document-too-large' = 'state-not-applied',
+  duringReconnect = true,
+): CollaborationEvent {
   return {
     type: 'delivery-rejected',
     sequence: 5,
@@ -793,9 +1111,9 @@ function deliveryRejectedEvent(sequence: number): CollaborationEvent {
       type: 'delivery-rejected',
       deliveryId: deliveryId(sequence),
       stateVector: 'AQID',
-      reason: 'state-not-applied',
+      reason,
     },
-    duringReconnect: true,
+    duringReconnect,
   };
 }
 

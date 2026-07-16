@@ -20,6 +20,7 @@ import type {
   AppSettings,
   Project,
 } from '../../../../../shared/application/contracts.js';
+import { settingsDraftValidationIssues } from '../../../../../shared/settings/draft-validation.js';
 import { unwrap } from '../../../lib/ipc.js';
 import { ExtensionSettings } from '../../extensions/ExtensionSettings.js';
 import { AgentsSettings } from '../agents/AgentsSettings.js';
@@ -34,9 +35,11 @@ import { PrivacySettings } from '../privacy/PrivacySettings.js';
 import { customPermissionConfigurationIssues } from '../../permissions/permission-profile-ui.js';
 import { environmentAllowlistIssues } from '../../configuration/EnvironmentAllowlistEditor.js';
 import { useCommandReadiness } from '../../configuration/useCommandReadiness.js';
+import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadiness.js';
+import { useSettingsFolderReadiness } from '../readiness/useSettingsFolderReadiness.js';
 import { settingsCommandDrafts } from './command-drafts.js';
 
-type SettingsTab =
+export type SettingsTab =
   | 'appearance'
   | 'agents'
   | 'permissions'
@@ -60,10 +63,11 @@ interface SettingsPanelProps {
   onFlushActiveCanvas: () => Promise<boolean>;
   onRecoveryApplied: () => Promise<void>;
   onError: (message: string) => void;
+  initialTab?: SettingsTab;
 }
 
 export function SettingsPanel(props: SettingsPanelProps) {
-  const [tab, setTab] = useState<SettingsTab>('appearance');
+  const [tab, setTab] = useState<SettingsTab>(props.initialTab ?? 'appearance');
   const [draft, setDraft] = useState(props.settings);
   const [busy, setBusy] = useState(false);
   const [deletePhrase, setDeletePhrase] = useState('');
@@ -76,12 +80,20 @@ export function SettingsPanel(props: SettingsPanelProps) {
   busyRef.current = busy;
   const permissionIssues = customPermissionConfigurationIssues(draft);
   const environmentIssues = environmentAllowlistIssues(draft.envAllowlist);
+  const draftIssues = settingsDraftValidationIssues(draft);
   const commandDrafts = settingsCommandDrafts(draft);
   const commandReadiness = useCommandReadiness(
     commandDrafts,
     props.activeProject?.id ?? null,
     checkCommandReadiness,
   );
+  const agentReadiness = useSettingsAgentReadiness(
+    draft,
+    props.settings,
+    props.agents,
+    checkAgentReadiness,
+  );
+  const folderReadiness = useSettingsFolderReadiness(draft, checkFolderReadiness);
 
   useEffect(() => {
     const previousFocus =
@@ -145,6 +157,9 @@ export function SettingsPanel(props: SettingsPanelProps) {
     const validationIssue =
       permissionIssues[0] ??
       environmentIssues[0] ??
+      draftIssues[0] ??
+      folderReadiness.blockingIssues[0] ??
+      agentReadiness.blockingIssues[0] ??
       commandReadiness.blockingIssues[0] ??
       (dockerConfigurationIncomplete(draft)
         ? 'Complete the selected Docker configuration before saving.'
@@ -259,9 +274,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 setDraft={setDraft}
                 busy={busy}
                 perform={perform}
-                checkAgentReadiness={async (input) =>
-                  unwrap(await window.forgeboard.agents.checkReadiness(input))
-                }
+                readiness={agentReadiness}
                 onError={props.onError}
               />
             )}
@@ -282,6 +295,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 busy={busy}
                 perform={perform}
                 developmentReadiness={commandReadiness.statuses['development']}
+                managedWorktreeReadiness={folderReadiness.statuses['managed-worktrees']}
               />
             )}
             {tab === 'checks' && (
@@ -318,6 +332,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 onDeleteAll={props.onDeleteAll}
                 onFlushActiveCanvas={props.onFlushActiveCanvas}
                 onRecoveryApplied={props.onRecoveryApplied}
+                backupReadiness={folderReadiness.statuses['backup-destination']}
               />
             )}
             {tab === 'help' && (
@@ -349,6 +364,33 @@ export function SettingsPanel(props: SettingsPanelProps) {
             )}
             {permissionIssues.length === 0 &&
               environmentIssues.length === 0 &&
+              draftIssues[0] !== undefined && (
+                <small id="settings-draft-validation" role="alert">
+                  {draftIssues[0]}
+                </small>
+              )}
+            {permissionIssues.length === 0 &&
+              environmentIssues.length === 0 &&
+              draftIssues.length === 0 &&
+              folderReadiness.blockingIssues[0] !== undefined && (
+                <small id="settings-folder-validation" role="alert">
+                  {folderReadiness.blockingIssues[0]}
+                </small>
+              )}
+            {permissionIssues.length === 0 &&
+              environmentIssues.length === 0 &&
+              draftIssues.length === 0 &&
+              folderReadiness.blockingIssues.length === 0 &&
+              agentReadiness.blockingIssues[0] !== undefined && (
+                <small id="settings-agent-validation" role="alert">
+                  {agentReadiness.blockingIssues[0]}
+                </small>
+              )}
+            {permissionIssues.length === 0 &&
+              environmentIssues.length === 0 &&
+              draftIssues.length === 0 &&
+              folderReadiness.blockingIssues.length === 0 &&
+              agentReadiness.blockingIssues.length === 0 &&
               commandReadiness.blockingIssues[0] !== undefined && (
                 <small id="settings-command-validation" role="alert">
                   {commandReadiness.blockingIssues[0]}
@@ -378,19 +420,33 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 dockerConfigurationIncomplete(draft) ||
                 permissionIssues.length > 0 ||
                 environmentIssues.length > 0 ||
+                draftIssues.length > 0 ||
+                folderReadiness.blockingIssues.length > 0 ||
+                agentReadiness.blockingIssues.length > 0 ||
                 commandReadiness.blockingIssues.length > 0
               }
               title={
-                permissionIssues[0] ?? environmentIssues[0] ?? commandReadiness.blockingIssues[0]
+                permissionIssues[0] ??
+                environmentIssues[0] ??
+                draftIssues[0] ??
+                folderReadiness.blockingIssues[0] ??
+                agentReadiness.blockingIssues[0] ??
+                commandReadiness.blockingIssues[0]
               }
               aria-describedby={
                 permissionIssues.length > 0
                   ? 'settings-permission-validation'
                   : environmentIssues.length > 0
                     ? 'settings-environment-validation'
-                    : commandReadiness.blockingIssues.length > 0
-                      ? 'settings-command-validation'
-                      : undefined
+                    : draftIssues.length > 0
+                      ? 'settings-draft-validation'
+                      : folderReadiness.blockingIssues.length > 0
+                        ? 'settings-folder-validation'
+                        : agentReadiness.blockingIssues.length > 0
+                          ? 'settings-agent-validation'
+                          : commandReadiness.blockingIssues.length > 0
+                            ? 'settings-command-validation'
+                            : undefined
               }
             >
               <Save size={15} /> Save settings
@@ -406,6 +462,18 @@ async function checkCommandReadiness(
   input: Parameters<typeof window.forgeboard.commands.checkReadiness>[0],
 ) {
   return unwrap(await window.forgeboard.commands.checkReadiness(input));
+}
+
+async function checkAgentReadiness(
+  input: Parameters<typeof window.forgeboard.agents.checkReadiness>[0],
+) {
+  return unwrap(await window.forgeboard.agents.checkReadiness(input));
+}
+
+async function checkFolderReadiness(
+  input: Parameters<typeof window.forgeboard.settings.checkFolderReadiness>[0],
+) {
+  return unwrap(await window.forgeboard.settings.checkFolderReadiness(input));
 }
 
 function SettingsTabButton({

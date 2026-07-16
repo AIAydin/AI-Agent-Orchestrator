@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,7 +12,10 @@ import {
 
 test('a UI-configured Custom host profile persists and governs deterministic runs', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-custom-permission-e2e-'));
-  const configuredWorktreeRoot = join(userDataDirectory, 'custom-profile-worktrees');
+  const configuredWorktreeRoot = join(
+    await realpath(userDataDirectory),
+    'custom-profile-worktrees',
+  );
   const externalRequests: string[] = [];
   let electronApp: ElectronApplication | null = null;
 

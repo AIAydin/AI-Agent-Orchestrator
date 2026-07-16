@@ -31,13 +31,19 @@ vi.mock('./components/onboarding/Welcome.js', () => ({
   ),
 }));
 
-vi.mock('./components/settings/shell/SettingsPanel.js', () => ({ SettingsPanel: () => null }));
+vi.mock('./components/settings/shell/SettingsPanel.js', () => ({
+  SettingsPanel: ({ initialTab }: { initialTab?: string }) => (
+    <div>Settings opened on {initialTab ?? 'appearance'}</div>
+  ),
+}));
 vi.mock('./components/onboarding/SetupWizard.js', () => ({ SetupWizard: () => null }));
 
 let closeListener: (() => boolean | Promise<boolean>) | null = null;
+let repairSummaries: unknown[] = [];
 
 beforeEach(() => {
   closeListener = null;
+  repairSummaries = [];
   mocks.flushCanvas.mockReset();
   mocks.unsubscribe.mockReset();
   mocks.flushCanvas.mockResolvedValue(true);
@@ -78,6 +84,24 @@ describe('App close persistence', () => {
     view.unmount();
     expect(mocks.unsubscribe).toHaveBeenCalledTimes(1);
   });
+
+  it('shows startup repair disclosure and opens its Data & privacy review', async () => {
+    repairSummaries = [
+      {
+        id: '60000000-0000-4000-8000-000000000099',
+        repairedAt: '2026-07-16T12:00:00.000Z',
+        sourceDatabaseVersion: 12,
+        repairedFieldPaths: ['worktreeRoot'],
+        sourceSettingsSha256: 'a'.repeat(64),
+        repairedSettingsSha256: 'b'.repeat(64),
+      },
+    ];
+    render(<App />);
+
+    expect(await screen.findByText('Settings were repaired for this version')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    expect(await screen.findByText('Settings opened on privacy')).toBeTruthy();
+  });
 });
 
 function forgeboardApi() {
@@ -115,7 +139,7 @@ function forgeboardApi() {
         return mocks.unsubscribe;
       },
     },
-    settings: { get: () => ok(settings) },
+    settings: { get: () => ok(settings), listRepairs: () => ok(repairSummaries) },
     agents: { detect: () => ok([]) },
     extensions: {
       list: () =>

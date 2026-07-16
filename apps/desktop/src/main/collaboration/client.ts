@@ -18,6 +18,8 @@ import {
   CollaborationAwarenessStateSchema,
   CollaborationAwarenessUpdateInputSchema,
   CollaborationConnectionSchema,
+  CollaborationCommentMetadataSchema,
+  CollaborationCreateCommentResultSchema,
   CollaborationEventSchema,
   CollaborationJoinInputSchema,
   CollaborationJoinResultSchema,
@@ -25,11 +27,15 @@ import {
   CollaborationRoleSchema,
   CollaborationRoomIdSchema,
   CollaborationSubjectSchema,
+  applyCollaborationRejectedCommentDismissals,
+  collaborationCommentMetadataEquals,
   serializeCollaborationMetadataSnapshot,
   type CollaborationAwarenessUpdateInput,
   type CollaborationConnection,
   type CollaborationConnectionError,
+  type CollaborationCommentMetadata,
   type CollaborationEvent,
+  type CollaborationCreateCommentResult,
   type CollaborationJoinInput,
   type CollaborationJoinResult,
   type CollaborationMetadataSnapshot,
@@ -50,6 +56,7 @@ import {
 const DEFAULT_JOIN_TIMEOUT_MS = 15_000;
 const DEFAULT_DELIVERY_ACKNOWLEDGEMENT_TIMEOUT_MS = 10_000;
 const MAX_PENDING_DELIVERIES = 256;
+const MAX_COMMENTS_PER_NODE = 500;
 
 const UnverifiedAccessClaimsSchema = z
   .object({
@@ -111,6 +118,9 @@ export class CollaborationClient {
   #identity: CollaborationIdentity | null = null;
   #pendingJoin: PendingJoin | null = null;
   readonly #pendingDeliveries = new Map<string, PendingDelivery>();
+  readonly #suppressedRejectedComments = new Map<string, CollaborationCommentMetadata>();
+  #rejectedCommentSuppressionBaseline: CollaborationMetadataSnapshot | null = null;
+  #pendingDeliveryReservations = 0;
   #latestAwareness: CollaborationAwarenessUpdateInput = {};
   #awarenessClientIds = new Set<number>();
   #sequence = 0;
@@ -148,10 +158,47 @@ export class CollaborationClient {
   public get snapshot(): CollaborationMetadataSnapshot | null {
     if (!this.#sharingReady() || this.#document === null) return null;
     try {
-      return collaborationSnapshotFromDocument(this.#document);
+      return this.#effectiveSnapshot(collaborationSnapshotFromDocument(this.#document));
     } catch {
       return null;
     }
+  }
+
+  /** Replaces the session-only exact overlay without mutating or transmitting Yjs state. */
+  public setRejectedCommentSuppressions(
+    rawComments: readonly CollaborationCommentMetadata[],
+    rawBaseline: CollaborationMetadataSnapshot | null = null,
+  ): void {
+    const comments = CollaborationCommentMetadataSchema.array().max(50_000).parse(rawComments);
+    const baseline = CollaborationMetadataSnapshotSchema.nullable().parse(rawBaseline);
+    const next = new Map<string, CollaborationCommentMetadata>();
+    for (const comment of comments) {
+      if (next.has(comment.id)) {
+        throw new Error('Rejected comment suppressions must have unique identities.');
+      }
+      next.set(comment.id, comment);
+    }
+    const baselineChanged =
+      this.#rejectedCommentSuppressionBaseline === null || baseline === null
+        ? this.#rejectedCommentSuppressionBaseline !== baseline
+        : serializeCollaborationMetadataSnapshot(this.#rejectedCommentSuppressionBaseline) !==
+          serializeCollaborationMetadataSnapshot(baseline);
+    const changed =
+      baselineChanged ||
+      next.size !== this.#suppressedRejectedComments.size ||
+      [...next].some(
+        ([commentId, comment]) =>
+          !collaborationCommentMetadataEquals(
+            this.#suppressedRejectedComments.get(commentId),
+            comment,
+          ),
+      );
+    this.#suppressedRejectedComments.clear();
+    for (const [commentId, comment] of next) {
+      this.#suppressedRejectedComments.set(commentId, comment);
+    }
+    this.#rejectedCommentSuppressionBaseline = baseline;
+    if (changed && this.#sharingReady()) this.#emitCurrentSnapshot();
   }
 
   public onEvent(listener: (event: CollaborationEvent) => void): () => void {
@@ -274,6 +321,8 @@ export class CollaborationClient {
   public leave(): CollaborationConnection | null {
     const previous = this.#connection;
     this.#latestAwareness = {};
+    this.#suppressedRejectedComments.clear();
+    this.#rejectedCommentSuppressionBaseline = null;
     if (previous === null && this.#provider === null && this.#pendingJoin === null) return null;
     const cancelled = connectionError('cancelled', 'The collaboration join was cancelled.', false);
     this.#resolvePending(joinFailure(cancelled.code, cancelled.message, cancelled.retryable));
@@ -307,38 +356,205 @@ export class CollaborationClient {
     return null;
   }
 
-  public publish(input: CollaborationMetadataSnapshot): CollaborationPublishReceipt | null {
+  public publish(
+    input: CollaborationMetadataSnapshot,
+    beforeApply?: (receipt: CollaborationPublishReceipt) => void,
+  ): CollaborationPublishReceipt | null {
     this.#assertAvailable();
-    const snapshot = CollaborationMetadataSnapshotSchema.parse(input);
-    if (
-      !this.#canPublishMetadata() ||
-      this.#document === null ||
-      this.#pendingDeliveries.size >= MAX_PENDING_DELIVERIES
-    ) {
+    const snapshot = this.#unpollutedSnapshot(CollaborationMetadataSnapshotSchema.parse(input));
+    if (!this.#canPublishMetadata() || this.#document === null) return null;
+    this.#assertCurrentDocumentUnpolluted();
+    const deliveryId = this.#reserveDelivery();
+    if (deliveryId === null) return null;
+    let reservationHeld = true;
+    try {
+      const receipt = this.#plannedDeliveryReceipt(snapshot, deliveryId);
+      beforeApply?.(receipt);
+      replaceCollaborationDocument(this.#document, snapshot);
+      this.#commitReservedDeliveryReceipt(receipt);
+      reservationHeld = false;
+      return receipt;
+    } finally {
+      if (reservationHeld) this.#releaseDeliveryReservation();
+    }
+  }
+
+  public createComment(
+    rawInput: { readonly nodeId: string; readonly body: string },
+    beforeApply?: (
+      snapshot: CollaborationMetadataSnapshot,
+      comment: CollaborationCommentMetadata,
+      receipt: CollaborationPublishReceipt,
+    ) => void,
+  ): CollaborationCreateCommentResult | null {
+    this.#assertAvailable();
+    const input = z
+      .object({
+        nodeId: z.string().trim().min(1).max(120),
+        body: z.string().trim().min(1).max(4_000),
+      })
+      .strict()
+      .parse(rawInput);
+    if (!this.#canWriteComments() || this.#document === null || this.#identity === null) {
       return null;
     }
-    replaceCollaborationDocument(this.#document, snapshot);
+    const current = this.#unpollutedSnapshot(collaborationSnapshotFromDocument(this.#document));
+    const deliveryId = this.#reserveDelivery();
+    if (deliveryId === null) return null;
+    let reservationHeld = true;
+    try {
+      if (current.nodes[input.nodeId] === undefined) {
+        throw new Error('Shared comments can only target a node in the authenticated room.');
+      }
+      const nodeCommentCount = Object.values(current.comments).filter(
+        (comment) => comment.nodeId === input.nodeId,
+      ).length;
+      if (nodeCommentCount >= MAX_COMMENTS_PER_NODE) {
+        throw new Error('This node has reached the shared comment limit.');
+      }
+      const comment = {
+        id: z.string().uuid().parse(this.#createDeliveryId()),
+        nodeId: input.nodeId,
+        authorId: this.#identity.subject,
+        body: input.body,
+        createdAt: this.#timestamp(),
+      };
+      const candidate = CollaborationMetadataSnapshotSchema.parse({
+        ...current,
+        comments: { ...current.comments, [comment.id]: comment },
+      });
+      const receipt = this.#plannedDeliveryReceipt(candidate, deliveryId);
+      beforeApply?.(candidate, comment, receipt);
+      this.#document.transact(() => {
+        this.#document?.getMap('comments').set(comment.id, structuredClone(comment));
+      }, COLLABORATION_LOCAL_METADATA_ORIGIN);
+      this.#commitReservedDeliveryReceipt(receipt);
+      reservationHeld = false;
+      return CollaborationCreateCommentResultSchema.parse({ comment, receipt });
+    } finally {
+      if (reservationHeld) this.#releaseDeliveryReservation();
+    }
+  }
+
+  public replayComments(
+    rawComments: readonly CollaborationCommentMetadata[],
+    beforeApply?: (
+      snapshot: CollaborationMetadataSnapshot,
+      receipt: CollaborationPublishReceipt,
+    ) => void,
+  ): CollaborationPublishReceipt | null {
+    this.#assertAvailable();
+    const comments = CollaborationCommentMetadataSchema.array().min(1).max(256).parse(rawComments);
+    if (!this.#canWriteComments() || this.#document === null || this.#identity === null) {
+      return null;
+    }
+    const replayedComments = comments.filter((comment) => !this.#isSuppressed(comment));
+    if (replayedComments.length === 0) return null;
+    const current = this.#unpollutedSnapshot(collaborationSnapshotFromDocument(this.#document));
+    const seen = new Set<string>();
+    const additionsByNode = new Map<string, number>();
+    const currentCountsByNode = new Map<string, number>();
+    for (const comment of Object.values(current.comments)) {
+      if (comment.nodeId !== undefined) {
+        currentCountsByNode.set(comment.nodeId, (currentCountsByNode.get(comment.nodeId) ?? 0) + 1);
+      }
+    }
+    for (const comment of replayedComments) {
+      if (comment.authorId !== this.#identity.subject) {
+        throw new Error('Recovered comments must belong to the authenticated collaborator.');
+      }
+      if (seen.has(comment.id) || current.comments[comment.id] !== undefined) {
+        throw new Error('Recovered comments must have unique identities absent from the room.');
+      }
+      seen.add(comment.id);
+      const nodeId = comment.nodeId;
+      if (nodeId === undefined || current.nodes[nodeId] === undefined) {
+        throw new Error('Recovered comments can only target a node in the authenticated room.');
+      }
+      additionsByNode.set(nodeId, (additionsByNode.get(nodeId) ?? 0) + 1);
+    }
+    for (const [nodeId, additionCount] of additionsByNode) {
+      const currentCount = currentCountsByNode.get(nodeId) ?? 0;
+      if (currentCount + additionCount > MAX_COMMENTS_PER_NODE) {
+        throw new Error('This node has reached the shared comment limit.');
+      }
+    }
+    const candidateComments: Record<string, CollaborationCommentMetadata> = {
+      ...current.comments,
+    };
+    for (const comment of replayedComments) candidateComments[comment.id] = comment;
+    const candidate = CollaborationMetadataSnapshotSchema.parse({
+      ...current,
+      comments: candidateComments,
+    });
+    const deliveryId = this.#reserveDelivery();
+    if (deliveryId === null) return null;
+    let reservationHeld = true;
+    try {
+      const receipt = this.#plannedDeliveryReceipt(candidate, deliveryId);
+      beforeApply?.(candidate, receipt);
+      this.#document.transact(() => {
+        const map = this.#document?.getMap('comments');
+        for (const comment of replayedComments) map?.set(comment.id, structuredClone(comment));
+      }, COLLABORATION_LOCAL_METADATA_ORIGIN);
+      this.#commitReservedDeliveryReceipt(receipt);
+      reservationHeld = false;
+      return receipt;
+    } finally {
+      if (reservationHeld) this.#releaseDeliveryReservation();
+    }
+  }
+
+  #plannedDeliveryReceipt(
+    snapshot: CollaborationMetadataSnapshot,
+    deliveryId: string,
+  ): CollaborationPublishReceipt {
+    if (this.#document === null || this.#pendingDeliveryReservations < 1) {
+      throw new Error('The collaboration delivery reservation was lost before publication.');
+    }
     const snapshotDigest = createHash('sha256')
       .update(serializeCollaborationMetadataSnapshot(snapshot))
       .digest('hex');
+    return CollaborationPublishReceiptSchema.parse({
+      deliveryId,
+      snapshotDigest,
+      disposition: this.#sharingReady() ? 'sent' : 'queued-offline',
+    });
+  }
+
+  #commitReservedDeliveryReceipt(receipt: CollaborationPublishReceipt): void {
+    if (this.#document === null || this.#pendingDeliveryReservations < 1) {
+      throw new Error('The collaboration delivery reservation was lost before publication.');
+    }
     const request = CollaborationDeliveryRequestSchema.parse({
       protocol: COLLABORATION_DELIVERY_PROTOCOL,
       type: 'confirm-delivery',
-      deliveryId: this.#createDeliveryId(),
+      deliveryId: receipt.deliveryId,
       stateVector: encodeCollaborationStateVector(Y.encodeStateVector(this.#document)),
     });
     this.#pendingDeliveries.set(request.deliveryId, {
       request,
-      snapshotDigest,
+      snapshotDigest: receipt.snapshotDigest,
       timeout: null,
     });
-    const online = this.#sharingReady();
-    if (online) this.#sendDeliveryConfirmation(request.deliveryId);
-    return CollaborationPublishReceiptSchema.parse({
-      deliveryId: request.deliveryId,
-      snapshotDigest,
-      disposition: online ? 'sent' : 'queued-offline',
-    });
+    this.#releaseDeliveryReservation();
+    if (this.#sharingReady()) this.#sendDeliveryConfirmation(request.deliveryId);
+  }
+
+  #reserveDelivery(): string | null {
+    if (
+      this.#pendingDeliveries.size + this.#pendingDeliveryReservations >=
+      MAX_PENDING_DELIVERIES
+    ) {
+      return null;
+    }
+    const deliveryId = z.string().uuid().parse(this.#createDeliveryId());
+    this.#pendingDeliveryReservations += 1;
+    return deliveryId;
+  }
+
+  #releaseDeliveryReservation(): void {
+    this.#pendingDeliveryReservations = Math.max(0, this.#pendingDeliveryReservations - 1);
   }
 
   public updateAwareness(input: CollaborationAwarenessUpdateInput): boolean {
@@ -479,7 +695,7 @@ export class CollaborationClient {
   #handleDocumentUpdate(generation: number, local: boolean): void {
     if (!this.#isCurrent(generation) || this.#document === null) return;
     try {
-      const snapshot = collaborationSnapshotFromDocument(this.#document);
+      const snapshot = this.#effectiveSnapshot(collaborationSnapshotFromDocument(this.#document));
       this.#emit({
         type: 'metadata-snapshot',
         sequence: this.#nextSequence(),
@@ -506,7 +722,7 @@ export class CollaborationClient {
   #emitCurrentSnapshot(): void {
     if (this.#document === null) return;
     try {
-      const snapshot = collaborationSnapshotFromDocument(this.#document);
+      const snapshot = this.#effectiveSnapshot(collaborationSnapshotFromDocument(this.#document));
       this.#emit({
         type: 'metadata-snapshot',
         sequence: this.#nextSequence(),
@@ -519,6 +735,41 @@ export class CollaborationClient {
     } catch {
       // Empty rooms have no complete metadata snapshot until a local canvas is published.
     }
+  }
+
+  #effectiveSnapshot(snapshot: CollaborationMetadataSnapshot): CollaborationMetadataSnapshot {
+    return applyCollaborationRejectedCommentDismissals(
+      snapshot,
+      [...this.#suppressedRejectedComments.values()],
+      this.#rejectedCommentSuppressionBaseline,
+    );
+  }
+
+  #unpollutedSnapshot(snapshot: CollaborationMetadataSnapshot): CollaborationMetadataSnapshot {
+    const effective = this.#effectiveSnapshot(snapshot);
+    if (
+      serializeCollaborationMetadataSnapshot(snapshot) !==
+      serializeCollaborationMetadataSnapshot(effective)
+    ) {
+      throw rejectedCommentRejoinRequiredError();
+    }
+    return snapshot;
+  }
+
+  #assertCurrentDocumentUnpolluted(): void {
+    if (this.#suppressedRejectedComments.size === 0 || this.#document === null) return;
+    try {
+      this.#unpollutedSnapshot(collaborationSnapshotFromDocument(this.#document));
+    } catch {
+      throw rejectedCommentRejoinRequiredError();
+    }
+  }
+
+  #isSuppressed(comment: CollaborationCommentMetadata): boolean {
+    return collaborationCommentMetadataEquals(
+      this.#suppressedRejectedComments.get(comment.id),
+      comment,
+    );
   }
 
   #handleAwarenessChange(generation: number): void {
@@ -607,7 +858,12 @@ export class CollaborationClient {
   #sendDeliveryConfirmation(deliveryId: string): void {
     const pending = this.#pendingDeliveries.get(deliveryId);
     if (pending === undefined || pending.timeout !== null || this.#provider === null) return;
-    this.#provider.sendStateless(JSON.stringify(pending.request));
+    try {
+      this.#provider.sendStateless(JSON.stringify(pending.request));
+    } catch {
+      // The Yjs update and durable local receipt already exist. Keep the confirmation pending so a
+      // late response can still settle it, or reject it honestly when the bounded timeout expires.
+    }
     pending.timeout = setTimeout(
       () => this.#expireDelivery(deliveryId),
       this.#deliveryAcknowledgementTimeoutMs,
@@ -649,6 +905,7 @@ export class CollaborationClient {
   #discardPendingDeliveries(): void {
     this.#suspendDeliveryConfirmations();
     this.#pendingDeliveries.clear();
+    this.#pendingDeliveryReservations = 0;
   }
 
   #applyLocalAwareness(): boolean {
@@ -739,7 +996,14 @@ export class CollaborationClient {
 
   #emit(input: CollaborationEvent): void {
     const event = CollaborationEventSchema.parse(input);
-    for (const listener of this.#listeners) listener(structuredClone(event));
+    for (const listener of this.#listeners) {
+      try {
+        listener(structuredClone(event));
+      } catch {
+        // A renderer transport/listener failure must not turn an already-applied Yjs transaction
+        // into a false operation failure or a privacy rejection in the collaboration client.
+      }
+    }
   }
 
   #destroyTransport(): void {
@@ -808,6 +1072,20 @@ export class CollaborationClient {
     if (this.#sharingReady()) return true;
     return this.#connection?.status === 'reconnecting' && this.#connection.reconnect;
   }
+
+  #canWriteComments(): boolean {
+    const role = this.#identity?.role;
+    if (
+      this.#document === null ||
+      this.#provider === null ||
+      !this.#hasConnected ||
+      (role !== 'owner' && role !== 'editor' && role !== 'reviewer')
+    ) {
+      return false;
+    }
+    if (this.#sharingReady()) return true;
+    return this.#connection?.status === 'reconnecting' && this.#connection.reconnect;
+  }
 }
 
 function decodeUnverifiedAccessClaims(token: string): z.infer<typeof UnverifiedAccessClaimsSchema> {
@@ -845,5 +1123,11 @@ function documentHasValues(document: Y.Doc): boolean {
   if (typeof value !== 'object' || value === null) return false;
   return Object.values(value as Record<string, unknown>).some(
     (entry) => typeof entry === 'object' && entry !== null && Object.keys(entry).length > 0,
+  );
+}
+
+function rejectedCommentRejoinRequiredError(): Error {
+  return new Error(
+    'Dismissed rejected comments remain in this stale collaboration view. Leave and rejoin the room before authoring more shared changes.',
   );
 }

@@ -1,0 +1,81 @@
+.settings-repair-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--amber);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.settings-repair-warning svg {
+  flex: 0 0 auto;
+  color: var(--amber);
+}
+
+.settings-repair-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-repair-list article {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.settings-repair-list article > div:first-child {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+
+.settings-repair-list article span {
+  color: var(--text-faint);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.settings-repair-evidence {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-repair-evidence details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.settings-repair-evidence summary {
+  padding: 9px 10px;
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.settings-repair-evidence pre {
+  max-height: 320px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 9px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { OptionalMachineSpecificValueSchema } from '../settings/values.js';
+
 const MAX_COMMAND_VALUE_BYTES = 32_768;
 
 const CommandArgumentSchema = z
@@ -12,9 +14,7 @@ const CommandArgumentSchema = z
     { message: 'Command arguments cannot contain NUL bytes or exceed 32 KiB.' },
   );
 
-const CommandExecutableSchema = CommandArgumentSchema.refine((value) => !/[\r\n]/u.test(value), {
-  message: 'Command executables cannot contain line breaks.',
-});
+const CommandExecutableSchema = CommandArgumentSchema.and(OptionalMachineSpecificValueSchema);
 
 export const CommandConfigurationSchema = z
   .object({

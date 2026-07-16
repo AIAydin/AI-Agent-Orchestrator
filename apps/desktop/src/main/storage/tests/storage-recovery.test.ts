@@ -29,6 +29,7 @@ import {
   type StoredRunRecord,
   type TrustedExtensionLedgerRecord,
 } from '../../storage.js';
+import { MIGRATIONS } from '../database.js';
 import { canvasContentHash, sanitizeCanvasDocument } from '../values.js';
 
 const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
@@ -322,7 +323,7 @@ describe('LocalStore persistence and recovery', () => {
     expect(upgraded.loadCanvas(PROJECT_ID)).toEqual(sanitizeCanvasDocument(canvas()));
     const inspector = new DatabaseSync(databasePath, { readOnly: true });
     expect(inspector.prepare('PRAGMA user_version;').get()).toEqual({
-      user_version: 10,
+      user_version: MIGRATIONS.length,
     });
     expect(
       inspector
@@ -332,7 +333,7 @@ describe('LocalStore persistence and recovery', () => {
               ('canvas_snapshots', 'project_path_history', 'backup_records', 'backup_health',
               'trusted_extension_ledger', 'check_executions', 'workflow_executions',
               'workflow_execution_events', 'workflow_node_bindings', 'approval_records',
-              'audit_chain_state', 'audit_chain_checkpoints')
+              'audit_chain_state', 'audit_chain_checkpoints', 'settings_repair_history')
            ORDER BY name`,
         )
         .all(),
@@ -345,6 +346,7 @@ describe('LocalStore persistence and recovery', () => {
       { name: 'canvas_snapshots' },
       { name: 'check_executions' },
       { name: 'project_path_history' },
+      { name: 'settings_repair_history' },
       { name: 'trusted_extension_ledger' },
       { name: 'workflow_execution_events' },
       { name: 'workflow_executions' },

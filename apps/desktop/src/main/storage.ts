@@ -8,8 +8,17 @@ import type {
   CanvasDocument,
   Project,
 } from '../shared/application/contracts.js';
+import type {
+  SettingsRepairEvidence,
+  SettingsRepairSummary,
+} from '../shared/settings/repair/contracts.js';
 import type { CheckExecutionView } from '../shared/checks/contracts.js';
 import type { GitTargetInput } from '../shared/git/contracts.js';
+import type {
+  CollaborationCommentMetadata,
+  CollaborationMetadataSnapshot,
+  CollaborationSyncRecovery,
+} from '../shared/collaboration/index.js';
 import type {
   GitReviewNoteDeleteInput,
   GitReviewNoteUpdateInput,
@@ -38,6 +47,11 @@ import {
   saveApproval as saveDatabaseApproval,
 } from './storage/security/approvals.js';
 import { initializeAuditIntegrity } from './storage/security/audit-integrity.js';
+import {
+  getSettingsRepair as getDatabaseSettingsRepair,
+  listSettingsRepairs as listDatabaseSettingsRepairs,
+  repairLegacyStoredSettings,
+} from './storage/settings-repair/repository.js';
 import {
   backupAttemptFromResult,
   getBackupHealth as getDatabaseBackupHealth,
@@ -133,6 +147,17 @@ import type {
   WorkflowNodeBinding,
 } from './storage/workflow/contracts.js';
 import { writeSettings } from './storage/writes.js';
+import {
+  checkpointCollaborationSyncState as checkpointDatabaseCollaborationSyncState,
+  discardRejectedCollaborationComment as discardDatabaseRejectedCollaborationComment,
+  pruneExpiredCollaborationSyncStates as pruneDatabaseCollaborationSyncStates,
+  recordCollaborationSyncDelivery as recordDatabaseCollaborationSyncDelivery,
+  recoverCollaborationSyncState as recoverDatabaseCollaborationSyncState,
+  settleCollaborationSyncDelivery as settleDatabaseCollaborationSyncDelivery,
+  stageCollaborationSyncDelivery as stageDatabaseCollaborationSyncDelivery,
+  stageCollaborationSyncState as stageDatabaseCollaborationSyncState,
+  type CollaborationSyncStorageScope,
+} from './storage/collaboration/sync-state.js';
 
 export type {
   InterruptedCheckRecoveryReport,
@@ -202,12 +227,22 @@ export class LocalStore {
     recoveredAt: new Date(0).toISOString(),
   };
 
-  constructor(databasePath: string) {
+  constructor(databasePath: string, options: { legacySettingsDefaults?: AppSettings } = {}) {
     this.databasePath = databasePath;
     this.database = openDatabase(databasePath);
     try {
+      const sourceDatabaseVersion = (
+        this.database.prepare('PRAGMA user_version;').get() as { user_version: number }
+      ).user_version;
       migrate(this.database);
       initializeAuditIntegrity(this.database);
+      if (options.legacySettingsDefaults !== undefined) {
+        repairLegacyStoredSettings(
+          this.database,
+          sourceDatabaseVersion,
+          options.legacySettingsDefaults,
+        );
+      }
       redactStoredSecrets(this.database);
       sanitizeStoredExtensionData(this.database);
       assertIntegrity(this.database);
@@ -246,6 +281,14 @@ export class LocalStore {
     writeSettings(this.database, parsed);
     this.notifyDurableChange();
     return parsed;
+  }
+
+  listSettingsRepairs(): SettingsRepairSummary[] {
+    return listDatabaseSettingsRepairs(this.database);
+  }
+
+  getSettingsRepair(repairId: string): SettingsRepairEvidence | undefined {
+    return getDatabaseSettingsRepair(this.database, repairId);
   }
 
   listProjects(limit = 30): Project[] {
@@ -296,6 +339,93 @@ export class LocalStore {
     const saved = saveDatabaseCanvas(this.database, document);
     this.notifyDurableChange();
     return saved;
+  }
+
+  recoverCollaborationSyncState(
+    scope: CollaborationSyncStorageScope,
+  ): CollaborationSyncRecovery | null {
+    return recoverDatabaseCollaborationSyncState(this.database, scope);
+  }
+
+  stageCollaborationSyncState(
+    scope: CollaborationSyncStorageScope,
+    baseline: CollaborationMetadataSnapshot | null,
+    pending: CollaborationMetadataSnapshot,
+  ): CollaborationSyncRecovery {
+    const value = stageDatabaseCollaborationSyncState(this.database, scope, baseline, pending);
+    this.notifyDurableChange();
+    return value;
+  }
+
+  stageCollaborationSyncDelivery(
+    scope: CollaborationSyncStorageScope,
+    baseline: CollaborationMetadataSnapshot | null,
+    pending: CollaborationMetadataSnapshot,
+    input: {
+      readonly deliveryId: string;
+      readonly snapshotDigest: string;
+      readonly disposition: 'sent' | 'queued-offline';
+    },
+  ): CollaborationSyncRecovery {
+    const value = stageDatabaseCollaborationSyncDelivery(
+      this.database,
+      scope,
+      baseline,
+      pending,
+      input,
+    );
+    this.notifyDurableChange();
+    return value;
+  }
+
+  checkpointCollaborationSyncState(
+    scope: CollaborationSyncStorageScope,
+    snapshot: CollaborationMetadataSnapshot,
+  ): CollaborationSyncRecovery {
+    const value = checkpointDatabaseCollaborationSyncState(this.database, scope, snapshot);
+    this.notifyDurableChange();
+    return value;
+  }
+
+  discardRejectedCollaborationComment(
+    scope: CollaborationSyncStorageScope,
+    comment: CollaborationCommentMetadata,
+    rejectedDeliveryId: string,
+  ): CollaborationSyncRecovery {
+    const value = discardDatabaseRejectedCollaborationComment(
+      this.database,
+      scope,
+      comment,
+      rejectedDeliveryId,
+    );
+    this.notifyDurableChange();
+    return value;
+  }
+
+  recordCollaborationSyncDelivery(
+    scope: CollaborationSyncStorageScope,
+    input: {
+      readonly deliveryId: string;
+      readonly snapshotDigest: string;
+      readonly disposition: 'sent' | 'queued-offline';
+    },
+  ): void {
+    recordDatabaseCollaborationSyncDelivery(this.database, scope, input);
+    this.notifyDurableChange();
+  }
+
+  settleCollaborationSyncDelivery(
+    deliveryId: string,
+    disposition: 'acknowledged' | 'rejected',
+  ): void {
+    settleDatabaseCollaborationSyncDelivery(this.database, deliveryId, disposition);
+    this.notifyDurableChange();
+  }
+
+  pruneExpiredCollaborationSyncStates(): number {
+    const count = pruneDatabaseCollaborationSyncStates(this.database);
+    if (count > 0) this.notifyDurableChange();
+    return count;
   }
 
   createCanvasSnapshot(projectId: string, reason: 'manual' | 'import' = 'manual'): CanvasSnapshot {

@@ -81,3 +81,14 @@
 .agent-readiness-warning {
   color: var(--yellow) !important;
 }
+
+.agent-readiness-list {
+  display: grid;
+  gap: 10px;
+}
+
+.agent-readiness-list h4 {
+  margin: 12px 0 -6px;
+  color: var(--text-soft);
+  font-size: 9px;
+}

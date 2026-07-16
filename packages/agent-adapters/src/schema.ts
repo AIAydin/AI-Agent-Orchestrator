@@ -11,6 +11,7 @@ export const AGENT_ADAPTERS_PACKAGE_VERSION = '0.1.0';
 
 const withoutNul = (value: string): boolean => !value.includes('\0');
 const withoutLineBreak = (value: string): boolean => !/[\r\n]/u.test(value);
+const DOCKER_CONTEXT_SNAPSHOT_ROOT = '/forgeboard-context';
 
 const ArgumentSchema = z
   .string()
@@ -39,7 +40,7 @@ const AbsolutePathSchema = z
   .max(32_768)
   .refine(withoutNul, 'Paths cannot contain NUL bytes.')
   .refine(withoutLineBreak, 'Paths cannot contain line breaks.')
-  .refine((value) => path.isAbsolute(value), 'Path must be absolute.');
+  .refine((value) => path.isAbsolute(value) || value.startsWith('/'), 'Path must be absolute.');
 
 const CrossPlatformAbsoluteExecutableSchema = z
   .string()
@@ -187,11 +188,17 @@ export const PermissionProfileSchema = z
           });
         }
       }
-      const wholeRead = profile.readRoots.length === 1;
+      const filesystemReadRoots =
+        custom.runtime === 'docker'
+          ? profile.readRoots.filter((root) => root !== DOCKER_CONTEXT_SNAPSHOT_ROOT)
+          : profile.readRoots;
+      const snapshotRootCount = profile.readRoots.length - filesystemReadRoots.length;
+      const wholeRead =
+        filesystemReadRoots.length === 1 && (custom.runtime !== 'docker' || snapshotRootCount <= 1);
       const wholeWrite =
         profile.writeRoots.length === 1 &&
         wholeRead &&
-        profile.writeRoots[0] === profile.readRoots[0];
+        profile.writeRoots[0] === filesystemReadRoots[0];
       if (
         custom.filesystem === 'assigned-worktree-read-only' &&
         (!wholeRead || profile.writeRoots.length > 0)

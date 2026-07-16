@@ -388,6 +388,10 @@ describe('GitReviewDialog', () => {
     expect(screen.getByRole('region', { name: 'Agent worktree target' }).textContent).toContain(
       'The primary checkout remains untouched.',
     );
+    const repositoryStatus = screen.getByRole('region', { name: 'Repository status' });
+    expect(repositoryStatus.textContent).toContain('forgeboard/agent-node-1');
+    expect(repositoryStatus.textContent).toContain('0 ahead · 0 behind');
+    expect(repositoryStatus.textContent).toContain('Changed');
     expect(reviewMock).toHaveBeenCalledWith(worktreeTarget);
     expect(screen.getByRole('tab', { name: 'Changes vs base' }).getAttribute('aria-selected')).toBe(
       'true',

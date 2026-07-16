@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,6 +10,9 @@ import {
   type CanvasDocument,
   type Project,
 } from '../../../../../shared/application/contracts.js';
+import type { FileDocument } from '../../../../../shared/files/contracts.js';
+import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { Workspace } from './Workspace.js';
 import type { WorkspaceHandle } from '../model/types.js';
 
@@ -19,12 +22,18 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../canvas/useCanvasPersistence.js', () => ({
-  useCanvasPersistence: () => ({ saveState: 'saving', flushCanvas: mocks.flushCanvas }),
+  useCanvasPersistence: () => ({
+    saveState: 'saving',
+    flushCanvas: mocks.flushCanvas,
+  }),
 }));
 vi.mock('../collaboration/useCollaborationCanvas.js', () => ({
   useCollaborationCanvas: () => ({
     awareness: [],
     graphReadOnly: mocks.collaborationGraphReadOnly,
+    rejectedComments: [],
+    rejectedCommentEntries: [],
+    discardRejectedComment: vi.fn().mockResolvedValue(false),
     updateCursor: vi.fn(),
     clearCursor: vi.fn(),
   }),
@@ -54,7 +63,7 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
     onKeyboardMove,
     collaborationGraphReadOnly,
   }: {
-    nodes: Array<{ id: string; position: { x: number; y: number } }>;
+    nodes: WorkshopNode[];
     onNodesChange: (
       changes: Array<
         { type: 'select'; id: string; selected: boolean } | { type: 'remove'; id: string }
@@ -67,13 +76,20 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
       <output data-testid="canvas-node-positions">
         {JSON.stringify(nodes.map(({ id, position }) => ({ id, position })))}
       </output>
+      <output data-testid="canvas-nodes">{JSON.stringify(nodes)}</output>
       <output data-testid="collaboration-graph-read-only">
         {String(collaborationGraphReadOnly)}
       </output>
       <button
         type="button"
         onClick={() =>
-          onNodesChange(nodes.map((node) => ({ type: 'select', id: node.id, selected: true })))
+          onNodesChange(
+            nodes.map((node) => ({
+              type: 'select',
+              id: node.id,
+              selected: true,
+            })),
+          )
         }
       >
         Select canvas nodes
@@ -94,17 +110,48 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
   ),
 }));
 vi.mock('./WorkspaceRail.js', () => ({ WorkspaceRail: () => null }));
-vi.mock('./WorkspaceInspector.js', () => ({ WorkspaceInspector: () => null }));
+vi.mock('./WorkspaceInspector.js', () => ({
+  WorkspaceInspector: ({
+    onAttachAgentContext,
+  }: {
+    onAttachAgentContext: (
+      targetNodeId: string,
+      payload: WorkspaceContextDragPayload,
+    ) => Promise<void>;
+  }) => (
+    <button
+      type="button"
+      onClick={() =>
+        void onAttachAgentContext('agent-node', {
+          schemaVersion: 1,
+          kind: 'project-file',
+          projectId: '70000000-0000-4000-8000-000000000001',
+          relativePath: 'src/context.ts',
+        })
+      }
+    >
+      Attach project file
+    </button>
+  ),
+}));
 vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
   WorkspaceActivityDrawer: () => null,
 }));
-vi.mock('./WorkspaceOverlays.js', () => ({ WorkspaceNotifications: () => null }));
+vi.mock('./WorkspaceOverlays.js', () => ({
+  WorkspaceNotifications: () => null,
+}));
 vi.mock('../../shell/CommandPalette.js', () => ({
   CommandPalette: () => <div aria-label="Command palette">Command palette open</div>,
 }));
-vi.mock('../../git-review/GitReviewDialog.js', () => ({ GitReviewDialog: () => null }));
-vi.mock('../runs/RunApprovalDialog.js', () => ({ RunApprovalDialog: () => null }));
-vi.mock('../CheckApprovalDialog.js', () => ({ CheckApprovalDialog: () => null }));
+vi.mock('../../git-review/GitReviewDialog.js', () => ({
+  GitReviewDialog: () => null,
+}));
+vi.mock('../runs/RunApprovalDialog.js', () => ({
+  RunApprovalDialog: () => null,
+}));
+vi.mock('../CheckApprovalDialog.js', () => ({
+  CheckApprovalDialog: () => null,
+}));
 vi.mock('../previews/useWorkspacePreviews.js', () => ({
   useWorkspacePreviews: () => ({ sessions: {}, updateSession: vi.fn() }),
 }));
@@ -161,7 +208,9 @@ beforeEach(() => {
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
-      canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: canvas() })) },
+      canvas: {
+        load: vi.fn(() => Promise.resolve({ ok: true, value: canvas() })),
+      },
       runs: { onEvent: vi.fn(() => vi.fn()) },
     },
   });
@@ -236,7 +285,9 @@ describe('Workspace persistence boundary', () => {
     Object.defineProperty(window, 'forgeboard', {
       configurable: true,
       value: {
-        canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
         runs: { onEvent: vi.fn(() => vi.fn()) },
       },
     });
@@ -279,13 +330,98 @@ describe('Workspace persistence boundary', () => {
     );
   });
 
+  it('links a verified file against current canvas state and records that exact state for undo', async () => {
+    let resolveRead: ((document: FileDocument) => void) | undefined;
+    const read = vi.fn(
+      () =>
+        new Promise<FileDocument>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const document = canvas([
+      agentCanvasNode('agent-node', 10),
+      canvasNode('task-node', 30, false),
+    ]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
+        files: { read },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('canvas-node-positions').textContent).toContain('agent-node'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Attach project file' }));
+    await waitFor(() =>
+      expect(read).toHaveBeenCalledWith({
+        projectId: project().id,
+        relativePath: 'src/context.ts',
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select canvas nodes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move selected right' }));
+    await waitFor(() => expect(canvasNodes()[0]?.position.x).toBe(11));
+
+    act(() => {
+      resolveRead?.(fileDocument());
+    });
+    await waitFor(() => {
+      const currentNodes = canvasNodes();
+      const agent = currentNodes.find((node) => node.id === 'agent-node');
+      const attachedId = agent?.data.contextAttachmentIds?.[0];
+      expect(agent?.position.x).toBe(11);
+      expect(attachedId).toBeTruthy();
+      expect(currentNodes.find((node) => node.id === attachedId)?.data.file).toMatchObject({
+        projectId: project().id,
+        relativePath: 'src/context.ts',
+        kind: 'file',
+        missing: false,
+        lastKnownHash: 'a'.repeat(64),
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo canvas' }));
+    await waitFor(() => {
+      const restoredNodes = canvasNodes();
+      const agent = restoredNodes.find((node) => node.id === 'agent-node');
+      expect(restoredNodes).toHaveLength(2);
+      expect(agent?.position.x).toBe(11);
+      expect(agent?.data.contextAttachmentIds).toEqual([]);
+    });
+  });
+
   it('keeps a viewer collaboration graph read-only across canvas mutation callbacks', async () => {
     mocks.collaborationGraphReadOnly = true;
     const document = canvas([canvasNode('shared-node', 10, false)]);
     Object.defineProperty(window, 'forgeboard', {
       configurable: true,
       value: {
-        canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
         runs: { onEvent: vi.fn(() => vi.fn()) },
       },
     });
@@ -367,6 +503,43 @@ function canvasNode(id: string, x: number, locked: boolean): CanvasDocument['nod
       color: '#445566',
     },
   };
+}
+
+function agentCanvasNode(id: string, x: number): CanvasDocument['nodes'][number] {
+  return {
+    id,
+    type: 'agent',
+    position: { x, y: 20 },
+    data: {
+      kind: 'agent',
+      title: id,
+      description: id,
+      status: 'idle',
+      locked: false,
+      collapsed: false,
+      color: '#445566',
+      contextAttachmentIds: [],
+    },
+  };
+}
+
+function fileDocument(): FileDocument {
+  return {
+    projectId: project().id,
+    relativePath: 'src/context.ts',
+    contentKind: 'text',
+    content: 'export {};\n',
+    encoding: 'utf-8',
+    sizeBytes: 11,
+    modifiedAt: '2026-07-15T12:00:00.000Z',
+    sha256: 'a'.repeat(64),
+    readOnly: false,
+    readOnlyReason: null,
+  };
+}
+
+function canvasNodes(): WorkshopNode[] {
+  return JSON.parse(screen.getByTestId('canvas-nodes').textContent ?? '[]') as WorkshopNode[];
 }
 
 function settings(overrides: Partial<AppSettings> = {}) {

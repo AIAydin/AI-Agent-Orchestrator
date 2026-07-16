@@ -1,26 +1,16 @@
-import { useState } from 'react';
-
 import type { AgentDetection, AppSettings } from '../../../../../shared/application/contracts.js';
-import type {
-  AgentReadinessResult,
-  CheckAgentReadiness,
-} from '../../../../../shared/readiness/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
 import { EnvironmentAllowlistEditor } from '../../configuration/EnvironmentAllowlistEditor.js';
 import { AgentReadinessPanel } from '../../readiness/AgentReadinessPanel.js';
-import {
-  currentReadinessResult,
-  isReadinessAgentId,
-  readinessDraftForAgent,
-} from '../../readiness/readiness-ui.js';
 import { permissionProfileNeedsDocker } from '../../permissions/permission-profile-ui.js';
 import { CustomAgentSettings } from './CustomAgentSettings.js';
 import { DockerSettings } from './DockerSettings.js';
+import type { SettingsAgentReadinessView } from '../readiness/useSettingsAgentReadiness.js';
 import { SettingsSection, type AsyncSettingsProps } from '../shared.js';
 
 interface AgentsSettingsProps extends AsyncSettingsProps {
   agents: AgentDetection[];
-  checkAgentReadiness?: CheckAgentReadiness;
+  readiness: SettingsAgentReadinessView;
   onError: (message: string) => void;
 }
 
@@ -30,30 +20,9 @@ export function AgentsSettings({
   setDraft,
   busy,
   perform,
-  checkAgentReadiness,
+  readiness,
   onError,
 }: AgentsSettingsProps) {
-  const [checkingAgent, setCheckingAgent] = useState(false);
-  const [readinessResults, setReadinessResults] = useState<Record<string, AgentReadinessResult>>(
-    {},
-  );
-  const selectedAgentId = isReadinessAgentId(draft.defaultAgent)
-    ? draft.defaultAgent
-    : 'test-agent';
-  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
-  const selectedReadinessDraft = readinessDraftForAgent(draft, selectedAgentId);
-  const selectedReadiness = currentReadinessResult(readinessResults, selectedReadinessDraft);
-  const checkCurrentAgent: CheckAgentReadiness | undefined = checkAgentReadiness
-    ? async (request) => {
-        setCheckingAgent(true);
-        try {
-          return await checkAgentReadiness(request);
-        } finally {
-          setCheckingAgent(false);
-        }
-      }
-    : undefined;
-
   return (
     <>
       <SettingsSection
@@ -62,7 +31,10 @@ export function AgentsSettings({
       >
         <div className="agent-grid">
           {agents.map((agent) => {
-            const validated = agent.id === selectedAgentId && selectedReadiness?.ready === true;
+            const readinessEntry = readiness.entries.find((entry) => entry.agentId === agent.id);
+            const validated = readinessEntry?.phase === 'ready';
+            const validatedNow = readinessEntry?.evidence === 'current-probe';
+            const version = readinessEntry?.result?.version ?? agent.version;
             return (
               <div className="agent-setting" key={agent.id}>
                 <span
@@ -71,8 +43,8 @@ export function AgentsSettings({
                 <div>
                   <strong>{agent.label}</strong>
                   <small>
-                    {validated
-                      ? `${selectedReadiness.version} · validated now`
+                    {validatedNow
+                      ? `${version} · validated now`
                       : agent.installed
                         ? (agent.version ?? 'Detected; version unavailable')
                         : 'Not found on this device'}
@@ -87,7 +59,9 @@ export function AgentsSettings({
                   }
                 >
                   {validated
-                    ? 'Validated'
+                    ? validatedNow
+                      ? 'Validated'
+                      : 'Detected'
                     : agent.installed && agent.version
                       ? 'Detected'
                       : agent.installed
@@ -196,20 +170,30 @@ export function AgentsSettings({
             </option>
           </select>
         </label>
-        <AgentReadinessPanel
-          agent={selectedAgent}
-          draft={selectedReadinessDraft}
-          result={selectedReadiness}
-          checking={busy || checkingAgent}
-          checkReadiness={checkCurrentAgent}
-          onResult={(result) =>
-            setReadinessResults((current) => ({
-              ...current,
-              [selectedReadinessDraft.fingerprint]: result,
-            }))
-          }
-          onError={onError}
-        />
+        <div className="agent-readiness-list" aria-label="Required agent readiness">
+          {readiness.entries.map((entry) => (
+            <div key={entry.agentId}>
+              {entry.agentId !== draft.defaultAgent && <h4>{entry.label}</h4>}
+              <AgentReadinessPanel
+                agent={entry.agent}
+                agentLabel={entry.label}
+                statusSubject={
+                  entry.agentId === draft.defaultAgent
+                    ? 'Selected executable'
+                    : `${entry.label} executable`
+                }
+                draft={entry.draft}
+                result={entry.result}
+                checking={busy || readiness.isChecking(entry.draft.fingerprint)}
+                disabled={busy || readiness.checking}
+                launchDetectionReady={entry.evidence === 'launch-detection'}
+                checkReadiness={readiness.checkReadiness}
+                onResult={() => undefined}
+                onError={onError}
+              />
+            </div>
+          ))}
+        </div>
         <label>
           Default permission profile
           <select

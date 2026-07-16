@@ -89,6 +89,42 @@ describe('AgentReadinessIpcService', () => {
     });
     expect(fixture.authorizations).toBe(2);
     expect(fixture.probe).toHaveBeenCalledWith(PLAN, expect.any(Function));
+    expect(fixture.recordVerifiedSettingsReadiness).toHaveBeenCalledWith(PLAN, readyResult());
+    await fixture.service.dispose();
+  });
+
+  it('admits no Settings evidence when the owner changes while a probe is running', async () => {
+    const parent = { isDestroyed: () => false };
+    electronMock.fromWebContents.mockReturnValue(parent);
+    const completed = deferred<AgentReadinessResult>();
+    const fixture = createFixture({ nativeResponse: 1 });
+    fixture.probe.mockImplementationOnce(async () => await completed.promise);
+    fixture.service.registerIpcHandler();
+    const event = liveEvent();
+    const request = requiredHandler()(event, { agentId: 'codex' });
+    await vi.waitFor(() => expect(fixture.probe).toHaveBeenCalledTimes(1));
+    Object.defineProperty(event, 'senderFrame', { value: {} });
+    completed.resolve(readyResult());
+
+    await expect(request).resolves.toMatchObject({ ok: false });
+    expect(fixture.recordVerifiedSettingsReadiness).not.toHaveBeenCalled();
+    await fixture.service.dispose();
+  });
+
+  it('admits no Settings evidence when the readiness audit cannot be recorded', async () => {
+    const parent = { isDestroyed: () => false };
+    electronMock.fromWebContents.mockReturnValue(parent);
+    const fixture = createFixture({ nativeResponse: 1 });
+    fixture.appendAudit.mockImplementation(() => {
+      throw new Error('audit unavailable');
+    });
+    fixture.service.registerIpcHandler();
+
+    await expect(requiredHandler()(liveEvent(), { agentId: 'codex' })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    expect(fixture.recordVerifiedSettingsReadiness).not.toHaveBeenCalled();
     await fixture.service.dispose();
   });
 
@@ -226,11 +262,12 @@ function createFixture(
       : options.decision;
   });
   const appendAudit = vi.fn();
+  const recordVerifiedSettingsReadiness = vi.fn();
   const service = new AgentReadinessIpcService(
     {
       showMessageBox: showMessageBox as unknown as Pick<Dialog, 'showMessageBox'>['showMessageBox'],
     },
-    { prepare, probe },
+    { prepare, probe, recordVerifiedSettingsReadiness },
     { appendAudit },
     undefined,
     options.now ?? (() => new Date('2026-07-15T12:00:00.000Z')),
@@ -239,6 +276,7 @@ function createFixture(
     service,
     prepare,
     probe,
+    recordVerifiedSettingsReadiness,
     showMessageBox,
     appendAudit,
     get authorizations() {

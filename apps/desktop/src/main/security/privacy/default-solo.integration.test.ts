@@ -146,7 +146,7 @@ describe('default solo privacy integration', () => {
     }
   });
 
-  it('discloses and sends only exact approved context while Forgeboard owns zero network attempts', async () => {
+  it('discloses logical context and sends only immutable approved bytes with zero network attempts', async () => {
     const fixture = await createRepositoryFixture();
     const network = installForgeboardNetworkTrap();
     let application: OpenApplication | undefined;
@@ -205,9 +205,16 @@ describe('default solo privacy integration', () => {
           readonly content: string;
         }>;
       };
-      expect(captured.attachments).toEqual([{ path: allowedPath, content: ALLOWED_BYTES }]);
+      expect(captured.attachments).toHaveLength(1);
+      const capturedAttachment = captured.attachments[0];
+      if (capturedAttachment === undefined) throw new Error('Expected one captured attachment.');
+      expect(capturedAttachment.content).toBe(ALLOWED_BYTES);
+      expect(path.isAbsolute(capturedAttachment.path)).toBe(true);
+      expect(capturedAttachment.path).not.toBe(allowedPath);
       expect(captured.prompt).toContain('No other file is implicitly attached');
-      expect(captured.prompt).toContain(`- file: ${allowedPath}`);
+      expect(captured.prompt).toContain(`- file: ${capturedAttachment.path}`);
+      expect(captured.prompt).not.toContain(allowedPath);
+      await expect(access(capturedAttachment.path)).rejects.toThrow();
       expect(JSON.stringify(captured)).not.toContain('.env.production');
       expect(JSON.stringify(captured)).not.toContain('ignored-by-git.txt');
       expect(JSON.stringify(captured)).not.toContain('ignored-by-forgeboard.txt');

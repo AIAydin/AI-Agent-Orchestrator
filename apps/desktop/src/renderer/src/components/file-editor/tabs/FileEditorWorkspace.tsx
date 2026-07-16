@@ -39,6 +39,7 @@ export function FileEditorWorkspace({
   readOnly = false,
   onBrowseFiles,
   onRevealInTree,
+  onFileDragStart,
   monacoLoader,
   theme,
 }: {
@@ -48,6 +49,7 @@ export function FileEditorWorkspace({
   readonly readOnly?: boolean;
   readonly onBrowseFiles: () => void;
   readonly onRevealInTree: (relativePath: string) => void;
+  readonly onFileDragStart?: (dataTransfer: DataTransfer, target: FileEditorTabTarget) => void;
   readonly monacoLoader?: MonacoLoader | undefined;
   readonly theme?: 'vs' | 'vs-dark' | 'hc-black' | 'hc-light' | undefined;
 }) {
@@ -121,13 +123,32 @@ export function FileEditorWorkspace({
             const active = key === activeKey;
             const state = states[key];
             const dirty = state?.dirty === true;
+            const contextDraggable =
+              onFileDragStart !== undefined && state?.status === 'ready' && !dirty;
             return (
               <div className={`file-editor-tab${active ? ' active' : ''}`} key={key}>
                 <button
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  title={tab.relativePath}
+                  draggable={contextDraggable}
+                  title={
+                    dirty
+                      ? 'Save or revert this tab before dragging its saved disk file.'
+                      : contextDraggable
+                        ? `Drag ${tab.relativePath} to Agent context`
+                        : tab.relativePath
+                  }
+                  onDragStart={(event) => {
+                    if (!contextDraggable) {
+                      event.preventDefault();
+                      return;
+                    }
+                    onFileDragStart(event.dataTransfer, {
+                      projectId: tab.projectId,
+                      relativePath: tab.relativePath,
+                    });
+                  }}
                   onClick={() =>
                     setWorkspace((current) => ({ ...current, activeKey: key, message: null }))
                   }

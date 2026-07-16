@@ -35,13 +35,16 @@ describe('WorkspaceRail accessibility', () => {
       templates: [],
       extensionTemplates: [],
       nodes: [],
+      fileOperations: fileOperations(),
       initializingGit: false,
+      collaborationGraphReadOnly: false,
       onTabChange: vi.fn(),
       onSearchChange: vi.fn(),
       onAddNode: vi.fn(),
       onAddExtensionNode: vi.fn(),
       onInitializeGit: vi.fn(),
       onSelectNode: vi.fn(),
+      onAttachAgentContext: vi.fn(),
     };
     const { rerender } = render(<WorkspaceRail {...props} tab="project" />);
 
@@ -74,13 +77,16 @@ describe('WorkspaceRail accessibility', () => {
         templates={[]}
         extensionTemplates={[]}
         nodes={[]}
+        fileOperations={fileOperations()}
         initializingGit={false}
+        collaborationGraphReadOnly={false}
         onTabChange={vi.fn()}
         onSearchChange={vi.fn()}
         onAddNode={vi.fn()}
         onAddExtensionNode={vi.fn()}
         onInitializeGit={onInitializeGit}
         onSelectNode={vi.fn()}
+        onAttachAgentContext={vi.fn()}
       />,
     );
 
@@ -89,3 +95,16 @@ describe('WorkspaceRail accessibility', () => {
     expect(onInitializeGit).toHaveBeenCalledTimes(1);
   });
 });
+
+function fileOperations() {
+  return {
+    tree: vi.fn().mockResolvedValue({
+      projectId: project.id,
+      directory: '.',
+      entries: [],
+      truncated: false,
+    }),
+    search: vi.fn(),
+    read: vi.fn(),
+  };
+}

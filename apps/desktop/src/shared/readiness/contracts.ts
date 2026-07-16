@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { CustomAgentConfigurationSchema } from '../application/contracts.js';
+import { MachineSpecificValueSchema } from '../settings/values.js';
 
 export const ReadinessAgentIdSchema = z.enum([
   'test-agent',
@@ -12,14 +13,7 @@ export const ReadinessAgentIdSchema = z.enum([
 ]);
 export type ReadinessAgentId = z.infer<typeof ReadinessAgentIdSchema>;
 
-const ExecutableOverrideSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(32_768)
-  .refine((value) => !value.includes('\0') && !/[\r\n]/u.test(value), {
-    message: 'Executable overrides cannot contain NUL bytes or line breaks.',
-  });
+const ExecutableOverrideSchema = MachineSpecificValueSchema;
 
 const BundledAgentReadinessRequestSchema = z
   .object({

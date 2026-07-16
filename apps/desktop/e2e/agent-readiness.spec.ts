@@ -93,6 +93,11 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     await setup.getByRole('button', { name: /Continue/ }).click();
     await expect(setup.getByText('Your local workshop is ready')).toBeVisible();
     await expect(setup).toContainText('Custom CLI');
+    const tour = setup.getByRole('region', { name: 'Getting started tour' });
+    await expect(tour.getByRole('tab')).toHaveCount(4);
+    await tour.getByRole('tab', { name: /Get help and control your data/u }).click();
+    await expect(tour).toContainText('Settings → Data & privacy');
+    await expect(tour).toContainText('troubleshooting guides');
     await setup.getByRole('button', { name: /Open Forgeboard/ }).click();
 
     await page.getByRole('button', { name: 'Settings' }).click();
@@ -104,6 +109,9 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     const tests = settings.getByRole('group', { name: 'Tests command' });
     await expect(tests.getByLabel('Executable')).toHaveValue(executable);
     await expect(tests.getByLabel('Arguments')).toHaveValue('-e\nprocess.stdout.write("READY")');
+    await settings.getByRole('button', { name: 'Help & shortcuts' }).click();
+    await settings.getByText('Replay Getting started tour').click();
+    await expect(settings.getByRole('region', { name: 'Getting started tour' })).toBeVisible();
     expect(externalRequests).toEqual([]);
   } finally {
     await electronApp?.close().catch(() => undefined);

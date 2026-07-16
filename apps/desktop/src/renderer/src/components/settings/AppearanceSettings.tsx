@@ -1,3 +1,4 @@
+import { numericDraftValue } from './fields/numeric-draft.js';
 import { SettingsSection, type SettingsDraftProps } from './shared.js';
 
 export function AppearanceSettings({ draft, setDraft }: SettingsDraftProps) {
@@ -58,7 +59,7 @@ export function AppearanceSettings({ draft, setDraft }: SettingsDraftProps) {
             name="canvas-grid-size"
             min="4"
             max="128"
-            value={draft.canvasGridSize}
+            value={numericDraftValue(draft.canvasGridSize)}
             onChange={(event) => setDraft({ ...draft, canvasGridSize: event.target.valueAsNumber })}
           />
         </label>

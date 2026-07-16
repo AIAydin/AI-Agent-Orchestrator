@@ -195,6 +195,15 @@ describe('SetupWizard', () => {
     );
     expect(screen.getAllByText(/Executable and package context ready/u)).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    expect(screen.getByRole('heading', { name: 'Getting started tour' })).toBeTruthy();
+    expect(
+      screen.getAllByRole('tab', {
+        name: /Start with|Find your|Review before|Get help/u,
+      }),
+    ).toHaveLength(4);
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: /Open Forgeboard/ }).disabled,
+    ).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: /Open Forgeboard/ }));
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
