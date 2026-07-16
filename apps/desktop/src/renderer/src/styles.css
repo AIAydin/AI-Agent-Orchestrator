@@ -7,6 +7,7 @@
 @import './styles/workspace/workspace-shell.css';
 @import './styles/workspace/project-rail.css';
 @import './styles/workspace/canvas.css';
+@import './styles/workspace/collaboration-presence.css';
 @import './styles/workspace/inspector.css';
 @import './styles/workspace/activity.css';
 @import './styles/workspace/workflows.css';

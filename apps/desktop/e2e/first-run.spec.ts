@@ -110,7 +110,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await settings.getByLabel('Default agent').selectOption('test-agent');
       await settings.getByLabel('Default permission profile').selectOption('plan-read-only');
       await settings
-        .getByLabel('Environment names allowed into processes')
+        .getByLabel('Environment variable names allowed into processes')
         .fill('PATH, HOME, LANG, CI');
 
       await settings.getByRole('button', { name: /Git & previews/ }).click();

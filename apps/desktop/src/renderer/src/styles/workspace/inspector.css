@@ -72,6 +72,59 @@
   min-height: 340px;
   margin: 14px 0;
 }
+.file-node-reference {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 14px 0 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+.file-node-reference > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.file-node-reference > div:last-child {
+  justify-items: end;
+}
+.file-node-reference span,
+.file-node-reference em,
+.file-node-reference-guidance {
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.4;
+}
+.file-node-reference code {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-node-reference em {
+  color: var(--amber);
+  font-style: normal;
+}
+.file-node-reference button {
+  min-height: 27px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font-size: 8px;
+}
+.file-node-reference-guidance {
+  margin: 14px 0 8px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
+}
 .inspector textarea {
   resize: vertical;
   line-height: 1.4;

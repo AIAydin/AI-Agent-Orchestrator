@@ -4,7 +4,8 @@ import type {
   AppSettings,
   CommandConfiguration,
 } from '../../../../shared/application/contracts.js';
-import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../lib/literal-arguments.js';
+import { CommandBuilder } from '../configuration/CommandBuilder.js';
+import type { CommandPurpose } from '../configuration/dependency-guidance.js';
 
 export interface SettingsDraftProps {
   draft: AppSettings;
@@ -42,50 +43,24 @@ export function CommandEditor({
   value,
   onChange,
   onBrowse,
+  purpose = 'check',
 }: {
   label: string;
   name: string;
   value: CommandConfiguration;
   onChange: (value: CommandConfiguration) => void;
   onBrowse: () => void;
+  purpose?: CommandPurpose;
 }) {
   return (
-    <fieldset className="command-editor">
-      <legend>{label}</legend>
-      <div className="command-editor-field">
-        <label htmlFor={`${name}-executable`}>Executable</label>
-        <span className="path-picker">
-          <input
-            id={`${name}-executable`}
-            name={`${name}-executable`}
-            value={value.executable}
-            placeholder="Auto-detect or enter an executable"
-            onChange={(event) => onChange({ ...value, executable: event.target.value })}
-          />
-          <button type="button" onClick={onBrowse}>
-            Browse
-          </button>
-        </span>
-      </div>
-      <label>
-        Arguments
-        <small id={`${name}-arguments-help`}>{LITERAL_ARGUMENT_HELP}</small>
-        <textarea
-          name={`${name}-arguments`}
-          aria-label="Arguments"
-          aria-describedby={`${name}-arguments-help`}
-          rows={3}
-          value={value.arguments.join('\n')}
-          placeholder={'run\ntest'}
-          onChange={(event) =>
-            onChange({
-              ...value,
-              arguments: parseLiteralArguments(event.target.value),
-            })
-          }
-        />
-      </label>
-    </fieldset>
+    <CommandBuilder
+      label={label}
+      name={name}
+      value={value}
+      purpose={purpose}
+      onChange={onChange}
+      onBrowse={onBrowse}
+    />
   );
 }
 

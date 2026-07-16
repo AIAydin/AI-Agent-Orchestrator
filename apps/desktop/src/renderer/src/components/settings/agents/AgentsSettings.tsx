@@ -6,6 +6,7 @@ import type {
   CheckAgentReadiness,
 } from '../../../../../shared/readiness/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
+import { EnvironmentAllowlistEditor } from '../../configuration/EnvironmentAllowlistEditor.js';
 import { AgentReadinessPanel } from '../../readiness/AgentReadinessPanel.js';
 import {
   currentReadinessResult,
@@ -243,25 +244,11 @@ export function AgentsSettings({
             Build the Custom profile in the Permissions centre. No configuration file is required.
           </small>
         </label>
-        <label>
-          Environment names allowed into processes
-          <input
-            name="process-environment-allowlist"
-            value={draft.envAllowlist.join(', ')}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                envAllowlist: event.target.value
-                  .split(',')
-                  .map((value) => value.trim())
-                  .filter(Boolean),
-              })
-            }
-          />
-          <small>
-            Names only are stored. Values are resolved at launch and redacted from audit data.
-          </small>
-        </label>
+        <EnvironmentAllowlistEditor
+          name="process-environment-allowlist"
+          value={draft.envAllowlist}
+          onChange={(envAllowlist) => setDraft({ ...draft, envAllowlist })}
+        />
       </SettingsSection>
       <SettingsSection
         title="Process launching"

@@ -30,6 +30,12 @@ export interface GitFileSelection {
   readonly path: string;
 }
 
+export interface GitDiffStats {
+  readonly files: number;
+  readonly additions: number;
+  readonly deletions: number;
+}
+
 function diffPath(file: GitDiffFileView): string | null {
   return file.newPath ?? file.oldPath;
 }
@@ -113,4 +119,29 @@ export function statusLabel(file: GitReviewFile): string {
   const status = file.diff?.status;
   if (status === undefined || status === 'unknown') return 'Changed';
   return `${status[0]?.toUpperCase() ?? ''}${status.slice(1)}`;
+}
+
+export function fileDiffStats(file: GitDiffDisplayFile): Omit<GitDiffStats, 'files'> {
+  let additions = 0;
+  let deletions = 0;
+  for (const hunk of file.diff?.hunks ?? []) {
+    for (const line of hunk.lines) {
+      if (line.kind === 'addition') additions += 1;
+      if (line.kind === 'deletion') deletions += 1;
+    }
+  }
+  return { additions, deletions };
+}
+
+export function workingTreeDiffStats(review: GitReviewView): GitDiffStats {
+  const paths = new Set(review.entries.map((entry) => entry.path));
+  for (const diff of [...review.staged.files, ...review.unstaged.files]) {
+    const path = diffPath(diff);
+    if (path !== null) paths.add(path);
+  }
+  return {
+    files: paths.size,
+    additions: review.staged.additions + review.unstaged.additions,
+    deletions: review.staged.deletions + review.unstaged.deletions,
+  };
 }

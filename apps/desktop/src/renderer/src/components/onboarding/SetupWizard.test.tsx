@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -102,6 +102,9 @@ afterEach(cleanup);
 
 describe('SetupWizard', () => {
   it('completes agent, Docker, preview, and worktree setup entirely through controls', async () => {
+    pickExecutable
+      .mockResolvedValueOnce({ ok: true, value: '/usr/local/bin/pnpm' })
+      .mockResolvedValueOnce({ ok: true, value: '/usr/local/bin/node' });
     const onComplete = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
     render(
       <SetupWizard
@@ -130,26 +133,46 @@ describe('SetupWizard', () => {
     await screen.findByText('Docker profile ready');
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
 
-    fireEvent.change(screen.getByLabelText('Development server executable'), {
-      target: { value: 'pnpm' },
-    });
+    const developmentCommand = screen.getByRole('group', { name: 'Development server' });
+    fireEvent.click(
+      within(developmentCommand).getByRole('button', {
+        name: 'Browse executable for Development server',
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        within(developmentCommand).getByLabelText<HTMLInputElement>('Development server executable')
+          .value,
+      ).toBe('/usr/local/bin/pnpm'),
+    );
     fireEvent.change(
       screen.getByLabelText(
         'Development server arguments, one non-empty literal argument per line; empty lines ignored',
       ),
       {
-        target: { value: 'dev\n--host' },
+        target: { value: 'run\ndev\n--host' },
       },
     );
-    fireEvent.change(screen.getByLabelText('Test command executable'), {
-      target: { value: 'pnpm' },
-    });
+    const testCommand = screen.getByRole('group', { name: 'Test command' });
+    fireEvent.click(
+      within(testCommand).getByRole('button', {
+        name: 'Browse executable for Test command',
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        within(testCommand).getByLabelText<HTMLInputElement>('Test command executable').value,
+      ).toBe('/usr/local/bin/node'),
+    );
     fireEvent.change(
       screen.getByLabelText(
         'Test command arguments, one non-empty literal argument per line; empty lines ignored',
       ),
-      { target: { value: 'run\ntest\n--watch=false' } },
+      { target: { value: '--test\n--test-reporter=spec' } },
     );
+    fireEvent.change(screen.getByLabelText('Environment variable names allowed into processes'), {
+      target: { value: 'PATH, HOME, CI, PATH' },
+    });
     expect(screen.queryByLabelText('Cleanup policy')).toBeNull();
     fireEvent.change(screen.getByLabelText('Branch prefix'), {
       target: { value: 'workshop/' },
@@ -163,11 +186,19 @@ describe('SetupWizard', () => {
       defaultPermissionProfile: 'docker-isolated',
       dockerEnabled: true,
       branchPrefix: 'workshop/',
-      developmentCommand: { executable: 'pnpm', arguments: ['dev', '--host'] },
-      testCommand: { executable: 'pnpm', arguments: ['run', 'test', '--watch=false'] },
+      developmentCommand: {
+        executable: '/usr/local/bin/pnpm',
+        arguments: ['run', 'dev', '--host'],
+      },
+      testCommand: {
+        executable: '/usr/local/bin/node',
+        arguments: ['--test', '--test-reporter=spec'],
+      },
+      envAllowlist: ['PATH', 'HOME', 'CI'],
       dockerImage: readyDocker.image,
       dockerContainerExecutable: readyDocker.containerExecutable,
     });
+    expect(pickExecutable).toHaveBeenCalledTimes(2);
   });
 
   it('remediates a missing selected CLI and validates the unsaved override before continuing', async () => {
@@ -207,6 +238,7 @@ describe('SetupWizard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
     fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/ }));
+    expect(screen.getByText(/Install OpenAI Codex CLI/u)).toBeTruthy();
     const continueButton = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
     expect(continueButton.disabled).toBe(true);
 
@@ -299,6 +331,38 @@ describe('SetupWizard', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Use safe defaults' }));
     await waitFor(() => expect(onSkip).toHaveBeenCalledTimes(1));
+  });
+
+  it('blocks invalid environment names and explains that secret values are not persisted', () => {
+    render(
+      <SetupWizard
+        settings={settings}
+        agents={agents}
+        onComplete={() => Promise.resolve()}
+        onSkip={() => Promise.resolve()}
+        onError={(message) => {
+          throw new Error(message);
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    const continueButton = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
+
+    fireEvent.change(screen.getByLabelText('Environment variable names allowed into processes'), {
+      target: { value: 'PATH, NOT-VALID' },
+    });
+    expect(screen.getByRole('alert').textContent).toMatch(/valid environment variable name/u);
+    expect(continueButton.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Environment variable names allowed into processes'), {
+      target: { value: 'PATH, CI' },
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(continueButton.disabled).toBe(false);
+    expect(screen.getByText(/session values are not entered here/u)).toBeTruthy();
   });
 
   it('configures a truthful host Custom profile in the Safety step without file editing', async () => {

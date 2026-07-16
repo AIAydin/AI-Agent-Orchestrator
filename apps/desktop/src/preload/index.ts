@@ -15,6 +15,7 @@ import {
   CollaborationEventSchema,
   CollaborationJoinInputSchema,
   CollaborationJoinResultSchema,
+  CollaborationMetadataSnapshotSchema,
   CollaborationPublishInputSchema,
   CollaborationUpdateAwarenessInputSchema,
 } from '../shared/collaboration/index.js';
@@ -169,6 +170,11 @@ const api: ForgeboardApi = {
   collaboration: {
     get: () =>
       invokeValidated(COLLABORATION_IPC_CHANNELS.get, CollaborationConnectionSchema.nullable()),
+    snapshot: () =>
+      invokeValidated(
+        COLLABORATION_IPC_CHANNELS.snapshot,
+        CollaborationMetadataSnapshotSchema.nullable(),
+      ),
     join: async (input) => {
       const result: unknown = await ipcRenderer.invoke(
         COLLABORATION_IPC_CHANNELS.join,

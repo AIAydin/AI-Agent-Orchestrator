@@ -13,18 +13,18 @@ import {
   TerminalSquare,
 } from 'lucide-react';
 
-import type {
-  AgentDetection,
-  AppSettings,
-  CommandConfiguration,
-} from '../../../../shared/application/contracts.js';
+import type { AgentDetection, AppSettings } from '../../../../shared/application/contracts.js';
 import type {
   AgentReadinessResult,
   CheckAgentReadiness,
 } from '../../../../shared/readiness/contracts.js';
 import type { DockerReadiness } from '../../../../shared/docker/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
-import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../lib/literal-arguments.js';
+import { CommandBuilder } from '../configuration/CommandBuilder.js';
+import {
+  EnvironmentAllowlistEditor,
+  environmentAllowlistIssues,
+} from '../configuration/EnvironmentAllowlistEditor.js';
 import { AgentReadinessPanel } from '../readiness/AgentReadinessPanel.js';
 import {
   currentReadinessResult,
@@ -66,6 +66,7 @@ export function SetupWizard(props: SetupWizardProps) {
   );
   const customAgentIncomplete =
     draft.defaultAgent === 'custom' && draft.customAgent.executable.trim() === '';
+  const environmentIssues = environmentAllowlistIssues(draft.envAllowlist);
   const customPermissionIssues = customPermissionConfigurationIssues(draft);
   const selectedPermissionNeedsDocker = permissionProfileNeedsDocker(
     draft.defaultPermissionProfile,
@@ -128,6 +129,17 @@ export function SetupWizard(props: SetupWizardProps) {
     await perform(async () => {
       const selected = unwrap(await window.forgeboard.projects.pickParent());
       if (selected) setDraft((current) => ({ ...current, worktreeRoot: selected }));
+    });
+  }
+
+  async function chooseCommandExecutable(key: 'developmentCommand' | 'testCommand') {
+    await perform(async () => {
+      const selected = unwrap(await window.forgeboard.projects.pickExecutable());
+      if (!selected) return;
+      setDraft((current) => ({
+        ...current,
+        [key]: { ...current[key], executable: selected },
+      }));
     });
   }
 
@@ -574,21 +586,37 @@ export function SetupWizard(props: SetupWizardProps) {
                 through a shell.
               </p>
               <div className="setup-command-grid">
-                <CompactCommandEditor
+                <CommandBuilder
                   label="Development server"
                   name="setup-development-server"
                   value={draft.developmentCommand}
-                  placeholder="pnpm · dev"
+                  purpose="preview"
+                  variant="compact"
+                  executablePlaceholder="pnpm"
+                  argumentsPlaceholder={'run\ndev'}
+                  busy={busy}
                   onChange={(developmentCommand) => setDraft({ ...draft, developmentCommand })}
+                  onBrowse={() => void chooseCommandExecutable('developmentCommand')}
                 />
-                <CompactCommandEditor
+                <CommandBuilder
                   label="Test command"
                   name="setup-test-command"
                   value={draft.testCommand}
-                  placeholder="pnpm · test"
+                  purpose="check"
+                  variant="compact"
+                  executablePlaceholder="pnpm"
+                  argumentsPlaceholder={'run\ntest'}
+                  busy={busy}
                   onChange={(testCommand) => setDraft({ ...draft, testCommand })}
+                  onBrowse={() => void chooseCommandExecutable('testCommand')}
                 />
               </div>
+              <EnvironmentAllowlistEditor
+                compact
+                name="setup-process-environment-allowlist"
+                value={draft.envAllowlist}
+                onChange={(envAllowlist) => setDraft({ ...draft, envAllowlist })}
+              />
               <label className="setup-path-field">
                 Branch prefix
                 <input
@@ -695,7 +723,8 @@ export function SetupWizard(props: SetupWizardProps) {
                     (selectedPermissionUnavailable !== null ||
                       (draft.defaultPermissionProfile === 'custom' &&
                         customPermissionIssues.length > 0) ||
-                      (selectedPermissionNeedsDocker && dockerReadiness?.available !== true)))
+                      (selectedPermissionNeedsDocker && dockerReadiness?.available !== true))) ||
+                  (step === 3 && environmentIssues.length > 0)
                 }
                 onClick={() => setStep((current) => current + 1)}
               >
@@ -751,47 +780,6 @@ function ChoiceCard({
       </span>
       <span className="setup-radio-indicator">{checked && <Check size={12} />}</span>
     </label>
-  );
-}
-
-function CompactCommandEditor({
-  label,
-  name,
-  value,
-  placeholder,
-  onChange,
-}: {
-  label: string;
-  name: string;
-  value: CommandConfiguration;
-  placeholder: string;
-  onChange: (value: CommandConfiguration) => void;
-}) {
-  return (
-    <fieldset>
-      <legend>{label}</legend>
-      <input
-        name={`${name}-executable`}
-        value={value.executable}
-        placeholder={placeholder.split(' · ')[0]}
-        aria-label={`${label} executable`}
-        onChange={(event) => onChange({ ...value, executable: event.target.value })}
-      />
-      <textarea
-        name={`${name}-arguments`}
-        rows={2}
-        value={value.arguments.join('\n')}
-        placeholder={`${placeholder.split(' · ')[1]}\n(one non-empty literal argument per line)`}
-        aria-label={`${label} arguments, one non-empty literal argument per line; empty lines ignored`}
-        onChange={(event) =>
-          onChange({
-            ...value,
-            arguments: parseLiteralArguments(event.target.value),
-          })
-        }
-      />
-      <small>{LITERAL_ARGUMENT_HELP}</small>
-    </fieldset>
   );
 }
 

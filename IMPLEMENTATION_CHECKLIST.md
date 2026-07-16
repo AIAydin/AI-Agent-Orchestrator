@@ -323,6 +323,13 @@ unchecked when only a subset of their required behavior has proof.
   refresh, empty/error/truncated UI states, accessible tab switching, and an unchanged primary
   checkout. The structure gate passed for all 411 checked files; broader merge, push, PR, comments,
   split-diff, archive, and cleanup surfaces remain unchecked.
+- 2026-07-15: working-tree and committed-base Git reviews gained previous/next file navigation,
+  per-group 100-item sidebar pages, user-controlled unified/split layouts, optional visible whitespace,
+  selected-file line totals, and authoritative whole-review tracked-text totals. Focused renderer
+  and form-accessibility coverage passed 18 tests, and the structure gate passed. Durable line
+  comments and review notes remain unimplemented because this Git review surface has no approved
+  persistence contract for target/path/line anchors, so the broad diff-review checklist entry
+  remains unchecked.
 - 2026-07-15: workflow-owned Agent and assigned Task attempts gained exact-owner ephemeral output,
   bounded live terminal rendering, input, and interrupt controls without renderer-selected owner or
   run IDs. Main-process tests cover wrong-window, stale-attempt, numeric WebContents ID reuse,
@@ -512,3 +519,31 @@ unchecked when only a subset of their required behavior has proof.
   `corepack pnpm audit --prod --audit-level high` reported no known production dependency
   vulnerabilities. The Electron suite includes the lock-aware first-run canvas journey and the new
   end-to-end reviewed primary-delivery path.
+- 2026-07-15: first-run and Settings configuration gained native executable Browse controls, safe
+  literal argument arrays, an environment-variable name allowlist that never stores values, and
+  actionable dependency guidance for agents, checks, and previews. Ordinary setup is available in
+  the UI without source or environment-file editing. The broad first-run readiness entry remains
+  unchecked pending proactive generic check/preview validation before save, package-script
+  discovery before a project is opened, and installation of external dependencies.
+- 2026-07-15: File nodes gained a bounded project-relative browser with recursive navigation,
+  breadcrumbs, 100-result quick-open search, honest ignored/sensitive/symlink/missing/binary/
+  oversize/read-only states, and UI-only assignment or reassignment into the existing Monaco text
+  editor. The broad file-editor entry remains unchecked because tabs, diagnostics, and external-
+  editor handoff are not implemented.
+- 2026-07-15: collaboration gained owner-scoped current-room snapshot retrieval, strict canvas-ID
+  and field allowlists, preservation of local private file bindings and prompts, safe remote graph
+  merging, role-enforced read-only graph controls, and bounded peer cursors, selections, presence,
+  and avatars. Initial room entry can union unsent local work, while later snapshots preserve remote
+  deletions. A changed room after disconnect now pauses instead of overwriting either side because
+  the current server contract has no per-update delivery acknowledgement or conflict-resolution UI;
+  the broad offline/reconnect collaboration entry therefore remains unchecked.
+- 2026-07-15: the UI-first file browser, review, configuration, and collaboration checkpoint passed
+  the 599-file modularity gate, repository-wide formatting and zero-warning lint, every workspace
+  strict typecheck, 923 unit tests across 158 files, 160 integration tests across 24 files, all 11
+  Electron Playwright journeys, all 18 standalone release/startup tests, and every workspace
+  production build. The final adversarial fix retains viewer/reviewer read-only authority during
+  reconnect/offline transitions and reapplies an unchanged authoritative snapshot before resuming;
+  three regressions cover reconnect, confirmed leave, and disabling collaboration. The production
+  dependency audit found no known vulnerabilities. A fresh unsigned macOS arm64 app, ZIP, and DMG
+  built successfully; packaged-app smoke passed, and the native DMG mount/copy/launch smoke returned
+  `FORGEBOARD_SMOKE_OK`. Signing remains inactive because this machine has no Developer ID identity.

@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { GitAgentBaseComparisonView } from '../../../../shared/git/contracts.js';
 import { GitDiffViewer } from './diff/GitDiffViewer.js';
+import { GitFilePageControls, useGitFilePage } from './diff/GitFilePagination.js';
 import type { GitDiffDisplayFile } from './git-review-model.js';
+import { fileDiffStats } from './git-review-model.js';
 import { GIT_BASE_PANEL_ID, GIT_BASE_TAB_ID } from './GitReviewModeTabs.js';
 
 export function GitBaseComparisonPanel({
@@ -16,6 +18,8 @@ export function GitBaseComparisonPanel({
   const files = useMemo(() => comparisonFiles(comparison), [comparison]);
   const [selectedPath, setSelectedPath] = useState<string | null>(files[0]?.path ?? null);
   const selected = files.find((file) => file.path === selectedPath) ?? null;
+  const selectedIndex = files.findIndex((file) => file.path === selectedPath);
+  const filePage = useGitFilePage(files.length, selectedIndex);
 
   useEffect(() => {
     setSelectedPath((current) =>
@@ -91,8 +95,9 @@ export function GitBaseComparisonPanel({
                 <span>{files.length}</span>
               </header>
               <ul>
-                {files.map((file) => {
+                {files.slice(filePage.start, filePage.end).map((file) => {
                   const active = file.path === selectedPath;
+                  const stats = fileDiffStats(file);
                   return (
                     <li className="git-base-file" key={file.path}>
                       <button
@@ -104,19 +109,36 @@ export function GitBaseComparisonPanel({
                         <FileCode2 size={13} aria-hidden="true" />
                         <span>
                           <strong>{file.path}</strong>
-                          <small>{comparisonStatus(file)}</small>
+                          <small>
+                            {comparisonStatus(file)} · +{stats.additions} −{stats.deletions}
+                          </small>
                         </span>
                       </button>
                     </li>
                   );
                 })}
               </ul>
+              <GitFilePageControls
+                label="Committed changes"
+                fileCount={files.length}
+                page={filePage}
+              />
             </section>
           </nav>
           <GitDiffViewer
             file={selected}
             busy={false}
             readOnly
+            {...(selectedIndex < 0
+              ? {}
+              : {
+                  navigation: {
+                    index: selectedIndex,
+                    count: files.length,
+                    onPrevious: () => setSelectedPath(files[selectedIndex - 1]?.path ?? null),
+                    onNext: () => setSelectedPath(files[selectedIndex + 1]?.path ?? null),
+                  },
+                })}
             onStageHunk={() => undefined}
             onUnstageHunk={() => undefined}
             onPrepareDiscard={() => undefined}

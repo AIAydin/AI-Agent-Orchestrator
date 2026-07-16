@@ -17,7 +17,9 @@ import {
 import { Bot, LayoutGrid } from 'lucide-react';
 
 import type { AppSettings, CanvasDocument } from '../../../../../shared/application/contracts.js';
+import type { CollaborationAwarenessEntry } from '../../../../../shared/collaboration/index.js';
 import { NODE_KINDS, WORKSHOP_NODE_TYPES, type NodeKind, type WorkshopNode } from './CanvasNode.js';
+import { CollaborationPresence } from '../collaboration/CollaborationPresence.js';
 import type { ExtensionTemplate, WorkshopEdge } from '../model/types.js';
 import { AlignmentGuides } from './interactions/AlignmentGuides.js';
 import {
@@ -49,6 +51,10 @@ interface WorkspaceCanvasProps {
   onSelectionChange: (selection: OnSelectionChangeParams<WorkshopNode, WorkshopEdge>) => void;
   onAddNode: (kind: NodeKind, position?: { x: number; y: number }) => void;
   onAddExtensionNode: (template: ExtensionTemplate, position?: { x: number; y: number }) => void;
+  collaborationAwareness: readonly CollaborationAwarenessEntry[];
+  onCollaborationCursorMove: (position: { readonly x: number; readonly y: number }) => void;
+  onCollaborationCursorLeave: () => void;
+  collaborationGraphReadOnly: boolean;
 }
 
 export function WorkspaceCanvas({
@@ -67,6 +73,10 @@ export function WorkspaceCanvas({
   onSelectionChange,
   onAddNode,
   onAddExtensionNode,
+  collaborationAwareness,
+  onCollaborationCursorMove,
+  onCollaborationCursorLeave,
+  collaborationGraphReadOnly,
 }: WorkspaceCanvasProps) {
   const [alignmentGuides, setAlignmentGuides] = useState<CanvasAlignmentGuides>({});
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState({ message: '', sequence: 0 });
@@ -81,12 +91,18 @@ export function WorkspaceCanvas({
   return (
     <section
       className="canvas-region"
+      onPointerMove={(event) => {
+        const position = instance?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        if (position !== undefined) onCollaborationCursorMove(position);
+      }}
+      onPointerLeave={onCollaborationCursorLeave}
       onDragOver={(event) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = 'copy';
       }}
       onDrop={(event) => {
         event.preventDefault();
+        if (collaborationGraphReadOnly) return;
         const extensionKey = event.dataTransfer.getData('application/x-forgeboard-extension-node');
         const position = instance?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
         if (extensionKey) {
@@ -127,6 +143,15 @@ export function WorkspaceCanvas({
             }
             const movement = keyboardMovementForKey(event.key, event.shiftKey);
             if (movement === null) return;
+            if (collaborationGraphReadOnly) {
+              event.preventDefault();
+              event.stopPropagation();
+              setKeyboardAnnouncement(({ sequence }) => ({
+                message: 'This collaboration role cannot edit the shared graph.',
+                sequence: sequence + 1,
+              }));
+              return;
+            }
             if (event.altKey || event.ctrlKey || event.metaKey) {
               event.stopPropagation();
               return;
@@ -163,13 +188,15 @@ export function WorkspaceCanvas({
             }
           }}
           fitView
+          nodesDraggable={!collaborationGraphReadOnly}
+          nodesConnectable={!collaborationGraphReadOnly}
           nodesFocusable
           autoPanOnNodeFocus
           snapToGrid={settings.canvasSnapToGrid}
           snapGrid={[settings.canvasGridSize, settings.canvasGridSize]}
           minZoom={0.15}
           maxZoom={2.5}
-          deleteKeyCode={['Backspace', 'Delete']}
+          deleteKeyCode={collaborationGraphReadOnly ? null : ['Backspace', 'Delete']}
           multiSelectionKeyCode={['Meta', 'Control']}
           selectionOnDrag
           panOnScroll
@@ -191,6 +218,7 @@ export function WorkspaceCanvas({
             variant={BackgroundVariant.Dots}
           />
           <AlignmentGuides guides={alignmentGuides} zoom={instance?.getZoom() ?? 1} />
+          <CollaborationPresence awareness={collaborationAwareness} nodes={nodes} />
           <Controls position="bottom-left" showInteractive={false} />
           <MiniMap
             position="bottom-right"
@@ -229,10 +257,20 @@ export function WorkspaceCanvas({
                 dependencies explicit.
               </p>
               <div>
-                <button type="button" className="button primary" onClick={() => onAddNode('brief')}>
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={collaborationGraphReadOnly}
+                  onClick={() => onAddNode('brief')}
+                >
                   Add a product brief
                 </button>
-                <button type="button" className="button" onClick={() => onAddNode('task')}>
+                <button
+                  type="button"
+                  className="button"
+                  disabled={collaborationGraphReadOnly}
+                  onClick={() => onAddNode('task')}
+                >
                   Add a task
                 </button>
               </div>

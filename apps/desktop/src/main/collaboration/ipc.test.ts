@@ -4,6 +4,7 @@ import type {
   CollaborationConnection,
   CollaborationEvent,
   CollaborationJoinInput,
+  CollaborationMetadataSnapshot,
 } from '../../shared/collaboration/index.js';
 import { OutboundActionGate } from '../outbound/outbound-action-gate.js';
 
@@ -112,9 +113,35 @@ describe('CollaborationIpcService ownership and approval', () => {
       connection: { subject: 'editor-1' },
     });
   });
+
+  it('returns the authenticated room snapshot only to the owning renderer', async () => {
+    const client = fakeClient();
+    const service = new CollaborationIpcService(
+      { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      { client },
+    );
+    service.registerIpcHandlers();
+    const owner = renderer(1);
+    const other = renderer(2);
+    electron.fromWebContents.mockImplementation((sender) =>
+      sender === owner.sender ? owner.parent : other.parent,
+    );
+    await invoke('join', owner.event, joinInput('owner-token'));
+
+    await expect(invoke('snapshot', owner.event)).resolves.toEqual({
+      ok: true,
+      value: safeSnapshot(),
+    });
+    await expect(invoke('snapshot', other.event)).resolves.toEqual({ ok: true, value: null });
+  });
 });
 
-function invoke(operation: 'join' | 'leave', event: unknown, ...args: unknown[]): Promise<unknown> {
+function invoke(
+  operation: 'join' | 'leave' | 'snapshot',
+  event: unknown,
+  ...args: unknown[]
+): Promise<unknown> {
   const handler = electron.handlers.get(COLLABORATION_IPC_CHANNELS[operation]);
   if (handler === undefined) throw new Error(`Missing ${operation} handler.`);
   return handler(event, ...args);
@@ -155,6 +182,9 @@ function fakeClient() {
     get connection() {
       return connection;
     },
+    get snapshot() {
+      return connection === null ? null : safeSnapshot();
+    },
     join: vi.fn((input: CollaborationJoinInput) => {
       connection = {
         connectionId: CONNECTION_ID,
@@ -186,5 +216,18 @@ function fakeClient() {
     resume: vi.fn(),
     reset: vi.fn(),
     dispose: vi.fn(),
+  };
+}
+
+function safeSnapshot(): CollaborationMetadataSnapshot {
+  return {
+    canvas: { id: 'canvas-1', title: 'Canvas', version: 1, updatedAt: NOW },
+    nodes: {},
+    edges: {},
+    groups: {},
+    tasks: {},
+    comments: {},
+    workflow: {},
+    reviews: {},
   };
 }

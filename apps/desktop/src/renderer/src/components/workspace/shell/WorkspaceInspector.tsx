@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Bot,
   Copy,
@@ -32,7 +33,11 @@ import { TypedEdgeInspector } from '../canvas/TypedEdgeInspector.js';
 import { canEditEdge } from '../canvas/interactions/lock-protection.js';
 import { GroupFrameInspector } from '../canvas/GroupFrameInspector.js';
 import { BuiltInContentInspector } from '../content/BuiltInContentInspector.js';
-import { FileEditorPanel } from '../../file-editor/index.js';
+import {
+  FileEditorPanel,
+  ProjectFileBrowser,
+  type ProjectFileSelection,
+} from '../../file-editor/index.js';
 import { WorkflowNodeInspector } from '../workflows/WorkflowNodeInspector.js';
 import type { WorkshopEdge } from '../model/types.js';
 import type { WorkshopEdgeData } from '../model/edge-config.js';
@@ -214,7 +219,14 @@ function NodeInspector(
           onError={props.onError}
         />
       )}
-      {selectedNode.data.kind === 'file' && <FileNodeEditor node={selectedNode} />}
+      {selectedNode.data.kind === 'file' && (
+        <FileNodeEditor
+          node={selectedNode}
+          projectId={props.project.id}
+          onRecord={onRecord}
+          onUpdate={onUpdateSelected}
+        />
+      )}
       <div className="inspector-actions">
         <button
           type="button"
@@ -266,31 +278,85 @@ function NodeInspector(
   );
 }
 
-function FileNodeEditor({ node }: { readonly node: WorkshopNode }) {
+function FileNodeEditor({
+  node,
+  projectId,
+  onRecord,
+  onUpdate,
+}: {
+  readonly node: WorkshopNode;
+  readonly projectId: string;
+  readonly onRecord: () => void;
+  readonly onUpdate: (data: Partial<WorkshopNode['data']>) => void;
+}) {
   const reference = node.data.file;
-  if (reference === undefined) {
-    return (
-      <p className="recovery-guidance warning" role="status">
-        This File node does not have a project-relative file reference yet.
-      </p>
-    );
-  }
-  if (reference.kind === 'directory') {
-    return (
-      <p className="recovery-guidance warning" role="status">
-        This File node references a directory. Select an ordinary project file to edit its contents.
-      </p>
-    );
-  }
+  const [browserOpen, setBrowserOpen] = useState(reference === undefined || reference.missing);
+  useEffect(() => {
+    setBrowserOpen(reference === undefined || reference.missing);
+  }, [node.id, reference?.missing, reference?.projectId, reference?.relativePath]);
+
+  const selectFile = (selection: ProjectFileSelection): void => {
+    onRecord();
+    onUpdate({
+      file: {
+        projectId: selection.projectId,
+        relativePath: selection.relativePath,
+        kind: 'file',
+        missing: false,
+        ...(selection.document.sha256 === null ? {} : { lastKnownHash: selection.document.sha256 }),
+      },
+    });
+    setBrowserOpen(false);
+  };
+
   return (
-    <div className="inspector-file-editor">
-      <FileEditorPanel
-        projectId={reference.projectId}
-        relativePath={reference.relativePath}
-        operations={window.forgeboard.files}
-        readOnly={node.data.locked || reference.missing || reference.kind !== 'file'}
-      />
-    </div>
+    <>
+      {reference !== undefined ? (
+        <section className="file-node-reference" aria-label="Current file reference">
+          <div>
+            <span>Current file</span>
+            <code>{reference.relativePath}</code>
+          </div>
+          <div>
+            {reference.missing ? <em>Missing</em> : null}
+            {reference.kind !== 'file' ? <em>Read-only {reference.kind}</em> : null}
+            <button type="button" disabled={node.data.locked} onClick={() => setBrowserOpen(true)}>
+              {reference.missing ? 'Choose replacement' : 'Change file'}
+            </button>
+          </div>
+        </section>
+      ) : (
+        <p className="file-node-reference-guidance" role="status">
+          Choose an ordinary project file. Ignored, sensitive, and symbolic-link entries remain
+          blocked by the main process.
+        </p>
+      )}
+
+      {browserOpen ? (
+        <ProjectFileBrowser
+          projectId={projectId}
+          operations={window.forgeboard.files}
+          {...(reference === undefined ? {} : { selectedRelativePath: reference.relativePath })}
+          assignmentDisabled={node.data.locked}
+          onSelect={selectFile}
+          {...(reference === undefined ? {} : { onCancel: () => setBrowserOpen(false) })}
+        />
+      ) : reference?.kind === 'directory' ? (
+        <p className="recovery-guidance warning" role="status">
+          This File node references a directory. Choose an ordinary project file to edit its
+          contents.
+        </p>
+      ) : reference !== undefined ? (
+        <div className="inspector-file-editor">
+          <FileEditorPanel
+            projectId={reference.projectId}
+            relativePath={reference.relativePath}
+            operations={window.forgeboard.files}
+            readOnly={node.data.locked || reference.missing || reference.kind !== 'file'}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
 

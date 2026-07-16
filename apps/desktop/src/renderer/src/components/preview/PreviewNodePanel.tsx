@@ -24,6 +24,7 @@ import {
   preferredPreviewScript,
 } from '../../../../shared/preview/command.js';
 import { unwrap } from '../../lib/ipc.js';
+import { packageManagerDependencyGuidance } from '../configuration/dependency-guidance.js';
 import type { WorkshopNodeData } from '../workspace/canvas/CanvasNode.js';
 import './PreviewNodePanel.css';
 
@@ -259,7 +260,8 @@ export function PreviewNodePanel({
           <code>{JSON.stringify(selectedScript.arguments)}</code> to{' '}
           <code>{selectedScript.executable}</code> as an exact argument array, with no
           Forgeboard-side shell parsing. The package manager runs the declaration only after you
-          click Start; detection never runs it. {runtimeGuidance(selectedScript.executable)}
+          click Start; detection never runs it.{' '}
+          {packageManagerDependencyGuidance(selectedScript.executable)}
         </p>
       ) : staleScript ? (
         <p className="preview-command-guidance" role="status">
@@ -585,12 +587,6 @@ function formatCommand(executable: string, arguments_: readonly string[]): strin
   return [executable, ...arguments_]
     .map((part) => (/^[A-Za-z0-9_./:=@+{}-]+$/u.test(part) ? part : JSON.stringify(part)))
     .join(' ');
-}
-
-function runtimeGuidance(packageManager: 'pnpm' | 'npm' | 'yarn' | 'bun'): string {
-  if (packageManager === 'npm') return 'If npm is missing, install Node.js and reopen Forgeboard.';
-  if (packageManager === 'bun') return 'If Bun is missing, install it and reopen Forgeboard.';
-  return `If ${packageManager} is missing, install it or enable it with Corepack, then reopen Forgeboard.`;
 }
 
 function truncate(value: string, length: number): string {

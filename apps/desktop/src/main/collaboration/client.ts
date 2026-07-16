@@ -107,6 +107,16 @@ export class CollaborationClient {
     return this.#connection === null ? null : structuredClone(this.#connection);
   }
 
+  /** Returns the already-authenticated room state for renderer views mounted after join. */
+  public get snapshot(): CollaborationMetadataSnapshot | null {
+    if (!this.#sharingReady() || this.#document === null) return null;
+    try {
+      return collaborationSnapshotFromDocument(this.#document);
+    } catch {
+      return null;
+    }
+  }
+
   public onEvent(listener: (event: CollaborationEvent) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);

@@ -1,0 +1,33 @@
+.command-builder-field {
+  min-width: 0;
+}
+
+.command-builder-guidance {
+  grid-column: 1 / -1;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.environment-editor {
+  display: grid;
+  gap: 6px;
+}
+
+.environment-editor > small {
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.environment-editor .environment-editor-issue {
+  color: var(--red);
+  font-weight: 650;
+}
+
+.environment-editor.compact {
+  margin-top: 12px;
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 650;
+}

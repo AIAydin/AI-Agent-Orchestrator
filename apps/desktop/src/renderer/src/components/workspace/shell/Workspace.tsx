@@ -22,6 +22,7 @@ import {
 import { PanelBottomOpen } from 'lucide-react';
 
 import type { CanvasDocument, RunAdapterId } from '../../../../../shared/application/contracts.js';
+import type { CollaborationMetadataSnapshot } from '../../../../../shared/collaboration/index.js';
 import type { GitTargetInput } from '../../../../../shared/git/contracts.js';
 import type { WorkflowExecutionView } from '../../../../../shared/workflow/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
@@ -83,6 +84,7 @@ import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
 import { useAgentRunController } from '../runs/useAgentRunController.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
 import { useCollaborationCanvas } from '../collaboration/useCollaborationCanvas.js';
+import { mergeCollaborationCanvasSnapshot } from '../collaboration/merge-canvas.js';
 import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
@@ -330,12 +332,71 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       viewport: instance?.getViewport() ?? canvas.viewport,
     };
   }, [canvas, edges, instance, nodes]);
-  useCollaborationCanvas({
+  const applyCollaborationSnapshot = useCallback(
+    (snapshot: CollaborationMetadataSnapshot, context: { readonly initial: boolean }): boolean => {
+      if (pendingCanvas === null) return false;
+      const merged = mergeCollaborationCanvasSnapshot(pendingCanvas, snapshot, context);
+      if (!merged.ok) {
+        onError(merged.message);
+        return false;
+      }
+      const nextSelectedNodeId = merged.document.nodes.some((node) => node.id === selectedNodeId)
+        ? selectedNodeId
+        : null;
+      const nextSelectedEdgeId = merged.document.edges.some((edge) => edge.id === selectedEdgeId)
+        ? selectedEdgeId
+        : null;
+      setCanvas(merged.document);
+      setNodes(
+        merged.document.nodes.map((node) => ({
+          id: node.id,
+          type: 'workshop' as const,
+          position: node.position,
+          ...(node.width === undefined ? {} : { width: node.width }),
+          ...(node.height === undefined ? {} : { height: node.height }),
+          selected: node.id === nextSelectedNodeId,
+          data: hydrateNodeData(node.data, extensionDiscoveryRef.current),
+        })),
+      );
+      setEdges(
+        merged.document.edges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          ...(edge.sourceHandle === undefined ? {} : { sourceHandle: edge.sourceHandle }),
+          ...(edge.targetHandle === undefined ? {} : { targetHandle: edge.targetHandle }),
+          type: 'smoothstep',
+          markerEnd: { type: MarkerType.ArrowClosed },
+          selected: edge.id === nextSelectedEdgeId,
+          data: createEdgeData(edge.type, edge.source, edge.data),
+          label: edge.type,
+        })),
+      );
+      setSelectedNodeId(nextSelectedNodeId);
+      setSelectedEdgeId(nextSelectedEdgeId);
+      setEvents((items) =>
+        items[0] === 'Applied authenticated collaboration metadata.'
+          ? items
+          : ['Applied authenticated collaboration metadata.', ...items].slice(0, 80),
+      );
+      return true;
+    },
+    [onError, pendingCanvas, selectedEdgeId, selectedNodeId],
+  );
+  const collaborationCanvas = useCollaborationCanvas({
     enabled: settings.collaborationEnabled,
     document: pendingCanvas,
     selectedNodeId,
+    onSnapshot: applyCollaborationSnapshot,
     onError,
   });
+  const reportCollaborationReadOnly = useCallback(() => {
+    setEvents((items) =>
+      items[0] === 'This collaboration role cannot edit the shared graph.'
+        ? items
+        : ['This collaboration role cannot edit the shared graph.', ...items].slice(0, 80),
+    );
+  }, []);
   const { saveState, flushCanvas } = useCanvasPersistence({
     projectId: project.id,
     document: pendingCanvas,
@@ -378,6 +439,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   }, [edges, nodes]);
 
   const undo = useCallback(() => {
+    if (collaborationCanvas.graphReadOnly) {
+      reportCollaborationReadOnly();
+      return;
+    }
     const snapshot = past.at(-1);
     if (!snapshot) return;
     setFuture((items) => [{ nodes, edges }, ...items].slice(0, 50));
@@ -385,9 +450,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     setNodes(snapshot.nodes);
     setEdges(snapshot.edges);
     setEvents((items) => ['Undid the last canvas change.', ...items].slice(0, 30));
-  }, [edges, nodes, past]);
+  }, [collaborationCanvas.graphReadOnly, edges, nodes, past, reportCollaborationReadOnly]);
 
   const redo = useCallback(() => {
+    if (collaborationCanvas.graphReadOnly) {
+      reportCollaborationReadOnly();
+      return;
+    }
     const snapshot = future[0];
     if (!snapshot) return;
     setPast((items) => [...items, { nodes, edges }].slice(-50));
@@ -395,10 +464,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     setNodes(snapshot.nodes);
     setEdges(snapshot.edges);
     setEvents((items) => ['Redid a canvas change.', ...items].slice(0, 30));
-  }, [edges, future, nodes]);
+  }, [collaborationCanvas.graphReadOnly, edges, future, nodes, reportCollaborationReadOnly]);
 
   const insertClipboardSelection = useCallback(
     (selection: CanvasClipboardSelection, offset: number, activity: string) => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return;
+      }
       if (selection.nodes.length === 0) return;
       record();
       const duplicate = instantiateClipboardSelection(selection, {
@@ -424,7 +497,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       }
       setEvents((items) => [activity, ...items].slice(0, 30));
     },
-    [record],
+    [collaborationCanvas.graphReadOnly, record, reportCollaborationReadOnly],
   );
 
   const copySelected = useCallback(() => {
@@ -466,6 +539,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       movement: CanvasKeyboardMovement,
       recordUndoCheckpoint: boolean,
     ): CanvasKeyboardMoveSummary => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        const selectedNodeIds = nodes
+          .filter((node) => node.selected === true)
+          .map((node) => node.id);
+        return { selectedNodeIds, movedNodeIds: [], lockedNodeIds: selectedNodeIds };
+      }
       const result = moveSelectedCanvasNodes(nodes, movement);
       if (result.movedNodeIds.length > 0) {
         if (recordUndoCheckpoint) record();
@@ -487,7 +567,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         lockedNodeIds: result.lockedNodeIds,
       };
     },
-    [nodes, record],
+    [collaborationCanvas.graphReadOnly, nodes, record, reportCollaborationReadOnly],
   );
 
   useEffect(() => {
@@ -535,6 +615,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
 
   const addNode = useCallback(
     (kind: NodeKind, position?: { x: number; y: number }) => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return;
+      }
       record();
       const definition = NODE_DEFINITIONS[kind];
       const id = crypto.randomUUID();
@@ -565,11 +649,21 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       }, 250);
       setEvents((items) => [`Added ${definition.label} node.`, ...items].slice(0, 30));
     },
-    [nodes.length, record, settings],
+    [
+      collaborationCanvas.graphReadOnly,
+      nodes.length,
+      record,
+      reportCollaborationReadOnly,
+      settings,
+    ],
   );
 
   const addExtensionNode = useCallback(
     (template: ExtensionTemplate, position?: { x: number; y: number }) => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return;
+      }
       record();
       const { extension, definition } = template;
       const binding = createExtensionNodeBinding(extension, definition);
@@ -608,7 +702,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         [`Added ${definition.displayName} extension node.`, ...items].slice(0, 30),
       );
     },
-    [nodes.length, record],
+    [collaborationCanvas.graphReadOnly, nodes.length, record, reportCollaborationReadOnly],
   );
 
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
@@ -820,6 +914,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   ];
 
   function updateSelected(data: Partial<WorkshopNode['data']>) {
+    if (collaborationCanvas.graphReadOnly) {
+      reportCollaborationReadOnly();
+      return;
+    }
     if (!selectedNode) return;
     const keys = Object.keys(data);
     if (selectedNode.data.locked && !(keys.length === 1 && keys[0] === 'locked')) return;
@@ -827,6 +925,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   }
 
   function deleteSelected() {
+    if (collaborationCanvas.graphReadOnly) {
+      reportCollaborationReadOnly();
+      return;
+    }
     if (!selectedNode) return;
     if (selectedNode.data.locked) {
       setEvents((items) =>
@@ -850,6 +952,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   }
 
   function updateEdgeType(edgeType: EdgeKind) {
+    if (collaborationCanvas.graphReadOnly) {
+      reportCollaborationReadOnly();
+      return;
+    }
     if (!selectedEdge) return;
     if (!canEditEdge(selectedEdge, nodes)) {
       setEvents((items) =>
@@ -874,6 +980,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   }
 
   function updateEdgeData(data: WorkshopEdgeData) {
+    if (collaborationCanvas.graphReadOnly) {
+      reportCollaborationReadOnly();
+      return;
+    }
     if (!selectedEdge) return;
     if (!canEditEdge(selectedEdge, nodes)) {
       setEvents((items) =>
@@ -1068,6 +1178,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           instance={instance}
           onInstance={setInstance}
           onNodesChange={(changes: NodeChange<WorkshopNode>[]) => {
+            if (collaborationCanvas.graphReadOnly) {
+              const safeChanges = changes.filter(
+                (change) => change.type === 'select' || change.type === 'dimensions',
+              );
+              setNodes((items) => applyNodeChanges(safeChanges, items));
+              if (safeChanges.length !== changes.length) reportCollaborationReadOnly();
+              return;
+            }
             const allowedChanges = filterLockedNodeChanges(changes, nodes, edges);
             const blockedRemoval = changes.some(
               (change) => change.type === 'remove' && !allowedChanges.includes(change),
@@ -1085,6 +1203,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             );
           }}
           onEdgesChange={(changes: EdgeChange<WorkshopEdge>[]) => {
+            if (collaborationCanvas.graphReadOnly) {
+              const safeChanges = changes.filter((change) => change.type === 'select');
+              setEdges((items) => applyEdgeChanges(safeChanges, items));
+              if (safeChanges.length !== changes.length) reportCollaborationReadOnly();
+              return;
+            }
             const allowedChanges = filterLockedEdgeChanges(changes, edges, nodes);
             const blockedRemoval = changes.some(
               (change) => change.type === 'remove' && !allowedChanges.includes(change),
@@ -1102,6 +1226,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             );
           }}
           onConnect={(connection: Connection) => {
+            if (collaborationCanvas.graphReadOnly) {
+              reportCollaborationReadOnly();
+              return;
+            }
             if (!canConnectUnlocked(connection, nodes)) {
               setEvents((items) =>
                 ['Unlock both nodes before changing their connections.', ...items].slice(0, 30),
@@ -1147,6 +1275,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           }}
           onAddNode={addNode}
           onAddExtensionNode={addExtensionNode}
+          collaborationAwareness={collaborationCanvas.awareness}
+          onCollaborationCursorMove={collaborationCanvas.updateCursor}
+          onCollaborationCursorLeave={collaborationCanvas.clearCursor}
+          collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
         />
         <WorkspaceInspector
           project={project}

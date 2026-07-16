@@ -47,6 +47,7 @@ import type {
   CollaborationEvent,
   CollaborationJoinInput,
   CollaborationJoinResult,
+  CollaborationMetadataSnapshot,
   CollaborationPublishInput,
   CollaborationUpdateAwarenessInput,
 } from './collaboration/index.js';
@@ -169,6 +170,7 @@ export interface ForgeboardApi {
   };
   collaboration: {
     get(): Promise<IpcResult<CollaborationConnection | null>>;
+    snapshot(): Promise<IpcResult<CollaborationMetadataSnapshot | null>>;
     join(input: CollaborationJoinInput): Promise<CollaborationJoinResult>;
     leave(): Promise<IpcResult<CollaborationConnection | null>>;
     publish(input: CollaborationPublishInput): Promise<IpcResult<boolean>>;

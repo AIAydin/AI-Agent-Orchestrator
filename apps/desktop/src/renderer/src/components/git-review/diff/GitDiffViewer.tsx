@@ -1,31 +1,41 @@
-import { FileQuestion, Minus, Plus, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileQuestion, Minus, Plus, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
 
-import type { GitDiffHunkView, GitDiffLineView } from '../../../../../shared/git/contracts.js';
+import type { GitDiffHunkView } from '../../../../../shared/git/contracts.js';
 import type { GitDiffDisplayArea, GitDiffDisplayFile } from '../git-review-model.js';
+import { fileDiffStats } from '../git-review-model.js';
+import { GitDiffRows, type GitDiffViewMode } from './GitDiffRows.js';
+import { GitDiffToolbar } from './GitDiffToolbar.js';
+
+interface GitDiffNavigation {
+  readonly index: number;
+  readonly count: number;
+  readonly onPrevious: () => void;
+  readonly onNext: () => void;
+}
 
 interface GitDiffViewerProps {
   file: GitDiffDisplayFile | null;
   busy: boolean;
   readOnly?: boolean;
+  navigation?: GitDiffNavigation;
   onStageHunk: (hunkId: string) => void;
   onUnstageHunk: (hunkId: string) => void;
   onPrepareDiscard: (hunkId: string) => void;
-}
-
-function linePrefix(line: GitDiffLineView): string {
-  if (line.kind === 'addition') return '+';
-  if (line.kind === 'deletion') return '−';
-  return ' ';
 }
 
 export function GitDiffViewer({
   file,
   busy,
   readOnly = false,
+  navigation,
   onStageHunk,
   onUnstageHunk,
   onPrepareDiscard,
 }: GitDiffViewerProps) {
+  const [viewMode, setViewMode] = useState<GitDiffViewMode>('unified');
+  const [showWhitespace, setShowWhitespace] = useState(false);
+
   if (file === null) {
     return (
       <section className="git-diff-empty" aria-label="Change preview">
@@ -37,6 +47,8 @@ export function GitDiffViewer({
   }
 
   const diff = file.diff;
+  const stats = fileDiffStats(file);
+  const hasTextDiff = diff !== undefined && !diff.binary && diff.hunks.length > 0;
   return (
     <section className="git-diff-viewer" aria-label={`Diff for ${file.path}`}>
       <header>
@@ -46,13 +58,48 @@ export function GitDiffViewer({
             <small>renamed from {diff.oldPath}</small>
           )}
         </span>
+        {navigation && (
+          <span className="git-diff-navigation">
+            <button
+              type="button"
+              aria-label="Previous changed file"
+              disabled={navigation.index <= 0}
+              onClick={navigation.onPrevious}
+            >
+              <ChevronLeft size={13} aria-hidden="true" />
+            </button>
+            <small>
+              File {navigation.index + 1} of {navigation.count}
+            </small>
+            <button
+              type="button"
+              aria-label="Next changed file"
+              disabled={navigation.index >= navigation.count - 1}
+              onClick={navigation.onNext}
+            >
+              <ChevronRight size={13} aria-hidden="true" />
+            </button>
+          </span>
+        )}
         {diff && (
-          <span className="git-diff-totals">
-            <b>+{diff.hunks.reduce(countAdditions, 0)}</b>
-            <i>−{diff.hunks.reduce(countDeletions, 0)}</i>
+          <span
+            className="git-diff-totals"
+            role="group"
+            aria-label={`${stats.additions} additions and ${stats.deletions} deletions in ${file.path}`}
+          >
+            <b>+{stats.additions}</b>
+            <i>−{stats.deletions}</i>
           </span>
         )}
       </header>
+      {hasTextDiff && (
+        <GitDiffToolbar
+          viewMode={viewMode}
+          showWhitespace={showWhitespace}
+          onViewModeChange={setViewMode}
+          onShowWhitespaceChange={setShowWhitespace}
+        />
+      )}
       {file.area === 'untracked' ? (
         <GitDiffNotice>
           This file is not tracked yet. Stage the whole file to include it in the index.
@@ -75,6 +122,8 @@ export function GitDiffViewer({
               path={file.path}
               busy={busy}
               readOnly={readOnly}
+              viewMode={viewMode}
+              showWhitespace={showWhitespace}
               onStage={() => onStageHunk(hunk.id)}
               onUnstage={() => onUnstageHunk(hunk.id)}
               onDiscard={() => onPrepareDiscard(hunk.id)}
@@ -92,6 +141,8 @@ function GitDiffHunk({
   path,
   busy,
   readOnly,
+  viewMode,
+  showWhitespace,
   onStage,
   onUnstage,
   onDiscard,
@@ -101,6 +152,8 @@ function GitDiffHunk({
   path: string;
   busy: boolean;
   readOnly: boolean;
+  viewMode: GitDiffViewMode;
+  showWhitespace: boolean;
   onStage: () => void;
   onUnstage: () => void;
   onDiscard: () => void;
@@ -134,33 +187,11 @@ function GitDiffHunk({
           )}
         </span>
       </header>
-      <table>
-        <caption className="git-visually-hidden">Unified diff for {path}</caption>
-        <tbody>
-          {hunk.lines.map((line, index) => (
-            <tr className={line.kind} key={`${index}-${line.oldLine}-${line.newLine}`}>
-              <td aria-label="Old line">{line.oldLine ?? ''}</td>
-              <td aria-label="New line">{line.newLine ?? ''}</td>
-              <td aria-hidden="true">{linePrefix(line)}</td>
-              <td>
-                <code>{line.content || ' '}</code>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <GitDiffRows hunk={hunk} path={path} viewMode={viewMode} showWhitespace={showWhitespace} />
     </article>
   );
 }
 
 function GitDiffNotice({ children }: { children: string }) {
   return <p className="git-diff-notice">{children}</p>;
-}
-
-function countAdditions(total: number, hunk: GitDiffHunkView): number {
-  return total + hunk.lines.filter((line) => line.kind === 'addition').length;
-}
-
-function countDeletions(total: number, hunk: GitDiffHunkView): number {
-  return total + hunk.lines.filter((line) => line.kind === 'deletion').length;
 }

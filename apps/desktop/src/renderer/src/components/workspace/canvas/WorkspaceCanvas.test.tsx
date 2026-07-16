@@ -115,6 +115,22 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     act(() => flowProps.onNodeDragStop());
     expect(view.container.querySelector('.canvas-alignment-guide')).toBeNull();
   });
+
+  it('disables graph mutation controls for reviewer and viewer collaboration roles', () => {
+    const onKeyboardMove = vi.fn();
+    render(<WorkspaceCanvas {...props(onKeyboardMove)} collaborationGraphReadOnly />);
+    const flowProps = mocks.reactFlowProps as {
+      nodesDraggable: boolean;
+      nodesConnectable: boolean;
+      deleteKeyCode: null | string[];
+    };
+    expect(flowProps.nodesDraggable).toBe(false);
+    expect(flowProps.nodesConnectable).toBe(false);
+    expect(flowProps.deleteKeyCode).toBeNull();
+    fireEvent.keyDown(screen.getByTestId('focusable-node'), { key: 'ArrowRight' });
+    expect(onKeyboardMove).not.toHaveBeenCalled();
+    expect(screen.getByText(/cannot edit the shared graph/u)).toBeTruthy();
+  });
 });
 
 function props(
@@ -140,7 +156,10 @@ function props(
       collaborationUrl: '',
     }),
     extensionTemplates: [],
-    instance: { getZoom: () => 1 } as React.ComponentProps<typeof WorkspaceCanvas>['instance'],
+    instance: {
+      getZoom: () => 1,
+      screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+    } as React.ComponentProps<typeof WorkspaceCanvas>['instance'],
     onInstance: vi.fn(),
     onNodesChange: vi.fn(),
     onEdgesChange: vi.fn(),
@@ -150,6 +169,10 @@ function props(
     onSelectionChange: vi.fn(),
     onAddNode: vi.fn(),
     onAddExtensionNode: vi.fn(),
+    collaborationAwareness: [],
+    onCollaborationCursorMove: vi.fn(),
+    onCollaborationCursorLeave: vi.fn(),
+    collaborationGraphReadOnly: false,
   };
 }
 

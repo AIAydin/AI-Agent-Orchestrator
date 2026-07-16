@@ -6,7 +6,8 @@ import type {
   GitReviewFile,
   GitReviewGroups,
 } from '../git-review-model.js';
-import { selectionKey, statusLabel } from '../git-review-model.js';
+import { fileDiffStats, selectionKey, statusLabel } from '../git-review-model.js';
+import { GitFilePageControls, useGitFilePage } from './GitFilePagination.js';
 
 interface GitFileSidebarProps {
   groups: GitReviewGroups;
@@ -61,6 +62,11 @@ function GitFileGroup({
   area: GitReviewArea;
   files: readonly GitReviewFile[];
 }) {
+  const selectedIndex =
+    selection?.area === area ? files.findIndex((file) => file.path === selection.path) : -1;
+  const page = useGitFilePage(files.length, selectedIndex);
+  const visibleFiles = files.slice(page.start, page.end);
+
   return (
     <section className="git-file-group" aria-labelledby={`git-${area}-heading`}>
       <header>
@@ -71,9 +77,10 @@ function GitFileGroup({
         <p>None</p>
       ) : (
         <ul>
-          {files.map((file) => {
+          {visibleFiles.map((file) => {
             const active = selection !== null && selectionKey(selection) === selectionKey(file);
             const action = area === 'staged' ? 'Unstage' : 'Stage';
+            const stats = fileDiffStats(file);
             return (
               <li key={selectionKey(file)}>
                 <button
@@ -85,7 +92,10 @@ function GitFileGroup({
                   <FileCode2 size={13} aria-hidden="true" />
                   <span>
                     <strong>{file.path}</strong>
-                    <small>{statusLabel(file)}</small>
+                    <small>
+                      {statusLabel(file)}
+                      {file.diff && ` · +${stats.additions} −${stats.deletions}`}
+                    </small>
                   </span>
                 </button>
                 <button
@@ -109,6 +119,7 @@ function GitFileGroup({
           })}
         </ul>
       )}
+      <GitFilePageControls label={groupLabels[area]} fileCount={files.length} page={page} />
     </section>
   );
 }

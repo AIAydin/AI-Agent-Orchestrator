@@ -232,8 +232,15 @@ describe('GitReviewDialog', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close Git review' }));
     await screen.findByText('origin/feature/review');
     expect(screen.getByText('2 ahead · 1 behind')).toBeTruthy();
+    expect(screen.getByText('3 paths · +2 −1')).toBeTruthy();
+    expect(await screen.findByText('File 1 of 3')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Previous changed file' })).toHaveProperty(
+      'disabled',
+      true,
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: /src\/app\.ts Modified/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next changed file' }));
+    expect(screen.getByText('File 2 of 3')).toBeTruthy();
     expect(await screen.findByText('updated line')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Stage src/app.ts' }));
     await waitFor(() => expect(stagePathsMock).toHaveBeenCalledTimes(1));

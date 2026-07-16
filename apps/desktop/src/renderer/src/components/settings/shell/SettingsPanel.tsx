@@ -32,6 +32,7 @@ import { HelpSettings } from '../help/HelpSettings.js';
 import { PermissionSettings } from '../PermissionSettings.js';
 import { PrivacySettings } from '../privacy/PrivacySettings.js';
 import { customPermissionConfigurationIssues } from '../../permissions/permission-profile-ui.js';
+import { environmentAllowlistIssues } from '../../configuration/EnvironmentAllowlistEditor.js';
 
 type SettingsTab =
   | 'appearance'
@@ -72,6 +73,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
   closeRef.current = props.onClose;
   busyRef.current = busy;
   const permissionIssues = customPermissionConfigurationIssues(draft);
+  const environmentIssues = environmentAllowlistIssues(draft.envAllowlist);
 
   useEffect(() => {
     const previousFocus =
@@ -314,6 +316,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 {permissionIssues[0]}
               </small>
             )}
+            {permissionIssues.length === 0 && environmentIssues[0] !== undefined && (
+              <small id="settings-environment-validation" role="alert">
+                {environmentIssues[0]}
+              </small>
+            )}
           </span>
           <div>
             <button
@@ -333,10 +340,19 @@ export function SettingsPanel(props: SettingsPanelProps) {
             <button
               className="button primary"
               type="submit"
-              disabled={busy || dockerConfigurationIncomplete(draft) || permissionIssues.length > 0}
-              title={permissionIssues[0]}
+              disabled={
+                busy ||
+                dockerConfigurationIncomplete(draft) ||
+                permissionIssues.length > 0 ||
+                environmentIssues.length > 0
+              }
+              title={permissionIssues[0] ?? environmentIssues[0]}
               aria-describedby={
-                permissionIssues.length > 0 ? 'settings-permission-validation' : undefined
+                permissionIssues.length > 0
+                  ? 'settings-permission-validation'
+                  : environmentIssues.length > 0
+                    ? 'settings-environment-validation'
+                    : undefined
               }
             >
               <Save size={15} /> Save settings

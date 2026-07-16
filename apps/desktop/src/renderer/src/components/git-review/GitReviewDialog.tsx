@@ -24,6 +24,7 @@ import { GitCommitPanel } from './actions/GitCommitPanel.js';
 import { GitDiffViewer } from './diff/GitDiffViewer.js';
 import { GitFileSidebar } from './diff/GitFileSidebar.js';
 import {
+  allReviewFiles,
   buildReviewGroups,
   findReviewFile,
   firstReviewSelection,
@@ -66,6 +67,10 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
     [controller.review],
   );
   const selectedFile = groups === null ? null : findReviewFile(groups, selection);
+  const reviewFiles = useMemo(() => (groups === null ? [] : allReviewFiles(groups)), [groups]);
+  const selectedFileIndex = reviewFiles.findIndex(
+    (file) => file.area === selection?.area && file.path === selection.path,
+  );
   const busy = controller.busyLabel !== null;
 
   useEffect(() => {
@@ -305,6 +310,24 @@ export function GitReviewDialog({ target, projectName, onClose, onError }: GitRe
                   <GitDiffViewer
                     file={selectedFile}
                     busy={busy}
+                    {...(selectedFileIndex < 0
+                      ? {}
+                      : {
+                          navigation: {
+                            index: selectedFileIndex,
+                            count: reviewFiles.length,
+                            onPrevious: () => {
+                              const previous = reviewFiles[selectedFileIndex - 1];
+                              if (previous !== undefined)
+                                setSelection({ area: previous.area, path: previous.path });
+                            },
+                            onNext: () => {
+                              const next = reviewFiles[selectedFileIndex + 1];
+                              if (next !== undefined)
+                                setSelection({ area: next.area, path: next.path });
+                            },
+                          },
+                        })}
                     onStageHunk={(hunkId) => void controller.stageHunks([hunkId])}
                     onUnstageHunk={(hunkId) => void controller.unstageHunks([hunkId])}
                     onPrepareDiscard={prepareDiscard}

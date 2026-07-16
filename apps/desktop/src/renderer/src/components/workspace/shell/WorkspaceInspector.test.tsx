@@ -9,6 +9,13 @@ import {
   type AppSettings,
   type Project,
 } from '../../../../../shared/application/contracts.js';
+import type {
+  FileDocument,
+  FileReadInput,
+  FileTreeEntry,
+  FileTreeInput,
+  FileTreeResult,
+} from '../../../../../shared/files/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
 
@@ -170,6 +177,99 @@ describe('WorkspaceInspector Custom permissions', () => {
     await waitFor(() => expect(screen.getAllByRole('status')[1]?.textContent).toBe('Read-only'));
     expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
   });
+
+  it('assigns an unlinked File node from the bounded project-relative browser', async () => {
+    const document = fileDocument('src/index.ts');
+    const tree = vi.fn((input: FileTreeInput) =>
+      Promise.resolve(
+        input.directory === '.'
+          ? treeResult('.', [treeDirectory('src')])
+          : treeResult('src', [treeEntry('src/index.ts')]),
+      ),
+    );
+    const read = vi.fn().mockResolvedValue(document);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        files: { tree, read, save: vi.fn(), revert: vi.fn(), reveal: vi.fn() },
+      },
+    });
+    const selectedNode = unlinkedFileNode();
+    const inspectorProps = props(settings(), selectedNode);
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    expect(screen.getByRole('region', { name: 'Project file browser' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open folder src' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Inspect file src/index.ts' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open in editor' }));
+
+    expect(inspectorProps.onRecord).toHaveBeenCalledOnce();
+    expect(inspectorProps.onUpdateSelected).toHaveBeenCalledWith({
+      file: {
+        projectId: project.id,
+        relativePath: 'src/index.ts',
+        kind: 'file',
+        missing: false,
+        lastKnownHash: document.sha256,
+      },
+    });
+    expect(tree).toHaveBeenCalledWith({ projectId: project.id, directory: '.' });
+    expect(read).toHaveBeenCalledWith({
+      projectId: project.id,
+      relativePath: 'src/index.ts',
+    });
+  });
+
+  it('reassigns an existing File node through the same UI without an absolute path', async () => {
+    const replacement = fileDocument('src/replacement.ts');
+    const tree = vi.fn((input: FileTreeInput) =>
+      Promise.resolve(
+        input.directory === '.'
+          ? treeResult('.', [treeDirectory('src')])
+          : treeResult('src', [treeEntry('src/replacement.ts')]),
+      ),
+    );
+    const read = vi.fn((input: FileReadInput) =>
+      Promise.resolve(
+        input.relativePath === replacement.relativePath
+          ? replacement
+          : fileDocument(input.relativePath),
+      ),
+    );
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        files: { tree, read, save: vi.fn(), revert: vi.fn(), reveal: vi.fn() },
+      },
+    });
+    const selectedNode = fileNode({
+      file: {
+        projectId: project.id,
+        relativePath: 'src/old.ts',
+        kind: 'file',
+        missing: false,
+      },
+    });
+    const inspectorProps = props(settings(), selectedNode);
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change file' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open folder src' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Inspect file src/replacement.ts' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open in editor' }));
+
+    expect(inspectorProps.onUpdateSelected).toHaveBeenCalledWith({
+      file: {
+        projectId: project.id,
+        relativePath: 'src/replacement.ts',
+        kind: 'file',
+        missing: false,
+        lastKnownHash: replacement.sha256,
+      },
+    });
+    expect(JSON.stringify(tree.mock.calls)).not.toContain(project.path);
+    expect(JSON.stringify(read.mock.calls)).not.toContain(project.path);
+  });
 });
 
 function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
@@ -243,6 +343,56 @@ function fileNode(data: Partial<WorkshopNode['data']>): WorkshopNode {
       },
       ...data,
     },
+  };
+}
+
+function unlinkedFileNode(): WorkshopNode {
+  const node = fileNode({});
+  Reflect.deleteProperty(node.data, 'file');
+  return node;
+}
+
+function treeResult(directory: string, entries: FileTreeEntry[]): FileTreeResult {
+  return {
+    projectId: project.id,
+    directory,
+    entries,
+    truncated: false,
+  };
+}
+
+function treeEntry(relativePath: string): FileTreeEntry {
+  return {
+    name: relativePath.split('/').at(-1) ?? relativePath,
+    relativePath,
+    kind: 'file' as const,
+    sizeBytes: 11,
+    modifiedAt: '2026-07-15T12:00:00.000Z',
+    policy: { status: 'normal' as const, reason: null },
+    canOpen: true,
+  };
+}
+
+function treeDirectory(relativePath: string): FileTreeEntry {
+  return {
+    ...treeEntry(relativePath),
+    kind: 'directory',
+    sizeBytes: null,
+  };
+}
+
+function fileDocument(relativePath: string): FileDocument {
+  return {
+    projectId: project.id,
+    relativePath,
+    contentKind: 'text' as const,
+    content: 'export {};\n',
+    encoding: 'utf-8' as const,
+    sizeBytes: 11,
+    modifiedAt: '2026-07-15T12:00:00.000Z',
+    sha256: 'c'.repeat(64),
+    readOnly: false,
+    readOnlyReason: null,
   };
 }
 

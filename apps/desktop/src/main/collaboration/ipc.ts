@@ -15,12 +15,14 @@ import {
   CollaborationConnectionSchema,
   CollaborationJoinInputSchema,
   CollaborationJoinResultSchema,
+  CollaborationMetadataSnapshotSchema,
   CollaborationPublishInputSchema,
   CollaborationUpdateAwarenessInputSchema,
   type CollaborationConnection,
   type CollaborationEvent,
   type CollaborationJoinInput,
   type CollaborationJoinResult,
+  type CollaborationMetadataSnapshot,
 } from '../../shared/collaboration/index.js';
 import type {
   OutboundActionDisclosure,
@@ -33,6 +35,7 @@ import { CollaborationClient } from './client.js';
 type CollaborationOperations = Pick<
   CollaborationClient,
   | 'connection'
+  | 'snapshot'
   | 'join'
   | 'leave'
   | 'publish'
@@ -75,6 +78,9 @@ export class CollaborationIpcService {
     if (this.#registered) throw new Error('The collaboration IPC handlers are already registered.');
     this.#registered = true;
     this.#handle(COLLABORATION_IPC_CHANNELS.get, (event, rawArgs) => this.#get(event, rawArgs));
+    this.#handle(COLLABORATION_IPC_CHANNELS.snapshot, (event, rawArgs) =>
+      this.#snapshot(event, rawArgs),
+    );
     this.#handle(COLLABORATION_IPC_CHANNELS.join, (event, rawArgs) => this.#join(event, rawArgs));
     this.#handle(COLLABORATION_IPC_CHANNELS.leave, (event, rawArgs) => this.#leave(event, rawArgs));
     this.#handle(COLLABORATION_IPC_CHANNELS.publish, (event, rawArgs) =>
@@ -139,6 +145,24 @@ export class CollaborationIpcService {
       };
     } catch (error) {
       return ipcFailure(error, 'Forgeboard could not read collaboration status.');
+    }
+  }
+
+  #snapshot(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): IpcResult<CollaborationMetadataSnapshot | null> {
+    try {
+      this.#assertAvailable();
+      z.tuple([]).parse(rawArgs);
+      assertLiveMainFrame(event, 'Collaboration snapshot');
+      const value = this.#owner === event.sender ? this.#client.snapshot : null;
+      return {
+        ok: true,
+        value: CollaborationMetadataSnapshotSchema.nullable().parse(value),
+      };
+    } catch (error) {
+      return ipcFailure(error, 'Forgeboard could not read the collaboration snapshot.');
     }
   }
 

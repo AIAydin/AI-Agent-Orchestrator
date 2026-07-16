@@ -5,6 +5,7 @@ import { CollaborationMetadataSnapshotSchema } from './metadata-contracts.js';
 
 export const COLLABORATION_IPC_CHANNELS = Object.freeze({
   get: 'collaboration:get',
+  snapshot: 'collaboration:snapshot',
   join: 'collaboration:join',
   leave: 'collaboration:leave',
   publish: 'collaboration:publish',

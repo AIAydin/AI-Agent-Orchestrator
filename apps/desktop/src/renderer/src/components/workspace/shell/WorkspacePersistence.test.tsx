@@ -15,10 +15,19 @@ import type { WorkspaceHandle } from '../model/types.js';
 
 const mocks = vi.hoisted(() => ({
   flushCanvas: vi.fn<() => Promise<boolean>>(),
+  collaborationGraphReadOnly: false,
 }));
 
 vi.mock('../canvas/useCanvasPersistence.js', () => ({
   useCanvasPersistence: () => ({ saveState: 'saving', flushCanvas: mocks.flushCanvas }),
+}));
+vi.mock('../collaboration/useCollaborationCanvas.js', () => ({
+  useCollaborationCanvas: () => ({
+    awareness: [],
+    graphReadOnly: mocks.collaborationGraphReadOnly,
+    updateCursor: vi.fn(),
+    clearCursor: vi.fn(),
+  }),
 }));
 vi.mock('./WorkspaceCommandBar.js', () => ({
   WorkspaceCommandBar: ({
@@ -43,14 +52,23 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
     nodes,
     onNodesChange,
     onKeyboardMove,
+    collaborationGraphReadOnly,
   }: {
     nodes: Array<{ id: string; position: { x: number; y: number } }>;
-    onNodesChange: (changes: Array<{ type: 'select'; id: string; selected: boolean }>) => void;
+    onNodesChange: (
+      changes: Array<
+        { type: 'select'; id: string; selected: boolean } | { type: 'remove'; id: string }
+      >,
+    ) => void;
     onKeyboardMove: (movement: { x: number; y: number }, recordUndoCheckpoint: boolean) => unknown;
+    collaborationGraphReadOnly: boolean;
   }) => (
     <div>
       <output data-testid="canvas-node-positions">
         {JSON.stringify(nodes.map(({ id, position }) => ({ id, position })))}
+      </output>
+      <output data-testid="collaboration-graph-read-only">
+        {String(collaborationGraphReadOnly)}
       </output>
       <button
         type="button"
@@ -62,6 +80,15 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
       </button>
       <button type="button" onClick={() => onKeyboardMove({ x: 1, y: 0 }, true)}>
         Move selected right
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          const first = nodes[0];
+          if (first !== undefined) onNodesChange([{ type: 'remove', id: first.id }]);
+        }}
+      >
+        Remove first node
       </button>
     </div>
   ),
@@ -128,6 +155,7 @@ vi.mock('../workflows/useWorkflowRuns.js', () => ({
 }));
 
 beforeEach(() => {
+  mocks.collaborationGraphReadOnly = false;
   mocks.flushCanvas.mockReset();
   mocks.flushCanvas.mockResolvedValue(true);
   Object.defineProperty(window, 'forgeboard', {
@@ -249,6 +277,45 @@ describe('Workspace persistence boundary', () => {
         { id: 'locked-node', position: { x: 30, y: 20 } },
       ]),
     );
+  });
+
+  it('keeps a viewer collaboration graph read-only across canvas mutation callbacks', async () => {
+    mocks.collaborationGraphReadOnly = true;
+    const document = canvas([canvasNode('shared-node', 10, false)]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('canvas-node-positions').textContent).toContain('shared-node'),
+    );
+    expect(screen.getByTestId('collaboration-graph-read-only').textContent).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Select canvas nodes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move selected right' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove first node' }));
+    expect(JSON.parse(screen.getByTestId('canvas-node-positions').textContent ?? '[]')).toEqual([
+      { id: 'shared-node', position: { x: 10, y: 20 } },
+    ]);
   });
 });
 

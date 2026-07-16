@@ -142,6 +142,7 @@ export function GitPreviewSettings({ draft, setDraft, perform }: AsyncSettingsPr
           label="Development server"
           name="development-server"
           value={draft.developmentCommand}
+          purpose="preview"
           onChange={(developmentCommand) => setDraft({ ...draft, developmentCommand })}
           onBrowse={() =>
             void chooseExecutable((executable) =>

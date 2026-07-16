@@ -138,8 +138,10 @@ describe('CollaborationClient', () => {
     });
     expect(provider.input?.accessToken).toBe(token);
     expect(JSON.stringify({ result, connection: client.connection, events })).not.toContain(token);
+    expect(client.snapshot).toBeNull();
 
     expect(client.publish(snapshot())).toBe(true);
+    expect(client.snapshot).toEqual(snapshot());
     expect(
       client.updateAwareness({
         selection: { nodeIds: ['task-1'] },

@@ -93,3 +93,27 @@
   display: grid;
   place-items: center;
 }
+.git-file-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5px;
+  margin: 7px 5px 1px;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+.git-file-pagination button {
+  width: 23px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+}
+.git-file-pagination button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-subtle);
+}

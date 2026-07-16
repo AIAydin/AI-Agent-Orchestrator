@@ -7,6 +7,7 @@ import type {
 } from '../../../../shared/readiness/contracts.js';
 import type { AgentReadinessDraft } from './readiness-ui.js';
 import { launchDetectionIsReady } from './readiness-ui.js';
+import { agentDependencyGuidance } from '../configuration/dependency-guidance.js';
 import './AgentReadinessPanel.css';
 
 interface AgentReadinessPanelProps {
@@ -78,6 +79,7 @@ export function AgentReadinessPanel({
             : 'No usable executable is currently detected. Browse to one or install the CLI, then refresh.'}
         </p>
       )}
+      {!ready && <p>{agentDependencyGuidance(agent, draft.request?.agentId ?? 'custom')}</p>}
       {checkReadiness === undefined && (
         <p className="agent-readiness-unavailable" role="status">
           Readiness refresh is unavailable in this application build. Only launch-time detection

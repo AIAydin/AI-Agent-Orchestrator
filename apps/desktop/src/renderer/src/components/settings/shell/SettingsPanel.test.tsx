@@ -235,6 +235,28 @@ describe('SettingsPanel draft transactions', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps environment values out of settings and blocks invalid environment names', () => {
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
+    const environment = screen.getByLabelText<HTMLInputElement>(
+      'Environment variable names allowed into processes',
+    );
+    fireEvent.change(environment, { target: { value: 'PATH, NOT-VALID' } });
+
+    const save = screen.getByRole<HTMLButtonElement>('button', { name: 'Save settings' });
+    expect(save.disabled).toBe(true);
+    expect(
+      screen
+        .getAllByRole('alert')
+        .some((alert) => /valid environment/u.test(alert.textContent ?? '')),
+    ).toBe(true);
+    expect(screen.getByText(/session values are not entered here/u)).toBeTruthy();
+
+    fireEvent.change(environment, { target: { value: 'PATH, CI' } });
+    expect(save.disabled).toBe(false);
+  });
+
   it('configures automatic local backup timing, shutdown protection, and retention in the UI', async () => {
     render(<SettingsPanel {...props()} />);
 
