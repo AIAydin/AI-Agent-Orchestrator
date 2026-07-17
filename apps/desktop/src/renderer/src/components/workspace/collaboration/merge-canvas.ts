@@ -519,7 +519,6 @@ function legacyNodeType(type: CollaborationNodeType): string {
 }
 
 function localLegacyStatus(status: CollaborationNodeMetadata['status']): string {
-  if (status === 'waiting-for-approval' || status === 'paused') return 'waiting';
   if (status === 'unavailable') return 'failed';
   return status ?? 'idle';
 }
@@ -539,9 +538,11 @@ function localNodeStatus(
     case 'running':
     case 'waiting-for-approval':
     case 'paused':
+    case 'cancelling':
     case 'failed':
     case 'succeeded':
     case 'cancelled':
+    case 'lost':
       return status;
   }
 }

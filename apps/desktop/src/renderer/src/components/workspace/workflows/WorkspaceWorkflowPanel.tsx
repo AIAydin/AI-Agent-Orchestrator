@@ -30,6 +30,7 @@ interface WorkspaceWorkflowPanelProps {
   interactionEvents: readonly WorkflowInteractionEventEnvelope[];
   loading: boolean;
   busyAction: string | null;
+  mutationsAuthorized: boolean;
   onSelect: (executionId: string) => void;
   onRefresh: () => void;
   onCancel: (executionId: string) => void;
@@ -46,6 +47,7 @@ export function WorkspaceWorkflowPanel({
   interactionEvents,
   loading,
   busyAction,
+  mutationsAuthorized,
   onSelect,
   onRefresh,
   onCancel,
@@ -62,6 +64,12 @@ export function WorkspaceWorkflowPanel({
       tabIndex={0}
       aria-busy={loading || busyAction !== null}
     >
+      {!mutationsAuthorized && (
+        <p className="workflow-role-notice" role="status">
+          This collaboration role can inspect workflow history, status, and output but cannot start,
+          approve, control, or cancel execution.
+        </p>
+      )}
       <header className="drawer-panel-summary workflow-panel-toolbar">
         <div>
           <strong>Durable workflow runs</strong>
@@ -94,7 +102,7 @@ export function WorkspaceWorkflowPanel({
             <button
               type="button"
               className="workflow-cancel"
-              disabled={busyAction !== null}
+              disabled={busyAction !== null || !mutationsAuthorized}
               onClick={() => onCancel(current.id)}
             >
               <Square size={11} aria-hidden="true" /> Cancel workflow
@@ -115,6 +123,7 @@ export function WorkspaceWorkflowPanel({
           interactiveNodeIds={interactiveNodeIds}
           interactionEvents={interactionEvents}
           busyAction={busyAction}
+          mutationsAuthorized={mutationsAuthorized}
           onReviewDecision={onReviewDecision}
           onSendInput={onSendInput}
           onInterrupt={onInterrupt}
@@ -130,6 +139,7 @@ function WorkflowExecutionDetails({
   interactiveNodeIds,
   interactionEvents,
   busyAction,
+  mutationsAuthorized,
   onReviewDecision,
   onSendInput,
   onInterrupt,
@@ -139,6 +149,7 @@ function WorkflowExecutionDetails({
   interactiveNodeIds: ReadonlySet<string>;
   interactionEvents: readonly WorkflowInteractionEventEnvelope[];
   busyAction: string | null;
+  mutationsAuthorized: boolean;
   onReviewDecision: (target: WorkflowDecisionTarget) => void;
   onSendInput: (input: WorkflowNodeInput) => Promise<boolean>;
   onInterrupt: (input: WorkflowNodeInterrupt) => Promise<boolean>;
@@ -185,7 +196,7 @@ function WorkflowExecutionDetails({
               key={request.preparationId}
               request={request}
               title={nodeTitle(nodeTitles, request.nodeId)}
-              disabled={busyAction !== null}
+              disabled={busyAction !== null || !mutationsAuthorized}
               onReview={() => onReviewDecision({ kind: 'launch', request })}
             />
           ))}
@@ -194,7 +205,7 @@ function WorkflowExecutionDetails({
               key={humanRequestKey(request)}
               request={request}
               title={nodeTitle(nodeTitles, request.targetId)}
-              disabled={busyAction !== null}
+              disabled={busyAction !== null || !mutationsAuthorized}
               onReview={() => onReviewDecision({ kind: 'human', request })}
             />
           ))}
@@ -202,7 +213,7 @@ function WorkflowExecutionDetails({
             <RevisionDecisionCard
               key={`${request.loopId}:${request.attemptsStarted}`}
               request={request}
-              disabled={busyAction !== null}
+              disabled={busyAction !== null || !mutationsAuthorized}
               onReview={() => onReviewDecision({ kind: 'revision', request })}
             />
           ))}
@@ -242,7 +253,7 @@ function WorkflowExecutionDetails({
                   run.nodeId,
                   run.attempt,
                 )}
-                busy={busyAction !== null}
+                busy={busyAction !== null || !mutationsAuthorized}
                 onSendInput={onSendInput}
                 onInterrupt={onInterrupt}
               />
@@ -259,6 +270,9 @@ function WorkflowExecutionDetails({
           </header>
           {execution.edges.map((edge) => (
             <article key={edge.edgeId}>
+              <span className={`workflow-edge-run-status ${edge.status}`}>
+                {edge.status.replaceAll('-', ' ')}
+              </span>
               <span className={`workflow-edge-state ${edge.disposition}`}>
                 {edge.disposition.replaceAll('-', ' ')}
               </span>

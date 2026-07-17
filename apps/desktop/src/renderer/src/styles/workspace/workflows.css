@@ -101,6 +101,7 @@
   font-size: 7px;
 }
 .workflow-state,
+.workflow-edge-run-status,
 .workflow-edge-state {
   display: inline-flex;
   width: fit-content;
@@ -114,16 +115,26 @@
 .workflow-state.running,
 .workflow-state.queued,
 .workflow-state.waiting-for-approval,
+.workflow-state.paused,
+.workflow-state.cancelling,
+.workflow-edge-run-status.queued,
+.workflow-edge-run-status.running,
+.workflow-edge-run-status.waiting-for-approval,
+.workflow-edge-run-status.paused,
+.workflow-edge-run-status.cancelling,
 .workflow-edge-state.waiting,
 .workflow-edge-state.waiting-for-approval {
   color: var(--yellow);
 }
 .workflow-state.succeeded,
+.workflow-edge-run-status.succeeded,
 .workflow-edge-state.satisfied {
   color: var(--green);
 }
 .workflow-state.failed,
 .workflow-state.lost,
+.workflow-edge-run-status.failed,
+.workflow-edge-run-status.lost,
 .workflow-edge-state.blocked {
   color: var(--red);
 }
@@ -336,14 +347,24 @@
 }
 .workflow-edge-list article {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 5px;
   padding: 5px 7px;
   border-bottom: 1px solid var(--line);
 }
 .workflow-edge-list article p {
-  grid-column: 2 / -1;
+  grid-column: 3 / -1;
+}
+
+.workflow-role-notice {
+  margin: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-subtle);
+  color: var(--yellow);
+  font-size: 7px;
+  line-height: 1.45;
 }
 .workflow-edge-state.inactive {
   opacity: 0.62;

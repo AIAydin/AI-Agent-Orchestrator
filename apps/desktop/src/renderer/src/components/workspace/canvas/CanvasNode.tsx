@@ -33,12 +33,13 @@ import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
 import { useCanvasNodeInteractions } from './interactions/CanvasNodeInteractionContext.js';
 import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
+import type { RunStatus } from '@forgeboard/core/domain';
 
 export interface WorkshopNodeData extends Record<string, unknown> {
   kind: NodeKind;
   title: string;
   description: string;
-  status: 'idle' | 'queued' | 'running' | 'waiting' | 'failed' | 'succeeded' | 'cancelled';
+  status: 'idle' | 'waiting' | RunStatus;
   locked: boolean;
   collapsed: boolean;
   color: string;
@@ -122,6 +123,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   command?: WorkshopCommandConfiguration;
   checkKind?: 'lint' | 'typecheck' | 'test' | 'build' | 'custom';
   runIds?: string[];
+  artifactPaths?: string[];
   humanApprovalRequired?: boolean;
   requiredCheckIds?: string[];
   lintRequired?: boolean;

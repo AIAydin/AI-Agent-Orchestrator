@@ -240,11 +240,25 @@
   background: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+.run-status.queued,
+.run-status.waiting,
+.run-status.waiting-for-approval,
+.run-status.paused {
+  background: var(--yellow);
+}
+.run-status.cancelling {
+  background: var(--yellow);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .run-status.succeeded {
   background: var(--green);
 }
-.run-status.failed {
+.run-status.failed,
+.run-status.lost {
   background: var(--red);
+}
+.run-status.cancelled {
+  background: var(--text-faint);
 }
 .node-collapse-button {
   width: 22px;

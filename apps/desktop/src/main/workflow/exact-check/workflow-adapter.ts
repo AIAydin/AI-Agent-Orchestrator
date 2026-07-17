@@ -58,7 +58,7 @@ export class ExactCheckWorkflowAdapter implements WorkflowNodeExecutor {
       preparationId: disclosure.planId,
       approvalFingerprint: disclosure.fingerprint,
       expiresAt: disclosure.expiresAt,
-      disclosure,
+      disclosure: JSON.parse(JSON.stringify(disclosure)) as WorkflowJsonValue,
     };
   }
 
@@ -124,6 +124,12 @@ function exactRequest(context: WorkflowExecutorContext): ExactCheckRequest {
     label: context.node.title,
     command: context.node.data.command,
     target: workflowCheckTarget(context),
+    workflowBinding: {
+      executionId: context.executionId,
+      nodeId: context.node.id,
+      attempt: context.attempt,
+    },
+    artifactPaths: context.node.data.artifactPaths ?? [],
   });
 }
 
@@ -205,6 +211,9 @@ function workflowHandle(
     cancel: async () => {
       await handle.cancel();
     },
+    ...(handle.subscribeInteraction === undefined
+      ? {}
+      : { subscribeInteraction: (listener) => handle.subscribeInteraction!(listener) }),
   };
 }
 
@@ -277,6 +286,8 @@ function checkEvidence(
       includedCodePoints: Array.from(summary).length,
       truncated: execution.outputTruncated || codePoints.length > OUTPUT_SUMMARY_MAX_CODE_POINTS,
     },
+    summary: execution.summary ?? null,
+    artifacts: execution.artifacts ?? [],
   };
 }
 

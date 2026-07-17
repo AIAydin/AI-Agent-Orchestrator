@@ -541,6 +541,16 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     onPrepareRun: vi.fn(),
     onPreviewSession: vi.fn(),
     onTerminalSessionStatus: vi.fn(),
+    testNodeRuntime: {
+      executions: [],
+      interactionEvents: [],
+      busyAction: null,
+      mutationsAuthorized: true,
+      onStart: vi.fn(),
+      onCancel: vi.fn(),
+      onRevealArtifact: vi.fn().mockResolvedValue(undefined),
+      onOpenArtifact: vi.fn().mockResolvedValue(undefined),
+    },
     diffReview: {
       agentRuns: [],
       agentRunsLoaded: true,

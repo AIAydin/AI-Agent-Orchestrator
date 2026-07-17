@@ -251,6 +251,7 @@ function canonicalData(
         runIds: stringArray(raw['runIds']),
         summary: raw['summary'],
         artifactIds: stringArray(raw['artifactIds']),
+        artifactPaths: stringArray(raw['artifactPaths']),
       });
     case 'review-gate':
       return compact({
@@ -493,10 +494,7 @@ function legacyStatus(value: unknown): NodeStatus {
 
 function canonicalStatus(status: NodeStatus): string {
   if (status === 'draft' || status === 'ready') return 'idle';
-  if (status === 'waiting-for-approval' || status === 'paused' || status === 'cancelling') {
-    return 'waiting';
-  }
-  if (status === 'lost' || status === 'blocked') return 'failed';
+  if (status === 'blocked') return 'failed';
   return status;
 }
 

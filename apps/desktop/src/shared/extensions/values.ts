@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RunStatusSchema } from '@forgeboard/core/domain';
 
 import {
   ExtensionCanvasNodeTypeViewSchema,
@@ -12,7 +13,7 @@ const ExtensionNodeDataSchema = z
     kind: z.literal('extension'),
     title: z.string().min(1).max(512),
     description: z.string().max(100_000),
-    status: z.enum(['idle', 'queued', 'running', 'waiting', 'failed', 'succeeded', 'cancelled']),
+    status: z.enum(['idle', 'waiting', ...RunStatusSchema.options]),
     locked: z.boolean(),
     collapsed: z.boolean(),
     color: z.string().regex(/^#[0-9A-Fa-f]{6}$/u),

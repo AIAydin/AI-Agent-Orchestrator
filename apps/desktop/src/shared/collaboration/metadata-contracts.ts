@@ -54,9 +54,11 @@ export const CollaborationNodeStatusSchema = z.enum([
   'running',
   'waiting-for-approval',
   'paused',
+  'cancelling',
   'failed',
   'succeeded',
   'cancelled',
+  'lost',
   'unavailable',
 ]);
 
@@ -200,9 +202,11 @@ export const CollaborationWorkflowMetadataSchema = z
       'running',
       'waiting-for-approval',
       'paused',
+      'cancelling',
       'failed',
       'succeeded',
       'cancelled',
+      'lost',
     ]),
     attempt: z.number().int().nonnegative().optional(),
     maxAttempts: z.number().int().min(1).max(100).optional(),

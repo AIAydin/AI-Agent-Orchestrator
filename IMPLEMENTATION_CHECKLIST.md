@@ -103,7 +103,7 @@ not be reclassified as future work.
       interrupt/terminate/lost recovery.
 - [x] Isolated web preview node with logs/console/errors/navigation/viewports/screenshots.
 - [x] Mobile preview node with device frames, rotation, touch, and side-by-side screens.
-- [ ] Test node with cancel, streaming, parsed summary, history, and artifacts.
+- [x] Test node with cancel, streaming, parsed summary, history, and artifacts.
 - [ ] Review gate node with human/deterministic/agent checks and bounded retries.
 - [x] Git/PR node with commits, divergence, remote, readiness, CI, and approved actions.
 - [ ] Mermaid diagram node with synchronized source/render/export.
@@ -995,3 +995,28 @@ unchecked when only a subset of their required behavior has proof.
   gate, desktop strict typecheck, configured formatting, zero-warning focused lint, and
   `git diff --check` passed. This closes the broad Infinite Canvas interaction entry only; the unified
   extensible renderer registry and universal run-history behavior remain open.
+- 2026-07-17: the Test node now has complete UI-only exact-process configuration for saved or custom
+  commands, literal arguments, checkout-relative working directory, allowlisted environment names,
+  check kind, and up to 32 expected artifact paths. The main-owned workflow runtime streams bounded
+  stdout, stderr, and lifecycle events; parses consistent Vitest, Jest, pytest, TAP, and generic
+  summaries; stores every workflow-bound attempt beyond the project recency window; restores results
+  after database and application restart; and exposes exact queued, running, waiting-for-approval,
+  paused, cancelling, failed, succeeded, cancelled, and lost states without lossy projection.
+  Owner/editor authorization is rechecked after native confirmation and again inside serialized
+  per-node cancellation, while reviewer/viewer roles retain read-only history. Artifact collection
+  accepts only configured, regular, no-follow, non-sensitive files inside the exact assigned checkout,
+  records size and SHA-256, revalidates identity before every action, and opens an application-owned
+  verified copy so source-path replacement cannot race the operating-system open. Current and older
+  attempts expose complete raw output, parsed counts, and verified Reveal/Open actions. Real-process
+  integration proves two genuine attempts, stdout/stderr streaming, summary persistence, regular-file
+  hashing, sensitive and symlink exclusion, host/database restart projection, and exact subprocess
+  cancellation. The dedicated Electron journey passed in 4.0 seconds and proves UI configuration,
+  exact renderer and native disclosure, live output and summary while Running, native-confirmed
+  cancellation, retained Cancelled history, passing rerun, verified artifact actions, full Electron
+  restart restoration, and zero external renderer requests. Repository gates passed the 998-file
+  structure check, formatting, zero-warning lint, all eight strict workspace typechecks, 1,879 unit
+  tests across 286 files, 275 real-process integration tests across 32 files, every workspace
+  production build, and `git diff --check`. Integration was scheduled with two workers because the
+  host was simultaneously CPU-constrained; assertions and timeouts were unchanged. This closes only
+  the Test node entry; the broader Review gate, workflow controls, and release requirements remain
+  open.

@@ -440,6 +440,8 @@ function exactCheckEvidence(status: 'passed' | 'failed' = 'passed') {
       includedCodePoints: 7,
       truncated: false,
     },
+    summary: null,
+    artifacts: [],
   };
 }
 

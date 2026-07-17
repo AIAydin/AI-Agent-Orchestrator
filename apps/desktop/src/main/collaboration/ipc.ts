@@ -163,6 +163,16 @@ export class CollaborationIpcService {
     );
   }
 
+  /** Main-process capability gate for workflow execution mutations owned by this window. */
+  public assertWorkflowMutationAuthorized(owner: WebContents): void {
+    if (this.#owner !== owner && this.#joiningOwner !== owner) return;
+    const role = this.#client.connection?.role;
+    if (role === 'owner' || role === 'editor') return;
+    throw new Error(
+      'This collaboration role cannot start, approve, control, or cancel workflow execution.',
+    );
+  }
+
   public async pauseForShutdown(): Promise<void> {
     if (this.#disposed) return;
     this.#paused = true;

@@ -39,6 +39,7 @@ interface WorkspaceActivityDrawerProps {
   workflowInteractionEvents: readonly WorkflowInteractionEventEnvelope[];
   workflowLoading: boolean;
   workflowBusyAction: string | null;
+  workflowMutationsAuthorized: boolean;
   onPrepareCheck: (checkId: string) => void;
   onCancelCheck: (executionId: string) => void;
   onSelectWorkflow: (executionId: string) => void;
@@ -65,6 +66,7 @@ export function WorkspaceActivityDrawer({
   workflowInteractionEvents,
   workflowLoading,
   workflowBusyAction,
+  workflowMutationsAuthorized,
   onPrepareCheck,
   onCancelCheck,
   onSelectWorkflow,
@@ -148,6 +150,7 @@ export function WorkspaceActivityDrawer({
           interactionEvents={workflowInteractionEvents}
           loading={workflowLoading}
           busyAction={workflowBusyAction}
+          mutationsAuthorized={workflowMutationsAuthorized}
           onSelect={onSelectWorkflow}
           onRefresh={onRefreshWorkflows}
           onCancel={onCancelWorkflow}

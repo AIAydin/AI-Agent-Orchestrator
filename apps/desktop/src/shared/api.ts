@@ -187,7 +187,9 @@ import type {
 import type {
   WorkflowApproveHumanDecisionInput,
   WorkflowApproveNodeInput,
+  WorkflowArtifactActionInput,
   WorkflowCancelInput,
+  WorkflowCancelNodeInput,
   WorkflowEventEnvelope,
   WorkflowExecutionView,
   WorkflowGetInput,
@@ -349,6 +351,9 @@ export interface ForgeboardApi {
       input: WorkflowResolveRevisionEscapeInput,
     ): Promise<IpcResult<WorkflowExecutionView | null>>;
     cancel(input: WorkflowCancelInput): Promise<IpcResult<WorkflowExecutionView | null>>;
+    cancelNode(input: WorkflowCancelNodeInput): Promise<IpcResult<WorkflowExecutionView | null>>;
+    revealArtifact(input: WorkflowArtifactActionInput): Promise<IpcResult<null>>;
+    openArtifact(input: WorkflowArtifactActionInput): Promise<IpcResult<null>>;
     sendInput(input: WorkflowNodeInput): Promise<IpcResult<boolean>>;
     interrupt(input: WorkflowNodeInterrupt): Promise<IpcResult<boolean>>;
     onEvent(listener: (event: WorkflowEventEnvelope) => void): () => void;

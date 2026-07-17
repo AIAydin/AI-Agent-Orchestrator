@@ -54,7 +54,7 @@ describe('CollaborationIpcService ownership and approval', () => {
     expect(JSON.stringify(disclosure)).not.toContain('SESSION_TOKEN_DO_NOT_DISCLOSE');
   });
 
-  it('main-authorizes terminal mutations only for collaboration owner and editor roles', async () => {
+  it('main-authorizes terminal and workflow mutations only for owner and editor roles', async () => {
     const viewerClient = fakeClient('viewer');
     const viewerService = new CollaborationIpcService(
       { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
@@ -73,8 +73,14 @@ describe('CollaborationIpcService ownership and approval', () => {
     expect(() => viewerService.assertTerminalMutationAuthorized(viewer.sender as never)).toThrow(
       /collaboration role cannot/u,
     );
+    expect(() => viewerService.assertWorkflowMutationAuthorized(viewer.sender as never)).toThrow(
+      /collaboration role cannot/u,
+    );
     expect(() =>
       viewerService.assertTerminalMutationAuthorized(localWindow.sender as never),
+    ).not.toThrow();
+    expect(() =>
+      viewerService.assertWorkflowMutationAuthorized(localWindow.sender as never),
     ).not.toThrow();
 
     await invoke('leave', viewer.event);
@@ -88,6 +94,9 @@ describe('CollaborationIpcService ownership and approval', () => {
     await invoke('join', viewer.event, joinInput('editor-token'));
     expect(() =>
       editorService.assertTerminalMutationAuthorized(viewer.sender as never),
+    ).not.toThrow();
+    expect(() =>
+      editorService.assertWorkflowMutationAuthorized(viewer.sender as never),
     ).not.toThrow();
   });
 
@@ -129,6 +138,9 @@ describe('CollaborationIpcService ownership and approval', () => {
     const joining = invoke('join', owner.event, joinInput('editor-token'));
     await vi.waitFor(() => expect(client.join).toHaveBeenCalledOnce());
     expect(() => service.assertTerminalMutationAuthorized(owner.sender as never)).toThrow(
+      /collaboration role cannot/u,
+    );
+    expect(() => service.assertWorkflowMutationAuthorized(owner.sender as never)).toThrow(
       /collaboration role cannot/u,
     );
     resolveJoin?.();

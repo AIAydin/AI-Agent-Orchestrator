@@ -53,6 +53,10 @@ import type {
   CollaborationRejectedCommentEntry,
 } from '../../../../../shared/collaboration/index.js';
 import type { TerminalSessionStatus } from '../../../../../shared/terminal/index.js';
+import type {
+  WorkflowExecutionView,
+  WorkflowInteractionEventEnvelope,
+} from '../../../../../shared/workflow/contracts.js';
 import { SharedComments } from '../collaboration/comments/SharedComments.js';
 import { LocalComments } from '../comments/LocalComments.js';
 import type { NodeComment } from '../comments/comment-model.js';
@@ -60,6 +64,8 @@ import { DiffReviewNodeInspector, type DiffReviewOpenRequest } from '../diff-rev
 import type { DiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 import { OperationalGitPrNodeInspector, type GitPrNodeConfiguration } from '../git-pr/index.js';
 import { TerminalNodePanel, type TerminalNodeConfiguration } from '../terminal/index.js';
+import { TestNodePanel } from '../workflows/test-node/TestNodePanel.js';
+import type { WorkflowArtifactActionInput } from '../../../../../shared/workflow/contracts.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
 type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
@@ -102,6 +108,16 @@ interface WorkspaceInspectorProps {
   onPrepareRun: () => void;
   onPreviewSession: (session: PreviewSessionSnapshot | null) => void;
   onTerminalSessionStatus: (nodeId: string, status: WorkshopNode['data']['status']) => void;
+  testNodeRuntime: {
+    readonly executions: readonly WorkflowExecutionView[];
+    readonly interactionEvents: readonly WorkflowInteractionEventEnvelope[];
+    readonly busyAction: string | null;
+    readonly mutationsAuthorized: boolean;
+    readonly onStart: (nodeId: string) => void;
+    readonly onCancel: (input: { executionId: string; nodeId: string; attempt: number }) => void;
+    readonly onRevealArtifact: (input: WorkflowArtifactActionInput) => Promise<void>;
+    readonly onOpenArtifact: (input: WorkflowArtifactActionInput) => Promise<void>;
+  };
   diffReview: DiffReviewNodeController;
   onOpenDiffReview: (request: DiffReviewOpenRequest) => void;
   onOpenGitPrReadiness: (runId: string) => void;
@@ -223,9 +239,7 @@ function NodeInspector(
               onError={props.onError}
             />
           )}
-        {(selectedNode.data.kind === 'task' ||
-          selectedNode.data.kind === 'test' ||
-          selectedNode.data.kind === 'review-gate') && (
+        {(selectedNode.data.kind === 'task' || selectedNode.data.kind === 'review-gate') && (
           <WorkflowNodeInspector
             node={selectedNode}
             nodes={props.nodes}
@@ -254,6 +268,26 @@ function NodeInspector(
           />
         )}
       </fieldset>
+      {selectedNode.data.kind === 'test' && (
+        <TestNodePanel
+          projectId={props.project.id}
+          node={selectedNode}
+          settings={props.settings}
+          locked={selectedNode.data.locked}
+          configurationReadOnly={selectedNode.data.locked || props.collaborationGraphReadOnly}
+          executions={props.testNodeRuntime.executions}
+          interactionEvents={props.testNodeRuntime.interactionEvents}
+          busyAction={props.testNodeRuntime.busyAction}
+          mutationsAuthorized={props.testNodeRuntime.mutationsAuthorized}
+          onRecord={onRecord}
+          onUpdate={onUpdateSelected}
+          onStart={props.testNodeRuntime.onStart}
+          onCancel={props.testNodeRuntime.onCancel}
+          onRevealArtifact={props.testNodeRuntime.onRevealArtifact}
+          onOpenArtifact={props.testNodeRuntime.onOpenArtifact}
+          onError={props.onError}
+        />
+      )}
       {selectedNode.data.kind === 'diff' && (
         <DiffReviewNodeInspector
           projectId={props.project.id}

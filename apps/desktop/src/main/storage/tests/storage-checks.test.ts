@@ -119,6 +119,36 @@ describe('durable project check storage', () => {
     expect(latest.at(-1)?.id).toBe(executionId(1_007));
   });
 
+  it('queries durable check history by workflow binding beyond the project recency window', () => {
+    const databasePath = createDatabasePath();
+    const store = openStore(databasePath);
+    const historical: CheckExecutionView = {
+      ...execution(executionId(50), 'passed'),
+      workflowBinding: {
+        executionId: 'workflow-old',
+        nodeId: 'test-1',
+        attempt: 1,
+      },
+    };
+    store.saveCheckExecution(historical);
+    for (let index = 1; index <= 205; index += 1) {
+      store.saveCheckExecution(
+        execution(
+          executionId(2_000 + index),
+          'passed',
+          new Date(Date.parse(NOW) + index * 1_000).toISOString(),
+        ),
+      );
+    }
+    expect(store.listCheckExecutions(PROJECT_ID)).not.toContainEqual(historical);
+    expect(store.listWorkflowCheckExecutions(PROJECT_ID, 'workflow-old')).toEqual([historical]);
+
+    closeStore(store);
+    const reopened = openStore(databasePath);
+    expect(reopened.listWorkflowCheckExecutions(PROJECT_ID, 'workflow-old')).toEqual([historical]);
+    expect(reopened.listWorkflowCheckExecutions(PROJECT_ID, 'workflow-other')).toEqual([]);
+  });
+
   it('enforces monotonic lifecycle transitions while allowing exact retries and fast exits', () => {
     const store = openStore();
     const id = executionId(11);

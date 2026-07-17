@@ -21,6 +21,7 @@ describe('WorkspaceWorkflowPanel', () => {
         interactionEvents={[]}
         loading={false}
         busyAction={null}
+        mutationsAuthorized
         onSelect={vi.fn()}
         onRefresh={vi.fn()}
         onCancel={vi.fn()}
@@ -31,7 +32,7 @@ describe('WorkspaceWorkflowPanel', () => {
     );
 
     expect(screen.getByText('Implementation agent')).toBeTruthy();
-    expect(screen.getByText('waiting for approval')).toBeTruthy();
+    expect(screen.getAllByText('waiting for approval')).toHaveLength(2);
     expect(screen.getByText('Exact prepared launch is awaiting confirmation.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Review launch' }));
     expect(onReviewDecision).toHaveBeenCalledWith({
@@ -52,6 +53,7 @@ describe('WorkspaceWorkflowPanel', () => {
         interactionEvents={[]}
         loading={false}
         busyAction={null}
+        mutationsAuthorized
         onSelect={vi.fn()}
         onRefresh={vi.fn()}
         onCancel={onCancel}
@@ -72,6 +74,7 @@ describe('WorkspaceWorkflowPanel', () => {
         interactionEvents={[]}
         loading={false}
         busyAction={null}
+        mutationsAuthorized
         onSelect={vi.fn()}
         onRefresh={vi.fn()}
         onCancel={onCancel}
@@ -81,6 +84,36 @@ describe('WorkspaceWorkflowPanel', () => {
       />,
     );
     expect(screen.queryByRole('button', { name: 'Cancel workflow' })).toBeNull();
+  });
+
+  it('keeps workflow evidence readable while disabling every decision and control for read-only roles', () => {
+    const current = execution();
+    render(
+      <WorkspaceWorkflowPanel
+        executions={[current]}
+        current={current}
+        nodeTitles={new Map([['agent-node', 'Implementation agent']])}
+        interactiveNodeIds={new Set(['agent-node'])}
+        interactionEvents={[]}
+        loading={false}
+        busyAction={null}
+        mutationsAuthorized={false}
+        onSelect={vi.fn()}
+        onRefresh={vi.fn()}
+        onCancel={vi.fn()}
+        onReviewDecision={vi.fn()}
+        onSendInput={vi.fn()}
+        onInterrupt={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('status').textContent).toMatch(/inspect workflow history/u);
+    expect(screen.getByText('Implementation agent')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancel workflow' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByRole('button', { name: 'Review launch' })).toHaveProperty('disabled', true);
   });
 
   it('shows bounded live output and sends input or interruption to the exact attempt', async () => {
@@ -122,6 +155,7 @@ describe('WorkspaceWorkflowPanel', () => {
         ]}
         loading={false}
         busyAction={null}
+        mutationsAuthorized
         onSelect={vi.fn()}
         onRefresh={vi.fn()}
         onCancel={vi.fn()}
@@ -207,6 +241,7 @@ function execution(): WorkflowExecutionView {
       activeNodeIds: [],
     },
     cancellationRequested: false,
+    testResults: [],
     createdAt: '2026-07-15T12:00:00.000Z',
     updatedAt: '2026-07-15T12:01:00.000Z',
   };

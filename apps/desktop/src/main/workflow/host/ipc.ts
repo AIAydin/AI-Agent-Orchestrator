@@ -7,6 +7,7 @@ import {
   type Dialog,
   type IpcMainInvokeEvent,
   type MessageBoxOptions,
+  type Shell,
   type WebContents,
 } from 'electron';
 import { z } from 'zod';
@@ -17,8 +18,10 @@ import { ipcResultSchema, type IpcResult } from '../../../shared/application/con
 import {
   WORKFLOW_IPC_CHANNELS,
   WorkflowApproveHumanDecisionInputSchema,
+  WorkflowArtifactActionInputSchema,
   WorkflowApproveNodeInputSchema,
   WorkflowCancelInputSchema,
+  WorkflowCancelNodeInputSchema,
   WorkflowEventEnvelopeSchema,
   WorkflowExecutionViewSchema,
   WorkflowGetInputSchema,
@@ -30,8 +33,10 @@ import {
   WorkflowReviewDecisionInputSchema,
   WorkflowStartInputSchema,
   type WorkflowApproveHumanDecisionInput,
+  type WorkflowArtifactActionInput,
   type WorkflowApproveNodeInput,
   type WorkflowCancelInput,
+  type WorkflowCancelNodeInput,
   type WorkflowEventEnvelope,
   type WorkflowGetInput,
   type WorkflowHumanDecisionRequest,
@@ -63,12 +68,20 @@ type GitDelegateAuthorizationRunner = <Output>(
   authorize: GitDelegateAuthorizer,
   operation: () => Promise<Output>,
 ) => Promise<Output>;
+type WorkflowMutationAuthorizer = (event: IpcMainInvokeEvent) => void;
+type WorkflowArtifactResolver = (
+  input: WorkflowArtifactActionInput,
+  action: 'reveal' | 'open',
+) => Promise<string>;
 
 export interface WorkflowIpcServiceOptions {
   readonly resolveWindow?: WindowResolver;
   readonly resetRuntime?: () => Promise<void>;
   readonly disposeRuntime?: () => Promise<void>;
   readonly withGitDelegateAuthorization?: GitDelegateAuthorizationRunner;
+  readonly authorizeMutation?: WorkflowMutationAuthorizer;
+  readonly resolveArtifact?: WorkflowArtifactResolver;
+  readonly nativeShell?: Pick<Shell, 'showItemInFolder' | 'openPath'>;
 }
 
 export class WorkflowIpcService {
@@ -84,6 +97,9 @@ export class WorkflowIpcService {
   readonly #resetRuntime: () => Promise<void>;
   readonly #disposeRuntime: () => Promise<void>;
   readonly #withGitDelegateAuthorization: GitDelegateAuthorizationRunner;
+  readonly #authorizeMutation: WorkflowMutationAuthorizer;
+  readonly #resolveArtifact: WorkflowArtifactResolver | undefined;
+  readonly #nativeShell: Pick<Shell, 'showItemInFolder' | 'openPath'> | undefined;
   #disposed = false;
   #paused = false;
 
@@ -97,6 +113,7 @@ export class WorkflowIpcService {
       | 'listProjectWorkflowExecutions'
       | 'listRecoverableWorkflowExecutions'
       | 'appendAudit'
+      | 'listWorkflowCheckExecutions'
     >,
     createHost: WorkflowHostFactory,
     options: WorkflowIpcServiceOptions = {},
@@ -107,6 +124,9 @@ export class WorkflowIpcService {
     this.#disposeRuntime = options.disposeRuntime ?? (() => Promise.resolve());
     this.#withGitDelegateAuthorization =
       options.withGitDelegateAuthorization ?? (async (_authorize, operation) => await operation());
+    this.#authorizeMutation = options.authorizeMutation ?? (() => undefined);
+    this.#resolveArtifact = options.resolveArtifact;
+    this.#nativeShell = options.nativeShell;
     this.#host = createHost(
       (notification) => this.#onHostNotification(notification),
       (notification) => this.#onHostInteraction(notification),
@@ -162,6 +182,24 @@ export class WorkflowIpcService {
       z.tuple([WorkflowCancelInputSchema]),
       WorkflowExecutionViewSchema.nullable(),
       async (event, input) => await this.#cancel(event, input),
+    );
+    this.#handle(
+      WORKFLOW_IPC_CHANNELS.cancelNode,
+      z.tuple([WorkflowCancelNodeInputSchema]),
+      WorkflowExecutionViewSchema.nullable(),
+      async (event, input) => await this.#cancelNode(event, input),
+    );
+    this.#handle(
+      WORKFLOW_IPC_CHANNELS.revealArtifact,
+      z.tuple([WorkflowArtifactActionInputSchema]),
+      z.null(),
+      async (event, input) => await this.#artifactAction(event, input, 'reveal'),
+    );
+    this.#handle(
+      WORKFLOW_IPC_CHANNELS.openArtifact,
+      z.tuple([WorkflowArtifactActionInputSchema]),
+      z.null(),
+      async (event, input) => await this.#artifactAction(event, input, 'open'),
     );
     this.#handle(
       WORKFLOW_IPC_CHANNELS.sendInput,
@@ -240,6 +278,7 @@ export class WorkflowIpcService {
   }
 
   async #start(event: IpcMainInvokeEvent, input: WorkflowStartInput) {
+    this.#assertMutationAuthorized(event);
     const ownerToken = this.#trackOwner(event);
     await this.#ready;
     this.#assertOwnerInvocation(event, ownerToken);
@@ -262,11 +301,11 @@ export class WorkflowIpcService {
     });
     this.#assertOwnerInvocation(event, ownerToken);
     this.#executionOwners.set(state.execution.id, ownerToken);
-    return workflowHostStateToView(state);
+    return this.#view(state);
   }
 
   async #get(event: IpcMainInvokeEvent, input: WorkflowGetInput) {
-    return workflowHostStateToView(await this.#ownedState(event, input.executionId));
+    return this.#view(await this.#ownedState(event, input.executionId));
   }
 
   async #list(event: IpcMainInvokeEvent, input: WorkflowListInput) {
@@ -289,9 +328,7 @@ export class WorkflowIpcService {
         records.map(({ id }) => id),
       );
       const states = await Promise.all(
-        records.map(async (record) =>
-          workflowHostStateToView(await this.#host.getState(record.id)),
-        ),
+        records.map(async (record) => this.#view(await this.#host.getState(record.id))),
       );
       this.#assertOwnerInvocation(event, ownerToken);
       this.#assertExecutionOwners(
@@ -306,6 +343,7 @@ export class WorkflowIpcService {
   }
 
   async #approveNode(event: IpcMainInvokeEvent, input: WorkflowApproveNodeInput) {
+    this.#assertMutationAuthorized(event);
     const state = await this.#ownedState(event, input.executionId);
     const ownerToken = this.#requireOwnedToken(event, input.executionId);
     const approval = state.approvals.find(
@@ -327,10 +365,11 @@ export class WorkflowIpcService {
       approvedBy: LOCAL_ACTOR,
     });
     this.#assertOwnedInvocation(event, ownerToken, input.executionId);
-    return workflowHostStateToView(next);
+    return this.#view(next);
   }
 
   async #approveHuman(event: IpcMainInvokeEvent, input: WorkflowApproveHumanDecisionInput) {
+    this.#assertMutationAuthorized(event);
     const state = await this.#ownedState(event, input.executionId);
     const ownerToken = this.#requireOwnedToken(event, input.executionId);
     const request = assertCurrentHumanDecision(state, input);
@@ -342,10 +381,11 @@ export class WorkflowIpcService {
     }
     const next = await this.#host.approveHumanDecision({ ...input, approvedBy: LOCAL_ACTOR });
     this.#assertOwnedInvocation(event, ownerToken, input.executionId);
-    return workflowHostStateToView(next);
+    return this.#view(next);
   }
 
   async #decideReview(event: IpcMainInvokeEvent, input: WorkflowReviewDecisionInput) {
+    this.#assertMutationAuthorized(event);
     const state = await this.#ownedState(event, input.executionId);
     const ownerToken = this.#requireOwnedToken(event, input.executionId);
     const request = assertCurrentHumanDecision(state, input);
@@ -368,16 +408,17 @@ export class WorkflowIpcService {
       decidedBy: LOCAL_ACTOR,
     });
     this.#assertOwnedInvocation(event, ownerToken, input.executionId);
-    return workflowHostStateToView(next);
+    return this.#view(next);
   }
 
   async #resolveRevisionEscape(
     event: IpcMainInvokeEvent,
     input: WorkflowResolveRevisionEscapeInput,
   ) {
+    this.#assertMutationAuthorized(event);
     const state = await this.#ownedState(event, input.executionId);
     const ownerToken = this.#requireOwnedToken(event, input.executionId);
-    const request = workflowHostStateToView(state).revisionEscapes.find(
+    const request = this.#view(state).revisionEscapes.find(
       (candidate) => candidate.loopId === input.loopId,
     );
     if (
@@ -398,10 +439,11 @@ export class WorkflowIpcService {
     }
     const next = await this.#host.resolveRevisionEscape({ ...input, decidedBy: LOCAL_ACTOR });
     this.#assertOwnedInvocation(event, ownerToken, input.executionId);
-    return workflowHostStateToView(next);
+    return this.#view(next);
   }
 
   async #cancel(event: IpcMainInvokeEvent, input: WorkflowCancelInput) {
+    this.#assertMutationAuthorized(event);
     await this.#ownedState(event, input.executionId);
     const ownerToken = this.#requireOwnedToken(event, input.executionId);
     const confirmed = await this.#confirm(event, cancelConfirmation());
@@ -412,10 +454,54 @@ export class WorkflowIpcService {
     }
     const next = await this.#host.cancel(input.executionId, LOCAL_ACTOR);
     this.#assertOwnedInvocation(event, ownerToken, input.executionId);
-    return workflowHostStateToView(next);
+    return this.#view(next);
+  }
+
+  async #cancelNode(event: IpcMainInvokeEvent, input: WorkflowCancelNodeInput) {
+    this.#assertMutationAuthorized(event);
+    const ownerToken = await this.#ownedExecutionPreflight(event, input.executionId);
+    const confirmed = await this.#confirm(event, nodeCancelConfirmation(input.nodeId));
+    this.#assertOwnedInvocation(event, ownerToken, input.executionId);
+    if (!confirmed) return null;
+    const assertAuthorized = () => {
+      this.#assertMutationAuthorized(event);
+      this.#assertOwnedInvocation(event, ownerToken, input.executionId);
+    };
+    assertAuthorized();
+    const next = await this.#host.cancelNode(input, assertAuthorized);
+    return this.#view(next);
+  }
+
+  async #artifactAction(
+    event: IpcMainInvokeEvent,
+    input: WorkflowArtifactActionInput,
+    action: 'reveal' | 'open',
+  ): Promise<null> {
+    await this.#ownedState(event, input.executionId);
+    if (this.#resolveArtifact === undefined || this.#nativeShell === undefined) {
+      throw new Error('Verified workflow artifact actions are unavailable.');
+    }
+    const absolutePath = await this.#resolveArtifact(input, action);
+    this.#assertLiveMainFrame(event);
+    if (action === 'reveal') {
+      this.#nativeShell.showItemInFolder(absolutePath);
+    } else {
+      const error = await this.#nativeShell.openPath(absolutePath);
+      if (error !== '') throw new Error('The operating system could not open this Test artifact.');
+    }
+    this.#assertLiveMainFrame(event);
+    this.store.appendAudit('workflow', `artifact-${action}`, 'allowed', {
+      executionId: input.executionId,
+      nodeId: input.nodeId,
+      attempt: input.attempt,
+      relativePath: input.relativePath,
+      sha256: input.sha256,
+    });
+    return null;
   }
 
   async #sendInput(event: IpcMainInvokeEvent, input: WorkflowNodeInput): Promise<boolean> {
+    this.#assertMutationAuthorized(event);
     const ownerToken = await this.#ownedExecutionPreflight(event, input.executionId);
     const accepted = await this.#host.sendInput(input, () =>
       this.#assertOwnedInvocation(event, ownerToken, input.executionId),
@@ -425,6 +511,7 @@ export class WorkflowIpcService {
   }
 
   async #interrupt(event: IpcMainInvokeEvent, input: WorkflowNodeInterrupt): Promise<boolean> {
+    this.#assertMutationAuthorized(event);
     const ownerToken = await this.#ownedExecutionPreflight(event, input.executionId);
     const accepted = await this.#host.interrupt(input, () =>
       this.#assertOwnedInvocation(event, ownerToken, input.executionId),
@@ -573,6 +660,11 @@ export class WorkflowIpcService {
     }
   }
 
+  #assertMutationAuthorized(event: IpcMainInvokeEvent): void {
+    this.#assertLiveMainFrame(event);
+    this.#authorizeMutation(event);
+  }
+
   #auditNativeCancellation(executionId: string, action: string, targetId: string): void {
     this.store.appendAudit('workflow', action, 'denied', {
       executionId,
@@ -606,7 +698,7 @@ export class WorkflowIpcService {
             type: notification.type,
             occurredAt: notification.occurredAt,
             payload: notification.payload,
-            execution: workflowHostStateToView(state),
+            execution: this.#view(state),
             ...(notification.nodeId === undefined ? {} : { nodeId: notification.nodeId }),
           };
           owner.send(WORKFLOW_IPC_CHANNELS.event, WorkflowEventEnvelopeSchema.parse(event));
@@ -635,6 +727,13 @@ export class WorkflowIpcService {
     } catch {
       // Live output is ephemeral; delivery failure cannot affect the supervised execution.
     }
+  }
+
+  #view(state: WorkflowHostState) {
+    return workflowHostStateToView(
+      state,
+      this.store.listWorkflowCheckExecutions(state.execution.projectId, state.execution.id),
+    );
   }
 
   #handle<Args extends unknown[], Output>(
@@ -848,6 +947,19 @@ function cancelConfirmation(): MessageBoxOptions {
     detail:
       'Forgeboard will request full-tree cancellation, keep the workflow in Cancelling state until acknowledgements arrive, and persist the terminal result.',
     buttons: ['Keep running', 'Cancel workflow'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
+}
+
+function nodeCancelConfirmation(nodeId: string): MessageBoxOptions {
+  return {
+    type: 'warning',
+    title: 'Cancel workflow node',
+    message: 'Stop only this active workflow node attempt?',
+    detail: `Node: ${nodeId}\n\nForgeboard will verify the current execution, node, and attempt before signalling its supervised process.`,
+    buttons: ['Keep running', 'Cancel node'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,

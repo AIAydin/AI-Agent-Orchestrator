@@ -11,8 +11,12 @@ import {
   type WorkflowNodeRunView,
 } from '../../../shared/workflow/contracts.js';
 import type { WorkflowHostState } from './service.js';
+import type { CheckExecutionView } from '../../../shared/checks/contracts.js';
 
-export function workflowHostStateToView(state: WorkflowHostState): WorkflowExecutionView {
+export function workflowHostStateToView(
+  state: WorkflowHostState,
+  checks: readonly CheckExecutionView[] = [],
+): WorkflowExecutionView {
   const delegateApprovals = new Map(
     state.delegateApprovals.map((approval) => [approval.nodeId, approval]),
   );
@@ -79,6 +83,24 @@ export function workflowHostStateToView(state: WorkflowHostState): WorkflowExecu
       activeNodeIds: state.scheduling.activeNodeIds,
     },
     cancellationRequested: state.runtime.cancellationRequested,
+    testResults: checks.flatMap((check) => {
+      const binding = check.workflowBinding;
+      if (binding === undefined || binding.executionId !== state.execution.id) return [];
+      return [
+        {
+          ...binding,
+          checkExecutionId: check.id,
+          status: check.status,
+          exitCode: check.exitCode,
+          output: check.output,
+          outputTruncated: check.outputTruncated,
+          summary: check.summary ?? null,
+          artifacts: check.artifacts ?? [],
+          startedAt: check.startedAt,
+          endedAt: check.endedAt,
+        },
+      ];
+    }),
     createdAt: state.runtime.run.createdAt,
     updatedAt: state.runtime.run.updatedAt,
     ...(state.runtime.run.endedAt === undefined ? {} : { endedAt: state.runtime.run.endedAt }),

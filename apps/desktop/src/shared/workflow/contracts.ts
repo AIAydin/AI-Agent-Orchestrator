@@ -1,6 +1,11 @@
 import { JsonValueSchema, RunStatusSchema } from '@forgeboard/core/domain';
 import { WorkflowRunScopeSchema } from '@forgeboard/core/workflow-runtime';
 import { z } from 'zod';
+import {
+  CheckArtifactReferenceSchema,
+  CheckExecutionStatusSchema,
+  ParsedCheckSummarySchema,
+} from '../checks/contracts.js';
 
 const WorkflowIdSchema = z
   .string()
@@ -18,6 +23,9 @@ export const WORKFLOW_IPC_CHANNELS = Object.freeze({
   decideReview: 'workflows:decide-review',
   resolveRevisionEscape: 'workflows:resolve-revision-escape',
   cancel: 'workflows:cancel',
+  cancelNode: 'workflows:cancel-node',
+  revealArtifact: 'workflows:reveal-artifact',
+  openArtifact: 'workflows:open-artifact',
   sendInput: 'workflows:send-input',
   interrupt: 'workflows:interrupt',
   event: 'workflows:event',
@@ -85,6 +93,40 @@ export type WorkflowNodeInput = z.infer<typeof WorkflowNodeInputSchema>;
 
 export const WorkflowNodeInterruptSchema = WorkflowNodeInteractionIdentitySchema;
 export type WorkflowNodeInterrupt = z.infer<typeof WorkflowNodeInterruptSchema>;
+
+export const WorkflowCancelNodeInputSchema = WorkflowNodeInteractionIdentitySchema.extend({
+  confirmed: z.literal(true),
+}).strict();
+export type WorkflowCancelNodeInput = z.infer<typeof WorkflowCancelNodeInputSchema>;
+
+export const WorkflowArtifactReferenceSchema = CheckArtifactReferenceSchema;
+export type WorkflowArtifactReference = z.infer<typeof WorkflowArtifactReferenceSchema>;
+
+export const WorkflowArtifactActionInputSchema = WorkflowArtifactReferenceSchema.pick({
+  executionId: true,
+  nodeId: true,
+  attempt: true,
+  relativePath: true,
+  sha256: true,
+})
+  .extend({
+    checkExecutionId: z.string().uuid(),
+  })
+  .strict();
+export type WorkflowArtifactActionInput = z.infer<typeof WorkflowArtifactActionInputSchema>;
+
+export const WorkflowTestResultSchema = WorkflowNodeInteractionIdentitySchema.extend({
+  checkExecutionId: z.string().uuid(),
+  status: CheckExecutionStatusSchema,
+  exitCode: z.number().int().nullable(),
+  output: z.string().max(1_048_576),
+  outputTruncated: z.boolean(),
+  summary: ParsedCheckSummarySchema.nullable(),
+  artifacts: z.array(WorkflowArtifactReferenceSchema).max(32),
+  startedAt: WorkflowTimestampSchema.nullable(),
+  endedAt: WorkflowTimestampSchema.nullable(),
+}).strict();
+export type WorkflowTestResult = z.infer<typeof WorkflowTestResultSchema>;
 
 const WorkflowHumanRequestIdentitySchema = z
   .object({
@@ -225,6 +267,7 @@ export const WorkflowExecutionViewSchema = z
     revisionEscapes: z.array(WorkflowRevisionEscapeRequestSchema),
     scheduling: WorkflowSchedulingViewSchema,
     cancellationRequested: z.boolean(),
+    testResults: z.array(WorkflowTestResultSchema).max(2_000).default([]),
     createdAt: WorkflowTimestampSchema,
     updatedAt: WorkflowTimestampSchema,
     endedAt: WorkflowTimestampSchema.optional(),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { validateWorkflow } from '@forgeboard/core';
+import { RunStatusSchema } from '@forgeboard/core/domain';
 
 import {
   canonicalCanvasFromLegacy,
@@ -54,6 +55,26 @@ function legacy(overrides: Partial<LegacyCanvasDocument> = {}): LegacyCanvasDocu
 }
 
 describe('canonical desktop canvas adapter', () => {
+  it('round-trips every canonical workflow lifecycle status without renderer collapse', () => {
+    const initial = canonicalCanvasFromLegacy(legacy());
+    expect(initial.ok).toBe(true);
+    if (!initial.ok) return;
+
+    for (const status of RunStatusSchema.options) {
+      const canonical = {
+        ...initial.canvas,
+        nodes: initial.canvas.nodes.map((candidate, index) =>
+          index === 0 ? { ...candidate, status } : candidate,
+        ),
+      };
+      const surface = legacySurfaceFromCanonical(canonical);
+      expect(surface.nodes[0]?.data['status']).toBe(status);
+      const reloaded = canonicalCanvasFromLegacy({ ...surface, canonical });
+      expect(reloaded.ok).toBe(true);
+      if (reloaded.ok) expect(reloaded.canvas.nodes[0]?.status).toBe(status);
+    }
+  });
+
   it('materializes stable canonical dimensions for an unresized legacy node', () => {
     const sized = node('task-1', 'task');
     const unresized: LegacyCanvasNode = {

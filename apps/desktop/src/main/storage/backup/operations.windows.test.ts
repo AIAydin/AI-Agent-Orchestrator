@@ -70,7 +70,7 @@ describe('Windows backup filesystem boundaries', () => {
     } finally {
       database.close();
     }
-  });
+  }, 15_000);
 
   it('leaves no SQLite bytes when private staging protection fails', async () => {
     const root = await temporaryRoot();

@@ -37,6 +37,7 @@ import {
 
 import { legacySurfaceFromCanonical } from '../../../shared/canvas/adapter.js';
 import type { Project } from '../../../shared/application/contracts.js';
+import type { CheckExecutionView } from '../../../shared/checks/contracts.js';
 import {
   WORKFLOW_IPC_CHANNELS,
   WorkflowEventEnvelopeSchema,
@@ -95,6 +96,96 @@ describe('WorkflowIpcService', () => {
     expect(subframeMessage).toMatch(/main Forgeboard frame/iu);
   });
 
+  it('main-authorizes mutations while keeping workflow history readable', async () => {
+    const authorizeMutation = vi.fn(() => {
+      throw new Error('This collaboration role cannot mutate workflow execution.');
+    });
+    const fixture = createFixture({ authorizeMutation, canvas: reviewGateCanvas() });
+    const owner = liveEvent(10);
+
+    const listed = await requiredHandler(WORKFLOW_IPC_CHANNELS.list)(owner, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+      limit: 10,
+    });
+    expect(listed).toEqual({ ok: true, value: [] });
+    expect(authorizeMutation).not.toHaveBeenCalled();
+
+    const start = await requiredHandler(WORKFLOW_IPC_CHANNELS.start)(owner, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+      scope: { kind: 'workflow' },
+    });
+    expect(start).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(JSON.stringify(start)).toMatch(/collaboration role cannot mutate/u);
+    const deniedMutations: readonly [string, Record<string, unknown>][] = [
+      [
+        WORKFLOW_IPC_CHANNELS.approveNode,
+        {
+          executionId: 'workflow-execution',
+          nodeId: NODE_ID,
+          preparationId: 'prepared-launch',
+          approvalFingerprint: 'fingerprint-123',
+          confirmed: true,
+        },
+      ],
+      [
+        WORKFLOW_IPC_CHANNELS.approveHuman,
+        {
+          executionId: 'workflow-execution',
+          targetId: 'execute-edge',
+          targetType: 'execute-edge',
+          targetAttempt: 1,
+          evidenceFingerprint: 'evidence',
+          confirmed: true,
+        },
+      ],
+      [
+        WORKFLOW_IPC_CHANNELS.decideReview,
+        {
+          executionId: 'workflow-execution',
+          targetId: 'review-edge',
+          targetType: 'human-review',
+          targetAttempt: 1,
+          evidenceFingerprint: 'evidence',
+          decision: 'approved',
+          confirmed: true,
+        },
+      ],
+      [
+        WORKFLOW_IPC_CHANNELS.resolveRevisionEscape,
+        {
+          executionId: 'workflow-execution',
+          loopId: 'revision-loop',
+          attemptsStarted: 1,
+          evidenceFingerprint: 'evidence',
+          decision: 'cancel',
+          confirmed: true,
+        },
+      ],
+      [WORKFLOW_IPC_CHANNELS.cancel, { executionId: 'workflow-execution', confirmed: true }],
+      [
+        WORKFLOW_IPC_CHANNELS.cancelNode,
+        { executionId: 'workflow-execution', nodeId: NODE_ID, attempt: 1, confirmed: true },
+      ],
+      [
+        WORKFLOW_IPC_CHANNELS.sendInput,
+        { executionId: 'workflow-execution', nodeId: NODE_ID, attempt: 1, data: 'input\n' },
+      ],
+      [
+        WORKFLOW_IPC_CHANNELS.interrupt,
+        { executionId: 'workflow-execution', nodeId: NODE_ID, attempt: 1 },
+      ],
+    ];
+    for (const [channel, input] of deniedMutations) {
+      const result = await requiredHandler(channel)(owner, input);
+      expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+      expect(JSON.stringify(result)).toMatch(/collaboration role cannot mutate/u);
+    }
+    expect(authorizeMutation).toHaveBeenCalledTimes(1 + deniedMutations.length);
+    expect(fixture.store.listProjectWorkflowExecutions(PROJECT_ID)).toEqual([]);
+  });
+
   it('reloads the persisted canonical canvas and returns a renderer-safe execution view', async () => {
     createFixture({ canvas: reviewGateCanvas() });
     const owner = liveEvent(11);
@@ -120,6 +211,113 @@ describe('WorkflowIpcService', () => {
       limit: 10,
     });
     expect(listed).toMatchObject({ ok: true, value: [{ revision: 2 }] });
+  });
+
+  it('loads Test results through their durable workflow binding', async () => {
+    const fixture = createFixture({ canvas: reviewGateCanvas() });
+    const owner = liveEvent(13);
+    const started = await requiredHandler(WORKFLOW_IPC_CHANNELS.start)(owner, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+      scope: { kind: 'workflow' },
+    });
+    const executionId = executionIdFrom(started);
+    const check: CheckExecutionView = {
+      id: '20000000-0000-4000-8000-000000000013',
+      projectId: PROJECT_ID,
+      checkId: 'test',
+      label: 'Bound test',
+      kind: 'test',
+      executable: 'node',
+      arguments: ['--test'],
+      cwd: '/tmp/forgeboard-workflow-ipc-project',
+      environmentVariableNames: [],
+      target: { kind: 'primary-project', projectId: PROJECT_ID },
+      workflowBinding: { executionId, nodeId: 'gate-1', attempt: 1 },
+      status: 'passed',
+      exitCode: 0,
+      startedAt: T0,
+      endedAt: '2026-07-15T20:00:01.000Z',
+      output: 'Tests: 1 passed, 1 total',
+      outputTruncated: false,
+      summary: { passed: 1, failed: 0, skipped: 0, total: 1, parser: 'generic' },
+      artifacts: [],
+      updatedAt: '2026-07-15T20:00:01.000Z',
+    };
+    fixture.store.saveCheckExecution(check);
+    const bindingQuery = vi.spyOn(fixture.store, 'listWorkflowCheckExecutions');
+    const globalQuery = vi.spyOn(fixture.store, 'listCheckExecutions').mockImplementation(() => {
+      throw new Error('The workflow view must not use the project-wide recency query.');
+    });
+
+    const result = await requiredHandler(WORKFLOW_IPC_CHANNELS.get)(owner, { executionId });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        testResults: [
+          {
+            checkExecutionId: check.id,
+            executionId,
+            nodeId: 'gate-1',
+            attempt: 1,
+            status: 'passed',
+          },
+        ],
+      },
+    });
+    expect(bindingQuery).toHaveBeenCalledWith(PROJECT_ID, executionId);
+    expect(globalQuery).not.toHaveBeenCalled();
+  });
+
+  it('reveals and opens only main-resolved artifacts for an owned workflow', async () => {
+    const resolveArtifact = vi.fn(() => Promise.resolve('/trusted/worktree/coverage/index.html'));
+    const showItemInFolder = vi.fn();
+    const openPath = vi.fn(() => Promise.resolve(''));
+    const authorizeMutation = vi.fn();
+    const fixture = createFixture({
+      canvas: reviewGateCanvas(),
+      authorizeMutation,
+      resolveArtifact,
+      nativeShell: { showItemInFolder, openPath },
+    });
+    const owner = liveEvent(14);
+    const started = await requiredHandler(WORKFLOW_IPC_CHANNELS.start)(owner, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+      scope: { kind: 'workflow' },
+    });
+    const input = {
+      checkExecutionId: '20000000-0000-4000-8000-000000000001',
+      executionId: executionIdFrom(started),
+      nodeId: 'test-node',
+      attempt: 1,
+      relativePath: 'coverage/index.html',
+      sha256: 'a'.repeat(64),
+    };
+
+    await expect(
+      requiredHandler(WORKFLOW_IPC_CHANNELS.revealArtifact)(owner, input),
+    ).resolves.toEqual({
+      ok: true,
+      value: null,
+    });
+    await expect(
+      requiredHandler(WORKFLOW_IPC_CHANNELS.openArtifact)(owner, input),
+    ).resolves.toEqual({
+      ok: true,
+      value: null,
+    });
+    expect(resolveArtifact).toHaveBeenCalledTimes(2);
+    expect(showItemInFolder).toHaveBeenCalledWith('/trusted/worktree/coverage/index.html');
+    expect(openPath).toHaveBeenCalledWith('/trusted/worktree/coverage/index.html');
+    expect(authorizeMutation).toHaveBeenCalledTimes(1);
+    expect(fixture.appendAuditSpy).toHaveBeenCalledWith(
+      'workflow',
+      'artifact-open',
+      'allowed',
+      expect.objectContaining({ relativePath: 'coverage/index.html' }),
+    );
   });
 
   it('recovers without inherited Git authority and retries only under a fresh live IPC authorizer', async () => {
@@ -541,6 +739,53 @@ describe('WorkflowIpcService', () => {
     });
   });
 
+  it('rechecks the collaboration role after node-cancel confirmation', async () => {
+    const parent = { isDestroyed: () => false };
+    electronMock.fromWebContents.mockReturnValue(parent);
+    let role: 'editor' | 'viewer' = 'editor';
+    const authorizeMutation = vi.fn(() => {
+      if (role !== 'editor') {
+        throw new Error('This collaboration role cannot mutate workflow execution.');
+      }
+    });
+    const fixture = createFixture({ nativeResponse: 1, authorizeMutation });
+    const owner = liveEvent(42);
+    const started = await requiredHandler(WORKFLOW_IPC_CHANNELS.start)(owner, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+      scope: { kind: 'workflow' },
+    });
+    const approval = approvalFrom(started);
+    await requiredHandler(WORKFLOW_IPC_CHANNELS.approveNode)(owner, {
+      ...approval,
+      confirmed: true,
+    });
+    const confirmation = deferred<{ response: number; checkboxChecked: boolean }>();
+    fixture.showMessageBox.mockImplementationOnce(() => confirmation.promise);
+    const cancelNode = vi.spyOn(fixture.host, 'cancelNode');
+
+    const cancelling = requiredHandler(WORKFLOW_IPC_CHANNELS.cancelNode)(owner, {
+      executionId: approval.executionId,
+      nodeId: NODE_ID,
+      attempt: 1,
+      confirmed: true,
+    });
+    await vi.waitFor(() => expect(fixture.showMessageBox).toHaveBeenCalledTimes(2));
+    role = 'viewer';
+    confirmation.resolve({ response: 1, checkboxChecked: false });
+
+    const result = await cancelling;
+    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(JSON.stringify(result)).toMatch(/collaboration role cannot mutate/u);
+    expect(cancelNode).not.toHaveBeenCalled();
+    fixture.fake.complete({
+      completion: { status: 'cancelled', reason: 'Test cleanup after denied cancellation.' },
+    });
+    await vi.waitFor(() => {
+      expect(fixture.store.getWorkflowExecution(approval.executionId)?.status).toBe('cancelled');
+    });
+  });
+
   it('resets and disposes its owned executor runtime after the host is drained', async () => {
     const resetRuntime = vi.fn(() => Promise.resolve());
     const disposeRuntime = vi.fn(() => Promise.resolve());
@@ -573,6 +818,9 @@ function createFixture({
   resetRuntime,
   disposeRuntime,
   withGitDelegateAuthorization,
+  authorizeMutation,
+  resolveArtifact,
+  nativeShell,
 }: {
   nativeResponse?: number;
   canvas?: Canvas;
@@ -583,6 +831,9 @@ function createFixture({
   withGitDelegateAuthorization?: NonNullable<
     WorkflowIpcServiceOptions['withGitDelegateAuthorization']
   >;
+  authorizeMutation?: NonNullable<WorkflowIpcServiceOptions['authorizeMutation']>;
+  resolveArtifact?: NonNullable<WorkflowIpcServiceOptions['resolveArtifact']>;
+  nativeShell?: NonNullable<WorkflowIpcServiceOptions['nativeShell']>;
 } = {}): Fixture {
   const directory = mkdtempSync(join(tmpdir(), 'forgeboard-workflow-ipc-test-'));
   const store = new LocalStore(join(directory, 'forgeboard.sqlite3'));
@@ -622,6 +873,9 @@ function createFixture({
       ...(resetRuntime === undefined ? {} : { resetRuntime }),
       ...(disposeRuntime === undefined ? {} : { disposeRuntime }),
       ...(withGitDelegateAuthorization === undefined ? {} : { withGitDelegateAuthorization }),
+      ...(authorizeMutation === undefined ? {} : { authorizeMutation }),
+      ...(resolveArtifact === undefined ? {} : { resolveArtifact }),
+      ...(nativeShell === undefined ? {} : { nativeShell }),
     },
   );
   const host = hosts[0];

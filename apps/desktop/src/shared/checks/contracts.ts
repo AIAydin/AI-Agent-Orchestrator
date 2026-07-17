@@ -112,6 +112,61 @@ export const CheckExecutionStatusSchema = z.enum([
 ]);
 export type CheckExecutionStatus = z.infer<typeof CheckExecutionStatusSchema>;
 
+export const CheckExecutionTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('primary-project'), projectId: z.string().uuid() }).strict(),
+  z
+    .object({
+      kind: z.literal('managed-worktree'),
+      projectId: z.string().uuid(),
+      runId: z.string().uuid(),
+    })
+    .strict(),
+]);
+
+export const WorkflowCheckBindingSchema = z
+  .object({
+    executionId: z.string().min(1).max(128),
+    nodeId: z.string().min(1).max(128),
+    attempt: z.number().int().positive().max(10_000),
+  })
+  .strict();
+
+export const ParsedCheckSummarySchema = z
+  .object({
+    passed: z.number().int().nonnegative().max(10_000_000),
+    failed: z.number().int().nonnegative().max(10_000_000),
+    skipped: z.number().int().nonnegative().max(10_000_000),
+    total: z.number().int().nonnegative().max(10_000_000),
+    parser: z.enum(['vitest', 'jest', 'tap', 'pytest', 'generic']),
+  })
+  .strict()
+  .superRefine((summary, context) => {
+    if (summary.passed + summary.failed + summary.skipped > summary.total) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Summary counts exceed the total.',
+      });
+    }
+  });
+
+export const CheckArtifactReferenceSchema = z
+  .object({
+    executionId: z.string().min(1).max(128),
+    nodeId: z.string().min(1).max(128),
+    attempt: z.number().int().positive().max(10_000),
+    projectId: z.string().uuid(),
+    relativePath: z.string().min(1).max(1_024),
+    label: z.string().min(1).max(256),
+    kind: z.enum(['artifact', 'report']),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    sizeBytes: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(100 * 1024 * 1024),
+  })
+  .strict();
+
 export const CheckExecutionViewSchema = z
   .object({
     id: z.string().uuid(),
@@ -123,12 +178,16 @@ export const CheckExecutionViewSchema = z
     arguments: CheckArgumentsSchema,
     cwd: CheckWorkingDirectorySchema,
     environmentVariableNames: EnvironmentVariableNamesSchema,
+    target: CheckExecutionTargetSchema.optional(),
+    workflowBinding: WorkflowCheckBindingSchema.optional(),
     status: CheckExecutionStatusSchema,
     exitCode: z.number().int().nullable(),
     startedAt: z.string().datetime().nullable(),
     endedAt: z.string().datetime().nullable(),
     output: CheckOutputSchema,
     outputTruncated: z.boolean(),
+    summary: ParsedCheckSummarySchema.nullable().optional(),
+    artifacts: z.array(CheckArtifactReferenceSchema).max(32).optional(),
     updatedAt: z.string().datetime(),
   })
   .strict()
@@ -139,6 +198,35 @@ export const CheckExecutionViewSchema = z
         path: ['checkId'],
         message: 'The check ID does not match its check kind.',
       });
+    }
+    if (execution.target !== undefined && execution.target.projectId !== execution.projectId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['target', 'projectId'],
+        message: 'The check target must belong to its project.',
+      });
+    }
+    if ((execution.artifacts?.length ?? 0) > 0 && execution.workflowBinding === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['artifacts'],
+        message: 'Verified artifacts require a workflow binding.',
+      });
+    }
+    for (const artifact of execution.artifacts ?? []) {
+      if (
+        artifact.projectId !== execution.projectId ||
+        artifact.executionId !== execution.workflowBinding?.executionId ||
+        artifact.nodeId !== execution.workflowBinding?.nodeId ||
+        artifact.attempt !== execution.workflowBinding?.attempt
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['artifacts'],
+          message: 'Verified artifacts must match the check workflow binding.',
+        });
+        break;
+      }
     }
 
     const terminal =

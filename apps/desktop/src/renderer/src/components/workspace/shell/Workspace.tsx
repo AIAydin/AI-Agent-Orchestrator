@@ -121,6 +121,7 @@ import {
   runnableWorkflowNodeCount,
   workflowSelectionEligibility,
 } from '../workflows/workflow-run-eligibility.js';
+import { workflowCanvasNodeStatus } from '../workflows/workflow-node-status.js';
 import {
   appendLocalComment,
   appendSharedComment,
@@ -139,28 +140,6 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
     );
   },
 );
-
-function canvasNodeStatus(
-  status: WorkflowExecutionView['nodeRuns'][number]['status'],
-): WorkshopNode['data']['status'] {
-  switch (status) {
-    case 'queued':
-      return 'queued';
-    case 'running':
-    case 'cancelling':
-      return 'running';
-    case 'waiting-for-approval':
-    case 'paused':
-      return 'waiting';
-    case 'succeeded':
-      return 'succeeded';
-    case 'cancelled':
-      return 'cancelled';
-    case 'failed':
-    case 'lost':
-      return 'failed';
-  }
-}
 
 function workflowEdgeColor(
   disposition: WorkflowExecutionView['edges'][number]['disposition'],
@@ -446,6 +425,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     flushCanvas,
     setEvents,
     onError,
+    mutationsAuthorized: !collaborationCanvas.graphReadOnly,
   });
   useImperativeHandle(ref, () => ({ flushCanvas }), [flushCanvas]);
 
@@ -1027,7 +1007,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     () =>
       new Map(
         (workflows.currentExecution?.nodeRuns ?? []).map(
-          (run) => [run.nodeId, canvasNodeStatus(run.status)] as const,
+          (run) => [run.nodeId, workflowCanvasNodeStatus(run.status)] as const,
         ),
       ),
     [workflows.currentExecution],
@@ -1083,7 +1063,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         return {
           ...edge,
           animated: runtime.disposition === 'waiting' || runtime.status === 'running',
-          label: `${edge.data?.edgeType ?? runtime.type} · ${runtime.disposition.replaceAll('-', ' ')}`,
+          className: `${edge.className ?? ''} workflow-edge-runtime ${runtime.status}`.trim(),
+          label: `${edge.data?.edgeType ?? runtime.type} · ${runtime.status.replaceAll('-', ' ')} · ${runtime.disposition.replaceAll('-', ' ')}`,
           style: {
             ...edge.style,
             stroke: workflowEdgeColor(runtime.disposition),
@@ -1100,14 +1081,21 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   );
   const workflowActive = workflows.activeExecution !== null;
   const workflowStartBusy =
-    workflows.busyAction !== null || workflowActive || canvas === null || nodes.length === 0;
+    !workflows.mutationsAuthorized ||
+    workflows.busyAction !== null ||
+    workflowActive ||
+    canvas === null ||
+    nodes.length === 0;
 
   useEffect(() => {
     if (workflowDecision === null) return;
-    if (!workflowDecisionIsCurrent(workflowDecision, workflows.currentExecution)) {
+    if (
+      !workflows.mutationsAuthorized ||
+      !workflowDecisionIsCurrent(workflowDecision, workflows.currentExecution)
+    ) {
       setWorkflowDecision(null);
     }
-  }, [workflowDecision, workflows.currentExecution]);
+  }, [workflowDecision, workflows.currentExecution, workflows.mutationsAuthorized]);
 
   const workflowDecisionCount =
     (workflows.currentExecution?.approvals.length ?? 0) +
@@ -1419,7 +1407,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             duration: settings.reducedMotion ? 0 : 240,
           }),
       },
-      ...(canRunWorkflow
+      ...(canRunWorkflow && workflows.mutationsAuthorized
         ? [
             {
               id: 'run-workflow',
@@ -1431,7 +1419,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             },
           ]
         : []),
-      ...(selectedNode === null || selectedWorkflowScope === undefined
+      ...(selectedNode === null ||
+      selectedWorkflowScope === undefined ||
+      !workflows.mutationsAuthorized
         ? []
         : [
             {
@@ -1497,9 +1487,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           workflows.activeExecution?.status ?? workflows.currentExecution?.status ?? null
         }
         workflowBusy={workflowStartBusy}
-        canRunWorkflow={canRunWorkflow}
-        canRunSelected={selectedWorkflowEligibility.runnable}
-        runSelectedReason={selectedWorkflowEligibility.reason}
+        canRunWorkflow={canRunWorkflow && workflows.mutationsAuthorized}
+        canRunSelected={selectedWorkflowEligibility.runnable && workflows.mutationsAuthorized}
+        runSelectedReason={
+          workflows.mutationsAuthorized
+            ? selectedWorkflowEligibility.reason
+            : 'This collaboration role can inspect workflow history but cannot start execution.'
+        }
         commandPaletteShortcut={commandPaletteShortcutLabel(settings.keyboardPreset)}
         onCloseProject={() => void closeProject()}
         onUndo={undo}
@@ -1705,6 +1699,21 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             if (selectedNode) previews.updateSession(selectedNode.id, session);
           }}
           onTerminalSessionStatus={(nodeId, status) => updateNodeData(nodeId, { status })}
+          testNodeRuntime={{
+            executions: workflows.executions,
+            interactionEvents: workflows.interactionEvents,
+            busyAction: workflows.busyAction,
+            mutationsAuthorized: workflows.mutationsAuthorized,
+            onStart: (nodeId) =>
+              void workflows.start({ kind: 'node', nodeId, includeUpstream: false }),
+            onCancel: (input) => void workflows.cancelNode(input),
+            onRevealArtifact: async (input) => {
+              unwrap(await window.forgeboard.workflows.revealArtifact(input));
+            },
+            onOpenArtifact: async (input) => {
+              unwrap(await window.forgeboard.workflows.openArtifact(input));
+            },
+          }}
           diffReview={diffReview}
           onOpenDiffReview={(request) => {
             if (selectedNode?.data.kind !== 'diff') return;
@@ -1736,6 +1745,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           workflowInteractionEvents={workflows.interactionEvents}
           workflowLoading={workflows.loading}
           workflowBusyAction={workflows.busyAction}
+          workflowMutationsAuthorized={workflows.mutationsAuthorized}
           onPrepareCheck={(checkId) => void checks.prepare(checkId)}
           onCancelCheck={(executionId) => void checks.cancel(executionId)}
           onSelectWorkflow={workflows.selectExecution}

@@ -6,6 +6,7 @@ import {
   CheckListInputSchema,
   type CheckExecutionView,
 } from '../../shared/checks/contracts.js';
+import { WorkflowGetInputSchema } from '../../shared/workflow/contracts.js';
 import {
   StoredCheckExecutionRecordSchema,
   type InterruptedCheckRecoveryReport,
@@ -29,6 +30,7 @@ export interface CheckExecutionRow {
 }
 
 const MAX_LISTED_CHECK_EXECUTIONS = 200;
+const MAX_LISTED_WORKFLOW_CHECK_EXECUTIONS = 2_000;
 
 export function saveCheckExecution(
   database: DatabaseSync,
@@ -86,6 +88,35 @@ export function listCheckExecutions(
        LIMIT ?`,
     )
     .all(parsedInput.projectId, boundedLimit) as unknown as CheckExecutionRow[];
+  return rows.map(parseCheckExecutionRow);
+}
+
+export function listWorkflowCheckExecutions(
+  database: DatabaseSync,
+  projectId: string,
+  workflowExecutionId: string,
+  limit = MAX_LISTED_WORKFLOW_CHECK_EXECUTIONS,
+): StoredCheckExecutionRecord[] {
+  const parsedProject = CheckListInputSchema.parse({ projectId });
+  const parsedWorkflow = WorkflowGetInputSchema.parse({ executionId: workflowExecutionId });
+  const requestedLimit = Number.isFinite(limit)
+    ? Math.trunc(limit)
+    : MAX_LISTED_WORKFLOW_CHECK_EXECUTIONS;
+  const boundedLimit = Math.max(1, Math.min(MAX_LISTED_WORKFLOW_CHECK_EXECUTIONS, requestedLimit));
+  const rows = database
+    .prepare(
+      `SELECT ${CHECK_EXECUTION_COLUMNS}
+       FROM check_executions
+       WHERE project_id = ?
+         AND json_extract(value_json, '$.workflowBinding.executionId') = ?
+       ORDER BY updated_at DESC, id DESC
+       LIMIT ?`,
+    )
+    .all(
+      parsedProject.projectId,
+      parsedWorkflow.executionId,
+      boundedLimit,
+    ) as unknown as CheckExecutionRow[];
   return rows.map(parseCheckExecutionRow);
 }
 
@@ -177,6 +208,8 @@ function executionIdentity(execution: StoredCheckExecutionRecord): Record<string
     arguments: execution.arguments,
     cwd: execution.cwd,
     environmentVariableNames: execution.environmentVariableNames,
+    target: execution.target,
+    workflowBinding: execution.workflowBinding,
   };
 }
 

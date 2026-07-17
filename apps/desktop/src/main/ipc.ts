@@ -73,6 +73,7 @@ import { createWorkflowRuntimeComposition } from './workflow/host/composition.js
 import { WorkflowIpcService } from './workflow/host/ipc.js';
 import { ExactCheckExecutor } from './workflow/exact-check/executor.js';
 import { ExactCheckResolver } from './workflow/exact-check/resolution.js';
+import { WorkflowArtifactActionResolver } from './workflow/exact-check/runtime/artifact-actions.js';
 import { assertLiveMainFrame } from './security/ipc-authority.js';
 
 const PathSchema = z.string().min(1).max(32_768);
@@ -316,11 +317,19 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     repositories,
     getSettings: () => store.getSettings(createDefaultSettings()),
   });
+  const workflowArtifactResolver = new WorkflowArtifactActionResolver(
+    store,
+    new GitTargetResolver(store, repositories, () => store.getSettings(createDefaultSettings())),
+    join(app.getPath('userData'), 'verified-test-artifacts'),
+  );
   const workflows = new WorkflowIpcService(dialog, store, workflowRuntime.createHost, {
     resetRuntime: workflowRuntime.resetForPrivacy,
     disposeRuntime: workflowRuntime.dispose,
     withGitDelegateAuthorization: async (authorize, operation) =>
       await repositories.git.withDelegateAuthorization(authorize, operation),
+    authorizeMutation: (event) => collaboration.assertWorkflowMutationAuthorized(event.sender),
+    resolveArtifact: async (input, action) => await workflowArtifactResolver.resolve(input, action),
+    nativeShell: shell,
   });
   const deliveryTargets = new GitTargetResolver(store, repositories, () =>
     store.getSettings(createDefaultSettings()),

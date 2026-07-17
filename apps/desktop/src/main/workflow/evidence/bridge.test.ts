@@ -559,5 +559,7 @@ function checkEvidence(
       includedCodePoints: 3,
       truncated: false,
     },
+    summary: null,
+    artifacts: [],
   });
 }

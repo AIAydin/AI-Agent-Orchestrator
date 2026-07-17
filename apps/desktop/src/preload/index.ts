@@ -73,7 +73,9 @@ import {
   WORKFLOW_IPC_CHANNELS,
   WorkflowApproveHumanDecisionInputSchema,
   WorkflowApproveNodeInputSchema,
+  WorkflowArtifactActionInputSchema,
   WorkflowCancelInputSchema,
+  WorkflowCancelNodeInputSchema,
   WorkflowEventEnvelopeSchema,
   WorkflowExecutionViewSchema,
   WorkflowGetInputSchema,
@@ -372,6 +374,24 @@ const api: ForgeboardApi = {
         WORKFLOW_IPC_CHANNELS.cancel,
         WorkflowExecutionViewSchema.nullable(),
         WorkflowCancelInputSchema.parse(input),
+      ),
+    cancelNode: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.cancelNode,
+        WorkflowExecutionViewSchema.nullable(),
+        WorkflowCancelNodeInputSchema.parse(input),
+      ),
+    revealArtifact: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.revealArtifact,
+        z.null(),
+        WorkflowArtifactActionInputSchema.parse(input),
+      ),
+    openArtifact: (input) =>
+      invokeValidated(
+        WORKFLOW_IPC_CHANNELS.openArtifact,
+        z.null(),
+        WorkflowArtifactActionInputSchema.parse(input),
       ),
     sendInput: (input) =>
       invokeValidated(

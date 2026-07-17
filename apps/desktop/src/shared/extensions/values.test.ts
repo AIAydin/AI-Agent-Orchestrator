@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RunStatusSchema } from '@forgeboard/core/domain';
 
 import {
   CanvasDocumentSchema,
@@ -38,6 +39,28 @@ const definition: ExtensionCanvasNodeTypeView = {
 };
 
 describe('authoritative extension canvas value sanitation', () => {
+  it('accepts every exact workflow lifecycle status for extension nodes', () => {
+    for (const status of RunStatusSchema.options) {
+      const document = CanvasDocumentSchema.parse({
+        id: '00000000-0000-4000-8000-000000000001',
+        projectId: '00000000-0000-4000-8000-000000000002',
+        name: 'Workshop',
+        nodes: [
+          {
+            id: 'extension-node',
+            type: 'workshop',
+            position: { x: 0, y: 0 },
+            data: extensionData(status),
+          },
+        ],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        updatedAt: '2026-07-14T16:00:00.000Z',
+      });
+      expect(sanitizeCanvasExtensionData(document).nodes[0]?.data['status']).toBe(status);
+    }
+  });
+
   it('strips undeclared data and values while normalizing declared bounded fields', () => {
     const document = CanvasDocumentSchema.parse({
       id: '00000000-0000-4000-8000-000000000001',
@@ -116,3 +139,20 @@ describe('authoritative extension canvas value sanitation', () => {
     expect(() => sanitizeCanvasExtensionData(document)).toThrow();
   });
 });
+
+function extensionData(status: string): Record<string, unknown> {
+  return {
+    kind: 'extension',
+    title: 'Release',
+    description: '',
+    status,
+    locked: false,
+    collapsed: false,
+    color: '#4F46E5',
+    extensionId: 'example.release',
+    extensionVersion: '1.0.0',
+    extensionNodeTypeId: definition.id,
+    extensionDefinition: definition,
+    extensionValues: { state: 'draft' },
+  };
+}

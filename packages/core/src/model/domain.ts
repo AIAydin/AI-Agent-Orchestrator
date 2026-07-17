@@ -185,7 +185,7 @@ export const ProductBriefNodeSchema = createNodeSchema(
             })
             .strict(),
         )
-        .default([]),
+        .optional(),
       attachmentIds: z.array(EntityIdSchema).default([]),
       acceptanceCriteria: z.array(AcceptanceCriterionSchema).default([]),
       versions: z
@@ -199,7 +199,7 @@ export const ProductBriefNodeSchema = createNodeSchema(
             })
             .strict(),
         )
-        .default([]),
+        .optional(),
       variables: z.record(z.string().max(100_000)).default({}),
     })
     .strict(),
@@ -361,6 +361,19 @@ export const MobilePreviewNodeSchema = createNodeSchema(
     .strict(),
 );
 
+export const TestArtifactPathSchema = z
+  .string()
+  .min(1)
+  .max(1_024)
+  .refine(
+    (value) =>
+      !value.includes('\\') &&
+      !value.startsWith('/') &&
+      !value.includes('\0') &&
+      value.split('/').every((part) => part !== '' && part !== '.' && part !== '..'),
+    'Artifact paths must be normalized project-relative paths.',
+  );
+
 export const TestNodeSchema = createNodeSchema(
   'test',
   z
@@ -376,6 +389,18 @@ export const TestNodeSchema = createNodeSchema(
         .strict()
         .optional(),
       artifactIds: z.array(EntityIdSchema).default([]),
+      artifactPaths: z
+        .array(TestArtifactPathSchema)
+        .max(32)
+        .superRefine((paths, context) => {
+          if (new Set(paths).size !== paths.length) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Artifact paths must be unique.',
+            });
+          }
+        })
+        .optional(),
     })
     .strict(),
 );

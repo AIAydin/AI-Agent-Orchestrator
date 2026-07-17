@@ -126,6 +126,7 @@ function props(): React.ComponentProps<typeof WorkspaceActivityDrawer> {
     workflowInteractionEvents: [],
     workflowLoading: false,
     workflowBusyAction: null,
+    workflowMutationsAuthorized: true,
     onPrepareCheck: vi.fn(),
     onCancelCheck: vi.fn(),
     onSelectWorkflow: vi.fn(),

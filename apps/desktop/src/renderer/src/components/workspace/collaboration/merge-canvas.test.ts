@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { RunStatusSchema } from '@forgeboard/core/domain';
+
 import type { CanvasDocument } from '../../../../../shared/application/contracts.js';
 import {
   CollaborationMetadataSnapshotSchema,
@@ -13,6 +15,31 @@ const CANVAS_ID = '70000000-0000-4000-8000-000000000002';
 const PROJECT_ID = '70000000-0000-4000-8000-000000000001';
 
 describe('mergeCollaborationCanvasSnapshot', () => {
+  it('preserves every canonical workflow lifecycle status received from collaboration', () => {
+    for (const status of RunStatusSchema.options) {
+      const shared = snapshot();
+      const result = mergeCollaborationCanvasSnapshot(
+        document(),
+        CollaborationMetadataSnapshotSchema.parse({
+          ...shared,
+          nodes: {
+            ...shared.nodes,
+            'agent-1': { ...shared.nodes['agent-1'], status },
+          },
+        }),
+        { initial: false },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      expect(result.document.nodes.find((node) => node.id === 'agent-1')?.data['status']).toBe(
+        status,
+      );
+      expect(result.document.canonical?.nodes.find((node) => node.id === 'agent-1')?.status).toBe(
+        status,
+      );
+    }
+  });
+
   it('applies safe shared metadata while preserving machine-local typed data', () => {
     const result = mergeCollaborationCanvasSnapshot(document(), snapshot(), {
       initial: false,

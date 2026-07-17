@@ -21,7 +21,12 @@ import {
 } from '@forgeboard/core/domain';
 import { z } from 'zod';
 
-import { CheckIdSchema, CheckKindSchema } from '../../../shared/checks/contracts.js';
+import {
+  CheckArtifactReferenceSchema,
+  CheckIdSchema,
+  CheckKindSchema,
+  ParsedCheckSummarySchema,
+} from '../../../shared/checks/contracts.js';
 import type { WorkflowJsonValue } from '../../storage.js';
 import { ExactCheckTargetSchema } from '../exact-check/contracts.js';
 import {
@@ -92,6 +97,8 @@ export const ExactCheckCompletionEvidenceSchema = z
     endedAt: z.string().datetime().nullable(),
     target: ExactCheckTargetSchema,
     outputSummary: OutputSummarySchema,
+    summary: ParsedCheckSummarySchema.nullable(),
+    artifacts: z.array(CheckArtifactReferenceSchema).max(32),
   })
   .strict()
   .superRefine((evidence, context) => {
@@ -575,6 +582,18 @@ function assertExactCheckEvidence(
     )
   ) {
     throw new Error(`Exact-check evidence for ${node.id} targets another checkout.`);
+  }
+  if (
+    evidence.artifacts.some(
+      (artifact) =>
+        artifact.executionId !== runtime.run.id ||
+        artifact.nodeId !== node.id ||
+        artifact.attempt !== run.attempt ||
+        artifact.projectId !== runtime.canvas.projectId ||
+        !(node.data.artifactPaths ?? []).includes(artifact.relativePath),
+    )
+  ) {
+    throw new Error(`Exact-check artifacts do not match Test node ${node.id}.`);
   }
   if (
     evidence.label !== node.title ||

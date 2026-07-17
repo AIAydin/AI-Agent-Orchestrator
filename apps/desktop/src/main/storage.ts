@@ -73,6 +73,7 @@ import {
 import {
   getCheckExecution as getDatabaseCheckExecution,
   listCheckExecutions as listDatabaseCheckExecutions,
+  listWorkflowCheckExecutions as listDatabaseWorkflowCheckExecutions,
   recoverInterruptedCheckExecutions as recoverDatabaseInterruptedCheckExecutions,
   saveCheckExecution as saveDatabaseCheckExecution,
 } from './storage/checks.js';
@@ -798,6 +799,19 @@ export class LocalStore implements DeliveryReadinessStore {
 
   listCheckExecutions(projectId: string, limit = 200): StoredCheckExecutionRecord[] {
     return listDatabaseCheckExecutions(this.database, projectId, limit);
+  }
+
+  listWorkflowCheckExecutions(
+    projectId: string,
+    workflowExecutionId: string,
+    limit = 2_000,
+  ): StoredCheckExecutionRecord[] {
+    return listDatabaseWorkflowCheckExecutions(
+      this.database,
+      projectId,
+      workflowExecutionId,
+      limit,
+    );
   }
 
   stageTrustedExtension(record: TrustedExtensionLedgerRecord): TrustedExtensionLedgerRecord {

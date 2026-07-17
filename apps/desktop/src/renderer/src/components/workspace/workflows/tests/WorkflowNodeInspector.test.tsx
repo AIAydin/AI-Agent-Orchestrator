@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AppSettingsSchema } from '../../../../../../shared/application/contracts.js';
 import type { WorkshopNode } from '../../canvas/CanvasNode.js';
 import { WorkflowNodeInspector } from '../WorkflowNodeInspector.js';
+import { TestNodeConfiguration } from '../test-node/TestNodeConfiguration.js';
 import { initialWorkflowNodeData, normalizeCheckProducerData } from '../workflow-node-config.js';
 
 const CUSTOM_CHECK_ID = '8aeb7544-4728-4e44-8f48-89d7f15409bb';
@@ -133,10 +134,10 @@ describe('WorkflowNodeInspector', () => {
       runIds: ['test-1'],
     });
     render(
-      <WorkflowNodeInspector
+      <TestNodeConfiguration
         node={selected}
-        nodes={[selected]}
         settings={settings}
+        configurationReadOnly={false}
         onRecord={onRecord}
         onUpdate={onUpdate}
         onError={vi.fn()}

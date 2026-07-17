@@ -29,6 +29,9 @@ import {
   type ExactCheckRequest,
 } from './contracts.js';
 import { ExactCheckOutputBuffer } from './output.js';
+import { verifyConfiguredArtifacts } from './runtime/artifacts.js';
+import { ExactCheckInteractionRelay } from './runtime/interaction.js';
+import { parseCommonTestSummary } from './runtime/result-summary.js';
 import {
   ExactCheckResolver,
   exactCheckTargetKey,
@@ -85,6 +88,8 @@ interface ActiveExactCheck {
   readonly executionKey: string;
   readonly target: ExactCheckRequest['target'];
   readonly output: ExactCheckOutputBuffer;
+  readonly interactions: ExactCheckInteractionRelay;
+  readonly resolved: ResolvedExactCheck;
   readonly completion: Promise<CheckExecutionView>;
   readonly resolveCompletion: (execution: CheckExecutionView) => void;
   readonly rejectCompletion: (error: unknown) => void;
@@ -161,6 +166,10 @@ export class ExactCheckExecutor {
         planId: randomUUID(),
         ownerId,
         target: request.target,
+        ...(request.workflowBinding === undefined
+          ? {}
+          : { workflowBinding: request.workflowBinding }),
+        artifactPaths: request.artifactPaths ?? [],
         checkId: request.checkId,
         label: request.label,
         kind: request.kind,
@@ -221,22 +230,31 @@ export class ExactCheckExecutor {
         arguments: current.arguments,
         cwd: current.cwd,
         environmentVariableNames: current.environment.names,
+        target: current.request.target,
+        ...(current.request.workflowBinding === undefined
+          ? {}
+          : { workflowBinding: current.request.workflowBinding }),
         status: 'queued',
         exitCode: null,
         startedAt: null,
         endedAt: null,
         output: '',
         outputTruncated: false,
+        summary: null,
+        artifacts: [],
         updatedAt: timestamp,
       });
       active = createActive(
         ownerId,
         executionKey,
         current.request.target,
+        current,
         queued,
         this.#maxOutputBytes,
+        this.#now,
       );
       this.#active.set(queued.id, active);
+      active.interactions.lifecycle('Exact check queued.');
       try {
         this.#persist(active);
       } catch (error) {
@@ -263,7 +281,10 @@ export class ExactCheckExecutor {
         current.cwd,
         current.environment.values,
         (stream, data) => {
-          if (!active.finalizing) active.output.write(stream, data);
+          if (!active.finalizing) {
+            active.output.write(stream, data);
+            active.interactions.write(stream, data);
+          }
         },
         this.#gracefulStopMs,
         this.#forceStopMs,
@@ -289,6 +310,7 @@ export class ExactCheckExecutor {
           updatedAt: startedAt,
         });
         this.#persist(active);
+        active.interactions.lifecycle('Exact check process started.');
         this.store.appendAudit('workflow-check', 'launch', 'allowed', {
           executionId: active.view.id,
           ownerId,
@@ -387,6 +409,7 @@ export class ExactCheckExecutor {
   async #cancelActive(active: ActiveExactCheck): Promise<CheckExecutionView> {
     if (active.finalizing) return await active.completion;
     active.finalStatusOverride = 'cancelled';
+    active.interactions.lifecycle('Exact check cancellation requested.');
     this.#safeAudit('cancel', 'allowed', active, {});
     try {
       await active.handle?.terminate();
@@ -422,21 +445,49 @@ export class ExactCheckExecutor {
     active.finalizing = true;
     active.output.finish();
     const timestamp = nextTimestamp(active.view.updatedAt, this.#now());
-    active.view = CheckExecutionViewSchema.parse({
-      ...active.view,
-      ...active.output.snapshot(),
-      status,
-      exitCode,
-      endedAt: timestamp,
-      updatedAt: timestamp,
-    });
+    const output = active.output.snapshot();
+    let finalStatus = status;
+    let finalExitCode = exitCode;
+    try {
+      const artifacts = await verifyConfiguredArtifacts(
+        active.resolved.targetBinding.repositoryRoot,
+        active.resolved.request,
+      );
+      active.view = CheckExecutionViewSchema.parse({
+        ...active.view,
+        ...output,
+        summary: parseCommonTestSummary(output.output),
+        artifacts,
+        status: finalStatus,
+        exitCode: finalExitCode,
+        endedAt: timestamp,
+        updatedAt: timestamp,
+      });
+    } catch (enrichmentError) {
+      finalStatus = 'lost';
+      finalExitCode = null;
+      active.view = CheckExecutionViewSchema.parse({
+        ...active.view,
+        ...output,
+        summary: null,
+        artifacts: [],
+        status: finalStatus,
+        exitCode: finalExitCode,
+        endedAt: timestamp,
+        updatedAt: timestamp,
+      });
+      this.#safeAudit('complete-enrichment', 'failed', active, {
+        attemptedStatus: status,
+        error: errorMessage(enrichmentError),
+      });
+    }
     let completion: CheckExecutionView | undefined;
     try {
       this.#persist(active);
       this.store.appendAudit(
         'workflow-check',
         'complete',
-        status === 'failed' || status === 'lost' ? 'failed' : 'allowed',
+        finalStatus === 'failed' || finalStatus === 'lost' ? 'failed' : 'allowed',
         {
           executionId: active.view.id,
           ownerId: active.ownerId,
@@ -444,8 +495,8 @@ export class ExactCheckExecutor {
           projectId: active.view.projectId,
           checkId: active.view.checkId,
           kind: active.view.kind,
-          status,
-          exitCode,
+          status: finalStatus,
+          exitCode: finalExitCode,
           outputTruncated: active.view.outputTruncated,
         },
       );
@@ -462,7 +513,7 @@ export class ExactCheckExecutor {
       try {
         this.#persist(active);
         this.#safeAudit('complete-persistence', 'failed', active, {
-          attemptedStatus: status,
+          attemptedStatus: finalStatus,
           error: errorMessage(terminalPersistenceError),
         });
         completion = copyCheckExecution(active.view);
@@ -478,6 +529,7 @@ export class ExactCheckExecutor {
       this.#active.delete(active.view.id);
     }
     active.resolveCompletion(completion);
+    active.interactions.finish(`Exact check ${active.view.status}.`);
     return completion;
   }
 
@@ -496,6 +548,7 @@ export class ExactCheckExecutor {
       process: active.process === null ? null : { ...active.process },
       completion: active.completion.then(copyCheckExecution),
       cancel: async () => await this.#cancelActive(active),
+      subscribeInteraction: (listener) => active.interactions.subscribe(listener),
     };
   }
 
@@ -633,8 +686,10 @@ function createActive(
   ownerId: string,
   executionKey: string,
   target: ExactCheckRequest['target'],
+  resolved: ResolvedExactCheck,
   view: CheckExecutionView,
   maximumOutputBytes: number,
+  now: () => Date,
 ): ActiveExactCheck {
   let resolveCompletion: (execution: CheckExecutionView) => void = () => undefined;
   let rejectCompletion: (error: unknown) => void = () => undefined;
@@ -651,7 +706,9 @@ function createActive(
     ownerId,
     executionKey,
     target,
+    resolved,
     output: new ExactCheckOutputBuffer(maximumOutputBytes),
+    interactions: new ExactCheckInteractionRelay(now),
     completion,
     resolveCompletion,
     rejectCompletion,

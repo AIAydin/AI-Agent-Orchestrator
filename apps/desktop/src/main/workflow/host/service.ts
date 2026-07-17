@@ -35,6 +35,8 @@ import type {
 import {
   WorkflowNodeInputSchema,
   WorkflowNodeInterruptSchema,
+  WorkflowCancelNodeInputSchema,
+  type WorkflowCancelNodeInput,
   type WorkflowNodeInput,
   type WorkflowNodeInterrupt,
 } from '../../../shared/workflow/contracts.js';
@@ -306,6 +308,29 @@ export class WorkflowHost {
       }
       this.#auditInteraction(input, 'node-interrupt', 'allowed', 'accepted');
       return true;
+    });
+  }
+
+  public async cancelNode(
+    untrustedInput: WorkflowCancelNodeInput,
+    assertAuthorized: () => void = () => undefined,
+  ): Promise<WorkflowHostState> {
+    this.#assertAvailable();
+    const input = WorkflowCancelNodeInputSchema.parse(untrustedInput);
+    return await this.#serialize(input.executionId, async () => {
+      assertAuthorized();
+      const active = this.#requireLiveNodeHandle(input, 'cancel');
+      this.#auditInteraction(input, 'node-cancel', 'allowed', 'accepted');
+      await active.handle.cancel();
+      const completion = await active.handle.completion;
+      await this.#completeLocked(
+        input.executionId,
+        input.nodeId,
+        input.attempt,
+        active.handle,
+        completion,
+      );
+      return await this.#pumpLocked(input.executionId);
     });
   }
 
@@ -1247,7 +1272,10 @@ export class WorkflowHost {
     this.#revisionWakes.delete(executionId);
   }
 
-  #requireLiveNodeHandle(input: WorkflowNodeInterrupt, action: 'input' | 'interrupt'): ActiveEntry {
+  #requireLiveNodeHandle(
+    input: WorkflowNodeInterrupt,
+    action: 'input' | 'interrupt' | 'cancel',
+  ): ActiveEntry {
     const record = this.#requireExecution(input.executionId);
     const runtime = runtimeFromRecord(record);
     const run = runtime.run.nodeRuns[input.nodeId];
@@ -1574,8 +1602,8 @@ export class WorkflowHost {
   }
 
   #auditInteraction(
-    input: WorkflowNodeInterrupt | WorkflowNodeInput,
-    action: 'node-input' | 'node-interrupt',
+    input: WorkflowNodeInterrupt | WorkflowNodeInput | WorkflowCancelNodeInput,
+    action: 'node-input' | 'node-interrupt' | 'node-cancel',
     outcome: 'allowed' | 'failed',
     reason: string,
   ): void {

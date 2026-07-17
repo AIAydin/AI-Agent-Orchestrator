@@ -1,16 +1,18 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 import type { ProcessReference } from '@forgeboard/core';
-import { CommandSpecSchema } from '@forgeboard/core/domain';
+import { CommandSpecSchema, TestArtifactPathSchema } from '@forgeboard/core/domain';
 import { z } from 'zod';
 
 import {
   CheckIdSchema,
   CheckKindSchema,
+  WorkflowCheckBindingSchema,
   type CheckExecutionView,
   type CheckId,
   type CheckKind,
 } from '../../../shared/checks/contracts.js';
+import type { WorkflowNodeInteractionEvent } from '../host/contracts.js';
 
 export const ExactCheckOwnerIdSchema = z
   .string()
@@ -42,6 +44,8 @@ export const ExactCheckRequestSchema = z
     label: z.string().trim().min(1).max(128),
     command: CommandSpecSchema,
     target: ExactCheckTargetSchema,
+    workflowBinding: WorkflowCheckBindingSchema.optional(),
+    artifactPaths: z.array(TestArtifactPathSchema).max(32).optional(),
   })
   .strict()
   .superRefine((request, context) => {
@@ -78,6 +82,8 @@ export const ExactCheckDisclosureSchema = z
     planId: z.string().uuid(),
     ownerId: ExactCheckOwnerIdSchema,
     target: ExactCheckTargetSchema,
+    workflowBinding: WorkflowCheckBindingSchema.optional(),
+    artifactPaths: z.array(TestArtifactPathSchema).max(32).optional(),
     checkId: CheckIdSchema,
     label: z.string().trim().min(1).max(128),
     kind: CheckKindSchema,
@@ -119,6 +125,7 @@ export interface ExactCheckExecutionHandle {
   readonly process: ProcessReference | null;
   readonly completion: Promise<CheckExecutionView>;
   cancel(): Promise<CheckExecutionView>;
+  subscribeInteraction?(listener: (event: WorkflowNodeInteractionEvent) => void): () => void;
 }
 
 export interface ExactCheckDisclosureFields {
@@ -126,6 +133,8 @@ export interface ExactCheckDisclosureFields {
   readonly planId: string;
   readonly ownerId: string;
   readonly target: ExactCheckTarget;
+  readonly workflowBinding?: z.infer<typeof WorkflowCheckBindingSchema>;
+  readonly artifactPaths?: readonly string[];
   readonly checkId: CheckId;
   readonly label: string;
   readonly kind: CheckKind;
@@ -140,7 +149,11 @@ export function createExactCheckDisclosure(
   fields: ExactCheckDisclosureFields,
 ): ExactCheckDisclosure {
   const fingerprint = createHash('sha256').update(stableDisclosure(fields)).digest('hex');
-  return ExactCheckDisclosureSchema.parse({ ...fields, fingerprint });
+  return ExactCheckDisclosureSchema.parse({
+    ...fields,
+    artifactPaths: fields.artifactPaths ?? [],
+    fingerprint,
+  });
 }
 
 export function fingerprintsMatch(actual: string, expected: string): boolean {
@@ -156,6 +169,12 @@ export function copyExactCheckDisclosure(disclosure: ExactCheckDisclosure): Exac
   return {
     ...disclosure,
     target: { ...disclosure.target },
+    ...(disclosure.workflowBinding === undefined
+      ? {}
+      : { workflowBinding: { ...disclosure.workflowBinding } }),
+    ...(disclosure.artifactPaths === undefined
+      ? {}
+      : { artifactPaths: [...disclosure.artifactPaths] }),
     arguments: [...disclosure.arguments],
     environmentVariableNames: [...disclosure.environmentVariableNames],
   };
@@ -166,6 +185,13 @@ export function copyCheckExecution(execution: CheckExecutionView): CheckExecutio
     ...execution,
     arguments: [...execution.arguments],
     environmentVariableNames: [...execution.environmentVariableNames],
+    ...(execution.target === undefined ? {} : { target: { ...execution.target } }),
+    ...(execution.workflowBinding === undefined
+      ? {}
+      : { workflowBinding: { ...execution.workflowBinding } }),
+    ...(execution.artifacts === undefined
+      ? {}
+      : { artifacts: execution.artifacts.map((artifact) => ({ ...artifact })) }),
   };
 }
 
@@ -175,6 +201,8 @@ function stableDisclosure(fields: ExactCheckDisclosureFields): string {
     planId: fields.planId,
     ownerId: fields.ownerId,
     target: fields.target,
+    workflowBinding: fields.workflowBinding,
+    artifactPaths: fields.artifactPaths ?? [],
     checkId: fields.checkId,
     label: fields.label,
     kind: fields.kind,

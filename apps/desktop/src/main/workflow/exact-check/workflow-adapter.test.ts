@@ -62,6 +62,12 @@ describe('ExactCheckWorkflowAdapter', () => {
           environmentNames: ['CI'],
         },
         target: { kind: 'primary-project', projectId: PROJECT_ID },
+        workflowBinding: {
+          executionId: context.executionId,
+          nodeId: context.node.id,
+          attempt: context.attempt,
+        },
+        artifactPaths: [],
       },
     });
     expect(prepared).toMatchObject({

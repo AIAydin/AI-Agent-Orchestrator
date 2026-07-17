@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   WorkflowApprovalRequest,
+  WorkflowCancelNodeInput,
   WorkflowExecutionView,
   WorkflowHumanDecisionRequest,
   WorkflowRevisionEscapeRequest,
@@ -20,7 +21,11 @@ interface UseWorkflowRunsOptions {
   flushCanvas: () => Promise<boolean>;
   setEvents: React.Dispatch<React.SetStateAction<string[]>>;
   onError: (message: string) => void;
+  mutationsAuthorized: boolean;
 }
+
+export const WORKFLOW_ROLE_READ_ONLY_MESSAGE =
+  'This collaboration role can inspect workflow history but cannot mutate workflow execution.';
 
 export function useWorkflowRuns({
   projectId,
@@ -28,6 +33,7 @@ export function useWorkflowRuns({
   flushCanvas,
   setEvents,
   onError,
+  mutationsAuthorized,
 }: UseWorkflowRunsOptions) {
   const [executions, setExecutions] = useState<WorkflowExecutionView[]>([]);
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
@@ -37,13 +43,34 @@ export function useWorkflowRuns({
     [],
   );
   const executionIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const pendingInteractionEventsRef = useRef<WorkflowInteractionEventEnvelope[]>([]);
   const identityRef = useRef(workspaceIdentity(projectId, canvasId));
   identityRef.current = workspaceIdentity(projectId, canvasId);
-  executionIdsRef.current = new Set(executions.map(({ id }) => id));
 
-  const recordExecution = useCallback((execution: WorkflowExecutionView) => {
-    setExecutions((current) => sortExecutions(upsertExecution(current, execution)));
+  const admitExecutionIds = useCallback((executionIds: readonly string[]) => {
+    if (executionIds.length === 0) return;
+    const known = new Set(executionIdsRef.current);
+    for (const executionId of executionIds) known.add(executionId);
+    executionIdsRef.current = known;
+    const admitted = pendingInteractionEventsRef.current.filter((event) =>
+      known.has(event.executionId),
+    );
+    if (admitted.length === 0) return;
+    pendingInteractionEventsRef.current = pendingInteractionEventsRef.current.filter(
+      (event) => !known.has(event.executionId),
+    );
+    setInteractionEvents((current) =>
+      admitted.reduce((buffer, event) => appendWorkflowInteraction(buffer, event), current),
+    );
   }, []);
+
+  const recordExecution = useCallback(
+    (execution: WorkflowExecutionView) => {
+      admitExecutionIds([execution.id]);
+      setExecutions((current) => sortExecutions(upsertExecution(current, execution)));
+    },
+    [admitExecutionIds],
+  );
 
   const refresh = useCallback(async () => {
     if (canvasId === null) return;
@@ -51,10 +78,15 @@ export function useWorkflowRuns({
     setLoading(true);
     try {
       const listed = unwrap(
-        await window.forgeboard.workflows.list({ projectId, canvasId, limit: 50 }),
+        await window.forgeboard.workflows.list({
+          projectId,
+          canvasId,
+          limit: 50,
+        }),
       );
       if (identityRef.current !== identity) return;
       const sorted = sortExecutions(listed);
+      admitExecutionIds(sorted.map(({ id }) => id));
       setExecutions((current) =>
         sortExecutions(
           sorted.reduce((merged, execution) => upsertExecution(merged, execution), [...current]),
@@ -74,13 +106,15 @@ export function useWorkflowRuns({
     } finally {
       if (identityRef.current === identity) setLoading(false);
     }
-  }, [canvasId, onError, projectId]);
+  }, [admitExecutionIds, canvasId, onError, projectId]);
 
   useEffect(() => {
     setExecutions([]);
     setSelectedExecutionId(null);
     setBusyAction(null);
     setInteractionEvents([]);
+    executionIdsRef.current = new Set();
+    pendingInteractionEventsRef.current = [];
     void refresh();
   }, [refresh]);
 
@@ -104,14 +138,24 @@ export function useWorkflowRuns({
   useEffect(
     () =>
       window.forgeboard.workflows.onInteractionEvent((event) => {
-        if (!executionIdsRef.current.has(event.executionId)) return;
-        setInteractionEvents((current) => appendWorkflowInteraction(current, event));
+        if (executionIdsRef.current.has(event.executionId)) {
+          setInteractionEvents((current) => appendWorkflowInteraction(current, event));
+          return;
+        }
+        pendingInteractionEventsRef.current = appendWorkflowInteraction(
+          pendingInteractionEventsRef.current,
+          event,
+        );
       }),
     [],
   );
 
   const start = useCallback(
     async (scope: WorkflowStartInput['scope']) => {
+      if (!mutationsAuthorized) {
+        onError(WORKFLOW_ROLE_READ_ONLY_MESSAGE);
+        return;
+      }
       if (canvasId === null) {
         onError('Wait for the canvas to finish loading before starting a workflow.');
         return;
@@ -123,7 +167,11 @@ export function useWorkflowRuns({
           return;
         }
         const execution = unwrap(
-          await window.forgeboard.workflows.start({ projectId, canvasId, scope }),
+          await window.forgeboard.workflows.start({
+            projectId,
+            canvasId,
+            scope,
+          }),
         );
         recordExecution(execution);
         setSelectedExecutionId(execution.id);
@@ -134,7 +182,7 @@ export function useWorkflowRuns({
         setBusyAction(null);
       }
     },
-    [canvasId, flushCanvas, onError, projectId, recordExecution, setEvents],
+    [canvasId, flushCanvas, mutationsAuthorized, onError, projectId, recordExecution, setEvents],
   );
 
   const runMutation = useCallback(
@@ -144,6 +192,10 @@ export function useWorkflowRuns({
       cancelledMessage: string,
       fallbackError: string,
     ): Promise<void> => {
+      if (!mutationsAuthorized) {
+        onError(WORKFLOW_ROLE_READ_ONLY_MESSAGE);
+        return;
+      }
       setBusyAction(action);
       try {
         const execution = unwrap(await invoke());
@@ -158,7 +210,7 @@ export function useWorkflowRuns({
         setBusyAction(null);
       }
     },
-    [onError, recordExecution, setEvents],
+    [mutationsAuthorized, onError, recordExecution, setEvents],
   );
 
   const approveNode = useCallback(
@@ -267,8 +319,24 @@ export function useWorkflowRuns({
     [runMutation],
   );
 
+  const cancelNode = useCallback(
+    async (input: Omit<WorkflowCancelNodeInput, 'confirmed'>) => {
+      await runMutation(
+        `cancel-node:${input.nodeId}`,
+        () => window.forgeboard.workflows.cancelNode({ ...input, confirmed: true }),
+        'Test cancellation was dismissed.',
+        'Could not cancel the Test node.',
+      );
+    },
+    [runMutation],
+  );
+
   const sendInput = useCallback(
     async (input: WorkflowNodeInput): Promise<boolean> => {
+      if (!mutationsAuthorized) {
+        onError(WORKFLOW_ROLE_READ_ONLY_MESSAGE);
+        return false;
+      }
       setBusyAction(`input:${input.nodeId}`);
       try {
         const accepted = unwrap(await window.forgeboard.workflows.sendInput(input));
@@ -288,11 +356,15 @@ export function useWorkflowRuns({
         setBusyAction(null);
       }
     },
-    [onError, setEvents],
+    [mutationsAuthorized, onError, setEvents],
   );
 
   const interrupt = useCallback(
     async (input: WorkflowNodeInterrupt): Promise<boolean> => {
+      if (!mutationsAuthorized) {
+        onError(WORKFLOW_ROLE_READ_ONLY_MESSAGE);
+        return false;
+      }
       setBusyAction(`interrupt:${input.nodeId}`);
       try {
         const accepted = unwrap(await window.forgeboard.workflows.interrupt(input));
@@ -312,7 +384,7 @@ export function useWorkflowRuns({
         setBusyAction(null);
       }
     },
-    [onError, setEvents],
+    [mutationsAuthorized, onError, setEvents],
   );
 
   const currentExecution = useMemo(
@@ -332,6 +404,7 @@ export function useWorkflowRuns({
     selectedExecutionId,
     loading,
     busyAction,
+    mutationsAuthorized,
     interactionEvents,
     selectExecution: setSelectedExecutionId,
     refresh,
@@ -341,6 +414,7 @@ export function useWorkflowRuns({
     decideReview,
     resolveRevisionEscape,
     cancel,
+    cancelNode,
     sendInput,
     interrupt,
   };

@@ -1,17 +1,9 @@
-import { CheckCircle2, ListChecks, ShieldCheck, TestTube2 } from 'lucide-react';
+import { CheckCircle2, ListChecks, ShieldCheck } from 'lucide-react';
 
 import type { AppSettings } from '../../../../../shared/application/contracts.js';
-import { unwrap } from '../../../lib/ipc.js';
-import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../../lib/literal-arguments.js';
-import type { WorkshopCommandConfiguration, WorkshopNode } from '../canvas/CanvasNode.js';
+import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { ConfiguredPermissionSummary } from '../../permissions/ConfiguredPermissionSummary.js';
-import {
-  checkProducerId,
-  commandPresets,
-  normalizedCommand,
-  parseLineList,
-  producerIdForCheckKind,
-} from './workflow-node-config.js';
+import { checkProducerId } from './workflow-node-config.js';
 
 interface WorkflowNodeInspectorProps {
   readonly node: WorkshopNode;
@@ -24,7 +16,6 @@ interface WorkflowNodeInspectorProps {
 
 export function WorkflowNodeInspector(props: WorkflowNodeInspectorProps) {
   if (props.node.data.kind === 'task') return <TaskNodeInspector {...props} />;
-  if (props.node.data.kind === 'test') return <TestNodeInspector {...props} />;
   if (props.node.data.kind === 'review-gate') return <ReviewGateInspector {...props} />;
   return null;
 }
@@ -170,164 +161,6 @@ function TaskNodeInspector({
         Related paths are prompt metadata only. Add explicit Context connections when the assigned
         agent should receive file contents; every launch still requires exact disclosure approval.
       </p>
-    </section>
-  );
-}
-
-function TestNodeInspector({
-  node,
-  settings,
-  onRecord,
-  onUpdate,
-  onError,
-}: WorkflowNodeInspectorProps) {
-  const command = normalizedCommand(node);
-  const presets = commandPresets(settings);
-  const updateCommand = (next: WorkshopCommandConfiguration): void => onUpdate({ command: next });
-
-  async function browseExecutable(): Promise<void> {
-    try {
-      const selected = unwrap(await window.forgeboard.projects.pickExecutable());
-      if (selected === null) return;
-      onRecord();
-      updateCommand({ ...command, executable: selected });
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'The executable could not be selected.');
-    }
-  }
-
-  return (
-    <section className="workflow-node-config" aria-label="Test node configuration">
-      <header>
-        <div>
-          <TestTube2 size={14} />
-          <h3>Deterministic check</h3>
-        </div>
-        <span>Exact arguments</span>
-      </header>
-      <label>
-        Saved command
-        <select
-          name={`node-${node.id}-command-preset`}
-          value=""
-          onChange={(event) => {
-            const selected = presets.find((preset) => preset.id === event.target.value);
-            if (selected === undefined) return;
-            onRecord();
-            onUpdate({
-              command: selected.command,
-              checkKind: selected.kind,
-              runIds: [selected.id],
-            });
-          }}
-        >
-          <option value="">Choose a configured command…</option>
-          {presets.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Check kind
-        <select
-          name={`node-${node.id}-check-kind`}
-          value={node.data.checkKind ?? 'test'}
-          onFocus={onRecord}
-          onChange={(event) => {
-            const checkKind = event.target.value as NonNullable<WorkshopNode['data']['checkKind']>;
-            onUpdate({
-              checkKind,
-              runIds: [producerIdForCheckKind(checkKind, node.data.runIds?.[0])],
-            });
-          }}
-        >
-          <option value="lint">Lint</option>
-          <option value="typecheck">Typecheck</option>
-          <option value="test">Test</option>
-          <option value="build">Build</option>
-          <option value="custom">Custom</option>
-        </select>
-      </label>
-      <fieldset className="workflow-command-editor">
-        <legend>Command</legend>
-        <div className="workflow-command-field">
-          <label htmlFor={`node-${node.id}-command-executable`}>Executable</label>
-          <span className="workflow-command-path">
-            <input
-              id={`node-${node.id}-command-executable`}
-              name={`node-${node.id}-command-executable`}
-              value={command.executable}
-              placeholder="pnpm"
-              onFocus={onRecord}
-              onChange={(event) => updateCommand({ ...command, executable: event.target.value })}
-            />
-            <button type="button" onClick={() => void browseExecutable()}>
-              Browse
-            </button>
-          </span>
-        </div>
-        <label>
-          Arguments <small>{LITERAL_ARGUMENT_HELP}</small>
-          <textarea
-            name={`node-${node.id}-command-arguments`}
-            rows={3}
-            value={command.arguments.join('\n')}
-            placeholder={'run\ntest'}
-            onFocus={onRecord}
-            onChange={(event) =>
-              updateCommand({ ...command, arguments: parseLiteralArguments(event.target.value) })
-            }
-          />
-        </label>
-        <label>
-          Working directory · relative to assigned checkout
-          <input
-            name={`node-${node.id}-command-cwd`}
-            value={command.cwdRelative ?? ''}
-            placeholder="packages/app"
-            onFocus={onRecord}
-            onChange={(event) => {
-              const withoutCwd: WorkshopCommandConfiguration = {
-                executable: command.executable,
-                arguments: command.arguments,
-                ...(command.environmentNames === undefined
-                  ? {}
-                  : { environmentNames: command.environmentNames }),
-              };
-              updateCommand(
-                event.target.value.trim() === ''
-                  ? withoutCwd
-                  : { ...withoutCwd, cwdRelative: event.target.value },
-              );
-            }}
-          />
-        </label>
-        <label>
-          Allowed environment names · one per line
-          <textarea
-            name={`node-${node.id}-command-environment`}
-            rows={2}
-            value={(command.environmentNames ?? []).join('\n')}
-            placeholder={'CI\nNODE_ENV'}
-            onFocus={onRecord}
-            onChange={(event) =>
-              updateCommand({
-                ...command,
-                environmentNames: parseLineList(event.target.value),
-              })
-            }
-          />
-        </label>
-      </fieldset>
-      <p>
-        The workflow host revalidates this executable, each literal argument, the resolved checkout,
-        and environment names before launch. No shell command string is evaluated.
-      </p>
-      <small>
-        Producer ID: <code>{checkProducerId(node)}</code>
-      </small>
     </section>
   );
 }

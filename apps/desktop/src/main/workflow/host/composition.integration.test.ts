@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { CanvasNodeSchema, CanvasSchema } from '@forgeboard/core';
+import { CanvasNodeSchema, CanvasSchema, getWorkflowHumanApprovalRequest } from '@forgeboard/core';
 import { RepositoryService } from '@forgeboard/git-engine';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -19,6 +20,8 @@ import type {
 } from '../../agent-execution/contracts.js';
 import { LocalStore } from '../../storage.js';
 import { createWorkflowRuntimeComposition } from './composition.js';
+import type { WorkflowHostState } from './service.js';
+import { workflowHostStateToView } from './view.js';
 
 const PROJECT_ID = '75000000-0000-4000-8000-000000000001';
 const CANVAS_ID = '75000000-0000-4000-8000-000000000002';
@@ -89,6 +92,218 @@ describe('workflow runtime composition', () => {
     expect(store.listCheckExecutions(PROJECT_ID)).toMatchObject([
       { checkId: 'test', status: 'passed', exitCode: 0 },
     ]);
+  });
+
+  it('streams and projects two real Test attempts with summaries and only verified artifacts after restart', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'forgeboard-workflow-test-history-'));
+    const databasePath = join(root, 'forgeboard.sqlite3');
+    const report = '{"suite":"workflow"}\n';
+    await mkdir(join(root, 'reports'));
+    await writeFile(join(root, 'reports', 'results.json'), report, 'utf8');
+    await writeFile(join(root, '.env'), 'FORGEBOARD_SECRET=not-an-artifact\n', 'utf8');
+    await writeFile(join(root, 'outside.json'), '{"outside":true}\n', 'utf8');
+    if (process.platform !== 'win32') {
+      await symlink(join(root, 'outside.json'), join(root, 'reports', 'linked.json'));
+    }
+
+    let store = new LocalStore(databasePath);
+    store.saveProject(project(root));
+    const canvas = revisionTestCanvas();
+    const surface = legacySurfaceFromCanonical(canvas);
+    store.saveCanvas({
+      ...surface,
+      nodes: [...surface.nodes],
+      edges: [...surface.edges],
+      canonical: canvas,
+    });
+    let composition = createWorkflowRuntimeComposition({
+      store,
+      runs: { executionOperations: () => unusedAgentOperations() },
+      repositories: new RepositoryService(),
+      getSettings: () => settings(join(root, 'worktrees')),
+    });
+    const interactions: Array<{
+      readonly attempt: number;
+      readonly kind: string;
+      readonly channel?: string;
+      readonly text: string;
+    }> = [];
+    let host = composition.createHost(
+      () => undefined,
+      (event) => interactions.push(event),
+    );
+    try {
+      const started = await host.start({
+        projectId: PROJECT_ID,
+        canvas,
+        scope: { kind: 'workflow' },
+      });
+      await approveOnlyTestNode(host, started, 1);
+      const reviewedFirst = await waitForNodeStatus(
+        host,
+        started.execution.id,
+        TEST_NODE_ID,
+        'succeeded',
+      );
+      const firstReview = getWorkflowHumanApprovalRequest(
+        reviewedFirst.runtime,
+        'test-human-review',
+      );
+      const revised = await host.recordHumanReview({
+        executionId: started.execution.id,
+        targetId: firstReview.targetId,
+        targetAttempt: firstReview.targetAttempt,
+        evidenceFingerprint: firstReview.evidenceFingerprint,
+        decision: 'changes-requested',
+        feedback: 'Run the exact check one more time.',
+        decidedBy: 'integration-test',
+      });
+      expect(revised.runtime.run.nodeRuns[TEST_NODE_ID]).toMatchObject({
+        attempt: 2,
+        status: 'queued',
+      });
+      await approveOnlyTestNode(host, revised, 2);
+      const reviewedSecond = await waitForNodeStatus(
+        host,
+        started.execution.id,
+        TEST_NODE_ID,
+        'succeeded',
+      );
+      const secondReview = getWorkflowHumanApprovalRequest(
+        reviewedSecond.runtime,
+        'test-human-review',
+      );
+      const completed = await host.recordHumanReview({
+        executionId: started.execution.id,
+        targetId: secondReview.targetId,
+        targetAttempt: secondReview.targetAttempt,
+        evidenceFingerprint: secondReview.evidenceFingerprint,
+        decision: 'approved',
+        decidedBy: 'integration-test',
+      });
+      expect(completed.runtime.run.status).toBe('succeeded');
+
+      const beforeRestart = store
+        .listCheckExecutions(PROJECT_ID)
+        .filter((execution) => execution.workflowBinding?.executionId === started.execution.id);
+      expect(beforeRestart).toHaveLength(2);
+      expect(beforeRestart.map((execution) => execution.workflowBinding?.attempt).sort()).toEqual([
+        1, 2,
+      ]);
+      for (const execution of beforeRestart) {
+        expect(execution).toMatchObject({
+          status: 'passed',
+          exitCode: 0,
+          summary: { passed: 2, failed: 0, skipped: 1, total: 3, parser: 'jest' },
+          artifacts: [
+            {
+              relativePath: 'reports/results.json',
+              kind: 'report',
+              sha256: createHash('sha256').update(report).digest('hex'),
+              sizeBytes: Buffer.byteLength(report),
+            },
+          ],
+        });
+        expect(execution.artifacts?.some((artifact) => artifact.relativePath === '.env')).toBe(
+          false,
+        );
+        expect(
+          execution.artifacts?.some((artifact) => artifact.relativePath === 'reports/linked.json'),
+        ).toBe(false);
+      }
+      expect(interactions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ attempt: 1, kind: 'stream', channel: 'stdout' }),
+          expect.objectContaining({ attempt: 1, kind: 'stream', channel: 'stderr' }),
+          expect.objectContaining({ attempt: 2, kind: 'stream', channel: 'stdout' }),
+          expect.objectContaining({ attempt: 2, kind: 'result', channel: 'status' }),
+        ]),
+      );
+      expect(interactions.map((event) => event.text).join('')).toContain('workflow-stream-out');
+      expect(interactions.map((event) => event.text).join('')).toContain('workflow-stream-error');
+
+      await host.dispose();
+      await composition.dispose();
+      store.close();
+      store = new LocalStore(databasePath);
+      composition = createWorkflowRuntimeComposition({
+        store,
+        runs: { executionOperations: () => unusedAgentOperations() },
+        repositories: new RepositoryService(),
+        getSettings: () => settings(join(root, 'worktrees')),
+      });
+      host = composition.createHost(() => undefined);
+      const restartedState = await host.getState(started.execution.id);
+      const restartedView = workflowHostStateToView(
+        restartedState,
+        store.listCheckExecutions(PROJECT_ID),
+      );
+      expect(restartedView.testResults.map((result) => result.attempt).sort()).toEqual([1, 2]);
+      expect(restartedView.testResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            attempt: 1,
+            status: 'passed',
+            summary: { passed: 2, failed: 0, skipped: 1, total: 3, parser: 'jest' },
+          }),
+          expect.objectContaining({
+            attempt: 2,
+            status: 'passed',
+            artifacts: [expect.objectContaining({ relativePath: 'reports/results.json' })],
+          }),
+        ]),
+      );
+    } finally {
+      await host.dispose();
+      await composition.dispose();
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('cancels only the selected live Test node through its real process handle', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'forgeboard-workflow-test-cancel-'));
+    const store = new LocalStore(join(root, 'forgeboard.sqlite3'));
+    store.saveProject(project(root));
+    const canvas = cancellationTestCanvas();
+    const surface = legacySurfaceFromCanonical(canvas);
+    store.saveCanvas({
+      ...surface,
+      nodes: [...surface.nodes],
+      edges: [...surface.edges],
+      canonical: canvas,
+    });
+    const composition = createWorkflowRuntimeComposition({
+      store,
+      runs: { executionOperations: () => unusedAgentOperations() },
+      repositories: new RepositoryService(),
+      getSettings: () => settings(join(root, 'worktrees')),
+    });
+    const host = composition.createHost(() => undefined);
+    try {
+      const started = await host.start({
+        projectId: PROJECT_ID,
+        canvas,
+        scope: { kind: 'workflow' },
+      });
+      await approveOnlyTestNode(host, started, 1);
+      const running = await waitForNodeStatus(host, started.execution.id, TEST_NODE_ID, 'running');
+      const cancelled = await host.cancelNode({
+        executionId: started.execution.id,
+        nodeId: TEST_NODE_ID,
+        attempt: running.runtime.run.nodeRuns[TEST_NODE_ID]!.attempt,
+        confirmed: true,
+      });
+      expect(cancelled.runtime.run.nodeRuns[TEST_NODE_ID]?.status).toBe('cancelled');
+      expect(store.listCheckExecutions(PROJECT_ID)).toMatchObject([
+        { status: 'cancelled', workflowBinding: { nodeId: TEST_NODE_ID, attempt: 1 } },
+      ]);
+    } finally {
+      await host.dispose();
+      await composition.dispose();
+      store.close();
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('runs an assigned canonical Task through the durable agent workflow composition', async () => {
@@ -166,6 +381,42 @@ async function waitForTerminal(
   return state;
 }
 
+async function waitForNodeStatus(
+  host: ReturnType<ReturnType<typeof createWorkflowRuntimeComposition>['createHost']>,
+  executionId: string,
+  nodeId: string,
+  expected: WorkflowHostState['runtime']['run']['nodeRuns'][string]['status'],
+): Promise<WorkflowHostState> {
+  let state = await host.getState(executionId);
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    if (state.runtime.run.nodeRuns[nodeId]?.status === expected) return state;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    state = await host.getState(executionId);
+  }
+  throw new Error(
+    `Timed out waiting for ${nodeId} to become ${expected}; current status is ${String(state.runtime.run.nodeRuns[nodeId]?.status)}.`,
+  );
+}
+
+async function approveOnlyTestNode(
+  host: ReturnType<ReturnType<typeof createWorkflowRuntimeComposition>['createHost']>,
+  state: WorkflowHostState,
+  attempt: number,
+): Promise<void> {
+  const approval = state.approvals.find(
+    (candidate) => candidate.nodeId === TEST_NODE_ID && candidate.attempt === attempt,
+  );
+  if (approval === undefined)
+    throw new Error(`Expected Test approval for attempt ${String(attempt)}.`);
+  await host.approveNode({
+    executionId: state.execution.id,
+    nodeId: TEST_NODE_ID,
+    preparationId: approval.preparationId,
+    approvalFingerprint: approval.approvalFingerprint,
+    approvedBy: 'integration-test',
+  });
+}
+
 function workflowCanvas() {
   const node = CanvasNodeSchema.parse({
     id: TEST_NODE_ID,
@@ -216,6 +467,142 @@ function workflowCanvas() {
         createdAt: T0,
       },
     ],
+    groups: [],
+    viewState: { viewport: { x: 0, y: 0, zoom: 1 } },
+    revisionLoops: [],
+    workflowLimits: {},
+    createdAt: T0,
+    updatedAt: T0,
+  });
+}
+
+function revisionTestCanvas() {
+  const test = CanvasNodeSchema.parse({
+    id: TEST_NODE_ID,
+    type: 'test',
+    title: 'Repeatable exact workflow test',
+    color: '#445566',
+    icon: 'test',
+    position: { x: 0, y: 0 },
+    size: { width: 320, height: 180 },
+    status: 'ready',
+    data: {
+      command: {
+        executable: process.execPath,
+        args: [
+          '-e',
+          [
+            "process.stdout.write('workflow-stream-out\\nTest Suites: 1 passed, 1 total\\nTests: 2 passed, 1 skipped, 3 total\\n')",
+            "process.stderr.write('workflow-stream-error\\n')",
+          ].join(';'),
+        ],
+        environmentNames: [],
+      },
+      runIds: ['test'],
+      artifactPaths: [
+        'reports/results.json',
+        '.env',
+        ...(process.platform === 'win32' ? [] : ['reports/linked.json']),
+      ],
+    },
+    createdAt: T0,
+    updatedAt: T0,
+  });
+  const review = CanvasNodeSchema.parse({
+    id: 'test-human-reviewer',
+    type: 'diff-review',
+    title: 'Review exact Test attempt',
+    color: '#445566',
+    icon: 'review',
+    position: { x: 420, y: 0 },
+    size: { width: 320, height: 180 },
+    status: 'ready',
+    data: {
+      baseRef: 'main',
+      headRef: 'forgeboard/test-review',
+      worktreeId: '75000000-0000-4000-8000-000000000004',
+    },
+    createdAt: T0,
+    updatedAt: T0,
+  });
+  return CanvasSchema.parse({
+    schemaVersion: 1,
+    id: CANVAS_ID,
+    projectId: PROJECT_ID,
+    name: 'Exact Test revision history',
+    nodes: [test, review],
+    edges: [
+      {
+        id: 'test-human-review',
+        sourceNodeId: TEST_NODE_ID,
+        targetNodeId: review.id,
+        type: 'review',
+        config: { reviewer: 'human', requireApproval: true, structuredFindings: true },
+        inspector: {},
+        createdAt: T0,
+      },
+      {
+        id: 'test-human-revision',
+        sourceNodeId: review.id,
+        targetNodeId: TEST_NODE_ID,
+        type: 'revision',
+        config: { loopId: 'test-loop', actionableFeedbackRequired: true },
+        inspector: {},
+        createdAt: T0,
+      },
+    ],
+    groups: [],
+    viewState: { viewport: { x: 0, y: 0, zoom: 1 } },
+    revisionLoops: [
+      {
+        id: 'test-loop',
+        implementationNodeId: TEST_NODE_ID,
+        reviewNodeId: review.id,
+        reviewEdgeId: 'test-human-review',
+        revisionEdgeId: 'test-human-revision',
+        maximumAttempts: 2,
+        stopConditions: ['review-approved', 'human-accepted'],
+        humanEscapeHatch: {
+          enabled: true,
+          approvalRequired: true,
+          instructions: 'A human decides whether the repeated Test attempt is sufficient.',
+        },
+      },
+    ],
+    workflowLimits: {},
+    createdAt: T0,
+    updatedAt: T0,
+  });
+}
+
+function cancellationTestCanvas() {
+  const test = CanvasNodeSchema.parse({
+    id: TEST_NODE_ID,
+    type: 'test',
+    title: 'Cancelable exact workflow test',
+    color: '#445566',
+    icon: 'test',
+    position: { x: 0, y: 0 },
+    size: { width: 320, height: 180 },
+    status: 'ready',
+    data: {
+      command: {
+        executable: process.execPath,
+        args: ['-e', "process.stdout.write('cancel-ready\\n'); setInterval(() => {}, 1000)"],
+        environmentNames: [],
+      },
+      runIds: ['test'],
+    },
+    createdAt: T0,
+    updatedAt: T0,
+  });
+  return CanvasSchema.parse({
+    schemaVersion: 1,
+    id: CANVAS_ID,
+    projectId: PROJECT_ID,
+    name: 'Cancelable exact Test',
+    nodes: [test],
+    edges: [],
     groups: [],
     viewState: { viewport: { x: 0, y: 0, zoom: 1 } },
     revisionLoops: [],

@@ -21,6 +21,7 @@ const approveHuman = vi.fn();
 const decideReview = vi.fn();
 const resolveRevisionEscape = vi.fn();
 const cancel = vi.fn();
+const cancelNode = vi.fn();
 const sendInput = vi.fn();
 const interrupt = vi.fn();
 const onError = vi.fn();
@@ -36,6 +37,7 @@ beforeEach(() => {
     decideReview,
     resolveRevisionEscape,
     cancel,
+    cancelNode,
     sendInput,
     interrupt,
     onError,
@@ -56,6 +58,7 @@ beforeEach(() => {
         decideReview,
         resolveRevisionEscape,
         cancel,
+        cancelNode,
         sendInput,
         interrupt,
         onEvent: vi.fn((listener: (event: WorkflowEventEnvelope) => void) => {
@@ -82,6 +85,38 @@ afterEach(() => {
 });
 
 describe('useWorkflowRuns', () => {
+  it('retains interaction output that arrives just before its workflow execution is recorded', async () => {
+    const hook = renderWorkflowHook(vi.fn(() => Promise.resolve(true)));
+    await waitFor(() => expect(interactionListener).not.toBeNull());
+
+    act(() => {
+      interactionListener?.({
+        executionId: 'workflow-execution',
+        nodeId: 'agent-node',
+        attempt: 1,
+        sequence: 0,
+        occurredAt: '2026-07-15T12:00:00.000Z',
+        kind: 'stream',
+        channel: 'stdout',
+        text: 'output before node-started\n',
+        truncated: false,
+      });
+    });
+    expect(hook.result.current.workflows.interactionEvents).toEqual([]);
+
+    act(() => {
+      eventListener?.(workflowEvent(execution({ status: 'running', revision: 2 })));
+    });
+    await waitFor(() =>
+      expect(hook.result.current.workflows.interactionEvents).toEqual([
+        expect.objectContaining({
+          executionId: 'workflow-execution',
+          text: 'output before node-started\n',
+        }),
+      ]),
+    );
+  });
+
   it('saves before starting and sends only a typed workflow scope', async () => {
     const flushCanvas = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     start.mockResolvedValue({ ok: true, value: execution() });
@@ -102,6 +137,14 @@ describe('useWorkflowRuns', () => {
           includeUpstream: true,
         }),
     );
+    await act(
+      async () =>
+        await hook.result.current.workflows.cancelNode({
+          executionId: 'workflow-execution',
+          nodeId: 'agent-node',
+          attempt: 1,
+        }),
+    );
     expect(start).toHaveBeenCalledWith({
       projectId: PROJECT_ID,
       canvasId: CANVAS_ID,
@@ -117,7 +160,13 @@ describe('useWorkflowRuns', () => {
     act(() => {
       eventListener?.(workflowEvent(execution({ status: 'running', revision: 2 })));
       eventListener?.(
-        workflowEvent(execution({ id: 'other-execution', canvasId: 'other-canvas', revision: 9 })),
+        workflowEvent(
+          execution({
+            id: 'other-execution',
+            canvasId: 'other-canvas',
+            revision: 9,
+          }),
+        ),
       );
     });
 
@@ -127,7 +176,10 @@ describe('useWorkflowRuns', () => {
   });
 
   it('never lets an older event or mutation response replace a newer durable revision', async () => {
-    approveNode.mockResolvedValue({ ok: true, value: execution({ revision: 2 }) });
+    approveNode.mockResolvedValue({
+      ok: true,
+      value: execution({ revision: 2 }),
+    });
     const hook = renderWorkflowHook(vi.fn(() => Promise.resolve(true)));
     await waitFor(() => expect(eventListener).not.toBeNull());
     act(() => {
@@ -154,7 +206,10 @@ describe('useWorkflowRuns', () => {
   });
 
   it('binds launch approval to the exact prepared request without renderer authority fields', async () => {
-    approveNode.mockResolvedValue({ ok: true, value: execution({ revision: 3 }) });
+    approveNode.mockResolvedValue({
+      ok: true,
+      value: execution({ revision: 3 }),
+    });
     const hook = renderWorkflowHook(vi.fn(() => Promise.resolve(true)));
     const request: WorkflowApprovalRequest = {
       executionId: 'workflow-execution',
@@ -178,6 +233,45 @@ describe('useWorkflowRuns', () => {
     });
     expect(approveNode.mock.calls[0]?.[0]).not.toHaveProperty('approvedBy');
     expect(approveNode.mock.calls[0]?.[0]).not.toHaveProperty('approvedAt');
+  });
+
+  it('keeps history readable but rejects every workflow mutation for read-only roles', async () => {
+    list.mockResolvedValue({ ok: true, value: [execution()] });
+    const flushCanvas = vi.fn(() => Promise.resolve(true));
+    const hook = renderWorkflowHook(flushCanvas, false);
+    await waitFor(() => expect(hook.result.current.workflows.executions).toHaveLength(1));
+
+    await act(async () => await hook.result.current.workflows.start({ kind: 'workflow' }));
+    const request: WorkflowApprovalRequest = {
+      executionId: 'workflow-execution',
+      nodeId: 'agent-node',
+      attempt: 1,
+      executorId: 'agent-executor',
+      preparationId: 'prepared-launch',
+      approvalFingerprint: 'fingerprint-123',
+      expiresAt: '2099-07-15T12:05:00.000Z',
+      disclosure: {},
+    };
+    await act(async () => await hook.result.current.workflows.approveNode(request));
+    await act(
+      async () =>
+        await hook.result.current.workflows.sendInput({
+          executionId: 'workflow-execution',
+          nodeId: 'agent-node',
+          attempt: 1,
+          data: 'blocked\n',
+        }),
+    );
+
+    expect(list).toHaveBeenCalledOnce();
+    expect(flushCanvas).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    expect(approveNode).not.toHaveBeenCalled();
+    expect(sendInput).not.toHaveBeenCalled();
+    expect(cancelNode).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(
+      'This collaboration role can inspect workflow history but cannot mutate workflow execution.',
+    );
   });
 
   it('keeps live output bounded and sends controls with only execution, node, and attempt identity', async () => {
@@ -250,7 +344,7 @@ describe('useWorkflowRuns', () => {
   });
 });
 
-function renderWorkflowHook(flushCanvas: () => Promise<boolean>) {
+function renderWorkflowHook(flushCanvas: () => Promise<boolean>, mutationsAuthorized = true) {
   return renderHook(() => {
     const [events, setEvents] = useState<string[]>([]);
     const workflows = useWorkflowRuns({
@@ -259,6 +353,7 @@ function renderWorkflowHook(flushCanvas: () => Promise<boolean>) {
       flushCanvas,
       setEvents,
       onError,
+      mutationsAuthorized,
     });
     return { workflows, events };
   });
@@ -305,6 +400,7 @@ function execution(overrides: Partial<WorkflowExecutionView> = {}): WorkflowExec
       activeNodeIds: [],
     },
     cancellationRequested: false,
+    testResults: [],
     createdAt: '2026-07-15T12:00:00.000Z',
     updatedAt: '2026-07-15T12:00:00.000Z',
     ...overrides,
