@@ -335,6 +335,13 @@ async function prepareDockerAdapter(
     environmentAllowlist: settings.envAllowlist.filter((name) =>
       DOCKER_SAFE_ENVIRONMENT_NAMES.has(name),
     ),
+    virtualContextAttachments:
+      input.context.generatedArtifacts?.map((artifact) => ({
+        path: artifact.path,
+        kind: 'file' as const,
+        explicitlyApproved: true as const,
+        sha256: artifact.sha256,
+      })) ?? [],
   });
   const imageBindingWarning = `Docker image ${settings.dockerImage} was reviewed as immutable image ID ${approvedImageId}; the approved launch uses that exact ID.`;
   const dockerPreflightWarning =

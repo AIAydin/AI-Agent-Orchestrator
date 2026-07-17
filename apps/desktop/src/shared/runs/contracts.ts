@@ -53,6 +53,14 @@ export const RunHistoryListInputSchema = z
   .strict();
 export type RunHistoryListInput = z.infer<typeof RunHistoryListInputSchema>;
 
+export const RunHistoryGetInputSchema = z
+  .object({
+    projectId: z.string().uuid(),
+    runId: z.string().uuid(),
+  })
+  .strict();
+export type RunHistoryGetInput = z.infer<typeof RunHistoryGetInputSchema>;
+
 /**
  * Renderer-safe persisted run metadata. The path-free lifecycle state distinguishes reviewable,
  * interrupted-cleanup, and cleaned targets without disclosing internal ownership. Paths and

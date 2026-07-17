@@ -449,8 +449,7 @@ export function contextAttachmentsForNode(
         resolution.sourceNodeId !== edge.sourceNodeId ||
         resolution.targetNodeId !== edge.targetNodeId ||
         resolution.targetAttempt !== targetAttempt ||
-        JSON.stringify(uniqueSorted(resolution.attachmentIds)) !==
-          JSON.stringify(uniqueSorted(edge.config.attachmentIds))
+        JSON.stringify(resolution.attachmentIds) !== JSON.stringify(edge.config.attachmentIds)
       ) {
         throw new Error(`Context edge is stale for the current target attempt: ${edge.id}`);
       }
@@ -459,7 +458,7 @@ export function contextAttachmentsForNode(
           edgeId: edge.id,
           sourceNodeId: edge.sourceNodeId,
           sourceType: nodeById(runtime, edge.sourceNodeId).type,
-          attachmentIds: uniqueSorted(edge.config.attachmentIds),
+          attachmentIds: [...edge.config.attachmentIds],
           required: edge.config.required,
           contentDigest: resolution.contentDigest,
           verifierId: resolution.verifierId,

@@ -20,7 +20,7 @@ const DOCKER_WORKTREE_ROOT = '/workspace';
 const COPY_BUFFER_BYTES = 64 * 1024;
 
 export const IMMUTABLE_CONTEXT_DISCLOSURE =
-  'Immediately before spawn, Forgeboard copies each approved context digest through a stable ordinary-file handle into a private per-run snapshot. The reviewed paths remain logical labels; only main substitutes randomized snapshot paths, and it removes them after the agent session ends.';
+  'Immediately before spawn, Forgeboard copies or materializes each approved context digest into a private per-run snapshot. The reviewed paths remain logical labels; only main substitutes randomized snapshot paths, and it removes them after the agent session ends.';
 
 export const IMMUTABLE_DOCKER_CONTEXT_DISCLOSURE =
   'Docker receives selected context through one additional private read-only snapshot mount at /forgeboard-context. The approved worktree bind and its read/write policy remain unchanged.';
@@ -91,10 +91,59 @@ export async function createImmutableContextSnapshot(
     await chmod(rootPath, 0o700);
     const bindings: SnapshotBinding[] = [];
     const selectedPaths = new Set<string>();
+    const generatedByPath = new Map(
+      (context.generatedArtifacts ?? []).map((artifact) => [path.resolve(artifact.path), artifact]),
+    );
     let totalBytes = 0;
     for (const [index, attachment] of context.attachments.entries()) {
       if (attachment.kind !== 'file' || attachment.sha256 === undefined) {
         throw new Error('Approved context must contain only digest-bound ordinary files.');
+      }
+      const logicalPath = path.resolve(attachment.path);
+      const generated = generatedByPath.get(logicalPath);
+      if (generated !== undefined) {
+        const relativePath = path.relative(canonicalCheckout, logicalPath);
+        if (!isContainedRelativePath(relativePath)) {
+          throw new Error('Generated context escaped its approved checkout.');
+        }
+        if (selectedPaths.has(logicalPath)) {
+          throw new Error('Agent context cannot contain duplicate selected file paths.');
+        }
+        selectedPaths.add(logicalPath);
+        const size = Buffer.byteLength(generated.content, 'utf8');
+        if (size > AGENT_CONTEXT_FILE_MAX_BYTES) {
+          throw new Error(
+            `Selected context exceeds the ${formatBytes(AGENT_CONTEXT_FILE_MAX_BYTES)} per-file limit.`,
+          );
+        }
+        totalBytes += size;
+        if (totalBytes > AGENT_CONTEXT_TOTAL_MAX_BYTES) {
+          throw new Error(
+            `Selected context exceeds the ${formatBytes(AGENT_CONTEXT_TOTAL_MAX_BYTES)} aggregate limit.`,
+          );
+        }
+        const snapshotName = snapshotFileName(index, logicalPath);
+        const snapshotPath = path.join(rootPath, snapshotName);
+        await writeGeneratedSnapshot(snapshotPath, generated.content, attachment.sha256, rootPath);
+        await directoryLease.protectFile(snapshotPath);
+        const snapshotIdentity = await verifySnapshotFile(
+          snapshotPath,
+          rootPath,
+          attachment.sha256,
+        );
+        generatedByPath.delete(logicalPath);
+        bindings.push({
+          sourcePath: logicalPath,
+          logicalLaunchPath:
+            options.runtime === 'docker'
+              ? `${DOCKER_WORKTREE_ROOT}/${relativePath.split(path.sep).join('/')}`
+              : logicalPath,
+          snapshotPath,
+          snapshotName,
+          snapshotIdentity,
+          sha256: attachment.sha256,
+        });
+        continue;
       }
       const opened = await openApprovedFile(
         attachment.path,
@@ -148,6 +197,9 @@ export async function createImmutableContextSnapshot(
         await opened.handle.close();
       }
     }
+    if (generatedByPath.size !== 0) {
+      throw new Error('Generated context did not match the approved attachment selection.');
+    }
     await chmod(rootPath, 0o500);
 
     const removeSnapshot = async (): Promise<void> => {
@@ -185,6 +237,31 @@ export async function createImmutableContextSnapshot(
     }
     throw error;
   }
+}
+
+async function writeGeneratedSnapshot(
+  destinationPath: string,
+  content: string,
+  expectedDigest: string,
+  rootPath: string,
+): Promise<FileIdentity> {
+  const bytes = Buffer.from(content, 'utf8');
+  if (createHash('sha256').update(bytes).digest('hex') !== expectedDigest) {
+    throw new Error('Generated context changed after disclosure. Review a fresh launch.');
+  }
+  const destination = await open(
+    destinationPath,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
+    0o400,
+  );
+  try {
+    await writeAll(destination, bytes, 0);
+    await destination.sync();
+  } finally {
+    await destination.close();
+  }
+  await chmod(destinationPath, 0o400);
+  return await verifySnapshotFile(destinationPath, rootPath, expectedDigest);
 }
 
 type IgnoreMatcher = Awaited<ReturnType<typeof loadProjectIgnoreMatcher>>;

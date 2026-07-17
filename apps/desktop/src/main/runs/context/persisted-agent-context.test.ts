@@ -10,7 +10,10 @@ import type {
   PrepareRunInput,
   Project,
 } from '../../../shared/application/contracts.js';
-import { PersistedAgentRunContextResolver } from './persisted-agent-context.js';
+import {
+  assertPersistedAgentLaunchAuthorityCurrent,
+  PersistedAgentRunContextResolver,
+} from './persisted-agent-context.js';
 
 const PROJECT_ID = '123fae6e-e213-4a10-a0db-0f85b791f7e9';
 const OTHER_PROJECT_ID = '223fae6e-e213-4a10-a0db-0f85b791f7e9';
@@ -91,9 +94,48 @@ describe('PersistedAgentRunContextResolver', () => {
     expect(nodeModel.authority.fingerprint).not.toBe(otherModel.authority.fingerprint);
   });
 
+  it('denies a locked Agent and an Agent inherited by a locked group', async () => {
+    const root = fixtureRoot();
+    await expect(
+      resolverFor(root, canvas([], [], { locked: true })).resolve(input(), settings()),
+    ).rejects.toThrow(/unlock the Agent/iu);
+    await expect(
+      resolverFor(root, canvas([], [groupNode('group-1', ['agent-1'], true)])).resolve(
+        input(),
+        settings(),
+      ),
+    ).rejects.toThrow(/containing group/iu);
+  });
+
+  it('binds final launch authority to the current persisted run on the exact Agent node', () => {
+    const runId = '00000000-0000-4000-8000-000000000001';
+    let document = canvas([], [], { runId });
+    const store = { loadCanvas: () => document };
+    const authority = {
+      attachmentIds: [],
+      canvasId: 'canvas-1',
+      fingerprint: 'a'.repeat(64),
+      manifestDigest: null,
+      relativePaths: [],
+    };
+
+    expect(() =>
+      assertPersistedAgentLaunchAuthorityCurrent(store, input(), settings(), runId, authority),
+    ).not.toThrow();
+    document = canvas([], [], {
+      runId: '00000000-0000-4000-8000-000000000002',
+    });
+    expect(() =>
+      assertPersistedAgentLaunchAuthorityCurrent(store, input(), settings(), runId, authority),
+    ).toThrow(/another run/iu);
+  });
+
   it('matches the visible description fallback when a legacy Agent has no prompt field', async () => {
     const root = fixtureRoot();
-    const legacy = canvas([], [], { prompt: null, description: 'Visible fallback prompt' });
+    const legacy = canvas([], [], {
+      prompt: null,
+      description: 'Visible fallback prompt',
+    });
 
     await expect(
       resolverFor(root, legacy).resolve(input({ prompt: 'Visible fallback prompt' }), settings()),
@@ -348,6 +390,31 @@ function fileNode(
         kind: overrides.kind ?? 'file',
         missing: overrides.missing ?? false,
       },
+    },
+  };
+}
+
+function groupNode(
+  id: string,
+  childNodeIds: string[],
+  locked: boolean,
+): CanvasDocument['nodes'][number] {
+  return {
+    id,
+    type: 'group-frame',
+    position: { x: 0, y: 0 },
+    data: {
+      kind: 'group-frame',
+      title: 'Locked group',
+      description: 'Group',
+      status: 'idle',
+      locked,
+      collapsed: false,
+      color: '#667788',
+      childNodeIds,
+      purpose: 'workflow-stage',
+      layout: 'freeform',
+      autoFit: false,
     },
   };
 }

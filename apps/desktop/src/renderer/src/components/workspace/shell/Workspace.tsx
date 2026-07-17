@@ -106,6 +106,7 @@ import type {
 } from '../model/types.js';
 import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
 import { useAgentRunController } from '../runs/useAgentRunController.js';
+import { useAgentStatusReconciliation } from '../runs/useAgentStatusReconciliation.js';
 import { effectiveNodeModel } from '../runs/agent-node/model-selection.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
 import { normalizeCanvasViewport } from '../canvas/view-state/viewport.js';
@@ -312,7 +313,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
               ...(update.worktreeId === undefined ? {} : { worktreeId: update.worktreeId }),
               ...(update.interactiveInputSupported === undefined
                 ? {}
-                : { interactiveInputSupported: update.interactiveInputSupported }),
+                : {
+                    interactiveInputSupported: update.interactiveInputSupported,
+                  }),
               ...(update.pauseSupported === undefined
                 ? {}
                 : { pauseSupported: update.pauseSupported }),
@@ -324,7 +327,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
                 : { resumeSupported: update.resumeSupported }),
               ...(update.providerSessionAvailable === undefined
                 ? {}
-                : { providerSessionAvailable: update.providerSessionAvailable }),
+                : {
+                    providerSessionAvailable: update.providerSessionAvailable,
+                  }),
               ...(update.tokenUsage === undefined ? {} : { tokenUsage: update.tokenUsage }),
               ...(update.cost === undefined ? {} : { cost: update.cost }),
             },
@@ -981,6 +986,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       return nextNodes;
     });
   }, []);
+  useAgentStatusReconciliation({
+    projectId: project.id,
+    nodes,
+    updateNodeData,
+    onError,
+  });
   const readCurrentGraph = useCallback(
     () => ({ nodes: nodesRef.current, edges: edgesRef.current }),
     [],

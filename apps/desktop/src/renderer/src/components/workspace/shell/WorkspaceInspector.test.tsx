@@ -25,7 +25,9 @@ import { WorkspaceInspector } from './WorkspaceInspector.js';
 beforeEach(() => {
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
-    value: { runs: { list: vi.fn().mockResolvedValue({ ok: true, value: [] }) } },
+    value: {
+      runs: { list: vi.fn().mockResolvedValue({ ok: true, value: [] }) },
+    },
   });
 });
 
@@ -186,6 +188,8 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Unlock' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Installed adapter')).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Review & run' })).toHaveProperty('disabled', true);
   });
 
   it('explains inherited group protection and prevents a misleading child unlock action', () => {
@@ -230,6 +234,22 @@ describe('WorkspaceInspector Custom permissions', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save locally' }));
     expect(inspectorProps.onCreateLocalComment).toHaveBeenCalledWith('Private reviewer note');
+  });
+
+  it('keeps Agent configuration and launch controls read-only for collaboration viewers', () => {
+    const selectedNode = agentNode({});
+    const inspectorProps = props(settings(), selectedNode);
+    inspectorProps.collaborationGraphReadOnly = true;
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    expect(screen.getByLabelText('Installed adapter')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Model (optional)')).toHaveProperty('disabled', true);
+    expect(screen.getByRole('combobox', { name: 'Permission profile' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByLabelText('Prompt')).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Review & run' })).toHaveProperty('disabled', true);
   });
 
   it('passes collaboration read-only authority into preview runtime controls', async () => {
@@ -312,7 +332,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(inspectorProps.onArrangeGroupFrame).toHaveBeenCalledWith('horizontal');
   });
 
-  it('keeps live run cancellation available when an Agent node is locked', () => {
+  it('keeps only emergency termination available when an Agent node is locked', () => {
     const selectedNode = agentNode({
       locked: true,
       status: 'running',
@@ -329,17 +349,16 @@ describe('WorkspaceInspector Custom permissions', () => {
       true,
     );
     expect(screen.getByLabelText<HTMLTextAreaElement>('Prompt')).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Pause unavailable' })).toHaveProperty(
       'disabled',
       true,
     );
     expect(screen.getByRole('button', { name: 'Terminate' })).toHaveProperty('disabled', false);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
     fireEvent.click(screen.getByRole('button', { name: 'Terminate' }));
-    expect(inspectorProps.onControlRun).toHaveBeenNthCalledWith(1, 'interrupt');
-    expect(inspectorProps.onControlRun).toHaveBeenNthCalledWith(2, 'terminate');
+    expect(inspectorProps.onControlRun).toHaveBeenCalledOnce();
+    expect(inspectorProps.onControlRun).toHaveBeenCalledWith('terminate');
   });
 
   it('shows live controls only for a runtime-confirmed active Agent run', () => {

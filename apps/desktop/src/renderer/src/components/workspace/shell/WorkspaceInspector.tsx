@@ -353,6 +353,7 @@ function NodeInspector(
             running={props.agentRunActive}
             preparingRun={props.preparingRun}
             configurationReadOnly={configurationReadOnly}
+            onRecord={onRecord}
             onUpdateSelected={props.onUpdateSelected}
             onRunInputChange={props.onRunInputChange}
             onSendRunInput={props.onSendRunInput}

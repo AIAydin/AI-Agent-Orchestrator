@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import path from 'node:path';
 
 import {
   AGENT_CONTEXT_ATTACHMENT_LIMIT,
@@ -419,11 +420,25 @@ export class WorkflowAgentExecutor implements WorkflowNodeExecutor {
       throw new Error(`Context resolver did not resolve attachment ID "${unresolved[0]}".`);
     }
     const attachments = attachmentIds.map((attachmentId) => byId.get(attachmentId)!);
+    const generatedById = new Map(
+      (resolution.generatedArtifacts ?? []).map((generated) => [
+        generated.attachmentId,
+        generated.artifact,
+      ]),
+    );
+    const generatedArtifacts = attachmentIds.flatMap((attachmentId) => {
+      const artifact = generatedById.get(attachmentId);
+      return artifact === undefined ? [] : [artifact];
+    });
     const resolved: ResolvedWorkflowAgentContext =
       resolution.manifestId === undefined || resolution.manifestDigest === undefined
-        ? { attachments }
+        ? {
+            attachments,
+            ...(generatedArtifacts.length === 0 ? {} : { generatedArtifacts }),
+          }
         : {
             attachments,
+            ...(generatedArtifacts.length === 0 ? {} : { generatedArtifacts }),
             manifestId: resolution.manifestId,
             manifestDigest: resolution.manifestDigest,
           };
@@ -490,7 +505,7 @@ function agentNodeConfiguration(context: WorkflowExecutorContext): AgentNodeConf
     ...(agent.data.model === undefined ? {} : { model: agent.data.model }),
     prompt,
     permissionProfile: permissionProfile.data,
-    attachmentIds: uniqueSorted([
+    attachmentIds: uniqueInOrder([
       ...(delegatedTask === undefined ? agent.data.contextAttachmentIds : []),
       ...contextAttachmentsForNode(context.runtime, context.node.id).flatMap(
         ({ attachmentIds }) => attachmentIds,
@@ -534,10 +549,17 @@ function assertPreparedAgent(
   const reviewedKinds = reviewedAttachments.map(({ kind }) => kind);
   const requestedDigests = request.context.attachments.map(({ sha256 }) => sha256 ?? null);
   const reviewedDigests = reviewedAttachments.map(({ sha256 }) => sha256);
+  const requestedPaths = request.context.attachments.map(({ path: attachmentPath }) =>
+    prepared.disclosure.permissionProfile.enforcement === 'docker'
+      ? `/workspace/${path.relative(prepared.disclosure.cwd, attachmentPath).split(path.sep).join('/')}`
+      : attachmentPath,
+  );
+  const reviewedPaths = reviewedAttachments.map(({ path: attachmentPath }) => attachmentPath);
   if (
     reviewedAttachments.length !== request.context.attachments.length ||
     JSON.stringify(reviewedKinds) !== JSON.stringify(requestedKinds) ||
     JSON.stringify(reviewedDigests) !== JSON.stringify(requestedDigests) ||
+    JSON.stringify(reviewedPaths) !== JSON.stringify(requestedPaths) ||
     (prepared.disclosure.contextManifestId ?? null) !== (request.context.manifestId ?? null) ||
     (prepared.disclosure.contextManifestDigest ?? null) !== (request.context.manifestDigest ?? null)
   ) {
@@ -617,8 +639,8 @@ function workflowAgentHandle(
   };
 }
 
-function uniqueSorted(values: readonly string[]): readonly string[] {
-  return [...new Set(values)].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+function uniqueInOrder(values: readonly string[]): readonly string[] {
+  return [...new Set(values)];
 }
 
 function workflowAgentCompletion(

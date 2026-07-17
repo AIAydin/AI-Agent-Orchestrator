@@ -140,6 +140,16 @@ export const AcceptanceCriterionSchema = z
 
 export const AGENT_CONTEXT_ATTACHMENT_LIMIT = 256;
 
+const AgentTokenUsageSchema = z
+  .object({
+    inputTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+    cachedInputTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+    outputTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+    totalTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+  })
+  .strict()
+  .refine((usage) => Object.keys(usage).length > 0, 'Token usage cannot be empty.');
+
 export const AgentNodeSchema = createNodeSchema(
   'agent',
   z
@@ -158,10 +168,7 @@ export const AgentNodeSchema = createNodeSchema(
       pauseSupported: z.boolean().default(false),
       interruptSupported: z.boolean().default(true),
       resumeSupported: z.boolean().default(false),
-      tokenUsage: z
-        .object({ input: z.number().int().nonnegative(), output: z.number().int().nonnegative() })
-        .strict()
-        .optional(),
+      tokenUsage: AgentTokenUsageSchema.optional(),
       cost: z
         .object({ amount: z.number().finite().nonnegative(), currency: z.string().length(3) })
         .strict()

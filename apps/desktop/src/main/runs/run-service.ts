@@ -30,7 +30,9 @@ import {
   type RunEventEnvelope,
 } from '../../shared/application/contracts.js';
 import {
+  RunHistoryGetInputSchema,
   RunHistoryListInputSchema,
+  type RunHistoryGetInput,
   type RunHistoryListInput,
   type RunHistorySummary,
 } from '../../shared/runs/contracts.js';
@@ -50,6 +52,8 @@ import { resolveDockerExecutable } from '../docker/docker-runtime.js';
 import { createNativeGitDelegateAuthorizer } from '../git/delegates/native-confirmation.js';
 import type { LocalStore } from '../storage.js';
 import {
+  assertPersistedAgentLaunchAuthorityCurrent,
+  assertPersistedAgentNodeMutable,
   PersistedAgentRunContextResolver,
   type AgentRunContextResolver,
   type PersistedAgentContextAuthority,
@@ -85,6 +89,14 @@ interface DockerPreparationApproval {
 
 export type RunServiceRuntimeFactory = (emit: AgentExecutionEventSink) => AgentExecutionOperations;
 export type RunServiceExecutionEventListener = (event: RunEventEnvelope) => void;
+export type RunServiceMutationAuthorizer = (owner: WebContents) => void;
+export type RunServicePersistedLaunchAuthorizer = (
+  store: Pick<LocalStore, 'loadCanvas'>,
+  input: PrepareRunInput,
+  settings: AppSettings,
+  expectedRunId: string,
+  expectedAuthority: PersistedAgentContextAuthority,
+) => void;
 
 /**
  * Electron compatibility shell for agent execution.
@@ -101,7 +113,7 @@ export class RunService {
   readonly #registeredChannels: string[] = [];
   readonly #repositories: RepositoryService;
   readonly #runtime: AgentExecutionOperations;
-  readonly #store: Pick<LocalStore, 'appendAudit' | 'listProjectRuns'>;
+  readonly #store: Pick<LocalStore, 'appendAudit' | 'getRun' | 'listProjectRuns' | 'loadCanvas'>;
   readonly #contextResolver: AgentRunContextResolver;
   #disposed = false;
   #privacyResetting = false;
@@ -119,6 +131,8 @@ export class RunService {
     private readonly dialog?: Pick<Dialog, 'showMessageBox'>,
     private readonly now: () => Date = () => new Date(),
     contextResolver?: AgentRunContextResolver,
+    private readonly authorizeMutation: RunServiceMutationAuthorizer = () => undefined,
+    private readonly authorizePersistedLaunch: RunServicePersistedLaunchAuthorizer = assertPersistedAgentLaunchAuthorityCurrent,
   ) {
     this.#store = store;
     this.#contextResolver = contextResolver ?? new PersistedAgentRunContextResolver(store);
@@ -140,6 +154,9 @@ export class RunService {
   }
 
   public registerIpcHandlers(): void {
+    this.#handle(IPC_CHANNELS.runsGet, z.tuple([RunHistoryGetInputSchema]), (event, input) =>
+      this.#getPersistedRun(event, input),
+    );
     this.#handle(IPC_CHANNELS.runsList, z.tuple([RunHistoryListInputSchema]), (event, input) =>
       this.#listPersistedRuns(event, input),
     );
@@ -148,6 +165,7 @@ export class RunService {
       z.tuple([PrepareRunInputSchema]),
       async (event, input) => {
         this.#assertLiveMainFrame(event);
+        this.authorizeMutation(event.sender);
         return await this.#trackOperation(this.#prepareFromRenderer(event, input));
       },
     );
@@ -157,6 +175,7 @@ export class RunService {
     ] as const) {
       this.#handle(channel, z.tuple([PrepareRunContinuationInputSchema]), async (event, input) => {
         this.#assertLiveMainFrame(event);
+        this.authorizeMutation(event.sender);
         return await this.#trackOperation(
           this.#prepareContinuationFromRenderer(event, input, action),
         );
@@ -164,6 +183,7 @@ export class RunService {
     }
     this.#handle(IPC_CHANNELS.runsApprove, z.tuple([RunIdSchema]), async (event, runId) => {
       this.#assertLiveMainFrame(event);
+      this.authorizeMutation(event.sender);
       return await this.#trackOperation(this.#confirmAndApprove(event, runId));
     });
     this.#handle(
@@ -171,11 +191,15 @@ export class RunService {
       z.tuple([RunIdSchema, InputSchema]),
       (event, runId, data) => {
         this.#assertLiveMainFrame(event);
+        this.authorizeMutation(event.sender);
+        this.#assertPersistedRunNodeMutable(runId);
         return this.sendInput(event.sender, runId, data);
       },
     );
     this.#handle(IPC_CHANNELS.runsInterrupt, z.tuple([RunIdSchema]), (event, runId) => {
       this.#assertLiveMainFrame(event);
+      this.authorizeMutation(event.sender);
+      this.#assertPersistedRunNodeMutable(runId);
       return this.interrupt(event.sender, runId);
     });
     this.#handle(IPC_CHANNELS.runsTerminate, z.tuple([RunIdSchema]), async (event, runId) => {
@@ -190,6 +214,15 @@ export class RunService {
     const records = this.#store.listProjectRuns(input.projectId, input.limit, input.nodeId);
     this.#assertCurrentWindow(event, parent);
     return summarizePersistedRunHistory(records).slice(0, input.limit);
+  }
+
+  #getPersistedRun(event: IpcMainInvokeEvent, input: RunHistoryGetInput): RunHistorySummary | null {
+    this.#assertAvailable();
+    const parent = this.#requireLiveParent(event, 'Agent run history');
+    const record = this.#store.getRun(input.runId);
+    this.#assertCurrentWindow(event, parent);
+    if (record === undefined || record.projectId !== input.projectId) return null;
+    return summarizePersistedRunHistory([record])[0] ?? null;
   }
 
   /** Main-process composition seam for durable workflow-owned agent runs. */
@@ -234,7 +267,10 @@ export class RunService {
     input: PrepareRunInput,
     processAuthorization: AgentPreparationProcessAuthorization | undefined,
     assertCurrent: (() => void) | undefined,
-    continuation: { readonly action: 'resume' | 'retry'; readonly parentRunId: string } | null,
+    continuation: {
+      readonly action: 'resume' | 'retry';
+      readonly parentRunId: string;
+    } | null,
   ): Promise<RunApprovalView> {
     this.#assertAvailable();
     const ownerId = this.#ownerId(owner);
@@ -431,6 +467,11 @@ export class RunService {
     if (this.dialog === undefined) {
       throw new Error('Native agent launch confirmation is unavailable in this build.');
     }
+    try {
+      await this.#assertApprovalContextCurrent(event, parent, ownerId, approval);
+    } catch (error) {
+      await this.#invalidateStaleApproval(runId, approval, ownerId, error);
+    }
     const decision = await this.dialog.showMessageBox(
       parent,
       runLaunchConfirmation(
@@ -439,7 +480,16 @@ export class RunService {
         approval.expiresAt,
       ),
     );
-    const assertCurrent = (): void => this.#assertCurrent(event, parent, ownerId);
+    const assertCurrent = (): void => {
+      this.#assertCurrent(event, parent, ownerId);
+      this.authorizePersistedLaunch(
+        this.#store,
+        approval.input,
+        this.getSettings(),
+        approval.disclosure.runId,
+        approval.contextAuthority,
+      );
+    };
     assertCurrent();
     if (decision.response !== 1 || Date.parse(approval.expiresAt) <= this.now().getTime()) {
       this.#approvals.delete(runId);
@@ -456,35 +506,9 @@ export class RunService {
       return false;
     }
     try {
-      const currentContext = await this.#contextResolver.resolve(
-        approval.input,
-        this.getSettings(),
-      );
-      assertCurrent();
-      if (currentContext.authority.fingerprint !== approval.contextAuthority.fingerprint) {
-        throw new Error(
-          'The Agent configuration or selected context changed after review. Review a fresh run.',
-        );
-      }
+      await this.#assertApprovalContextCurrent(event, parent, ownerId, approval);
     } catch (error) {
-      this.#approvals.delete(runId);
-      const cleanupError = await this.#runtime
-        .terminate(ownerId, approval.planId)
-        .then(() => undefined)
-        .catch((cause: unknown) => cause);
-      this.#store.appendAudit('agent-run', 'renderer-launch-confirmation', 'denied', {
-        runId,
-        adapterId: approval.disclosure.adapterId,
-        disclosureFingerprint: approval.disclosureFingerprint,
-        reason: 'persisted-run-authority-changed',
-      });
-      if (cleanupError !== undefined) {
-        throw new AggregateError(
-          [error, cleanupError],
-          'The reviewed Agent context changed and its pending plan could not be terminated.',
-        );
-      }
-      throw error;
+      await this.#invalidateStaleApproval(runId, approval, ownerId, error);
     }
     this.#approvals.delete(runId);
     await this.#runtime.launch(
@@ -636,9 +660,66 @@ export class RunService {
 
   #assertCurrent(event: IpcMainInvokeEvent, parent: BrowserWindow, ownerId: string): void {
     this.#assertCurrentWindow(event, parent);
+    this.authorizeMutation(event.sender);
     if (this.#owners.get(ownerId) !== event.sender) {
       throw new Error('The originating Forgeboard window changed or closed.');
     }
+  }
+
+  #assertPersistedRunNodeMutable(runId: string): void {
+    const run = this.#store.getRun(runId);
+    if (run === undefined) {
+      throw new Error('The active Agent run has no durable node authority.');
+    }
+    assertPersistedAgentNodeMutable(this.#store, run.projectId, run.nodeId, runId);
+  }
+
+  async #assertApprovalContextCurrent(
+    event: IpcMainInvokeEvent,
+    parent: BrowserWindow,
+    ownerId: string,
+    approval: PreparedApproval,
+  ): Promise<void> {
+    const currentContext = await this.#contextResolver.resolve(approval.input, this.getSettings());
+    this.#assertCurrent(event, parent, ownerId);
+    this.authorizePersistedLaunch(
+      this.#store,
+      approval.input,
+      this.getSettings(),
+      approval.disclosure.runId,
+      approval.contextAuthority,
+    );
+    if (currentContext.authority.fingerprint !== approval.contextAuthority.fingerprint) {
+      throw new Error(
+        'The Agent configuration or selected context changed after review. Review a fresh run.',
+      );
+    }
+  }
+
+  async #invalidateStaleApproval(
+    runId: string,
+    approval: PreparedApproval,
+    ownerId: string,
+    error: unknown,
+  ): Promise<never> {
+    this.#approvals.delete(runId);
+    const cleanupError = await this.#runtime
+      .terminate(ownerId, approval.planId)
+      .then(() => undefined)
+      .catch((cause: unknown) => cause);
+    this.#store.appendAudit('agent-run', 'renderer-launch-confirmation', 'denied', {
+      runId,
+      adapterId: approval.disclosure.adapterId,
+      disclosureFingerprint: approval.disclosureFingerprint,
+      reason: 'persisted-run-authority-changed',
+    });
+    if (cleanupError !== undefined) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'The reviewed Agent context changed and its pending plan could not be terminated.',
+      );
+    }
+    throw error;
   }
 
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {

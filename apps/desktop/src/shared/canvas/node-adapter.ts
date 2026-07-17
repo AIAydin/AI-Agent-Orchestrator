@@ -448,9 +448,14 @@ function commandValue(value: unknown): Record<string, unknown> | undefined {
 
 function agentTokenUsage(value: unknown): Record<string, number> | undefined {
   const usage = unknownRecord(value);
-  const input = nonnegativeInteger(usage?.['input']);
-  const output = nonnegativeInteger(usage?.['output']);
-  return input === undefined || output === undefined ? undefined : { input, output };
+  const normalized = compact({
+    inputTokens: nonnegativeInteger(usage?.['inputTokens']) ?? nonnegativeInteger(usage?.['input']),
+    cachedInputTokens: nonnegativeInteger(usage?.['cachedInputTokens']),
+    outputTokens:
+      nonnegativeInteger(usage?.['outputTokens']) ?? nonnegativeInteger(usage?.['output']),
+    totalTokens: nonnegativeInteger(usage?.['totalTokens']),
+  });
+  return Object.keys(normalized).length === 0 ? undefined : (normalized as Record<string, number>);
 }
 
 function agentCost(value: unknown): Record<string, unknown> | undefined {

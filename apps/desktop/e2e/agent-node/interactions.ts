@@ -62,7 +62,15 @@ export async function approvePreparedRun(
 ): Promise<Locator> {
   await openReview();
   const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
-  await expect(dialog).toBeVisible();
+  try {
+    await expect(dialog).toBeVisible();
+  } catch (error) {
+    const alerts = await page.getByRole('alert').allTextContents();
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)} Visible alerts: ${alerts.join(' | ')}`,
+      { cause: error },
+    );
+  }
   for (const text of expectedText) await expect(dialog).toContainText(text);
   await expect(page.locator('.autosave-state')).toHaveText('Saved locally');
   try {

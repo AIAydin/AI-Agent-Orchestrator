@@ -1061,3 +1061,22 @@ unchecked when only a subset of their required behavior has proof.
   storage, and compatibility coverage passed. The broad Agent node checklist item remains open
   because real pause support is still unavailable and the UI says so rather than presenting a fake
   control.
+- 2026-07-17: Agent execution now enforces persisted lock/group protection and collaboration mutation
+  authority in both renderer and main for configuration, launch, retry, resume, input, and interrupt,
+  while retaining owner-scoped emergency termination. Exact run lookup prevents older superseded
+  attempts from receiving input; approval revalidates the saved node, context, window, and role before
+  native review, after native review, and again at the immediate process-spawn boundary. Restart-stale
+  canvas activity reconciles against the exact durable attempt with stale-response guards and bounded
+  retry, so a dead child is not presented as alive. Provider token metadata preserves input, cached
+  input, output, and total-only reports without manufacturing missing values, remains finite JSON, and
+  Agent-specific configuration edits create undo checkpoints. Context edges can now supply ordered,
+  digest-bound Product Brief, Task, Mermaid Diagram, and Note snapshots alongside explicit File nodes.
+  Generated context is size-bounded before approval, omits unselected referenced paths/hashes, works
+  through host and Docker private read-only snapshots, is revalidated immediately before launch, and
+  is removed from active runtime memory after binding. The rebuilt offline Electron journey passed in
+  16.8 seconds and proves UI lock enforcement, streaming, input, interruption, resume, retry, restart
+  restoration, primary-checkout isolation, and zero external requests. Repository verification passed
+  the 1,058-file structure gate, formatting, zero-warning lint, all eight strict typechecks, all
+  workspace builds, 1,987 unit tests across 307 files, and 280 real-process integration tests across
+  32 files. The broad Agent node item remains open solely because a real pause/continue backend is not
+  yet available; Forgeboard continues to expose that limitation honestly.

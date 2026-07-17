@@ -306,6 +306,17 @@ describe('domain schemas', () => {
     ).toMatchObject({ data: { excalidraw: {} } });
   });
 
+  it('preserves independently optional Agent token categories', () => {
+    expect(
+      CanvasNodeSchema.parse({
+        ...baseNode,
+        id: 'agent-usage',
+        type: 'agent',
+        data: { tokenUsage: { cachedInputTokens: 12, totalTokens: 29 } },
+      }),
+    ).toMatchObject({ data: { tokenUsage: { cachedInputTokens: 12, totalTokens: 29 } } });
+  });
+
   it('preserves schema-safe legacy edge metadata outside typed execution configuration', () => {
     expect(
       CanvasEdgeSchema.parse({

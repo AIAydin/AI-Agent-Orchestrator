@@ -315,6 +315,9 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     repositories,
     undefined,
     dialog,
+    undefined,
+    undefined,
+    (owner) => collaboration.assertAgentMutationAuthorized(owner),
   );
   const previews = new PreviewIpcService(dialog, store, () =>
     store.getSettings(createDefaultSettings()),

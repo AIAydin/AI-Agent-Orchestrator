@@ -2,6 +2,8 @@ import { ContextAttachmentSchema, type ContextAttachment } from '@forgeboard/age
 import { EntityIdSchema, TimestampSchema } from '@forgeboard/core/domain';
 import { z } from 'zod';
 
+import { GeneratedAgentContextArtifactSchema } from '../../agent-execution/contracts.js';
+
 import type { WorkflowExecutionRuntime } from '@forgeboard/core';
 
 const FingerprintSchema = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -17,6 +19,17 @@ export type WorkflowAgentResolvedAttachment = z.infer<typeof WorkflowAgentResolv
 export const WorkflowAgentContextResolutionSchema = z
   .object({
     attachments: z.array(WorkflowAgentResolvedAttachmentSchema).max(256),
+    generatedArtifacts: z
+      .array(
+        z
+          .object({
+            attachmentId: EntityIdSchema,
+            artifact: GeneratedAgentContextArtifactSchema,
+          })
+          .strict(),
+      )
+      .max(256)
+      .optional(),
     manifestId: z.string().min(1).max(128).optional(),
     manifestDigest: FingerprintSchema.optional(),
   })
@@ -27,6 +40,18 @@ export const WorkflowAgentContextResolutionSchema = z
         code: z.ZodIssueCode.custom,
         message: 'Context manifest ID and digest must be provided together.',
       });
+    }
+    const attachmentIds = new Set(resolution.attachments.map(({ attachmentId }) => attachmentId));
+    const generatedIds = new Set<string>();
+    for (const [index, generated] of (resolution.generatedArtifacts ?? []).entries()) {
+      if (!attachmentIds.has(generated.attachmentId) || generatedIds.has(generated.attachmentId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['generatedArtifacts', index, 'attachmentId'],
+          message: 'Generated workflow context must identify one unique resolved attachment.',
+        });
+      }
+      generatedIds.add(generated.attachmentId);
     }
   });
 export type WorkflowAgentContextResolution = z.infer<typeof WorkflowAgentContextResolutionSchema>;
@@ -46,6 +71,7 @@ export type WorkflowAgentContextResolver = (
 
 export interface ResolvedWorkflowAgentContext {
   readonly attachments: readonly ContextAttachment[];
+  readonly generatedArtifacts?: readonly z.infer<typeof GeneratedAgentContextArtifactSchema>[];
   readonly manifestId?: string;
   readonly manifestDigest?: string;
 }

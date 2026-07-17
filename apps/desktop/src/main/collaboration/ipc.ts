@@ -173,6 +173,16 @@ export class CollaborationIpcService {
     );
   }
 
+  /** Main-process capability gate for local coding-agent mutations owned by this window. */
+  public assertAgentMutationAuthorized(owner: WebContents): void {
+    if (this.#owner !== owner && this.#joiningOwner !== owner) return;
+    const role = this.#client.connection?.role;
+    if (role === 'owner' || role === 'editor') return;
+    throw new Error(
+      'This collaboration role cannot launch, type into, or interrupt a local coding agent.',
+    );
+  }
+
   public async pauseForShutdown(): Promise<void> {
     if (this.#disposed) return;
     this.#paused = true;

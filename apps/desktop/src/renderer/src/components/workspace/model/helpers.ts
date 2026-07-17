@@ -5,6 +5,7 @@ import type {
   RunAdapterId,
   RunEventEnvelope,
 } from '../../../../../shared/application/contracts.js';
+import type { RunHistoryTokenUsage } from '../../../../../shared/runs/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { resolveExtensionNodeBinding } from '../../extensions/extension-nodes.js';
 import { normalizeCheckProducerData } from '../workflows/workflow-node-config.js';
@@ -115,7 +116,7 @@ interface RunEventUpdate {
   interruptSupported?: boolean;
   resumeSupported?: boolean;
   providerSessionAvailable?: boolean;
-  tokenUsage?: { input: number; output: number };
+  tokenUsage?: RunHistoryTokenUsage;
   cost?: { amount: number; currency: string };
 }
 
@@ -137,9 +138,17 @@ export function summarizeRunEvent(event: RunEventEnvelope): RunEventUpdate {
     }`;
     const capabilities = asRecord(payload?.capabilities);
     const usage = asRecord(payload?.usage);
-    const inputTokens = nonnegativeNumber(usage?.inputTokens);
-    const outputTokens = nonnegativeNumber(usage?.outputTokens);
+    const inputTokens = nonnegativeInteger(usage?.inputTokens);
+    const cachedInputTokens = nonnegativeInteger(usage?.cachedInputTokens);
+    const outputTokens = nonnegativeInteger(usage?.outputTokens);
+    const totalTokens = nonnegativeInteger(usage?.totalTokens);
     const costUsd = nonnegativeNumber(usage?.costUsd);
+    const tokenUsage = optionalTokenUsage({
+      inputTokens,
+      cachedInputTokens,
+      outputTokens,
+      totalTokens,
+    });
     return {
       status: runStatus(status),
       summary,
@@ -160,9 +169,7 @@ export function summarizeRunEvent(event: RunEventEnvelope): RunEventUpdate {
       ...(typeof payload?.providerSessionAvailable === 'boolean'
         ? { providerSessionAvailable: payload.providerSessionAvailable }
         : {}),
-      ...(inputTokens === undefined || outputTokens === undefined
-        ? {}
-        : { tokenUsage: { input: inputTokens, output: outputTokens } }),
+      ...(tokenUsage === undefined ? {} : { tokenUsage }),
       ...(costUsd === undefined ? {} : { cost: { amount: costUsd, currency: 'USD' } }),
     };
   }
@@ -241,4 +248,20 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function nonnegativeNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function nonnegativeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
+function optionalTokenUsage(usage: {
+  readonly inputTokens: number | undefined;
+  readonly cachedInputTokens: number | undefined;
+  readonly outputTokens: number | undefined;
+  readonly totalTokens: number | undefined;
+}): RunHistoryTokenUsage | undefined {
+  const defined = Object.fromEntries(
+    Object.entries(usage).filter((entry): entry is [string, number] => entry[1] !== undefined),
+  );
+  return Object.keys(defined).length === 0 ? undefined : (defined as RunHistoryTokenUsage);
 }

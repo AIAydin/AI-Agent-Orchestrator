@@ -57,6 +57,15 @@ test('Agent node discloses capabilities, streams, resumes, retries, and restores
       await expect(configuration.getByRole('button', { name: 'Pause' })).toHaveCount(0);
     });
 
+    await test.step('locking the Agent honestly disables configuration and launch', async () => {
+      await page.getByRole('button', { name: 'Lock', exact: true }).click();
+      await expect(configuration.getByLabel('Installed adapter')).toBeDisabled();
+      await expect(configuration.getByLabel('Prompt')).toBeDisabled();
+      await expect(configuration.getByRole('button', { name: 'Review & run' })).toBeDisabled();
+      await page.getByRole('button', { name: 'Unlock', exact: true }).click();
+      await expect(configuration.getByRole('button', { name: 'Review & run' })).toBeEnabled();
+    });
+
     await test.step('the approved run streams input and is interrupted with normalized metadata', async () => {
       await approvePreparedRun(
         app!,
@@ -93,6 +102,7 @@ test('Agent node discloses capabilities, streams, resumes, retries, and restores
       await expect(interrupted).toContainText(MODEL_ID);
       await expect(interrupted).toContainText('Available for resume review (adapter manifest)');
       await expect(interrupted.getByRole('button', { name: 'Resume review' })).toBeEnabled();
+      await expect(page.locator('.autosave-state')).toHaveText('Saved locally');
     });
 
     await test.step('resume reuses provider identity but requires a fresh exact approval', async () => {

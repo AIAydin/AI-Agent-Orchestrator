@@ -54,7 +54,7 @@ describe('CollaborationIpcService ownership and approval', () => {
     expect(JSON.stringify(disclosure)).not.toContain('SESSION_TOKEN_DO_NOT_DISCLOSE');
   });
 
-  it('main-authorizes terminal and workflow mutations only for owner and editor roles', async () => {
+  it('main-authorizes terminal, Agent, and workflow mutations only for owner and editor roles', async () => {
     const viewerClient = fakeClient('viewer');
     const viewerService = new CollaborationIpcService(
       { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
@@ -76,11 +76,17 @@ describe('CollaborationIpcService ownership and approval', () => {
     expect(() => viewerService.assertWorkflowMutationAuthorized(viewer.sender as never)).toThrow(
       /collaboration role cannot/u,
     );
+    expect(() => viewerService.assertAgentMutationAuthorized(viewer.sender as never)).toThrow(
+      /collaboration role cannot/u,
+    );
     expect(() =>
       viewerService.assertTerminalMutationAuthorized(localWindow.sender as never),
     ).not.toThrow();
     expect(() =>
       viewerService.assertWorkflowMutationAuthorized(localWindow.sender as never),
+    ).not.toThrow();
+    expect(() =>
+      viewerService.assertAgentMutationAuthorized(localWindow.sender as never),
     ).not.toThrow();
 
     await invoke('leave', viewer.event);
@@ -98,6 +104,7 @@ describe('CollaborationIpcService ownership and approval', () => {
     expect(() =>
       editorService.assertWorkflowMutationAuthorized(viewer.sender as never),
     ).not.toThrow();
+    expect(() => editorService.assertAgentMutationAuthorized(viewer.sender as never)).not.toThrow();
   });
 
   it('denies terminal mutations while the collaboration owner role is unresolved', async () => {
@@ -141,6 +148,9 @@ describe('CollaborationIpcService ownership and approval', () => {
       /collaboration role cannot/u,
     );
     expect(() => service.assertWorkflowMutationAuthorized(owner.sender as never)).toThrow(
+      /collaboration role cannot/u,
+    );
+    expect(() => service.assertAgentMutationAuthorized(owner.sender as never)).toThrow(
       /collaboration role cannot/u,
     );
     resolveJoin?.();

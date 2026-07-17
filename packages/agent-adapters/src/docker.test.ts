@@ -104,6 +104,49 @@ function dockerOptions(
 }
 
 describe('Docker agent launch planning', () => {
+  it('maps reviewed virtual context without requiring a source file', async () => {
+    const worktree = await temporaryDirectory();
+    const logicalPath = path.join(worktree, '.forgeboard-context', 'brief.md');
+    const digest = 'a'.repeat(64);
+    const attachment: ContextAttachment = {
+      path: logicalPath,
+      kind: 'file',
+      explicitlyApproved: true,
+      sha256: digest,
+    };
+    const result = await planDockerAgentLaunch(
+      preparedLaunch(worktree, {
+        attachments: [attachment],
+        arguments: ['Review', logicalPath],
+      }),
+      dockerOptions(worktree, { virtualContextAttachments: [attachment] }),
+    );
+
+    expect(result.disclosure.contextAttachments).toEqual([
+      expect.objectContaining({ path: '/workspace/.forgeboard-context/brief.md', sha256: digest }),
+    ]);
+    await expect(
+      planDockerAgentLaunch(
+        preparedLaunch(worktree, { attachments: [attachment] }),
+        dockerOptions(worktree, {
+          virtualContextAttachments: [{ ...attachment, sha256: 'b'.repeat(64) }],
+        }),
+      ),
+    ).rejects.toThrow(/exact digest-bound/iu);
+    await expect(
+      planDockerAgentLaunch(
+        preparedLaunch(worktree, { attachments: [attachment] }),
+        dockerOptions(worktree),
+      ),
+    ).rejects.toThrow(/unavailable/iu);
+    await expect(
+      planDockerAgentLaunch(
+        preparedLaunch(worktree),
+        dockerOptions(worktree, { virtualContextAttachments: [attachment] }),
+      ),
+    ).rejects.toThrow(/not present/iu);
+  });
+
   it('emits exact shell-free hardened args and rewrites approved paths with spaces', async () => {
     const root = await temporaryDirectory();
     const worktree = path.join(root, 'assigned worktree with spaces');

@@ -39,6 +39,65 @@ export interface AgentRunContextResolver {
   resolve(input: PrepareRunInput, settings: AppSettings): Promise<PersistedAgentContextResolution>;
 }
 
+export function assertPersistedAgentNodeMutable(
+  store: Pick<LocalStore, 'loadCanvas'>,
+  projectId: string,
+  nodeId: string,
+  expectedRunId?: string,
+): void {
+  const stored = store.loadCanvas(projectId);
+  if (stored === undefined) throw new Error('The Agent canvas is no longer available.');
+  const synchronized = synchronizeCanvasDocument(stored);
+  if (!synchronized.ok) {
+    throw new Error('The saved canvas is invalid. Repair it before controlling an Agent run.');
+  }
+  const canvas = synchronized.document.canonical;
+  if (canvas.projectId !== projectId)
+    throw new Error('The saved canvas belongs to another project.');
+  const agent = canvas.nodes.find((node) => node.id === nodeId);
+  if (agent === undefined || agent.type !== 'agent') {
+    throw new Error('Agent controls require an exact persisted Agent node.');
+  }
+  if (protectedNodeIds(canvas.nodes).has(nodeId)) {
+    throw new Error('Unlock the Agent node or its containing group before controlling it.');
+  }
+  if (expectedRunId !== undefined && persistedAgentRunId(agent) !== expectedRunId) {
+    throw new Error('The Agent node now points to another run. Use its current controls.');
+  }
+}
+
+export function assertPersistedAgentLaunchAuthorityCurrent(
+  store: Pick<LocalStore, 'loadCanvas'>,
+  input: PrepareRunInput,
+  settings: AppSettings,
+  expectedRunId: string,
+  expected: PersistedAgentContextAuthority,
+): void {
+  assertPersistedAgentNodeMutable(store, input.projectId, input.nodeId, expectedRunId);
+  const stored = store.loadCanvas(input.projectId);
+  if (stored === undefined) throw new Error('The Agent canvas is no longer available.');
+  const synchronized = synchronizeCanvasDocument(stored);
+  if (!synchronized.ok) throw new Error('The saved Agent canvas is invalid.');
+  const canvas = synchronized.document.canonical;
+  const agent = canvas.nodes.find((node) => node.id === input.nodeId);
+  if (agent === undefined || agent.type !== 'agent') {
+    throw new Error('Agent launch authority no longer resolves to the reviewed node.');
+  }
+  assertPreparedConfiguration(agent, input, settings);
+  const attachmentIds = [...agent.data.contextAttachmentIds];
+  const relativePaths = attachmentIds.map(
+    (attachmentId) =>
+      requireFileNode(canvas.nodes, input.projectId, attachmentId).data.file.relativePath,
+  );
+  if (
+    canvas.id !== expected.canvasId ||
+    JSON.stringify(attachmentIds) !== JSON.stringify(expected.attachmentIds) ||
+    JSON.stringify(relativePaths) !== JSON.stringify(expected.relativePaths)
+  ) {
+    throw new Error('The Agent context selection changed after review. Review a fresh run.');
+  }
+}
+
 /** Main-only authority that turns persisted opaque File-node IDs into reviewed file bytes. */
 export class PersistedAgentRunContextResolver implements AgentRunContextResolver {
   public constructor(private readonly store: PersistedAgentContextStore) {}
@@ -89,6 +148,9 @@ export class PersistedAgentRunContextResolver implements AgentRunContextResolver
     const agent = canvas.nodes.find((node) => node.id === input.nodeId);
     if (agent === undefined || agent.type !== 'agent') {
       throw new Error('Agent runs require an exact persisted Agent node.');
+    }
+    if (protectedNodeIds(canvas.nodes).has(agent.id)) {
+      throw new Error('Unlock the Agent node or its containing group before reviewing a run.');
     }
     assertPreparedConfiguration(agent, input, settings);
 
@@ -174,6 +236,23 @@ export class PersistedAgentRunContextResolver implements AgentRunContextResolver
   }
 }
 
+function protectedNodeIds(nodes: readonly CanvasNode[]): ReadonlySet<string> {
+  const protectedIds = new Set(nodes.filter((node) => node.locked).map((node) => node.id));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const node of nodes) {
+      if (node.type !== 'group-frame' || !protectedIds.has(node.id)) continue;
+      for (const childId of node.data.childNodeIds) {
+        if (protectedIds.has(childId)) continue;
+        protectedIds.add(childId);
+        changed = true;
+      }
+    }
+  }
+  return protectedIds;
+}
+
 function assertPreparedConfiguration(
   agent: Extract<CanvasNode, { type: 'agent' }>,
   input: PrepareRunInput,
@@ -208,6 +287,15 @@ function persistedAgentPrompt(agent: Extract<CanvasNode, { type: 'agent' }>): st
   const record = legacyData as Readonly<Record<string, unknown>>;
   if (typeof record['prompt'] === 'string') return record['prompt'].trim();
   return typeof record['description'] === 'string' ? record['description'].trim() : typedPrompt;
+}
+
+function persistedAgentRunId(agent: Extract<CanvasNode, { type: 'agent' }>): string | undefined {
+  const legacyData = agent.inspector['legacyData'];
+  if (legacyData === null || typeof legacyData !== 'object' || Array.isArray(legacyData)) {
+    return undefined;
+  }
+  const runId = (legacyData as Readonly<Record<string, unknown>>)['runId'];
+  return typeof runId === 'string' ? runId : undefined;
 }
 
 function requireFileNode(

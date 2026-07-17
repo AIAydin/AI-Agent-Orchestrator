@@ -177,7 +177,10 @@ describe('canonical desktop canvas adapter', () => {
                 },
               ],
               resources: { cpuUnits: 2, memoryMb: 1024, exclusiveKeys: ['worktree:agent-1'] },
-              data: { ...candidate.data, tokenUsage: { input: 12, output: 8 } },
+              data: {
+                ...candidate.data,
+                tokenUsage: { inputTokens: 12, outputTokens: 8 },
+              },
             }
           : candidate,
       ),
@@ -216,7 +219,7 @@ describe('canonical desktop canvas adapter', () => {
       status: 'ready',
       comments: [{ body: 'Keep this durable review note.' }],
       resources: { cpuUnits: 2, memoryMb: 1024, exclusiveKeys: ['worktree:agent-1'] },
-      data: { tokenUsage: { input: 12, output: 8 } },
+      data: { tokenUsage: { inputTokens: 12, outputTokens: 8 } },
     });
     expect(migrated.canvas.groups).toEqual(canonical.groups);
     expect(migrated.canvas.workflowLimits).toEqual(canonical.workflowLimits);
@@ -718,7 +721,12 @@ describe('canonical desktop canvas adapter', () => {
             pauseSupported: false,
             interruptSupported: true,
             resumeSupported: true,
-            tokenUsage: { input: 120, output: 30 },
+            tokenUsage: {
+              inputTokens: 120,
+              cachedInputTokens: 20,
+              outputTokens: 30,
+              totalTokens: 150,
+            },
             cost: { amount: 0.0125, currency: 'USD' },
           }),
         ],
@@ -735,7 +743,12 @@ describe('canonical desktop canvas adapter', () => {
         pauseSupported: false,
         interruptSupported: true,
         resumeSupported: true,
-        tokenUsage: { input: 120, output: 30 },
+        tokenUsage: {
+          inputTokens: 120,
+          cachedInputTokens: 20,
+          outputTokens: 30,
+          totalTokens: 150,
+        },
         cost: { amount: 0.0125, currency: 'USD' },
       },
     });
@@ -745,8 +758,28 @@ describe('canonical desktop canvas adapter', () => {
       pauseSupported: false,
       interruptSupported: true,
       resumeSupported: true,
-      tokenUsage: { input: 120, output: 30 },
+      tokenUsage: {
+        inputTokens: 120,
+        cachedInputTokens: 20,
+        outputTokens: 30,
+        totalTokens: 150,
+      },
       cost: { amount: 0.0125, currency: 'USD' },
+    });
+  });
+
+  it('normalizes legacy required input/output token counts without dropping saved usage', () => {
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [node('agent-1', 'agent', { tokenUsage: { input: 8, output: 5 } })],
+        edges: [],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.canvas.nodes[0]?.data).toMatchObject({
+      tokenUsage: { inputTokens: 8, outputTokens: 5 },
     });
   });
 

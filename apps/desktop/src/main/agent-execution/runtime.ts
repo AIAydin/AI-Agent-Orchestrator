@@ -870,6 +870,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       };
       const active: ActiveRunState = {
         ...prepared,
+        context: discardGeneratedContextContent(prepared.context),
         session,
         pendingTestInputId: null,
         outputPreview: prepared.record.outputPreview ?? '',
@@ -1668,6 +1669,14 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
   }
 }
 
+function discardGeneratedContextContent(
+  context: AgentExecutionContextRequest,
+): AgentExecutionContextRequest {
+  const retained = { ...context };
+  delete retained.generatedArtifacts;
+  return retained;
+}
+
 function visibleMessageOutput(payload: unknown): string | null {
   if (!isRecord(payload)) return null;
   const eventType = typeof payload['type'] === 'string' ? payload['type'].toLowerCase() : '';
@@ -1715,12 +1724,23 @@ export async function remapContextIntoWorktree(
     realpath(path.resolve(repositoryPath)),
     realpath(path.resolve(worktreePath)),
   ]);
+  const generatedByPath = new Map(
+    (context.generatedArtifacts ?? []).map((artifact) => [path.resolve(artifact.path), artifact]),
+  );
   const attachments = await Promise.all(
     context.attachments.map(async (attachment) => {
       if (attachment.kind !== 'file') {
         throw new Error(
           'Directory context cannot be safely remapped into an agent worktree. Select explicit File nodes instead.',
         );
+      }
+      const generated = generatedByPath.get(path.resolve(attachment.path));
+      if (generated !== undefined) {
+        const relativePath = path.relative(canonicalRepository, path.resolve(attachment.path));
+        if (!isContainedRelativePath(relativePath)) {
+          throw new Error('Generated context is outside the approved project checkout.');
+        }
+        return { ...attachment, path: path.resolve(canonicalWorktree, relativePath) };
       }
       const source = await canonicalRegularFile(attachment.path, canonicalRepository, 'source');
       const relativePath = path.relative(canonicalRepository, source);
@@ -1748,7 +1768,18 @@ export async function remapContextIntoWorktree(
       return { ...attachment, path: target };
     }),
   );
-  return AgentExecutionRequestSchema.shape.context.parse({ ...context, attachments });
+  const generatedArtifacts = (context.generatedArtifacts ?? []).map((artifact) => {
+    const relativePath = path.relative(canonicalRepository, path.resolve(artifact.path));
+    if (!isContainedRelativePath(relativePath)) {
+      throw new Error('Generated context is outside the approved project checkout.');
+    }
+    return { ...artifact, path: path.resolve(canonicalWorktree, relativePath) };
+  });
+  return AgentExecutionRequestSchema.shape.context.parse({
+    ...context,
+    attachments,
+    ...(generatedArtifacts.length === 0 ? {} : { generatedArtifacts }),
+  });
 }
 
 function contextSnapshotDisclosureWarnings(

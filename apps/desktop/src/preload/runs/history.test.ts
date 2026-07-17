@@ -37,6 +37,21 @@ describe('createRunHistoryApi', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
+  it('retrieves one exact path-free run identity', async () => {
+    const value = summary();
+    const invoke = vi.fn().mockResolvedValue({ ok: true, value });
+    const api = createRunHistoryApi(invoke);
+
+    await expect(api.get({ projectId: PROJECT_ID, runId: RUN_ID })).resolves.toEqual({
+      ok: true,
+      value,
+    });
+    expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.runsGet, {
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+    });
+  });
+
   it('rejects a main-process response that leaks a worktree path', async () => {
     const invoke = vi.fn().mockResolvedValue({
       ok: true,

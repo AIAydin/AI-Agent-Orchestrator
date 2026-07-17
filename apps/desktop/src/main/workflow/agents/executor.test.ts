@@ -379,7 +379,7 @@ describe('WorkflowAgentExecutor preparation', () => {
     await executor.discardPreparation(original, prepared);
   });
 
-  it('includes verified active context-edge attachments with deterministic cross-source dedupe', async () => {
+  it('includes verified active context-edge attachments with configured-order dedupe', async () => {
     const node = agentNode({ attachmentIds: ['shared-context', 'node-context'] });
     const source = taskNode('context-source');
     const edge = contextEdge(source.id, node.id, ['shared-context', 'edge-context']);
@@ -392,7 +392,7 @@ describe('WorkflowAgentExecutor preparation', () => {
         sourceNodeId: source.id,
         targetNodeId: node.id,
         targetAttempt: 1,
-        attachmentIds: ['edge-context', 'shared-context'],
+        attachmentIds: ['shared-context', 'edge-context'],
         contentDigest: 'sha256:verified-context',
         verifiedAt: NOW,
         verifierId: 'desktop-context-verifier',
@@ -413,13 +413,13 @@ describe('WorkflowAgentExecutor preparation', () => {
 
     expect(resolver).toHaveBeenCalledWith(
       expect.objectContaining({
-        attachmentIds: ['edge-context', 'node-context', 'shared-context'],
+        attachmentIds: ['shared-context', 'node-context', 'edge-context'],
       }),
     );
     expect(backend.prepareCalls[0]?.request.context.attachments.map(({ label }) => label)).toEqual([
-      'edge-context',
-      'node-context',
       'shared-context',
+      'node-context',
+      'edge-context',
     ]);
   });
 

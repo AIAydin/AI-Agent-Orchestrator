@@ -43,7 +43,13 @@ describe('summarizeRunEvent Agent metadata', () => {
           resume: true,
           source: 'manifest',
         },
-        usage: { inputTokens: 120, outputTokens: 30, totalTokens: 150, costUsd: 0.0125 },
+        usage: {
+          inputTokens: 120,
+          cachedInputTokens: 20,
+          outputTokens: 30,
+          totalTokens: 150,
+          costUsd: 0.0125,
+        },
       }),
     );
 
@@ -56,13 +62,18 @@ describe('summarizeRunEvent Agent metadata', () => {
       interruptSupported: true,
       pauseSupported: false,
       resumeSupported: true,
-      tokenUsage: { input: 120, output: 30 },
+      tokenUsage: {
+        inputTokens: 120,
+        cachedInputTokens: 20,
+        outputTokens: 30,
+        totalTokens: 150,
+      },
       cost: { amount: 0.0125, currency: 'USD' },
     });
     expect(JSON.stringify(update)).not.toContain('providerSessionId');
   });
 
-  it('does not invent token or cost metadata from partial or invalid usage', () => {
+  it('preserves total-only usage without inventing component counts', () => {
     const update = summarizeRunEvent(
       event('run-summary', {
         status: 'failed',
@@ -70,8 +81,21 @@ describe('summarizeRunEvent Agent metadata', () => {
         usage: { totalTokens: 12, costUsd: -1 },
       }),
     );
-    expect(update).not.toHaveProperty('tokenUsage');
+    expect(update).toMatchObject({ tokenUsage: { totalTokens: 12 } });
+    expect(update.tokenUsage).toEqual({ totalTokens: 12 });
+    expect(Object.values(update.tokenUsage ?? {})).not.toContain(undefined);
     expect(update).not.toHaveProperty('cost');
+  });
+
+  it('drops token metadata when the provider reports no valid category', () => {
+    const update = summarizeRunEvent(
+      event('run-summary', {
+        status: 'failed',
+        changedFiles: [],
+        usage: { inputTokens: -1, outputTokens: 1.5, totalTokens: 'unknown' },
+      }),
+    );
+    expect(update).not.toHaveProperty('tokenUsage');
   });
 });
 

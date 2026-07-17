@@ -28,6 +28,7 @@ import type {
   ExtensionCanvasNodeTypeView,
   PermissionProfile,
 } from '../../../../../shared/application/contracts.js';
+import type { RunHistoryTokenUsage } from '../../../../../shared/runs/contracts.js';
 import { CANVAS_NODE_MINIMUM_DIMENSIONS } from '../../../../../shared/canvas/node-dimensions.js';
 import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
@@ -94,7 +95,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   interruptSupported?: boolean | undefined;
   resumeSupported?: boolean | undefined;
   providerSessionAvailable?: boolean | undefined;
-  tokenUsage?: { input: number; output: number } | undefined;
+  tokenUsage?: RunHistoryTokenUsage | undefined;
   cost?: { amount: number; currency: string } | undefined;
   remote?: string;
   destinationBranch?: string;

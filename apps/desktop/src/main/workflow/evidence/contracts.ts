@@ -1,6 +1,8 @@
 import { EntityIdSchema, RelativePathSchema } from '@forgeboard/core/domain';
 import { z } from 'zod';
 
+import type { WorkflowCanvasContextSource } from '../context/canvas-source.js';
+
 const Sha256DigestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 
 export const WORKFLOW_EVIDENCE_VERIFIER_ID = EntityIdSchema.parse(
@@ -38,7 +40,9 @@ export interface WorkflowContextEvidenceRequest {
   readonly sourceNodeId: string;
   readonly targetNodeId: string;
   readonly targetAttempt: number;
+  readonly attachmentIds: readonly string[];
   readonly files: readonly WorkflowContextFileReference[];
+  readonly canvasSources: readonly WorkflowCanvasContextSource[];
 }
 
 /**

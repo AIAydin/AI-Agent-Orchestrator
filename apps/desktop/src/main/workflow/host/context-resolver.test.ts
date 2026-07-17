@@ -1,4 +1,5 @@
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -13,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Project } from '../../../shared/application/contracts.js';
 import { FileNodeWorkflowContextResolver } from './context-resolver.js';
+import { serializeWorkflowCanvasContext } from '../context/canvas-source.js';
 import { WORKFLOW_EVIDENCE_VERIFIER_ID } from '../evidence/contracts.js';
 
 const PROJECT_ID = 'project-1';
@@ -148,6 +150,7 @@ describe('FileNodeWorkflowContextResolver', () => {
       sourceNodeId: 'file-1',
       targetNodeId: 'agent-1',
       targetAttempt: 1,
+      attachmentIds: ['file-1'],
       files: [
         {
           attachmentId: 'file-1',
@@ -156,6 +159,7 @@ describe('FileNodeWorkflowContextResolver', () => {
           readOnly: true,
         },
       ],
+      canvasSources: [],
     });
 
     expect(proof.attachmentIds).toEqual(['file-1']);
@@ -206,6 +210,179 @@ describe('FileNodeWorkflowContextResolver', () => {
     await expect(resolver.resolve(request(runtime, ['file-1']))).rejects.toThrow(
       'changed after its evidence was verified',
     );
+  });
+
+  it('binds each File attachment ID to its reviewed relative path', async () => {
+    const root = fixtureRoot();
+    writeFileSync(join(root, 'a.md'), 'A\n');
+    writeFileSync(join(root, 'b.md'), 'B\n');
+    const resolver = new FileNodeWorkflowContextResolver({
+      getProject: () => project(root),
+      appendAudit: vi.fn(),
+    });
+    const base = {
+      executionId: 'workflow-1',
+      projectId: PROJECT_ID,
+      edgeId: 'context-edge',
+      sourceNodeId: 'file-1',
+      targetNodeId: 'agent-1',
+      targetAttempt: 1,
+      attachmentIds: ['file-1', 'file-2'],
+      canvasSources: [],
+    };
+    const first = await resolver.resolveEvidence({
+      ...base,
+      files: [fileReference('file-1', 'a.md'), fileReference('file-2', 'b.md')],
+    });
+    const swapped = await resolver.resolveEvidence({
+      ...base,
+      files: [fileReference('file-1', 'b.md'), fileReference('file-2', 'a.md')],
+    });
+    expect(swapped.contentDigest).not.toBe(first.contentDigest);
+    const reordered = await resolver.resolveEvidence({
+      ...base,
+      attachmentIds: ['file-2', 'file-1'],
+      files: [fileReference('file-1', 'a.md'), fileReference('file-2', 'b.md')],
+    });
+    expect(reordered.contentDigest).not.toBe(first.contentDigest);
+  });
+
+  it('rejects aggregate generated context above the launch budget before approval', async () => {
+    const root = fixtureRoot();
+    const resolver = new FileNodeWorkflowContextResolver({
+      getProject: () => project(root),
+      appendAudit: vi.fn(),
+    });
+    const content = 'x'.repeat(4 * 1024 * 1024);
+    const sha256 = createHash('sha256').update(content).digest('hex');
+    const attachmentIds = Array.from({ length: 9 }, (_, index) => `brief-${String(index)}`);
+    await expect(
+      resolver.resolveEvidence({
+        executionId: 'workflow-1',
+        projectId: PROJECT_ID,
+        edgeId: 'large-edge',
+        sourceNodeId: attachmentIds[0]!,
+        targetNodeId: 'agent-1',
+        targetAttempt: 1,
+        attachmentIds,
+        files: [],
+        canvasSources: attachmentIds.map((attachmentId) => ({
+          attachmentId,
+          sourceNodeId: attachmentId,
+          sourceType: 'product-brief' as const,
+          content,
+          sha256,
+        })),
+      }),
+    ).rejects.toThrow(/32 MiB aggregate/iu);
+  });
+
+  it('resolves a mixed File, Product Brief, Task, Diagram, and Note selection in edge order', async () => {
+    const root = fixtureRoot();
+    writeFileSync(join(root, 'review.md'), '# File context\n');
+    const brief = canvasContextNode('brief-1', 'product-brief', { markdown: '# Brief' });
+    const task = canvasContextNode('task-context', 'task', { description: 'Ship the feature' });
+    const diagram = canvasContextNode('diagram-1', 'diagram', {
+      mermaidSource: 'flowchart LR\nA-->B',
+    });
+    const note = canvasContextNode('note-1', 'note-image', { markdown: 'Remember this' });
+    const attachmentIds = ['brief-1', 'file-1', 'task-context', 'diagram-1', 'note-1'];
+    const nodes = [
+      agentNode(attachmentIds),
+      brief,
+      fileNode('file-1', 'review.md'),
+      task,
+      diagram,
+      note,
+    ];
+    const resolver = new FileNodeWorkflowContextResolver({
+      getProject: () => project(root),
+      appendAudit: vi.fn(),
+    });
+    const canonicalNodes = workflowRuntime(nodes).canvas.nodes;
+    const canvasSources = canonicalNodes
+      .filter(
+        (node) =>
+          node.type === 'product-brief' ||
+          node.type === 'task' ||
+          node.type === 'diagram' ||
+          node.type === 'note-image',
+      )
+      .map(serializeWorkflowCanvasContext);
+    const proof = await resolver.resolveEvidence({
+      executionId: 'workflow-1',
+      projectId: PROJECT_ID,
+      edgeId: 'mixed-edge',
+      sourceNodeId: 'brief-1',
+      targetNodeId: 'agent-1',
+      targetAttempt: 1,
+      attachmentIds,
+      files: [
+        {
+          attachmentId: 'file-1',
+          fileNodeId: 'file-1',
+          relativePath: 'review.md',
+          readOnly: true,
+        },
+      ],
+      canvasSources,
+    });
+    expect(proof.attachmentIds).toEqual(attachmentIds);
+    const edge: Canvas['edges'][number] = {
+      id: 'mixed-edge',
+      type: 'context',
+      sourceNodeId: 'brief-1',
+      targetNodeId: 'agent-1',
+      config: { attachmentMode: 'explicit', required: true, attachmentIds },
+      inspector: {},
+      createdAt: T0,
+    };
+    const initial = workflowRuntime(nodes, [edge]);
+    const runtime = {
+      ...initial,
+      evidence: {
+        ...initial.evidence,
+        contextResolutions: {
+          'mixed-edge': {
+            edgeId: 'mixed-edge',
+            runId: initial.run.id,
+            sourceNodeId: 'brief-1',
+            targetNodeId: 'agent-1',
+            targetAttempt: 1,
+            attachmentIds,
+            contentDigest: `sha256:${proof.contentDigest}`,
+            verifiedAt: T0,
+            verifierId: WORKFLOW_EVIDENCE_VERIFIER_ID,
+          },
+        },
+      },
+    };
+
+    expect(
+      runtime.canvas.nodes
+        .filter(
+          (node) =>
+            node.type === 'product-brief' ||
+            node.type === 'task' ||
+            node.type === 'diagram' ||
+            node.type === 'note-image',
+        )
+        .map(serializeWorkflowCanvasContext),
+    ).toEqual(canvasSources);
+
+    const resolved = await resolver.resolve(request(runtime, attachmentIds));
+    expect(resolved.attachments.map(({ attachmentId }) => attachmentId)).toEqual(attachmentIds);
+    expect(resolved.generatedArtifacts).toHaveLength(4);
+    expect(resolved.generatedArtifacts?.map(({ attachmentId }) => attachmentId)).toEqual([
+      'brief-1',
+      'task-context',
+      'diagram-1',
+      'note-1',
+    ]);
+    for (const generated of resolved.generatedArtifacts ?? []) {
+      expect(generated.artifact.path).toContain(join(root, '.forgeboard-context'));
+      expect(generated.artifact.sha256).toMatch(/^[0-9a-f]{64}$/u);
+    }
   });
 });
 
@@ -278,6 +455,18 @@ function fileNode(
     type: 'file',
     data: { file: { projectId: PROJECT_ID, relativePath, kind, missing: false } },
   });
+}
+
+function fileReference(attachmentId: string, relativePath: string) {
+  return { attachmentId, fileNodeId: attachmentId, relativePath, readOnly: true };
+}
+
+function canvasContextNode(
+  id: string,
+  type: 'product-brief' | 'task' | 'diagram' | 'note-image',
+  data: Record<string, unknown>,
+): CanvasNode {
+  return CanvasNodeSchema.parse({ ...nodeBase(id, id), type, data });
 }
 
 function nodeBase(id: string, title: string) {

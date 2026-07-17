@@ -50,6 +50,7 @@ describe('MainWorkflowEvidenceBridge', () => {
       sourceNodeId: 'file-1',
       targetNodeId: 'agent-1',
       targetAttempt: 1,
+      attachmentIds: ['file-1'],
       files: [
         {
           attachmentId: 'file-1',
@@ -59,6 +60,7 @@ describe('MainWorkflowEvidenceBridge', () => {
           lastKnownHash: 'sha256:last-known',
         },
       ],
+      canvasSources: [],
     });
     expect(reconciled.evidence.contextResolutions['context-edge']).toEqual({
       edgeId: 'context-edge',
@@ -91,7 +93,7 @@ describe('MainWorkflowEvidenceBridge', () => {
     const neverCalled = vi.fn();
     await expect(
       new MainWorkflowEvidenceBridge({ resolveContext: neverCalled }).reconcile(nonFile, T1),
-    ).rejects.toThrow('not a canonical regular File node');
+    ).rejects.toThrow('must be a regular File, Product Brief, Task, Diagram, or Note node');
     expect(neverCalled).not.toHaveBeenCalled();
 
     const mismatched = new MainWorkflowEvidenceBridge({
@@ -326,7 +328,7 @@ function runtimeFor(canvas: Canvas): WorkflowExecutionRuntime {
 
 function contextCanvas(override: { readonly nonFileAttachment?: boolean } = {}): Canvas {
   const source = override.nonFileAttachment
-    ? noteNode('file-1')
+    ? unsupportedContextNode('file-1')
     : fileNode('file-1', 'docs/brief.md');
   return canvas({
     nodes: [source, agentNode('agent-1')],
@@ -497,8 +499,14 @@ function fileNode(id: string, relativePath: string) {
   };
 }
 
-function noteNode(id: string) {
-  return { ...baseNode, id, title: id, type: 'note-image' as const, data: {} };
+function unsupportedContextNode(id: string) {
+  return {
+    ...baseNode,
+    id,
+    title: id,
+    type: 'whiteboard-mockup' as const,
+    data: { excalidraw: { elements: [] } },
+  };
 }
 
 function process(pid: number) {

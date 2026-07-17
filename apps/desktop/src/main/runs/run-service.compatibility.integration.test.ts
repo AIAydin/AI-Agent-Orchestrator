@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   IPC_CHANNELS,
   type AppSettings,
+  type CanvasDocument,
   type PrepareRunInput,
   type RunEventEnvelope,
 } from '../../shared/application/contracts.js';
@@ -26,6 +27,7 @@ import type {
   PersistedAgentContextResolution,
 } from './context/persisted-agent-context.js';
 import { RunService } from './run-service.js';
+import type { RunServicePersistedLaunchAuthorizer } from './run-service.js';
 import type { LocalStore } from '../storage.js';
 import type { StoredRunRecord } from '../storage-schemas.js';
 
@@ -94,6 +96,7 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
   paused = false;
   reset = false;
   prepareGate: Promise<void> | undefined;
+  launchAuthorizationGate: Promise<void> | undefined;
   resetResult: Promise<void> | undefined;
   stopOwnerResult: Promise<void> | undefined;
   stopOwnerError: Error | undefined;
@@ -170,16 +173,17 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
     return this.prepare(ownerId, input);
   }
 
-  public launch(
+  public async launch(
     ownerId: string,
     planId: string,
     disclosureFingerprint: string,
     authorizeLaunch?: () => void,
   ): Promise<AgentExecutionLaunchHandle> {
     this.beforeAuthorizeLaunch?.();
+    if (this.launchAuthorizationGate !== undefined) await this.launchAuthorizationGate;
     authorizeLaunch?.();
     this.launchCalls.push({ ownerId, planId, disclosureFingerprint });
-    return Promise.resolve({
+    return {
       runId: planId,
       process: null,
       capabilities: {
@@ -214,7 +218,7 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
       writeInput: () => undefined,
       interrupt: () => undefined,
       terminate: () => Promise.resolve(),
-    });
+    };
   }
 
   public sendInput(ownerId: string, runId: string, data: string): boolean {
@@ -365,6 +369,26 @@ describe('RunService Electron compatibility', () => {
     await service.dispose();
   });
 
+  it('gets one exact path-free run only when it belongs to the requested project', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    const run = storedRun('00000000-0000-4000-8000-000000000095');
+    const { service } = serviceHarness(runtime, { runRecords: [run] });
+    const handler = requiredHandler(IPC_CHANNELS.runsGet);
+    const event = invokeEvent(webContents(95).owner);
+
+    await expect(handler(event, { projectId: PROJECT_ID, runId: run.id })).resolves.toMatchObject({
+      ok: true,
+      value: { id: run.id, projectId: PROJECT_ID },
+    });
+    await expect(
+      handler(event, {
+        projectId: '223fae6e-e213-4a10-a0db-0f85b791f7e9',
+        runId: run.id,
+      }),
+    ).resolves.toEqual({ ok: true, value: null });
+    await service.dispose();
+  });
+
   it('rejects run-history subframes and a window replacement before returning storage data', async () => {
     const runtime = new FakeAgentExecutionRuntime();
     const { listProjectRuns, service } = serviceHarness(runtime, {
@@ -425,7 +449,12 @@ describe('RunService Electron compatibility', () => {
     const runtime = new FakeAgentExecutionRuntime();
     let emit: AgentExecutionEventSink | undefined;
     const service = new RunService(
-      {} as LocalStore,
+      {
+        appendAudit: vi.fn(),
+        getRun: () => undefined,
+        listProjectRuns: () => [],
+        loadCanvas: () => undefined,
+      } as unknown as LocalStore,
       () => ({}) as AppSettings,
       () => Promise.resolve(undefined),
       undefined,
@@ -437,6 +466,8 @@ describe('RunService Electron compatibility', () => {
       { showMessageBox: () => Promise.resolve({ response: 1, checkboxChecked: false }) },
       () => new Date('2026-07-15T12:00:00.000Z'),
       emptyContextResolver(),
+      undefined,
+      () => undefined,
     );
     const firstOwner = webContents(7);
     const secondOwner = webContents(8);
@@ -512,6 +543,7 @@ describe('RunService Electron compatibility', () => {
     expect(electronMock.removed).toEqual(
       expect.arrayContaining([
         IPC_CHANNELS.runsPrepare,
+        IPC_CHANNELS.runsGet,
         IPC_CHANNELS.runsResume,
         IPC_CHANNELS.runsRetry,
         IPC_CHANNELS.runsApprove,
@@ -520,6 +552,86 @@ describe('RunService Electron compatibility', () => {
         IPC_CHANNELS.runsTerminate,
       ]),
     );
+  });
+
+  it('denies renderer Agent mutations through the main collaboration gate while preserving termination', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    const authorizeMutation = vi.fn(() => {
+      throw new Error('This collaboration role cannot mutate a local coding agent.');
+    });
+    const { service } = serviceHarness(runtime, { authorizeMutation });
+    const owner = webContents(91);
+    const event = invokeEvent(owner.owner);
+    const runId = '00000000-0000-4000-8000-000000000091';
+
+    await expect(
+      requiredHandler(IPC_CHANNELS.runsPrepare)(event, PREPARE_INPUT),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    for (const channel of [IPC_CHANNELS.runsResume, IPC_CHANNELS.runsRetry]) {
+      await expect(
+        requiredHandler(channel)(event, { ...PREPARE_INPUT, parentRunId: runId }),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    }
+    await expect(requiredHandler(IPC_CHANNELS.runsApprove)(event, runId)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    await expect(
+      requiredHandler(IPC_CHANNELS.runsInput)(event, runId, 'input'),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    await expect(requiredHandler(IPC_CHANNELS.runsInterrupt)(event, runId)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    await expect(requiredHandler(IPC_CHANNELS.runsTerminate)(event, runId)).resolves.toEqual({
+      ok: true,
+      value: true,
+    });
+
+    expect(runtime.prepareCalls).toEqual([]);
+    expect(runtime.inputCalls).toEqual([]);
+    expect(runtime.interruptCalls).toEqual([]);
+    expect(runtime.terminateCalls).toEqual([expect.objectContaining({ runId })]);
+    expect(authorizeMutation).toHaveBeenCalledTimes(6);
+    await service.dispose();
+  });
+
+  it('fails input and interrupt closed when durable Agent node authority is missing', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    const { service } = serviceHarness(runtime);
+    const event = invokeEvent(webContents(92).owner);
+    const runId = '00000000-0000-4000-8000-000000000092';
+
+    for (const channel of [IPC_CHANNELS.runsInput, IPC_CHANNELS.runsInterrupt]) {
+      const arguments_ = channel === IPC_CHANNELS.runsInput ? [runId, 'input'] : [runId];
+      const result = await requiredHandler(channel)(event, ...arguments_);
+      expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+      expect(JSON.stringify(result)).toMatch(/durable node authority/iu);
+    }
+    expect(runtime.inputCalls).toEqual([]);
+    expect(runtime.interruptCalls).toEqual([]);
+    await service.dispose();
+  });
+
+  it('denies input and interrupt after the same Agent node points to a superseding run', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    const oldRunId = '00000000-0000-4000-8000-000000000092';
+    const newRunId = '00000000-0000-4000-8000-000000000093';
+    const { service } = serviceHarness(runtime, {
+      runRecords: [storedRun(oldRunId, { status: 'running', endedAt: null })],
+      canvasDocument: agentCanvas(newRunId),
+    });
+    const event = invokeEvent(webContents(93).owner);
+
+    for (const channel of [IPC_CHANNELS.runsInput, IPC_CHANNELS.runsInterrupt]) {
+      const arguments_ = channel === IPC_CHANNELS.runsInput ? [oldRunId, 'input'] : [oldRunId];
+      const result = await requiredHandler(channel)(event, ...arguments_);
+      expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+      expect(JSON.stringify(result)).toMatch(/another run/iu);
+    }
+    expect(runtime.inputCalls).toEqual([]);
+    expect(runtime.interruptCalls).toEqual([]);
+    await service.dispose();
   });
 
   it('passes the exact persisted context manifest into ordinary preparation and disclosure', async () => {
@@ -656,6 +768,38 @@ describe('RunService Electron compatibility', () => {
       requiredHandler(IPC_CHANNELS.runsApprove)(invokeEvent(owner.owner), disclosure.runId),
     ).resolves.toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
     expect(runtime.launchCalls).toEqual([]);
+    await service.dispose();
+  });
+
+  it('revalidates persisted launch authority after deferred runtime work and before spawn', async () => {
+    const runtime = new FakeAgentExecutionRuntime();
+    const gate = deferred<void>();
+    runtime.launchAuthorizationGate = gate.promise;
+    let currentRunId = '00000000-0000-4000-8000-000000000001';
+    const authorizePersistedLaunch = vi.fn<RunServicePersistedLaunchAuthorizer>(
+      (_store, _input, _settings, expectedRunId) => {
+        if (currentRunId !== expectedRunId) {
+          throw new Error('The Agent node now points to another run.');
+        }
+      },
+    );
+    const { service } = serviceHarness(runtime, { authorizePersistedLaunch });
+    const owner = webContents(181);
+    const disclosure = await service.prepare(owner.owner, PREPARE_INPUT);
+    const approving = requiredHandler(IPC_CHANNELS.runsApprove)(
+      invokeEvent(owner.owner),
+      disclosure.runId,
+    );
+    await vi.waitFor(() => expect(authorizePersistedLaunch).toHaveBeenCalledTimes(3));
+    currentRunId = '00000000-0000-4000-8000-000000000002';
+    gate.resolve();
+
+    await expect(approving).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    expect(runtime.launchCalls).toEqual([]);
+    expect(authorizePersistedLaunch).toHaveBeenCalledTimes(4);
     await service.dispose();
   });
 
@@ -904,6 +1048,9 @@ function serviceHarness(
     readonly settings?: AppSettings;
     readonly contextResolver?: AgentRunContextResolver;
     readonly runRecords?: readonly StoredRunRecord[];
+    readonly authorizeMutation?: (owner: WebContents) => void;
+    readonly authorizePersistedLaunch?: RunServicePersistedLaunchAuthorizer;
+    readonly canvasDocument?: CanvasDocument;
   } = {},
 ): {
   readonly appendAudit: ReturnType<typeof vi.fn>;
@@ -925,7 +1072,12 @@ function serviceHarness(
   electronMock.fromWebContents.mockReset().mockReturnValue({ isDestroyed: () => false });
   let emit!: AgentExecutionEventSink;
   const service = new RunService(
-    { appendAudit, listProjectRuns } as unknown as LocalStore,
+    {
+      appendAudit,
+      getRun: (runId: string) => options.runRecords?.find((run) => run.id === runId),
+      listProjectRuns,
+      loadCanvas: () => options.canvasDocument,
+    } as unknown as LocalStore,
     () => options.settings ?? ({} as AppSettings),
     () => Promise.resolve(undefined),
     undefined,
@@ -937,6 +1089,8 @@ function serviceHarness(
     { showMessageBox },
     () => new Date('2026-07-15T12:00:00.000Z'),
     options.contextResolver ?? emptyContextResolver(),
+    options.authorizeMutation,
+    options.authorizePersistedLaunch ?? (() => undefined),
   );
   service.registerIpcHandlers();
   return { appendAudit, emit, listProjectRuns, service, showMessageBox };
@@ -962,6 +1116,38 @@ function storedRun(id: string, overrides: Partial<StoredRunRecord> = {}): Stored
     createdAt: '2026-07-15T11:59:00.000Z',
     updatedAt: '2026-07-15T12:01:00.000Z',
     ...overrides,
+  };
+}
+
+function agentCanvas(runId: string): CanvasDocument {
+  return {
+    id: 'canvas-1',
+    projectId: PROJECT_ID,
+    name: 'Canvas',
+    nodes: [
+      {
+        id: 'agent-node',
+        type: 'agent',
+        position: { x: 0, y: 0 },
+        data: {
+          kind: 'agent',
+          title: 'Agent',
+          description: 'Agent',
+          status: 'running',
+          locked: false,
+          collapsed: false,
+          color: '#445566',
+          adapterId: 'test-agent',
+          permissionProfile: 'plan-read-only',
+          prompt: PREPARE_INPUT.prompt,
+          contextAttachmentIds: [],
+          runId,
+        },
+      },
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    updatedAt: '2026-07-15T12:00:00.000Z',
   };
 }
 

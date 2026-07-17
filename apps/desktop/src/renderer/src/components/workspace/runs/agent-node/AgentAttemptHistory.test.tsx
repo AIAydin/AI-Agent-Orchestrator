@@ -80,6 +80,11 @@ describe('AgentAttemptHistory', () => {
     expect(screen.getByText('Dedicated worktree')).toBeTruthy();
     expect(screen.getByText('feature/agent-node')).toBeTruthy();
     expect(screen.getByText('Available for review')).toBeTruthy();
+    expect(screen.getByText('Input tokens')).toBeTruthy();
+    expect(screen.getByText('Cached input tokens')).toBeTruthy();
+    expect(screen.getByText('Output tokens')).toBeTruthy();
+    expect(screen.getByText('Total tokens')).toBeTruthy();
+    expect(screen.getByText('250')).toBeTruthy();
     expect(screen.getByText('1,500')).toBeTruthy();
     expect(screen.getByText('$0.0425')).toBeTruthy();
     expect(screen.getByText('Available for resume review (CLI capability probed)')).toBeTruthy();
@@ -241,7 +246,12 @@ function runSummary(): RunHistorySummary {
     exitCode: 130,
     outputDigest: 'a'.repeat(64),
     changedFileCount: 1,
-    tokenUsage: { inputTokens: 1_000, outputTokens: 500, totalTokens: 1_500 },
+    tokenUsage: {
+      inputTokens: 1_000,
+      cachedInputTokens: 250,
+      outputTokens: 500,
+      totalTokens: 1_500,
+    },
     costUsd: 0.0425,
     outputPreview: 'Changed src/agent.ts',
     createdAt: '2026-07-17T18:00:00.000Z',

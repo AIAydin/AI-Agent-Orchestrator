@@ -4,6 +4,7 @@ import type { ForgeboardApi } from '../../shared/api.js';
 import { IPC_CHANNELS, ipcResultSchema } from '../../shared/application/contracts.js';
 import {
   RUN_HISTORY_MAX_LIMIT,
+  RunHistoryGetInputSchema,
   RunHistoryListInputSchema,
   RunHistorySummarySchema,
 } from '../../shared/runs/contracts.js';
@@ -13,8 +14,13 @@ export type RunHistoryIpcInvoker = (channel: string, ...args: unknown[]) => Prom
 /** Creates the narrow, path-free persisted run-history bridge. */
 export function createRunHistoryApi(
   invoke: RunHistoryIpcInvoker,
-): Pick<ForgeboardApi['runs'], 'list'> {
+): Pick<ForgeboardApi['runs'], 'get' | 'list'> {
   return {
+    get: async (input) => {
+      const parsedInput = RunHistoryGetInputSchema.parse(input);
+      const rawResult: unknown = await invoke(IPC_CHANNELS.runsGet, parsedInput);
+      return ipcResultSchema(RunHistorySummarySchema.nullable()).parse(rawResult);
+    },
     list: async (input) => {
       const parsedInput = RunHistoryListInputSchema.parse(input);
       const rawResult: unknown = await invoke(IPC_CHANNELS.runsList, parsedInput);

@@ -38,6 +38,10 @@ import {
 import { workflowCheckTarget } from '../exact-check/workflow-target.js';
 import { WorkflowAgentEvidenceSchema } from '../agents/executor-contracts.js';
 import type { WorkflowEvidenceBridge } from '../host/contracts.js';
+import {
+  isWorkflowCanvasContextNode,
+  serializeWorkflowCanvasContext,
+} from '../context/canvas-source.js';
 
 export { WORKFLOW_EVIDENCE_VERIFIER_ID } from './contracts.js';
 
@@ -200,7 +204,7 @@ export class MainWorkflowEvidenceBridge implements WorkflowEvidenceBridge {
         continue;
       }
       if (currentContextMatches(runtime, edge, target.attempt)) continue;
-      const files = canonicalContextFiles(runtime, edge.config.attachmentIds);
+      const selected = canonicalContextSelection(runtime, edge.config.attachmentIds);
       const proof = WorkflowContextEvidenceProofSchema.parse(
         await this.#resolveContext({
           executionId: runtime.run.id,
@@ -209,10 +213,12 @@ export class MainWorkflowEvidenceBridge implements WorkflowEvidenceBridge {
           sourceNodeId: edge.sourceNodeId,
           targetNodeId: edge.targetNodeId,
           targetAttempt: target.attempt,
-          files,
+          attachmentIds: edge.config.attachmentIds,
+          files: selected.files,
+          canvasSources: selected.canvasSources,
         }),
       );
-      if (!sameStrings(proof.attachmentIds, edge.config.attachmentIds)) {
+      if (!sameOrderedStrings(proof.attachmentIds, edge.config.attachmentIds)) {
         throw new Error(`Context proof for ${edge.id} does not match its selected File nodes.`);
       }
       const resolution: ContextResolution = {
@@ -221,7 +227,7 @@ export class MainWorkflowEvidenceBridge implements WorkflowEvidenceBridge {
         sourceNodeId: edge.sourceNodeId,
         targetNodeId: edge.targetNodeId,
         targetAttempt: target.attempt,
-        attachmentIds: sortedUnique(proof.attachmentIds),
+        attachmentIds: [...proof.attachmentIds],
         contentDigest: `sha256:${proof.contentDigest}`,
         verifiedAt: occurredAt,
         verifierId: WORKFLOW_EVIDENCE_VERIFIER_ID,
@@ -483,38 +489,54 @@ function currentCheckForGate(
   }
 }
 
-function canonicalContextFiles(
+function canonicalContextSelection(
   runtime: WorkflowExecutionRuntime,
   attachmentIds: readonly string[],
-) {
+): {
+  readonly files: z.infer<typeof WorkflowContextFileReferenceSchema>[];
+  readonly canvasSources: ReturnType<typeof serializeWorkflowCanvasContext>[];
+} {
   if (attachmentIds.length > MAX_CONTEXT_FILES) {
     throw new Error(`Workflow context cannot exceed ${String(MAX_CONTEXT_FILES)} selected files.`);
   }
   if (new Set(attachmentIds).size !== attachmentIds.length) {
     throw new Error('Workflow context attachment IDs must be unique.');
   }
-  const files = attachmentIds.map((attachmentId) => {
+  const files: z.infer<typeof WorkflowContextFileReferenceSchema>[] = [];
+  const canvasSources: ReturnType<typeof serializeWorkflowCanvasContext>[] = [];
+  for (const attachmentId of attachmentIds) {
     const node = runtime.canvas.nodes.find((candidate) => candidate.id === attachmentId);
-    if (node?.type !== 'file' || node.data.file?.kind !== 'file') {
-      throw new Error(`Context attachment ${attachmentId} is not a canonical regular File node.`);
+    if (node === undefined) {
+      throw new Error(`Context attachment ${attachmentId} no longer exists.`);
+    }
+    if (isWorkflowCanvasContextNode(node)) {
+      canvasSources.push(serializeWorkflowCanvasContext(node));
+      continue;
+    }
+    if (node.type !== 'file' || node.data.file?.kind !== 'file') {
+      throw new Error(
+        `Context attachment ${attachmentId} must be a regular File, Product Brief, Task, Diagram, or Note node.`,
+      );
     }
     if (node.data.file.projectId !== runtime.canvas.projectId || node.data.file.missing) {
       throw new Error(`Context attachment ${attachmentId} is unresolved for the current project.`);
     }
-    return WorkflowContextFileReferenceSchema.parse({
-      attachmentId,
-      fileNodeId: node.id,
-      relativePath: node.data.file.relativePath,
-      readOnly: node.data.readOnly,
-      ...(node.data.file.lastKnownHash === undefined
-        ? {}
-        : { lastKnownHash: node.data.file.lastKnownHash }),
-    });
-  });
+    files.push(
+      WorkflowContextFileReferenceSchema.parse({
+        attachmentId,
+        fileNodeId: node.id,
+        relativePath: node.data.file.relativePath,
+        readOnly: node.data.readOnly,
+        ...(node.data.file.lastKnownHash === undefined
+          ? {}
+          : { lastKnownHash: node.data.file.lastKnownHash }),
+      }),
+    );
+  }
   if (new Set(files.map((file) => file.relativePath)).size !== files.length) {
     throw new Error('Workflow context cannot select the same project file through multiple IDs.');
   }
-  return files;
+  return { files, canvasSources };
 }
 
 function currentContextMatches(
@@ -529,7 +551,7 @@ function currentContextMatches(
     resolution.targetNodeId === edge.targetNodeId &&
     resolution.targetAttempt === targetAttempt &&
     resolution.verifierId === WORKFLOW_EVIDENCE_VERIFIER_ID &&
-    sameStrings(resolution.attachmentIds, edge.config.attachmentIds)
+    sameOrderedStrings(resolution.attachmentIds, edge.config.attachmentIds)
   );
 }
 
@@ -734,12 +756,8 @@ function uniqueChecks(checks: readonly CheckResult[]): CheckResult[] {
   return [...byValue.values()];
 }
 
-function sameStrings(left: readonly string[], right: readonly string[]): boolean {
-  return sameEvidence(sortedUnique(left), sortedUnique(right));
-}
-
-function sortedUnique(values: readonly string[]): string[] {
-  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+function sameOrderedStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function sameEvidence(left: unknown, right: unknown): boolean {

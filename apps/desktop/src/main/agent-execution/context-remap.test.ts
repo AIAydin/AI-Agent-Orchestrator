@@ -70,6 +70,34 @@ describe('agent worktree context remapping', () => {
       remapContextIntoWorktree(context(path.join(project, 'task.ts')), project, worktree),
     ).rejects.toThrow(/ordinary file|symbolic-link/iu);
   });
+
+  it('remaps generated logical paths without requiring source or worktree files', async () => {
+    const { project, worktree } = await roots();
+    const sourcePath = path.join(project, '.forgeboard-context', 'brief.md');
+    const content = '# Brief\n';
+    const digest = createHash('sha256').update(content).digest('hex');
+    const remapped = await remapContextIntoWorktree(
+      {
+        attachments: [
+          {
+            path: sourcePath,
+            kind: 'file',
+            explicitlyApproved: true,
+            sha256: digest,
+          },
+        ],
+        generatedArtifacts: [{ path: sourcePath, content, sha256: digest }],
+        manifestId: 'generated-context',
+        manifestDigest: 'b'.repeat(64),
+      },
+      project,
+      worktree,
+    );
+
+    const expected = path.join(worktree, '.forgeboard-context', 'brief.md');
+    expect(remapped.attachments[0]?.path).toBe(expected);
+    expect(remapped.generatedArtifacts?.[0]?.path).toBe(expected);
+  });
 });
 
 function context(filePath: string): AgentExecutionContextRequest {

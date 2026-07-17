@@ -7,6 +7,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import {
+  ContextAttachmentSchema,
   PreparedAgentLaunchSchema,
   type ContextAttachment,
   type PreparedAgentLaunch,
@@ -111,6 +112,7 @@ export const DockerLaunchOptionsSchema = z
     tmpfsSizeMb: z.number().int().min(16).max(16_384).default(128),
     network: DockerNetworkPolicySchema.default({ mode: 'none' }),
     environmentAllowlist: z.array(EnvironmentNameSchema).max(128).default([]),
+    virtualContextAttachments: z.array(ContextAttachmentSchema).max(256).default([]),
   })
   .strict()
   .superRefine((options, context) => {
@@ -321,8 +323,39 @@ async function validateWorktreePath(
 async function validateContextAttachment(
   attachment: ContextAttachment,
   canonicalWorktree: string,
+  virtualAttachments: ReadonlyMap<string, ContextAttachment>,
 ): Promise<{ attachment: ContextAttachment; hostPath: string; containerPath: string }> {
   const resolved = await validateWorktreePath(attachment.path, canonicalWorktree);
+  const virtual = virtualAttachments.get(resolved);
+  if (virtual !== undefined) {
+    if (
+      attachment.kind !== 'file' ||
+      virtual.kind !== 'file' ||
+      attachment.sha256 === undefined ||
+      virtual.sha256 !== attachment.sha256 ||
+      path.resolve(virtual.path) !== resolved
+    ) {
+      throw new DockerLaunchValidationError(
+        'Virtual context must match one exact digest-bound file attachment.',
+      );
+    }
+    return {
+      attachment: {
+        ...attachment,
+        path: mapWorktreePathToContainer(
+          canonicalWorktree,
+          resolved,
+          process.platform === 'win32' ? 'win32' : 'posix',
+        ),
+      },
+      hostPath: resolved,
+      containerPath: mapWorktreePathToContainer(
+        canonicalWorktree,
+        resolved,
+        process.platform === 'win32' ? 'win32' : 'posix',
+      ),
+    };
+  }
   let attachmentStats;
   try {
     attachmentStats = await lstat(resolved);
@@ -621,11 +654,28 @@ export async function planDockerAgentLaunch(
     );
   }
 
+  const virtualAttachments = new Map(
+    options.virtualContextAttachments.map((attachment) => [
+      path.resolve(attachment.path),
+      attachment,
+    ]),
+  );
+  if (virtualAttachments.size !== options.virtualContextAttachments.length) {
+    throw new DockerLaunchValidationError('Virtual context attachment paths must be unique.');
+  }
   const validatedAttachments = await Promise.all(
     plan.disclosure.contextAttachments.map(async (attachment) =>
-      validateContextAttachment(attachment, canonicalWorktree),
+      validateContextAttachment(attachment, canonicalWorktree, virtualAttachments),
     ),
   );
+  const selectedPaths = new Set(
+    plan.disclosure.contextAttachments.map((attachment) => path.resolve(attachment.path)),
+  );
+  if ([...virtualAttachments.keys()].some((candidate) => !selectedPaths.has(candidate))) {
+    throw new DockerLaunchValidationError(
+      'Virtual context was not present in the prepared attachment selection.',
+    );
+  }
   const mappings = validatedAttachments.map(({ hostPath, containerPath }) => ({
     hostPath,
     containerPath,

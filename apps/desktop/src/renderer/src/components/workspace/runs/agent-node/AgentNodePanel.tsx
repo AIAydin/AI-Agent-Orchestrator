@@ -14,6 +14,7 @@ import {
 } from '../../../permissions/permission-profile-ui.js';
 import { AgentAttemptHistory, type AgentAttemptActionCallbacks } from './AgentAttemptHistory.js';
 import { effectiveNodeModel } from './model-selection.js';
+import { tokenUsageRows } from './usage/token-usage.js';
 
 import './agent-node.css';
 
@@ -31,6 +32,7 @@ export interface AgentNodePanelProps extends AgentAttemptActionCallbacks {
   readonly running: boolean;
   readonly preparingRun: boolean;
   readonly configurationReadOnly: boolean;
+  readonly onRecord: () => void;
   readonly onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
   readonly onRunInputChange: (value: string) => void;
   readonly onSendRunInput: () => void;
@@ -73,6 +75,10 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
       : props.preparingRun
         ? 'Wait for the current launch review to finish.'
         : null;
+  const mutationUnavailableReason = props.configurationReadOnly
+    ? 'Unlock this node and use an editable collaboration role to control the Agent.'
+    : null;
+  const liveTokenUsage = tokenUsageRows(selectedNode.data.tokenUsage);
 
   return (
     <>
@@ -89,7 +95,8 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
           <select
             name={`node-${selectedNode.id}-agent-adapter`}
             value={selectedAdapter}
-            disabled={props.running || selectedNode.data.locked}
+            disabled={props.running || props.configurationReadOnly}
+            onFocus={props.onRecord}
             onChange={(event) => {
               const adapterId = event.target.value;
               const adapter = runnableAgents.find((agent) => agent.id === adapterId);
@@ -112,12 +119,13 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             name={`node-${selectedNode.id}-agent-model`}
             aria-label="Model (optional)"
             value={selectedNode.data.model ?? ''}
-            disabled={props.running || selectedNode.data.locked || !modelSelectionSupported}
+            disabled={props.running || props.configurationReadOnly || !modelSelectionSupported}
             aria-describedby={modelHelpId}
             maxLength={200}
             placeholder={
               settings.agentDefaultModels[selectedAdapter] ?? 'Use the provider CLI default'
             }
+            onFocus={props.onRecord}
             onChange={(event) =>
               onUpdateSelected({
                 model: event.target.value.trim() === '' ? undefined : event.target.value,
@@ -135,7 +143,8 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
           <select
             name={`node-${selectedNode.id}-permission-profile`}
             value={selectedPermission}
-            disabled={props.running || selectedNode.data.locked}
+            disabled={props.running || props.configurationReadOnly}
+            onFocus={props.onRecord}
             onChange={(event) =>
               onUpdateSelected({
                 permissionProfile: event.target.value as PermissionProfile,
@@ -181,8 +190,9 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             name={`node-${selectedNode.id}-prompt`}
             rows={6}
             value={selectedNode.data.prompt ?? selectedNode.data.description}
-            disabled={props.running || selectedNode.data.locked}
+            disabled={props.running || props.configurationReadOnly}
             placeholder="Describe the concrete outcome for this agent…"
+            onFocus={props.onRecord}
             onChange={(event) => onUpdateSelected({ prompt: event.target.value })}
           />
         </label>
@@ -194,26 +204,32 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
                 value={props.runInput}
                 placeholder="Send interactive input"
                 aria-label="Agent input"
-                disabled={!interactiveInputSupported}
+                disabled={!interactiveInputSupported || props.configurationReadOnly}
                 title={
-                  interactiveInputSupported
+                  mutationUnavailableReason ??
+                  (interactiveInputSupported
                     ? undefined
-                    : 'This running session does not expose interactive input.'
+                    : 'This running session does not expose interactive input.')
                 }
                 onChange={(event) => props.onRunInputChange(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && interactiveInputSupported) {
+                  if (
+                    event.key === 'Enter' &&
+                    interactiveInputSupported &&
+                    !props.configurationReadOnly
+                  ) {
                     props.onSendRunInput();
                   }
                 }}
               />
               <button
                 type="button"
-                disabled={!interactiveInputSupported}
+                disabled={!interactiveInputSupported || props.configurationReadOnly}
                 title={
-                  interactiveInputSupported
+                  mutationUnavailableReason ??
+                  (interactiveInputSupported
                     ? undefined
-                    : 'This running session does not expose interactive input.'
+                    : 'This running session does not expose interactive input.')
                 }
                 onClick={props.onSendRunInput}
               >
@@ -222,11 +238,12 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             </div>
             <button
               type="button"
-              disabled={!interruptSupported}
+              disabled={!interruptSupported || props.configurationReadOnly}
               title={
-                interruptSupported
+                mutationUnavailableReason ??
+                (interruptSupported
                   ? undefined
-                  : 'This running session does not expose graceful interrupt.'
+                  : 'This running session does not expose graceful interrupt.')
               }
               onClick={() => props.onControlRun('interrupt')}
             >
@@ -256,9 +273,12 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             type="button"
             className="button primary review-run-button"
             disabled={
-              props.preparingRun || runnableAgents.length === 0 || permissionUnavailable !== null
+              props.preparingRun ||
+              runnableAgents.length === 0 ||
+              permissionUnavailable !== null ||
+              props.configurationReadOnly
             }
-            title={permissionUnavailable ?? undefined}
+            title={mutationUnavailableReason ?? permissionUnavailable ?? undefined}
             aria-describedby={permissionUnavailable === null ? undefined : permissionIssueId}
             onClick={props.onPrepareRun}
           >
@@ -304,16 +324,12 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
                 <dd>Assigned to this run</dd>
               </div>
             ) : null}
-            {selectedNode.data.tokenUsage ? (
-              <div>
-                <dt>Tokens</dt>
-                <dd>
-                  {(
-                    selectedNode.data.tokenUsage.input + selectedNode.data.tokenUsage.output
-                  ).toLocaleString()}
-                </dd>
+            {liveTokenUsage.map((row) => (
+              <div key={row.label}>
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
               </div>
-            ) : null}
+            ))}
             {selectedNode.data.cost ? (
               <div>
                 <dt>Cost</dt>

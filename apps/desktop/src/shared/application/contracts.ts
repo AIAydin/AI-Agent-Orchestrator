@@ -1080,6 +1080,7 @@ export const IPC_CHANNELS = Object.freeze({
   dockerCheck: 'docker:check',
   dockerPull: 'docker:pull',
   runsList: 'runs:list',
+  runsGet: 'runs:get',
   runsPrepare: 'runs:prepare',
   runsResume: 'runs:resume',
   runsRetry: 'runs:retry',

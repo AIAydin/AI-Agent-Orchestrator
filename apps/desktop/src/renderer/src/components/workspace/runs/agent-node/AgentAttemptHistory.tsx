@@ -7,6 +7,7 @@ import type {
 import type { RunHistorySummary } from '../../../../../../shared/runs/contracts.js';
 import { continuationUnavailableReason, type SelectedAgentAuthority } from './attempt-actions.js';
 import { useAgentAttemptHistory } from './useAgentAttemptHistory.js';
+import { tokenUsageRows } from './usage/token-usage.js';
 
 export interface AgentAttemptActionCallbacks {
   readonly onRetryAttempt?: (attempt: RunHistorySummary) => void;
@@ -108,7 +109,13 @@ export function AgentAttemptHistory({
                       }
                     />
                     <Meta label="Output digest" value={shortDigest(attempt.outputDigest)} />
-                    <Meta label="Tokens" value={tokenLabel(attempt)} />
+                    {attempt.tokenUsage === null ? (
+                      <Meta label="Tokens" value="Not exposed by provider" />
+                    ) : (
+                      tokenUsageRows(attempt.tokenUsage).map((row) => (
+                        <Meta key={row.label} label={row.label} value={row.value} />
+                      ))
+                    )}
                     <Meta label="Cost" value={costLabel(attempt.costUsd)} />
                     <Meta
                       label="Session"
@@ -234,13 +241,6 @@ function worktreeLabel(attempt: RunHistorySummary): string {
 
 function shortDigest(digest: string | null): string {
   return digest === null ? 'Not recorded' : `${digest.slice(0, 12)}…`;
-}
-
-function tokenLabel(attempt: RunHistorySummary): string {
-  const usage = attempt.tokenUsage;
-  if (usage === null) return 'Not exposed by provider';
-  const total = usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
-  return total.toLocaleString();
 }
 
 function costLabel(costUsd: number | null): string {

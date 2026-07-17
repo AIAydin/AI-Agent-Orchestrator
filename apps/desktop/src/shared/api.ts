@@ -162,7 +162,11 @@ import type {
   FileTreeResult,
 } from './files/contracts.js';
 import type { IntegrityCheckInput, IntegrityCheckResult } from './integrity/contracts.js';
-import type { RunHistoryListInput, RunHistorySummary } from './runs/contracts.js';
+import type {
+  RunHistoryGetInput,
+  RunHistoryListInput,
+  RunHistorySummary,
+} from './runs/contracts.js';
 import type {
   TerminalChooseExecutableInput,
   TerminalEvent,
@@ -311,6 +315,7 @@ export interface ForgeboardApi {
   };
   runs: {
     list(input: RunHistoryListInput): Promise<IpcResult<RunHistorySummary[]>>;
+    get(input: RunHistoryGetInput): Promise<IpcResult<RunHistorySummary | null>>;
     prepare(input: PrepareRunInput): Promise<IpcResult<RunApprovalView | null>>;
     resume(input: PrepareRunContinuationInput): Promise<IpcResult<RunApprovalView | null>>;
     retry(input: PrepareRunContinuationInput): Promise<IpcResult<RunApprovalView | null>>;

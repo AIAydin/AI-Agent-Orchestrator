@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type {
   AgentAdapterManifest,
   AgentSession,
@@ -23,9 +25,47 @@ import {
 } from '../../shared/application/contracts.js';
 import type { StoredRunRecord } from '../storage.js';
 
+const GENERATED_CONTEXT_MAX_BYTES = 4 * 1024 * 1024;
+
+export const GeneratedAgentContextArtifactSchema = z
+  .object({
+    path: z.string().min(1).max(32_768),
+    content: z.string().max(GENERATED_CONTEXT_MAX_BYTES),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+  })
+  .strict()
+  .superRefine((artifact, context) => {
+    if (artifact.path.includes('\0') || /[\r\n]/u.test(artifact.path)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['path'],
+        message: 'Generated context paths cannot contain NUL bytes or line breaks.',
+      });
+    }
+    if (Buffer.byteLength(artifact.content, 'utf8') > GENERATED_CONTEXT_MAX_BYTES) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['content'],
+        message: 'Generated context exceeds the 4 MiB context-file limit.',
+      });
+    }
+    if (createHash('sha256').update(artifact.content, 'utf8').digest('hex') !== artifact.sha256) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sha256'],
+        message: 'Generated context digest must match its exact UTF-8 content.',
+      });
+    }
+  });
+export type GeneratedAgentContextArtifact = z.infer<typeof GeneratedAgentContextArtifactSchema>;
+
 export const AgentExecutionContextRequestSchema = z
   .object({
     attachments: z.array(ContextAttachmentSchema).max(AGENT_CONTEXT_ATTACHMENT_LIMIT).default([]),
+    generatedArtifacts: z
+      .array(GeneratedAgentContextArtifactSchema)
+      .max(AGENT_CONTEXT_ATTACHMENT_LIMIT)
+      .optional(),
     manifestId: z.string().min(1).max(128).optional(),
     manifestDigest: z
       .string()
@@ -66,6 +106,27 @@ export const AgentExecutionContextRequestSchema = z
         });
       }
     });
+    const generatedPaths = new Set<string>();
+    for (const [index, artifact] of (context.generatedArtifacts ?? []).entries()) {
+      if (generatedPaths.has(artifact.path)) {
+        refinement.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['generatedArtifacts', index, 'path'],
+          message: 'Generated context artifact paths must be unique.',
+        });
+      }
+      generatedPaths.add(artifact.path);
+      const attachment = context.attachments.find(
+        (candidate) => candidate.path === artifact.path && candidate.sha256 === artifact.sha256,
+      );
+      if (attachment?.kind !== 'file') {
+        refinement.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['generatedArtifacts', index],
+          message: 'Generated context must match one exact digest-bound file attachment.',
+        });
+      }
+    }
   });
 export type AgentExecutionContextRequest = z.infer<typeof AgentExecutionContextRequestSchema>;
 
