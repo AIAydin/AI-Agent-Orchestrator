@@ -57,6 +57,10 @@ import { OutboundActionGate } from './outbound/outbound-action-gate.js';
 import { createGitHubCliCommandRunner } from './outbound/git/executors.js';
 import { PreviewIpcService } from './previews/preview-ipc.js';
 import { ProjectCloneIpcService } from './projects/project-clone-ipc.js';
+import {
+  ProviderConnectionIpcService,
+  ProviderConnectionService,
+} from './provider-connections/index.js';
 import { AgentReadinessIpcService } from './readiness/ipc.js';
 import { AgentReadinessService } from './readiness/service.js';
 import { prepareReversibleQuitBackup } from './backups/quit-backup-preparation.js';
@@ -179,6 +183,7 @@ export interface ApplicationServices {
   settings: SettingsIpcService;
   folderReadiness: FolderReadinessIpcService;
   readiness: AgentReadinessIpcService;
+  providerConnections: ProviderConnectionIpcService;
   projectClones: ProjectCloneIpcService;
   docker: DockerIpcService;
   runs: RunService;
@@ -252,6 +257,15 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     : resolve(process.cwd(), '../../packages/test-agent/dist/cli.js');
   const agentReadiness = new AgentReadinessService(testAgentPath);
   const readiness = new AgentReadinessIpcService(dialog, agentReadiness, store, runDataOperation);
+  const providerConnections = new ProviderConnectionIpcService(
+    dialog,
+    new ProviderConnectionService(
+      agentReadiness,
+      () => store.getSettings(createDefaultSettings()),
+      app.getPath('home'),
+      store,
+    ),
+  );
   const commandReadiness = new CommandReadinessService(store, app.getPath('home'));
   const folderReadinessService = new FolderReadinessService();
   const settingsPersistenceReadiness = new SettingsPersistenceReadinessVerifier(
@@ -416,6 +430,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const resumeDataServices = (): void => {
     recovery.resumeAfterExternalDataMutation();
     readiness.resume();
+    providerConnections.resumeAfterPause();
     projectClones.resume();
     docker.resumeAfterShutdownPause();
     git.resumeAfterPrivacyReset();
@@ -448,6 +463,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       previews.pauseForShutdown(),
       checks.pauseForShutdown(),
       readiness.pauseForShutdown(),
+      providerConnections.pauseForShutdown(),
       projectClones.pauseForShutdown(),
       docker.pauseForShutdown(),
       extensions.pauseForShutdown(),
@@ -473,6 +489,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           previews.resetForPrivacy(),
           checks.resetForPrivacy(),
           extensions.pauseForDataMutation(),
+          providerConnections.resetForPrivacy(),
           git.resetForPrivacy(),
           deliveryReadiness.resetForPrivacy(),
           gitRemote.resetForPrivacy(),
@@ -487,6 +504,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         deliveryReadiness.pauseForDataMutation();
         await awaitDataServices([
           terminal.pauseForDataMutation(),
+          providerConnections.pauseForShutdown(),
           extensions.pauseForDataMutation(),
           git.resetForPrivacy(),
           gitRemote.resetForPrivacy(),
@@ -831,6 +849,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
               terminal.resetForPrivacy(),
               previews.resetForPrivacy(),
               extensions.resetForPrivacy(),
+              providerConnections.resetForPrivacy(),
               git.resetForPrivacy(),
               deliveryReadiness.resetForPrivacy(),
               gitRemote.resetForPrivacy(),
@@ -860,6 +879,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   settings.registerIpcHandlers();
   folderReadiness.registerIpcHandler();
   readiness.registerIpcHandler();
+  providerConnections.registerIpcHandlers();
   projectClones.registerIpcHandler();
   runs.registerIpcHandlers();
   terminal.registerIpcHandlers();
@@ -879,6 +899,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     settings,
     folderReadiness,
     readiness,
+    providerConnections,
     projectClones,
     docker,
     runs,
@@ -934,6 +955,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         projectClones.dispose(),
         checks.dispose(),
         readiness.dispose(),
+        providerConnections.dispose(),
         previews.dispose(),
         runs.dispose(),
         terminal.dispose(),

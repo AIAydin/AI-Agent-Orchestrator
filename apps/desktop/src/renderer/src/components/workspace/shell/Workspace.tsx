@@ -80,6 +80,7 @@ import {
 } from '../canvas/interactions/groups/group-workspace-state.js';
 import { useCanvasGraphInteractions } from '../canvas/interactions/workspace/useCanvasGraphInteractions.js';
 import { WorkspaceCommandBar } from './WorkspaceCommandBar.js';
+import { applyNodeDataPatch } from './node-data-patch.js';
 import { WorkflowDecisionDialog } from '../workflows/WorkflowDecisionDialog.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
 import { WorkspaceNotifications } from './WorkspaceOverlays.js';
@@ -105,6 +106,7 @@ import type {
 } from '../model/types.js';
 import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
 import { useAgentRunController } from '../runs/useAgentRunController.js';
+import { effectiveNodeModel } from '../runs/agent-node/model-selection.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
 import { normalizeCanvasViewport } from '../canvas/view-state/viewport.js';
 import { useCollaborationCanvas } from '../collaboration/useCollaborationCanvas.js';
@@ -306,6 +308,25 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
               ...(update.transcript ? { transcriptUpdatedAt: new Date().toISOString() } : {}),
               ...(update.summary ? { lastRunSummary: update.summary } : {}),
               ...(update.changedFiles === undefined ? {} : { changedFiles: update.changedFiles }),
+              ...(update.branch === undefined ? {} : { branch: update.branch }),
+              ...(update.worktreeId === undefined ? {} : { worktreeId: update.worktreeId }),
+              ...(update.interactiveInputSupported === undefined
+                ? {}
+                : { interactiveInputSupported: update.interactiveInputSupported }),
+              ...(update.pauseSupported === undefined
+                ? {}
+                : { pauseSupported: update.pauseSupported }),
+              ...(update.interruptSupported === undefined
+                ? {}
+                : { interruptSupported: update.interruptSupported }),
+              ...(update.resumeSupported === undefined
+                ? {}
+                : { resumeSupported: update.resumeSupported }),
+              ...(update.providerSessionAvailable === undefined
+                ? {}
+                : { providerSessionAvailable: update.providerSessionAvailable }),
+              ...(update.tokenUsage === undefined ? {} : { tokenUsage: update.tokenUsage }),
+              ...(update.cost === undefined ? {} : { cost: update.cost }),
             },
           };
         }),
@@ -935,6 +956,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     ? (selectedNode.data.adapterId ??
       (isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'test-agent'))
     : 'test-agent';
+  const selectedAgent = runnableAgents.find((agent) => agent.id === selectedAdapter);
+  const selectedModel = effectiveNodeModel(
+    selectedAgent,
+    selectedNode?.data.model,
+    settings.agentDefaultModels[selectedAdapter],
+  );
   const configuredPermission =
     selectedNode?.data.permissionProfile ?? settings.defaultPermissionProfile;
   const selectedPermission = configuredPermission;
@@ -945,9 +972,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
 
   const updateNodeData = useCallback((nodeId: string, data: Partial<WorkshopNode['data']>) => {
     setNodes((items) => {
-      const nextNodes = items.map((node) =>
-        node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node,
-      );
+      const nextNodes = items.map((node) => {
+        if (node.id !== nodeId) return node;
+        const nextData = applyNodeDataPatch(node.data, data);
+        return { ...node, data: nextData };
+      });
       nodesRef.current = nextNodes;
       return nextNodes;
     });
@@ -978,6 +1007,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     project,
     selectedNode,
     selectedAdapter,
+    ...(selectedModel === undefined ? {} : { selectedModel }),
     selectedPermission,
     permissionUnavailableReason: selectedPermissionUnavailableReason,
     flushCanvas,
@@ -1695,6 +1725,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             }
             void runs.prepareSelectedRun();
           }}
+          onRetryAgentAttempt={(attempt) => void runs.prepareSelectedContinuation('retry', attempt)}
+          onResumeAgentAttempt={(attempt) =>
+            void runs.prepareSelectedContinuation('resume', attempt)
+          }
           onPreviewSession={(session) => {
             if (selectedNode) previews.updateSession(selectedNode.id, session);
           }}
@@ -1705,7 +1739,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             busyAction: workflows.busyAction,
             mutationsAuthorized: workflows.mutationsAuthorized,
             onStart: (nodeId) =>
-              void workflows.start({ kind: 'node', nodeId, includeUpstream: false }),
+              void workflows.start({
+                kind: 'node',
+                nodeId,
+                includeUpstream: false,
+              }),
             onCancel: (input) => void workflows.cancelNode(input),
             onRevealArtifact: async (input) => {
               unwrap(await window.forgeboard.workflows.revealArtifact(input));

@@ -249,7 +249,11 @@ function configureSessionSecurity(): void {
   );
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const development = Boolean(process.env.ELECTRON_RENDERER_URL);
-    const scriptPolicy = development ? "script-src 'self' 'unsafe-eval'" : "script-src 'self'";
+    // Vite injects its React refresh preamble as an inline development script. Keeping this
+    // allowance development-only preserves the strict packaged renderer policy.
+    const scriptPolicy = development
+      ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
+      : "script-src 'self'";
     const connectPolicy = development
       ? "connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:*"
       : "connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:*";

@@ -258,6 +258,21 @@
     background 120ms ease;
 }
 
+.setup-provider-connection {
+  margin-top: 12px;
+}
+
+.setup-connection-guidance {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.setup-provider-connection .provider-connection-card {
+  background: var(--surface-subtle);
+}
+
 .setup-agent-list label:hover,
 .setup-agent-list label.selected {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));

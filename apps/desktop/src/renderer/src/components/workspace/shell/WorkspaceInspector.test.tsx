@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AppSettingsSchema,
@@ -21,6 +21,13 @@ import type {
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { readWorkspaceContextDrag, WORKSPACE_CONTEXT_DRAG_MIME } from '../context-dnd/contracts.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
+
+beforeEach(() => {
+  Object.defineProperty(window, 'forgeboard', {
+    configurable: true,
+    value: { runs: { list: vi.fn().mockResolvedValue({ ok: true, value: [] }) } },
+  });
+});
 
 afterEach(() => {
   cleanup();
@@ -53,9 +60,64 @@ const testAgent: AgentDetection & { id: 'test-agent' } = {
   executable: '/tmp/test-agent',
   version: '1.0.0',
   providerDisclosure: 'Local only.',
+  capabilities: {
+    interactiveInput: true,
+    interrupt: true,
+    pause: false,
+    resume: false,
+    modelSelection: false,
+  },
+  capabilitySource: 'manifest',
+};
+
+const codexAgent: AgentDetection & { id: 'codex' } = {
+  ...testAgent,
+  id: 'codex',
+  label: 'OpenAI Codex CLI',
+  capabilities: {
+    ...testAgent.capabilities!,
+    resume: true,
+    modelSelection: true,
+  },
 };
 
 describe('WorkspaceInspector Custom permissions', () => {
+  it('disables unsupported model selection and explains the adapter default', () => {
+    render(<WorkspaceInspector {...props(settings(), agentNode({}))} />);
+
+    expect(screen.getByLabelText<HTMLInputElement>('Model (optional)')).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByText(/does not declare model selection/u)).toBeTruthy();
+  });
+
+  it('enables supported model selection and clears it when switching to an unsupported adapter', () => {
+    const onUpdateSelected = vi.fn();
+    const selectedNode = agentNode({ adapterId: 'codex', model: 'gpt-5.1' });
+    render(
+      <WorkspaceInspector
+        {...props(settings(), selectedNode)}
+        runnableAgents={[codexAgent, testAgent]}
+        selectedAdapter="codex"
+        onUpdateSelected={onUpdateSelected}
+      />,
+    );
+
+    const model = screen.getByLabelText<HTMLInputElement>('Model (optional)');
+    expect(model.disabled).toBe(false);
+    fireEvent.change(model, { target: { value: '' } });
+    expect(onUpdateSelected).toHaveBeenCalledWith({ model: undefined });
+
+    fireEvent.change(screen.getByLabelText('Installed adapter'), {
+      target: { value: 'test-agent' },
+    });
+    expect(onUpdateSelected).toHaveBeenCalledWith({
+      adapterId: 'test-agent',
+      model: undefined,
+    });
+  });
+
   it('selects and explains Custom while disabling a test-agent Docker pairing', () => {
     const onUpdateSelected = vi.fn();
     const selectedNode = agentNode({ permissionProfile: 'custom' });
@@ -136,7 +198,10 @@ describe('WorkspaceInspector Custom permissions', () => {
   });
 
   it('makes shared graph configuration actions honestly read-only for collaboration roles', () => {
-    const selectedNode = groupNode({ childNodeIds: ['member'], layout: 'horizontal' });
+    const selectedNode = groupNode({
+      childNodeIds: ['member'],
+      layout: 'horizontal',
+    });
     const inspectorProps = props(
       settings({
         collaborationEnabled: true,
@@ -160,7 +225,9 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByText(/can read comments but cannot add/u)).toBeTruthy();
     const privateInput = screen.getByLabelText('Add a private comment');
     expect(privateInput).toHaveProperty('disabled', false);
-    fireEvent.change(privateInput, { target: { value: 'Private reviewer note' } });
+    fireEvent.change(privateInput, {
+      target: { value: 'Private reviewer note' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save locally' }));
     expect(inspectorProps.onCreateLocalComment).toHaveBeenCalledWith('Private reviewer note');
   });
@@ -197,7 +264,9 @@ describe('WorkspaceInspector Custom permissions', () => {
       },
     };
     const inspectorProps = props(
-      settings({ developmentCommand: { executable: 'pnpm', arguments: ['run', 'dev'] } }),
+      settings({
+        developmentCommand: { executable: 'pnpm', arguments: ['run', 'dev'] },
+      }),
       selectedNode,
     );
     inspectorProps.collaborationGraphReadOnly = true;
@@ -244,7 +313,13 @@ describe('WorkspaceInspector Custom permissions', () => {
   });
 
   it('keeps live run cancellation available when an Agent node is locked', () => {
-    const selectedNode = agentNode({ locked: true, status: 'running' });
+    const selectedNode = agentNode({
+      locked: true,
+      status: 'running',
+      interactiveInputSupported: true,
+      interruptSupported: true,
+      pauseSupported: false,
+    });
     const inspectorProps = props(settings(), selectedNode);
     inspectorProps.agentRunActive = true;
     render(<WorkspaceInspector {...inspectorProps} />);
@@ -255,6 +330,10 @@ describe('WorkspaceInspector Custom permissions', () => {
     );
     expect(screen.getByLabelText<HTMLTextAreaElement>('Prompt')).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Pause unavailable' })).toHaveProperty(
+      'disabled',
+      true,
+    );
     expect(screen.getByRole('button', { name: 'Terminate' })).toHaveProperty('disabled', false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
@@ -276,8 +355,20 @@ describe('WorkspaceInspector Custom permissions', () => {
 
     inspectorProps.agentRunActive = true;
     rerender(<WorkspaceInspector {...inspectorProps} />);
-    expect(screen.getByRole('button', { name: 'Interrupt' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Agent input')).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Terminate' })).toBeTruthy();
+
+    inspectorProps.selectedNode = agentNode({
+      runId: '80000000-0000-4000-8000-000000000001',
+      status: 'running',
+      interactiveInputSupported: true,
+      interruptSupported: true,
+      pauseSupported: false,
+    });
+    rerender(<WorkspaceInspector {...inspectorProps} />);
+    expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Agent input')).toHaveProperty('disabled', false);
 
     inspectorProps.agentRunActive = false;
     inspectorProps.selectedNode = agentNode({
@@ -539,6 +630,8 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     onSendRunInput: vi.fn(),
     onControlRun: vi.fn(),
     onPrepareRun: vi.fn(),
+    onRetryAgentAttempt: vi.fn(),
+    onResumeAgentAttempt: vi.fn(),
     onPreviewSession: vi.fn(),
     onTerminalSessionStatus: vi.fn(),
     testNodeRuntime: {

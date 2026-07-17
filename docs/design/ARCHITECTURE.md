@@ -48,6 +48,17 @@ and exact context file list. The trusted runtime records redacted allowed, denie
 outcomes around the supervised launch; a project-check saved grant is never accepted as agent-run
 approval.
 
+Codex and Claude Code account connections are a separate main-owned provider-connection boundary.
+The renderer can request a strict provider ID, action, and optional current-draft executable override;
+it cannot supply arguments, environment, browser URLs, status, account identity, or credentials.
+Main resolves and version-probes the exact executable, creates an owner-bound expiring plan, presents
+a native confirmation, and revalidates executable identity immediately before spawning the official
+CLI auth/status command. Connect, Refresh, Disconnect, and Reconnect use this prepare/confirm path;
+Cancel aborts only the caller's pending plan or active process. Raw output is counted and discarded.
+Only normalized connected/disconnected/unknown evidence crosses preload, where unknown is presented
+as needs refresh. Passive status reads return the last in-memory normalized evidence without running
+a CLI or contacting the provider.
+
 Renderer drag payloads contain only a strict project ID, project-relative path, and optional source
 File-node ID. They are not launch authority. A configured File-node center dropped on an unlocked
 Agent links that exact existing node, while a drop elsewhere remains a normal canvas move; locked,
@@ -148,7 +159,8 @@ delivery and invalidate only CLI-bound plans and status, preserving unrelated pu
 ## Configuration and distribution
 
 The settings database is the canonical configuration source. Implemented desktop screens cover
-agent discovery and executable pickers, custom CLI setup, permission profiles, argument-array
+OAuth-first Codex/Claude connections, agent discovery and executable pickers, custom CLI setup,
+permission profiles, argument-array
 preview and project-check commands, worktree locations, Docker profiles, extensions, and local
 storage/retention. Backup settings cover the destination picker, automatic interval, quit-time
 behavior, and a per-folder retention target. The optional Git commit identity override and default
@@ -167,6 +179,15 @@ First-run setup treats agent readiness as a trusted gate. Main resolves and prob
 bundled, detected, overridden, or custom executable and returns strict ready/failure evidence;
 missing, mismatched, invalid, or unrecognized candidates keep the renderer's **Continue** action
 disabled. Readiness does not persist a draft override or mint launch authority.
+
+For Codex and Claude Code, normalized connection evidence is the primary first-run gate. Their
+executable, model, and readiness controls remain optional **Advanced** configuration. A current-draft
+executable override may be passed through the strict connection prepare input for every action; main
+binds its resolved path, identity, hash, and version into the native disclosure and revalidates it at
+spawn time. Provider connection code never persists the override or reads provider auth stores.
+Only the normal Settings save transaction owns persistence. OAuth tokens, account identity, browser
+codes, and raw auth output are absent from contracts and storage. Gemini and OpenCode continue to use
+their existing executable-readiness path; no OAuth capability is inferred for them.
 
 The Settings renderer requires current, fingerprint-bound readiness for every configured built-in
 or custom agent and every configured preview/check command. The trusted `settings:update`

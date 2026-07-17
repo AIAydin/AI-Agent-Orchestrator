@@ -98,12 +98,17 @@ describe('ProjectService moved-project recovery', () => {
     });
 
     await expect(
-      service.pickRepository({ parent: parent as BrowserWindow, assertCurrent }),
+      service.pickRepository({
+        parent: parent as BrowserWindow,
+        assertCurrent,
+      }),
     ).rejects.toThrow('window changed');
 
     expect(showOpenDialog).toHaveBeenCalledWith(
       parent,
-      expect.objectContaining({ properties: ['openDirectory', 'createDirectory'] }),
+      expect.objectContaining({
+        properties: ['openDirectory', 'createDirectory'],
+      }),
     );
     expect(assertCurrent).toHaveBeenCalledTimes(1);
     expect(store.listProjects()).toEqual([]);
@@ -141,7 +146,10 @@ describe('ProjectService moved-project recovery', () => {
     mkdirSync(repositoryPath);
     writeFileSync(
       join(repositoryPath, 'package.json'),
-      JSON.stringify({ packageManager: 'pnpm@10.13.1', scripts: { preview: 'vite' } }),
+      JSON.stringify({
+        packageManager: 'pnpm@10.13.1',
+        scripts: { preview: 'vite' },
+      }),
     );
     const store = openStore(root);
 
@@ -192,7 +200,9 @@ describe('ProjectService moved-project recovery', () => {
     const opened = await service.open(repositoryPath);
 
     await expect(service.initializeGit(opened.id)).resolves.toBeNull();
-    await expect(access(join(repositoryPath, '.git'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(access(join(repositoryPath, '.git'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
     expect(store.listAuditEvents(1)[0]).toMatchObject({
       category: 'git',
       action: 'initialize',
@@ -249,7 +259,9 @@ describe('ProjectService moved-project recovery', () => {
     await expect(service.initializeGit(opened.id)).rejects.toThrow(
       'selected project is no longer available',
     );
-    await expect(access(join(movedPath, '.git'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(access(join(movedPath, '.git'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
     expect(store.listAuditEvents(1)[0]).toMatchObject({
       category: 'git',
       action: 'initialize',
@@ -276,6 +288,7 @@ describe('ProjectService moved-project recovery', () => {
       branch: null,
       worktreeId: null,
       worktreeState: 'active',
+      worktreeAuthority: 'owned',
       repositoryRoot: canonicalOriginal,
       managedRoot: null,
       baseRef: null,
@@ -298,11 +311,17 @@ describe('ProjectService moved-project recovery', () => {
     expect(assessment).toMatchObject({
       projectId: PROJECT_ID,
       original: { name: 'repository-before-move', path: canonicalOriginal },
-      candidate: { name: 'repository-after-move', path: await realpath(movedPath) },
+      candidate: {
+        name: 'repository-after-move',
+        path: await realpath(movedPath),
+      },
       warnings: [],
     });
     expect(showOpenDialog).toHaveBeenCalledWith(
-      expect.objectContaining({ properties: ['openDirectory'], buttonLabel: 'Inspect repository' }),
+      expect.objectContaining({
+        properties: ['openDirectory'],
+        buttonLabel: 'Inspect repository',
+      }),
     );
     expect(store.getProject(PROJECT_ID)).toMatchObject({
       path: canonicalOriginal,
@@ -373,7 +392,10 @@ describe('ProjectService moved-project recovery', () => {
         confirmed: true,
       }),
     ).rejects.toThrow('missing, expired, or belongs to another project');
-    expect(store.getProject(PROJECT_ID)).toMatchObject({ path: missingPath, missing: true });
+    expect(store.getProject(PROJECT_ID)).toMatchObject({
+      path: missingPath,
+      missing: true,
+    });
 
     writeFileSync(
       join(candidatePath, 'package.json'),
@@ -386,7 +408,10 @@ describe('ProjectService moved-project recovery', () => {
         confirmed: true,
       }),
     ).rejects.toThrow('changed after review');
-    expect(store.getProject(PROJECT_ID)).toMatchObject({ path: missingPath, missing: true });
+    expect(store.getProject(PROJECT_ID)).toMatchObject({
+      path: missingPath,
+      missing: true,
+    });
   });
 
   it('reopens a repository outside the recent-30 window without replacing its identity or history', async () => {
@@ -407,6 +432,7 @@ describe('ProjectService moved-project recovery', () => {
       branch: null,
       worktreeId: null,
       worktreeState: 'active',
+      worktreeAuthority: 'owned',
       repositoryRoot: canonicalRepository,
       managedRoot: null,
       baseRef: null,
@@ -445,6 +471,8 @@ describe('trusted extension adapter detection', () => {
       installed: true,
       executable: await realpath(process.execPath),
       version: null,
+      capabilitySource: 'manifest',
+      capabilities: { modelSelection: true },
     });
   }, 15_000);
 
@@ -493,6 +521,8 @@ describe('trusted extension adapter detection', () => {
       installed: true,
       executable: await realpath(process.execPath),
       version: null,
+      capabilitySource: 'manifest',
+      capabilities: { modelSelection: false },
     });
     await expect(access(probeMarker)).rejects.toMatchObject({ code: 'ENOENT' });
   }, 15_000);
@@ -537,6 +567,8 @@ describe('trusted extension adapter detection', () => {
       installed: true,
       executable: process.execPath,
       providerDisclosure: 'Example provider disclosure shown before every launch.',
+      capabilitySource: 'manifest',
+      capabilities: { modelSelection: true },
     });
     expect(extension?.version).toBeNull();
     await expect(access(probeMarker)).rejects.toMatchObject({ code: 'ENOENT' });

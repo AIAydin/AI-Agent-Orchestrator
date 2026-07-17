@@ -47,6 +47,8 @@ describe('AgentReadinessService', () => {
       executableOverride: '/chosen/bin/codex',
     });
 
+    expect(result.effectiveCapabilities?.modelSelection).toBe(true);
+
     expect(locateExecutable).toHaveBeenCalledWith(expect.objectContaining({ id: 'codex' }), {
       executable: '/chosen/bin/codex',
     });
@@ -104,7 +106,10 @@ describe('AgentReadinessService', () => {
       identifyExecutable,
       probeAgent: vi.fn(() =>
         Promise.resolve(
-          detection({ version: undefined, rawVersion: 'unexpected version response' }),
+          detection({
+            version: undefined,
+            rawVersion: 'unexpected version response',
+          }),
         ),
       ),
     });
@@ -357,7 +362,10 @@ describe('AgentReadinessService', () => {
     await expect(
       service.verifySettingsReadiness({
         agentId: 'custom',
-        configuration: { ...configuration, launchArguments: ['run', '--changed'] },
+        configuration: {
+          ...configuration,
+          launchArguments: ['run', '--changed'],
+        },
       }),
     ).rejects.toThrow(/Refresh readiness/u);
     expect(locateExecutable).toHaveBeenCalledTimes(2);

@@ -1,16 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Bot,
-  Copy,
-  History,
-  LayoutGrid,
-  Lock,
-  ShieldCheck,
-  Square,
-  Trash2,
-  Unlock,
-  X,
-} from 'lucide-react';
+import { Copy, LayoutGrid, Lock, Trash2, Unlock, X } from 'lucide-react';
 
 import type {
   AgentDetection,
@@ -21,12 +10,6 @@ import type {
   RunAdapterId,
 } from '../../../../../shared/application/contracts.js';
 import { NODE_DEFINITIONS, type WorkshopNode } from '../canvas/CanvasNode.js';
-import { ConfiguredPermissionSummary } from '../../permissions/ConfiguredPermissionSummary.js';
-import {
-  PERMISSION_PROFILE_OPTIONS,
-  permissionProfileNeedsDocker,
-  permissionProfileUnavailableReason,
-} from '../../permissions/permission-profile-ui.js';
 import { DeclarativeExtensionInspector } from '../../extensions/DeclarativeExtensionInspector.js';
 import { PreviewNodePanel } from '../../preview/PreviewNodePanel.js';
 import { TypedEdgeInspector } from '../canvas/TypedEdgeInspector.js';
@@ -66,6 +49,8 @@ import { OperationalGitPrNodeInspector, type GitPrNodeConfiguration } from '../g
 import { TerminalNodePanel, type TerminalNodeConfiguration } from '../terminal/index.js';
 import { TestNodePanel } from '../workflows/test-node/TestNodePanel.js';
 import type { WorkflowArtifactActionInput } from '../../../../../shared/workflow/contracts.js';
+import { AgentNodePanel } from '../runs/agent-node/AgentNodePanel.js';
+import type { RunHistorySummary } from '../../../../../shared/runs/contracts.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
 type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
@@ -106,6 +91,8 @@ interface WorkspaceInspectorProps {
   onSendRunInput: () => void;
   onControlRun: (action: 'interrupt' | 'terminate') => void;
   onPrepareRun: () => void;
+  onRetryAgentAttempt: (attempt: RunHistorySummary) => void;
+  onResumeAgentAttempt: (attempt: RunHistorySummary) => void;
   onPreviewSession: (session: PreviewSessionSnapshot | null) => void;
   onTerminalSessionStatus: (nodeId: string, status: WorkshopNode['data']['status']) => void;
   testNodeRuntime: {
@@ -340,7 +327,9 @@ function NodeInspector(
           configuration={terminalNodeConfiguration(selectedNode, props.settings)}
           onRecord={onRecord}
           onConfigurationChange={(configuration) =>
-            onUpdateSelected({ command: terminalCommandConfiguration(configuration) })
+            onUpdateSelected({
+              command: terminalCommandConfiguration(configuration),
+            })
           }
           onSessionChange={(session) =>
             props.onTerminalSessionStatus(
@@ -353,7 +342,26 @@ function NodeInspector(
       )}
       {selectedNode.data.kind === 'agent' && (
         <>
-          <AgentRunInspector {...props} />
+          <AgentNodePanel
+            projectId={props.project.id}
+            selectedNode={selectedNode}
+            selectedAdapter={props.selectedAdapter}
+            selectedPermission={props.selectedPermission}
+            runnableAgents={props.runnableAgents}
+            settings={props.settings}
+            runInput={props.runInput}
+            running={props.agentRunActive}
+            preparingRun={props.preparingRun}
+            configurationReadOnly={configurationReadOnly}
+            onUpdateSelected={props.onUpdateSelected}
+            onRunInputChange={props.onRunInputChange}
+            onSendRunInput={props.onSendRunInput}
+            onControlRun={props.onControlRun}
+            onPrepareRun={props.onPrepareRun}
+            onRetryAttempt={props.onRetryAgentAttempt}
+            onResumeAttempt={props.onResumeAgentAttempt}
+            onReviewAttempt={(attempt) => props.onOpenGitPrReadiness(attempt.id)}
+          />
           <AgentContextDropZone
             agent={selectedNode}
             nodes={props.nodes}
@@ -444,20 +452,6 @@ function NodeInspector(
           Delete
         </button>
       </div>
-      {selectedNode.data.kind === 'agent' && (
-        <section className="run-history">
-          <header>
-            <History size={14} />
-            <h3>Run history</h3>
-          </header>
-          {selectedNode.data.transcript ? (
-            <pre>{selectedNode.data.transcript}</pre>
-          ) : (
-            <p>No runs yet. Forgeboard never fabricates agent output.</p>
-          )}
-          {selectedNode.data.lastRunSummary && <strong>{selectedNode.data.lastRunSummary}</strong>}
-        </section>
-      )}
     </div>
   );
 }
@@ -686,156 +680,6 @@ function FileNodeEditor({
         </div>
       ) : null}
     </>
-  );
-}
-
-function AgentRunInspector(
-  props: WorkspaceInspectorProps & {
-    selectedNode: WorkshopNode;
-  },
-) {
-  const {
-    selectedNode,
-    selectedAdapter,
-    selectedPermission,
-    runnableAgents,
-    settings,
-    onUpdateSelected,
-  } = props;
-  const running = props.agentRunActive;
-  const permissionUnavailable = permissionProfileUnavailableReason(
-    selectedPermission,
-    settings,
-    selectedAdapter,
-  );
-  const permissionIssueId = `node-${selectedNode.id}-permission-unavailable`;
-  return (
-    <section className="agent-run-config" aria-label="Agent run configuration">
-      <header>
-        <div>
-          <Bot size={14} />
-          <h3>Agent run</h3>
-        </div>
-        <span>Approval required</span>
-      </header>
-      <label>
-        Installed adapter
-        <select
-          name={`node-${selectedNode.id}-agent-adapter`}
-          value={selectedAdapter}
-          disabled={running || selectedNode.data.locked}
-          onChange={(event) => onUpdateSelected({ adapterId: event.target.value })}
-        >
-          {runnableAgents.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.label} {agent.version ? `(${agent.version})` : ''}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Permission profile
-        <select
-          name={`node-${selectedNode.id}-permission-profile`}
-          value={selectedPermission}
-          disabled={running || selectedNode.data.locked}
-          onChange={(event) =>
-            onUpdateSelected({
-              permissionProfile: event.target.value as PermissionProfile,
-            })
-          }
-        >
-          {PERMISSION_PROFILE_OPTIONS.map((option) => (
-            <option
-              key={option.value}
-              value={option.value}
-              disabled={
-                permissionProfileUnavailableReason(option.value, settings, selectedAdapter) !== null
-              }
-            >
-              {option.label} · {option.description}
-            </option>
-          ))}
-        </select>
-      </label>
-      <ConfiguredPermissionSummary
-        profile={selectedPermission}
-        settings={settings}
-        adapterId={selectedAdapter}
-      />
-      {permissionUnavailable !== null && (
-        <p id={permissionIssueId} className="recovery-guidance warning" role="alert">
-          {permissionUnavailable} Choose another adapter or permission profile before reviewing this
-          run.
-        </p>
-      )}
-      {selectedAdapter === 'custom' &&
-        !permissionProfileNeedsDocker(selectedPermission, settings) && (
-          <small>
-            A generic CLI has no provider-specific sandbox flags. Worktree mode protects the primary
-            checkout, but OS-level access remains disclosure-only; choose Docker for a technical
-            boundary.
-          </small>
-        )}
-      <label>
-        Prompt
-        <textarea
-          name={`node-${selectedNode.id}-prompt`}
-          rows={6}
-          value={selectedNode.data.prompt ?? selectedNode.data.description}
-          disabled={running || selectedNode.data.locked}
-          placeholder="Describe the concrete outcome for this agent…"
-          onChange={(event) => onUpdateSelected({ prompt: event.target.value })}
-        />
-      </label>
-      {running ? (
-        <div className="live-run-controls">
-          <div>
-            <input
-              name={`node-${selectedNode.id}-agent-input`}
-              value={props.runInput}
-              placeholder="Send interactive input"
-              aria-label="Agent input"
-              onChange={(event) => props.onRunInputChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') props.onSendRunInput();
-              }}
-            />
-            <button type="button" onClick={props.onSendRunInput}>
-              Send
-            </button>
-          </div>
-          <button type="button" onClick={() => props.onControlRun('interrupt')}>
-            <Square size={12} /> Interrupt
-          </button>
-          <button
-            type="button"
-            className="danger-text"
-            onClick={() => props.onControlRun('terminate')}
-          >
-            <Trash2 size={12} /> Terminate
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="button primary review-run-button"
-          disabled={
-            props.preparingRun || runnableAgents.length === 0 || permissionUnavailable !== null
-          }
-          title={permissionUnavailable ?? undefined}
-          aria-describedby={permissionUnavailable === null ? undefined : permissionIssueId}
-          onClick={props.onPrepareRun}
-        >
-          <ShieldCheck size={14} />
-          {props.preparingRun ? 'Preparing exact launch…' : 'Review & run'}
-        </button>
-      )}
-      <p>
-        Nothing launches from this button alone. Forgeboard first shows the exact command, folder,
-        context, environment names, and permissions for approval.
-      </p>
-    </section>
   );
 }
 

@@ -66,6 +66,7 @@ describe('PersistedAgentRunContextResolver', () => {
   it.each([
     ['prompt', input({ prompt: 'Different prompt' })],
     ['adapter', input({ adapterId: 'codex' })],
+    ['model', input({ model: 'different-model' })],
     ['permission profile', input({ permissionProfile: 'worktree-write' })],
   ] as const)(
     'requires the persisted Agent %s to match the reviewed request',
@@ -75,6 +76,20 @@ describe('PersistedAgentRunContextResolver', () => {
       await expect(resolver.resolve(request, settings())).rejects.toThrow(/saved Agent/iu);
     },
   );
+
+  it('binds the persisted Agent model into immutable run authority', async () => {
+    const root = fixtureRoot();
+    const nodeModel = await resolverFor(
+      root,
+      canvas([], [], { adapterId: 'codex', model: 'node-model' }),
+    ).resolve(input({ adapterId: 'codex', model: 'node-model' }), settings());
+    const otherModel = await resolverFor(
+      root,
+      canvas([], [], { adapterId: 'codex', model: 'other-model' }),
+    ).resolve(input({ adapterId: 'codex', model: 'other-model' }), settings());
+
+    expect(nodeModel.authority.fingerprint).not.toBe(otherModel.authority.fingerprint);
+  });
 
   it('matches the visible description fallback when a legacy Agent has no prompt field', async () => {
     const root = fixtureRoot();

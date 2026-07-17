@@ -413,6 +413,10 @@ export const MIGRATIONS = [
     CREATE INDEX IF NOT EXISTS idx_terminal_sessions_recovery
       ON terminal_sessions(status, updated_at, id);
   `,
+  `
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_project_node_updated
+      ON agent_runs(project_id, node_id, updated_at DESC, id DESC);
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {

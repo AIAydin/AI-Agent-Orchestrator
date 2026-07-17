@@ -7,6 +7,8 @@ import path from 'node:path';
 
 import {
   AgentAdapterManifestSchema,
+  AgentResultMetadataSchema,
+  AgentSessionCapabilitiesSchema,
   AgentLaunchRequestSchema,
   AgentResumeRequestSchema,
   PreparedAgentLaunchSchema,
@@ -17,6 +19,8 @@ import {
   type AgentLaunchRequest,
   type AgentResumeRequest,
   type AgentResultMetadata,
+  type AgentSessionCapabilities,
+  type AgentUsageMetadata,
   type ContextAttachment,
   type ParsedAgentLaunchRequest,
   type ParsedAgentResumeRequest,
@@ -142,6 +146,7 @@ class JsonLinesNormalizer {
 
 export interface AgentSession {
   readonly pid: number | undefined;
+  readonly capabilities: AgentSessionCapabilities;
   readonly events: AsyncIterable<AgentEvent>;
   readonly result: Promise<AgentResultMetadata>;
   writeInput(data: string): void;
@@ -161,14 +166,17 @@ class ProcessAgentSession implements AgentSession {
   #exitIntent: 'interrupt' | 'terminate' | undefined;
   #settled = false;
   #providerSessionId: string | undefined;
+  #usage: AgentUsageMetadata | undefined;
 
   public constructor(
     manifest: AgentAdapterManifest,
     runtime: RuntimeProcess,
     initialStdin: string | undefined,
+    capabilities: AgentSessionCapabilities,
   ) {
     this.#manifest = manifest;
     this.#runtime = runtime;
+    this.capabilities = AgentSessionCapabilitiesSchema.parse(capabilities);
     let resolveResult: ((value: AgentResultMetadata) => void) | undefined;
     this.result = new Promise((resolve) => {
       resolveResult = resolve;
@@ -190,12 +198,14 @@ class ProcessAgentSession implements AgentSession {
     return this.#runtime.pid;
   }
 
+  public readonly capabilities: AgentSessionCapabilities;
+
   public get events(): AsyncIterable<AgentEvent> {
     return this.#events;
   }
 
   public writeInput(data: string): void {
-    if (!this.#manifest.capabilities.interactiveInput) {
+    if (!this.capabilities.interactiveInput) {
       throw new UnsupportedAgentCapabilityError('interactive input', this.#manifest.id);
     }
     if (this.#settled) throw new AgentLaunchValidationError('Cannot write to an exited session.');
@@ -206,7 +216,7 @@ class ProcessAgentSession implements AgentSession {
   }
 
   public interrupt(): void {
-    if (!this.#manifest.capabilities.interrupt) {
+    if (!this.capabilities.interrupt) {
       throw new UnsupportedAgentCapabilityError('interrupt', this.#manifest.id);
     }
     if (this.#settled) return;
@@ -216,7 +226,7 @@ class ProcessAgentSession implements AgentSession {
   }
 
   public terminate(): void {
-    if (!this.#manifest.capabilities.terminate) {
+    if (!this.capabilities.terminate) {
       throw new UnsupportedAgentCapabilityError('terminate', this.#manifest.id);
     }
     if (this.#settled) return;
@@ -256,6 +266,8 @@ class ProcessAgentSession implements AgentSession {
   #emitMessage(channel: RuntimeChannel, payload: unknown): void {
     const sessionId = extractSessionId(payload);
     if (sessionId !== undefined) this.#providerSessionId = sessionId;
+    const usage = extractUsage(payload);
+    if (usage !== undefined) this.#usage = { ...this.#usage, ...usage };
     this.#events.push({ ...this.#base(), type: 'message', channel, payload });
   }
 
@@ -285,7 +297,9 @@ class ProcessAgentSession implements AgentSession {
       ...(this.#providerSessionId === undefined
         ? {}
         : { providerSessionId: this.#providerSessionId }),
+      ...(this.#usage === undefined ? {} : { usage: this.#usage }),
     };
+    AgentResultMetadataSchema.parse(result);
     this.#emitLifecycle('exited');
     this.#events.push({ ...this.#base(), type: 'result', result });
     this.#events.close();
@@ -296,11 +310,61 @@ class ProcessAgentSession implements AgentSession {
 function extractSessionId(payload: unknown): string | undefined {
   if (typeof payload !== 'object' || payload === null) return undefined;
   const record = payload as Record<string, unknown>;
-  for (const key of ['sessionId', 'session_id', 'sessionID']) {
+  for (const key of ['sessionId', 'session_id', 'sessionID', 'threadId', 'thread_id']) {
     const value = record[key];
-    if (typeof value === 'string' && value.length > 0) return value;
+    if (value === undefined) continue;
+    const parsed = AgentResultMetadataSchema.shape.providerSessionId.safeParse(value);
+    if (parsed.success && parsed.data !== undefined) return parsed.data;
   }
   return undefined;
+}
+
+function extractUsage(payload: unknown): AgentUsageMetadata | undefined {
+  if (!isRecord(payload)) return undefined;
+  const metadata = isRecord(payload.metadata) ? payload.metadata : undefined;
+  const candidate = isRecord(payload.usage)
+    ? payload.usage
+    : metadata !== undefined && isRecord(metadata.usage)
+      ? metadata.usage
+      : undefined;
+  if (candidate === undefined) return undefined;
+  const value = {
+    ...optionalNumber(candidate, 'inputTokens', 'input_tokens'),
+    ...optionalNumber(candidate, 'cachedInputTokens', 'cached_input_tokens'),
+    ...optionalNumber(candidate, 'outputTokens', 'output_tokens'),
+    ...optionalNumber(candidate, 'totalTokens', 'total_tokens'),
+    ...usageCost(candidate, metadata, payload),
+  };
+  const parsed = AgentResultMetadataSchema.shape.usage.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function usageCost(
+  usage: Readonly<Record<string, unknown>>,
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  payload: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  for (const candidate of [usage, metadata, payload]) {
+    if (candidate === undefined) continue;
+    const cost = optionalNumber(candidate, 'costUsd', 'cost_usd', 'total_cost_usd');
+    if (cost.costUsd !== undefined) return cost;
+  }
+  return {};
+}
+
+function optionalNumber(
+  record: Readonly<Record<string, unknown>>,
+  outputKey: string,
+  ...inputKeys: readonly string[]
+): Record<string, unknown> {
+  for (const key of [outputKey, ...inputKeys]) {
+    if (record[key] !== undefined) return { [outputKey]: record[key] };
+  }
+  return {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function createPipeRuntime(plan: PreparedAgentLaunch, beforeSpawn?: () => void): RuntimeProcess {
@@ -660,13 +724,33 @@ export function prepareAgentResume(
 export async function launchPreparedAgent(
   planInput: PreparedAgentLaunch,
   beforeSpawn?: () => void,
+  capabilitiesInput?: AgentSessionCapabilities,
 ): Promise<AgentSession> {
   const plan = PreparedAgentLaunchSchema.parse(planInput);
   const runtime =
     plan.disclosure.runtime === 'pty'
       ? await createPtyRuntime(plan, beforeSpawn)
       : createPipeRuntime(plan, beforeSpawn);
-  return new ProcessAgentSession(plan.manifest, runtime, plan.initialStdin);
+  const capabilities =
+    capabilitiesInput ?? sessionCapabilities(plan.manifest.capabilities, 'manifest');
+  return new ProcessAgentSession(plan.manifest, runtime, plan.initialStdin, capabilities);
+}
+
+function sessionCapabilities(
+  capabilities: Pick<
+    AgentCapabilities,
+    'interactiveInput' | 'interrupt' | 'terminate' | 'pause' | 'resume'
+  >,
+  source: AgentSessionCapabilities['source'],
+): AgentSessionCapabilities {
+  return AgentSessionCapabilitiesSchema.parse({
+    interactiveInput: capabilities.interactiveInput,
+    interrupt: capabilities.interrupt,
+    terminate: capabilities.terminate,
+    pause: capabilities.pause,
+    resume: capabilities.resume,
+    source,
+  });
 }
 
 interface ExecutableProbeResult {
@@ -965,7 +1049,23 @@ export class CliAgentAdapter {
         `Prepared launch belongs to ${plan.manifest.id}, not ${this.manifest.id}.`,
       );
     }
-    return launchPreparedAgent(plan, beforeSpawn);
+    return launchPreparedAgent(
+      plan,
+      beforeSpawn,
+      sessionCapabilities(
+        this.#effectiveCapabilities ?? this.manifest.capabilities,
+        this.#effectiveCapabilities === undefined ? 'manifest' : 'probe',
+      ),
+    );
+  }
+
+  public get effectiveCapabilities(): AgentCapabilities {
+    return {
+      ...(this.#effectiveCapabilities ?? this.manifest.capabilities),
+      permissionModes: [
+        ...(this.#effectiveCapabilities ?? this.manifest.capabilities).permissionModes,
+      ],
+    };
   }
 
   #assertDetectedCapabilities(

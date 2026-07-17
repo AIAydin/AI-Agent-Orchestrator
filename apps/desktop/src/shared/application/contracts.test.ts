@@ -43,7 +43,7 @@ describe('save-before-close IPC contracts', () => {
 });
 
 describe('agent-run target contracts', () => {
-  it('accepts only a project ID and rejects renderer-selected repository paths', () => {
+  it('accepts an optional bounded model and rejects renderer-selected repository paths', () => {
     const input = {
       projectId: 'c95b77bb-53d0-46f9-b9fc-5df23c0d5843',
       nodeId: 'agent-1',
@@ -52,6 +52,10 @@ describe('agent-run target contracts', () => {
       permissionProfile: 'plan-read-only' as const,
     };
     expect(PrepareRunInputSchema.parse(input)).toEqual(input);
+    expect(PrepareRunInputSchema.parse({ ...input, model: '  node-model  ' }).model).toBe(
+      'node-model',
+    );
+    expect(PrepareRunInputSchema.safeParse({ ...input, model: '   ' }).success).toBe(false);
     expect(
       PrepareRunInputSchema.safeParse({ ...input, repositoryPath: '/renderer/chosen/path' })
         .success,

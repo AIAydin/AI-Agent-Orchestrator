@@ -73,6 +73,7 @@ const MAX_PROVIDER_SESSION_CODE_UNITS = 512;
 interface AgentNodeConfiguration {
   readonly configuredAgentNodeId: string;
   readonly adapterId: AgentExecutionRequest['adapterId'];
+  readonly model?: string;
   readonly prompt: string;
   readonly permissionProfile: AgentExecutionRequest['permissionProfile'];
   readonly attachmentIds: readonly string[];
@@ -135,6 +136,7 @@ export class WorkflowAgentExecutor implements WorkflowNodeExecutor {
       projectId: context.projectId,
       nodeId: context.node.id,
       adapterId: configuration.adapterId,
+      ...(configuration.model === undefined ? {} : { model: configuration.model }),
       prompt: configuration.prompt,
       permissionProfile: configuration.permissionProfile,
       context: resolvedContext,
@@ -485,6 +487,7 @@ function agentNodeConfiguration(context: WorkflowExecutorContext): AgentNodeConf
   return {
     configuredAgentNodeId: agent.id,
     adapterId: adapter.data,
+    ...(agent.data.model === undefined ? {} : { model: agent.data.model }),
     prompt,
     permissionProfile: permissionProfile.data,
     attachmentIds: uniqueSorted([

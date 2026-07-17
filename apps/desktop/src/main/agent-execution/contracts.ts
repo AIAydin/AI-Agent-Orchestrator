@@ -4,7 +4,12 @@ import type {
   CliAgentAdapter,
   PreparedAgentLaunch,
 } from '@forgeboard/agent-adapters';
-import { ContextAttachmentSchema } from '@forgeboard/agent-adapters';
+import {
+  AgentSessionCapabilitiesSchema,
+  AgentResultMetadataSchema,
+  AgentUsageMetadataSchema,
+  ContextAttachmentSchema,
+} from '@forgeboard/agent-adapters';
 import { AGENT_CONTEXT_ATTACHMENT_LIMIT, type ProcessReference } from '@forgeboard/core';
 import type { WorktreeOwnership } from '@forgeboard/git-engine';
 import { z } from 'zod';
@@ -92,8 +97,11 @@ export const AgentExecutionCompletionSchema = z
     changedFiles: z.array(z.string()).max(100_000),
     outputDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     branch: z.string().nullable(),
+    worktreeId: z.string().uuid().nullable(),
     worktreePath: z.string().nullable(),
-    providerSessionId: z.string().optional(),
+    capabilities: AgentSessionCapabilitiesSchema,
+    providerSessionId: AgentResultMetadataSchema.shape.providerSessionId,
+    usage: AgentUsageMetadataSchema.optional(),
   })
   .strict();
 export type AgentExecutionCompletion = z.infer<typeof AgentExecutionCompletionSchema>;
@@ -101,6 +109,7 @@ export type AgentExecutionCompletion = z.infer<typeof AgentExecutionCompletionSc
 export interface AgentExecutionLaunchHandle {
   readonly runId: string;
   readonly process: ProcessReference | null;
+  readonly capabilities: AgentSession['capabilities'];
   readonly completion: Promise<AgentExecutionCompletion>;
   writeInput(data: string): void;
   interrupt(): void;
@@ -130,6 +139,7 @@ export type AgentAdapterPlanner = (
   settings: AppSettings,
   runId: string,
   processAuthorization?: AgentPreparationProcessAuthorization,
+  resumeSessionId?: string,
 ) => Promise<AgentRuntimeAdapterPlan>;
 
 export interface AgentPreparationProcessAuthorization {
@@ -158,6 +168,17 @@ export interface AgentExecutionStore {
       }
     | undefined;
   saveRun(record: StoredRunRecord): StoredRunRecord;
+  getRun?(runId: string): StoredRunRecord | undefined;
+  transferRunWorktreeAuthority?(input: {
+    readonly parentRunId: string;
+    readonly childRunId: string;
+  }): StoredRunRecord;
+  transitionRunWorktreeState?(input: {
+    readonly runId: string;
+    readonly expectedWorktreeId: string;
+    readonly expectedState: 'active' | 'cleanup-pending';
+    readonly nextState: 'active' | 'cleanup-pending' | 'cleaned';
+  }): StoredRunRecord;
   appendAudit(
     category: string,
     action: string,
@@ -169,6 +190,18 @@ export interface AgentExecutionStore {
 export interface AgentExecutionOperations {
   prepare(
     ownerId: string,
+    input: AgentExecutionRequest,
+    processAuthorization?: AgentPreparationProcessAuthorization,
+  ): Promise<PreparedAgentExecution>;
+  prepareResume(
+    ownerId: string,
+    parentRunId: string,
+    input: AgentExecutionRequest,
+    processAuthorization?: AgentPreparationProcessAuthorization,
+  ): Promise<PreparedAgentExecution>;
+  prepareRetry(
+    ownerId: string,
+    parentRunId: string,
     input: AgentExecutionRequest,
     processAuthorization?: AgentPreparationProcessAuthorization,
   ): Promise<PreparedAgentExecution>;
@@ -200,7 +233,9 @@ export interface PreparedRunState {
   readonly expiresAt: string;
   readonly generation: number;
   readonly nodeId: string;
+  readonly ownsWorktreeCleanup: boolean;
   readonly ownerId: string;
+  readonly authorityParentRunId: string | null;
   readonly plan: PreparedAgentLaunch;
   readonly planId: string;
   readonly repositoryPath: string;

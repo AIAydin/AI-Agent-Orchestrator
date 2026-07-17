@@ -103,7 +103,10 @@ const TestAgentEventBaseSchema = z.object({
 });
 
 export const TestAgentEventSchema = z.discriminatedUnion('type', [
-  TestAgentEventBaseSchema.extend({ type: z.literal('ready') }).strict(),
+  TestAgentEventBaseSchema.extend({
+    type: z.literal('ready'),
+    sessionId: z.string().trim().min(1).max(1_024).optional(),
+  }).strict(),
   TestAgentEventBaseSchema.extend({
     type: z.literal('run-started'),
     actionCount: z.number().int().nonnegative(),
@@ -165,6 +168,7 @@ export const TEST_AGENT_MANIFEST = Object.freeze({
   invocation: {
     runtime: 'pipes',
     launchArguments: ['{extraArgs}'],
+    resumeArguments: ['--resume-session', '{sessionId}', '{extraArgs}'],
     promptTransport: 'stdin',
     promptTerminator: '\n',
     modelArguments: [],
@@ -176,7 +180,8 @@ export const TEST_AGENT_MANIFEST = Object.freeze({
     interactiveInput: true,
     interrupt: true,
     terminate: true,
-    resume: false,
+    pause: false,
+    resume: true,
     ansiStreaming: false,
     structuredOutput: true,
     modelSelection: false,
@@ -190,6 +195,7 @@ export interface TestAgentProtocolOptions {
   stdin: Readable;
   writeLine: (line: string) => void;
   cwd: string;
+  providerSessionId?: string;
   signal?: AbortSignal;
 }
 
@@ -329,7 +335,10 @@ export async function runTestAgentProtocol(options: TestAgentProtocolOptions): P
     if (runCommand === undefined) rejectRun?.(new Error('stdin closed before a run command.'));
   });
 
-  emit({ type: 'ready' });
+  emit({
+    type: 'ready',
+    ...(options.providerSessionId === undefined ? {} : { sessionId: options.providerSessionId }),
+  });
   try {
     const command = await runReady;
     emit({ type: 'run-started', actionCount: command.actions.length });

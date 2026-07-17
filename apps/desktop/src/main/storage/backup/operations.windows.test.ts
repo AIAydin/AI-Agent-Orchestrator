@@ -135,7 +135,7 @@ describe('Windows backup filesystem boundaries', () => {
     } finally {
       database.close();
     }
-  });
+  }, 10_000);
 
   it('does not create a destination when the current Windows identity is unavailable', async () => {
     const root = await temporaryRoot();

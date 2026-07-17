@@ -109,6 +109,7 @@ function runRecord(
     cwd: ownership.worktreePath,
     branch: ownership.branch,
     worktreeId: ownership.id,
+    worktreeAuthority: 'owned',
     worktreeState: 'active',
     repositoryRoot: ownership.repositoryRoot,
     managedRoot: ownership.managedRoot,

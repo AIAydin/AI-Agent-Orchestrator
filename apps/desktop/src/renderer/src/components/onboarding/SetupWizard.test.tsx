@@ -11,6 +11,7 @@ import {
 } from '../../../../shared/application/contracts.js';
 import type { DockerReadiness } from '../../../../shared/docker/contracts.js';
 import type { AgentReadinessResult } from '../../../../shared/readiness/contracts.js';
+import type { ProviderConnectionStatus } from '../../../../shared/provider-connections/index.js';
 import type {
   CommandReadinessRequest,
   CommandReadinessResult,
@@ -101,6 +102,23 @@ const pickExecutable = vi.fn(() =>
 const commandCheck = vi.fn((input: CommandReadinessRequest) =>
   Promise.resolve({ ok: true as const, value: readyCommand(input) }),
 );
+const providerGet = vi.fn(
+  ({
+    providerId,
+  }: {
+    providerId: 'codex' | 'claude';
+  }): Promise<{ ok: true; value: ProviderConnectionStatus }> =>
+    Promise.resolve({
+      ok: true as const,
+      value: {
+        schemaVersion: 1 as const,
+        providerId,
+        state: 'connected' as const,
+        checkedAt: '2026-07-17T12:00:00.000Z',
+        reason: null,
+      },
+    }),
+);
 
 function readyCommand(input: CommandReadinessRequest): CommandReadinessResult {
   const projectValidated = input.projectId !== null;
@@ -136,6 +154,19 @@ beforeEach(() => {
   commandCheck.mockImplementation((input) =>
     Promise.resolve({ ok: true, value: readyCommand(input) }),
   );
+  providerGet.mockReset();
+  providerGet.mockImplementation(({ providerId }) =>
+    Promise.resolve({
+      ok: true,
+      value: {
+        schemaVersion: 1,
+        providerId,
+        state: 'connected',
+        checkedAt: '2026-07-17T12:00:00.000Z',
+        reason: null,
+      },
+    }),
+  );
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -146,6 +177,14 @@ beforeEach(() => {
         pickReferences: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
       },
       commands: { checkReadiness: commandCheck },
+      agents: {
+        connections: {
+          get: providerGet,
+          prepare: vi.fn(),
+          confirm: vi.fn(),
+          cancel: vi.fn(),
+        },
+      },
     },
   });
 });
@@ -153,6 +192,40 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('SetupWizard', () => {
+  it('guides Codex onboarding through official provider sign-in with advanced CLI controls folded', async () => {
+    providerGet.mockImplementation(({ providerId }) =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          schemaVersion: 1,
+          providerId,
+          state: 'disconnected',
+          checkedAt: null,
+          reason: 'Not signed in.',
+        },
+      }),
+    );
+    render(
+      <SetupWizard
+        settings={settings}
+        agents={agents}
+        onComplete={() => Promise.resolve()}
+        onSkip={() => Promise.resolve()}
+        onError={(message) => {
+          throw new Error(message);
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/i }));
+    expect(await screen.findByRole('button', { name: 'Connect with OpenAI' })).toBeTruthy();
+    expect(screen.getByText(/connect Codex CLI here or choose the local test agent/i)).toBeTruthy();
+    expect(screen.getByText(/official sign-in opens in your browser/i)).toBeTruthy();
+    expect(screen.getByText('Advanced').closest('details')?.open).toBe(false);
+    expect(screen.getByRole('button', { name: /Continue/ }).hasAttribute('disabled')).toBe(true);
+  });
+
   it('adopts detected project scripts and passively validates them before completion', async () => {
     const onComplete = vi.fn<(settings: AppSettings) => Promise<void>>(() => Promise.resolve());
     render(
@@ -275,7 +348,10 @@ describe('SetupWizard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
     fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await screen.findByText('Connected');
+    const agentContinue = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
+    await waitFor(() => expect(agentContinue.disabled).toBe(false));
+    fireEvent.click(agentContinue);
 
     fireEvent.click(screen.getByRole('radio', { name: /Docker isolated/ }));
     fireEvent.change(screen.getByLabelText('Container image'), {
@@ -458,7 +534,10 @@ describe('SetupWizard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
     fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await screen.findByText('Connected');
+    const agentContinue = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
+    await waitFor(() => expect(agentContinue.disabled).toBe(false));
+    fireEvent.click(agentContinue);
     fireEvent.click(screen.getByRole('radio', { name: /Docker isolated/ }));
     fireEvent.change(screen.getByLabelText('Container image'), {
       target: { value: readyDocker.image },

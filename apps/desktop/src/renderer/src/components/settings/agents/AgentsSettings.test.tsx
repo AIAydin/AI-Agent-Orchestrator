@@ -13,6 +13,7 @@ import type {
   AgentReadinessResult,
   CheckAgentReadiness,
 } from '../../../../../shared/readiness/contracts.js';
+import type { ProviderConnectionId } from '../../../../../shared/provider-connections/index.js';
 import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadiness.js';
 import { AgentsSettings } from './AgentsSettings.js';
 
@@ -65,6 +66,25 @@ beforeEach(() => {
     configurable: true,
     value: {
       projects: { pickExecutable },
+      agents: {
+        connections: {
+          get: vi.fn(({ providerId }: { providerId: ProviderConnectionId }) =>
+            Promise.resolve({
+              ok: true,
+              value: {
+                schemaVersion: 1,
+                providerId,
+                state: 'disconnected',
+                checkedAt: null,
+                reason: 'Not signed in.',
+              },
+            }),
+          ),
+          prepare: vi.fn(),
+          confirm: vi.fn(),
+          cancel: vi.fn(),
+        },
+      },
     },
   });
 });
@@ -88,6 +108,7 @@ describe('AgentsSettings readiness', () => {
     const checkAgentReadiness = vi.fn(() => Promise.resolve(ready));
     render(<Harness checkAgentReadiness={checkAgentReadiness} />);
 
+    expect(await screen.findByText(/Connect Codex CLI above before saving it/)).toBeTruthy();
     expect(screen.getByText('Selected executable needs attention')).toBeTruthy();
     const override = screen.getByLabelText<HTMLInputElement>('Executable override');
     const field = override.closest('.agent-override-field');

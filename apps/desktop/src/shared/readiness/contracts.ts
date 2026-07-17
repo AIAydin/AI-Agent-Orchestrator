@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
-import { CustomAgentConfigurationSchema } from '../application/contracts.js';
+import {
+  AgentCapabilitySummarySchema,
+  CustomAgentConfigurationSchema,
+} from '../application/contracts.js';
 import { MachineSpecificValueSchema } from '../settings/values.js';
 
 export const ReadinessAgentIdSchema = z.enum([
@@ -62,6 +65,7 @@ export const AgentReadinessResultSchema = z
     checkedAt: z.string().datetime(),
     reason: z.string().min(1).max(4_096).nullable(),
     warnings: z.array(z.string().min(1).max(4_096)).max(128),
+    effectiveCapabilities: AgentCapabilitySummarySchema.optional(),
   })
   .strict()
   .superRefine((result, context) => {

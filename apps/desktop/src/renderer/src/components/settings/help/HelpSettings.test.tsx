@@ -90,6 +90,20 @@ describe('HelpSettings', () => {
     expect(screen.getByText(/rejected without force/u)).toBeTruthy();
   });
 
+  it('finds the OAuth-first Codex and Claude connection guide without claiming other providers', () => {
+    render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
+      target: { value: 'oauth reconnect token' },
+    });
+
+    expect(screen.getByRole('status').textContent).toBe('1 matching guide');
+    expect(screen.getByText('Connect Codex or Claude Code')).toBeTruthy();
+    expect(screen.getByText(/never sees or stores the OAuth token/u)).toBeTruthy();
+    expect(screen.getByText(/current override is validated/u)).toBeTruthy();
+    expect(screen.getByText(/Gemini and OpenCode do not use this OAuth flow/u)).toBeTruthy();
+  });
+
   it('renders an actionable empty state for an unmatched search', () => {
     render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
 

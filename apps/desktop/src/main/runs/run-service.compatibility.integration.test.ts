@@ -72,6 +72,11 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
     readonly ownerId: string;
     readonly input: AgentExecutionRequest;
   }> = [];
+  readonly continuationCalls: Array<{
+    readonly action: 'resume' | 'retry';
+    readonly ownerId: string;
+    readonly parentRunId: string;
+  }> = [];
   readonly launchCalls: Array<{
     readonly ownerId: string;
     readonly planId: string;
@@ -147,6 +152,24 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
     };
   }
 
+  public prepareResume(
+    ownerId: string,
+    parentRunId: string,
+    input: AgentExecutionRequest,
+  ): Promise<PreparedAgentExecution> {
+    this.continuationCalls.push({ action: 'resume', ownerId, parentRunId });
+    return this.prepare(ownerId, input);
+  }
+
+  public prepareRetry(
+    ownerId: string,
+    parentRunId: string,
+    input: AgentExecutionRequest,
+  ): Promise<PreparedAgentExecution> {
+    this.continuationCalls.push({ action: 'retry', ownerId, parentRunId });
+    return this.prepare(ownerId, input);
+  }
+
   public launch(
     ownerId: string,
     planId: string,
@@ -159,6 +182,14 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
     return Promise.resolve({
       runId: planId,
       process: null,
+      capabilities: {
+        interactiveInput: true,
+        interrupt: true,
+        terminate: true,
+        pause: false,
+        resume: false,
+        source: 'manifest',
+      },
       completion: Promise.resolve({
         runId: planId,
         nodeId: 'agent-node',
@@ -169,7 +200,16 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
         changedFiles: [],
         outputDigest: 'b'.repeat(64),
         branch: 'main',
+        worktreeId: null,
         worktreePath: null,
+        capabilities: {
+          interactiveInput: true,
+          interrupt: true,
+          terminate: true,
+          pause: false,
+          resume: false,
+          source: 'manifest',
+        },
       }),
       writeInput: () => undefined,
       interrupt: () => undefined,
@@ -223,8 +263,16 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
 }
 
 describe('RunService Electron compatibility', () => {
-  it('lists only path-free terminal managed-worktree records for the current window', async () => {
-    const available = storedRun('00000000-0000-4000-8000-000000000091');
+  it('lists bounded path-free project and node attempt history for the current window', async () => {
+    const available = storedRun('00000000-0000-4000-8000-000000000091', {
+      model: 'provider-model-1',
+      providerSessionId: 'provider-session-7',
+      action: 'retry',
+      parentRunId: '00000000-0000-4000-8000-000000000090',
+      tokenUsage: { inputTokens: 13, outputTokens: 5, totalTokens: 18 },
+      costUsd: 0.0042,
+      outputPreview: 'Changed /repo/.forgeboard/worktrees/agent-node/src/a.ts',
+    });
     const legacy = storedRun('00000000-0000-4000-8000-000000000092', {
       status: 'failed',
       managedRoot: null,
@@ -257,23 +305,57 @@ describe('RunService Electron compatibility', () => {
           projectId: PROJECT_ID,
           nodeId: 'agent-node',
           adapterId: 'test-agent',
+          model: 'provider-model-1',
+          permissionProfile: null,
+          providerSessionAvailable: true,
+          resumeSupported: false,
+          resumeCapabilitySource: null,
+          action: 'retry',
+          parentRunId: '00000000-0000-4000-8000-000000000090',
           status: 'succeeded',
           branch: 'forgeboard/agent-node',
           worktreeState: 'active',
           worktreeAvailable: true,
+          supersededByNewerAttempt: false,
           startedAt: '2026-07-15T12:00:00.000Z',
           endedAt: '2026-07-15T12:01:00.000Z',
+          exitCode: 0,
+          outputDigest: null,
+          changedFileCount: null,
+          tokenUsage: { inputTokens: 13, outputTokens: 5, totalTokens: 18 },
+          costUsd: 0.0042,
+          outputPreview: 'Changed <run-worktree>/src/a.ts',
           createdAt: '2026-07-15T11:59:00.000Z',
           updatedAt: '2026-07-15T12:01:00.000Z',
         },
         expect.objectContaining({ id: legacy.id, worktreeAvailable: false }),
+        expect.objectContaining({
+          id: '00000000-0000-4000-8000-000000000093',
+          status: 'running',
+          endedAt: null,
+        }),
+        expect.objectContaining({
+          id: '00000000-0000-4000-8000-000000000094',
+          worktreeState: 'none',
+          worktreeAvailable: false,
+        }),
       ],
     });
-    expect(listProjectRuns).toHaveBeenCalledWith(PROJECT_ID, 20);
+    expect(listProjectRuns).toHaveBeenCalledWith(PROJECT_ID, 20, undefined);
     const result = await handler(invokeEvent(owner.owner), { projectId: PROJECT_ID, limit: 20 });
     expect(JSON.stringify(result)).not.toMatch(
       /cwd|repositoryRoot|managedRoot|worktreeId|\/repo/iu,
     );
+
+    listProjectRuns.mockClear();
+    await expect(
+      handler(invokeEvent(owner.owner), {
+        projectId: PROJECT_ID,
+        nodeId: 'agent-node',
+        limit: 5,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(listProjectRuns).toHaveBeenCalledWith(PROJECT_ID, 5, 'agent-node');
 
     listProjectRuns.mockClear();
     await expect(
@@ -372,6 +454,29 @@ describe('RunService Electron compatibility', () => {
     expect(runtime.prepareCalls[1]?.ownerId).toMatch(/^web-contents:8:/u);
     expect(runtime.prepareCalls[0]?.ownerId).not.toBe(runtime.prepareCalls[1]?.ownerId);
 
+    const parentRunId = '00000000-0000-4000-8000-000000000090';
+    const resumed = await requiredHandler(IPC_CHANNELS.runsResume)(invokeEvent(firstOwner.owner), {
+      ...PREPARE_INPUT,
+      parentRunId,
+    });
+    const retried = await requiredHandler(IPC_CHANNELS.runsRetry)(invokeEvent(firstOwner.owner), {
+      ...PREPARE_INPUT,
+      parentRunId,
+    });
+    expect(resumed).toMatchObject({ ok: true, value: { nodeId: 'agent-node' } });
+    expect(retried).toMatchObject({ ok: true, value: { nodeId: 'agent-node' } });
+    expect(runtime.continuationCalls).toEqual([
+      { action: 'resume', ownerId: runtime.prepareCalls[0]?.ownerId, parentRunId },
+      { action: 'retry', ownerId: runtime.prepareCalls[0]?.ownerId, parentRunId },
+    ]);
+    await expect(
+      requiredHandler(IPC_CHANNELS.runsResume)(invokeEvent(firstOwner.owner), {
+        ...PREPARE_INPUT,
+        parentRunId,
+        worktreePath: '/private/managed',
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+
     const firstRunId = runtime.prepareCalls.length > 0 ? extractRunId(firstPrepared) : '';
     const approveHandler = requiredHandler(IPC_CHANNELS.runsApprove);
     await expect(approveHandler(invokeEvent(firstOwner.owner), firstRunId)).resolves.toEqual({
@@ -407,6 +512,8 @@ describe('RunService Electron compatibility', () => {
     expect(electronMock.removed).toEqual(
       expect.arrayContaining([
         IPC_CHANNELS.runsPrepare,
+        IPC_CHANNELS.runsResume,
+        IPC_CHANNELS.runsRetry,
         IPC_CHANNELS.runsApprove,
         IPC_CHANNELS.runsInput,
         IPC_CHANNELS.runsInterrupt,
@@ -801,12 +908,16 @@ function serviceHarness(
 ): {
   readonly appendAudit: ReturnType<typeof vi.fn>;
   readonly emit: AgentExecutionEventSink;
-  readonly listProjectRuns: ReturnType<typeof vi.fn<() => StoredRunRecord[]>>;
+  readonly listProjectRuns: ReturnType<
+    typeof vi.fn<(projectId: string, limit?: number, nodeId?: string) => StoredRunRecord[]>
+  >;
   readonly service: RunService;
   readonly showMessageBox: ReturnType<typeof vi.fn>;
 } {
   const appendAudit = vi.fn();
-  const listProjectRuns = vi.fn(() => [...(options.runRecords ?? [])]);
+  const listProjectRuns = vi.fn<
+    (projectId: string, limit?: number, nodeId?: string) => StoredRunRecord[]
+  >(() => [...(options.runRecords ?? [])]);
   const showMessageBox = vi.fn(() =>
     Promise.resolve({ response: options.nativeResponse ?? 1, checkboxChecked: false }),
   );

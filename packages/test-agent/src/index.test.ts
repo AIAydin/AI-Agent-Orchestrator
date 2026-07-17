@@ -14,6 +14,7 @@ import {
   type TestAgentAction,
   type TestAgentEvent,
 } from './index.js';
+import { parseTestAgentCliArguments } from './cli-arguments.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -34,12 +35,14 @@ async function temporaryDirectory(): Promise<string> {
 function protocolHarness(
   cwd: string,
   onEvent?: (event: TestAgentEvent, stdin: PassThrough) => void,
+  providerSessionId?: string,
 ) {
   const stdin = new PassThrough();
   const events: TestAgentEvent[] = [];
   const result = runTestAgentProtocol({
     stdin,
     cwd,
+    ...(providerSessionId === undefined ? {} : { providerSessionId }),
     writeLine: (line) => {
       const event = TestAgentEventSchema.parse(JSON.parse(line) as unknown);
       events.push(event);
@@ -54,9 +57,37 @@ describe('deterministic test-agent protocol', () => {
     expect(TEST_AGENT_MANIFEST).toMatchObject({
       id: 'forgeboard-test-agent',
       provider: { sendsContextOffDevice: false },
-      invocation: { runtime: 'pipes', output: 'json-lines' },
-      capabilities: { resume: false, structuredOutput: true },
+      invocation: {
+        runtime: 'pipes',
+        output: 'json-lines',
+        resumeArguments: ['--resume-session', '{sessionId}', '{extraArgs}'],
+      },
+      capabilities: { pause: false, resume: true, structuredOutput: true },
     });
+  });
+
+  it('preserves one exact reviewed session identity through CLI parsing and protocol readiness', async () => {
+    const providerSessionId = 'test-session-reviewed-42';
+    expect(parseTestAgentCliArguments(['--resume-session', providerSessionId])).toEqual({
+      kind: 'run',
+      providerSessionId,
+    });
+    expect(parseTestAgentCliArguments(['--resume-session'])).toEqual({
+      kind: 'error',
+      message: '--resume-session requires exactly one valid provider session ID.',
+    });
+    expect(
+      parseTestAgentCliArguments(['--resume-session', providerSessionId, 'unexpected']),
+    ).toEqual({
+      kind: 'error',
+      message: '--resume-session requires exactly one valid provider session ID.',
+    });
+
+    const cwd = await temporaryDirectory();
+    const harness = protocolHarness(cwd, undefined, providerSessionId);
+    harness.stdin.write(`${createTestAgentRunCommand([{ type: 'complete' }])}\n`);
+    await expect(harness.result).resolves.toBe(0);
+    expect(harness.events[0]).toMatchObject({ type: 'ready', sessionId: providerSessionId });
   });
 
   it('writes files, streams output, waits for input, and completes in exact order', async () => {

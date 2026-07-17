@@ -22,6 +22,30 @@ An enabled third-party coding-agent CLI may transmit the prompt and files that t
 attaches to that CLI's provider. Forgeboard shows the receiving adapter/provider and exact attachment
 list before launch. Provider processing is governed by that provider's terms.
 
+## Codex and Claude Code account connections
+
+The first-run wizard and **Settings → Agents & runtime** can ask the installed Codex or Claude Code
+CLI to start its official provider-owned browser OAuth flow. Forgeboard prepares an exact Connect,
+Refresh, Disconnect, or Reconnect action, requires a separate native confirmation, and supervises
+the selected local CLI process. An active browser sign-in can be cancelled from the card. Forgeboard
+shows **Connected** only after the CLI returns normalized connection evidence; cached passive status
+on Data & Privacy does not run a CLI, contact a provider, or imply a fresh check.
+
+Forgeboard never receives or stores the OAuth token, browser code, account identity, or raw auth
+output. It does not inspect OpenAI or Anthropic credential stores and does not proxy authentication
+or model traffic. Potentially sensitive CLI output is discarded. The local audit records the exact
+reviewed executable, arguments, working directory, executable hash, environment-variable names,
+outcome, and bounded output byte counts, but never auth-output content. The renderer receives only
+normalized connected, disconnected, or needs-refresh status. The provider CLI and browser
+communicate under OpenAI's or Anthropic's own privacy policy and terms.
+
+An optional executable override from the current UI draft is validated, identity-bound into the
+native review, and revalidated before the CLI starts. The connection operation does not persist that
+override; only saving Settings does. The optional default-model field is launch configuration, not
+an OAuth credential. These connection controls apply only to Codex and Claude Code. Forgeboard does
+not claim OAuth management for Gemini, OpenCode, or custom CLIs. The deterministic local test agent
+requires no provider account and does not contact a model provider.
+
 Selected context is copied immediately before launch into a randomized, per-run private snapshot;
 the provider receives those verified bytes rather than mutable source paths. On Windows, Host and
 Docker snapshots stay inside Forgeboard's per-user application-data directory under separate
@@ -72,7 +96,8 @@ days without activity. Rejected comment IDs are derived from those existing allo
 they do not add another content store. Human-authored titles and comments are not content-redacted,
 so users must not paste secrets or source code into shared text fields.
 
-The Data & Privacy screen exposes database and transcript locations, retention, connected providers,
+The Data & Privacy screen exposes database and transcript locations, retention, passive normalized
+Codex/Claude connection state, other locally detected providers,
 outbound integrations, collaboration status, export/import, recovery, and deletion of
 Forgeboard-managed local data. A user can choose a backup folder, automatic interval, bounded backup
 cleanup target per folder, and whether changed local data is backed up on quit. A managed-worktree

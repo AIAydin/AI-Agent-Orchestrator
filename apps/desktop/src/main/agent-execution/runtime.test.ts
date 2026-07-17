@@ -22,7 +22,7 @@ import type {
 import { TEST_AGENT_MANIFEST } from '@forgeboard/test-agent';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AppSettings } from '../../shared/application/contracts.js';
+import type { AppSettings, RunEventEnvelope } from '../../shared/application/contracts.js';
 import type { StoredRunRecord } from '../storage.js';
 import type {
   AgentAdapterPlanner,
@@ -36,6 +36,14 @@ const REPOSITORY_PATH = '/repo';
 const BASE_COMMIT = '1'.repeat(40);
 const STARTED_AT = '2026-07-15T12:00:00.000Z';
 const ENDED_AT = '2026-07-15T12:00:01.000Z';
+const SESSION_CAPABILITIES = {
+  interactiveInput: true,
+  interrupt: true,
+  terminate: true,
+  pause: false,
+  resume: false,
+  source: 'manifest',
+} as const;
 
 const TEST_PERMISSION_PROFILE: PermissionProfile = {
   id: 'test-plan',
@@ -62,6 +70,7 @@ const TEST_PERMISSION_PROFILE: PermissionProfile = {
 
 interface RuntimeHarness {
   readonly audits: Array<{ readonly action: string; readonly outcome: string }>;
+  readonly events: RunEventEnvelope[];
   readonly launchSession: ReturnType<
     typeof vi.fn<(adapter: unknown, plan: unknown) => Promise<AgentSession>>
   >;
@@ -115,6 +124,7 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
   let headOid: string | null = BASE_COMMIT;
   const records = new Map<string, StoredRunRecord>();
   const audits: Array<{ action: string; outcome: string }> = [];
+  const events: RunEventEnvelope[] = [];
   const failSaveOnceStatuses = new Set(options.failSaveOnceStatuses ?? []);
   const store: AgentExecutionStore = {
     getProject: (projectId) =>
@@ -130,6 +140,30 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
       }
       records.set(record.id, { ...record });
       return record;
+    },
+    getRun: (runId) => records.get(runId),
+    transferRunWorktreeAuthority: ({ parentRunId, childRunId }) => {
+      const parent = records.get(parentRunId);
+      const child = records.get(childRunId);
+      if (parent === undefined || child === undefined) throw new Error('missing transfer record');
+      const authoritativeChild = { ...child, worktreeAuthority: 'owned' as const };
+      records.set(childRunId, authoritativeChild);
+      const next = { ...parent, supersededByRunId: childRunId };
+      records.set(parentRunId, next);
+      return authoritativeChild;
+    },
+    transitionRunWorktreeState: ({ runId, expectedWorktreeId, expectedState, nextState }) => {
+      const record = records.get(runId);
+      if (
+        record === undefined ||
+        record.worktreeId !== expectedWorktreeId ||
+        (record.worktreeState ?? 'active') !== expectedState
+      ) {
+        throw new Error('stale worktree transition');
+      }
+      const next = { ...record, worktreeState: nextState };
+      records.set(runId, next);
+      return next;
     },
     appendAudit: (_category, action, outcome) => {
       audits.push({ action, outcome });
@@ -157,22 +191,26 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
     },
     capabilities: { ...TEST_AGENT_MANIFEST.capabilities, contextAttachments: true },
   });
-  const planner = vi.fn<AgentAdapterPlanner>((input, cwd) =>
-    Promise.resolve({
+  const planner = vi.fn<AgentAdapterPlanner>((input, cwd, _settings, _runId, _auth, sessionId) => {
+    const launchRequest = {
+      prompt: input.prompt,
+      cwd,
+      permissionProfile: { ...TEST_PERMISSION_PROFILE, readRoots: [cwd] },
+      contextAttachments: input.context.attachments,
+      executable: process.execPath,
+      extraArguments: [],
+      environment: { inherit: 'none' as const, variables: {}, unset: [] },
+    };
+    return Promise.resolve({
       adapter,
-      plan: adapter.prepareLaunch({
-        prompt: input.prompt,
-        cwd,
-        permissionProfile: { ...TEST_PERMISSION_PROFILE, readRoots: [cwd] },
-        contextAttachments: input.context.attachments,
-        executable: process.execPath,
-        extraArguments: [],
-        environment: { inherit: 'none', variables: {}, unset: [] },
-      }),
+      plan:
+        sessionId === undefined
+          ? adapter.prepareLaunch(launchRequest)
+          : adapter.prepareResume({ ...launchRequest, sessionId }),
       detectionWarnings: [],
       trustedExtensionAdapter: options.trustedExtensionAdapter ?? false,
-    }),
-  );
+    });
+  });
   const launchSession = vi.fn(
     options.launchSession ??
       (() => Promise.resolve(options.session ?? settledSession('succeeded', 4321))),
@@ -185,7 +223,7 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
   const runtime = new AgentExecutionRuntime({
     store,
     getSettings: () => settings,
-    emit: vi.fn(),
+    emit: (_ownerId, event) => events.push(event),
     getTrustedAdapter: options.getTrustedAdapter ?? (() => Promise.resolve(undefined)),
     repositories: repository,
     ...(options.worktrees === undefined ? {} : { worktrees: options.worktrees }),
@@ -205,6 +243,7 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
   });
   return {
     audits,
+    events,
     launchSession,
     planner,
     records,
@@ -249,6 +288,7 @@ function settledSession(
 ): AgentSession {
   return {
     pid,
+    capabilities: SESSION_CAPABILITIES,
     events: emptyEvents(),
     result: Promise.resolve(result(status)),
     writeInput: vi.fn(),
@@ -269,6 +309,7 @@ function controllableSession(pid?: number): {
   const terminate = vi.fn(() => resolveResult?.(result('terminated')));
   const session: AgentSession = {
     pid,
+    capabilities: SESSION_CAPABILITIES,
     events: emptyEvents(),
     result: sessionResult,
     writeInput: vi.fn(),
@@ -288,6 +329,34 @@ function emptyEvents(): AsyncIterable<AgentEvent> {
       next: () => Promise.resolve({ done: true, value: undefined }),
     }),
   };
+}
+
+function eventSequence(events: readonly AgentEvent[]): AsyncIterable<AgentEvent> {
+  return {
+    [Symbol.asyncIterator]: () => {
+      let index = 0;
+      return {
+        next: () =>
+          Promise.resolve(
+            index < events.length
+              ? { done: false as const, value: events[index++]! }
+              : { done: true as const, value: undefined },
+          ),
+      };
+    },
+  };
+}
+
+type UnsequencedAgentOutputEvent =
+  | Omit<Extract<AgentEvent, { type: 'stream' }>, 'sequence' | 'timestamp'>
+  | Omit<Extract<AgentEvent, { type: 'message' }>, 'sequence' | 'timestamp'>;
+
+function agentEvent(event: UnsequencedAgentOutputEvent): AgentEvent {
+  return {
+    ...event,
+    sequence: 0,
+    timestamp: STARTED_AT,
+  } as AgentEvent;
 }
 
 function deferred<T>(): {
@@ -802,6 +871,124 @@ describe('AgentExecutionRuntime approval binding', () => {
 });
 
 describe('AgentExecutionRuntime launch handles', () => {
+  it('keeps a cancelled read-only resume pending and transfers authority only after fresh approval', async () => {
+    const session: AgentSession = {
+      ...settledSession('interrupted', 4321),
+      capabilities: { ...SESSION_CAPABILITIES, resume: true },
+      result: Promise.resolve({
+        ...result('interrupted'),
+        providerSessionId: 'provider-session-read-only',
+      }),
+    };
+    const harness = createHarness({ session });
+    const initial = await harness.runtime.prepare('owner-a', request());
+    const initialHandle = await harness.runtime.launch(
+      'owner-a',
+      initial.planId,
+      initial.disclosureFingerprint,
+    );
+    await initialHandle.completion;
+
+    const cancelled = await harness.runtime.prepareResume('owner-a', initial.runId, request());
+    expect(cancelled.disclosure.warnings.join(' ')).toContain(
+      `Resume of attempt ${initial.runId.slice(0, 8)}`,
+    );
+    expect(harness.records.get(cancelled.runId)).toMatchObject({
+      action: 'resume',
+      parentRunId: initial.runId,
+      providerSessionId: 'provider-session-read-only',
+      worktreeAuthority: 'pending-transfer',
+    });
+    await harness.runtime.terminate('owner-a', cancelled.runId);
+    expect(harness.records.get(initial.runId)?.supersededByRunId).toBeNull();
+    expect(harness.records.get(cancelled.runId)).toMatchObject({
+      status: 'terminated',
+      worktreeAuthority: 'pending-transfer',
+    });
+
+    const resumed = await harness.runtime.prepareResume('owner-a', initial.runId, request());
+    const resumedHandle = await harness.runtime.launch(
+      'owner-a',
+      resumed.planId,
+      resumed.disclosureFingerprint,
+    );
+    await resumedHandle.completion;
+    expect(harness.records.get(initial.runId)?.supersededByRunId).toBe(resumed.runId);
+    expect(harness.records.get(resumed.runId)?.worktreeAuthority).toBe('owned');
+    expect(harness.planner.mock.calls.at(-1)?.[5]).toBe('provider-session-read-only');
+  });
+
+  it('rejects read-only resume when the primary branch base changes after disclosure', async () => {
+    const session: AgentSession = {
+      ...settledSession('interrupted', 4321),
+      capabilities: { ...SESSION_CAPABILITIES, resume: true },
+      result: Promise.resolve({
+        ...result('interrupted'),
+        providerSessionId: 'provider-session-stale',
+      }),
+    };
+    const harness = createHarness({ session });
+    const initial = await harness.runtime.prepare('owner-a', request());
+    const initialHandle = await harness.runtime.launch(
+      'owner-a',
+      initial.planId,
+      initial.disclosureFingerprint,
+    );
+    await initialHandle.completion;
+    const resumed = await harness.runtime.prepareResume('owner-a', initial.runId, request());
+
+    harness.setHeadOid('f'.repeat(40));
+
+    await expect(
+      harness.runtime.launch('owner-a', resumed.planId, resumed.disclosureFingerprint),
+    ).rejects.toThrow('branch or base commit changed after disclosure');
+    expect(harness.launchSession).toHaveBeenCalledTimes(1);
+    expect(harness.records.get(initial.runId)?.supersededByRunId).toBeNull();
+  });
+
+  it('retains an inherited provider ID across a resumed interrupt that emits no replacement', async () => {
+    const first: AgentSession = {
+      ...settledSession('interrupted', 4321),
+      capabilities: { ...SESSION_CAPABILITIES, resume: true },
+      result: Promise.resolve({
+        ...result('interrupted'),
+        providerSessionId: 'provider-session-chain',
+      }),
+    };
+    const second: AgentSession = {
+      ...settledSession('interrupted', 4322),
+      capabilities: { ...SESSION_CAPABILITIES, resume: true },
+      result: Promise.resolve(result('interrupted')),
+    };
+    const sessions = [first, second];
+    const harness = createHarness({
+      launchSession: () => Promise.resolve(sessions.shift() ?? second),
+    });
+    const initial = await harness.runtime.prepare('owner-a', request());
+    const initialHandle = await harness.runtime.launch(
+      'owner-a',
+      initial.planId,
+      initial.disclosureFingerprint,
+    );
+    await initialHandle.completion;
+    const resumed = await harness.runtime.prepareResume('owner-a', initial.runId, request());
+    const resumedHandle = await harness.runtime.launch(
+      'owner-a',
+      resumed.planId,
+      resumed.disclosureFingerprint,
+    );
+    await resumedHandle.completion;
+
+    expect(harness.records.get(resumed.runId)).toMatchObject({
+      status: 'interrupted',
+      providerSessionId: 'provider-session-chain',
+      resumeSupported: true,
+    });
+    const chained = await harness.runtime.prepareResume('owner-a', resumed.runId, request());
+    expect(harness.planner.mock.calls.at(-1)?.[5]).toBe('provider-session-chain');
+    await harness.runtime.terminate('owner-a', chained.runId);
+  });
+
   it('launches only immutable approved context bytes and preserves class session methods', async () => {
     const temporaryRoot = await realpath(
       await mkdtemp(path.join(os.tmpdir(), 'forgeboard-runtime-snapshot-')),
@@ -935,6 +1122,114 @@ describe('AgentExecutionRuntime launch handles', () => {
       changedFiles: [],
     });
     expect(completion.outputDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(harness.records.get(prepared.runId)).toMatchObject({
+      status,
+      exitCode,
+      outputDigest: completion.outputDigest,
+      changedFileCount: 0,
+    });
+  });
+
+  it('persists structured visible output and real provider metadata without protocol noise', async () => {
+    const session: AgentSession = {
+      ...settledSession('succeeded', 4321),
+      events: eventSequence([
+        agentEvent({
+          type: 'stream',
+          channel: 'stdout',
+          data: '{"type":"input-received","data":"RAW_PROTOCOL_SECRET"}\n',
+        }),
+        agentEvent({
+          type: 'message',
+          channel: 'stdout',
+          payload: { type: 'output', stream: 'stdout', data: 'Visible agent answer.\n' },
+        }),
+        agentEvent({
+          type: 'message',
+          channel: 'stdout',
+          payload: { type: 'input-received', requestId: 'secret', data: 'USER_INPUT_SECRET' },
+        }),
+        agentEvent({
+          type: 'message',
+          channel: 'stdout',
+          payload: { type: 'completed', metadata: { secret: 'METADATA_SECRET' } },
+        }),
+      ]),
+      result: Promise.resolve({
+        ...result('succeeded'),
+        providerSessionId: 'provider-session-7',
+        usage: {
+          inputTokens: 13,
+          cachedInputTokens: 3,
+          outputTokens: 5,
+          totalTokens: 18,
+          costUsd: 0.0042,
+        },
+      }),
+    };
+    const harness = createHarness({ session });
+    const prepared = await harness.runtime.prepare('owner-a', {
+      ...request(),
+      model: 'provider-model-1',
+    });
+    const handle = await harness.runtime.launch(
+      'owner-a',
+      prepared.planId,
+      prepared.disclosureFingerprint,
+    );
+
+    await handle.completion;
+
+    expect(harness.records.get(prepared.runId)).toMatchObject({
+      model: 'provider-model-1',
+      providerSessionId: 'provider-session-7',
+      action: 'launch',
+      parentRunId: null,
+      tokenUsage: {
+        inputTokens: 13,
+        cachedInputTokens: 3,
+        outputTokens: 5,
+        totalTokens: 18,
+      },
+      costUsd: 0.0042,
+      outputPreview: 'Visible agent answer.\n',
+    });
+    expect(harness.records.get(prepared.runId)?.outputPreview).not.toMatch(
+      /RAW_PROTOCOL_SECRET|USER_INPUT_SECRET|METADATA_SECRET/u,
+    );
+  });
+
+  it('checkpoints a bounded structured output preview before the process completes', async () => {
+    const pendingResult = deferred<AgentResultMetadata>();
+    const visibleOutput = 'x'.repeat(5_000);
+    const session: AgentSession = {
+      ...settledSession('succeeded', 4321),
+      events: eventSequence([
+        agentEvent({
+          type: 'message',
+          channel: 'stdout',
+          payload: { type: 'output', stream: 'stdout', data: visibleOutput },
+        }),
+      ]),
+      result: pendingResult.promise,
+    };
+    const harness = createHarness({ session });
+    const prepared = await harness.runtime.prepare('owner-a', request());
+    const handle = await harness.runtime.launch(
+      'owner-a',
+      prepared.planId,
+      prepared.disclosureFingerprint,
+    );
+
+    await vi.waitFor(() => {
+      expect(harness.records.get(prepared.runId)).toMatchObject({
+        status: 'running',
+        outputPreview: visibleOutput,
+      });
+    });
+
+    pendingResult.resolve(result('succeeded'));
+    await handle.completion;
   });
 
   it('returns null instead of fabricating a process reference when the adapter has no PID', async () => {
@@ -948,6 +1243,52 @@ describe('AgentExecutionRuntime launch handles', () => {
 
     expect(handle.process).toBeNull();
     await expect(handle.completion).resolves.toMatchObject({ status: 'succeeded' });
+  });
+
+  it('returns only provider-emitted bounded usage, resume identity, and exact session controls', async () => {
+    const session: AgentSession = {
+      ...settledSession('interrupted', 4321),
+      capabilities: { ...SESSION_CAPABILITIES, resume: true },
+      result: Promise.resolve({
+        ...result('interrupted'),
+        providerSessionId: 'provider-session-7',
+        usage: { inputTokens: 21, outputTokens: 8, totalTokens: 29, costUsd: 0.003 },
+      }),
+    };
+    const harness = createHarness({ session });
+    const prepared = await harness.runtime.prepare('owner-a', request());
+    const handle = await harness.runtime.launch(
+      'owner-a',
+      prepared.planId,
+      prepared.disclosureFingerprint,
+    );
+
+    expect(handle.capabilities).toEqual(session.capabilities);
+    const completion = await handle.completion;
+    expect(completion).toMatchObject({
+      status: 'interrupted',
+      providerSessionId: 'provider-session-7',
+      usage: { inputTokens: 21, outputTokens: 8, totalTokens: 29, costUsd: 0.003 },
+      capabilities: session.capabilities,
+      worktreeId: null,
+    });
+    expect(harness.records.get(prepared.runId)).toMatchObject({
+      providerSessionId: 'provider-session-7',
+      tokenUsage: { inputTokens: 21, outputTokens: 8, totalTokens: 29 },
+      costUsd: 0.003,
+    });
+    expect(harness.events.at(-1)).toMatchObject({
+      kind: 'run-summary',
+      payload: {
+        providerSessionAvailable: true,
+        usage: { totalTokens: 29, costUsd: 0.003 },
+        capabilities: session.capabilities,
+        worktreeId: null,
+      },
+    });
+    expect(
+      (harness.events.at(-1)?.payload as Record<string, unknown>).worktreePath,
+    ).toBeUndefined();
   });
 
   it('terminates an adapter session that reports an invalid PID instead of losing supervision', async () => {
@@ -990,6 +1331,7 @@ describe('AgentExecutionRuntime launch handles', () => {
       REPOSITORY_PATH,
       expect.any(Object),
       expect.any(String),
+      undefined,
       undefined,
     );
   });
@@ -1054,6 +1396,7 @@ describe('AgentExecutionRuntime launch handles', () => {
 });
 
 class PrototypeAgentSession implements AgentSession {
+  public readonly capabilities = SESSION_CAPABILITIES;
   public readonly pid = 8765;
   public readonly events = emptyEvents();
   public readonly result: Promise<AgentResultMetadata>;

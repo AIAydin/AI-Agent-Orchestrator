@@ -477,6 +477,7 @@ function hostPlan(
     id: 'snapshot-test',
     invocation: {
       ...TEST_AGENT_MANIFEST.invocation,
+      resumeArguments: undefined,
       promptTransport: options.transport,
       launchArguments:
         options.transport === 'argument'
@@ -494,6 +495,7 @@ function hostPlan(
     capabilities: {
       ...TEST_AGENT_MANIFEST.capabilities,
       contextAttachments: true,
+      resume: false,
     },
   });
   return createCustomCliAdapter(manifest).prepareLaunch({

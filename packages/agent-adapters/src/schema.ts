@@ -341,6 +341,11 @@ export const AgentCapabilitiesSchema = z
     interactiveInput: z.boolean(),
     interrupt: z.boolean(),
     terminate: z.boolean(),
+    /**
+     * True only when the adapter runtime can suspend and continue the same local process on every
+     * supported Forgeboard platform. API version 1 intentionally has no such runtime primitive.
+     */
+    pause: z.literal(false).default(false),
     resume: z.boolean(),
     ansiStreaming: z.boolean(),
     structuredOutput: z.boolean(),
@@ -350,6 +355,18 @@ export const AgentCapabilitiesSchema = z
   })
   .strict();
 export type AgentCapabilities = z.infer<typeof AgentCapabilitiesSchema>;
+
+/** Controls that the concrete launched session can truthfully enforce. */
+export const AgentSessionCapabilitiesSchema = AgentCapabilitiesSchema.pick({
+  interactiveInput: true,
+  interrupt: true,
+  terminate: true,
+  pause: true,
+  resume: true,
+})
+  .extend({ source: z.enum(['manifest', 'probe']) })
+  .strict();
+export type AgentSessionCapabilities = z.infer<typeof AgentSessionCapabilitiesSchema>;
 
 export const AgentAdapterManifestSchema = z
   .object({
@@ -659,6 +676,18 @@ export const AgentMessageEventSchema = EventBaseSchema.extend({
   payload: z.unknown(),
 }).strict();
 
+export const AgentUsageMetadataSchema = z
+  .object({
+    inputTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+    cachedInputTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+    outputTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+    totalTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+    costUsd: z.number().finite().nonnegative().max(1_000_000_000).optional(),
+  })
+  .strict()
+  .refine((usage) => Object.keys(usage).length > 0, 'Usage metadata cannot be empty.');
+export type AgentUsageMetadata = z.infer<typeof AgentUsageMetadataSchema>;
+
 export const AgentResultMetadataSchema = z
   .object({
     status: z.enum(['succeeded', 'failed', 'interrupted', 'terminated']),
@@ -667,7 +696,8 @@ export const AgentResultMetadataSchema = z
     startedAt: z.string().datetime(),
     endedAt: z.string().datetime(),
     durationMs: z.number().nonnegative(),
-    providerSessionId: z.string().optional(),
+    providerSessionId: z.string().trim().min(1).max(1_024).refine(withoutNul).optional(),
+    usage: AgentUsageMetadataSchema.optional(),
   })
   .strict();
 export type AgentResultMetadata = z.infer<typeof AgentResultMetadataSchema>;

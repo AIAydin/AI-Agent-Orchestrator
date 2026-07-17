@@ -401,6 +401,17 @@ export const ConfirmProjectRecoveryInputSchema = z
   .strict();
 export type ConfirmProjectRecoveryInput = z.infer<typeof ConfirmProjectRecoveryInputSchema>;
 
+export const AgentCapabilitySummarySchema = z
+  .object({
+    interactiveInput: z.boolean(),
+    interrupt: z.boolean(),
+    pause: z.boolean(),
+    resume: z.boolean(),
+    modelSelection: z.boolean(),
+  })
+  .strict();
+export type AgentCapabilitySummary = z.infer<typeof AgentCapabilitySummarySchema>;
+
 export const AgentDetectionSchema = z.object({
   id: z.union([
     z.enum(['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom', 'gh', 'docker']),
@@ -411,6 +422,8 @@ export const AgentDetectionSchema = z.object({
   executable: z.string().nullable(),
   version: z.string().nullable(),
   providerDisclosure: z.string(),
+  capabilities: AgentCapabilitySummarySchema.optional(),
+  capabilitySource: z.literal('manifest').optional(),
 });
 export type AgentDetection = z.infer<typeof AgentDetectionSchema>;
 
@@ -425,11 +438,17 @@ export const PrepareRunInputSchema = z
     projectId: z.string().uuid(),
     nodeId: z.string().min(1),
     adapterId: RunAdapterIdSchema,
+    model: z.string().trim().min(1).max(200).optional(),
     prompt: z.string().trim().min(1).max(1_000_000),
     permissionProfile: PermissionProfileSchema,
   })
   .strict();
 export type PrepareRunInput = z.infer<typeof PrepareRunInputSchema>;
+
+export const PrepareRunContinuationInputSchema = PrepareRunInputSchema.extend({
+  parentRunId: z.string().uuid(),
+}).strict();
+export type PrepareRunContinuationInput = z.infer<typeof PrepareRunContinuationInputSchema>;
 
 const RunPermissionProfileBaseSchema = z
   .object({
@@ -1062,6 +1081,8 @@ export const IPC_CHANNELS = Object.freeze({
   dockerPull: 'docker:pull',
   runsList: 'runs:list',
   runsPrepare: 'runs:prepare',
+  runsResume: 'runs:resume',
+  runsRetry: 'runs:retry',
   runsApprove: 'runs:approve',
   runsInput: 'runs:input',
   runsInterrupt: 'runs:interrupt',

@@ -12,7 +12,10 @@ import {
   type GitRemoteInspectView,
   type GitRemotePushPlanView,
 } from '../../../../../shared/git/remote/index.js';
-import type { RunHistorySummary } from '../../../../../shared/runs/contracts.js';
+import {
+  TerminalRunHistoryStatusSchema,
+  type RunHistorySummary,
+} from '../../../../../shared/runs/contracts.js';
 import type { GitRemoteDeliveryApi } from '../../../../../preload/git/remote/index.js';
 import { unwrap } from '../../../lib/ipc.js';
 import type {
@@ -751,6 +754,8 @@ function runOptions(
   const agentLabels = new Map(agents.map((agent) => [agent.id, agent.label] as const));
   const seen = new Set<string>();
   return records.flatMap((record) => {
+    const terminalStatus = TerminalRunHistoryStatusSchema.safeParse(record.status);
+    if (!terminalStatus.success || record.endedAt === null) return [];
     if (seen.has(record.id) || record.worktreeState === 'cleaned') return [];
     if (!record.worktreeAvailable && record.worktreeState !== 'cleanup-pending') return [];
     seen.add(record.id);
@@ -759,7 +764,7 @@ function runOptions(
         runId: record.id,
         nodeLabel: nodeLabels.get(record.nodeId) ?? `Run from ${record.nodeId}`,
         agentLabel: agentLabels.get(record.adapterId) ?? record.adapterId,
-        status: record.status,
+        status: terminalStatus.data,
         branch: record.branch,
         worktreeState: record.worktreeState === 'cleanup-pending' ? 'cleanup-pending' : 'active',
         endedAt: record.endedAt,

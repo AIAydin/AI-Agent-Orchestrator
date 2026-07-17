@@ -29,6 +29,85 @@ describe('summarizePersistedRunHistory worktree lifecycle', () => {
     });
     expect(JSON.stringify(summary)).not.toContain('/private/authority');
   });
+
+  it('projects live and worktree-free attempts with normalized optional evidence', () => {
+    const [summary] = summarizePersistedRunHistory([
+      run({
+        status: 'running',
+        worktreeId: null,
+        branch: null,
+        startedAt: NOW,
+        endedAt: null,
+        exitCode: null,
+        outputDigest: undefined,
+        changedFileCount: undefined,
+      }),
+    ]);
+
+    expect(summary).toMatchObject({
+      status: 'running',
+      worktreeState: 'none',
+      worktreeAvailable: false,
+      endedAt: null,
+      exitCode: null,
+      outputDigest: null,
+      changedFileCount: null,
+      model: null,
+      permissionProfile: null,
+      providerSessionAvailable: false,
+      resumeSupported: false,
+      resumeCapabilitySource: null,
+      supersededByNewerAttempt: false,
+      action: 'launch',
+      parentRunId: null,
+      tokenUsage: null,
+      costUsd: null,
+      outputPreview: '',
+    });
+  });
+
+  it('keeps declared running capability separate from provider-session availability', () => {
+    const [summary] = summarizePersistedRunHistory([
+      run({
+        status: 'running',
+        endedAt: null,
+        exitCode: null,
+        resumeSupported: true,
+        resumeCapabilitySource: 'manifest',
+        providerSessionId: null,
+      }),
+    ]);
+
+    expect(summary).toMatchObject({
+      status: 'running',
+      resumeSupported: true,
+      resumeCapabilitySource: 'manifest',
+      providerSessionAvailable: false,
+    });
+  });
+
+  it('hides worktree authority after a newer resumed attempt supersedes it', () => {
+    const [summary] = summarizePersistedRunHistory([
+      run({ supersededByRunId: '83000000-0000-4000-8000-000000000099' }),
+    ]);
+
+    expect(summary).toMatchObject({
+      worktreeAvailable: false,
+      supersededByNewerAttempt: true,
+    });
+  });
+
+  it('redacts main-process repository and worktree authorities from output previews', () => {
+    const [summary] = summarizePersistedRunHistory([
+      run({
+        outputPreview:
+          'Read /private/authority/worktree/src/a.ts then /private/authority/repository/README.md.',
+      }),
+    ]);
+
+    expect(summary?.outputPreview).toBe('Read <run-worktree>/src/a.ts then <project>/README.md.');
+    expect(JSON.stringify(summary)).not.toContain('/private/authority');
+  });
 });
 
 function run(overrides: Partial<StoredRunRecord> = {}): StoredRunRecord {

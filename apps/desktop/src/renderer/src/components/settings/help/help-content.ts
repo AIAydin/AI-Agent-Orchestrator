@@ -37,6 +37,33 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     ],
   },
   {
+    id: 'provider-connection',
+    title: 'Connect Codex or Claude Code',
+    summary:
+      'Use the official provider-owned browser sign-in without entering an API key or editing configuration.',
+    keywords: [
+      'oauth',
+      'openai',
+      'anthropic',
+      'codex',
+      'claude',
+      'connect',
+      'disconnect',
+      'reconnect',
+      'refresh',
+      'cancel',
+      'token',
+    ],
+    icon: Bot,
+    steps: [
+      'In first-run setup or Settings → Agents & runtime, choose Connect with OpenAI or Connect with Anthropic and review the native confirmation.',
+      'The official provider CLI opens browser sign-in. Forgeboard never sees or stores the OAuth token, reads no provider credential store, and does not proxy model traffic.',
+      'Wait for normalized Connected evidence. Needs refresh is not connected; choose Refresh or Reconnect. Use Cancel sign-in while active or Disconnect for a connected CLI.',
+      'Expand Advanced only for an optional executable override, default model, or readiness check. The current override is validated for the reviewed connection action; save Settings separately to persist it.',
+      'Gemini and OpenCode do not use this OAuth flow. Choose Deterministic test agent for a fully local no-account workflow.',
+    ],
+  },
+  {
     id: 'agent-not-detected',
     title: 'An agent CLI is not detected',
     summary: 'Use the bundled demo immediately or point Forgeboard at an installed executable.',
@@ -45,7 +72,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     steps: [
       'Open Settings → Agents & runtime and find the provider.',
       'Choose Browse beside Executable override and select the CLI program; no PATH or file editing is required.',
-      'Save settings and confirm the provider reports Ready. Its existing local sign-in remains provider-managed.',
+      'For Codex or Claude Code, use the connection card after selecting the executable. Gemini, OpenCode, and custom CLIs keep their existing readiness flow.',
       'If no coding-agent CLI is installed, select Deterministic test agent to exercise local agent execution and Git review offline.',
     ],
   },

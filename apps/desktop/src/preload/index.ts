@@ -40,7 +40,6 @@ import {
   PreviewEventEnvelopeSchema,
   ProjectRecoveryAssessmentSchema,
   ProjectSchema,
-  RunApprovalViewSchema,
   RunEventEnvelopeSchema,
   ipcResultSchema,
 } from '../shared/application/contracts.js';
@@ -94,9 +93,11 @@ import { createGitDeliveryReadinessApi } from './git/readiness/bridge.js';
 import { createGitRemoteDeliveryApi } from './git/remote/index.js';
 import { createGitReviewNotesApi } from './git-review-notes.js';
 import { createRunHistoryApi } from './runs/history.js';
+import { createRunContinuationApi } from './runs/continuation.js';
 import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
 import { createTerminalApi } from './terminal/index.js';
 import { createPreviewSurfaceApi } from './preview/surface/index.js';
+import { createProviderConnectionsApi } from './provider-connections/index.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -158,6 +159,9 @@ const api: ForgeboardApi = {
         AgentReadinessResultSchema.nullable(),
         input,
       ),
+    connections: createProviderConnectionsApi((channel, ...args) =>
+      ipcRenderer.invoke(channel, ...args),
+    ),
   },
   commands: {
     checkReadiness: (input) =>
@@ -270,8 +274,7 @@ const api: ForgeboardApi = {
   },
   runs: {
     ...createRunHistoryApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
-    prepare: (input) =>
-      invokeValidated(IPC_CHANNELS.runsPrepare, RunApprovalViewSchema.nullable(), input),
+    ...createRunContinuationApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     approve: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsApprove, runId),
     sendInput: (runId, data) => ipcRenderer.invoke(IPC_CHANNELS.runsInput, runId, data),
     interrupt: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsInterrupt, runId),

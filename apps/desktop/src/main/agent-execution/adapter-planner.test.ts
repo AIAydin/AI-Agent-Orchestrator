@@ -19,6 +19,50 @@ afterEach(async () => {
 });
 
 describe('default agent adapter planner launch binding', () => {
+  it('rejects a node model when the selected adapter does not support model selection', async () => {
+    const repositoryPath = await temporaryDirectory();
+    const planner = createDefaultAgentAdapterPlanner({
+      getTrustedAdapter: () => Promise.resolve(undefined),
+      resolveTestAgentCliPath: () => Promise.reject(new Error('must not resolve the executable')),
+    });
+
+    await expect(
+      planner(
+        { ...request(), model: 'unsupported-model' },
+        repositoryPath,
+        { envAllowlist: [] } as unknown as AppSettings,
+        '123fae6e-e213-4a10-a0db-0f85b791f7e9',
+      ),
+    ).rejects.toThrow(/does not support selecting a model/iu);
+  });
+
+  it('uses the Agent node model instead of the adapter default in launch review', async () => {
+    if (process.platform === 'win32') return;
+    const repositoryPath = await temporaryDirectory();
+    const executable = path.join(repositoryPath, 'codex');
+    await writeFile(executable, '#!/bin/sh\nexit 0\n');
+    await chmod(executable, 0o700);
+    const planner = createDefaultAgentAdapterPlanner({
+      getTrustedAdapter: () => Promise.resolve(undefined),
+      resolveTestAgentCliPath: () => Promise.reject(new Error('not used')),
+    });
+
+    const planned = await planner(
+      { ...request(), adapterId: 'codex', model: 'node-model' },
+      repositoryPath,
+      {
+        envAllowlist: [],
+        agentDefaultModels: { codex: 'settings-model' },
+        agentExecutableOverrides: { codex: executable },
+      } as unknown as AppSettings,
+      '123fae6e-e213-4a10-a0db-0f85b791f7e9',
+    );
+
+    expect(planned.plan.disclosure.arguments).toContain('--model');
+    expect(planned.plan.disclosure.arguments).toContain('node-model');
+    expect(planned.plan.disclosure.arguments).not.toContain('settings-model');
+  });
+
   it('rejects replacement of the bundled test-agent script after review', async () => {
     const repositoryPath = await temporaryDirectory();
     const cliPath = path.join(repositoryPath, 'test-agent-cli.js');

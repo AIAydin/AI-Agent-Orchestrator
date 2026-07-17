@@ -1,0 +1,112 @@
+.provider-connections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.provider-connections.compact {
+  grid-template-columns: 1fr;
+  margin-top: 12px;
+}
+
+.provider-connection-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.provider-connection-heading,
+.provider-connection-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provider-connection-heading {
+  justify-content: space-between;
+}
+
+.provider-connection-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.provider-connection-heading small,
+.provider-connection-card > p,
+.provider-connection-advanced > p,
+.provider-browser-note,
+.provider-privacy-note {
+  color: var(--text-soft);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.provider-privacy-note {
+  display: block;
+}
+
+.provider-connection-card > p {
+  margin: 0;
+}
+
+.provider-connection-error {
+  color: var(--red) !important;
+}
+
+.provider-connection-actions {
+  flex-wrap: wrap;
+}
+
+.provider-browser-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.provider-connection-advanced {
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.provider-connection-advanced summary {
+  width: fit-content;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.provider-connection-advanced > p {
+  margin: 7px 0 10px;
+}
+
+.provider-connection-advanced .agent-overrides {
+  display: grid;
+  gap: 10px;
+}
+
+.spin {
+  animation: provider-connection-spin 800ms linear infinite;
+}
+
+@keyframes provider-connection-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .provider-connections {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

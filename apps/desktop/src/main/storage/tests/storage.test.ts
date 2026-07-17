@@ -204,6 +204,7 @@ function storedRun(overrides: Partial<StoredRunRecord> = {}): StoredRunRecord {
     branch: 'forgeboard/agent-1',
     worktreeId: uuidFor(501),
     worktreeState: 'active',
+    worktreeAuthority: 'owned',
     repositoryRoot: '/tmp/forgeboard-project',
     managedRoot: '/tmp/forgeboard-worktrees',
     baseRef: 'HEAD',
@@ -488,6 +489,7 @@ describe('LocalStore', () => {
     });
     const newer = storedRun({
       id: uuidFor(511),
+      nodeId: 'other-agent-node',
       updatedAt: '2026-07-14T17:00:00.000Z',
     });
     const unrelated = storedRun({
@@ -502,6 +504,10 @@ describe('LocalStore', () => {
     expect(store.getRun(uuidFor(999))).toBeUndefined();
     expect(store.listProjectRuns(PROJECT_ID).map((run) => run.id)).toEqual([newer.id, older.id]);
     expect(store.listProjectRuns(PROJECT_ID, 1).map((run) => run.id)).toEqual([newer.id]);
+    expect(store.listProjectRuns(PROJECT_ID, 20, 'agent-1').map((run) => run.id)).toEqual([
+      older.id,
+    ]);
+    expect(store.listProjectRuns(PROJECT_ID, 20, 'missing-node')).toEqual([]);
   });
 
   it('freezes every identity-critical worktree field while allowing lifecycle updates', () => {
@@ -629,6 +635,109 @@ describe('LocalStore', () => {
         nextState: 'active',
       }),
     ).toThrow('Invalid run worktree lifecycle transition');
+  });
+
+  it('atomically transfers exact managed-worktree continuation authority', () => {
+    const store = openStore();
+    const parent = storedRun({
+      status: 'interrupted',
+      permissionProfile: 'worktree-write',
+      providerSessionId: 'provider-session',
+      resumeSupported: true,
+      resumeCapabilitySource: 'probe',
+      action: 'launch',
+      parentRunId: null,
+      supersededByRunId: null,
+    });
+    const child = storedRun({
+      ...parent,
+      id: uuidFor(502),
+      status: 'prepared',
+      providerSessionId: 'provider-session',
+      resumeSupported: null,
+      resumeCapabilitySource: null,
+      action: 'resume',
+      parentRunId: parent.id,
+      worktreeAuthority: 'pending-transfer',
+      startedAt: null,
+      endedAt: null,
+      exitCode: null,
+      createdAt: '2026-07-14T18:00:00.000Z',
+      updatedAt: '2026-07-14T18:00:00.000Z',
+    });
+    store.saveRun(parent);
+    store.saveRun(child);
+
+    store.transferRunWorktreeAuthority(
+      { parentRunId: parent.id, childRunId: child.id },
+      new Date('2026-07-14T18:01:00.000Z'),
+    );
+
+    expect(store.getRun(parent.id)).toMatchObject({ supersededByRunId: child.id });
+    expect(store.getRun(child.id)).toMatchObject({ worktreeAuthority: 'owned' });
+    expect(() =>
+      store.transferRunWorktreeAuthority({ parentRunId: parent.id, childRunId: child.id }),
+    ).toThrow('lineage or exact worktree authority changed');
+  });
+
+  it('transfers read-only continuation authority but rejects adapter authority drift atomically', () => {
+    const store = openStore();
+    const parent = storedRun({
+      status: 'interrupted',
+      adapterId: 'codex',
+      model: 'gpt-5',
+      permissionProfile: 'plan-read-only',
+      providerSessionId: 'provider-session',
+      resumeSupported: true,
+      resumeCapabilitySource: 'manifest',
+      action: 'launch',
+      worktreeId: null,
+      worktreeAuthority: 'owned',
+      cwd: '/tmp/forgeboard-project',
+      branch: 'main',
+      repositoryRoot: '/tmp/forgeboard-project',
+      managedRoot: null,
+      baseRef: 'main',
+    });
+    const child = storedRun({
+      ...parent,
+      id: uuidFor(503),
+      status: 'prepared',
+      action: 'resume',
+      parentRunId: parent.id,
+      providerSessionId: 'provider-session',
+      resumeSupported: null,
+      resumeCapabilitySource: null,
+      worktreeAuthority: 'pending-transfer',
+      startedAt: null,
+      endedAt: null,
+      exitCode: null,
+      createdAt: '2026-07-14T18:00:00.000Z',
+      updatedAt: '2026-07-14T18:00:00.000Z',
+    });
+    store.saveRun(parent);
+    store.saveRun(child);
+    store.transferRunWorktreeAuthority({ parentRunId: parent.id, childRunId: child.id });
+    expect(store.getRun(child.id)?.worktreeAuthority).toBe('owned');
+
+    const secondParent = { ...parent, id: uuidFor(504), supersededByRunId: null };
+    const driftedChild = {
+      ...child,
+      id: uuidFor(505),
+      parentRunId: secondParent.id,
+      adapterId: 'claude',
+      worktreeAuthority: 'pending-transfer' as const,
+    };
+    store.saveRun(secondParent);
+    store.saveRun(driftedChild);
+    expect(() =>
+      store.transferRunWorktreeAuthority({
+        parentRunId: secondParent.id,
+        childRunId: driftedChild.id,
+      }),
+    ).toThrow('lineage or exact worktree authority changed');
+    expect(store.getRun(secondParent.id)?.supersededByRunId).toBeNull();
+    expect(store.getRun(driftedChild.id)?.worktreeAuthority).toBe('pending-transfer');
   });
 
   it('reads legacy run JSON with null durable-worktree fields', () => {

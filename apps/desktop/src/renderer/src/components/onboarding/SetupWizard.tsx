@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,9 +24,14 @@ import type {
   CheckAgentReadiness,
 } from '../../../../shared/readiness/contracts.js';
 import type { DockerReadiness } from '../../../../shared/docker/contracts.js';
+import type {
+  ProviderConnectionId,
+  ProviderConnectionStatus,
+} from '../../../../shared/provider-connections/index.js';
 import { unwrap } from '../../lib/ipc.js';
 import { CommandBuilder } from '../configuration/CommandBuilder.js';
 import { FirstRunTour } from '../help/tour/FirstRunTour.js';
+import { ProviderConnectionCards } from '../settings/agents/connections/index.js';
 import {
   EnvironmentAllowlistEditor,
   environmentAllowlistIssues,
@@ -73,6 +78,9 @@ export function SetupWizard(props: SetupWizardProps) {
   const [checkingAgent, setCheckingAgent] = useState(false);
   const [agentReadiness, setAgentReadiness] = useState<Record<string, AgentReadinessResult>>({});
   const [dockerReadiness, setDockerReadiness] = useState<DockerReadiness | null>(null);
+  const [providerStatuses, setProviderStatuses] = useState<
+    Partial<Record<ProviderConnectionId, ProviderConnectionStatus>>
+  >({});
   const [commandProjectId, setCommandProjectId] = useState<string | null>(() =>
     initialCommandSuggestionProjectId(props.projects ?? []),
   );
@@ -100,8 +108,11 @@ export function SetupWizard(props: SetupWizardProps) {
   const selectedReadinessDraft = readinessDraftForAgent(draft, readinessAgentId);
   const selectedReadiness = currentReadinessResult(agentReadiness, selectedReadinessDraft);
   const selectedAgentReady =
-    selectedReadiness?.ready === true ||
-    (selectedReadiness === null && launchDetectionIsReady(selectedAgent, selectedReadinessDraft));
+    draft.defaultAgent === 'codex' || draft.defaultAgent === 'claude'
+      ? providerStatuses[draft.defaultAgent]?.state === 'connected'
+      : selectedReadiness?.ready === true ||
+        (selectedReadiness === null &&
+          launchDetectionIsReady(selectedAgent, selectedReadinessDraft));
   const setupCommands = useMemo(
     () => [
       {
@@ -123,6 +134,18 @@ export function SetupWizard(props: SetupWizardProps) {
     setupCommands,
     commandProjectId,
     props.checkCommandReadiness ?? checkConfiguredCommand,
+  );
+  const rememberProviderStatus = useCallback(
+    (providerId: ProviderConnectionId, status: ProviderConnectionStatus) => {
+      setProviderStatuses((current) =>
+        current[providerId]?.state === status.state &&
+        current[providerId]?.checkedAt === status.checkedAt &&
+        current[providerId]?.reason === status.reason
+          ? current
+          : { ...current, [providerId]: status },
+      );
+    },
+    [],
   );
 
   const checkCurrentAgent: CheckAgentReadiness | undefined = props.checkAgentReadiness
@@ -328,37 +351,126 @@ export function SetupWizard(props: SetupWizardProps) {
                   );
                 })}
               </div>
-              {draft.defaultAgent !== 'test-agent' && draft.defaultAgent !== 'custom' && (
-                <div className="setup-path-field">
-                  <label htmlFor={`setup-agent-${draft.defaultAgent}-executable`}>
-                    Executable override <small>Optional; automatic detection is recommended.</small>
-                  </label>
-                  <span className="path-picker">
-                    <input
-                      id={`setup-agent-${draft.defaultAgent}-executable`}
-                      name={`setup-agent-${draft.defaultAgent}-executable`}
-                      value={draft.agentExecutableOverrides[draft.defaultAgent] ?? ''}
-                      placeholder="Use the detected executable"
-                      onChange={(event) =>
-                        setDraft({
-                          ...draft,
-                          agentExecutableOverrides: {
-                            ...draft.agentExecutableOverrides,
-                            [draft.defaultAgent]: event.target.value,
-                          },
-                        })
-                      }
-                    />
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void chooseExecutable(draft.defaultAgent)}
-                    >
-                      Browse
-                    </button>
-                  </span>
+              {(draft.defaultAgent === 'codex' || draft.defaultAgent === 'claude') && (
+                <div className="setup-provider-connection">
+                  <p className="setup-connection-guidance" role="status">
+                    {providerStatuses[draft.defaultAgent]?.state === 'connected'
+                      ? `${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} is connected and ready to use as your default.`
+                      : `Connect ${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} here or choose the local test agent. You can connect later in Settings.`}
+                  </p>
+                  <ProviderConnectionCards
+                    compact
+                    providerIds={[draft.defaultAgent]}
+                    executableOverrides={{
+                      [draft.defaultAgent]:
+                        draft.agentExecutableOverrides[draft.defaultAgent] ?? '',
+                    }}
+                    onStatus={rememberProviderStatus}
+                    advanced={{
+                      [draft.defaultAgent]: (
+                        <div className="agent-overrides">
+                          <div className="setup-path-field">
+                            <label htmlFor={`setup-agent-${draft.defaultAgent}-executable`}>
+                              Executable override{' '}
+                              <small>Optional; automatic detection is recommended.</small>
+                            </label>
+                            <span className="path-picker">
+                              <input
+                                id={`setup-agent-${draft.defaultAgent}-executable`}
+                                name={`setup-agent-${draft.defaultAgent}-executable`}
+                                value={draft.agentExecutableOverrides[draft.defaultAgent] ?? ''}
+                                placeholder="Use the detected executable"
+                                onChange={(event) =>
+                                  setDraft({
+                                    ...draft,
+                                    agentExecutableOverrides: {
+                                      ...draft.agentExecutableOverrides,
+                                      [draft.defaultAgent]: event.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void chooseExecutable(draft.defaultAgent)}
+                              >
+                                Browse
+                              </button>
+                            </span>
+                          </div>
+                          <label>
+                            Default model (optional)
+                            <input
+                              name={`setup-agent-${draft.defaultAgent}-default-model`}
+                              value={draft.agentDefaultModels[draft.defaultAgent] ?? ''}
+                              placeholder="Use the provider CLI default"
+                              onChange={(event) =>
+                                setDraft({
+                                  ...draft,
+                                  agentDefaultModels: {
+                                    ...draft.agentDefaultModels,
+                                    [draft.defaultAgent]: event.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </label>
+                          <AgentReadinessPanel
+                            agent={selectedAgent}
+                            draft={selectedReadinessDraft}
+                            result={selectedReadiness}
+                            checking={checkingAgent}
+                            checkReadiness={checkCurrentAgent}
+                            onResult={(result) =>
+                              setAgentReadiness((current) => ({
+                                ...current,
+                                [selectedReadinessDraft.fingerprint]: result,
+                              }))
+                            }
+                            onError={props.onError}
+                          />
+                        </div>
+                      ),
+                    }}
+                  />
                 </div>
               )}
+              {draft.defaultAgent !== 'test-agent' &&
+                draft.defaultAgent !== 'custom' &&
+                draft.defaultAgent !== 'codex' &&
+                draft.defaultAgent !== 'claude' && (
+                  <div className="setup-path-field">
+                    <label htmlFor={`setup-agent-${draft.defaultAgent}-executable`}>
+                      Executable override{' '}
+                      <small>Optional; automatic detection is recommended.</small>
+                    </label>
+                    <span className="path-picker">
+                      <input
+                        id={`setup-agent-${draft.defaultAgent}-executable`}
+                        name={`setup-agent-${draft.defaultAgent}-executable`}
+                        value={draft.agentExecutableOverrides[draft.defaultAgent] ?? ''}
+                        placeholder="Use the detected executable"
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+                            agentExecutableOverrides: {
+                              ...draft.agentExecutableOverrides,
+                              [draft.defaultAgent]: event.target.value,
+                            },
+                          })
+                        }
+                      />
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void chooseExecutable(draft.defaultAgent)}
+                      >
+                        Browse
+                      </button>
+                    </span>
+                  </div>
+                )}
               {draft.defaultAgent === 'custom' && (
                 <div className="setup-custom-agent">
                   <div className="two-column">
@@ -466,20 +578,22 @@ export function SetupWizard(props: SetupWizardProps) {
                   )}
                 </div>
               )}
-              <AgentReadinessPanel
-                agent={selectedAgent}
-                draft={selectedReadinessDraft}
-                result={selectedReadiness}
-                checking={checkingAgent}
-                checkReadiness={checkCurrentAgent}
-                onResult={(result) =>
-                  setAgentReadiness((current) => ({
-                    ...current,
-                    [selectedReadinessDraft.fingerprint]: result,
-                  }))
-                }
-                onError={props.onError}
-              />
+              {draft.defaultAgent !== 'codex' && draft.defaultAgent !== 'claude' && (
+                <AgentReadinessPanel
+                  agent={selectedAgent}
+                  draft={selectedReadinessDraft}
+                  result={selectedReadiness}
+                  checking={checkingAgent}
+                  checkReadiness={checkCurrentAgent}
+                  onResult={(result) =>
+                    setAgentReadiness((current) => ({
+                      ...current,
+                      [selectedReadinessDraft.fingerprint]: result,
+                    }))
+                  }
+                  onError={props.onError}
+                />
+              )}
             </div>
           )}
 

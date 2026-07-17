@@ -108,6 +108,15 @@ interface RunEventUpdate {
   summary?: string;
   activity?: string;
   changedFiles?: string[];
+  branch?: string | undefined;
+  worktreeId?: string | undefined;
+  interactiveInputSupported?: boolean;
+  pauseSupported?: boolean;
+  interruptSupported?: boolean;
+  resumeSupported?: boolean;
+  providerSessionAvailable?: boolean;
+  tokenUsage?: { input: number; output: number };
+  cost?: { amount: number; currency: string };
 }
 
 export function summarizeRunEvent(event: RunEventEnvelope): RunEventUpdate {
@@ -126,15 +135,54 @@ export function summarizeRunEvent(event: RunEventEnvelope): RunEventUpdate {
         ? ` · ${changedFiles.length} changed file${changedFiles.length === 1 ? '' : 's'}`
         : ' · no file changes'
     }`;
+    const capabilities = asRecord(payload?.capabilities);
+    const usage = asRecord(payload?.usage);
+    const inputTokens = nonnegativeNumber(usage?.inputTokens);
+    const outputTokens = nonnegativeNumber(usage?.outputTokens);
+    const costUsd = nonnegativeNumber(usage?.costUsd);
     return {
       status: runStatus(status),
       summary,
       activity: `Run ${summary}.`,
       changedFiles,
+      ...(typeof payload?.branch === 'string' ? { branch: payload.branch } : {}),
+      ...(typeof payload?.worktreeId === 'string' ? { worktreeId: payload.worktreeId } : {}),
+      ...(typeof capabilities?.interactiveInput === 'boolean'
+        ? { interactiveInputSupported: capabilities.interactiveInput }
+        : {}),
+      ...(typeof capabilities?.pause === 'boolean' ? { pauseSupported: capabilities.pause } : {}),
+      ...(typeof capabilities?.interrupt === 'boolean'
+        ? { interruptSupported: capabilities.interrupt }
+        : {}),
+      ...(typeof capabilities?.resume === 'boolean'
+        ? { resumeSupported: capabilities.resume }
+        : {}),
+      ...(typeof payload?.providerSessionAvailable === 'boolean'
+        ? { providerSessionAvailable: payload.providerSessionAvailable }
+        : {}),
+      ...(inputTokens === undefined || outputTokens === undefined
+        ? {}
+        : { tokenUsage: { input: inputTokens, output: outputTokens } }),
+      ...(costUsd === undefined ? {} : { cost: { amount: costUsd, currency: 'USD' } }),
     };
   }
 
   const type = typeof payload?.type === 'string' ? payload.type : '';
+  if (type === 'capabilities') {
+    const capabilities = asRecord(payload?.capabilities);
+    return {
+      ...(typeof capabilities?.interactiveInput === 'boolean'
+        ? { interactiveInputSupported: capabilities.interactiveInput }
+        : {}),
+      ...(typeof capabilities?.pause === 'boolean' ? { pauseSupported: capabilities.pause } : {}),
+      ...(typeof capabilities?.interrupt === 'boolean'
+        ? { interruptSupported: capabilities.interrupt }
+        : {}),
+      ...(typeof capabilities?.resume === 'boolean'
+        ? { resumeSupported: capabilities.resume }
+        : {}),
+    };
+  }
   if (type === 'lifecycle') {
     const phase = typeof payload?.phase === 'string' ? payload.phase : 'updated';
     const status =
@@ -189,4 +237,8 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function nonnegativeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }

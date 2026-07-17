@@ -16,6 +16,7 @@ import type { FolderReadinessStatus } from '../readiness/useSettingsFolderReadin
 import { InfoPath, SettingsSection, type AsyncSettingsProps } from '../shared.js';
 import { TrustCenter } from '../../integrity/TrustCenter.js';
 import { SettingsRepairHistory } from './repair/SettingsRepairHistory.js';
+import { ProviderConnectionSummary } from '../agents/connections/index.js';
 
 interface PrivacySettingsProps extends AsyncSettingsProps {
   info: AppInfo;
@@ -98,8 +99,15 @@ export function PrivacySettings({
             </span>
             <span className="status-chip">On demand</span>
           </div>
+          <ProviderConnectionSummary />
           {agents
-            .filter((agent) => agent.installed && isCodingAgent(agent.id))
+            .filter(
+              (agent) =>
+                agent.installed &&
+                isCodingAgent(agent.id) &&
+                agent.id !== 'codex' &&
+                agent.id !== 'claude',
+            )
             .map((agent) => (
               <div key={agent.id}>
                 <span>

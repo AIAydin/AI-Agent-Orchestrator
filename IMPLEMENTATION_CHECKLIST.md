@@ -1031,3 +1031,33 @@ unchecked when only a subset of their required behavior has proof.
   Developer ID identity, so the executable remains an unsigned development artifact. Fresh
   Windows/Linux/macOS Intel artifacts, signing/notarization, a tag, and GitHub Release publication
   remain open; hosted Actions are still blocked before workflow steps by the account billing gate.
+- 2026-07-17: Codex CLI and Claude Code gained OAuth-first, UI-only provider connections in
+  onboarding and Settings. Forgeboard invokes each official CLI's browser sign-in, status, and
+  logout commands only after a cancel-default native review bound to the exact executable path,
+  SHA-256, literal arguments, working directory, environment names, provider, and network
+  disclosure. The provider CLI owns OAuth credentials; Forgeboard neither receives nor stores
+  tokens, reads provider auth stores, proxies model traffic, nor exposes raw status output or account
+  identity across IPC. Connection plans are owner-bound, single-use, expiring, cancellable, and
+  revalidate executable identity before launch. Restart restores only an honest Needs refresh state;
+  explicit reviewed Refresh, Disconnect, and Reconnect actions produce normalized status and
+  redacted audit evidence. Optional executable/model/readiness controls remain under Advanced, and
+  the bundled deterministic test agent provides a no-account onboarding path. The offline Electron
+  journey passed repeatedly and proves native cancellation without a subprocess, exact Codex and
+  Claude argument sequences, connected state, unsaved executable binding, passive restart with zero
+  automatic commands, explicit refresh/disconnect/reconnect, redacted audit UI, and zero external
+  renderer requests. Focused provider contracts, main, preload, UI, and fixture coverage passed
+  23 tests; the production desktop build and strict typecheck passed.
+- 2026-07-17: the Agent-node milestone gained UI model selection, exact capability disclosure, live
+  output/input/interrupt controls, durable per-node attempt history, structured token/cost evidence,
+  and renderer-redacted provider identifiers. Retry always creates a fresh reviewed worktree; resume
+  is limited to interrupted attempts with an exact persisted provider session and revalidated
+  repository/worktree/base/branch authority. Continuation transfers worktree ownership atomically,
+  supersedes the parent, preserves primary-checkout isolation, and requires a fresh native approval.
+  The deterministic test adapter supports exact bounded resume-session arguments, and malformed or
+  duplicate identifiers fail closed. A production Electron journey passed and proves streaming,
+  input, interrupt, automatic terminal history refresh, same-worktree resume, fresh-worktree retry,
+  full application restart restoration, lineage, output, usage/cost, an unchanged primary checkout,
+  and zero external requests. Focused Agent runtime, authority, history, renderer, continuation,
+  storage, and compatibility coverage passed. The broad Agent node checklist item remains open
+  because real pause support is still unavailable and the UI says so rather than presenting a fake
+  control.

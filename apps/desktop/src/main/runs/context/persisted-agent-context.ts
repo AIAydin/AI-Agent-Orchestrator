@@ -152,6 +152,7 @@ export class PersistedAgentRunContextResolver implements AgentRunContextResolver
         canvasId: canvas.id,
         nodeId: input.nodeId,
         adapterId: input.adapterId,
+        model: input.model ?? null,
         permissionProfile: input.permissionProfile,
         promptDigest: stableDigest(input.prompt),
         attachmentIds,
@@ -180,12 +181,17 @@ function assertPreparedConfiguration(
 ): void {
   const prompt = persistedAgentPrompt(agent);
   const adapterId = agent.data.adapterId ?? settings.defaultAgent;
+  const model =
+    agent.data.model?.trim() || settings.agentDefaultModels?.[adapterId]?.trim() || undefined;
   const permissionProfile = agent.data.permissionProfileId ?? settings.defaultPermissionProfile;
   if (prompt !== input.prompt) {
     throw new Error('The saved Agent prompt changed. Save and review a fresh run.');
   }
   if (adapterId !== input.adapterId) {
     throw new Error('The saved Agent adapter changed. Save and review a fresh run.');
+  }
+  if (model !== input.model) {
+    throw new Error('The saved Agent model changed. Save and review a fresh run.');
   }
   if (permissionProfile !== input.permissionProfile) {
     throw new Error('The saved Agent permission profile changed. Save and review a fresh run.');

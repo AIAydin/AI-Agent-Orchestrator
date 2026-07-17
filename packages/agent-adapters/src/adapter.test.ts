@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   AgentAdapterManifestSchema,
+  AgentResultMetadataSchema,
   BUILT_IN_AGENT_MANIFESTS,
   CliAgentAdapter,
   type AgentAdapterManifest,
@@ -259,7 +260,7 @@ describe('launch preparation and execution', () => {
         runtime: 'pipes',
         launchArguments: [
           '-e',
-          'process.stdout.write(JSON.stringify({type:"hello",session_id:"session-7"})+"\\n")',
+          'process.stdout.write(JSON.stringify({type:"hello",thread_id:"session-7"})+"\\n"+JSON.stringify({type:"completed",total_cost_usd:0.0042,metadata:{usage:{input_tokens:13,cached_input_tokens:3,output_tokens:5,total_tokens:18}}})+"\\n")',
           '{extraArgs}',
           '{prompt}',
         ],
@@ -293,10 +294,56 @@ describe('launch preparation and execution', () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: 'message',
-        payload: { type: 'hello', session_id: 'session-7' },
+        payload: { type: 'hello', thread_id: 'session-7' },
       }),
     );
     expect(result.providerSessionId).toBe('session-7');
+    expect(result.usage).toEqual({
+      inputTokens: 13,
+      cachedInputTokens: 3,
+      outputTokens: 5,
+      totalTokens: 18,
+      costUsd: 0.0042,
+    });
+    expect(session.capabilities).toEqual({
+      interactiveInput: true,
+      interrupt: true,
+      terminate: true,
+      pause: false,
+      resume: false,
+      source: 'manifest',
+    });
+  });
+
+  it('rejects unbounded result metadata and never advertises unenforceable process pause', () => {
+    expect(() =>
+      AgentResultMetadataSchema.parse({
+        status: 'succeeded',
+        exitCode: 0,
+        signal: null,
+        startedAt: '2026-07-17T12:00:00.000Z',
+        endedAt: '2026-07-17T12:00:01.000Z',
+        durationMs: 1_000,
+        providerSessionId: `session-${'x'.repeat(1_024)}`,
+      }),
+    ).toThrow();
+    expect(() =>
+      AgentResultMetadataSchema.parse({
+        status: 'succeeded',
+        exitCode: 0,
+        signal: null,
+        startedAt: '2026-07-17T12:00:00.000Z',
+        endedAt: '2026-07-17T12:00:01.000Z',
+        durationMs: 1_000,
+        usage: { totalTokens: 1_000_000_000_001 },
+      }),
+    ).toThrow();
+    expect(() =>
+      AgentAdapterManifestSchema.parse({
+        ...nodeManifest(),
+        capabilities: { ...nodeManifest().capabilities, pause: true },
+      }),
+    ).toThrow(/pause/u);
   });
 
   it('preserves ANSI styling semantics from a real pseudo-terminal stream', async () => {

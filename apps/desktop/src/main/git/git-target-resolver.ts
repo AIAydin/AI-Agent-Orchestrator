@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 import type { AppSettings, Project } from '../../shared/application/contracts.js';
 import type { LocalStore, StoredRunRecord } from '../storage.js';
-import { effectiveRunWorktreeState } from '../storage-schemas.js';
+import { effectiveRunWorktreeAuthority, effectiveRunWorktreeState } from '../storage-schemas.js';
 
 const ResolveInputSchema = z.object({
   projectId: z.string().uuid(),
@@ -149,6 +149,18 @@ export class GitTargetResolver {
       throw new GitTargetResolutionError(
         'RUN_PROJECT_MISMATCH',
         'The selected agent run does not belong to this project.',
+      );
+    }
+    if (run.supersededByRunId != null) {
+      throw new GitTargetResolutionError(
+        'WORKTREE_LIFECYCLE_INACTIVE',
+        'A newer resumed attempt now owns this managed worktree. Review the latest attempt instead.',
+      );
+    }
+    if (effectiveRunWorktreeAuthority(run) !== 'owned') {
+      throw new GitTargetResolutionError(
+        'WORKTREE_LIFECYCLE_INACTIVE',
+        'This resumed attempt has not received approved authority over the managed worktree.',
       );
     }
     if (requireTerminalRun && (!TERMINAL_RUN_STATUSES.has(run.status) || run.endedAt === null)) {

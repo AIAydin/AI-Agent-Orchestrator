@@ -165,6 +165,11 @@ function canonicalData(
         worktreeId: stringValue(raw['worktreeId']),
         branch: stringValue(raw['branch']),
         contextAttachmentIds: stringArray(raw['contextAttachmentIds']),
+        pauseSupported: booleanValue(raw['pauseSupported']),
+        interruptSupported: booleanValue(raw['interruptSupported']),
+        resumeSupported: booleanValue(raw['resumeSupported']),
+        tokenUsage: agentTokenUsage(raw['tokenUsage']),
+        cost: agentCost(raw['cost']),
       });
     case 'product-brief':
       return compact({
@@ -335,6 +340,11 @@ function legacyDataFromCanonical(node: CanvasNode): Record<string, unknown> {
         worktreeId: node.data.worktreeId,
         branch: node.data.branch,
         contextAttachmentIds: node.data.contextAttachmentIds,
+        pauseSupported: node.data.pauseSupported,
+        interruptSupported: node.data.interruptSupported,
+        resumeSupported: node.data.resumeSupported,
+        tokenUsage: node.data.tokenUsage,
+        cost: node.data.cost,
       });
     case 'extension':
       return {
@@ -434,6 +444,30 @@ function commandValue(value: unknown): Record<string, unknown> | undefined {
     cwdRelative: stringValue(command?.['cwdRelative']),
     environmentNames: stringArray(command?.['environmentNames']) ?? [],
   });
+}
+
+function agentTokenUsage(value: unknown): Record<string, number> | undefined {
+  const usage = unknownRecord(value);
+  const input = nonnegativeInteger(usage?.['input']);
+  const output = nonnegativeInteger(usage?.['output']);
+  return input === undefined || output === undefined ? undefined : { input, output };
+}
+
+function agentCost(value: unknown): Record<string, unknown> | undefined {
+  const cost = unknownRecord(value);
+  const amount = nonnegativeNumber(cost?.['amount']);
+  const currency = stringValue(cost?.['currency']);
+  return amount === undefined || currency === undefined || currency.length !== 3
+    ? undefined
+    : { amount, currency };
+}
+
+function nonnegativeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
+function nonnegativeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function compact(value: Record<string, unknown>): Record<string, unknown> {

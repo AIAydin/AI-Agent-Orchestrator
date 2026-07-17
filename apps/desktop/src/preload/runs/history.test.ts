@@ -21,6 +21,15 @@ describe('createRunHistoryApi', () => {
       limit: 20,
     });
 
+    await expect(
+      api.list({ projectId: PROJECT_ID, nodeId: 'agent-node', limit: 5 }),
+    ).resolves.toEqual({ ok: true, value: [] });
+    expect(invoke).toHaveBeenLastCalledWith(IPC_CHANNELS.runsList, {
+      projectId: PROJECT_ID,
+      nodeId: 'agent-node',
+      limit: 5,
+    });
+
     invoke.mockClear();
     await expect(
       api.list({ projectId: PROJECT_ID, limit: RUN_HISTORY_MAX_LIMIT + 1 }),
@@ -56,12 +65,26 @@ function summary() {
     projectId: PROJECT_ID,
     nodeId: 'agent-node',
     adapterId: 'test-agent',
+    model: null,
+    permissionProfile: 'worktree-write',
+    providerSessionAvailable: false,
+    resumeSupported: false,
+    resumeCapabilitySource: null,
+    action: 'launch',
+    parentRunId: null,
     status: 'succeeded',
     branch: 'forgeboard/agent-node',
     worktreeState: 'active',
     worktreeAvailable: true,
+    supersededByNewerAttempt: false,
     startedAt: '2026-07-16T12:00:00.000Z',
     endedAt: '2026-07-16T12:01:00.000Z',
+    exitCode: 0,
+    outputDigest: 'a'.repeat(64),
+    changedFileCount: 2,
+    tokenUsage: null,
+    costUsd: null,
+    outputPreview: 'Tests passed.\n',
     createdAt: '2026-07-16T11:59:00.000Z',
     updatedAt: '2026-07-16T12:01:00.000Z',
   };

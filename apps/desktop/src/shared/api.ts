@@ -17,6 +17,7 @@ import type {
   LocalReferenceSelectionInput,
   LocateProjectRecoveryInput,
   PrepareRunInput,
+  PrepareRunContinuationInput,
   PreviewEventEnvelope,
   PreviewNavigateInput,
   PreviewNodeKey,
@@ -28,6 +29,14 @@ import type {
   RunEventEnvelope,
 } from './application/contracts.js';
 import type { AgentReadinessRequest, AgentReadinessResult } from './readiness/contracts.js';
+import type {
+  ProviderConnectionCancelResult,
+  ProviderConnectionGetInput,
+  ProviderConnectionPlan,
+  ProviderConnectionPlanInput,
+  ProviderConnectionPrepareInput,
+  ProviderConnectionStatus,
+} from './provider-connections/index.js';
 import type {
   CommandReadinessRequest,
   CommandReadinessResult,
@@ -221,6 +230,16 @@ export interface ForgeboardApi {
   agents: {
     detect(): Promise<IpcResult<AgentDetection[]>>;
     checkReadiness(input: AgentReadinessRequest): Promise<IpcResult<AgentReadinessResult | null>>;
+    connections: {
+      get(input: ProviderConnectionGetInput): Promise<IpcResult<ProviderConnectionStatus>>;
+      prepare(input: ProviderConnectionPrepareInput): Promise<IpcResult<ProviderConnectionPlan>>;
+      confirm(
+        input: ProviderConnectionPlanInput,
+      ): Promise<IpcResult<ProviderConnectionStatus | null>>;
+      cancel(
+        input: ProviderConnectionPlanInput,
+      ): Promise<IpcResult<ProviderConnectionCancelResult>>;
+    };
   };
   commands: {
     checkReadiness(input: CommandReadinessRequest): Promise<IpcResult<CommandReadinessResult>>;
@@ -293,6 +312,8 @@ export interface ForgeboardApi {
   runs: {
     list(input: RunHistoryListInput): Promise<IpcResult<RunHistorySummary[]>>;
     prepare(input: PrepareRunInput): Promise<IpcResult<RunApprovalView | null>>;
+    resume(input: PrepareRunContinuationInput): Promise<IpcResult<RunApprovalView | null>>;
+    retry(input: PrepareRunContinuationInput): Promise<IpcResult<RunApprovalView | null>>;
     approve(runId: string): Promise<IpcResult<boolean>>;
     sendInput(runId: string, data: string): Promise<IpcResult<boolean>>;
     interrupt(runId: string): Promise<IpcResult<boolean>>;

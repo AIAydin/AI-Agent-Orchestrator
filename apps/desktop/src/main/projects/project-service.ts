@@ -13,13 +13,17 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
-import { locateAgentExecutable, type AgentAdapterManifest } from '@forgeboard/agent-adapters';
+import {
+  getBuiltInAgentManifest,
+  locateAgentExecutable,
+  type AgentAdapterManifest,
+} from '@forgeboard/agent-adapters';
 import {
   GitEngineError,
   RepositoryService,
   type GitDelegateAuthorizer,
 } from '@forgeboard/git-engine';
-import { TEST_AGENT_PACKAGE_VERSION } from '@forgeboard/test-agent';
+import { TEST_AGENT_MANIFEST, TEST_AGENT_PACKAGE_VERSION } from '@forgeboard/test-agent';
 import type { App, BrowserWindow, Dialog, MessageBoxOptions, OpenDialogOptions } from 'electron';
 
 import type {
@@ -370,11 +374,17 @@ export class ProjectService {
     });
     authority?.assertCurrent();
     if (initializeGit) {
-      await this.repositories.git.run(['init', '--initial-branch=main'], { cwd: target });
+      await this.repositories.git.run(['init', '--initial-branch=main'], {
+        cwd: target,
+      });
       authority?.assertCurrent();
       await this.repositories.git.runGuarded(
         ['add', '--', 'README.md'],
-        { repositoryPath: target, operation: 'stage-clean', paths: ['README.md'] },
+        {
+          repositoryPath: target,
+          operation: 'stage-clean',
+          paths: ['README.md'],
+        },
         { cwd: target },
       );
       authority?.assertCurrent();
@@ -392,7 +402,10 @@ export class ProjectService {
       );
       authority?.assertCurrent();
     }
-    this.store.appendAudit('project', 'create', 'allowed', { name, initializeGit });
+    this.store.appendAudit('project', 'create', 'allowed', {
+      name,
+      initializeGit,
+    });
     return this.open(target, authority);
   }
 
@@ -460,7 +473,9 @@ export class ProjectService {
       authority?.assertCurrent();
       await writeFile(marker, '1\n');
       authority?.assertCurrent();
-      await this.repositories.git.run(['init', '--initial-branch=main'], { cwd: target });
+      await this.repositories.git.run(['init', '--initial-branch=main'], {
+        cwd: target,
+      });
       authority?.assertCurrent();
       await this.repositories.git.runGuarded(
         ['add', '--', 'README.md', 'src/message.ts', '.forgeboard-demo-v1'],
@@ -525,7 +540,9 @@ export class ProjectService {
       if (current.path !== project.path) {
         throw new Error('The project location changed after approval. Review it again.');
       }
-      await this.repositories.git.run(['init', '--initial-branch=main'], { cwd: current.path });
+      await this.repositories.git.run(['init', '--initial-branch=main'], {
+        cwd: current.path,
+      });
       authority?.assertCurrent();
       const health = await scanRepository(current.path, this.repositories);
       if (!health.isGitRepository) {
@@ -616,6 +633,12 @@ export async function detectAgents(
           : configured
             ? await validateExecutableOverride(configured)
             : await findExecutable(executable);
+      const manifest =
+        id === 'test-agent'
+          ? TEST_AGENT_MANIFEST
+          : ['codex', 'claude', 'gemini', 'opencode'].includes(id)
+            ? getBuiltInAgentManifest(id)
+            : undefined;
       return {
         id,
         label,
@@ -623,6 +646,12 @@ export async function detectAgents(
         executable: located,
         version: id === 'test-agent' ? TEST_AGENT_PACKAGE_VERSION : null,
         providerDisclosure: PROVIDER_DISCLOSURES[id],
+        ...(manifest === undefined
+          ? {}
+          : {
+              capabilities: capabilitySummary(manifest),
+              capabilitySource: 'manifest' as const,
+            }),
       };
     }),
   );
@@ -642,6 +671,8 @@ export async function detectAgents(
         executable: detection.executable,
         version: null,
         providerDisclosure: manifest.provider.disclosure,
+        capabilities: capabilitySummary(manifest),
+        capabilitySource: 'manifest',
       };
     }),
   );
@@ -657,6 +688,14 @@ export async function detectAgents(
         executable: customAgent?.executable || null,
         version: null,
         providerDisclosure: disclosure,
+        capabilities: {
+          interactiveInput: true,
+          interrupt: true,
+          pause: false,
+          resume: false,
+          modelSelection: false,
+        },
+        capabilitySource: 'manifest',
       };
     }
     try {
@@ -671,6 +710,8 @@ export async function detectAgents(
         executable: detection.executable,
         version: null,
         providerDisclosure: disclosure,
+        capabilities: capabilitySummary(manifest),
+        capabilitySource: 'manifest',
       };
     } catch {
       return {
@@ -680,10 +721,31 @@ export async function detectAgents(
         executable: customAgent.executable || null,
         version: null,
         providerDisclosure: disclosure,
+        capabilities: {
+          interactiveInput: true,
+          interrupt: true,
+          pause: false,
+          resume: false,
+          modelSelection: false,
+        },
+        capabilitySource: 'manifest',
       };
     }
   })();
   return [...(await builtInDetections), customDetection, ...(await extensionDetections)];
+}
+
+function capabilitySummary(manifest: {
+  readonly capabilities: {
+    readonly interactiveInput: boolean;
+    readonly interrupt: boolean;
+    readonly pause: boolean;
+    readonly resume: boolean;
+    readonly modelSelection: boolean;
+  };
+}) {
+  const { interactiveInput, interrupt, pause, resume, modelSelection } = manifest.capabilities;
+  return { interactiveInput, interrupt, pause, resume, modelSelection };
 }
 
 async function scanRepository(path: string, repositories: RepositoryService): Promise<GitHealth> {
@@ -694,7 +756,9 @@ async function scanRepository(path: string, repositories: RepositoryService): Pr
   let remotes: { name: string; url: string }[] = [];
 
   try {
-    await repositories.git.run(['rev-parse', '--is-inside-work-tree'], { cwd: path });
+    await repositories.git.run(['rev-parse', '--is-inside-work-tree'], {
+      cwd: path,
+    });
     const status = await repositories.status(path);
     isGitRepository = true;
     branch = status.branch;

@@ -10,12 +10,7 @@ import {
   findSensitivePath,
   loadProjectIgnoreMatcher,
 } from '@forgeboard/core';
-import {
-  RepositoryService,
-  WorktreeService,
-  type ManagedWorktreeState,
-  type WorktreeOwnership,
-} from '@forgeboard/git-engine';
+import { RepositoryService, WorktreeService, type WorktreeOwnership } from '@forgeboard/git-engine';
 import { z } from 'zod';
 
 import {
@@ -25,7 +20,8 @@ import {
   type RunDisclosure,
   type RunEventEnvelope,
 } from '../../shared/application/contracts.js';
-import type { StoredRunRecord } from '../storage.js';
+import { RUN_HISTORY_OUTPUT_PREVIEW_MAX_LENGTH } from '../../shared/runs/contracts.js';
+import type { StoredRunRecord } from '../storage-schemas.js';
 import { createDefaultAgentAdapterPlanner } from './adapter-planner.js';
 import {
   AgentExecutionCompletionSchema,
@@ -46,7 +42,6 @@ import {
   type PreparedRunState,
   type TrustedAdapterLauncher,
   type TrustedAdapterLookup,
-  type WorkspaceSnapshot,
 } from './contracts.js';
 import {
   disclosureFingerprint,
@@ -61,6 +56,17 @@ import {
   type ImmutableContextSnapshot,
 } from './context/immutable-snapshot.js';
 import { withDockerContextBindFailureGuidance } from './context/docker-bind-guidance.js';
+import { boundedInteger, boundedSubset, countOwnerIds, countOwners } from './admission/limits.js';
+import {
+  assertContinuationNotInUse,
+  assertManagedWorktreeState,
+  assertPrimaryResumeAuthority,
+  readResumeWorktree,
+  requireContinuationParent,
+  type AttemptContinuation,
+} from './continuation/authority.js';
+import { normalizedTokenUsage } from './history/usage.js';
+import { captureWorkspace, changedWorkspace } from './workspace/snapshot.js';
 
 const DEFAULT_PLAN_TTL_MS = 60_000;
 const MAX_PLAN_TTL_MS = 10 * 60_000;
@@ -77,6 +83,7 @@ const OwnerIdSchema = z
   .max(512)
   .refine((value) => !value.includes('\0'));
 const FingerprintSchema = z.string().regex(/^[0-9a-f]{64}$/u);
+const ParentRunIdSchema = z.string().uuid();
 const InputSchema = z
   .string()
   .max(1_000_000)
@@ -85,11 +92,9 @@ const InputSchema = z
 interface ActiveRunState extends PreparedRunState {
   readonly session: AgentSession;
   pendingTestInputId: string | null;
-}
-
-interface WorkspaceResult {
-  readonly after: WorkspaceSnapshot;
-  readonly changedFiles: readonly string[];
+  outputPreview: string;
+  outputObservedUnits: number;
+  outputPersistedUnits: number;
 }
 
 export interface AgentExecutionRuntimeOptions {
@@ -177,6 +182,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       options.maxPendingPlansPerOwner ??
         Math.min(DEFAULT_MAX_PENDING_PLANS_PER_OWNER, this.#maxPendingPlans),
       this.#maxPendingPlans,
+      MAX_ADMISSION_LIMIT,
       'maxPendingPlansPerOwner',
     );
     this.#maxActiveRuns = boundedInteger(
@@ -188,6 +194,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       options.maxActiveRunsPerOwner ??
         Math.min(DEFAULT_MAX_ACTIVE_RUNS_PER_OWNER, this.#maxActiveRuns),
       this.#maxActiveRuns,
+      MAX_ADMISSION_LIMIT,
       'maxActiveRunsPerOwner',
     );
   }
@@ -209,12 +216,60 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     } catch (error) {
       return Promise.reject(asError(error));
     }
-    const operation = this.#prepare(parsedOwnerId, parsedInput, processAuthorization).finally(
+    const operation = this.#prepare(parsedOwnerId, parsedInput, processAuthorization, null).finally(
       () => {
         this.#prepareReservations.delete(reservation);
       },
     );
     return this.#trackOwnerOperation(parsedOwnerId, operation);
+  }
+
+  public prepareResume(
+    ownerId: string,
+    parentRunId: string,
+    input: AgentExecutionRequest,
+    processAuthorization?: AgentPreparationProcessAuthorization,
+  ): Promise<PreparedAgentExecution> {
+    return this.#prepareContinuation('resume', ownerId, parentRunId, input, processAuthorization);
+  }
+
+  public prepareRetry(
+    ownerId: string,
+    parentRunId: string,
+    input: AgentExecutionRequest,
+    processAuthorization?: AgentPreparationProcessAuthorization,
+  ): Promise<PreparedAgentExecution> {
+    return this.#prepareContinuation('retry', ownerId, parentRunId, input, processAuthorization);
+  }
+
+  #prepareContinuation(
+    action: AttemptContinuation['action'],
+    ownerIdValue: string,
+    parentRunIdValue: string,
+    input: AgentExecutionRequest,
+    processAuthorization?: AgentPreparationProcessAuthorization,
+  ): Promise<PreparedAgentExecution> {
+    let ownerId: string;
+    let parentRunId: string;
+    let parsedInput: AgentExecutionRequest;
+    let reservation: symbol;
+    try {
+      this.#assertAvailable();
+      ownerId = OwnerIdSchema.parse(ownerIdValue);
+      parentRunId = ParentRunIdSchema.parse(parentRunIdValue);
+      this.#assertOwnerAccepting(ownerId);
+      parsedInput = AgentExecutionRequestSchema.parse(input);
+      reservation = this.#reservePreparation(ownerId);
+    } catch (error) {
+      return Promise.reject(asError(error));
+    }
+    const operation = this.#prepare(ownerId, parsedInput, processAuthorization, {
+      action,
+      parentRunId,
+    }).finally(() => {
+      this.#prepareReservations.delete(reservation);
+    });
+    return this.#trackOwnerOperation(ownerId, operation);
   }
 
   public launch(
@@ -409,8 +464,11 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     ownerId: string,
     input: AgentExecutionRequest,
     processAuthorization?: AgentPreparationProcessAuthorization,
+    continuation: AttemptContinuation | null = null,
   ): Promise<PreparedAgentExecution> {
     const generation = this.#generation;
+    const parent =
+      continuation === null ? null : requireContinuationParent(this.#store, continuation, input);
     const project = this.#store.getProject(input.projectId);
     if (project === undefined || project.missing) {
       throw new Error('The selected project is no longer available.');
@@ -430,8 +488,30 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     let branch = primaryStatus.branch;
     let baseCommit = primaryStatus.headOid;
     let primaryWasDirty = primaryStatus.dirty;
+    let ownsWorktreeCleanup = true;
 
-    if (input.permissionProfile !== 'plan-read-only') {
+    if (continuation?.action === 'resume') {
+      if (parent === null) throw new Error('A resume attempt requires a persisted parent.');
+      assertContinuationNotInUse(
+        [...this.#pending.values(), ...this.#active.values()],
+        parent.id,
+        parent.worktreeId,
+      );
+      if (parent.worktreeId === null) {
+        assertPrimaryResumeAuthority(parent, repositoryPath, primaryStatus);
+        cwd = repositoryPath;
+        branch = parent.branch;
+        baseCommit = parent.baseCommit;
+      } else {
+        worktree = await readResumeWorktree(this.#worktrees, parent, repositoryPath);
+        const state = await this.#worktrees.inspect(worktree);
+        await assertManagedWorktreeState(this.#repositories, worktree, state);
+        cwd = worktree.worktreePath;
+        branch = worktree.branch;
+        baseCommit = worktree.baseCommit;
+      }
+      ownsWorktreeCleanup = false;
+    } else if (input.permissionProfile !== 'plan-read-only') {
       if (primaryStatus.headOid === null) {
         throw new Error('A writable agent run requires the repository to have an initial commit.');
       }
@@ -462,6 +542,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         settings,
         runId,
         processAuthorization,
+        continuation?.action === 'resume' ? (parent?.providerSessionId ?? undefined) : undefined,
       );
       const warnings = contextSnapshotDisclosureWarnings(
         [...planned.plan.disclosure.warnings, ...planned.detectionWarnings],
@@ -472,6 +553,21 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         warnings.push(
           'The primary checkout has uncommitted changes. This run starts from its committed HEAD, so those changes are not present in the dedicated worktree.',
         );
+      }
+      if (continuation !== null) {
+        warnings.push(
+          `${continuation.action === 'resume' ? 'Resume' : 'Retry'} of attempt ${continuation.parentRunId.slice(0, 8)}. This is a fresh immutable disclosure and requires a new native approval.`,
+        );
+      }
+      if (continuation?.action === 'resume') {
+        warnings.push(
+          'This attempt resumes the disclosed provider session in the exact saved repository target and branch. The prior attempt becomes read-only history when this launch is approved.',
+        );
+        if (parent?.resumeCapabilitySource === 'manifest') {
+          warnings.push(
+            'Resume support for the prior session is declared by its adapter manifest, not verified by a capability probe. The CLI may still reject this reviewed resume invocation.',
+          );
+        }
       }
       const disclosure: RunDisclosure = {
         runId,
@@ -515,21 +611,34 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         projectId: input.projectId,
         nodeId: input.nodeId,
         adapterId: input.adapterId,
+        model: input.model ?? null,
+        permissionProfile: input.permissionProfile,
+        providerSessionId:
+          continuation?.action === 'resume' ? (parent?.providerSessionId ?? null) : null,
+        resumeSupported: null,
+        resumeCapabilitySource: null,
+        action: continuation?.action ?? 'launch',
+        parentRunId: continuation?.parentRunId ?? null,
+        supersededByRunId: null,
         status: 'prepared',
         cwd,
         branch,
         worktreeId: worktree?.id ?? null,
+        worktreeAuthority: continuation?.action === 'resume' ? 'pending-transfer' : 'owned',
         repositoryRoot: repositoryPath,
         managedRoot: worktree?.managedRoot ?? null,
-        baseRef: worktree?.baseRef ?? null,
-        baseCommit: worktree?.baseCommit ?? null,
+        baseRef: worktree?.baseRef ?? branch,
+        baseCommit,
         startedAt: null,
         endedAt: null,
         exitCode: null,
+        tokenUsage: null,
+        costUsd: null,
+        outputPreview: '',
         createdAt: timestamp,
         updatedAt: timestamp,
       };
-      const before = await this.#captureWorkspace(cwd);
+      const before = await captureWorkspace(this.#repositories, cwd);
       const expiresAt = new Date(this.#now().getTime() + this.#planTtlMs).toISOString();
       const fingerprint = disclosureFingerprint({
         planId,
@@ -554,7 +663,9 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         expiresAt,
         generation,
         nodeId: input.nodeId,
+        ownsWorktreeCleanup,
         ownerId,
+        authorityParentRunId: continuation?.action === 'resume' ? continuation.parentRunId : null,
         plan: planned.plan,
         planId,
         repositoryPath,
@@ -595,7 +706,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       return publicPrepared;
     } catch (error) {
       let cleanupFailure: unknown;
-      if (worktree !== null) {
+      if (worktree !== null && ownsWorktreeCleanup) {
         try {
           await this.#cleanupUnusedWorktree(worktree);
         } catch (cleanupError) {
@@ -692,6 +803,15 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
             }
           : { runtime: 'host' },
       );
+      if (prepared.authorityParentRunId !== null) {
+        if (this.#store.transferRunWorktreeAuthority === undefined) {
+          throw new Error('Durable resume authority transfer is unavailable in this build.');
+        }
+        prepared.record = this.#store.transferRunWorktreeAuthority({
+          parentRunId: prepared.authorityParentRunId,
+          childRunId: prepared.record.id,
+        });
+      }
       const launchedSession = await this.#launchPrepared(
         prepared,
         contextSnapshot,
@@ -743,6 +863,8 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       prepared.record = {
         ...prepared.record,
         status: 'running',
+        resumeSupported: session.capabilities.resume,
+        resumeCapabilitySource: session.capabilities.source,
         startedAt,
         updatedAt: startedAt,
       };
@@ -750,6 +872,9 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         ...prepared,
         session,
         pendingTestInputId: null,
+        outputPreview: prepared.record.outputPreview ?? '',
+        outputObservedUnits: 0,
+        outputPersistedUnits: 0,
       };
       this.#active.set(prepared.record.id, active);
       const completion = this.#registerCompletion(active);
@@ -764,6 +889,12 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         await completion;
         throw error;
       }
+      this.#emit(active.ownerId, {
+        runId: active.record.id,
+        nodeId: active.nodeId,
+        kind: 'agent-event',
+        payload: { type: 'capabilities', capabilities: active.session.capabilities },
+      });
       this.#safeAudit('agent-run', 'launch', 'allowed', {
         runId: active.record.id,
         planId,
@@ -776,6 +907,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       return {
         runId: active.record.id,
         process,
+        capabilities: active.session.capabilities,
         completion,
         writeInput: (data) => {
           this.sendInput(ownerId, active.record.id, data);
@@ -819,9 +951,9 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     this.#pending.delete(prepared.planId);
     this.#scheduleNextExpiry();
     let worktreeRemoved = false;
-    if (prepared.worktree !== null) {
+    if (prepared.worktree !== null && prepared.ownsWorktreeCleanup) {
       try {
-        await this.#cleanupUnusedWorktree(prepared.worktree);
+        await this.#cleanupPreparedWorktree(prepared);
         worktreeRemoved = true;
       } catch (error) {
         this.#safeAudit('agent-run', 'cancel-preflight-cleanup', 'failed', {
@@ -835,7 +967,8 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       nodeId: prepared.nodeId,
       adapterId: prepared.adapterId,
       worktreeRemoved,
-      worktreePreserved: prepared.worktree !== null && !worktreeRemoved,
+      worktreePreserved:
+        prepared.worktree !== null && (!prepared.ownsWorktreeCleanup || !worktreeRemoved),
     });
     this.#emit(ownerId, {
       runId,
@@ -846,7 +979,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         exitCode: null,
         changedFiles: [],
         branch: prepared.record.branch,
-        worktreePath: prepared.worktree?.worktreePath ?? null,
+        worktreeId: prepared.record.worktreeId,
       },
     });
     return true;
@@ -941,6 +1074,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       for await (const event of active.session.events) {
         if (this.#active.get(active.record.id) !== active) return;
         this.#observeTestInput(active, event);
+        this.#observeOutputPreview(active, event);
         this.#emit(active.ownerId, {
           runId: active.record.id,
           nodeId: active.nodeId,
@@ -952,7 +1086,8 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     try {
       const result = await active.session.result;
       await events;
-      const workspace = await this.#changedWorkspace(
+      const workspace = await changedWorkspace(
+        this.#repositories,
         active.repositoryPath,
         active.record.cwd,
         active.before,
@@ -971,6 +1106,12 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         startedAt: result.startedAt,
         endedAt: result.endedAt,
         exitCode: result.exitCode,
+        outputDigest: digest,
+        changedFileCount: workspace.changedFiles.length,
+        providerSessionId: result.providerSessionId ?? active.record.providerSessionId ?? null,
+        tokenUsage: normalizedTokenUsage(result.usage),
+        costUsd: result.usage?.costUsd ?? null,
+        outputPreview: active.outputPreview,
         updatedAt: this.#now().toISOString(),
       };
       this.#store.saveRun(active.record);
@@ -994,10 +1135,13 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         changedFiles: workspace.changedFiles,
         outputDigest: digest,
         branch: active.record.branch,
+        worktreeId: active.record.worktreeId,
         worktreePath: active.worktree?.worktreePath ?? null,
+        capabilities: active.session.capabilities,
         ...(result.providerSessionId === undefined
           ? {}
           : { providerSessionId: result.providerSessionId }),
+        ...(result.usage === undefined ? {} : { usage: result.usage }),
       });
       this.#emit(active.ownerId, {
         runId: completion.runId,
@@ -1009,7 +1153,10 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
           changedFiles: completion.changedFiles,
           outputDigest: completion.outputDigest,
           branch: completion.branch,
-          worktreePath: completion.worktreePath,
+          worktreeId: completion.worktreeId,
+          capabilities: completion.capabilities,
+          providerSessionAvailable: completion.providerSessionId !== undefined,
+          ...(completion.usage === undefined ? {} : { usage: completion.usage }),
         },
       });
       return completion;
@@ -1035,6 +1182,9 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       startedAt,
       endedAt,
       exitCode: null,
+      outputDigest: digest,
+      changedFileCount: 0,
+      outputPreview: active.outputPreview,
       updatedAt: endedAt,
     };
     try {
@@ -1065,7 +1215,9 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       changedFiles: [],
       outputDigest: digest,
       branch: active.record.branch,
+      worktreeId: active.record.worktreeId,
       worktreePath: active.worktree?.worktreePath ?? null,
+      capabilities: active.session.capabilities,
     });
   }
 
@@ -1080,45 +1232,29 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     }
     if (prepared.worktree !== null) {
       const state = await this.#worktrees.inspect(prepared.worktree);
-      await this.#assertWorktreeState(prepared.worktree, state);
+      await assertManagedWorktreeState(this.#repositories, prepared.worktree, state);
+    } else if (prepared.authorityParentRunId !== null) {
+      const status = await this.#repositories.status(prepared.repositoryPath);
+      if (
+        status.branch !== prepared.record.branch ||
+        status.headOid !== prepared.record.baseCommit
+      ) {
+        throw new Error(
+          'The primary repository branch or base commit changed after disclosure. Review a fresh resume.',
+        );
+      }
     }
-    const current = await this.#captureWorkspace(prepared.record.cwd);
+    const current = await captureWorkspace(this.#repositories, prepared.record.cwd);
     if (workspaceSnapshotDigest(current) !== workspaceSnapshotDigest(prepared.before)) {
       throw new Error('The approved workspace changed after disclosure. Review a fresh launch.');
     }
   }
 
-  async #assertWorktreeState(
-    expected: WorktreeOwnership,
-    state: ManagedWorktreeState,
-  ): Promise<void> {
-    if (!sameWorktreeBinding(expected, state.ownership)) {
-      throw new Error('The managed worktree ownership changed after disclosure.');
-    }
-    if (
-      state.ownership.status !== 'active' ||
-      state.missing ||
-      !state.branchExists ||
-      state.branchOid === null ||
-      state.status === null ||
-      state.status.branch !== expected.branch
-    ) {
-      throw new Error('The managed worktree is no longer active on its approved branch.');
-    }
-    const [primaryCommon, worktreeCommon] = await Promise.all([
-      this.#repositories.commonDirectory(expected.repositoryRoot),
-      this.#repositories.commonDirectory(expected.worktreePath),
-    ]);
-    if (primaryCommon !== worktreeCommon) {
-      throw new Error('The managed worktree no longer belongs to the approved repository.');
-    }
-  }
-
   async #recordLaunchFailure(prepared: PreparedRunState, error: unknown): Promise<void> {
     let worktreePreserved = prepared.worktree !== null;
-    if (prepared.worktree !== null) {
+    if (prepared.worktree !== null && prepared.ownsWorktreeCleanup) {
       try {
-        await this.#cleanupUnusedWorktree(prepared.worktree);
+        await this.#cleanupPreparedWorktree(prepared);
         worktreePreserved = false;
       } catch {
         // Preserve a worktree that no longer matches its clean approval snapshot.
@@ -1184,9 +1320,9 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     prepared.record = stoppedRecord;
     this.#pending.delete(prepared.planId);
     let worktreePreserved = prepared.worktree !== null;
-    if (prepared.worktree !== null) {
+    if (prepared.worktree !== null && prepared.ownsWorktreeCleanup) {
       try {
-        await this.#cleanupUnusedWorktree(prepared.worktree);
+        await this.#cleanupPreparedWorktree(prepared);
         worktreePreserved = false;
       } catch {
         // Preserve unexpected worktree changes rather than deleting them during expiry.
@@ -1198,73 +1334,6 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       reason: 'expired-plan',
       worktreePreserved,
     });
-  }
-
-  async #captureWorkspace(repositoryPath: string): Promise<WorkspaceSnapshot> {
-    const status = await this.#repositories.status(repositoryPath);
-    const paths = new Map<string, string>();
-    for (const entry of status.entries) {
-      if (entry.kind === 'ignored') continue;
-      const [content, index] = await Promise.all([
-        this.#repositories.git.run(
-          ['-C', repositoryPath, 'hash-object', '--no-filters', '--', entry.path],
-          { allowNonZeroExit: true },
-        ),
-        this.#repositories.git.run(['-C', repositoryPath, 'ls-files', '-s', '--', entry.path], {
-          allowNonZeroExit: true,
-        }),
-      ]);
-      paths.set(
-        entry.path,
-        createHash('sha256')
-          .update(
-            [
-              entry.kind,
-              entry.index,
-              entry.worktree,
-              entry.originalPath ?? '',
-              content.stdout.trim(),
-              index.stdout.trim(),
-            ].join('\0'),
-          )
-          .digest('hex'),
-      );
-    }
-    return { headOid: status.headOid, paths };
-  }
-
-  async #changedWorkspace(
-    repositoryRoot: string,
-    cwd: string,
-    before: WorkspaceSnapshot,
-  ): Promise<WorkspaceResult> {
-    const after = await this.#captureWorkspace(cwd);
-    const changed = new Set<string>();
-    for (const candidate of new Set([...before.paths.keys(), ...after.paths.keys()])) {
-      if (before.paths.get(candidate) !== after.paths.get(candidate)) changed.add(candidate);
-    }
-    if (before.headOid !== null && after.headOid !== null && before.headOid !== after.headOid) {
-      const committed = await this.#repositories.git.runGuarded(
-        [
-          '-C',
-          cwd,
-          'diff',
-          '--no-ext-diff',
-          '--no-textconv',
-          '--name-only',
-          '-z',
-          before.headOid,
-          after.headOid,
-          '--',
-        ],
-        { repositoryPath: cwd, operation: 'object-inspection' },
-      );
-      for (const candidate of committed.stdout.split('\0')) {
-        if (candidate !== '') changed.add(candidate);
-      }
-    }
-    await this.#repositories.resolveRepositoryRoot(repositoryRoot);
-    return { after, changedFiles: [...changed].sort() };
   }
 
   async #cleanupUnusedWorktree(ownership: WorktreeOwnership): Promise<void> {
@@ -1292,15 +1361,49 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     });
   }
 
+  async #cleanupPreparedWorktree(prepared: PreparedRunState): Promise<void> {
+    const worktree = prepared.worktree;
+    if (worktree === null || !prepared.ownsWorktreeCleanup) return;
+    if (this.#store.transitionRunWorktreeState !== undefined) {
+      prepared.record = this.#store.transitionRunWorktreeState({
+        runId: prepared.record.id,
+        expectedWorktreeId: worktree.id,
+        expectedState: 'active',
+        nextState: 'cleanup-pending',
+      });
+    }
+    try {
+      await this.#cleanupUnusedWorktree(worktree);
+    } catch (error) {
+      if (this.#store.transitionRunWorktreeState !== undefined) {
+        prepared.record = this.#store.transitionRunWorktreeState({
+          runId: prepared.record.id,
+          expectedWorktreeId: worktree.id,
+          expectedState: 'cleanup-pending',
+          nextState: 'active',
+        });
+      }
+      throw error;
+    }
+    if (this.#store.transitionRunWorktreeState !== undefined) {
+      prepared.record = this.#store.transitionRunWorktreeState({
+        runId: prepared.record.id,
+        expectedWorktreeId: worktree.id,
+        expectedState: 'cleanup-pending',
+        nextState: 'cleaned',
+      });
+    }
+  }
+
   async #cleanupPendingWorktrees(
     pending: readonly PreparedRunState[],
     action: string,
     failures: unknown[],
   ): Promise<void> {
     for (const prepared of pending) {
-      if (prepared.worktree === null) continue;
+      if (prepared.worktree === null || !prepared.ownsWorktreeCleanup) continue;
       try {
-        await this.#cleanupUnusedWorktree(prepared.worktree);
+        await this.#cleanupPreparedWorktree(prepared);
       } catch (error) {
         failures.push(error);
         this.#safeAudit('agent-run', action, 'failed', {
@@ -1317,6 +1420,38 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     const payload = event.payload as Record<string, unknown>;
     if (payload['type'] === 'input-requested' && typeof payload['requestId'] === 'string') {
       active.pendingTestInputId = payload['requestId'];
+    }
+  }
+
+  #observeOutputPreview(active: ActiveRunState, event: AgentEvent): void {
+    const chunk =
+      event.type === 'stream'
+        ? active.plan.manifest.invocation.output === 'json-lines'
+          ? null
+          : event.data
+        : event.type === 'message'
+          ? visibleMessageOutput(event.payload)
+          : null;
+    if (chunk === null || chunk.length === 0) return;
+    const safeChunk = chunk.replaceAll('\0', '\uFFFD');
+    active.outputPreview = `${active.outputPreview}${safeChunk}`.slice(
+      -RUN_HISTORY_OUTPUT_PREVIEW_MAX_LENGTH,
+    );
+    active.outputObservedUnits += chunk.length;
+    if (active.outputObservedUnits - active.outputPersistedUnits < 4_096) return;
+    active.record = {
+      ...active.record,
+      outputPreview: active.outputPreview,
+      updatedAt: this.#now().toISOString(),
+    };
+    try {
+      this.#store.saveRun(active.record);
+      active.outputPersistedUnits = active.outputObservedUnits;
+    } catch (error) {
+      this.#safeAudit('agent-run', 'output-preview-checkpoint', 'failed', {
+        runId: active.record.id,
+        reason: errorMessage(error),
+      });
     }
   }
 
@@ -1533,6 +1668,43 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
   }
 }
 
+function visibleMessageOutput(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  const eventType = typeof payload['type'] === 'string' ? payload['type'].toLowerCase() : '';
+  if (eventType === 'output' && typeof payload['data'] === 'string') return payload['data'];
+  if (
+    (eventType === 'failed' || eventType === 'error' || eventType === 'protocol-error') &&
+    typeof payload['message'] === 'string'
+  ) {
+    return `${payload['message']}\n`;
+  }
+  const item = payload['item'];
+  if (isRecord(item) && item['type'] === 'agent_message' && typeof item['text'] === 'string') {
+    return item['text'];
+  }
+  if (!/(?:assistant|message|output|content)/u.test(eventType)) return null;
+  if (typeof payload['text'] === 'string') return payload['text'];
+  if (typeof payload['content'] === 'string') return payload['content'];
+  if (typeof payload['message'] === 'string') return payload['message'];
+  const message = payload['message'];
+  if (isRecord(message)) return visibleContentText(message['content']);
+  return visibleContentText(payload['content']);
+}
+
+function visibleContentText(content: unknown): string | null {
+  if (!Array.isArray(content)) return null;
+  const text = content.flatMap((part) =>
+    isRecord(part) && part['type'] === 'text' && typeof part['text'] === 'string'
+      ? [part['text']]
+      : [],
+  );
+  return text.length === 0 ? null : text.join('');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export async function remapContextIntoWorktree(
   context: AgentExecutionContextRequest,
   repositoryPath: string,
@@ -1626,6 +1798,7 @@ function retainSnapshotThroughSession(
   );
   return {
     pid: session.pid,
+    capabilities: session.capabilities,
     events: docker
       ? withDockerContextBindFailureGuidance(session.events, snapshot.rootPath)
       : session.events,
@@ -1744,44 +1917,6 @@ function pathsEqual(left: string, right: string): boolean {
   return process.platform === 'win32'
     ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
     : path.resolve(left) === path.resolve(right);
-}
-
-function sameWorktreeBinding(left: WorktreeOwnership, right: WorktreeOwnership): boolean {
-  return isDeepStrictEqual(left, right);
-}
-
-function boundedInteger(value: number, minimum: number, maximum: number): number {
-  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
-    throw new Error(`Expected an integer from ${String(minimum)} through ${String(maximum)}.`);
-  }
-  return value;
-}
-
-function boundedSubset(value: number, maximum: number, label: string): number {
-  const parsed = boundedInteger(value, 1, MAX_ADMISSION_LIMIT);
-  if (parsed > maximum) {
-    throw new Error(`${label} cannot exceed its global admission limit.`);
-  }
-  return parsed;
-}
-
-function countOwners<T extends { readonly ownerId: string }>(
-  values: Iterable<T>,
-  ownerId: string,
-): number {
-  let count = 0;
-  for (const value of values) {
-    if (value.ownerId === ownerId) count += 1;
-  }
-  return count;
-}
-
-function countOwnerIds(values: Iterable<string>, ownerId: string): number {
-  let count = 0;
-  for (const value of values) {
-    if (value === ownerId) count += 1;
-  }
-  return count;
 }
 
 function errorMessage(error: unknown): string {

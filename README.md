@@ -12,8 +12,10 @@ The Git / PR node applies that same authority to an exact normal branch push and
 GitHub repository, pull-request, and exact-head CI actions through the user's local `gh` CLI.
 The permission centre exposes Plan/read-only, Worktree write, Docker isolated, and a reusable
 Custom profile with complete host/Docker controls and honest enforcement disclosures.
-The first-run agent step requires main-process readiness evidence for the selected bundled,
-detected, overridden, or custom CLI before setup can continue. Only an exact fingerprinted project
+The first-run agent step uses provider-owned browser sign-in for Codex and Claude Code, and requires
+normalized main-process connection evidence before either can become the default. The bundled solo
+test agent needs no account. Gemini, OpenCode, and custom CLIs retain their local executable-readiness
+flow. Only an exact fingerprinted project
 check can optionally be remembered for 30 days; saved check approvals can be revoked immediately
 under **Settings → Permissions** and do not authorize agent launches or other actions.
 Data & Privacy also provides UI-configured scheduled and quit-time SQLite backups with a per-folder
@@ -42,6 +44,10 @@ checkout or configuration-file editing.
 - Forgeboard uses its bundled Git runtime and launches the user's installed Codex, Claude Code,
   Gemini CLI, OpenCode, or custom CLI. Those tools may send selected context to their providers
   under their own terms.
+- Codex and Claude Code connections start their official CLI-owned browser OAuth flows from first-run
+  setup or **Settings → Agents & runtime**. Forgeboard does not receive or store OAuth tokens, read
+  provider credential stores, or proxy model traffic. This OAuth connection UI does not apply to
+  Gemini, OpenCode, or custom CLIs.
 - There is no telemetry, analytics, crash upload, model proxy, or automatic log collection.
 - The optional collaboration protocol/server accepts approved canvas metadata only, never
   repository files or raw transcripts. Joining and leaving an authenticated room is configured in
@@ -89,8 +95,9 @@ tree still needs fresh Windows, Linux, and macOS Intel hosted proof, signing/not
 Release publication. The latest hosted rerun was prevented from starting by the repository account's
 GitHub Actions billing state.
 
-For implemented solo workflows, the first-run wizard and Settings provide UI controls for agent
-detection and executable selection, custom CLI setup, permission profile selection, Docker,
+For implemented solo workflows, the first-run wizard and Settings provide UI controls for Codex and
+Claude Code browser connection, agent detection and optional advanced executable/model selection,
+custom CLI setup, permission profile selection, Docker,
 project/worktree locations, Git remotes and the optional GitHub CLI, preview commands, extensions,
 and local storage, backup, and retention behavior. Source and config-file edits are optional for
 these flows.
@@ -292,6 +299,16 @@ The equivalent explicit commands are `corepack pnpm install --frozen-lockfile` f
 
 No external credentials are required for the deterministic demo flow. Real agent CLIs and `gh`
 are detected locally and remain optional.
+
+For Codex or Claude Code, choose **Connect with OpenAI** or **Connect with Anthropic** in first-run
+setup or **Settings → Agents & runtime**. Forgeboard prepares the exact CLI action, shows a native
+confirmation, then lets that provider's CLI open its official browser sign-in. The card changes to
+**Connected** only after normalized CLI status evidence. **Refresh**, **Cancel sign-in**,
+**Disconnect**, and **Reconnect** remain explicit UI actions. An unsaved executable override in the
+expanded **Advanced** section is validated and bound to the reviewed action without being persisted;
+saving Settings remains the only way to store that path. The optional model field affects later
+agent launches, not OAuth. Provider account and submitted model data remain governed by the
+provider's terms.
 
 Developers may build from source with the commands below. The download-first release goal is that end
 users will not need to clone the repository or install Node.js; publication of those installers is

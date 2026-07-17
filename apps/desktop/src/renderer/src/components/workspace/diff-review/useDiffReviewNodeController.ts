@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AgentDetection, Project } from '../../../../../shared/application/contracts.js';
 import { GitTargetInputSchema, type GitTargetInput } from '../../../../../shared/git/contracts.js';
-import type { RunHistorySummary } from '../../../../../shared/runs/contracts.js';
+import {
+  TerminalRunHistoryStatusSchema,
+  type RunHistorySummary,
+} from '../../../../../shared/runs/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import {
@@ -247,6 +250,8 @@ function runOptions(
   const nodeLabels = new Map(nodes.map((node) => [node.id, node.data.title] as const));
   const agentLabels = new Map(agents.map((agent) => [agent.id, agent.label] as const));
   return records.flatMap((record) => {
+    const terminalStatus = TerminalRunHistoryStatusSchema.safeParse(record.status);
+    if (!terminalStatus.success || record.endedAt === null) return [];
     if (!record.worktreeAvailable && record.worktreeState !== 'cleanup-pending') return [];
     const worktreeState = record.worktreeState === 'cleanup-pending' ? 'cleanup-pending' : 'active';
     return [
@@ -254,7 +259,7 @@ function runOptions(
         runId: record.id,
         nodeLabel: nodeLabels.get(record.nodeId) ?? `Run from ${record.nodeId}`,
         agentLabel: agentLabels.get(record.adapterId) ?? record.adapterId,
-        status: record.status,
+        status: terminalStatus.data,
         branch: record.branch,
         worktreeState,
         endedAt: record.endedAt,

@@ -523,6 +523,7 @@ describe('SettingsPanel draft transactions', () => {
     render(<SettingsPanel {...props({ agents: [...agents, codex] })} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
+    fireEvent.click(screen.getAllByText('Advanced')[0]!);
     fireEvent.change(screen.getByLabelText('Executable override'), {
       target: { value: '/chosen/bin/codex' },
     });

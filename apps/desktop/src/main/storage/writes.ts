@@ -173,6 +173,10 @@ function writeRunWithLifecyclePolicy(
       existing.projectId !== record.projectId ||
       existing.nodeId !== record.nodeId ||
       existing.adapterId !== record.adapterId ||
+      (existing.model ?? null) !== (record.model ?? null) ||
+      (existing.permissionProfile ?? null) !== (record.permissionProfile ?? null) ||
+      (existing.action ?? 'launch') !== (record.action ?? 'launch') ||
+      (existing.parentRunId ?? null) !== (record.parentRunId ?? null) ||
       existing.createdAt !== record.createdAt ||
       existing.cwd !== record.cwd ||
       existing.branch !== record.branch ||

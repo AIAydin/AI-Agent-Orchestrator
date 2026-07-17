@@ -51,7 +51,7 @@ export function createDefaultAgentAdapterPlanner({
   getTrustedAdapter,
   resolveTestAgentCliPath,
 }: DefaultAgentAdapterPlannerOptions): AgentAdapterPlanner {
-  return async (input, cwd, settings, runId, processAuthorization) =>
+  return async (input, cwd, settings, runId, processAuthorization, resumeSessionId) =>
     await prepareAdapter(
       input,
       cwd,
@@ -62,6 +62,7 @@ export function createDefaultAgentAdapterPlanner({
         resolveTestAgentCliPath,
       },
       processAuthorization,
+      resumeSessionId,
     );
 }
 
@@ -72,9 +73,11 @@ async function prepareAdapter(
   runId: string,
   dependencies: DefaultAgentAdapterPlannerOptions,
   processAuthorization?: AgentPreparationProcessAuthorization,
+  resumeSessionId?: string,
 ): Promise<AgentRuntimeAdapterPlan> {
   const environment = allowedEnvironment(settings.envAllowlist);
   if (input.adapterId === 'test-agent') {
+    assertModelSelectionSupported(input, TEST_AGENT_MANIFEST);
     if (
       input.permissionProfile === 'docker-isolated' ||
       (input.permissionProfile === 'custom' &&
@@ -100,7 +103,7 @@ async function prepareAdapter(
       assertCustomAttachmentsWithinReadRoots(custom, input.context.attachments);
     }
     const actions = testAgentActions(input, runId, cwd, custom);
-    const plan = adapter.prepareLaunch({
+    const request: Parameters<CliAgentAdapter['prepareLaunch']>[0] = {
       prompt: createTestAgentRunCommand(actions),
       cwd,
       permissionProfile: profile,
@@ -112,7 +115,11 @@ async function prepareAdapter(
         variables: { ...environment, ELECTRON_RUN_AS_NODE: '1' },
         unset: [],
       },
-    });
+    };
+    const plan =
+      resumeSessionId === undefined
+        ? adapter.prepareLaunch(request)
+        : adapter.prepareResume({ ...request, sessionId: resumeSessionId });
     const [executableIdentity, cliIdentity] = await Promise.all([
       captureLaunchExecutableIdentity(process.execPath),
       captureLaunchFileIdentity(cliPath),
@@ -140,6 +147,7 @@ async function prepareAdapter(
       : undefined;
   const manifest = builtInManifest ?? trustedManifest;
   if (manifest === undefined) throw new Error(`No adapter is registered for ${input.adapterId}.`);
+  assertModelSelectionSupported(input, manifest);
   const adapter = new CliAgentAdapter(manifest);
 
   if (
@@ -154,6 +162,7 @@ async function prepareAdapter(
       environment,
       trustedManifest !== undefined,
       processAuthorization,
+      resumeSessionId,
     );
   }
 
@@ -185,9 +194,9 @@ async function prepareAdapter(
     assertCustomAttachmentsWithinReadRoots(custom, input.context.attachments);
   }
   const configuredModel = manifest.capabilities.modelSelection
-    ? settings.agentDefaultModels[input.adapterId]?.trim()
+    ? (input.model ?? settings.agentDefaultModels[input.adapterId]?.trim())
     : undefined;
-  const plan = adapter.prepareLaunch({
+  const request: Parameters<CliAgentAdapter['prepareLaunch']>[0] = {
     prompt: custom?.prompt ?? input.prompt,
     cwd,
     permissionProfile:
@@ -199,7 +208,11 @@ async function prepareAdapter(
     executable: location.executable,
     extraArguments: [],
     environment: { inherit: 'none', variables: environment, unset: [] },
-  });
+  };
+  const plan =
+    resumeSessionId === undefined
+      ? adapter.prepareLaunch(request)
+      : adapter.prepareResume({ ...request, sessionId: resumeSessionId });
   const executableIdentity = await captureLaunchExecutableIdentity(location.executable);
   return {
     adapter,
@@ -212,6 +225,15 @@ async function prepareAdapter(
   };
 }
 
+function assertModelSelectionSupported(
+  input: AgentExecutionRequest,
+  manifest: { readonly name: string; readonly capabilities: { readonly modelSelection: boolean } },
+): void {
+  if (input.model !== undefined && !manifest.capabilities.modelSelection) {
+    throw new Error(`${manifest.name} does not support selecting a model.`);
+  }
+}
+
 async function prepareDockerAdapter(
   adapter: CliAgentAdapter,
   input: AgentExecutionRequest,
@@ -220,6 +242,7 @@ async function prepareDockerAdapter(
   environment: Record<string, string>,
   trustedExtensionAdapter: boolean,
   processAuthorization?: AgentPreparationProcessAuthorization,
+  resumeSessionId?: string,
 ): Promise<AgentRuntimeAdapterPlan> {
   if (processAuthorization === undefined) {
     throw new Error(
@@ -265,9 +288,9 @@ async function prepareDockerAdapter(
   }
   const approvedImageId = runtime.imageId;
   const configuredModel = adapter.manifest.capabilities.modelSelection
-    ? settings.agentDefaultModels[input.adapterId]?.trim()
+    ? (input.model ?? settings.agentDefaultModels[input.adapterId]?.trim())
     : undefined;
-  const providerPlan = adapter.prepareLaunch({
+  const providerRequest: Parameters<CliAgentAdapter['prepareLaunch']>[0] = {
     prompt: custom?.prompt ?? input.prompt,
     cwd,
     permissionProfile:
@@ -279,7 +302,11 @@ async function prepareDockerAdapter(
     executable: adapter.manifest.executable.command,
     extraArguments: [],
     environment: { inherit: 'none', variables: environment, unset: [] },
-  });
+  };
+  const providerPlan =
+    resumeSessionId === undefined
+      ? adapter.prepareLaunch(providerRequest)
+      : adapter.prepareResume({ ...providerRequest, sessionId: resumeSessionId });
   const dockerPolicy = custom?.profile.custom;
   const plan = await planDockerAgentLaunch(providerPlan, {
     assignedWorktreePath: cwd,

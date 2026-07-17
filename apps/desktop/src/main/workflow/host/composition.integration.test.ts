@@ -30,6 +30,7 @@ const GATE_NODE_ID = 'review-gate';
 const TASK_NODE_ID = 'task-node';
 const TASK_AGENT_NODE_ID = 'task-agent';
 const TASK_RUN_ID = '75000000-0000-4000-8000-000000000003';
+const TASK_WORKTREE_ID = '75000000-0000-4000-8000-000000000004';
 const T0 = '2026-07-15T20:00:00.000Z';
 const cleanup: Array<() => Promise<void>> = [];
 
@@ -717,6 +718,8 @@ function unusedAgentOperations(): AgentExecutionOperations {
     new Error('Agent operations are outside this exact-check composition test.');
   return {
     prepare: () => Promise.reject(unavailable()),
+    prepareResume: () => Promise.reject(unavailable()),
+    prepareRetry: () => Promise.reject(unavailable()),
     launch: () => Promise.reject(unavailable()),
     sendInput: () => {
       throw unavailable();
@@ -776,11 +779,21 @@ function assignedTaskAgentOperations(): {
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
       });
     },
+    prepareResume: () => Promise.reject(new Error('Resume is outside this composition test.')),
+    prepareRetry: () => Promise.reject(new Error('Retry is outside this composition test.')),
     launch: () => {
       const completedAt = new Date().toISOString();
       return Promise.resolve({
         runId: TASK_RUN_ID,
         process: null,
+        capabilities: {
+          interactiveInput: true,
+          interrupt: true,
+          terminate: true,
+          pause: false,
+          resume: false,
+          source: 'manifest',
+        },
         completion: Promise.resolve({
           runId: TASK_RUN_ID,
           nodeId: TASK_NODE_ID,
@@ -791,7 +804,16 @@ function assignedTaskAgentOperations(): {
           changedFiles: ['src/task.ts'],
           outputDigest: 'b'.repeat(64),
           branch: 'forgeboard/task-node',
+          worktreeId: TASK_WORKTREE_ID,
           worktreePath: '/managed/task-node',
+          capabilities: {
+            interactiveInput: true,
+            interrupt: true,
+            terminate: true,
+            pause: false,
+            resume: false,
+            source: 'manifest',
+          },
         }),
         writeInput: () => undefined,
         interrupt: () => undefined,

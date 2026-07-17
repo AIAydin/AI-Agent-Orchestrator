@@ -17,12 +17,14 @@ import { z } from 'zod';
 
 import {
   IPC_CHANNELS,
+  PrepareRunContinuationInputSchema,
   PrepareRunInputSchema,
   RunApprovalViewSchema,
   RunEventEnvelopeSchema,
   type AppSettings,
   type IpcResult,
   type PrepareRunInput,
+  type PrepareRunContinuationInput,
   type RunApprovalView,
   type RunDisclosure,
   type RunEventEnvelope,
@@ -149,6 +151,17 @@ export class RunService {
         return await this.#trackOperation(this.#prepareFromRenderer(event, input));
       },
     );
+    for (const [channel, action] of [
+      [IPC_CHANNELS.runsResume, 'resume'],
+      [IPC_CHANNELS.runsRetry, 'retry'],
+    ] as const) {
+      this.#handle(channel, z.tuple([PrepareRunContinuationInputSchema]), async (event, input) => {
+        this.#assertLiveMainFrame(event);
+        return await this.#trackOperation(
+          this.#prepareContinuationFromRenderer(event, input, action),
+        );
+      });
+    }
     this.#handle(IPC_CHANNELS.runsApprove, z.tuple([RunIdSchema]), async (event, runId) => {
       this.#assertLiveMainFrame(event);
       return await this.#trackOperation(this.#confirmAndApprove(event, runId));
@@ -174,7 +187,7 @@ export class RunService {
   #listPersistedRuns(event: IpcMainInvokeEvent, input: RunHistoryListInput): RunHistorySummary[] {
     this.#assertAvailable();
     const parent = this.#requireLiveParent(event, 'Agent run history');
-    const records = this.#store.listProjectRuns(input.projectId, input.limit);
+    const records = this.#store.listProjectRuns(input.projectId, input.limit, input.nodeId);
     this.#assertCurrentWindow(event, parent);
     return summarizePersistedRunHistory(records).slice(0, input.limit);
   }
@@ -213,17 +226,36 @@ export class RunService {
     processAuthorization?: AgentPreparationProcessAuthorization,
     assertCurrent?: () => void,
   ): Promise<RunApprovalView> {
+    return await this.#prepareAttempt(owner, input, processAuthorization, assertCurrent, null);
+  }
+
+  async #prepareAttempt(
+    owner: WebContents,
+    input: PrepareRunInput,
+    processAuthorization: AgentPreparationProcessAuthorization | undefined,
+    assertCurrent: (() => void) | undefined,
+    continuation: { readonly action: 'resume' | 'retry'; readonly parentRunId: string } | null,
+  ): Promise<RunApprovalView> {
     this.#assertAvailable();
     const ownerId = this.#ownerId(owner);
     const contextResolution = await this.#contextResolver.resolve(input, this.getSettings());
-    const prepared = await this.#runtime.prepare(
-      ownerId,
-      {
-        ...input,
-        context: contextResolution.context,
-      },
-      processAuthorization,
-    );
+    const executionInput = { ...input, context: contextResolution.context };
+    const prepared =
+      continuation === null
+        ? await this.#runtime.prepare(ownerId, executionInput, processAuthorization)
+        : continuation.action === 'resume'
+          ? await this.#runtime.prepareResume(
+              ownerId,
+              continuation.parentRunId,
+              executionInput,
+              processAuthorization,
+            )
+          : await this.#runtime.prepareRetry(
+              ownerId,
+              continuation.parentRunId,
+              executionInput,
+              processAuthorization,
+            );
     try {
       if (owner.isDestroyed() || this.#owners.get(ownerId) !== owner) {
         throw new Error('The originating Forgeboard window closed while preparing the agent run.');
@@ -282,6 +314,37 @@ export class RunService {
     return await this.#repositories.git.withDelegateAuthorization(
       authorizeGitDelegates,
       async () => await this.prepare(event.sender, input, authorization, assertCurrent),
+    );
+  }
+
+  async #prepareContinuationFromRenderer(
+    event: IpcMainInvokeEvent,
+    continuationInput: PrepareRunContinuationInput,
+    action: 'resume' | 'retry',
+  ): Promise<RunApprovalView | null> {
+    const { parentRunId, ...input } = continuationInput;
+    const settings = this.getSettings();
+    const authorization = await this.#dockerPreparationAuthorization(event, input, settings);
+    if (authorization === null) return null;
+    const parent = this.#requireLiveParent(event);
+    const ownerId = this.#ownerId(event.sender);
+    const assertCurrent = (): void => this.#assertCurrent(event, parent, ownerId);
+    const authorizeGitDelegates = createNativeGitDelegateAuthorizer({
+      assertCurrent,
+      show: async (options) => {
+        if (this.dialog === undefined) {
+          throw new Error('Native Git filter confirmation is unavailable in this build.');
+        }
+        return (await this.dialog.showMessageBox(parent, options)).response;
+      },
+    });
+    return await this.#repositories.git.withDelegateAuthorization(
+      authorizeGitDelegates,
+      async () =>
+        await this.#prepareAttempt(event.sender, input, authorization, assertCurrent, {
+          action,
+          parentRunId,
+        }),
     );
   }
 

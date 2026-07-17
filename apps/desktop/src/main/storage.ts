@@ -108,7 +108,9 @@ import {
   listProjectRuns as listDatabaseProjectRuns,
   recoverInterruptedRuns as recoverDatabaseInterruptedRuns,
   saveRun as saveDatabaseRun,
+  transferRunWorktreeAuthority as transferDatabaseRunWorktreeAuthority,
   transitionRunWorktreeState as transitionDatabaseRunWorktreeState,
+  type RunWorktreeAuthorityTransfer,
   type RunWorktreeStateTransition,
 } from './storage/runs-audit.js';
 import {
@@ -705,6 +707,18 @@ export class LocalStore implements DeliveryReadinessStore {
     return saved;
   }
 
+  transferRunWorktreeAuthority(
+    input: Omit<RunWorktreeAuthorityTransfer, 'transferredAt'>,
+    now = new Date(),
+  ): StoredRunRecord {
+    const transferred = transferDatabaseRunWorktreeAuthority(this.database, {
+      ...input,
+      transferredAt: now.toISOString(),
+    });
+    this.notifyDurableChange();
+    return transferred;
+  }
+
   transitionRunWorktreeState(
     input: Omit<RunWorktreeStateTransition, 'transitionedAt'>,
     now = new Date(),
@@ -721,8 +735,8 @@ export class LocalStore implements DeliveryReadinessStore {
     return getDatabaseRun(this.database, runId);
   }
 
-  listProjectRuns(projectId: string, limit = 200): StoredRunRecord[] {
-    return listDatabaseProjectRuns(this.database, projectId, limit);
+  listProjectRuns(projectId: string, limit = 200, nodeId?: string): StoredRunRecord[] {
+    return listDatabaseProjectRuns(this.database, projectId, limit, nodeId);
   }
 
   createReviewNote(note: StoredGitReviewNote): StoredGitReviewNote {

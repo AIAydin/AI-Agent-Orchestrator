@@ -4,6 +4,7 @@ const commonCapabilities = {
   interactiveInput: true,
   interrupt: true,
   terminate: true,
+  pause: false,
   resume: true,
   ansiStreaming: true,
   structuredOutput: false,

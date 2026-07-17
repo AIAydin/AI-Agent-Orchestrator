@@ -2,6 +2,8 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import { AuditEventSchema, type AuditEvent } from '../../shared/application/contracts.js';
 import {
+  effectiveRunWorktreeState,
+  effectiveRunWorktreeAuthority,
   StoredRunRecordSchema,
   StoredRunWorktreeStateSchema,
   type InterruptedRunRecoveryReport,
@@ -47,6 +49,78 @@ export function saveRun(database: DatabaseSync, record: StoredRunRecord): Stored
   return parsed;
 }
 
+export interface RunWorktreeAuthorityTransfer {
+  readonly parentRunId: string;
+  readonly childRunId: string;
+  readonly transferredAt: string;
+}
+
+/** Atomically makes a prepared resume attempt the only continuation authority for its target. */
+export function transferRunWorktreeAuthority(
+  database: DatabaseSync,
+  input: RunWorktreeAuthorityTransfer,
+): StoredRunRecord {
+  const parentRunId = parseUuid(input.parentRunId);
+  const childRunId = parseUuid(input.childRunId);
+  const transferredAt = StoredRunRecordSchema.shape.updatedAt.parse(input.transferredAt);
+  if (parentRunId === childRunId) throw new Error('A run cannot transfer authority to itself.');
+  return transaction(database, () => {
+    const parent = getRun(database, parentRunId);
+    const child = getRun(database, childRunId);
+    if (parent === undefined || child === undefined) {
+      throw new Error('Both persisted attempts are required for a worktree authority transfer.');
+    }
+    if (
+      child.action !== 'resume' ||
+      child.parentRunId !== parent.id ||
+      parent.supersededByRunId != null ||
+      parent.status !== 'interrupted' ||
+      parent.providerSessionId == null ||
+      parent.resumeSupported !== true ||
+      effectiveRunWorktreeAuthority(parent) !== 'owned' ||
+      child.projectId !== parent.projectId ||
+      child.nodeId !== parent.nodeId ||
+      child.adapterId !== parent.adapterId ||
+      (child.model ?? null) !== (parent.model ?? null) ||
+      child.permissionProfile !== parent.permissionProfile ||
+      child.worktreeId !== parent.worktreeId ||
+      child.cwd !== parent.cwd ||
+      child.branch !== parent.branch ||
+      child.repositoryRoot !== parent.repositoryRoot ||
+      child.managedRoot !== parent.managedRoot ||
+      child.baseRef !== parent.baseRef ||
+      child.baseCommit !== parent.baseCommit ||
+      child.status !== 'prepared' ||
+      effectiveRunWorktreeAuthority(child) !== 'pending-transfer' ||
+      (parent.worktreeId === null &&
+        (parent.permissionProfile !== 'plan-read-only' ||
+          parent.managedRoot !== null ||
+          parent.repositoryRoot !== parent.cwd ||
+          parent.branch === null ||
+          parent.baseCommit === null)) ||
+      (parent.worktreeId !== null && effectiveRunWorktreeState(parent) !== 'active') ||
+      effectiveRunWorktreeState(child) !== 'active'
+    ) {
+      throw new Error('The persisted resume lineage or exact worktree authority changed.');
+    }
+    const next = StoredRunRecordSchema.parse({
+      ...parent,
+      supersededByRunId: child.id,
+      updatedAt:
+        Date.parse(transferredAt) > Date.parse(parent.updatedAt) ? transferredAt : parent.updatedAt,
+    });
+    const authoritativeChild = StoredRunRecordSchema.parse({
+      ...child,
+      worktreeAuthority: 'owned',
+      updatedAt:
+        Date.parse(transferredAt) > Date.parse(child.updatedAt) ? transferredAt : child.updatedAt,
+    });
+    writeRun(database, next);
+    writeRun(database, authoritativeChild);
+    return authoritativeChild;
+  });
+}
+
 export interface RunWorktreeStateTransition {
   readonly runId: string;
   readonly expectedWorktreeId: string;
@@ -85,6 +159,25 @@ export function transitionRunWorktreeState(
           : current.updatedAt,
     });
     writeRunForWorktreeTransition(database, next);
+    if (nextState === 'cleaned') {
+      const related = database
+        .prepare(
+          `SELECT value_json FROM agent_runs
+           WHERE id <> ? AND json_extract(value_json, '$.worktreeId') = ?`,
+        )
+        .all(runId, expectedWorktreeId) as unknown as JsonRow[];
+      for (const siblingRow of related) {
+        const sibling = StoredRunRecordSchema.parse(JSON.parse(siblingRow.value_json));
+        writeRunForWorktreeTransition(database, {
+          ...sibling,
+          worktreeState: 'cleaned',
+          updatedAt:
+            Date.parse(transitionedAt) > Date.parse(sibling.updatedAt)
+              ? transitionedAt
+              : sibling.updatedAt,
+        });
+      }
+    }
     return next;
   });
 }
@@ -100,14 +193,23 @@ export function listProjectRuns(
   database: DatabaseSync,
   projectId: string,
   limit = 200,
+  nodeId?: string,
 ): StoredRunRecord[] {
   const boundedLimit = Math.max(1, Math.min(1_000, Math.trunc(limit)));
-  const rows = database
-    .prepare(
-      `SELECT value_json FROM agent_runs
-       WHERE project_id = ? ORDER BY updated_at DESC, id DESC LIMIT ?`,
-    )
-    .all(projectId, boundedLimit) as unknown as JsonRow[];
+  const rows = (nodeId === undefined
+    ? database
+        .prepare(
+          `SELECT value_json FROM agent_runs
+             WHERE project_id = ? ORDER BY updated_at DESC, id DESC LIMIT ?`,
+        )
+        .all(projectId, boundedLimit)
+    : database
+        .prepare(
+          `SELECT value_json FROM agent_runs
+             WHERE project_id = ? AND node_id = ?
+             ORDER BY updated_at DESC, id DESC LIMIT ?`,
+        )
+        .all(projectId, nodeId, boundedLimit)) as unknown as JsonRow[];
   return rows.map((row) => StoredRunRecordSchema.parse(JSON.parse(row.value_json)));
 }
 

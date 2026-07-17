@@ -48,6 +48,14 @@ const NOW = '2026-07-15T18:00:00.000Z';
 const LATER = '2026-07-15T18:01:00.000Z';
 const OUTPUT_DIGEST = 'b'.repeat(64);
 const APPROVAL_FINGERPRINT = 'a'.repeat(64);
+const SESSION_CAPABILITIES = {
+  interactiveInput: true,
+  interrupt: true,
+  terminate: true,
+  pause: false,
+  resume: false,
+  source: 'manifest',
+} as const;
 const HOST_VERIFIER: WorkflowEvidenceVerifier = {
   verifyContextResolution: () => true,
   verifyOutputPublication: () => true,
@@ -641,6 +649,7 @@ describe('WorkflowAgentExecutor launch and completion', () => {
     backend.handle = {
       runId: RUN_ID,
       process: null,
+      capabilities: SESSION_CAPABILITIES,
       completion: completion.promise,
       writeInput,
       interrupt,
@@ -992,6 +1001,7 @@ function agentHandle(input: {
   return {
     runId: input.runId ?? RUN_ID,
     process: input.process,
+    capabilities: SESSION_CAPABILITIES,
     completion: Promise.resolve(input.completion),
     writeInput: vi.fn(),
     interrupt: vi.fn(),
@@ -1026,8 +1036,10 @@ function agentCompletion(
     changedFiles: [...(override.changedFiles ?? ['src/agent.ts'])],
     outputDigest: OUTPUT_DIGEST,
     branch: override.branch === undefined ? 'forgeboard/agent-node-1' : override.branch,
+    worktreeId: null,
     worktreePath:
       override.worktreePath === undefined ? '/managed/agent-node-1' : override.worktreePath,
+    capabilities: SESSION_CAPABILITIES,
     ...(override.providerSessionId === undefined
       ? {}
       : { providerSessionId: override.providerSessionId }),

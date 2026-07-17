@@ -110,7 +110,9 @@ export class AgentReadinessService {
     const requestedExecutable = executableForRequest(request, this.testAgentPath, manifest);
     let located: AgentDetectionResult;
     try {
-      located = await this.#locateExecutable(manifest, { executable: requestedExecutable });
+      located = await this.#locateExecutable(manifest, {
+        executable: requestedExecutable,
+      });
     } catch (error) {
       return {
         outcome: 'result',
@@ -182,7 +184,9 @@ export class AgentReadinessService {
     this.#verifiedSettingsReadiness.delete(readinessRequestFingerprint(request));
     let located: AgentDetectionResult;
     try {
-      located = await this.#locateExecutable(manifest, { executable: plan.executable });
+      located = await this.#locateExecutable(manifest, {
+        executable: plan.executable,
+      });
       if (
         !located.available ||
         located.adapterId !== manifest.id ||
@@ -254,6 +258,9 @@ export class AgentReadinessService {
       version,
       warnings: detection.capabilityWarnings,
       checkedAt: detection.checkedAt,
+      effectiveCapabilities: capabilitySummary(
+        detection.effectiveCapabilities ?? manifest.capabilities,
+      ),
     });
     return result;
   }
@@ -290,6 +297,7 @@ export class AgentReadinessService {
       const bundled = this.#result(request, 'bundled', 'ready', {
         executable: prepared.plan.executable,
         version: TEST_AGENT_PACKAGE_VERSION,
+        effectiveCapabilities: capabilitySummary(prepared.plan.manifest.capabilities),
       });
       this.#rememberSettingsReadiness(prepared.plan, bundled);
       verified = this.#verifiedSettingsReadiness.get(fingerprint);
@@ -340,6 +348,7 @@ export class AgentReadinessService {
       readonly reason?: string;
       readonly warnings?: readonly string[];
       readonly checkedAt?: string;
+      readonly effectiveCapabilities?: AgentReadinessResult['effectiveCapabilities'];
     },
   ): AgentReadinessResult {
     const ready = state === 'ready';
@@ -354,6 +363,9 @@ export class AgentReadinessService {
       checkedAt: details.checkedAt ?? this.#now().toISOString(),
       reason: ready ? null : (details.reason ?? 'The selected agent is not ready.'),
       warnings: [...(details.warnings ?? [])],
+      ...(details.effectiveCapabilities === undefined
+        ? {}
+        : { effectiveCapabilities: details.effectiveCapabilities }),
     });
   }
 
@@ -378,10 +390,18 @@ export class AgentReadinessService {
   }
 }
 
+function capabilitySummary(capabilities: AgentAdapterManifest['capabilities']) {
+  const { interactiveInput, interrupt, pause, resume, modelSelection } = capabilities;
+  return { interactiveInput, interrupt, pause, resume, modelSelection };
+}
+
 function manifestForRequest(request: AgentReadinessRequest): AgentAdapterManifest {
   if (request.agentId === 'custom') return customAgentManifest(request.configuration);
   if (request.agentId === 'test-agent') {
-    return AgentAdapterManifestSchema.parse({ ...TEST_AGENT_MANIFEST, id: 'test-agent' });
+    return AgentAdapterManifestSchema.parse({
+      ...TEST_AGENT_MANIFEST,
+      id: 'test-agent',
+    });
   }
   const manifest = getBuiltInAgentManifest(request.agentId);
   if (manifest === undefined) throw new Error(`Unsupported readiness agent: ${request.agentId}`);

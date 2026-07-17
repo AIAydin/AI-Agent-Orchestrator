@@ -3,11 +3,12 @@
 import process from 'node:process';
 
 import { TEST_AGENT_PACKAGE_VERSION, createTestAgentStop, runTestAgentProtocol } from './index.js';
+import { parseTestAgentCliArguments } from './cli-arguments.js';
 
-const argument = process.argv[2];
-if (argument === '--version' || argument === '-v') {
+const command = parseTestAgentCliArguments(process.argv.slice(2));
+if (command.kind === 'version') {
   process.stdout.write(`forgeboard-test-agent ${TEST_AGENT_PACKAGE_VERSION}\n`);
-} else if (argument === '--help' || argument === '-h') {
+} else if (command.kind === 'help') {
   process.stdout.write(
     [
       'forgeboard-test-agent - deterministic JSON-lines coding-agent fixture',
@@ -21,8 +22,8 @@ if (argument === '--version' || argument === '-v') {
       '',
     ].join('\n'),
   );
-} else if (argument !== undefined) {
-  process.stderr.write(`Unknown argument: ${argument}\n`);
+} else if (command.kind === 'error') {
+  process.stderr.write(`${command.message}\n`);
   process.exitCode = 2;
 } else {
   const controller = new AbortController();
@@ -32,6 +33,7 @@ if (argument === '--version' || argument === '-v') {
     stdin: process.stdin,
     writeLine: (line) => process.stdout.write(line),
     cwd: process.cwd(),
+    providerSessionId: command.providerSessionId ?? `test-session-${String(process.pid)}`,
     signal: controller.signal,
   });
 }

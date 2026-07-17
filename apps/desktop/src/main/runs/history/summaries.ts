@@ -1,7 +1,12 @@
-import { effectiveRunWorktreeState, type StoredRunRecord } from '../../storage-schemas.js';
 import {
+  effectiveRunWorktreeAuthority,
+  effectiveRunWorktreeState,
+  type StoredRunRecord,
+} from '../../storage-schemas.js';
+import {
+  RUN_HISTORY_OUTPUT_PREVIEW_MAX_LENGTH,
   RunHistorySummarySchema,
-  TerminalRunHistoryStatusSchema,
+  RunHistoryStatusSchema,
   type RunHistorySummary,
 } from '../../../shared/runs/contracts.js';
 
@@ -16,26 +21,66 @@ export function summarizePersistedRunHistory(
 ): RunHistorySummary[] {
   const summaries: RunHistorySummary[] = [];
   for (const record of records) {
-    const status = TerminalRunHistoryStatusSchema.safeParse(record.status);
-    if (!status.success || record.endedAt === null || record.worktreeId === null) continue;
-    const worktreeState = effectiveRunWorktreeState(record);
+    const status = RunHistoryStatusSchema.safeParse(record.status);
+    if (!status.success) continue;
+    const worktreeState =
+      record.worktreeId === null ? ('none' as const) : effectiveRunWorktreeState(record);
     const summary = RunHistorySummarySchema.safeParse({
       id: record.id,
       projectId: record.projectId,
       nodeId: record.nodeId,
       adapterId: record.adapterId,
+      model: record.model ?? null,
+      permissionProfile: record.permissionProfile ?? null,
+      providerSessionAvailable: record.providerSessionId != null,
+      resumeSupported: record.resumeSupported === true,
+      resumeCapabilitySource: record.resumeCapabilitySource ?? null,
+      action: record.action ?? 'launch',
+      parentRunId: record.parentRunId ?? null,
       status: status.data,
       branch: record.branch,
       worktreeState,
-      worktreeAvailable: worktreeState === 'active' && hasCompleteWorktreeBinding(record),
+      worktreeAvailable:
+        worktreeState === 'active' &&
+        effectiveRunWorktreeAuthority(record) === 'owned' &&
+        record.supersededByRunId == null &&
+        record.worktreeId !== null &&
+        hasCompleteWorktreeBinding(record),
+      supersededByNewerAttempt: record.supersededByRunId != null,
       startedAt: record.startedAt,
       endedAt: record.endedAt,
+      exitCode: record.exitCode,
+      outputDigest: record.outputDigest ?? null,
+      changedFileCount: record.changedFileCount ?? null,
+      tokenUsage: record.tokenUsage ?? null,
+      costUsd: record.costUsd ?? null,
+      outputPreview: redactAuthorityPaths(record.outputPreview ?? '', record),
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     });
     if (summary.success) summaries.push(summary.data);
   }
   return summaries;
+}
+
+function redactAuthorityPaths(
+  preview: string,
+  record: Pick<StoredRunRecord, 'cwd' | 'repositoryRoot' | 'managedRoot'>,
+): string {
+  const authorities = [
+    [record.cwd, '<run-worktree>'],
+    [record.managedRoot, '<managed-worktrees>'],
+    [record.repositoryRoot, '<project>'],
+  ] as const;
+  let redacted = preview;
+  for (const [authority, replacement] of [...authorities].sort(
+    ([left], [right]) => (right?.length ?? 0) - (left?.length ?? 0),
+  )) {
+    if (authority !== null && authority.length > 0) {
+      redacted = redacted.split(authority).join(replacement);
+    }
+  }
+  return redacted.slice(-RUN_HISTORY_OUTPUT_PREVIEW_MAX_LENGTH);
 }
 
 function hasCompleteWorktreeBinding(record: StoredRunRecord): boolean {

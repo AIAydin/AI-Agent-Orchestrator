@@ -1,0 +1,198 @@
+.agent-attempt-history,
+.agent-live-output {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 15px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+}
+
+.agent-live-output > header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.agent-live-output h4,
+.agent-live-output p {
+  margin: 0;
+}
+
+.agent-live-output h4 {
+  font-size: 9px;
+}
+
+.agent-live-output p,
+.agent-live-output strong {
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.agent-live-output pre {
+  overflow: auto;
+  max-height: 220px;
+  margin: 0;
+  padding: 7px;
+  border-radius: 5px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font-size: 7px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.agent-live-output dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.agent-live-output dt {
+  color: var(--text-faint);
+  font-size: 7px;
+}
+
+.agent-live-output dd {
+  margin: 2px 0 0;
+  color: var(--text-soft);
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}
+
+.agent-attempt-history > header,
+.agent-attempt-history > header > div,
+.agent-attempt-history article > header,
+.agent-attempt-history article > header > div,
+.agent-attempt-actions,
+.agent-attempt-actions button {
+  display: flex;
+  align-items: center;
+}
+
+.agent-attempt-history > header,
+.agent-attempt-history article > header {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-attempt-history > header > div,
+.agent-attempt-history article > header > div,
+.agent-attempt-actions,
+.agent-attempt-actions button {
+  gap: 5px;
+}
+
+.agent-attempt-history h4,
+.agent-attempt-history p {
+  margin: 0;
+}
+
+.agent-attempt-history h4 {
+  font-size: 9px;
+}
+
+.agent-attempt-history > p,
+.agent-history-error,
+.agent-attempt-lineage {
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.agent-attempt-history > ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-attempt-history article {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.agent-attempt-history article > header strong {
+  font-size: 8px;
+}
+
+.agent-attempt-history time,
+.agent-attempt-status {
+  color: var(--text-faint);
+  font-size: 7px;
+}
+
+.agent-attempt-status {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  text-transform: capitalize;
+}
+
+.agent-attempt-history dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.agent-attempt-history dl > div {
+  min-width: 0;
+}
+
+.agent-attempt-history dt {
+  color: var(--text-faint);
+  font-size: 7px;
+}
+
+.agent-attempt-history dd {
+  overflow-wrap: anywhere;
+  margin: 2px 0 0;
+  color: var(--text-soft);
+  font-size: 8px;
+}
+
+.agent-attempt-history details summary {
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 8px;
+}
+
+.agent-attempt-history pre {
+  overflow: auto;
+  max-height: 170px;
+  margin: 6px 0 0;
+  padding: 7px;
+  border-radius: 5px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font-size: 7px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.agent-attempt-actions {
+  flex-wrap: wrap;
+}
+
+.agent-attempt-actions button,
+.agent-history-error button {
+  min-height: 27px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font-size: 7px;
+}
+
+.agent-attempt-actions button:disabled {
+  opacity: 0.5;
+}

@@ -708,6 +708,48 @@ describe('canonical desktop canvas adapter', () => {
     });
   });
 
+  it('round-trips genuine Agent capability and usage metadata through canonical data', () => {
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('agent-1', 'agent', {
+            adapterId: 'codex',
+            permissionProfile: 'worktree-write',
+            pauseSupported: false,
+            interruptSupported: true,
+            resumeSupported: true,
+            tokenUsage: { input: 120, output: 30 },
+            cost: { amount: 0.0125, currency: 'USD' },
+          }),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    const canonicalAgent = migrated.canvas.nodes.find((candidate) => candidate.id === 'agent-1');
+    expect(canonicalAgent).toMatchObject({
+      type: 'agent',
+      data: {
+        pauseSupported: false,
+        interruptSupported: true,
+        resumeSupported: true,
+        tokenUsage: { input: 120, output: 30 },
+        cost: { amount: 0.0125, currency: 'USD' },
+      },
+    });
+
+    const surface = legacySurfaceFromCanonical(migrated.canvas);
+    expect(surface.nodes[0]?.data).toMatchObject({
+      pauseSupported: false,
+      interruptSupported: true,
+      resumeSupported: true,
+      tokenUsage: { input: 120, output: 30 },
+      cost: { amount: 0.0125, currency: 'USD' },
+    });
+  });
+
   it('preserves UI-authored Terminal configuration across canonical save and reload', () => {
     const configured = legacy({
       nodes: [

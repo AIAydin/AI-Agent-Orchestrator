@@ -13,9 +13,12 @@ import {
 } from '../shared/application/contracts.js';
 import { CheckExecutionViewSchema, type CheckExecutionView } from '../shared/checks/contracts.js';
 import {
+  RUN_HISTORY_OUTPUT_PREVIEW_MAX_LENGTH,
+  RunHistoryActionSchema,
+  RunHistoryTokenUsageSchema,
   RunHistoryWorktreeStateSchema,
-  type RunHistoryWorktreeState,
 } from '../shared/runs/contracts.js';
+import { PermissionProfileSchema } from '../shared/permissions/contracts.js';
 
 export const StoredCheckExecutionRecordSchema = CheckExecutionViewSchema;
 export type StoredCheckExecutionRecord = CheckExecutionView;
@@ -30,8 +33,8 @@ export const StoredRunStatusSchema = z.enum([
   'lost',
 ]);
 
-export const StoredRunWorktreeStateSchema = RunHistoryWorktreeStateSchema;
-export type StoredRunWorktreeState = RunHistoryWorktreeState;
+export const StoredRunWorktreeStateSchema = RunHistoryWorktreeStateSchema.exclude(['none']);
+export type StoredRunWorktreeState = z.infer<typeof StoredRunWorktreeStateSchema>;
 
 export const StoredRunRecordSchema = z
   .object({
@@ -39,11 +42,20 @@ export const StoredRunRecordSchema = z
     projectId: z.string().uuid(),
     nodeId: z.string().min(1),
     adapterId: z.string().min(1),
+    model: z.string().trim().min(1).max(200).nullable().optional(),
+    permissionProfile: PermissionProfileSchema.nullable().optional(),
+    providerSessionId: z.string().trim().min(1).max(1_024).nullable().optional(),
+    resumeSupported: z.boolean().nullable().optional(),
+    resumeCapabilitySource: z.enum(['manifest', 'probe']).nullable().optional(),
+    action: RunHistoryActionSchema.optional(),
+    parentRunId: z.string().uuid().nullable().optional(),
+    supersededByRunId: z.string().uuid().nullable().optional(),
     status: StoredRunStatusSchema,
     cwd: z.string().min(1),
     branch: z.string().nullable(),
     worktreeId: z.string().uuid().nullable(),
     worktreeState: StoredRunWorktreeStateSchema.default('active'),
+    worktreeAuthority: z.enum(['owned', 'pending-transfer']).default('owned'),
     repositoryRoot: z.string().min(1).nullable().default(null),
     managedRoot: z.string().min(1).nullable().default(null),
     baseRef: z.string().min(1).nullable().default(null),
@@ -55,19 +67,39 @@ export const StoredRunRecordSchema = z
     startedAt: z.string().datetime().nullable(),
     endedAt: z.string().datetime().nullable(),
     exitCode: z.number().int().nullable(),
+    outputDigest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .nullable()
+      .optional(),
+    changedFileCount: z.number().int().nonnegative().max(100_000).nullable().optional(),
+    tokenUsage: RunHistoryTokenUsageSchema.nullable().optional(),
+    costUsd: z.number().finite().nonnegative().max(1_000_000_000).nullable().optional(),
+    outputPreview: z
+      .string()
+      .max(RUN_HISTORY_OUTPUT_PREVIEW_MAX_LENGTH)
+      .refine((value) => !value.includes('\0'))
+      .optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })
   .strict();
 type ParsedStoredRunRecord = z.infer<typeof StoredRunRecordSchema>;
-export type StoredRunRecord = Omit<ParsedStoredRunRecord, 'worktreeState'> & {
+export type StoredRunRecord = Omit<ParsedStoredRunRecord, 'worktreeState' | 'worktreeAuthority'> & {
   readonly worktreeState?: StoredRunWorktreeState;
+  readonly worktreeAuthority?: 'owned' | 'pending-transfer';
 };
 
 export function effectiveRunWorktreeState(
   record: Pick<StoredRunRecord, 'worktreeState'>,
 ): StoredRunWorktreeState {
   return record.worktreeState ?? 'active';
+}
+
+export function effectiveRunWorktreeAuthority(
+  record: Pick<StoredRunRecord, 'worktreeAuthority'>,
+): 'owned' | 'pending-transfer' {
+  return record.worktreeAuthority ?? 'owned';
 }
 
 export const TrustedExtensionStateSchema = z.enum(['pending', 'active', 'revoked']);

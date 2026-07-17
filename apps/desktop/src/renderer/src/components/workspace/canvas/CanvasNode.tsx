@@ -47,7 +47,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   permissionProfile?: PermissionProfile;
   lastRunPermissionProfile?: PermissionProfile;
   prompt?: string;
-  model?: string;
+  model?: string | undefined;
   contextAttachmentIds?: string[];
   markdown?: string;
   checklist?: Array<{
@@ -87,8 +87,15 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   };
   reviewTarget?: { kind: 'primary' } | { kind: 'agent-run'; runId: string };
   deliveryTarget?: { kind: 'agent-run'; runId: string } | undefined;
-  worktreeId?: string;
-  branch?: string;
+  worktreeId?: string | undefined;
+  branch?: string | undefined;
+  interactiveInputSupported?: boolean | undefined;
+  pauseSupported?: boolean | undefined;
+  interruptSupported?: boolean | undefined;
+  resumeSupported?: boolean | undefined;
+  providerSessionAvailable?: boolean | undefined;
+  tokenUsage?: { input: number; output: number } | undefined;
+  cost?: { amount: number; currency: string } | undefined;
   remote?: string;
   destinationBranch?: string;
   baseBranch?: string;
@@ -140,6 +147,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   autoFit?: boolean;
   runId?: string;
   transcript?: string;
+  transcriptUpdatedAt?: string;
   lastRunSummary?: string;
   changedFiles?: string[];
   previewCwdRelative?: string;
@@ -364,7 +372,9 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           type="target"
           position={Position.Left}
           className="node-handle"
-          style={{ top: `${((index + 1) / (targetHandles.length + 1)) * 100}%` }}
+          style={{
+            top: `${((index + 1) / (targetHandles.length + 1)) * 100}%`,
+          }}
         />
       ))}
       <header>
@@ -427,7 +437,9 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           type="source"
           position={Position.Right}
           className="node-handle"
-          style={{ top: `${((index + 1) / (sourceHandles.length + 1)) * 100}%` }}
+          style={{
+            top: `${((index + 1) / (sourceHandles.length + 1)) * 100}%`,
+          }}
         />
       ))}
     </article>

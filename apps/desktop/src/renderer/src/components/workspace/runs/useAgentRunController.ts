@@ -7,12 +7,18 @@ import type {
   RunApprovalView,
 } from '../../../../../shared/application/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import type { RunHistorySummary } from '../../../../../shared/runs/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
+import {
+  continuationUnavailableReason,
+  type AgentContinuationAction,
+} from './agent-node/attempt-actions.js';
 
 interface UseAgentRunControllerInput {
   project: Project;
   selectedNode: WorkshopNode | null;
   selectedAdapter: RunAdapterId;
+  selectedModel?: string;
   selectedPermission: NonNullable<WorkshopNode['data']['permissionProfile']>;
   permissionUnavailableReason: string | null;
   flushCanvas: () => Promise<boolean>;
@@ -25,6 +31,7 @@ export function useAgentRunController({
   project,
   selectedNode,
   selectedAdapter,
+  selectedModel,
   selectedPermission,
   permissionUnavailableReason,
   flushCanvas,
@@ -90,11 +97,21 @@ export function useAgentRunController({
         transcript: '',
         transcriptUpdatedAt: new Date().toISOString(),
         lastRunSummary: '',
+        worktreeId: undefined,
+        branch: undefined,
+        tokenUsage: undefined,
+        cost: undefined,
+        interactiveInputSupported: undefined,
+        pauseSupported: undefined,
+        interruptSupported: undefined,
+        resumeSupported: undefined,
+        providerSessionAvailable: undefined,
       });
       const result = await window.forgeboard.runs.prepare({
         projectId: project.id,
         nodeId,
         adapterId: selectedAdapter,
+        ...(selectedModel === undefined ? {} : { model: selectedModel }),
         prompt,
         permissionProfile: selectedPermission,
       });
@@ -118,6 +135,112 @@ export function useAgentRunController({
     } catch (cause) {
       updateNodeData(nodeId, { status: 'failed' });
       onError(cause instanceof Error ? cause.message : 'Could not prepare the agent run.');
+    } finally {
+      setPreparingRun(false);
+    }
+  }
+
+  async function prepareSelectedContinuation(
+    action: AgentContinuationAction,
+    attempt: RunHistorySummary,
+  ) {
+    if (!selectedNode) return;
+    if (attempt.projectId !== project.id || attempt.nodeId !== selectedNode.id) {
+      onError('The selected attempt does not belong to this Agent node. Refresh attempt history.');
+      return;
+    }
+    if (permissionUnavailableReason !== null) {
+      onError(permissionUnavailableReason);
+      return;
+    }
+    const model = selectedModel ?? null;
+    const unavailable = continuationUnavailableReason(attempt, action, {
+      adapterId: selectedAdapter,
+      model,
+      permissionProfile: selectedPermission,
+    });
+    if (unavailable !== null) {
+      onError(unavailable);
+      return;
+    }
+    const prompt = (selectedNode.data.prompt ?? selectedNode.data.description).trim();
+    if (!prompt) {
+      onError('Add a prompt before reviewing this run.');
+      return;
+    }
+    const nodeId = selectedNode.id;
+    setPreparingRun(true);
+    try {
+      const staleDisclosure = disclosure;
+      setDisclosure(null);
+      setReviewedPrompt(null);
+      if (staleDisclosure !== null) {
+        unwrap(await window.forgeboard.runs.terminate(staleDisclosure.runId));
+      }
+      flushSync(() => {
+        updateNodeData(nodeId, { permissionProfile: selectedPermission });
+      });
+      if (!(await flushCanvas())) {
+        onError('Save the current canvas before reviewing this Agent continuation.');
+        return;
+      }
+      updateNodeData(nodeId, {
+        lastRunPermissionProfile: selectedPermission,
+        changedFiles: [],
+        status: 'queued',
+        transcript: '',
+        transcriptUpdatedAt: new Date().toISOString(),
+        lastRunSummary: '',
+        worktreeId: undefined,
+        branch: undefined,
+        tokenUsage: undefined,
+        cost: undefined,
+        interactiveInputSupported: undefined,
+        pauseSupported: undefined,
+        interruptSupported: undefined,
+        resumeSupported: undefined,
+        providerSessionAvailable: undefined,
+      });
+      const continuationInput = {
+        projectId: project.id,
+        nodeId,
+        adapterId: selectedAdapter,
+        ...(selectedModel === undefined ? {} : { model: selectedModel }),
+        prompt,
+        permissionProfile: selectedPermission,
+        parentRunId: attempt.id,
+      };
+      const result =
+        action === 'resume'
+          ? await window.forgeboard.runs.resume(continuationInput)
+          : await window.forgeboard.runs.retry(continuationInput);
+      const next = unwrap(result);
+      if (next === null) {
+        updateNodeData(nodeId, { status: 'cancelled' });
+        setEvents((items) =>
+          [`Cancelled ${action} preparation before any configured executable ran.`, ...items].slice(
+            0,
+            80,
+          ),
+        );
+        return;
+      }
+      updateNodeData(nodeId, { runId: next.runId, status: 'waiting' });
+      setReviewedPrompt(prompt);
+      setDisclosure(next);
+      setEvents((items) =>
+        [
+          `Prepared ${action} with ${next.provider}; waiting for explicit launch approval.`,
+          ...items,
+        ].slice(0, 80),
+      );
+    } catch (cause) {
+      updateNodeData(nodeId, { status: 'failed' });
+      setDisclosure(null);
+      setReviewedPrompt(null);
+      onError(
+        cause instanceof Error ? cause.message : `Could not prepare the Agent ${action} review.`,
+      );
     } finally {
       setPreparingRun(false);
     }
@@ -212,6 +335,7 @@ export function useAgentRunController({
     selectedRunActive,
     setRunInput,
     prepareSelectedRun,
+    prepareSelectedContinuation,
     approvePreparedRun,
     cancelPreparedRun,
     controlRun,

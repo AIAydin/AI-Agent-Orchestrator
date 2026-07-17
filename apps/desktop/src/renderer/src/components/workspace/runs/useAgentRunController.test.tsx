@@ -6,9 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Project, RunApprovalView } from '../../../../../shared/application/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import type { RunHistorySummary } from '../../../../../shared/runs/contracts.js';
 import { useAgentRunController } from './useAgentRunController.js';
 
 const prepare = vi.fn();
+const resume = vi.fn();
+const retry = vi.fn();
 const approve = vi.fn();
 const terminate = vi.fn();
 const interrupt = vi.fn();
@@ -16,10 +19,21 @@ const onError = vi.fn();
 const updateNodeData = vi.fn();
 
 beforeEach(() => {
-  for (const mock of [prepare, approve, terminate, interrupt, onError, updateNodeData]) {
+  for (const mock of [
+    prepare,
+    resume,
+    retry,
+    approve,
+    terminate,
+    interrupt,
+    onError,
+    updateNodeData,
+  ]) {
     mock.mockReset();
   }
   prepare.mockResolvedValue({ ok: true, value: disclosure() });
+  resume.mockResolvedValue({ ok: true, value: disclosure('80000000-0000-4000-8000-000000000002') });
+  retry.mockResolvedValue({ ok: true, value: disclosure('80000000-0000-4000-8000-000000000003') });
   approve.mockResolvedValue({ ok: true, value: true });
   terminate.mockResolvedValue({ ok: true, value: true });
   interrupt.mockResolvedValue({ ok: true, value: true });
@@ -28,6 +42,8 @@ beforeEach(() => {
     value: {
       runs: {
         prepare,
+        resume,
+        retry,
         approve,
         terminate,
         interrupt,
@@ -40,6 +56,31 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('useAgentRunController persisted review boundary', () => {
+  it('prepares the exact model selected on this Agent node', async () => {
+    const hook = renderHook(() => {
+      const [events, setEvents] = useState<string[]>([]);
+      const runs = useAgentRunController({
+        project: PROJECT,
+        selectedNode: agentNode(),
+        selectedAdapter: 'codex',
+        selectedModel: 'node-model',
+        selectedPermission: 'plan-read-only',
+        permissionUnavailableReason: null,
+        flushCanvas: () => Promise.resolve(true),
+        updateNodeData,
+        setEvents,
+        onError,
+      });
+      return { events, runs };
+    });
+
+    await act(async () => await hook.result.current.runs.prepareSelectedRun());
+
+    expect(prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ adapterId: 'codex', model: 'node-model' }),
+    );
+  });
+
   it('flushes before preparation and preserves the exact reviewed prompt snapshot', async () => {
     const order: string[] = [];
     const flushCanvas = vi.fn(() => {
@@ -159,6 +200,55 @@ describe('useAgentRunController persisted review boundary', () => {
     expect(approve).toHaveBeenCalledWith(disclosure().runId);
     expect(hook.result.current.runs.disclosure).toBeNull();
     expect(hook.result.current.runs.reviewedPrompt).toBeNull();
+  });
+
+  it.each(['resume', 'retry'] as const)(
+    'flushes current node authority into a fresh %s review without auto-approval',
+    async (action) => {
+      const flushCanvas = vi.fn().mockResolvedValue(true);
+      const hook = renderController(flushCanvas);
+      await act(async () => await hook.result.current.runs.prepareSelectedRun());
+      const parent = runSummary();
+
+      await act(
+        async () => await hook.result.current.runs.prepareSelectedContinuation(action, parent),
+      );
+
+      const operation = action === 'resume' ? resume : retry;
+      expect(terminate).toHaveBeenCalledWith(disclosure().runId);
+      expect(operation).toHaveBeenCalledWith({
+        projectId: PROJECT.id,
+        nodeId: 'agent-1',
+        adapterId: 'test-agent',
+        prompt: 'Review the linked files.',
+        permissionProfile: 'plan-read-only',
+        parentRunId: parent.id,
+      });
+      expect(flushCanvas).toHaveBeenCalledTimes(2);
+      expect(approve).not.toHaveBeenCalled();
+      expect(hook.result.current.runs.disclosure?.runId).toBe(
+        action === 'resume'
+          ? '80000000-0000-4000-8000-000000000002'
+          : '80000000-0000-4000-8000-000000000003',
+      );
+      expect(hook.result.current.runs.reviewedPrompt).toBe('Review the linked files.');
+    },
+  );
+
+  it('rejects an ineligible continuation before saving or calling the backend', async () => {
+    const flushCanvas = vi.fn().mockResolvedValue(true);
+    const hook = renderController(flushCanvas);
+    const succeeded = { ...runSummary(), status: 'succeeded' as const };
+
+    await act(
+      async () => await hook.result.current.runs.prepareSelectedContinuation('retry', succeeded),
+    );
+
+    expect(flushCanvas).not.toHaveBeenCalled();
+    expect(retry).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(
+      'Only a failed, interrupted, terminated, or lost attempt can be retried.',
+    );
   });
 
   it('requires a fresh Review after an approval IPC error consumes stale authority', async () => {
@@ -294,9 +384,9 @@ function agentNode(permissionProfile?: WorkshopNode['data']['permissionProfile']
   };
 }
 
-function disclosure(): RunApprovalView {
+function disclosure(runId = '80000000-0000-4000-8000-000000000001'): RunApprovalView {
   return {
-    runId: '80000000-0000-4000-8000-000000000001',
+    runId,
     nodeId: 'agent-1',
     adapterId: 'test-agent',
     provider: 'Local provider',
@@ -322,5 +412,36 @@ function disclosure(): RunApprovalView {
     primaryWasDirty: false,
     disclosureFingerprint: 'a'.repeat(64),
     expiresAt: '2026-07-15T12:05:00.000Z',
+  };
+}
+
+function runSummary(): RunHistorySummary {
+  return {
+    id: '81000000-0000-4000-8000-000000000001',
+    projectId: PROJECT.id,
+    nodeId: 'agent-1',
+    adapterId: 'test-agent',
+    model: null,
+    permissionProfile: 'plan-read-only',
+    providerSessionAvailable: true,
+    resumeSupported: true,
+    resumeCapabilitySource: 'manifest',
+    action: 'launch',
+    parentRunId: null,
+    status: 'interrupted',
+    branch: null,
+    worktreeState: 'none',
+    worktreeAvailable: false,
+    supersededByNewerAttempt: false,
+    startedAt: '2026-07-15T12:00:00.000Z',
+    endedAt: '2026-07-15T12:01:00.000Z',
+    exitCode: 130,
+    outputDigest: 'a'.repeat(64),
+    changedFileCount: 0,
+    tokenUsage: null,
+    costUsd: null,
+    outputPreview: 'Interrupted',
+    createdAt: '2026-07-15T12:00:00.000Z',
+    updatedAt: '2026-07-15T12:01:00.000Z',
   };
 }
