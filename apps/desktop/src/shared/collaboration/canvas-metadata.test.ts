@@ -77,7 +77,15 @@ function canvas(): Canvas {
           {
             id: 'comment-1',
             authorId: 'editor-1',
+            scope: 'shared',
             body: 'Please verify the safe empty state.',
+            createdAt: NOW,
+          },
+          {
+            id: 'local:private-note',
+            authorId: 'local-user',
+            scope: 'local',
+            body: 'PRIVATE_COMMENT_DO_NOT_SHARE',
             createdAt: NOW,
           },
         ],
@@ -289,6 +297,7 @@ describe('canonical Canvas collaboration metadata projection', () => {
       acceptanceState: 'passed',
     });
     expect(snapshot.comments['comment-1']?.body).toBe('Please verify the safe empty state.');
+    expect(snapshot.comments['local:private-note']).toBeUndefined();
     expect(forbiddenKeys(snapshot)).toEqual([]);
   });
 
@@ -543,6 +552,7 @@ describe('canonical Canvas collaboration metadata projection', () => {
                 {
                   id: 'comment-1',
                   authorId: 'editor-1',
+                  scope: 'shared',
                   body: 'A duplicate identifier',
                   createdAt: NOW,
                 },
@@ -568,6 +578,7 @@ describe('canonical Canvas collaboration metadata projection', () => {
                 {
                   id: 'comment-oversized',
                   authorId: 'editor-1',
+                  scope: 'shared',
                   body: 'x'.repeat(4_001),
                   createdAt: NOW,
                 },

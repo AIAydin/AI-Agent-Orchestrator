@@ -50,6 +50,20 @@ describe('SharedComments', () => {
     expect(screen.getByText(/can read comments but cannot add/u)).toBeTruthy();
   });
 
+  it('describes shared comments as optional when a solo user has collaboration off', () => {
+    render(
+      <SharedComments
+        comments={[]}
+        roomEnabled={false}
+        canComment={false}
+        onCreate={vi.fn()}
+        onDiscardRejected={vi.fn().mockResolvedValue(false)}
+      />,
+    );
+    expect(screen.getByText(/Shared room comments are optional/u)).toBeTruthy();
+    expect(screen.queryByText(/This role/u)).toBeNull();
+  });
+
   it('restores exact text and separately confirms a value-bound local discard', async () => {
     const entry: CollaborationRejectedCommentEntry = {
       comment: {

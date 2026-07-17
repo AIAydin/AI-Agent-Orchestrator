@@ -6,6 +6,7 @@ import {
   type CollaborationMetadataSnapshot,
 } from '../../../../../shared/collaboration/index.js';
 import { mergeCollaborationCanvasSnapshot } from './merge-canvas.js';
+import { appendLocalComment } from '../comments/comment-model.js';
 
 const NOW = '2026-07-15T12:00:00.000Z';
 const CANVAS_ID = '70000000-0000-4000-8000-000000000002';
@@ -113,6 +114,38 @@ describe('mergeCollaborationCanvasSnapshot', () => {
     expect(later.document.edges.map((edge) => edge.id)).not.toContain('local-edge');
     expect(later.document.nodes.map((node) => node.id)).toContain('local-extension');
     expect(later.document.edges.map((edge) => edge.id)).toContain('extension-edge');
+  });
+
+  it('preserves private comments while replacing shared comments on later room updates', () => {
+    const first = mergeCollaborationCanvasSnapshot(document(), snapshot(), { initial: false });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const withPrivate = appendLocalComment(first.document, 'agent-1', 'Private reviewer note', {
+      id: 'local:reviewer-note',
+      createdAt: NOW,
+    });
+    if (withPrivate === null) throw new Error('Expected local canvas.');
+    const remote = snapshot();
+    const withoutSharedComment = CollaborationMetadataSnapshotSchema.parse({
+      ...remote,
+      comments: {},
+      reviews: {},
+    });
+
+    const later = mergeCollaborationCanvasSnapshot(withPrivate, withoutSharedComment, {
+      initial: false,
+    });
+    expect(later.ok).toBe(true);
+    if (!later.ok) return;
+    expect(
+      later.document.canonical?.nodes.find((node) => node.id === 'agent-1')?.comments,
+    ).toMatchObject([
+      {
+        id: 'local:reviewer-note',
+        scope: 'local',
+        body: 'Private reviewer note',
+      },
+    ]);
   });
 
   it('rejects a snapshot for a different canvas without mutating local state', () => {

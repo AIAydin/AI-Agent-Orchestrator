@@ -89,7 +89,7 @@ not be reclassified as future work.
 
 ## Infinite canvas and nodes
 
-- [ ] Pan/zoom, minimap, search, fit, box/multi-select, snap/guides, groups/frames, locking,
+- [x] Pan/zoom, minimap, search, fit, box/multi-select, snap/guides, groups/frames, locking,
       comments, copy/paste/duplicate, autosave, and keyboard navigation.
 - [ ] Extensible registry and shared title/color/icon/resize/collapse/lock/duplicate/delete/group/comment/
       status/run-history/inspector behavior.
@@ -979,3 +979,19 @@ unchecked when only a subset of their required behavior has proof.
   strict code-signing and Gatekeeper assessment fail. Fresh Windows/Linux/macOS Intel artifacts,
   signing/notarization, repository visibility, a tag, and GitHub Release publication remain open.
   Hosted Actions remain excluded because the billing/payment gate stops jobs before workflow steps.
+- 2026-07-17: the Infinite Canvas now persists pure pan/zoom changes through the existing bounded
+  autosave path and explicitly restores the saved finite viewport without mount-time `fitView`
+  overriding it. Reviewer/viewer navigation remains usable but cannot mutate shared graph state.
+  Every node also has private on-device comments in solo and multiplayer sessions; historical
+  unscoped comments fail closed as private, only explicitly shared comments enter collaboration
+  metadata, and room merges preserve local comments without publishing their text. Shared comment
+  authoring remains role-authorized and clearly separated in the inspector. Focused coverage passed
+  174 tests across 25 files, including viewport bounds/restore, editable versus read-only movement,
+  local/shared projection and merge behavior, solo/reviewer/viewer UI, failure truthfulness, and a
+  real SQLite restart. The modular Electron journey passed in 18.8 seconds and proves search/center,
+  minimap/fit, modifier multi-select, two-node keyboard movement, copy/paste/duplicate, locked-node
+  immobility, private comment creation, pure viewport autosave, full app relaunch with exact
+  normalized viewport/comment/graph restoration, and zero external requests. The 980-file structure
+  gate, desktop strict typecheck, configured formatting, zero-warning focused lint, and
+  `git diff --check` passed. This closes the broad Infinite Canvas interaction entry only; the unified
+  extensible renderer registry and universal run-history behavior remain open.

@@ -1,0 +1,50 @@
+.local-comments {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.local-comments > header {
+  display: flex;
+  justify-content: space-between;
+}
+
+.local-comments ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.local-comments li {
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.local-comments li p,
+.local-comments-privacy,
+.local-comments-empty {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.local-comments time,
+.local-comments-privacy,
+.local-comments-empty {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.local-comments form {
+  display: grid;
+  gap: 8px;
+}
+
+.local-comments textarea {
+  min-height: 72px;
+  resize: vertical;
+}

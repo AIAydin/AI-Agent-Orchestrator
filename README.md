@@ -116,6 +116,11 @@ console capture, navigation/history/reload, native-reviewed screenshots, and con
 opening. Mobile frames use Chromium touch emulation; side-by-side frames share the same selected
 target, while separate target-bound nodes can run competing worktrees concurrently.
 
+Canvas pan, zoom, selection, grouping, guides, locking, duplication, keyboard movement, and private
+node comments work in the default solo product and autosave locally. Viewport position and zoom are
+restored on relaunch. In an optional collaboration room, private comments remain on the device unless
+the user separately creates an explicitly shared, role-authorized room comment.
+
 The selected first-run CLI must have current ready evidence from the trusted process: Forgeboard
 resolves the exact executable and runs its bounded version/capability probe, while missing,
 mismatched, or invalid configurations keep **Continue** disabled. Checking a draft executable does

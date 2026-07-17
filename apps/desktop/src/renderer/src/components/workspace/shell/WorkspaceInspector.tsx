@@ -54,6 +54,8 @@ import type {
 } from '../../../../../shared/collaboration/index.js';
 import type { TerminalSessionStatus } from '../../../../../shared/terminal/index.js';
 import { SharedComments } from '../collaboration/comments/SharedComments.js';
+import { LocalComments } from '../comments/LocalComments.js';
+import type { NodeComment } from '../comments/comment-model.js';
 import { DiffReviewNodeInspector, type DiffReviewOpenRequest } from '../diff-review/index.js';
 import type { DiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 import { OperationalGitPrNodeInspector, type GitPrNodeConfiguration } from '../git-pr/index.js';
@@ -79,9 +81,11 @@ interface WorkspaceInspectorProps {
   agentRunActive: boolean;
   preparingRun: boolean;
   sharedComments: readonly CollaborationCommentMetadata[];
+  localComments: readonly NodeComment[];
   rejectedSharedCommentEntries?: readonly CollaborationRejectedCommentEntry[];
   canComment: boolean;
   onCreateComment: (body: string) => Promise<boolean>;
+  onCreateLocalComment: (body: string) => boolean;
   onDiscardRejectedComment: (entry: CollaborationRejectedCommentEntry) => Promise<boolean>;
   onClearSelection: () => void;
   onRecord: () => void;
@@ -355,9 +359,11 @@ function NodeInspector(
           onUpdate={onUpdateSelected}
         />
       )}
+      <LocalComments comments={props.localComments} onCreate={props.onCreateLocalComment} />
       <SharedComments
         comments={props.sharedComments}
         rejectedCommentEntries={props.rejectedSharedCommentEntries ?? []}
+        roomEnabled={props.settings.collaborationEnabled}
         canComment={props.canComment}
         onCreate={props.onCreateComment}
         onDiscardRejected={props.onDiscardRejectedComment}

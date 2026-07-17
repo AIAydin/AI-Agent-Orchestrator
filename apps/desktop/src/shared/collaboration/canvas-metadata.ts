@@ -151,6 +151,9 @@ export function collaborationMetadataSnapshotFromCanvas(
   for (const node of canonical.nodes) {
     if (!includedNodeIds.has(node.id)) continue;
     for (const comment of node.comments) {
+      // Unscoped comments predate collaboration-aware storage and are private by default. Only an
+      // explicit user-authorized shared comment may enter a room document.
+      if (comment.scope !== 'shared') continue;
       const body = comment.body.trim();
       const authorId = optionalParsedString(CollaborationSubjectSchema, comment.authorId);
       if (body === '' || body.length > 4_000 || authorId === undefined) {

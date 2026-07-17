@@ -13,6 +13,7 @@ import {
   type OnNodeDrag,
   type OnSelectionChangeParams,
   type ReactFlowInstance,
+  type Viewport,
 } from '@xyflow/react';
 import { Bot, LayoutGrid } from 'lucide-react';
 
@@ -41,6 +42,12 @@ import {
 } from './interactions/keyboard-navigation.js';
 import { visibleCanvasDropPosition } from './interactions/drop-position.js';
 import { CanvasNodeInteractionProvider } from './interactions/CanvasNodeInteractionContext.js';
+import {
+  CANVAS_MAX_ZOOM,
+  CANVAS_MIN_ZOOM,
+  normalizeCanvasViewport,
+} from './view-state/viewport.js';
+import { useViewportRestore } from './view-state/useViewportRestore.js';
 
 interface WorkspaceCanvasProps {
   canvas: CanvasDocument | null;
@@ -50,6 +57,7 @@ interface WorkspaceCanvasProps {
   extensionTemplates: ExtensionTemplate[];
   instance: ReactFlowInstance<WorkshopNode, WorkshopEdge> | null;
   onInstance: (instance: ReactFlowInstance<WorkshopNode, WorkshopEdge>) => void;
+  onViewportChange: (viewport: Viewport) => void;
   onNodesChange: (changes: NodeChange<WorkshopNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<WorkshopEdge>[]) => void;
   onConnect: (connection: Connection) => void;
@@ -83,6 +91,7 @@ export function WorkspaceCanvas({
   extensionTemplates,
   instance,
   onInstance,
+  onViewportChange,
   onNodesChange,
   onEdgesChange,
   onConnect,
@@ -101,6 +110,7 @@ export function WorkspaceCanvas({
   onCollaborationCursorLeave,
   collaborationGraphReadOnly,
 }: WorkspaceCanvasProps) {
+  useViewportRestore(instance, canvas?.id ?? null, canvas?.viewport ?? null);
   const [alignmentGuides, setAlignmentGuides] = useState<CanvasAlignmentGuides>({});
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState({
     message: '',
@@ -231,6 +241,10 @@ export function WorkspaceCanvas({
             edges={edges}
             nodeTypes={WORKSHOP_NODE_TYPES}
             onInit={onInstance}
+            defaultViewport={normalizeCanvasViewport(canvas.viewport)}
+            onMoveEnd={(_event, viewport) => {
+              if (!collaborationGraphReadOnly) onViewportChange(normalizeCanvasViewport(viewport));
+            }}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -296,8 +310,6 @@ export function WorkspaceCanvas({
                 }));
               }
             }}
-            fitView
-            fitViewOptions={{ maxZoom: 1.25 }}
             nodesDraggable={!collaborationGraphReadOnly}
             nodesConnectable={!collaborationGraphReadOnly}
             nodesFocusable
@@ -305,8 +317,8 @@ export function WorkspaceCanvas({
             elevateNodesOnSelect={false}
             snapToGrid={settings.canvasSnapToGrid}
             snapGrid={[settings.canvasGridSize, settings.canvasGridSize]}
-            minZoom={0.15}
-            maxZoom={2.5}
+            minZoom={CANVAS_MIN_ZOOM}
+            maxZoom={CANVAS_MAX_ZOOM}
             deleteKeyCode={collaborationGraphReadOnly ? null : ['Backspace', 'Delete']}
             multiSelectionKeyCode={['Meta', 'Control']}
             selectionOnDrag

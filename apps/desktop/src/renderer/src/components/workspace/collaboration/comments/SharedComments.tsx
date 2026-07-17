@@ -12,6 +12,7 @@ const MAX_RENDERED_COMMENTS = 200;
 interface SharedCommentsProps {
   readonly comments: readonly CollaborationCommentMetadata[];
   readonly rejectedCommentEntries?: readonly CollaborationRejectedCommentEntry[];
+  readonly roomEnabled?: boolean;
   readonly canComment: boolean;
   readonly onCreate: (body: string) => Promise<boolean>;
   readonly onDiscardRejected: (entry: CollaborationRejectedCommentEntry) => Promise<boolean>;
@@ -20,6 +21,7 @@ interface SharedCommentsProps {
 export function SharedComments({
   comments,
   rejectedCommentEntries = [],
+  roomEnabled = true,
   canComment,
   onCreate,
   onDiscardRejected,
@@ -111,8 +113,13 @@ export function SharedComments({
             {busy ? 'Sharing…' : 'Share comment'}
           </button>
         </form>
-      ) : (
+      ) : roomEnabled ? (
         <p className="shared-comments-empty">This role can read comments but cannot add them.</p>
+      ) : (
+        <p className="shared-comments-empty">
+          Collaboration is off. Shared room comments are optional; private comments above stay on
+          this device.
+        </p>
       )}
     </section>
   );

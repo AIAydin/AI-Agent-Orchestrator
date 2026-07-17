@@ -137,7 +137,14 @@ describe('WorkspaceInspector Custom permissions', () => {
 
   it('makes shared graph configuration actions honestly read-only for collaboration roles', () => {
     const selectedNode = groupNode({ childNodeIds: ['member'], layout: 'horizontal' });
-    const inspectorProps = props(settings(), selectedNode);
+    const inspectorProps = props(
+      settings({
+        collaborationEnabled: true,
+        collaborationUrl: 'ws://127.0.0.1:1234',
+        collaborationRoom: 'review-room',
+      }),
+      selectedNode,
+    );
     inspectorProps.nodes = [selectedNode, { ...agentNode({}), id: 'member' }];
     inspectorProps.collaborationGraphReadOnly = true;
     render(<WorkspaceInspector {...inspectorProps} />);
@@ -150,6 +157,12 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByRole('button', { name: 'Lock' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', true);
+    expect(screen.getByText(/can read comments but cannot add/u)).toBeTruthy();
+    const privateInput = screen.getByLabelText('Add a private comment');
+    expect(privateInput).toHaveProperty('disabled', false);
+    fireEvent.change(privateInput, { target: { value: 'Private reviewer note' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save locally' }));
+    expect(inspectorProps.onCreateLocalComment).toHaveBeenCalledWith('Private reviewer note');
   });
 
   it('passes collaboration read-only authority into preview runtime controls', async () => {
@@ -507,9 +520,11 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     agentRunActive: false,
     preparingRun: false,
     sharedComments: [],
+    localComments: [],
     rejectedSharedCommentEntries: [],
     canComment: false,
     onCreateComment: vi.fn().mockResolvedValue(false),
+    onCreateLocalComment: vi.fn().mockReturnValue(true),
     onDiscardRejectedComment: vi.fn().mockResolvedValue(false),
     onClearSelection: vi.fn(),
     onRecord: vi.fn(),

@@ -218,12 +218,17 @@ function applyNodeMetadata(
   canvasUpdatedAt: string,
   options: CollaborationCanvasMergeOptions,
 ): CanvasNode {
-  const localComments = options.initial ? (localNode?.comments ?? []) : [];
+  // Private comments remain device-local through every room update. On the initial handshake we
+  // also retain shared comments long enough for the collaboration recovery flow to reconcile them.
+  const localComments = (localNode?.comments ?? []).filter(
+    (comment) => comment.scope !== 'shared' || options.initial,
+  );
   const mergedComments = new Map(localComments.map((comment) => [comment.id, comment]));
   for (const comment of comments) {
     mergedComments.set(comment.id, {
       id: comment.id,
       authorId: comment.authorId,
+      scope: 'shared',
       body: comment.body,
       createdAt: comment.createdAt,
       ...(comment.updatedAt === undefined ? {} : { updatedAt: comment.updatedAt }),

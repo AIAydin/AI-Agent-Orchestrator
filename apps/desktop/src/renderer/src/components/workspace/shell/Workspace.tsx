@@ -16,11 +16,11 @@ import {
   type EdgeChange,
   type OnSelectionChangeParams,
   type ReactFlowInstance,
+  type Viewport,
 } from '@xyflow/react';
 import { PanelBottomOpen } from 'lucide-react';
 
 import type { CanvasDocument, RunAdapterId } from '../../../../../shared/application/contracts.js';
-import { canonicalCanvasFromLegacy } from '../../../../../shared/canvas/adapter.js';
 import {
   CollaborationCommentMetadataSchema,
   type CollaborationCommentMetadata,
@@ -106,6 +106,7 @@ import type {
 import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
 import { useAgentRunController } from '../runs/useAgentRunController.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
+import { normalizeCanvasViewport } from '../canvas/view-state/viewport.js';
 import { useCollaborationCanvas } from '../collaboration/useCollaborationCanvas.js';
 import { mergeCollaborationCanvasSnapshot } from '../collaboration/merge-canvas.js';
 import { useProjectChecks } from '../useProjectChecks.js';
@@ -120,6 +121,12 @@ import {
   runnableWorkflowNodeCount,
   workflowSelectionEligibility,
 } from '../workflows/workflow-run-eligibility.js';
+import {
+  appendLocalComment,
+  appendSharedComment,
+  localCommentsForNode,
+  sharedCanonicalCommentsForNode,
+} from '../comments/comment-model.js';
 
 const LOCKED_CONNECTION_ACTIVITY = 'Unlock locked nodes before changing their connections.';
 
@@ -225,6 +232,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   ref,
 ) {
   const [canvas, setCanvas] = useState<CanvasDocument | null>(null);
+  const [viewport, setViewport] = useState<Viewport | null>(null);
   const [nodes, setNodes] = useState<WorkshopNode[]>([]);
   const [edges, setEdges] = useState<WorkshopEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -260,6 +268,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       .then((result) => {
         const document = unwrap(result);
         setCanvas(document);
+        setViewport(normalizeCanvasViewport(document.viewport));
         setNodes(
           document.nodes.map((node) => ({
             id: node.id,
@@ -353,9 +362,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         type: edge.data?.edgeType ?? 'context',
         data: edgeDataForPersistence(edge.data),
       })),
-      viewport: instance?.getViewport() ?? canvas.viewport,
+      viewport: viewport ?? normalizeCanvasViewport(canvas.viewport),
     };
-  }, [canvas, edges, instance, nodes]);
+  }, [canvas, edges, nodes, viewport]);
   const applyCollaborationSnapshot = useCallback(
     (snapshot: CollaborationMetadataSnapshot, context: { readonly initial: boolean }): boolean => {
       if (pendingCanvas === null) return false;
@@ -371,6 +380,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         ? selectedEdgeId
         : null;
       setCanvas(merged.document);
+      setViewport(normalizeCanvasViewport(merged.document.viewport));
       setNodes(
         merged.document.nodes.map((node) => ({
           id: node.id,
@@ -887,6 +897,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     () => collaborationCommentsForNode(pendingCanvas, selectedNodeId),
     [pendingCanvas, selectedNodeId],
   );
+  const localComments = useMemo(
+    () => localCommentsForNode(pendingCanvas, selectedNodeId),
+    [pendingCanvas, selectedNodeId],
+  );
   const rejectedSharedCommentEntries = useMemo(
     () =>
       selectedNodeId === null
@@ -901,11 +915,25 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       if (selectedNodeId === null) return false;
       const comment = await collaborationCanvas.createComment(selectedNodeId, body);
       if (comment === null) return false;
-      setCanvas((current) => appendCollaborationComment(current, selectedNodeId, comment));
+      setCanvas((current) => appendSharedComment(current, selectedNodeId, comment));
       setEvents((items) => ['Shared a collaboration comment.', ...items].slice(0, 80));
       return true;
     },
     [collaborationCanvas.createComment, selectedNodeId],
+  );
+  const createLocalComment = useCallback(
+    (body: string): boolean => {
+      if (pendingCanvas === null || selectedNodeId === null || body.trim() === '') return false;
+      const next = appendLocalComment(pendingCanvas, selectedNodeId, body, {
+        id: `local:${crypto.randomUUID()}`,
+        createdAt: new Date().toISOString(),
+      });
+      if (next === null || next === pendingCanvas) return false;
+      setCanvas(next);
+      setEvents((items) => ['Saved a private local comment.', ...items].slice(0, 80));
+      return true;
+    },
+    [pendingCanvas, selectedNodeId],
   );
   const selectedCanvasNodes = nodes.filter((node) => node.selected === true);
   const selectedWorkflowEligibility = workflowSelectionEligibility(
@@ -1539,6 +1567,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           extensionTemplates={extensionTemplates}
           instance={instance}
           onInstance={setInstance}
+          onViewportChange={setViewport}
           onNodesChange={changeCanvasNodes}
           onEdgesChange={(changes: EdgeChange<WorkshopEdge>[]) => {
             if (collaborationCanvas.graphReadOnly) {
@@ -1642,9 +1671,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           agentRunActive={runs.selectedRunActive}
           preparingRun={runs.preparingRun}
           sharedComments={sharedComments}
+          localComments={localComments}
           rejectedSharedCommentEntries={rejectedSharedCommentEntries}
           canComment={collaborationCanvas.canComment}
           onCreateComment={createSharedComment}
+          onCreateLocalComment={createLocalComment}
           onDiscardRejectedComment={collaborationCanvas.discardRejectedComment}
           onClearSelection={() => {
             setSelectedNodeId(null);
@@ -1817,11 +1848,7 @@ function collaborationCommentsForNode(
   nodeId: string | null,
 ): CollaborationCommentMetadata[] {
   if (document === null || nodeId === null) return [];
-  const migrated = canonicalCanvasFromLegacy(document);
-  if (!migrated.ok) return [];
-  const node = migrated.canvas.nodes.find((candidate) => candidate.id === nodeId);
-  if (node === undefined) return [];
-  return node.comments.flatMap((comment) => {
+  return sharedCanonicalCommentsForNode(document, nodeId).flatMap((comment) => {
     const parsed = CollaborationCommentMetadataSchema.safeParse({
       id: comment.id,
       nodeId,
@@ -1833,40 +1860,4 @@ function collaborationCommentsForNode(
     });
     return parsed.success ? [parsed.data] : [];
   });
-}
-
-function appendCollaborationComment(
-  document: CanvasDocument | null,
-  nodeId: string,
-  comment: CollaborationCommentMetadata,
-): CanvasDocument | null {
-  if (document === null) return null;
-  const migrated = canonicalCanvasFromLegacy(document);
-  if (!migrated.ok) return document;
-  const now = new Date().toISOString();
-  return {
-    ...document,
-    canonical: {
-      ...migrated.canvas,
-      nodes: migrated.canvas.nodes.map((node) =>
-        node.id !== nodeId || node.comments.some((current) => current.id === comment.id)
-          ? node
-          : {
-              ...node,
-              comments: [
-                ...node.comments,
-                {
-                  id: comment.id,
-                  authorId: comment.authorId,
-                  body: comment.body,
-                  createdAt: comment.createdAt,
-                  ...(comment.updatedAt === undefined ? {} : { updatedAt: comment.updatedAt }),
-                  ...(comment.resolved ? { resolvedAt: comment.updatedAt ?? now } : {}),
-                },
-              ],
-            },
-      ),
-    },
-    updatedAt: now,
-  };
 }

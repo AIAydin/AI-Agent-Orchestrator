@@ -77,6 +77,7 @@ export const CommentSchema = z
   .object({
     id: EntityIdSchema,
     authorId: EntityIdSchema,
+    scope: z.enum(['local', 'shared']).optional(),
     body: z.string().min(1).max(100_000),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema.optional(),

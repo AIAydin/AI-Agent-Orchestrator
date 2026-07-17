@@ -57,6 +57,25 @@ describe('useCanvasPersistence', () => {
     expect(hook.result.current.saveState).toBe('saved');
   });
 
+  it('treats a viewport-only pan and zoom change as a durable revision', async () => {
+    const loaded = canvas('loaded');
+    const hook = renderPersistence(loaded);
+    hook.rerender({
+      projectId: PROJECT_A,
+      document: { ...loaded, viewport: { x: -240, y: 96, zoom: 1.4 } },
+    });
+
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+
+    expect(persistCanvas).toHaveBeenCalledTimes(1);
+    expect(persistCanvas.mock.calls[0]?.[0].viewport).toEqual({
+      x: -240,
+      y: 96,
+      zoom: 1.4,
+    });
+    expect(hook.result.current.saveState).toBe('saved');
+  });
+
   it('serializes saves and drains the newest revision before reporting saved', async () => {
     const firstSave = deferred<void>();
     const latestSave = deferred<void>();
@@ -131,13 +150,19 @@ describe('useCanvasPersistence', () => {
     const oldSave = deferred<void>();
     persistCanvas.mockImplementationOnce(() => oldSave.promise);
     const hook = renderPersistence(canvas('loaded'));
-    hook.rerender({ projectId: PROJECT_A, document: canvas('old project edit') });
+    hook.rerender({
+      projectId: PROJECT_A,
+      document: canvas('old project edit'),
+    });
 
     let flush!: Promise<boolean>;
     act(() => {
       flush = hook.result.current.flushCanvas();
     });
-    hook.rerender({ projectId: PROJECT_B, document: canvas('new project', PROJECT_B) });
+    hook.rerender({
+      projectId: PROJECT_B,
+      document: canvas('new project', PROJECT_B),
+    });
 
     let saved = false;
     await act(async () => {

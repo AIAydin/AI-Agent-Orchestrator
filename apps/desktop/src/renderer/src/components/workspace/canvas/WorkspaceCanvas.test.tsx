@@ -101,7 +101,8 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
       snapGrid: [number, number];
       nodesFocusable: boolean;
       autoPanOnNodeFocus: boolean;
-      fitViewOptions: { maxZoom: number };
+      fitView?: boolean;
+      defaultViewport: { x: number; y: number; zoom: number };
       'aria-label': string;
     };
     expect(flowProps.snapGrid).toEqual([
@@ -110,7 +111,8 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     ]);
     expect(flowProps.nodesFocusable).toBe(true);
     expect(flowProps.autoPanOnNodeFocus).toBe(true);
-    expect(flowProps.fitViewOptions).toEqual({ maxZoom: 1.25 });
+    expect(flowProps.fitView).toBeUndefined();
+    expect(flowProps.defaultViewport).toEqual({ x: 0, y: 0, zoom: 1 });
     expect(flowProps['aria-label']).toBe('Canvas canvas');
   });
 
@@ -148,6 +150,47 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     expect(onKeyboardMove).not.toHaveBeenCalled();
     expect(screen.getByText(/cannot edit the shared graph/u)).toBeTruthy();
   });
+
+  it('reports a bounded completed viewport move for autosave but not for read-only roles', () => {
+    const canvasProps = props(vi.fn());
+    render(<WorkspaceCanvas {...canvasProps} />);
+    const flowProps = mocks.reactFlowProps as {
+      onMoveEnd: (event: unknown, viewport: { x: number; y: number; zoom: number }) => void;
+    };
+
+    act(() => flowProps.onMoveEnd({}, { x: -220, y: 48, zoom: 9 }));
+    expect(canvasProps.onViewportChange).toHaveBeenCalledWith({
+      x: -220,
+      y: 48,
+      zoom: 2.5,
+    });
+
+    cleanup();
+    const readOnlyProps = props(vi.fn());
+    readOnlyProps.collaborationGraphReadOnly = true;
+    render(<WorkspaceCanvas {...readOnlyProps} />);
+    const readOnlyFlowProps = mocks.reactFlowProps as typeof flowProps;
+    act(() => readOnlyFlowProps.onMoveEnd({}, { x: 1, y: 2, zoom: 1.2 }));
+    expect(readOnlyProps.onViewportChange).not.toHaveBeenCalled();
+  });
+
+  it('explicitly restores the saved viewport without fitting content', async () => {
+    const canvasProps = props(vi.fn());
+    if (canvasProps.canvas === null) throw new Error('Missing test canvas.');
+    canvasProps.canvas = {
+      ...canvasProps.canvas,
+      viewport: { x: -310, y: 77, zoom: 1.6 },
+    };
+    render(<WorkspaceCanvas {...canvasProps} />);
+
+    await waitFor(() =>
+      expect(canvasProps.instance?.setViewport).toHaveBeenCalledWith(
+        { x: -310, y: 77, zoom: 1.6 },
+        { duration: 0 },
+      ),
+    );
+    expect(mocks.reactFlowProps).not.toHaveProperty('fitView', true);
+  });
 });
 
 describe('WorkspaceCanvas palette drops', () => {
@@ -171,6 +214,7 @@ describe('WorkspaceCanvas palette drops', () => {
     );
     canvasProps.instance = {
       getZoom: () => zoom,
+      setViewport: vi.fn().mockResolvedValue(true),
       screenToFlowPosition,
     } as unknown as React.ComponentProps<typeof WorkspaceCanvas>['instance'];
     const view = render(<WorkspaceCanvas {...canvasProps} />);
@@ -209,7 +253,10 @@ describe('WorkspaceCanvas palette drops', () => {
       paletteDropEvent(paletteDataTransfer('application/x-forgeboard-node', 'group-frame')),
     );
 
-    expect(groupProps.onAddNode).toHaveBeenCalledWith('group-frame', { x: 464, y: 374 });
+    expect(groupProps.onAddNode).toHaveBeenCalledWith('group-frame', {
+      x: 464,
+      y: 374,
+    });
     groupView.unmount();
 
     const extensionProps = props(vi.fn());
@@ -226,7 +273,10 @@ describe('WorkspaceCanvas palette drops', () => {
       ),
     );
 
-    expect(extensionProps.onAddExtensionNode).toHaveBeenCalledWith(template, { x: 664, y: 554 });
+    expect(extensionProps.onAddExtensionNode).toHaveBeenCalledWith(template, {
+      x: 664,
+      y: 554,
+    });
   });
 });
 
@@ -379,9 +429,11 @@ function props(
     extensionTemplates: [],
     instance: {
       getZoom: () => 1,
+      setViewport: vi.fn().mockResolvedValue(true),
       screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
-    } as React.ComponentProps<typeof WorkspaceCanvas>['instance'],
+    } as unknown as React.ComponentProps<typeof WorkspaceCanvas>['instance'],
     onInstance: vi.fn(),
+    onViewportChange: vi.fn(),
     onNodesChange: vi.fn(),
     onEdgesChange: vi.fn(),
     onConnect: vi.fn(),
