@@ -183,6 +183,7 @@ describe('WorkspaceInspector Custom permissions', () => {
   it('keeps live run cancellation available when an Agent node is locked', () => {
     const selectedNode = agentNode({ locked: true, status: 'running' });
     const inspectorProps = props(settings(), selectedNode);
+    inspectorProps.agentRunActive = true;
     render(<WorkspaceInspector {...inspectorProps} />);
 
     expect(screen.getByLabelText<HTMLSelectElement>('Installed adapter')).toHaveProperty(
@@ -197,6 +198,31 @@ describe('WorkspaceInspector Custom permissions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Terminate' }));
     expect(inspectorProps.onControlRun).toHaveBeenNthCalledWith(1, 'interrupt');
     expect(inspectorProps.onControlRun).toHaveBeenNthCalledWith(2, 'terminate');
+  });
+
+  it('shows live controls only for a runtime-confirmed active Agent run', () => {
+    const preparedNode = agentNode({
+      runId: '80000000-0000-4000-8000-000000000001',
+      status: 'waiting',
+    });
+    const inspectorProps = props(settings(), preparedNode);
+    const { rerender } = render(<WorkspaceInspector {...inspectorProps} />);
+
+    expect(screen.queryByRole('button', { name: 'Interrupt' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Review & run' })).toBeTruthy();
+
+    inspectorProps.agentRunActive = true;
+    rerender(<WorkspaceInspector {...inspectorProps} />);
+    expect(screen.getByRole('button', { name: 'Interrupt' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Terminate' })).toBeTruthy();
+
+    inspectorProps.agentRunActive = false;
+    inspectorProps.selectedNode = agentNode({
+      runId: '80000000-0000-4000-8000-000000000001',
+      status: 'failed',
+    });
+    rerender(<WorkspaceInspector {...inspectorProps} />);
+    expect(screen.queryByRole('button', { name: 'Interrupt' })).toBeNull();
   });
 
   it('wires a selected File node to the real project-relative editor and preserves its lock', async () => {
@@ -428,6 +454,7 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     selectedPermission: selectedNode.data.permissionProfile ?? ('worktree-write' as const),
     previewSession: null,
     runInput: '',
+    agentRunActive: false,
     preparingRun: false,
     sharedComments: [],
     rejectedSharedCommentEntries: [],
@@ -448,6 +475,7 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     onControlRun: vi.fn(),
     onPrepareRun: vi.fn(),
     onPreviewSession: vi.fn(),
+    onTerminalSessionStatus: vi.fn(),
     diffReview: {
       agentRuns: [],
       agentRunsLoaded: true,

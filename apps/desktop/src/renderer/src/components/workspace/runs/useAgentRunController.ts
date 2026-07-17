@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
 
 import type {
@@ -37,6 +37,30 @@ export function useAgentRunController({
   const [approvingRun, setApprovingRun] = useState(false);
   const [reviewedPrompt, setReviewedPrompt] = useState<string | null>(null);
   const [runInput, setRunInput] = useState('');
+  const [activeRunIds, setActiveRunIds] = useState<ReadonlySet<string>>(() => new Set());
+
+  const selectedRunId = selectedNode?.data.runId;
+  const selectedRunStatus = selectedNode?.data.status;
+  const selectedRunActive =
+    selectedRunId !== undefined &&
+    activeRunIds.has(selectedRunId) &&
+    (selectedRunStatus === 'running' || selectedRunStatus === 'waiting');
+
+  useEffect(() => {
+    if (
+      selectedRunId === undefined ||
+      selectedRunStatus === 'running' ||
+      selectedRunStatus === 'waiting'
+    ) {
+      return;
+    }
+    setActiveRunIds((current) => {
+      if (!current.has(selectedRunId)) return current;
+      const next = new Set(current);
+      next.delete(selectedRunId);
+      return next;
+    });
+  }, [selectedRunId, selectedRunStatus]);
 
   async function prepareSelectedRun() {
     if (!selectedNode) return;
@@ -120,6 +144,7 @@ export function useAgentRunController({
         );
         return;
       }
+      setActiveRunIds((current) => new Set(current).add(disclosure.runId));
       updateNodeData(disclosure.nodeId, { status: 'running' });
       setEvents((items) =>
         [`Approved and launched ${disclosure.provider} in ${disclosure.cwd}.`, ...items].slice(
@@ -161,7 +186,6 @@ export function useAgentRunController({
           ? await window.forgeboard.runs.interrupt(runId)
           : await window.forgeboard.runs.terminate(runId);
       unwrap(result);
-      updateNodeData(selectedNode.id, { status: 'waiting' });
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : `Could not ${action} this run.`);
     }
@@ -185,6 +209,7 @@ export function useAgentRunController({
     preparingRun,
     approvingRun,
     runInput,
+    selectedRunActive,
     setRunInput,
     prepareSelectedRun,
     approvePreparedRun,

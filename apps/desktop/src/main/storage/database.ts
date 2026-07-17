@@ -394,6 +394,25 @@ export const MIGRATIONS = [
       )
     );
   `,
+  `
+    CREATE TABLE IF NOT EXISTS terminal_sessions (
+      id TEXT PRIMARY KEY CHECK(length(id) = 36),
+      project_id TEXT NOT NULL,
+      node_id TEXT NOT NULL CHECK(length(node_id) BETWEEN 1 AND 256),
+      status TEXT NOT NULL CHECK(status IN (
+        'starting', 'running', 'exited', 'failed', 'interrupted', 'terminated', 'lost'
+      )),
+      updated_at TEXT NOT NULL,
+      value_json TEXT NOT NULL CHECK(length(CAST(value_json AS BLOB)) <= 1048576),
+      FOREIGN KEY(project_id) REFERENCES recent_projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_terminal_sessions_project_updated
+      ON terminal_sessions(project_id, updated_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_terminal_sessions_node_updated
+      ON terminal_sessions(project_id, node_id, updated_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_terminal_sessions_recovery
+      ON terminal_sessions(status, updated_at, id);
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {
@@ -448,6 +467,7 @@ export function migrate(database: DatabaseSync): void {
 
 export function clearAllTables(database: DatabaseSync): void {
   database.prepare('DELETE FROM github_cli_executable_binding').run();
+  database.prepare('DELETE FROM terminal_sessions').run();
   database.prepare('DELETE FROM settings_repair_history').run();
   database.prepare('DELETE FROM backup_health').run();
   database.prepare('DELETE FROM delivery_readiness_approvals').run();
@@ -481,6 +501,7 @@ export function clearPortableTables(database: DatabaseSync): void {
   // Workflow recovery records are not part of portable export version 3. Clear them before the
   // canvases they bind to so a replace import cannot retain orphaned runtime state.
   database.prepare('DELETE FROM workflow_executions').run();
+  database.prepare('DELETE FROM terminal_sessions').run();
   database.prepare('DELETE FROM delivery_readiness_approvals').run();
   database.prepare('DELETE FROM delivery_readiness_records').run();
   database.prepare('DELETE FROM git_review_notes').run();

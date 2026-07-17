@@ -156,8 +156,10 @@ network or picker-selected local remotes, replaces simple managed targets, remov
 managed configuration and tracking refs, and selects automatic or custom GitHub CLI discovery.
 Collaboration connection settings drive the explicit desktop join/leave boundary; its access token
 remains volatile and is not persisted with those settings. Several persisted settings are not yet
-connected to a complete runtime surface, including terminal and updates. Direct SQLite backup
-restore UI remains unfinished; its presence in a schema is not treated as implemented behavior.
+connected to a complete runtime surface, including updates. Terminal process defaults and
+environment allowlists are consumed by its main-owned PTY runtime and can be overridden per node in
+the inspector. Direct SQLite backup restore UI remains unfinished; its presence in a schema is not
+treated as implemented behavior.
 
 First-run setup treats agent readiness as a trusted gate. Main resolves and probes only the selected
 bundled, detected, overridden, or custom executable and returns strict ready/failure evidence;
@@ -239,8 +241,14 @@ SQLite is local, versioned by transactional migrations, and configured for WAL w
 Structured secret and authentication-token fields are excluded. Retained raw subprocess output is
 not redacted and can contain any value the process prints. Run summaries are persisted and
 interrupted runs recover as lost records rather than fictional live processes. Durable bounded
-raw-transcript storage remains unchecked in the implementation ledger and is not represented as
-complete. Project-check execution records and bounded raw output are persisted locally, recover
+raw-transcript unification across every process surface remains unchecked in the implementation
+ledger and is not represented as complete. Interactive Terminal history rows are path-free and
+argument-redacted in SQLite, while UI-authored process configuration remains durable canvas data;
+resolved canonical paths and the exact live-session overlay are main-memory only. Its private raw
+JSON-lines files are bounded to 16 MiB per session, 256 MiB and 10,000 files in total, owner-routed
+while live, pruned by the configured transcript-retention window at startup, and excluded from
+portable JSON. Active sessions recover as `lost`, never alive. Project-check
+execution records and bounded raw output are persisted locally, recover
 interrupted processes as lost, transition through a validated monotonic state machine, and apply the
 configured retention period only to terminal records.
 

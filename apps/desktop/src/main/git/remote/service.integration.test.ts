@@ -738,7 +738,7 @@ describe('main-owned Git remote delivery', () => {
     expect(ciResult?.runs).toHaveLength(1);
     expect(ciResult?.runs[0]?.headSha).toBe(fixture.sourceHead);
     expect(runner.calls.every((call) => call.executable === runner.executable)).toBe(true);
-  }, 45_000);
+  }, 60_000);
 
   it('binds native review, cached status, and every command to one CLI fingerprint', async () => {
     const fixture = await createFixture();

@@ -52,10 +52,12 @@ import type {
   CollaborationCommentMetadata,
   CollaborationRejectedCommentEntry,
 } from '../../../../../shared/collaboration/index.js';
+import type { TerminalSessionStatus } from '../../../../../shared/terminal/index.js';
 import { SharedComments } from '../collaboration/comments/SharedComments.js';
 import { DiffReviewNodeInspector, type DiffReviewOpenRequest } from '../diff-review/index.js';
 import type { DiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 import { OperationalGitPrNodeInspector, type GitPrNodeConfiguration } from '../git-pr/index.js';
+import { TerminalNodePanel, type TerminalNodeConfiguration } from '../terminal/index.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
 type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
@@ -74,6 +76,7 @@ interface WorkspaceInspectorProps {
   selectedPermission: PermissionProfile;
   previewSession: PreviewSessionSnapshot | null;
   runInput: string;
+  agentRunActive: boolean;
   preparingRun: boolean;
   sharedComments: readonly CollaborationCommentMetadata[];
   rejectedSharedCommentEntries?: readonly CollaborationRejectedCommentEntry[];
@@ -94,6 +97,7 @@ interface WorkspaceInspectorProps {
   onControlRun: (action: 'interrupt' | 'terminate') => void;
   onPrepareRun: () => void;
   onPreviewSession: (session: PreviewSessionSnapshot | null) => void;
+  onTerminalSessionStatus: (nodeId: string, status: WorkshopNode['data']['status']) => void;
   diffReview: DiffReviewNodeController;
   onOpenDiffReview: (request: DiffReviewOpenRequest) => void;
   onOpenGitPrReadiness: (runId: string) => void;
@@ -289,6 +293,26 @@ function NodeInspector(
           onError={props.onError}
         />
       )}
+      {selectedNode.data.kind === 'terminal' && (
+        <TerminalNodePanel
+          projectId={props.project.id}
+          nodeId={selectedNode.id}
+          locked={selectedNode.data.locked}
+          configurationReadOnly={props.collaborationGraphReadOnly}
+          configuration={terminalNodeConfiguration(selectedNode, props.settings)}
+          onRecord={onRecord}
+          onConfigurationChange={(configuration) =>
+            onUpdateSelected({ command: terminalCommandConfiguration(configuration) })
+          }
+          onSessionChange={(session) =>
+            props.onTerminalSessionStatus(
+              selectedNode.id,
+              terminalSessionNodeStatus(session?.status, session?.exitCode),
+            )
+          }
+          onError={props.onError}
+        />
+      )}
       {selectedNode.data.kind === 'agent' && (
         <>
           <AgentRunInspector {...props} />
@@ -379,20 +403,58 @@ function NodeInspector(
           Delete
         </button>
       </div>
-      <section className="run-history">
-        <header>
-          <History size={14} />
-          <h3>Run history</h3>
-        </header>
-        {selectedNode.data.transcript ? (
-          <pre>{selectedNode.data.transcript}</pre>
-        ) : (
-          <p>No runs yet. Forgeboard never fabricates agent output.</p>
-        )}
-        {selectedNode.data.lastRunSummary && <strong>{selectedNode.data.lastRunSummary}</strong>}
-      </section>
+      {selectedNode.data.kind === 'agent' && (
+        <section className="run-history">
+          <header>
+            <History size={14} />
+            <h3>Run history</h3>
+          </header>
+          {selectedNode.data.transcript ? (
+            <pre>{selectedNode.data.transcript}</pre>
+          ) : (
+            <p>No runs yet. Forgeboard never fabricates agent output.</p>
+          )}
+          {selectedNode.data.lastRunSummary && <strong>{selectedNode.data.lastRunSummary}</strong>}
+        </section>
+      )}
     </div>
   );
+}
+
+function terminalNodeConfiguration(
+  node: WorkshopNode,
+  settings: AppSettings,
+): TerminalNodeConfiguration {
+  const command = node.data.command;
+  return {
+    executable: command?.executable ?? settings.terminalShell,
+    arguments: command?.arguments ?? [],
+    cwdRelative: command?.cwdRelative ?? '.',
+    environmentVariableNames: command?.environmentNames ?? settings.envAllowlist,
+  };
+}
+
+function terminalCommandConfiguration(
+  configuration: TerminalNodeConfiguration,
+): NonNullable<WorkshopNode['data']['command']> {
+  return {
+    executable: configuration.executable,
+    arguments: [...configuration.arguments],
+    cwdRelative: configuration.cwdRelative,
+    environmentNames: [...configuration.environmentVariableNames],
+  };
+}
+
+function terminalSessionNodeStatus(
+  status: TerminalSessionStatus | undefined,
+  exitCode: number | null | undefined,
+): WorkshopNode['data']['status'] {
+  if (status === undefined) return 'idle';
+  if (status === 'starting') return 'queued';
+  if (status === 'running') return 'running';
+  if (status === 'interrupted' || status === 'terminated') return 'cancelled';
+  if (status === 'exited') return exitCode === 0 ? 'succeeded' : 'failed';
+  return 'failed';
 }
 
 function gitPrConfiguration(node: WorkshopNode, defaultRemote: string): GitPrNodeConfiguration {
@@ -599,7 +661,7 @@ function AgentRunInspector(
     settings,
     onUpdateSelected,
   } = props;
-  const running = selectedNode.data.status === 'running';
+  const running = props.agentRunActive;
   const permissionUnavailable = permissionProfileUnavailableReason(
     selectedPermission,
     settings,

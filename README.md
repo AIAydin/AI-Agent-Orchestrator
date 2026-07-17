@@ -17,9 +17,8 @@ detected, overridden, or custom CLI before setup can continue. Only an exact fin
 check can optionally be remembered for 30 days; saved check approvals can be revoked immediately
 under **Settings → Permissions** and do not authorize agent launches or other actions.
 Data & Privacy also provides UI-configured scheduled and quit-time SQLite backups with a per-folder
-retention target, canvas snapshot recovery, and reviewed portable JSON export/import. The interactive
-terminal node and other unchecked surfaces in the implementation ledger are still under
-construction.
+retention target, canvas snapshot recovery, and reviewed portable JSON export/import. Other
+unchecked surfaces in the implementation ledger are still under construction.
 
 > Forgeboard is under active construction. `IMPLEMENTATION_CHECKLIST.md` is the authoritative
 > status ledger; unchecked items are not claimed as complete.
@@ -98,6 +97,16 @@ these flows.
 Lint, typecheck, test, build, and custom project checks can likewise be configured, approved, run,
 cancelled, and inspected entirely in the UI. See [Permission profiles](docs/PERMISSIONS.md) for the
 exact technical and disclosure-only boundaries.
+
+Interactive Terminal nodes are configured entirely in the inspector. A new node inherits the shell
+and environment-variable allowlist selected in Settings; executable, literal argument array,
+project-relative working directory, and environment names can then be changed per node. Launches
+require both an in-app exact-command review and a separate cancel-default native confirmation. The
+main process rechecks executable identity, canonical project/cwd containment, Settings allowlist,
+expiry, and originating window immediately before starting a real PTY. The xterm surface supports
+ANSI output, raw input, resize, search, display clearing, replay, interrupt, terminate, and fresh
+reviewed restart. See [Interactive Terminal](docs/terminal/README.md) for its unsandboxed host
+boundary and retention behavior.
 
 The selected first-run CLI must have current ready evidence from the trusted process: Forgeboard
 resolves the exact executable and runs its bounded version/capability probe, while missing,
@@ -204,8 +213,8 @@ The release workflow is designed to emit clearly identified unsigned development
 the optional signing secrets documented in the release guide are configured. Such artifacts may
 trigger the operating system's standard warning.
 
-Still unfinished are broader merge and visual conflict-resolution flows, the interactive terminal
-node, updater, direct SQLite backup restore UI, and complete wiring of every persisted setting. See
+Still unfinished are broader merge and visual conflict-resolution flows, the updater, direct SQLite
+backup restore UI, and complete wiring of every persisted setting. See
 `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
 
 Optional collaboration is explicitly enabled and configured under **Settings → Connectivity**.

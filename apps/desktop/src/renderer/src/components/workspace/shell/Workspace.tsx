@@ -1639,6 +1639,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           selectedPermission={selectedPermission}
           previewSession={selectedNode ? (previews.sessions[selectedNode.id] ?? null) : null}
           runInput={runs.runInput}
+          agentRunActive={runs.selectedRunActive}
           preparingRun={runs.preparingRun}
           sharedComments={sharedComments}
           rejectedSharedCommentEntries={rejectedSharedCommentEntries}
@@ -1672,6 +1673,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onPreviewSession={(session) => {
             if (selectedNode) previews.updateSession(selectedNode.id, session);
           }}
+          onTerminalSessionStatus={(nodeId, status) => updateNodeData(nodeId, { status })}
           diffReview={diffReview}
           onOpenDiffReview={(request) => {
             if (selectedNode?.data.kind !== 'diff') return;

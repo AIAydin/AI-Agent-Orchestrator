@@ -98,7 +98,9 @@ not be reclassified as future work.
 - [ ] Task node with priority, assignee, dependencies, criteria, files, status, and execution.
 - [x] Live Monaco file node with history, dirty state, reveal, and context drag.
 - [ ] Diff/review node with hunk decisions, comments, revision requests, and approval gate.
-- [ ] Interactive terminal node.
+- [x] Interactive terminal node with UI-only literal process configuration, two-step native-reviewed
+      PTY launch, ANSI/raw input/resize, bounded private replay/history, and honest
+      interrupt/terminate/lost recovery.
 - [ ] Isolated web preview node with logs/console/errors/navigation/viewports/screenshots.
 - [ ] Mobile preview node with device frames, rotation, touch, and side-by-side screens.
 - [ ] Test node with cancel, streaming, parsed summary, history, and artifacts.
@@ -902,3 +904,22 @@ unchecked when only a subset of their required behavior has proof.
   implemented. The repository remains private with no tags or GitHub Release, so there is not yet a
   public download. Hosted Actions remain excluded because the billing/payment gate stops jobs before
   any workflow step executes.
+- 2026-07-17: Interactive Terminal nodes gained complete ordinary-user configuration in the
+  inspector: native executable selection, literal argument rows, project-relative cwd, and
+  Settings-allowlisted environment names. Every launch uses an expiring single-use renderer review
+  and a separate cancel-default native confirmation showing the exact canonical executable,
+  arguments, working directory, environment names, and unsandboxed host boundary. Main rechecks
+  project/cwd containment, symlinks, executable identity, settings authority, collaboration
+  owner/editor role, plan expiry, and the originating window immediately before a real `node-pty`
+  spawn. Reviewer and viewer roles cannot pick, prepare, confirm, type, or resize through IPC;
+  owner-bound interrupt and terminate remain available as local safety controls after a role
+  downgrade. The xterm surface supports ANSI, raw input, responsive resize, search, clear-display,
+  history selection, replay, restart, interrupt, and terminate. UI-authored configuration persists
+  across a real app restart; path-free and argument-redacted history rows point to private JSON-lines
+  transcripts bounded to 16 MiB per session, 256 MiB and 10,000 files globally, with bounded replay,
+  retention pruning, privacy deletion, honest missing-history disclosure, 1 MiB coalesced live-output
+  admission, and restart/shutdown recovery to `lost` rather than fictional live processes.
+  Persistence failures, post-spawn checkpoint failures, unconfirmed stop attempts, fast PTY exit,
+  and output floods keep lifecycle cleanup deterministic and never fabricate success. This closes
+  only the Interactive Terminal node entry; broader preview, node-registry, workflow, and release
+  requirements remain open.

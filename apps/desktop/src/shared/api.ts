@@ -152,6 +152,22 @@ import type {
 } from './files/contracts.js';
 import type { IntegrityCheckInput, IntegrityCheckResult } from './integrity/contracts.js';
 import type { RunHistoryListInput, RunHistorySummary } from './runs/contracts.js';
+import type {
+  TerminalChooseExecutableInput,
+  TerminalEvent,
+  TerminalExecutableSelectionView,
+  TerminalInput,
+  TerminalLaunchPlanCancelResult,
+  TerminalLaunchPlanConfirmationInput,
+  TerminalLaunchPlanView,
+  TerminalPrepareLaunchInput,
+  TerminalReplayInput,
+  TerminalReplayView,
+  TerminalResizeInput,
+  TerminalSessionListInput,
+  TerminalSessionTargetInput,
+  TerminalSessionView,
+} from './terminal/index.js';
 import type { FolderReadinessRequest, FolderReadinessResult } from './settings/folder-readiness.js';
 import type { SettingsRepairEvidence, SettingsRepairSummary } from './settings/repair/contracts.js';
 import type {
@@ -278,6 +294,26 @@ export interface ForgeboardApi {
     interrupt(runId: string): Promise<IpcResult<boolean>>;
     terminate(runId: string): Promise<IpcResult<boolean>>;
     onEvent(listener: (event: RunEventEnvelope) => void): () => void;
+  };
+  terminal: {
+    chooseExecutable(
+      input: TerminalChooseExecutableInput,
+    ): Promise<IpcResult<TerminalExecutableSelectionView | null>>;
+    prepareLaunch(input: TerminalPrepareLaunchInput): Promise<IpcResult<TerminalLaunchPlanView>>;
+    cancelLaunch(
+      input: TerminalLaunchPlanConfirmationInput,
+    ): Promise<IpcResult<TerminalLaunchPlanCancelResult>>;
+    confirmLaunch(
+      input: TerminalLaunchPlanConfirmationInput,
+    ): Promise<IpcResult<TerminalSessionView | null>>;
+    getSession(input: TerminalSessionTargetInput): Promise<IpcResult<TerminalSessionView | null>>;
+    listSessions(input: TerminalSessionListInput): Promise<IpcResult<TerminalSessionView[]>>;
+    replay(input: TerminalReplayInput): Promise<IpcResult<TerminalReplayView | null>>;
+    sendInput(input: TerminalInput): Promise<IpcResult<TerminalSessionView>>;
+    resize(input: TerminalResizeInput): Promise<IpcResult<TerminalSessionView>>;
+    interrupt(input: TerminalSessionTargetInput): Promise<IpcResult<TerminalSessionView>>;
+    terminate(input: TerminalSessionTargetInput): Promise<IpcResult<TerminalSessionView>>;
+    onEvent(listener: (event: TerminalEvent) => void): () => void;
   };
   previews: {
     start(input: PreviewStartInput): Promise<IpcResult<PreviewSessionSnapshot | null>>;

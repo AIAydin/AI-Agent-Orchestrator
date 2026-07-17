@@ -11,6 +11,7 @@ analytics, crash upload, session recording, model proxy, or cloud dependency.
 - Git diffs and local review comments
 - agent transcripts and normalized events
 - project-check status and bounded raw output
+- interactive Terminal session metadata and private bounded raw PTY output
 - canvas data, project settings, scoped approval records, content-bound delivery-readiness evidence,
   audit records, and local snapshots
 - device-local settings-repair evidence when an upgrade replaces an unsafe legacy value, with each
@@ -84,6 +85,18 @@ and the published hard link is rechecked. SQLite backups contain a copy of the l
 database and should be protected accordingly. Direct restore of a SQLite backup is not yet available
 in the UI.
 
+Interactive Terminal output is unredacted and can contain secrets printed by the launched process.
+The UI-authored executable, literal arguments, project-relative directory, and environment names are
+stored in durable local canvas data. Forgeboard stores separate path-free, argument-redacted session
+history metadata in SQLite; resolved canonical paths and the owning live-session exact overlay remain
+in main-process memory. Raw output is kept in private per-session JSON-lines files under the
+application transcript directory. Those files are capped at 16 MiB per session, 256 MiB and 10,000
+files in total, use owner-only permissions where the platform supports them, and are not synchronized
+or included in portable JSON. The configured transcript-retention window removes expired session
+metadata and files at startup; complete local-data deletion removes both. A working directory limits
+where a process starts, not what the operating-system user can access, and the process retains that
+user's network permissions.
+
 Portable JSON export/import covers Forgeboard settings, projects, canvases, agent runs, check
 executions, snapshots, and audit history. It never embeds repository files or extension source
 folders. Saved approvals, delivery-readiness records, the selected GitHub CLI binding, and
@@ -102,7 +115,8 @@ revalidating each recorded file's identity. If a recorded file is unavailable, F
 a separate cancel-default native choice to either reconnect it or explicitly forget the missing
 record and continue. The warning explains that a forgotten copy may still exist on a detached drive
 or network location and will no longer be tracked. The **Transcript retention (days)** setting also
-removes old terminal project-check histories while preserving queued or running records for recovery.
+removes old terminal project-check histories and expired Interactive Terminal sessions. Queued or
+running records first recover honestly as lost; they are never presented as resumed child processes.
 
 ## Audit retention and limits
 

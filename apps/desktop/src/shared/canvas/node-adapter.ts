@@ -342,9 +342,26 @@ function legacyDataFromCanonical(node: CanvasNode): Record<string, unknown> {
         extensionValues: node.data.values,
         extensionAvailability: node.data.availability,
       };
+    case 'terminal':
+      return {
+        ...node.data,
+        command: legacyCommandFromCanonical(node.data.command),
+      };
     default:
       return { ...node.data };
   }
+}
+
+function legacyCommandFromCanonical(
+  command: Extract<CanvasNode, { type: 'terminal' }>['data']['command'],
+): Record<string, unknown> | undefined {
+  if (command === undefined) return undefined;
+  return compact({
+    executable: command.executable,
+    arguments: [...command.args],
+    cwdRelative: command.cwdRelative,
+    environmentNames: [...command.environmentNames],
+  });
 }
 
 function commandValue(value: unknown): Record<string, unknown> | undefined {

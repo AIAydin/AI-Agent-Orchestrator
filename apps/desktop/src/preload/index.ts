@@ -92,6 +92,7 @@ import { createGitRemoteDeliveryApi } from './git/remote/index.js';
 import { createGitReviewNotesApi } from './git-review-notes.js';
 import { createRunHistoryApi } from './runs/history.js';
 import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
+import { createTerminalApi } from './terminal/index.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -279,6 +280,16 @@ const api: ForgeboardApi = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.runsEvent, handler);
     },
   },
+  terminal: createTerminalApi(
+    (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+    (channel, listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+  ),
   previews: {
     start: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsStart, input),
     restart: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsRestart, input),

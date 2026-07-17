@@ -12,7 +12,7 @@ export class ProcessActivityPresentError extends Error {
 
   public constructor(options?: ErrorOptions) {
     super(
-      'Stop or cancel every Forgeboard-managed agent run, preview, check, and workflow before cleaning up a worktree.',
+      'Stop or cancel every Forgeboard-managed agent run, terminal, preview, check, and workflow before cleaning up a worktree.',
       options,
     );
     this.name = 'ProcessActivityPresentError';

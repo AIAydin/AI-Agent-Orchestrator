@@ -108,6 +108,7 @@ export class CollaborationIpcService {
   >();
   #sessionRejectedCommentSuppressionBaseline: CollaborationMetadataSnapshot | null = null;
   #owner: WebContents | null = null;
+  #joiningOwner: WebContents | null = null;
   #registered = false;
   #disposed = false;
   #paused = false;
@@ -149,6 +150,16 @@ export class CollaborationIpcService {
     );
     this.#handle(COLLABORATION_IPC_CHANNELS.updateAwareness, (event, rawArgs) =>
       this.#updateAwareness(event, rawArgs),
+    );
+  }
+
+  /** Main-process capability gate for terminal mutations owned by this collaboration window. */
+  public assertTerminalMutationAuthorized(owner: WebContents): void {
+    if (this.#owner !== owner && this.#joiningOwner !== owner) return;
+    const role = this.#client.connection?.role;
+    if (role === 'owner' || role === 'editor') return;
+    throw new Error(
+      'This collaboration role cannot launch, type into, or reconfigure a local terminal.',
     );
   }
 
@@ -234,13 +245,17 @@ export class CollaborationIpcService {
       this.#assertAvailable();
       const [input] = z.tuple([CollaborationJoinInputSchema]).parse(rawArgs);
       const parent = this.#requireLiveParent(event);
-      if (this.#owner !== null && this.#owner !== event.sender) {
+      if (
+        (this.#owner !== null && this.#owner !== event.sender) ||
+        (this.#joiningOwner !== null && this.#joiningOwner !== event.sender)
+      ) {
         return joinFailure(
           'authorization-failed',
-          'Another Forgeboard window owns the active collaboration session.',
+          'Another Forgeboard window owns the active or pending collaboration session.',
           false,
         );
       }
+      this.#joiningOwner = event.sender;
       const ownerId = this.#ownerId(event.sender);
       const ownerBeforeApproval = this.#owner;
       let approvalConsumed = false;
@@ -248,6 +263,7 @@ export class CollaborationIpcService {
         assertLiveMainFrame(event, 'Collaboration join');
         if (
           this.#owner !== (approvalConsumed ? event.sender : ownerBeforeApproval) ||
+          this.#joiningOwner !== event.sender ||
           this.#ownerIds.get(event.sender) !== ownerId ||
           parent.isDestroyed() ||
           BrowserWindow.fromWebContents(event.sender) !== parent
@@ -277,10 +293,13 @@ export class CollaborationIpcService {
         },
       });
       if (result.outcome === 'denied') {
+        this.#joiningOwner = null;
         return joinFailure('cancelled', 'The collaboration connection was cancelled.', false);
       }
+      this.#joiningOwner = null;
       return CollaborationJoinResultSchema.parse(result.value);
     } catch (error) {
+      if (this.#joiningOwner === event.sender) this.#joiningOwner = null;
       const invalid = error instanceof z.ZodError;
       return joinFailure(
         invalid ? 'invalid-configuration' : 'network-failed',
@@ -511,7 +530,10 @@ export class CollaborationIpcService {
       ) {
         recovery = store.checkpointCollaborationSyncState(scope, recovery.baseline);
       }
-      return { ok: true, value: CollaborationSyncRecoverySchema.parse(recovery) };
+      return {
+        ok: true,
+        value: CollaborationSyncRecoverySchema.parse(recovery),
+      };
     } catch (error) {
       return ipcFailure(error, 'Forgeboard could not discard the rejected local comment.');
     }
@@ -611,6 +633,7 @@ export class CollaborationIpcService {
   #discardOwner(): void {
     const owner = this.#owner;
     this.#owner = null;
+    this.#joiningOwner = null;
     this.#recordedDeliveryIds.clear();
     this.#clearSessionRejectedCommentSuppressions();
     if (owner === null) return;

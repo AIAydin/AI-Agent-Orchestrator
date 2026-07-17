@@ -29,6 +29,16 @@ export function initialWorkflowNodeData(
         : settings.defaultPermissionProfile;
     return { adapterId, permissionProfile };
   }
+  if (kind === 'terminal') {
+    return {
+      command: {
+        executable: settings.terminalShell,
+        arguments: [],
+        cwdRelative: '.',
+        environmentNames: [...settings.envAllowlist],
+      },
+    };
+  }
   if (kind === 'test') {
     return {
       command: copyCommand(settings.testCommand),

@@ -54,6 +54,87 @@ describe('CollaborationIpcService ownership and approval', () => {
     expect(JSON.stringify(disclosure)).not.toContain('SESSION_TOKEN_DO_NOT_DISCLOSE');
   });
 
+  it('main-authorizes terminal mutations only for collaboration owner and editor roles', async () => {
+    const viewerClient = fakeClient('viewer');
+    const viewerService = new CollaborationIpcService(
+      { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      { client: viewerClient },
+    );
+    viewerService.registerIpcHandlers();
+    const viewer = renderer(1);
+    const localWindow = renderer(2);
+    electron.fromWebContents.mockReturnValue(viewer.parent);
+
+    expect(() =>
+      viewerService.assertTerminalMutationAuthorized(viewer.sender as never),
+    ).not.toThrow();
+    await invoke('join', viewer.event, joinInput('viewer-token'));
+    expect(() => viewerService.assertTerminalMutationAuthorized(viewer.sender as never)).toThrow(
+      /collaboration role cannot/u,
+    );
+    expect(() =>
+      viewerService.assertTerminalMutationAuthorized(localWindow.sender as never),
+    ).not.toThrow();
+
+    await invoke('leave', viewer.event);
+    const editorClient = fakeClient('editor');
+    const editorService = new CollaborationIpcService(
+      { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      { client: editorClient },
+    );
+    editorService.registerIpcHandlers();
+    await invoke('join', viewer.event, joinInput('editor-token'));
+    expect(() =>
+      editorService.assertTerminalMutationAuthorized(viewer.sender as never),
+    ).not.toThrow();
+  });
+
+  it('denies terminal mutations while the collaboration owner role is unresolved', async () => {
+    const client = fakeClient('editor');
+    let resolveJoin: (() => void) | undefined;
+    client.join.mockImplementationOnce(
+      () =>
+        new Promise((resolvePromise) => {
+          resolveJoin = () =>
+            resolvePromise({
+              ok: true as const,
+              connection: {
+                connectionId: CONNECTION_ID,
+                serverUrl: 'wss://collaboration.example.test/team',
+                roomId: 'launch-room',
+                subject: 'editor-1',
+                displayName: 'Local editor',
+                color: '#6d5efc',
+                role: 'editor' as const,
+                status: 'connected' as const,
+                reconnect: true,
+                reconnectAttempt: 0,
+                connectedAt: NOW,
+                lastTransitionAt: NOW,
+              },
+            });
+        }),
+    );
+    const service = new CollaborationIpcService(
+      { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      { client },
+    );
+    service.registerIpcHandlers();
+    const owner = renderer(1);
+    electron.fromWebContents.mockReturnValue(owner.parent);
+
+    const joining = invoke('join', owner.event, joinInput('editor-token'));
+    await vi.waitFor(() => expect(client.join).toHaveBeenCalledOnce());
+    expect(() => service.assertTerminalMutationAuthorized(owner.sender as never)).toThrow(
+      /collaboration role cannot/u,
+    );
+    resolveJoin?.();
+    await joining;
+  });
+
   it('does not claim an owner on cancellation and never discloses the token', async () => {
     const client = fakeClient();
     const audit = { appendAudit: vi.fn() };
@@ -683,7 +764,10 @@ describe('CollaborationIpcService ownership and approval', () => {
         comment,
         rejectedDeliveryId,
       }),
-    ).resolves.toMatchObject({ ok: true, value: { disposition: 'synchronized' } });
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { disposition: 'synchronized' },
+    });
     expect(store.discardRejectedCollaborationComment).toHaveBeenCalledWith(
       expect.objectContaining({ subject: 'editor-1' }),
       comment,
@@ -764,7 +848,10 @@ describe('CollaborationIpcService ownership and approval', () => {
       }),
     ).resolves.toMatchObject({
       ok: true,
-      value: { disposition: 'rejected', dismissedRejectedComments: [{ id: comment.id }] },
+      value: {
+        disposition: 'rejected',
+        dismissedRejectedComments: [{ id: comment.id }],
+      },
     });
     expect(store.checkpointCollaborationSyncState).not.toHaveBeenCalled();
     expect(viewer.setRejectedCommentSuppressions).toHaveBeenLastCalledWith([comment], room);
@@ -782,8 +869,14 @@ describe('CollaborationIpcService ownership and approval', () => {
     };
     const room = safeSnapshot();
     const rejectedDeliveryId = '00000000-0000-4000-8000-000000000094';
-    const remoteC = { ...room, canvas: { ...room.canvas, title: 'Authenticated remote C' } };
-    const locallyPollutedCurrent = { ...remoteC, comments: { [comment.id]: comment } };
+    const remoteC = {
+      ...room,
+      canvas: { ...room.canvas, title: 'Authenticated remote C' },
+    };
+    const locallyPollutedCurrent = {
+      ...remoteC,
+      comments: { [comment.id]: comment },
+    };
     viewer.setSnapshot(locallyPollutedCurrent);
     store.recoverCollaborationSyncState.mockReturnValue({
       baseline: room,
@@ -809,7 +902,10 @@ describe('CollaborationIpcService ownership and approval', () => {
     await invoke('join', owner.event, joinInput('viewer-token'));
 
     await expect(
-      invoke('recover', owner.event, { projectId: PROJECT_ID, canvasId: CANVAS_ID }),
+      invoke('recover', owner.event, {
+        projectId: PROJECT_ID,
+        canvasId: CANVAS_ID,
+      }),
     ).resolves.toMatchObject({
       ok: true,
       value: { disposition: 'synchronized', pending: { comments: {} } },
@@ -862,7 +958,10 @@ describe('CollaborationIpcService ownership and approval', () => {
     electron.fromWebContents.mockReturnValue(owner.parent);
     await invoke('join', owner.event, joinInput('viewer-token'));
 
-    await invoke('recover', owner.event, { projectId: PROJECT_ID, canvasId: CANVAS_ID });
+    await invoke('recover', owner.event, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+    });
     expect(viewer.setRejectedCommentSuppressions).toHaveBeenLastCalledWith([comment], room);
 
     const advancedBaseline = {
@@ -882,7 +981,10 @@ describe('CollaborationIpcService ownership and approval', () => {
       dismissedRejectedCommentEntries: [{ comment, rejectedDeliveryId: originalDeliveryId }],
       expiresAt: NOW,
     });
-    await invoke('recover', owner.event, { projectId: PROJECT_ID, canvasId: CANVAS_ID });
+    await invoke('recover', owner.event, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+    });
     expect(viewer.setRejectedCommentSuppressions).toHaveBeenLastCalledWith(
       [comment],
       advancedBaseline,
@@ -902,7 +1004,10 @@ describe('CollaborationIpcService ownership and approval', () => {
       expiresAt: NOW,
     });
 
-    await invoke('recover', owner.event, { projectId: PROJECT_ID, canvasId: CANVAS_ID });
+    await invoke('recover', owner.event, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+    });
     expect(viewer.setRejectedCommentSuppressions).toHaveBeenLastCalledWith([], null);
     expect(store.checkpointCollaborationSyncState).not.toHaveBeenCalled();
   });
@@ -948,7 +1053,10 @@ describe('CollaborationIpcService ownership and approval', () => {
     electron.fromWebContents.mockReturnValue(owner.parent);
     await invoke('join', owner.event, joinInput('viewer-token'));
 
-    await invoke('recover', owner.event, { projectId: PROJECT_ID, canvasId: CANVAS_ID });
+    await invoke('recover', owner.event, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+    });
     expect(viewer.setRejectedCommentSuppressions).toHaveBeenLastCalledWith([comment], room);
 
     const acceptedBaseline = { ...room, comments: { [comment.id]: comment } };
@@ -956,7 +1064,10 @@ describe('CollaborationIpcService ownership and approval', () => {
       baseline: acceptedBaseline,
       pending: {
         ...acceptedBaseline,
-        canvas: { ...acceptedBaseline.canvas, title: 'Newer unrelated pending C' },
+        canvas: {
+          ...acceptedBaseline.canvas,
+          title: 'Newer unrelated pending C',
+        },
       },
       deliveryId: laterDeliveryId,
       snapshotDigest: '4'.repeat(64),
@@ -969,7 +1080,10 @@ describe('CollaborationIpcService ownership and approval', () => {
       expiresAt: NOW,
     });
 
-    await invoke('recover', owner.event, { projectId: PROJECT_ID, canvasId: CANVAS_ID });
+    await invoke('recover', owner.event, {
+      projectId: PROJECT_ID,
+      canvasId: CANVAS_ID,
+    });
     expect(viewer.setRejectedCommentSuppressions).toHaveBeenLastCalledWith([], null);
   });
 

@@ -164,6 +164,21 @@ import {
   saveGitHubCliBinding as saveDatabaseGitHubCliBinding,
 } from './storage/github-cli/repository.js';
 import type { StoredGitHubCliBinding } from './storage/github-cli/contracts.js';
+import type { TerminalSessionView } from '../shared/terminal/index.js';
+import {
+  createTerminalSession as createDatabaseTerminalSession,
+  deleteTerminalSession as deleteDatabaseTerminalSession,
+  deleteTerminalSessions as deleteDatabaseTerminalSessions,
+  getTerminalSession as getDatabaseTerminalSession,
+  getTerminalSessionRecord as getDatabaseTerminalSessionRecord,
+  listTerminalSessions as listDatabaseTerminalSessions,
+  listAllTerminalSessionIds as listAllDatabaseTerminalSessionIds,
+  listExpiredTerminalSessionIds as listExpiredDatabaseTerminalSessionIds,
+  recoverInterruptedTerminalSessions as recoverDatabaseInterruptedTerminalSessions,
+  updateTerminalSession as updateDatabaseTerminalSession,
+  type TerminalRecoveryReport,
+} from './storage/terminal/repository.js';
+import type { StoredTerminalSession } from './storage/terminal/contracts.js';
 import {
   checkpointCollaborationSyncState as checkpointDatabaseCollaborationSyncState,
   discardRejectedCollaborationComment as discardDatabaseRejectedCollaborationComment,
@@ -185,6 +200,8 @@ export type {
   TrustedExtensionState,
 } from './storage-schemas.js';
 export type { TransactionalAuditEvent } from './storage/database.js';
+export type { StoredTerminalSession } from './storage/terminal/contracts.js';
+export type { TerminalRecoveryReport } from './storage/terminal/repository.js';
 export type { AuditedCanvasSnapshotRestore } from './storage/projects-canvases.js';
 export type { PortableImportOptions } from './storage/transfers.js';
 export type {
@@ -321,6 +338,60 @@ export class LocalStore implements DeliveryReadinessStore {
     const cleared = clearDatabaseGitHubCliBinding(this.database);
     if (cleared) this.notifyDurableChange();
     return cleared;
+  }
+
+  createTerminalSession(session: TerminalSessionView): void {
+    createDatabaseTerminalSession(this.database, session);
+    this.notifyDurableChange();
+  }
+
+  updateTerminalSession(
+    session: TerminalSessionView,
+    transcript?: {
+      readonly transcriptBytes: number;
+      readonly lastPersistedSequence: number;
+    },
+  ): void {
+    updateDatabaseTerminalSession(this.database, session, transcript);
+    this.notifyDurableChange();
+  }
+
+  getTerminalSession(sessionId: string): TerminalSessionView | undefined {
+    return getDatabaseTerminalSession(this.database, sessionId);
+  }
+
+  getTerminalSessionRecord(sessionId: string): StoredTerminalSession | undefined {
+    return getDatabaseTerminalSessionRecord(this.database, sessionId);
+  }
+
+  listTerminalSessions(projectId: string, nodeId?: string): TerminalSessionView[] {
+    return listDatabaseTerminalSessions(this.database, projectId, nodeId);
+  }
+
+  recoverInterruptedTerminalSessions(now = new Date()): TerminalRecoveryReport {
+    const result = recoverDatabaseInterruptedTerminalSessions(this.database, now);
+    if (result.lostSessionIds.length > 0) this.notifyDurableChange();
+    return result;
+  }
+
+  deleteTerminalSessions(): number {
+    const deleted = deleteDatabaseTerminalSessions(this.database);
+    if (deleted > 0) this.notifyDurableChange();
+    return deleted;
+  }
+
+  deleteTerminalSession(sessionId: string): boolean {
+    const deleted = deleteDatabaseTerminalSession(this.database, sessionId);
+    if (deleted) this.notifyDurableChange();
+    return deleted;
+  }
+
+  listAllTerminalSessionIds(): string[] {
+    return listAllDatabaseTerminalSessionIds(this.database);
+  }
+
+  listExpiredTerminalSessionIds(cutoff: string): string[] {
+    return listExpiredDatabaseTerminalSessionIds(this.database, cutoff);
   }
 
   createDeliveryReadiness(

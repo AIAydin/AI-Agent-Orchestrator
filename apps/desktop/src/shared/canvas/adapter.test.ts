@@ -560,6 +560,42 @@ describe('canonical desktop canvas adapter', () => {
     });
   });
 
+  it('preserves UI-authored Terminal configuration across canonical save and reload', () => {
+    const configured = legacy({
+      nodes: [
+        node('terminal-1', 'terminal', {
+          command: {
+            executable: '/bin/zsh',
+            arguments: ['-l', '--no-rcs'],
+            cwdRelative: '.',
+            environmentNames: ['PATH', 'HOME'],
+          },
+        }),
+      ],
+      edges: [],
+    });
+
+    const synchronized = synchronizeCanvasDocument(configured);
+    expect(synchronized.ok).toBe(true);
+    if (!synchronized.ok) return;
+    expect(synchronized.document.nodes[0]?.data.command).toEqual({
+      executable: '/bin/zsh',
+      arguments: ['-l', '--no-rcs'],
+      cwdRelative: '.',
+      environmentNames: ['PATH', 'HOME'],
+    });
+
+    const reloaded = synchronizeCanvasDocument(synchronized.document);
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) return;
+    expect(reloaded.document.nodes[0]?.data.command).toEqual({
+      executable: '/bin/zsh',
+      arguments: ['-l', '--no-rcs'],
+      cwdRelative: '.',
+      environmentNames: ['PATH', 'HOME'],
+    });
+  });
+
   it('persists UI-authored test commands and bounded review-gate configuration canonically', () => {
     const migrated = canonicalCanvasFromLegacy(
       legacy({

@@ -67,6 +67,8 @@ import { SettingsPersistenceReadinessVerifier } from './settings/persistence-rea
 import { FolderReadinessIpcService } from './settings/folder-readiness/ipc.js';
 import { FolderReadinessService } from './settings/folder-readiness/service.js';
 import type { LocalStore } from './storage.js';
+import { TerminalIpcService } from './terminal/ipc.js';
+import { TerminalService } from './terminal/service.js';
 import { createWorkflowRuntimeComposition } from './workflow/host/composition.js';
 import { WorkflowIpcService } from './workflow/host/ipc.js';
 import { ExactCheckExecutor } from './workflow/exact-check/executor.js';
@@ -179,6 +181,7 @@ export interface ApplicationServices {
   projectClones: ProjectCloneIpcService;
   docker: DockerIpcService;
   runs: RunService;
+  terminal: TerminalIpcService;
   previews: PreviewIpcService;
   extensions: ExtensionIpcService;
   files: FileIpcService;
@@ -235,6 +238,14 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   });
   const projectClones = new ProjectCloneIpcService(dialog, projects, outbound, runDataOperation);
   const transcripts = join(app.getPath('userData'), 'transcripts');
+  const terminal = new TerminalIpcService(
+    dialog,
+    new TerminalService(store, join(transcripts, 'terminal'), () =>
+      store.getSettings(createDefaultSettings()),
+    ),
+    undefined,
+    (event) => collaboration.assertTerminalMutationAuthorized(event.sender),
+  );
   const testAgentPath = app.isPackaged
     ? join(process.resourcesPath, 'test-agent', 'cli.js')
     : resolve(process.cwd(), '../../packages/test-agent/dist/cli.js');
@@ -383,6 +394,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       withCleanupAdmission: createProcessQuiescenceAdmission(dataOperations, [
         workflows,
         runs,
+        terminal,
         previews,
         checks,
         deliveryReadiness,
@@ -404,6 +416,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     extensions.resumeAfterPrivacyReset();
     previews.resumeAfterPrivacyReset();
     runs.resumeAfterPrivacyReset();
+    terminal.resumeAfterPrivacyReset();
     checks.resumeAfterPrivacyReset();
     collaboration.resume();
     workflows.resumeAfterPrivacyReset();
@@ -422,6 +435,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     await gitConnections.pauseForShutdown();
     const operations = [
       runs.pauseForShutdown(),
+      terminal.pauseForShutdown(),
       previews.pauseForShutdown(),
       checks.pauseForShutdown(),
       readiness.pauseForShutdown(),
@@ -446,6 +460,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         await workflows.resetForPrivacy();
         await awaitDataServices([
           runs.resetForPrivacy(),
+          terminal.resetForPrivacy(),
           previews.resetForPrivacy(),
           checks.resetForPrivacy(),
           extensions.pauseForDataMutation(),
@@ -462,6 +477,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         checks.pauseForDataMutation();
         deliveryReadiness.pauseForDataMutation();
         await awaitDataServices([
+          terminal.pauseForDataMutation(),
           extensions.pauseForDataMutation(),
           git.resetForPrivacy(),
           gitRemote.resetForPrivacy(),
@@ -803,6 +819,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
             await workflows.resetForPrivacy();
             await awaitDataServices([
               runs.resetForPrivacy(),
+              terminal.resetForPrivacy(),
               previews.resetForPrivacy(),
               extensions.resetForPrivacy(),
               git.resetForPrivacy(),
@@ -836,6 +853,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   readiness.registerIpcHandler();
   projectClones.registerIpcHandler();
   runs.registerIpcHandlers();
+  terminal.registerIpcHandlers();
   previews.registerIpcHandlers();
   extensions.registerIpcHandlers();
   files.registerIpcHandlers();
@@ -855,6 +873,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     projectClones,
     docker,
     runs,
+    terminal,
     previews,
     extensions,
     files,
@@ -908,6 +927,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         readiness.dispose(),
         previews.dispose(),
         runs.dispose(),
+        terminal.dispose(),
         extensions.dispose(),
         git.dispose(),
         deliveryReadiness.dispose(),

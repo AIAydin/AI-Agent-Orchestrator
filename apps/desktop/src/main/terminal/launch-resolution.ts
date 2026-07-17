@@ -1,0 +1,302 @@
+import { constants } from 'node:fs';
+import { access, realpath, stat } from 'node:fs/promises';
+import { delimiter, extname, isAbsolute, relative, resolve, sep } from 'node:path';
+
+import type { AppSettings, Project } from '../../shared/application/contracts.js';
+import {
+  TerminalPrepareLaunchInputSchema,
+  type TerminalPermissionIndicator,
+  type TerminalPrepareLaunchInput,
+} from '../../shared/terminal/index.js';
+import {
+  assertLaunchExecutableIdentity,
+  captureLaunchExecutableIdentity,
+  type LaunchExecutableIdentity,
+} from '../agent-execution/launch-integrity.js';
+
+const MAX_EXECUTABLE_BYTES = 512 * 1_024 * 1_024;
+const MAX_PATH_ENTRIES = 4_096;
+const MAX_ENVIRONMENT_VALUE_BYTES = 64 * 1_024;
+const MAX_ENVIRONMENT_BYTES = 512 * 1_024;
+const MAX_REVIEWABLE_ARGUMENT_BYTES = 64 * 1_024;
+const BLOCKED_ENVIRONMENT_NAMES = new Set([
+  'BASH_ENV',
+  'ENV',
+  'ELECTRON_RUN_AS_NODE',
+  'NODE_EXTRA_CA_CERTS',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'NODE_REPL_EXTERNAL_MODULE',
+  'NODE_TLS_REJECT_UNAUTHORIZED',
+  'PYTHONINSPECT',
+  'PYTHONPATH',
+  'RUBYOPT',
+]);
+const BLOCKED_ENVIRONMENT_PREFIXES = ['DYLD_', 'LD_'];
+
+export const TERMINAL_PERMISSION_INDICATOR: TerminalPermissionIndicator = {
+  label: 'Local terminal (not sandboxed)',
+  sandboxed: false,
+  filesystem: 'operating-system-user',
+  network: 'operating-system-user',
+  detail:
+    'This terminal runs as your operating-system user. Its project working directory and environment allowlist are boundaries for configuration, not a security sandbox.',
+};
+
+interface DirectoryIdentity {
+  readonly path: string;
+  readonly device: number;
+  readonly inode: number;
+  readonly mode: number;
+  readonly modifiedAtMs: number;
+  readonly changedAtMs: number;
+}
+
+export interface ResolvedTerminalLaunch {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly projectPath: string;
+  readonly nodeId: string;
+  readonly configuredExecutable: string;
+  readonly executable: string;
+  readonly arguments: readonly string[];
+  readonly cwd: string;
+  readonly cwdRelative: string;
+  readonly environment: Readonly<Record<string, string>>;
+  readonly environmentVariableNames: readonly string[];
+  readonly columns: number;
+  readonly rows: number;
+  readonly rootIdentity: DirectoryIdentity;
+  readonly cwdIdentity: DirectoryIdentity;
+  readonly executableIdentity: LaunchExecutableIdentity;
+}
+
+export async function resolveTerminalLaunch(
+  project: Project,
+  input: TerminalPrepareLaunchInput,
+  settings: AppSettings,
+): Promise<ResolvedTerminalLaunch> {
+  const parsed = TerminalPrepareLaunchInputSchema.parse(input);
+  if (project.id !== parsed.projectId || project.missing) {
+    throw new Error('The selected terminal project is no longer available.');
+  }
+  const root = await canonicalDirectory(project.path, 'project');
+  const requestedCwd = resolve(root.path, parsed.cwdRelative === '.' ? '' : parsed.cwdRelative);
+  const cwd = await canonicalDirectory(requestedCwd, 'working');
+  assertContained(root.path, cwd.path);
+  const canonicalRelative = relative(root.path, cwd.path).split(sep).join('/') || '.';
+  if (!pathsEqual(canonicalRelative, parsed.cwdRelative)) {
+    throw new Error('The terminal working directory must use its canonical project-relative path.');
+  }
+  const executable = await locateExecutable(parsed.executable, cwd.path);
+  const argumentBytes = parsed.arguments.reduce(
+    (total, argument) => total + Buffer.byteLength(argument, 'utf8'),
+    0,
+  );
+  if (argumentBytes > MAX_REVIEWABLE_ARGUMENT_BYTES) {
+    throw new Error('The terminal argument list is too large to review safely in a native dialog.');
+  }
+  const executableIdentity = await captureLaunchExecutableIdentity(executable, {
+    maximumBytes: MAX_EXECUTABLE_BYTES,
+  });
+  const environment = terminalEnvironment(parsed.environmentVariableNames, settings);
+  return {
+    projectId: project.id,
+    projectName: project.name,
+    projectPath: project.path,
+    nodeId: parsed.nodeId,
+    configuredExecutable: parsed.executable,
+    executable,
+    arguments: [...parsed.arguments],
+    cwd: cwd.path,
+    cwdRelative: canonicalRelative,
+    environment: environment.values,
+    environmentVariableNames: environment.names,
+    columns: parsed.columns,
+    rows: parsed.rows,
+    rootIdentity: root,
+    cwdIdentity: cwd,
+    executableIdentity,
+  };
+}
+
+export async function assertTerminalLaunchCurrent(
+  resolved: ResolvedTerminalLaunch,
+  project: Project | undefined,
+  settings: AppSettings,
+): Promise<void> {
+  if (
+    project === undefined ||
+    project.missing ||
+    project.id !== resolved.projectId ||
+    !pathsEqual(project.path, resolved.projectPath)
+  ) {
+    throw new Error('The selected project changed after the terminal launch was reviewed.');
+  }
+  const [root, cwd] = await Promise.all([
+    canonicalDirectory(project.path, 'project'),
+    canonicalDirectory(resolve(project.path, resolved.cwdRelative), 'working'),
+  ]);
+  assertContained(root.path, cwd.path);
+  if (
+    !sameDirectoryIdentity(root, resolved.rootIdentity) ||
+    !sameDirectoryIdentity(cwd, resolved.cwdIdentity)
+  ) {
+    throw new Error('The terminal working directory changed after review. Review a fresh launch.');
+  }
+  assertEnvironmentStillAllowed(resolved.environmentVariableNames, settings);
+  await assertLaunchExecutableIdentity(resolved.executableIdentity, {
+    maximumBytes: MAX_EXECUTABLE_BYTES,
+  });
+}
+
+async function canonicalDirectory(
+  path: string,
+  label: 'project' | 'working',
+): Promise<DirectoryIdentity> {
+  let canonical: string;
+  try {
+    canonical = await realpath(resolve(path));
+  } catch {
+    throw new Error(`The terminal ${label} directory is no longer available.`);
+  }
+  const details = await stat(canonical);
+  if (!details.isDirectory()) throw new Error(`The terminal ${label} path is not a directory.`);
+  return {
+    path: canonical,
+    device: details.dev,
+    inode: details.ino,
+    mode: details.mode,
+    modifiedAtMs: details.mtimeMs,
+    changedAtMs: details.ctimeMs,
+  };
+}
+
+async function locateExecutable(command: string, cwd: string): Promise<string> {
+  for (const candidate of executableCandidates(command, cwd)) {
+    try {
+      const canonical = await realpath(candidate);
+      const details = await stat(canonical);
+      if (!details.isFile()) continue;
+      await access(canonical, process.platform === 'win32' ? constants.F_OK : constants.X_OK);
+      if (process.platform === 'win32' && /\.(?:bat|cmd)$/iu.test(canonical)) {
+        throw new Error(
+          'Windows batch files are not direct terminal executables. Choose PowerShell, cmd.exe, or another executable file.',
+        );
+      }
+      return canonical;
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Windows batch files')) throw error;
+    }
+  }
+  throw new Error('The configured terminal executable was not found or is not executable.');
+}
+
+function executableCandidates(command: string, cwd: string): string[] {
+  if (isAbsolute(command)) return [command];
+  if (command.includes('/') || command.includes('\\') || command.includes(sep)) {
+    return [resolve(cwd, command)];
+  }
+  const pathValue = process.env.PATH ?? process.env.Path ?? process.env.path ?? '';
+  const extensions =
+    process.platform === 'win32' && extname(command) === ''
+      ? (process.env.PATHEXT ?? '.COM;.EXE')
+          .split(';')
+          .filter((extension) => /^\.[A-Za-z0-9]+$/u.test(extension))
+          .slice(0, 32)
+      : [''];
+  return pathValue
+    .split(delimiter)
+    .filter((directory) => directory !== '' && !directory.includes('\0'))
+    .slice(0, MAX_PATH_ENTRIES)
+    .flatMap((directory) =>
+      extensions.map((extension) =>
+        resolve(cwd, unquoteWindowsPath(directory), `${command}${extension}`),
+      ),
+    );
+}
+
+function terminalEnvironment(
+  requestedNames: readonly string[],
+  settings: AppSettings,
+): { readonly values: Record<string, string>; readonly names: string[] } {
+  assertEnvironmentStillAllowed(requestedNames, settings);
+  const values: Record<string, string> = {};
+  let totalBytes = 0;
+  for (const requested of requestedNames) {
+    const actual = environmentEntry(requested);
+    const value = actual?.value ?? '';
+    if (value.includes('\0')) {
+      throw new Error(`Environment variable ${requested} contains an invalid NUL byte.`);
+    }
+    const bytes = Buffer.byteLength(value, 'utf8');
+    if (bytes > MAX_ENVIRONMENT_VALUE_BYTES) {
+      throw new Error(`Environment variable ${requested} is too large for a terminal launch.`);
+    }
+    totalBytes += Buffer.byteLength(requested, 'utf8') + bytes;
+    if (totalBytes > MAX_ENVIRONMENT_BYTES) {
+      throw new Error('The allowlisted terminal environment is too large.');
+    }
+    values[requested] = value;
+  }
+  return { values, names: Object.keys(values) };
+}
+
+function assertEnvironmentStillAllowed(names: readonly string[], settings: AppSettings): void {
+  const allowed = new Set(settings.envAllowlist.map((name) => name.toUpperCase()));
+  for (const name of names) {
+    const canonical = name.toUpperCase();
+    if (!allowed.has(canonical)) {
+      throw new Error(`Environment variable ${name} is not allowed by Terminal settings.`);
+    }
+    if (
+      BLOCKED_ENVIRONMENT_NAMES.has(canonical) ||
+      BLOCKED_ENVIRONMENT_PREFIXES.some((prefix) => canonical.startsWith(prefix))
+    ) {
+      throw new Error(`Environment variable ${name} cannot be passed to a local terminal.`);
+    }
+  }
+}
+
+function environmentEntry(
+  name: string,
+): { readonly name: string; readonly value: string } | undefined {
+  if (process.platform !== 'win32') {
+    const value = process.env[name];
+    return value === undefined ? undefined : { name, value };
+  }
+  const found = Object.entries(process.env).find(
+    ([candidate]) => candidate.toUpperCase() === name.toUpperCase(),
+  );
+  const value = found?.[1];
+  return found === undefined || value === undefined ? undefined : { name: found[0], value };
+}
+
+function assertContained(root: string, candidate: string): void {
+  const fromRoot = relative(root, candidate);
+  if (fromRoot === '' || (!fromRoot.startsWith('..') && !isAbsolute(fromRoot))) return;
+  throw new Error('The terminal working directory escapes the selected project.');
+}
+
+function sameDirectoryIdentity(left: DirectoryIdentity, right: DirectoryIdentity): boolean {
+  return (
+    pathsEqual(left.path, right.path) &&
+    left.device === right.device &&
+    left.inode === right.inode &&
+    left.mode === right.mode &&
+    left.modifiedAtMs === right.modifiedAtMs &&
+    left.changedAtMs === right.changedAtMs
+  );
+}
+
+function unquoteWindowsPath(value: string): string {
+  return process.platform === 'win32' && value.startsWith('"') && value.endsWith('"')
+    ? value.slice(1, -1)
+    : value;
+}
+
+function pathsEqual(left: string, right: string): boolean {
+  return process.platform === 'win32'
+    ? resolve(left).toLowerCase() === resolve(right).toLowerCase()
+    : resolve(left) === resolve(right);
+}

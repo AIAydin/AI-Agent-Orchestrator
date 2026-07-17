@@ -11,14 +11,18 @@ import { useAgentRunController } from './useAgentRunController.js';
 const prepare = vi.fn();
 const approve = vi.fn();
 const terminate = vi.fn();
+const interrupt = vi.fn();
 const onError = vi.fn();
 const updateNodeData = vi.fn();
 
 beforeEach(() => {
-  for (const mock of [prepare, approve, terminate, onError, updateNodeData]) mock.mockReset();
+  for (const mock of [prepare, approve, terminate, interrupt, onError, updateNodeData]) {
+    mock.mockReset();
+  }
   prepare.mockResolvedValue({ ok: true, value: disclosure() });
   approve.mockResolvedValue({ ok: true, value: true });
   terminate.mockResolvedValue({ ok: true, value: true });
+  interrupt.mockResolvedValue({ ok: true, value: true });
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -26,7 +30,7 @@ beforeEach(() => {
         prepare,
         approve,
         terminate,
-        interrupt: vi.fn(),
+        interrupt,
         sendInput: vi.fn(),
       },
     },
@@ -168,6 +172,41 @@ describe('useAgentRunController persisted review boundary', () => {
     expect(hook.result.current.runs.reviewedPrompt).toBeNull();
     expect(onError).toHaveBeenLastCalledWith('Selected context changed after review.');
   });
+
+  it('keeps a confirmed process active while waiting and clears it only after terminal state', async () => {
+    const hook = renderStatefulController();
+
+    await act(async () => await hook.result.current.runs.prepareSelectedRun());
+    expect(hook.result.current.node.data.status).toBe('waiting');
+    expect(hook.result.current.runs.selectedRunActive).toBe(false);
+
+    await act(async () => await hook.result.current.runs.approvePreparedRun());
+    expect(hook.result.current.node.data.status).toBe('running');
+    expect(hook.result.current.runs.selectedRunActive).toBe(true);
+
+    act(() => hook.result.current.setStatus('waiting'));
+    expect(hook.result.current.runs.selectedRunActive).toBe(true);
+
+    await act(async () => await hook.result.current.runs.controlRun('interrupt'));
+    expect(interrupt).toHaveBeenCalledWith(disclosure().runId);
+    expect(hook.result.current.node.data.status).toBe('waiting');
+    expect(hook.result.current.runs.selectedRunActive).toBe(true);
+
+    act(() => hook.result.current.setStatus('failed'));
+    expect(hook.result.current.runs.selectedRunActive).toBe(false);
+
+    act(() => hook.result.current.setStatus('waiting'));
+    expect(hook.result.current.runs.selectedRunActive).toBe(false);
+  });
+
+  it('does not treat a persisted running status as a live process after renderer restart', () => {
+    const node = agentNode();
+    node.data.runId = disclosure().runId;
+    node.data.status = 'running';
+    const hook = renderStatefulController(node);
+
+    expect(hook.result.current.runs.selectedRunActive).toBe(false);
+  });
 });
 
 function renderController(flushCanvas: () => Promise<boolean>) {
@@ -185,6 +224,35 @@ function renderController(flushCanvas: () => Promise<boolean>) {
       onError,
     });
     return { events, runs };
+  });
+}
+
+function renderStatefulController(initialNode = agentNode()) {
+  return renderHook(() => {
+    const [events, setEvents] = useState<string[]>([]);
+    const [node, setNode] = useState(initialNode);
+    const runs = useAgentRunController({
+      project: PROJECT,
+      selectedNode: node,
+      selectedAdapter: 'test-agent',
+      selectedPermission: 'plan-read-only',
+      permissionUnavailableReason: null,
+      flushCanvas: () => Promise.resolve(true),
+      updateNodeData: (nodeId, data) => {
+        setNode((current) =>
+          current.id === nodeId ? { ...current, data: { ...current.data, ...data } } : current,
+        );
+      },
+      setEvents,
+      onError,
+    });
+    return {
+      events,
+      node,
+      runs,
+      setStatus: (status: WorkshopNode['data']['status']) =>
+        setNode((current) => ({ ...current, data: { ...current.data, status } })),
+    };
   });
 }
 

@@ -231,6 +231,14 @@ describe('WorkflowNodeInspector', () => {
       adapterId: 'test-agent',
       permissionProfile: 'worktree-write',
     });
+    expect(initialWorkflowNodeData('terminal', 'terminal-1', settings)).toEqual({
+      command: {
+        executable: '/bin/sh',
+        arguments: [],
+        cwdRelative: '.',
+        environmentNames: ['PATH', 'CI'],
+      },
+    });
     expect(initialWorkflowNodeData('test', 'test-1', settings)).toEqual({
       command: { executable: 'pnpm', arguments: ['test'] },
       checkKind: 'test',
