@@ -967,3 +967,15 @@ unchecked when only a subset of their required behavior has proof.
   the isolated web/mobile preview entries only; one simultaneous comparison surface bound to multiple
   competing worktrees, exact fixed device-metric scaling inside a clipped stage, broader product
   items, cross-platform installers, signing/notarization, and public release remain open.
+- 2026-07-17: the frozen preview source checkpoint
+  `9e9ce8193ea7a4d46377d2fbc1356d59b01cf8a3` produced a fresh macOS arm64 application, ZIP, DMG,
+  and both blockmaps after rebuilding the native `node-pty` dependency. The packaged-application
+  smoke and read-only DMG mount/copy/launch smoke passed, the latter with `FORGEBOARD_SMOKE_OK`;
+  release metadata records the exact source commit and `unsigned-development` status. All four
+  distributables received fresh independent SHA-256 entries, and `hdiutil` validated the DMG. The
+  DMG SHA-256 is `b76d145af597e94a738b13c6ccd8af127cf54395152fb3950ae29e1de35f7967`;
+  the ZIP SHA-256 is `428dadf5d49c3aa03efeca71108e5418d49b061342bdf6010f23e633194ecbc9`.
+  Electron Builder found no Developer ID identity, so the executable is ad-hoc/linker-signed;
+  strict code-signing and Gatekeeper assessment fail. Fresh Windows/Linux/macOS Intel artifacts,
+  signing/notarization, repository visibility, a tag, and GitHub Release publication remain open.
+  Hosted Actions remain excluded because the billing/payment gate stops jobs before workflow steps.
