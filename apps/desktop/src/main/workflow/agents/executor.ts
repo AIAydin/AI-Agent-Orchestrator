@@ -1,12 +1,16 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { lstat, readFile, realpath } from 'node:fs/promises';
 
 import {
   AGENT_CONTEXT_ATTACHMENT_LIMIT,
   WorkflowExecutionReferenceSchema,
   contextAttachmentsForNode,
+  findSensitivePath,
+  currentReviewGateEvidence,
 } from '@forgeboard/core';
 import type { CanvasNode } from '@forgeboard/core/domain';
+import { AgentEventSchema } from '@forgeboard/agent-adapters';
 import { z } from 'zod';
 
 import {
@@ -29,10 +33,12 @@ import {
 import {
   WorkflowAgentContextResolutionSchema,
   WorkflowAgentEvidenceSchema,
+  WorkflowReviewerFinalRecordSchema,
   type ResolvedWorkflowAgentContext,
   type WorkflowAgentContextResolver,
 } from './executor-contracts.js';
 import { assignedAgentForTask, workflowTaskPrompt } from './task-delegation.js';
+import { WORKFLOW_EVIDENCE_VERIFIER_ID } from '../evidence/contracts.js';
 import { normalizeWorkflowAgentEvent, WorkflowAgentEventRelay } from './events.js';
 import type {
   WorkflowExecutorContext,
@@ -78,6 +84,7 @@ interface AgentNodeConfiguration {
   readonly prompt: string;
   readonly permissionProfile: AgentExecutionRequest['permissionProfile'];
   readonly attachmentIds: readonly string[];
+  readonly reviewerProtocol: boolean;
 }
 
 interface PendingAgentPreparation {
@@ -140,6 +147,7 @@ export class WorkflowAgentExecutor implements WorkflowNodeExecutor {
       ...(configuration.model === undefined ? {} : { model: configuration.model }),
       prompt: configuration.prompt,
       permissionProfile: configuration.permissionProfile,
+      ...(configuration.reviewerProtocol ? { reviewerProtocol: true } : {}),
       context: resolvedContext,
     });
     const ownerId = workflowAgentOwnerId(context);
@@ -183,7 +191,9 @@ export class WorkflowAgentExecutor implements WorkflowNodeExecutor {
     const launchObservedAt = this.#now().toISOString();
     const relay = new WorkflowAgentEventRelay();
     let sequence = 0;
+    const reviewerRecordCapture = new ReviewerFinalRecordCapture();
     let unsubscribe = this.#subscribeEvents?.(ownerId, (event) => {
+      reviewerRecordCapture.observe(event);
       const normalized = normalizeWorkflowAgentEvent(
         event,
         { runId: disclosure.runId, nodeId: disclosure.nodeId },
@@ -214,7 +224,14 @@ export class WorkflowAgentExecutor implements WorkflowNodeExecutor {
       if (handle.runId !== disclosure.runId) {
         throw new Error('The launched agent run does not match its reviewed disclosure.');
       }
-      return workflowAgentHandle(handle, disclosure, launchObservedAt, relay, cleanupEvents);
+      return workflowAgentHandle(
+        handle,
+        disclosure,
+        launchObservedAt,
+        relay,
+        cleanupEvents,
+        reviewerRecordCapture,
+      );
     } catch (validationError) {
       cleanupEvents();
       this.#superviseDetachedHandle(handle);
@@ -430,8 +447,52 @@ export class WorkflowAgentExecutor implements WorkflowNodeExecutor {
       const artifact = generatedById.get(attachmentId);
       return artifact === undefined ? [] : [artifact];
     });
+    const reviewerOutputs = reviewerCompletionOutputs(context, configurationReviewerId(context));
+    if (reviewerOutputs.length > 0 && resolution.projectRoot === undefined) {
+      throw new Error('Reviewer artifacts require an authoritative project root.');
+    }
+    const reviewerAttachments = reviewerOutputs.map((output) => {
+      const artifactPath = path.resolve(
+        resolution.projectRoot!,
+        '.forgeboard-context',
+        'reviews',
+        `${output.nodeId}-${output.contentDigest.slice('sha256:'.length, 24)}.json`,
+      );
+      return {
+        attachment: {
+          path: artifactPath,
+          kind: 'file' as const,
+          label: `Reviewed output for ${output.nodeId}`,
+          explicitlyApproved: true as const,
+          sha256: output.contentDigest.slice('sha256:'.length),
+        },
+        artifact: {
+          path: artifactPath,
+          content: output.artifactContent,
+          sha256: output.contentDigest.slice('sha256:'.length),
+        },
+      };
+    });
+    attachments.push(...reviewerAttachments.map(({ attachment }) => attachment));
+    generatedArtifacts.push(...reviewerAttachments.map(({ artifact }) => artifact));
+    const combinedManifestDigest =
+      reviewerAttachments.length === 0
+        ? resolution.manifestDigest
+        : attachments.length === 0
+          ? undefined
+          : createHash('sha256')
+              .update(
+                JSON.stringify({
+                  base: resolution.manifestDigest ?? null,
+                  attachments: attachments.map(({ path: selectedPath, sha256 }) => ({
+                    path: selectedPath,
+                    sha256,
+                  })),
+                }),
+              )
+              .digest('hex');
     const resolved: ResolvedWorkflowAgentContext =
-      resolution.manifestId === undefined || resolution.manifestDigest === undefined
+      combinedManifestDigest === undefined
         ? {
             attachments,
             ...(generatedArtifacts.length === 0 ? {} : { generatedArtifacts }),
@@ -439,11 +500,38 @@ export class WorkflowAgentExecutor implements WorkflowNodeExecutor {
         : {
             attachments,
             ...(generatedArtifacts.length === 0 ? {} : { generatedArtifacts }),
-            manifestId: resolution.manifestId,
-            manifestDigest: resolution.manifestDigest,
+            manifestId:
+              reviewerAttachments.length === 0
+                ? resolution.manifestId!
+                : `workflow-context-v2:${combinedManifestDigest.slice(0, 64)}`,
+            manifestDigest: combinedManifestDigest,
           };
     return AgentExecutionContextRequestSchema.parse(resolved);
   }
+}
+
+function configurationReviewerId(context: WorkflowExecutorContext): string {
+  if (context.node.type === 'agent') return context.node.id;
+  if (context.node.type === 'task') {
+    return assignedAgentForTask(context.node, context.runtime.canvas.nodes).id;
+  }
+  throw new Error('Reviewer context requires an Agent or assigned Task node.');
+}
+
+function reviewerCompletionOutputs(context: WorkflowExecutorContext, reviewerNodeId: string) {
+  return context.runtime.canvas.edges.flatMap((edge) => {
+    if (edge.type !== 'review' || !context.runtime.plan.executableEdgeIds.includes(edge.id))
+      return [];
+    const target = context.runtime.canvas.nodes.find(({ id }) => id === edge.targetNodeId);
+    const matches =
+      (edge.config.reviewer === 'agent' && edge.targetNodeId === reviewerNodeId) ||
+      (edge.config.reviewer === 'gate' &&
+        target?.type === 'review-gate' &&
+        target.data.reviewerAgentId === reviewerNodeId);
+    if (!matches) return [];
+    const output = context.runtime.evidence.nodeCompletionOutputs[edge.sourceNodeId];
+    return output === undefined ? [] : [output];
+  });
 }
 
 function agentContextFingerprint(context: AgentExecutionContextRequest): string {
@@ -488,13 +576,15 @@ function agentNodeConfiguration(context: WorkflowExecutorContext): AgentNodeConf
   if (!adapter.success) {
     throw new Error(`${subject} needs a valid configured agent adapter before it can run.`);
   }
-  const prompt =
+  const authoredPrompt =
     delegatedTask === undefined
       ? agent.data.promptDraft.trim()
       : workflowTaskPrompt(delegatedTask, context.projectId);
-  if (prompt === '') {
+  if (authoredPrompt === '') {
     throw new Error(`${subject} needs a nonempty prompt before it can run.`);
   }
+  const prompt = reviewerAgentPrompt(context, agent.id, authoredPrompt);
+  const reviewerProtocol = prompt !== authoredPrompt;
   const permissionProfile = PermissionProfileSchema.safeParse(agent.data.permissionProfileId);
   if (!permissionProfile.success) {
     throw new Error(`${subject} needs a valid permission profile before it can run.`);
@@ -511,7 +601,82 @@ function agentNodeConfiguration(context: WorkflowExecutorContext): AgentNodeConf
         ({ attachmentIds }) => attachmentIds,
       ),
     ]),
+    reviewerProtocol,
   };
+}
+
+function reviewerAgentPrompt(
+  context: WorkflowExecutorContext,
+  reviewerNodeId: string,
+  authoredPrompt: string,
+): string {
+  const edges = context.runtime.canvas.edges.filter(
+    (edge): edge is Extract<(typeof context.runtime.canvas.edges)[number], { type: 'review' }> => {
+      if (edge.type !== 'review' || !context.runtime.plan.executableEdgeIds.includes(edge.id)) {
+        return false;
+      }
+      if (edge.config.reviewer === 'agent') return edge.targetNodeId === reviewerNodeId;
+      const target = context.runtime.canvas.nodes.find(({ id }) => id === edge.targetNodeId);
+      return target?.type === 'review-gate' && target.data.reviewerAgentId === reviewerNodeId;
+    },
+  );
+  if (edges.length === 0) return authoredPrompt;
+  const assessments = edges.map((edge) => {
+    const reviewedRun = context.runtime.run.nodeRuns[edge.sourceNodeId];
+    const output = context.runtime.evidence.nodeCompletionOutputs[edge.sourceNodeId];
+    if (
+      reviewedRun?.status !== 'succeeded' ||
+      output?.runId !== context.runtime.run.id ||
+      output.nodeAttempt !== reviewedRun.attempt ||
+      output.verifierId !== WORKFLOW_EVIDENCE_VERIFIER_ID
+    ) {
+      throw new Error(
+        `Reviewer ${reviewerNodeId} has no verified output for ${edge.sourceNodeId}.`,
+      );
+    }
+    const target = context.runtime.canvas.nodes.find(({ id }) => id === edge.targetNodeId);
+    const checks =
+      target?.type === 'review-gate'
+        ? currentReviewGateEvidence(context.runtime, target.id).checks
+        : [];
+    return {
+      reviewEdgeId: edge.id,
+      reviewedNodeId: edge.sourceNodeId,
+      reviewedNodeAttempt: reviewedRun.attempt,
+      reviewedOutputDigest: output.contentDigest,
+      reviewedArtifactLabel: `Reviewed output for ${edge.sourceNodeId}`,
+      reviewedArtifactFormat:
+        'Forgeboard JSON snapshot; each file entry contains its relative path, status, and exact UTF-8 content',
+      structuredFindingsRequired: edge.config.structuredFindings,
+      checks,
+    };
+  });
+  const finalRecord = {
+    type: 'forgeboard.reviewer-assessment.final',
+    schemaVersion: 1,
+    executionId: context.executionId,
+    reviewerNodeId,
+    reviewerAttempt: context.attempt,
+    assessments: assessments.map((assessment) => ({
+      reviewEdgeId: assessment.reviewEdgeId,
+      reviewedNodeId: assessment.reviewedNodeId,
+      reviewedNodeAttempt: assessment.reviewedNodeAttempt,
+      reviewedOutputDigest: assessment.reviewedOutputDigest,
+      verdict: 'approved | changes-requested',
+      findings: [],
+      summary: null,
+    })),
+  };
+  return [
+    authoredPrompt,
+    '',
+    'Forgeboard reviewer protocol (authoritative):',
+    'Assess the exact reviewed outputs and check evidence below. Blocking problems require changes-requested and actionable findings.',
+    JSON.stringify(assessments, null, 2),
+    'Your final response must be one dedicated structured message payload matching this exact record shape and bound values:',
+    JSON.stringify(finalRecord, null, 2),
+    'Do not wrap the record in Markdown, a string, prose, or a provider-specific envelope. Forgeboard ignores prose and accepts only the dedicated final structured payload.',
+  ].join('\n');
 }
 
 async function terminateAfterValidationFailure(
@@ -605,6 +770,7 @@ function workflowAgentHandle(
   launchObservedAt: string,
   relay: WorkflowAgentEventRelay,
   cleanupEvents: () => void,
+  reviewerRecordCapture: ReviewerFinalRecordCapture,
 ): WorkflowNodeExecutionHandle {
   const executionReference = WorkflowExecutionReferenceSchema.parse(
     handle.process ?? {
@@ -614,12 +780,16 @@ function workflowAgentHandle(
     },
   );
   const completion = handle.completion
-    .then((untrusted) => {
+    .then(async (untrusted) => {
       const parsed = AgentExecutionCompletionSchema.parse(untrusted);
       if (parsed.runId !== handle.runId || parsed.nodeId !== disclosure.nodeId) {
         throw new Error('The agent completion does not match its launched workflow node.');
       }
-      return workflowAgentCompletion(parsed);
+      return workflowAgentCompletion(
+        parsed,
+        reviewerRecordCapture.finalRecord(),
+        await createReviewArtifact(parsed),
+      );
     })
     .finally(cleanupEvents);
   return {
@@ -645,8 +815,10 @@ function uniqueInOrder(values: readonly string[]): readonly string[] {
 
 function workflowAgentCompletion(
   execution: AgentExecutionCompletion,
+  reviewerFinalRecord?: z.infer<typeof WorkflowReviewerFinalRecordSchema>,
+  reviewArtifact?: z.infer<typeof WorkflowAgentEvidenceSchema>['reviewArtifact'],
 ): WorkflowNodeExecutionCompletion {
-  const evidence = agentEvidence(execution);
+  const evidence = agentEvidence(execution, reviewerFinalRecord, reviewArtifact);
   switch (execution.status) {
     case 'succeeded':
       return { completion: { status: 'succeeded' }, evidence };
@@ -674,6 +846,8 @@ function workflowAgentCompletion(
 
 function agentEvidence(
   execution: AgentExecutionCompletion,
+  reviewerFinalRecord?: z.infer<typeof WorkflowReviewerFinalRecordSchema>,
+  reviewArtifact?: z.infer<typeof WorkflowAgentEvidenceSchema>['reviewArtifact'],
 ): z.infer<typeof WorkflowAgentEvidenceSchema> {
   const changedFiles = execution.changedFiles
     .slice(0, MAX_CHANGED_FILES)
@@ -705,7 +879,188 @@ function agentEvidence(
       changedFiles.some(({ truncated }) => truncated),
     providerSessionId: providerSession?.value ?? null,
     providerSessionIdTruncated: providerSession?.truncated ?? false,
+    reviewerFinalRecord: reviewerFinalRecord ?? null,
+    reviewArtifact: reviewArtifact ?? null,
   });
+}
+
+async function createReviewArtifact(
+  execution: AgentExecutionCompletion,
+): Promise<NonNullable<z.infer<typeof WorkflowAgentEvidenceSchema>['reviewArtifact']> | undefined> {
+  if (
+    execution.status !== 'succeeded' ||
+    execution.worktreePath === null ||
+    execution.changedFiles.length === 0
+  ) {
+    return undefined;
+  }
+  if (execution.changedFiles.length > MAX_CHANGED_FILES) {
+    throw new Error('Reviewed output contains too many changed files for complete assessment.');
+  }
+  const root = await realpath(path.resolve(execution.worktreePath)).catch(() => undefined);
+  if (root === undefined) return undefined;
+  const files: Array<{ path: string; status: string; content: string }> = [];
+  let includedBytes = 0;
+  for (const relativePath of [...execution.changedFiles].sort()) {
+    if (findSensitivePath(relativePath) !== undefined) {
+      throw new Error('Reviewed output contains a sensitive changed path and cannot be assessed.');
+    }
+    const candidate = path.resolve(root, relativePath);
+    const relative = path.relative(root, candidate);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error('Reviewed output path escaped its source worktree.');
+    }
+    const details = await lstat(candidate).catch(() => undefined);
+    if (details === undefined) {
+      throw new Error('Deleted reviewed output lacks bounded prior content for assessment.');
+    }
+    if (!details.isFile() || details.isSymbolicLink() || details.size > 400_000 - includedBytes) {
+      throw new Error('Reviewed output cannot be represented within the bounded artifact.');
+    }
+    const canonical = await realpath(candidate);
+    if (canonical !== candidate) throw new Error('Reviewed output crosses a filesystem alias.');
+    const bytes = await readFile(candidate);
+    const content = bytes.toString('utf8');
+    if (content.includes('\0') || !Buffer.from(content, 'utf8').equals(bytes)) {
+      throw new Error('Binary reviewed output requires a separate human review.');
+    }
+    includedBytes += bytes.length;
+    files.push({ path: relativePath, status: 'present', content });
+  }
+  const content = JSON.stringify({ schemaVersion: 1, sourceRunId: execution.runId, files });
+  if (Buffer.byteLength(content, 'utf8') > 600_000) {
+    throw new Error('Reviewed output exceeds the bounded reviewer artifact limit.');
+  }
+  return {
+    sourceRunId: execution.runId,
+    worktreePath: root,
+    content,
+    sha256: createHash('sha256').update(content, 'utf8').digest('hex'),
+  };
+}
+
+export class ReviewerFinalRecordCapture {
+  #candidate: z.infer<typeof WorkflowReviewerFinalRecordSchema> | undefined;
+  #candidateProtocol: 'codex' | 'claude' | 'direct' | 'test-agent' | undefined;
+  #invalid = false;
+  #terminalSucceeded = false;
+  #protocolTerminal = false;
+
+  public observe(envelope: RunEventEnvelope): void {
+    if (envelope.kind !== 'agent-event') return;
+    const parsed = AgentEventSchema.safeParse(envelope.payload);
+    if (!parsed.success) return;
+    const event = parsed.data;
+    if (event.type === 'result') {
+      this.#terminalSucceeded = event.result.status === 'succeeded';
+      return;
+    }
+    if (event.type === 'message' && event.channel === 'stdout') {
+      if (isRecord(event.payload)) {
+        const payloadType = event.payload['type'];
+        if (payloadType === 'turn.completed' || payloadType === 'result') {
+          const terminalProtocol = payloadType === 'turn.completed' ? 'codex' : 'claude';
+          if (this.#candidateProtocol !== terminalProtocol || this.#protocolTerminal) {
+            this.#invalid = true;
+          } else {
+            this.#protocolTerminal = true;
+          }
+          return;
+        }
+        if (payloadType === 'completed' && isRecord(event.payload['metadata'])) {
+          const record = WorkflowReviewerFinalRecordSchema.safeParse(
+            event.payload['metadata']['reviewerFinalRecord'],
+          );
+          if (record.success && this.#candidate === undefined && !this.#protocolTerminal) {
+            this.#candidate = record.data;
+            this.#candidateProtocol = 'test-agent';
+            this.#protocolTerminal = true;
+            return;
+          }
+          this.#invalid = true;
+          return;
+        }
+      }
+      const candidate = reviewerRecordCandidate(event.payload);
+      const record = WorkflowReviewerFinalRecordSchema.safeParse(candidate);
+      const protocol = reviewerCandidateProtocol(event.payload);
+      if (
+        record.success &&
+        protocol !== undefined &&
+        this.#candidate === undefined &&
+        !this.#invalid &&
+        !this.#protocolTerminal
+      ) {
+        this.#candidate = record.data;
+        this.#candidateProtocol = protocol;
+        if (protocol === 'direct') this.#protocolTerminal = true;
+        return;
+      }
+      const laterAssistantContent =
+        this.#candidate !== undefined && exactAssistantText(event.payload) !== null;
+      const malformedDirectRecord =
+        isRecord(event.payload) && event.payload['type'] === 'forgeboard.reviewer-assessment.final';
+      if (laterAssistantContent || record.success || malformedDirectRecord) this.#invalid = true;
+      return;
+    }
+  }
+
+  public finalRecord(): z.infer<typeof WorkflowReviewerFinalRecordSchema> | undefined {
+    return this.#invalid || !this.#terminalSucceeded || !this.#protocolTerminal
+      ? undefined
+      : this.#candidate;
+  }
+}
+
+function reviewerCandidateProtocol(payload: unknown): 'codex' | 'claude' | 'direct' | undefined {
+  if (WorkflowReviewerFinalRecordSchema.safeParse(payload).success) return 'direct';
+  if (!isRecord(payload)) return undefined;
+  if (payload['type'] === 'item.completed') return 'codex';
+  if (payload['type'] === 'assistant') return 'claude';
+  return undefined;
+}
+
+function reviewerRecordCandidate(payload: unknown): unknown {
+  const direct = WorkflowReviewerFinalRecordSchema.safeParse(payload);
+  if (direct.success) return direct.data;
+  const text = exactAssistantText(payload);
+  if (text === null || text.length > 262_144) return undefined;
+  try {
+    return JSON.parse(text.trim()) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function exactAssistantText(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  const item = payload['item'];
+  if (
+    payload['type'] === 'item.completed' &&
+    isRecord(item) &&
+    item['type'] === 'agent_message' &&
+    typeof item['text'] === 'string'
+  ) {
+    return item['text'];
+  }
+  if (payload['type'] !== 'assistant') return null;
+  const message = payload['message'];
+  if (!isRecord(message) || message['role'] !== 'assistant') return null;
+  const content = message['content'];
+  if (!Array.isArray(content)) return null;
+  if (
+    content.some(
+      (part) => !isRecord(part) || part['type'] !== 'text' || typeof part['text'] !== 'string',
+    )
+  ) {
+    return null;
+  }
+  const parts = content.map((part) => (part as Record<string, unknown>)['text'] as string);
+  return parts.length === 0 ? null : parts.join('');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function agentFailureReason(execution: AgentExecutionCompletion): string {

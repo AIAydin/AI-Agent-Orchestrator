@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import {
   CliAgentAdapter,
+  AgentAdapterManifestSchema,
   createCustomCliAdapter,
   detectDockerRuntime,
   getBuiltInAgentManifest,
@@ -145,7 +146,9 @@ async function prepareAdapter(
     builtInManifest === undefined
       ? await dependencies.getTrustedAdapter(input.adapterId)
       : undefined;
-  const manifest = builtInManifest ?? trustedManifest;
+  const baseManifest = builtInManifest ?? trustedManifest;
+  const manifest =
+    baseManifest === undefined ? undefined : reviewerProtocolManifest(baseManifest, input);
   if (manifest === undefined) throw new Error(`No adapter is registered for ${input.adapterId}.`);
   assertModelSelectionSupported(input, manifest);
   const adapter = new CliAgentAdapter(manifest);
@@ -223,6 +226,59 @@ async function prepareAdapter(
       await assertLaunchExecutableIdentity(executableIdentity);
     },
   };
+}
+
+function reviewerProtocolManifest(
+  manifest: AgentAdapterManifest,
+  input: AgentExecutionRequest,
+): AgentAdapterManifest {
+  if (!input.reviewerProtocol) return manifest;
+  if (manifest.id === 'test-agent') return manifest;
+  if (manifest.id === 'codex') {
+    return AgentAdapterManifestSchema.parse({
+      ...manifest,
+      capabilities: { ...manifest.capabilities, resume: false },
+      invocation: {
+        ...manifest.invocation,
+        runtime: 'pipes',
+        launchArguments: [
+          'exec',
+          '--json',
+          '{permissionArgs}',
+          '{modelArgs}',
+          '{extraArgs}',
+          '{prompt}',
+        ],
+        resumeArguments: undefined,
+        output: 'json-lines',
+      },
+    });
+  }
+  if (manifest.id === 'claude') {
+    return AgentAdapterManifestSchema.parse({
+      ...manifest,
+      capabilities: { ...manifest.capabilities, resume: false },
+      invocation: {
+        ...manifest.invocation,
+        runtime: 'pipes',
+        launchArguments: [
+          '-p',
+          '--verbose',
+          '--output-format',
+          'stream-json',
+          '{permissionArgs}',
+          '{modelArgs}',
+          '{extraArgs}',
+          '{prompt}',
+        ],
+        resumeArguments: undefined,
+        output: 'json-lines',
+      },
+    });
+  }
+  throw new Error(
+    `Adapter ${manifest.id} cannot emit the strict structured reviewer protocol in this build.`,
+  );
 }
 
 function assertModelSelectionSupported(

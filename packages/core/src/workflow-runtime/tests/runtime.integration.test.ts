@@ -266,6 +266,8 @@ function reviewAssessment(
   if (reviewer === undefined || reviewed === undefined)
     throw new Error('Missing review provenance');
   return {
+    runId: runtime.run.id,
+    reviewEdgeId,
     reviewerNodeId,
     reviewerAttempt: reviewer.attempt,
     reviewedNodeId: edge.sourceNodeId,
@@ -575,6 +577,8 @@ describe('scoped workflow planning and typed edge behavior', () => {
         runtime,
         'review-edge',
         {
+          runId: runtime.run.id,
+          reviewEdgeId: 'review-edge',
           reviewerNodeId: 'reviewer-agent',
           reviewerAttempt: 1,
           reviewedNodeId: 'agent-1',

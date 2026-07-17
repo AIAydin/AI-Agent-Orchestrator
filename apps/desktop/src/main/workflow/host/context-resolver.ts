@@ -130,10 +130,12 @@ export class FileNodeWorkflowContextResolver {
   async #resolve(
     request: WorkflowAgentContextResolutionRequest,
   ): Promise<WorkflowAgentContextResolution> {
-    if (request.attachmentIds.length === 0) return { attachments: [] };
     const project = this.store.getProject(request.projectId);
     if (project === undefined || project.missing) {
       throw new Error('The workflow context project is no longer available.');
+    }
+    if (request.attachmentIds.length === 0) {
+      return { attachments: [], projectRoot: project.path };
     }
     const target = request.runtime.canvas.nodes.find((node) => node.id === request.nodeId);
     if (target === undefined || (target.type !== 'agent' && target.type !== 'task')) {
@@ -252,6 +254,7 @@ export class FileNodeWorkflowContextResolver {
       ...(generatedArtifacts.length === 0 ? {} : { generatedArtifacts }),
       manifestId: manifest?.id ?? `workflow-canvas-context-v1:${digest.slice(0, 64)}`,
       manifestDigest: digest,
+      projectRoot: project.path,
     };
   }
 }

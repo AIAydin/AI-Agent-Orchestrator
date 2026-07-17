@@ -9,6 +9,7 @@ import {
 } from '../workflow/model.js';
 import {
   ContextResolutionSchema,
+  NodeCompletionOutputSchema,
   OutputPublicationSchema,
   RevisionEscapeResolutionSchema,
   WorkflowHumanApprovalSchema,
@@ -141,6 +142,7 @@ export const WorkflowExecutionEvidenceSchema = z
     humanReviewDecisions: z.record(WorkflowHumanReviewDecisionSchema),
     contextResolutions: z.record(ContextResolutionSchema),
     outputPublications: z.record(OutputPublicationSchema),
+    nodeCompletionOutputs: z.record(NodeCompletionOutputSchema).default({}),
     reviewerAssessments: z.record(ReviewerAssessmentSchema),
     gateChecks: z.record(z.array(CheckResultSchema).max(MAX_RUNTIME_ENTITIES)),
     revisionEscapes: z.record(RevisionEscapeResolutionSchema),
@@ -156,6 +158,17 @@ export const WorkflowExecutionEvidenceSchema = z
         });
       }
     }
+    const artifactBytes = Object.values(evidence.nodeCompletionOutputs).reduce(
+      (total, output) => total + new TextEncoder().encode(output.artifactContent).byteLength,
+      0,
+    );
+    if (artifactBytes > 32 * 1024 * 1024) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nodeCompletionOutputs'],
+        message: 'Persisted reviewer artifacts exceed the 32 MiB aggregate limit',
+      });
+    }
     validateEmbeddedMapIds(evidence.humanApprovals, 'targetId', 'humanApprovals', context);
     validateEmbeddedMapIds(
       evidence.humanReviewDecisions,
@@ -165,6 +178,12 @@ export const WorkflowExecutionEvidenceSchema = z
     );
     validateEmbeddedMapIds(evidence.contextResolutions, 'edgeId', 'contextResolutions', context);
     validateEmbeddedMapIds(evidence.outputPublications, 'edgeId', 'outputPublications', context);
+    validateEmbeddedMapIds(
+      evidence.nodeCompletionOutputs,
+      'nodeId',
+      'nodeCompletionOutputs',
+      context,
+    );
     validateEmbeddedMapIds(evidence.revisionEscapes, 'loopId', 'revisionEscapes', context);
   });
 
@@ -253,6 +272,7 @@ function validateEvidenceBindings(
     ...Object.entries(runtime.evidence.humanReviewDecisions),
     ...Object.entries(runtime.evidence.contextResolutions),
     ...Object.entries(runtime.evidence.outputPublications),
+    ...Object.entries(runtime.evidence.nodeCompletionOutputs),
     ...Object.entries(runtime.evidence.revisionEscapes),
   ];
   for (const [key, record] of runIdEvidence) {
@@ -261,6 +281,19 @@ function validateEvidenceBindings(
         code: z.ZodIssueCode.custom,
         path: ['evidence', key],
         message: 'Workflow evidence must belong to the persisted workflow run',
+      });
+    }
+  }
+  for (const [nodeId, output] of Object.entries(runtime.evidence.nodeCompletionOutputs)) {
+    if (
+      nodeId !== output.nodeId ||
+      !runtime.plan.nodeIds.includes(nodeId) ||
+      output.nodeAttempt !== runtime.run.nodeRuns[nodeId]?.attempt
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['evidence', 'nodeCompletionOutputs', nodeId],
+        message: 'Node completion output must target the current planned node attempt',
       });
     }
   }

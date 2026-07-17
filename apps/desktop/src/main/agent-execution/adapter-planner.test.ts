@@ -19,6 +19,48 @@ afterEach(async () => {
 });
 
 describe('default agent adapter planner launch binding', () => {
+  it('uses provider-specific headless JSONL only for Codex and Claude reviewer runs', async () => {
+    if (process.platform === 'win32') return;
+    const repositoryPath = await temporaryDirectory();
+    for (const adapterId of ['codex', 'claude'] as const) {
+      const executable = path.join(repositoryPath, adapterId);
+      await writeFile(executable, '#!/bin/sh\nexit 0\n');
+      await chmod(executable, 0o700);
+      const planner = createDefaultAgentAdapterPlanner({
+        getTrustedAdapter: () => Promise.resolve(undefined),
+        resolveTestAgentCliPath: () => Promise.reject(new Error('not used')),
+      });
+      const settings = {
+        envAllowlist: [],
+        agentDefaultModels: {},
+        agentExecutableOverrides: { [adapterId]: executable },
+      } as unknown as AppSettings;
+      const reviewer = await planner(
+        { ...request(), adapterId, reviewerProtocol: true },
+        repositoryPath,
+        settings,
+        '123fae6e-e213-4a10-a0db-0f85b791f7e9',
+      );
+      const ordinary = await planner(
+        { ...request(), adapterId },
+        repositoryPath,
+        settings,
+        '223fae6e-e213-4a10-a0db-0f85b791f7e9',
+      );
+      expect(reviewer.plan.manifest.invocation.runtime).toBe('pipes');
+      expect(reviewer.plan.manifest.invocation.output).toBe('json-lines');
+      expect(reviewer.plan.disclosure.arguments).toEqual(
+        expect.arrayContaining(
+          adapterId === 'codex'
+            ? ['exec', '--json']
+            : ['-p', '--verbose', '--output-format', 'stream-json'],
+        ),
+      );
+      expect(ordinary.plan.manifest.invocation.runtime).toBe('pty');
+      expect(ordinary.plan.manifest.invocation.output).toBe('text');
+    }
+  });
+
   it('rejects a node model when the selected adapter does not support model selection', async () => {
     const repositoryPath = await temporaryDirectory();
     const planner = createDefaultAgentAdapterPlanner({

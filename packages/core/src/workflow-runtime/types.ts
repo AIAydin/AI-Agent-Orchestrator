@@ -29,6 +29,18 @@ export interface OutputPublication {
   readonly verifierId: string;
 }
 
+export interface NodeCompletionOutput {
+  readonly runId: string;
+  readonly nodeId: string;
+  readonly nodeAttempt: number;
+  readonly contentDigest: string;
+  readonly sourceRunId: string;
+  readonly worktreePath: string;
+  readonly artifactContent: string;
+  readonly verifiedAt: string;
+  readonly verifierId: string;
+}
+
 export interface ContextResolution {
   readonly edgeId: string;
   readonly runId: string;
@@ -88,6 +100,7 @@ export interface WorkflowExecutionEvidence {
   readonly humanReviewDecisions: Readonly<Record<string, WorkflowHumanReviewDecision>>;
   readonly contextResolutions: Readonly<Record<string, ContextResolution>>;
   readonly outputPublications: Readonly<Record<string, OutputPublication>>;
+  readonly nodeCompletionOutputs: Readonly<Record<string, NodeCompletionOutput>>;
   readonly reviewerAssessments: Readonly<Record<string, ReviewerAssessment>>;
   readonly gateChecks: Readonly<Record<string, readonly CheckResult[]>>;
   readonly revisionEscapes: Readonly<Record<string, RevisionEscapeResolution>>;

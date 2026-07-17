@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AppSettingsSchema } from '../../../../../../shared/application/contracts.js';
+import type { WorkflowReviewGateView } from '../../../../../../shared/workflow/contracts.js';
 import type { WorkshopNode } from '../../canvas/CanvasNode.js';
 import { WorkflowNodeInspector } from '../WorkflowNodeInspector.js';
 import { TestNodeConfiguration } from '../test-node/TestNodeConfiguration.js';
@@ -206,15 +207,14 @@ describe('WorkflowNodeInspector', () => {
     );
 
     expect(screen.getByRole('alert').textContent).toContain('Select both a test and lint producer');
+    expect(screen.getByText('Not evaluated')).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: /test-1/u }));
     expect(onUpdate).toHaveBeenCalledWith({
       requiredCheckIds: ['test'],
-      gateState: 'pending',
     });
     fireEvent.click(screen.getByRole('checkbox', { name: /Require human approval/u }));
     expect(onUpdate).toHaveBeenCalledWith({
       humanApprovalRequired: false,
-      gateState: 'pending',
     });
     expect(screen.queryByRole('combobox', { name: /Reviewer agent/u })).toBeNull();
     expect(screen.getByText(/Reviewer-agent gates are not available/u)).toBeTruthy();
@@ -223,8 +223,67 @@ describe('WorkflowNodeInspector', () => {
     });
     expect(onUpdate).toHaveBeenCalledWith({
       retryPolicy: { maximumIterations: 9, backoffMs: 0 },
-      gateState: 'pending',
     });
+  });
+
+  it('renders authoritative gate evidence instead of the stale configured gate state', () => {
+    const gate = node('gate-1', 'review-gate', {
+      humanApprovalRequired: false,
+      gateState: 'passed',
+    });
+    const reviewGate: WorkflowReviewGateView = {
+      nodeId: gate.id,
+      attempt: 2,
+      status: 'failed',
+      deterministicStatus: 'passed',
+      reviewerStatus: 'failed',
+      humanStatus: 'not-required',
+      checks: [{ id: 'test', kind: 'test', status: 'passed', exitCode: 0 }],
+      reviewerAssessment: {
+        runId: 'workflow-run',
+        reviewEdgeId: 'implementation-review',
+        reviewerNodeId: 'reviewer',
+        reviewerAttempt: 2,
+        reviewedNodeId: 'implementation',
+        reviewedNodeAttempt: 2,
+        reviewedOutputDigest: 'a'.repeat(64),
+        verdict: 'changes-requested',
+        findings: [
+          {
+            id: 'finding-1',
+            severity: 'error',
+            message: 'Cover the failure path.',
+            blocking: true,
+          },
+        ],
+        summary: 'Changes are required.',
+      },
+      missingCheckIds: [],
+      failedCheckIds: [],
+      pendingCheckIds: [],
+      blockingFindingIds: ['finding-1'],
+      reasons: ['Reviewer requested changes'],
+    };
+    render(
+      <WorkflowNodeInspector
+        node={gate}
+        nodes={[gate]}
+        settings={settings}
+        reviewGate={reviewGate}
+        onRecord={vi.fn()}
+        onUpdate={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Failed')).toBeTruthy();
+    expect(screen.getByText('Reviewer requested changes')).toBeTruthy();
+    expect(screen.getByLabelText('Selected check evidence').textContent).toContain(
+      'test · test · passed · exit 0',
+    );
+    expect(screen.getByLabelText('Reviewer assessment').textContent).toContain(
+      'Cover the failure path. · blocking',
+    );
   });
 
   it('creates executable node defaults from installed UI settings without invalid Docker claims', () => {

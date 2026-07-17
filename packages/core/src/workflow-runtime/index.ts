@@ -1,4 +1,5 @@
 export * from './types.js';
+export { ReviewerAssessmentSchema } from '../workflow/gates.js';
 export {
   ScopedWorkflowPlanSchema,
   WorkflowExecutionEvidenceSchema,
@@ -13,7 +14,7 @@ export {
   evaluateExecutableEdge,
   evaluateNodeReadiness,
 } from './evaluation.js';
-export { reviewGateEvaluation } from './evidence-state.js';
+export { currentReviewGateEvidence, reviewGateEvaluation } from './evidence-state.js';
 export {
   cancelWorkflowExecution,
   completeWorkflowNode,

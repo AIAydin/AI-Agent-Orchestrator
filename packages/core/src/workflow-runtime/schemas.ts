@@ -22,6 +22,20 @@ export const OutputPublicationSchema = z
   })
   .strict();
 
+export const NodeCompletionOutputSchema = z
+  .object({
+    runId: EntityIdSchema,
+    nodeId: EntityIdSchema,
+    nodeAttempt: z.number().int().positive(),
+    contentDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+    sourceRunId: EntityIdSchema,
+    worktreePath: z.string().min(1).max(32_768),
+    artifactContent: z.string().max(600_000),
+    verifiedAt: TimestampSchema,
+    verifierId: EntityIdSchema,
+  })
+  .strict();
+
 export const ContextResolutionSchema = z
   .object({
     edgeId: EntityIdSchema,

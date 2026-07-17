@@ -1,6 +1,7 @@
 import { CheckCircle2, ListChecks, ShieldCheck } from 'lucide-react';
 
 import type { AppSettings } from '../../../../../shared/application/contracts.js';
+import type { WorkflowReviewGateView } from '../../../../../shared/workflow/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { ConfiguredPermissionSummary } from '../../permissions/ConfiguredPermissionSummary.js';
 import { checkProducerId } from './workflow-node-config.js';
@@ -9,6 +10,7 @@ interface WorkflowNodeInspectorProps {
   readonly node: WorkshopNode;
   readonly nodes: readonly WorkshopNode[];
   readonly settings: AppSettings;
+  readonly reviewGate?: WorkflowReviewGateView;
   readonly onRecord: () => void;
   readonly onUpdate: (data: Partial<WorkshopNode['data']>) => void;
   readonly onError: (message: string) => void;
@@ -165,7 +167,13 @@ function TaskNodeInspector({
   );
 }
 
-function ReviewGateInspector({ node, nodes, onRecord, onUpdate }: WorkflowNodeInspectorProps) {
+function ReviewGateInspector({
+  node,
+  nodes,
+  reviewGate,
+  onRecord,
+  onUpdate,
+}: WorkflowNodeInspectorProps) {
   const testNodes = nodes.filter((candidate) => candidate.data.kind === 'test');
   const required = new Set(node.data.requiredCheckIds ?? []);
   const retryPolicy = node.data.retryPolicy ?? { maximumIterations: 3, backoffMs: 0 };
@@ -177,8 +185,7 @@ function ReviewGateInspector({ node, nodes, onRecord, onUpdate }: WorkflowNodeIn
     node.data.lintRequired === true &&
     !selectedTests.some((candidate) => candidate.data.checkKind === 'lint');
 
-  const updateGate = (data: Partial<WorkshopNode['data']>): void =>
-    onUpdate({ ...data, gateState: 'pending' });
+  const updateGate = (data: Partial<WorkshopNode['data']>): void => onUpdate(data);
 
   return (
     <section className="workflow-node-config" aria-label="Review gate configuration">
@@ -187,8 +194,11 @@ function ReviewGateInspector({ node, nodes, onRecord, onUpdate }: WorkflowNodeIn
           <ShieldCheck size={14} />
           <h3>Quality gate</h3>
         </div>
-        <span>{gateLabel(node.data.gateState)}</span>
+        <span>
+          {reviewGate === undefined ? 'Not evaluated' : gateLabelFromView(reviewGate.status)}
+        </span>
       </header>
+      {reviewGate !== undefined && <ReviewGateEvidence gate={reviewGate} />}
       <label className="workflow-toggle">
         <input
           type="checkbox"
@@ -338,6 +348,62 @@ function ReviewGateInspector({ node, nodes, onRecord, onUpdate }: WorkflowNodeIn
   );
 }
 
+function ReviewGateEvidence({ gate }: { readonly gate: WorkflowReviewGateView }) {
+  const findings = gate.reviewerAssessment?.findings ?? [];
+  const blocking = new Set(gate.blockingFindingIds);
+  return (
+    <section className="workflow-gate-evidence" aria-label="Authoritative review gate evidence">
+      <p>
+        Attempt {gate.attempt} · deterministic {gate.deterministicStatus.replaceAll('-', ' ')} ·
+        reviewer {gate.reviewerStatus.replaceAll('-', ' ')} · human{' '}
+        {gate.humanStatus.replaceAll('-', ' ')}
+      </p>
+      <ul aria-label="Review gate reasons">
+        {gate.reasons.map((reason) => (
+          <li key={reason}>{reason}</li>
+        ))}
+      </ul>
+      <div aria-label="Selected check evidence">
+        <strong>Selected checks</strong>
+        {gate.checks.length === 0 ? (
+          <p>No current selected check evidence.</p>
+        ) : (
+          <ul>
+            {gate.checks.map((check) => (
+              <li key={check.id}>
+                <code>{check.id}</code> · {check.kind} · {check.status}
+                {check.exitCode === undefined ? '' : ` · exit ${String(check.exitCode)}`}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {gate.reviewerAssessment !== null && (
+        <div aria-label="Reviewer assessment">
+          <strong>
+            Reviewer {gate.reviewerAssessment.reviewerNodeId} · {gate.reviewerAssessment.verdict}
+          </strong>
+          {gate.reviewerAssessment.summary !== undefined && (
+            <p>{gate.reviewerAssessment.summary}</p>
+          )}
+          {findings.length > 0 && (
+            <ul>
+              {findings.map((finding) => (
+                <li key={finding.id}>
+                  {finding.severity} · {finding.message}
+                  {blocking.has(finding.id) ? ' · blocking' : ''}
+                  {finding.path === undefined ? '' : ` · ${finding.path}`}
+                  {finding.line === undefined ? '' : `:${String(finding.line)}`}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function boundedInteger(value: string, minimum: number, maximum: number): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return minimum;
@@ -367,4 +433,8 @@ function gateLabel(state: WorkshopNode['data']['gateState']): string {
     failed: 'Failed',
     'waiting-for-human': 'Waiting for human',
   }[state ?? 'pending'];
+}
+
+function gateLabelFromView(state: WorkflowReviewGateView['status']): string {
+  return gateLabel(state === 'waiting-human' ? 'waiting-for-human' : state);
 }

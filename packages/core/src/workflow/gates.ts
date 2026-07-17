@@ -21,6 +21,8 @@ export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;
 
 export const ReviewerAssessmentSchema = z
   .object({
+    runId: EntityIdSchema,
+    reviewEdgeId: EntityIdSchema,
     reviewerNodeId: EntityIdSchema,
     reviewerAttempt: z.number().int().positive(),
     reviewedNodeId: EntityIdSchema,

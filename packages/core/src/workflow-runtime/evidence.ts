@@ -378,6 +378,9 @@ export function recordWorkflowReview(
     throw new Error(`Review source must succeed before assessment: ${edge.sourceNodeId}`);
   }
   const assessment = ReviewerAssessmentSchema.parse(untrustedAssessment);
+  if (assessment.runId !== runtime.run.id || assessment.reviewEdgeId !== reviewEdgeId) {
+    throw new Error('Review assessment is not bound to this execution and review edge');
+  }
   if (edge.config.reviewer === 'human') {
     throw new Error('Human review decisions must use the explicit human approval action');
   }

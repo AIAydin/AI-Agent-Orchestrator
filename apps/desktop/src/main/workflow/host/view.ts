@@ -1,4 +1,5 @@
 import {
+  currentReviewGateEvidence,
   evaluateExecutableEdge,
   getRevisionEscapeRequest,
   getWorkflowHumanApprovalRequest,
@@ -73,6 +74,48 @@ export function workflowHostStateToView(
     approvals: state.approvals,
     humanDecisions: humanDecisionRequests(state),
     revisionEscapes: revisionEscapeRequests(state),
+    reviewGates: state.runtime.canvas.nodes.flatMap((node) => {
+      if (node.type !== 'review-gate' || !state.runtime.plan.nodeIds.includes(node.id)) return [];
+      const run = state.runtime.run.nodeRuns[node.id];
+      if (run === undefined) throw new Error(`Workflow view is missing review gate ${node.id}.`);
+      const evidence = currentReviewGateEvidence(state.runtime, node.id);
+      const evaluation = evidence.evaluation;
+      return [
+        {
+          nodeId: node.id,
+          attempt: run.attempt,
+          status: evaluation.status,
+          deterministicStatus: evaluation.deterministicStatus,
+          reviewerStatus: evaluation.reviewerStatus,
+          humanStatus: evaluation.humanStatus,
+          checks: evidence.checks.map((check) => ({
+            id: check.id,
+            kind: check.kind,
+            status: check.status,
+            ...(check.producerNodeId === undefined ? {} : { producerNodeId: check.producerNodeId }),
+            ...(check.producerAttempt === undefined
+              ? {}
+              : { producerAttempt: check.producerAttempt }),
+            ...(check.reviewedNodeId === undefined ? {} : { reviewedNodeId: check.reviewedNodeId }),
+            ...(check.reviewedNodeAttempt === undefined
+              ? {}
+              : { reviewedNodeAttempt: check.reviewedNodeAttempt }),
+            ...(check.reviewedOutputDigest === undefined
+              ? {}
+              : { reviewedOutputDigest: check.reviewedOutputDigest }),
+            ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }),
+            ...(check.startedAt === undefined ? {} : { startedAt: check.startedAt }),
+            ...(check.endedAt === undefined ? {} : { endedAt: check.endedAt }),
+          })),
+          reviewerAssessment: evidence.reviewerAssessment ?? null,
+          missingCheckIds: evaluation.missingCheckIds,
+          failedCheckIds: evaluation.failedCheckIds,
+          pendingCheckIds: evaluation.pendingCheckIds,
+          blockingFindingIds: evaluation.blockingFindingIds,
+          reasons: gateReasons(evaluation.status, evaluation.reasons),
+        },
+      ];
+    }),
     scheduling: {
       runnableNodeIds: state.scheduling.runnableNodeIds.filter(
         (nodeId) => !delegateApprovals.has(nodeId),
@@ -105,6 +148,16 @@ export function workflowHostStateToView(
     updatedAt: state.runtime.run.updatedAt,
     ...(state.runtime.run.endedAt === undefined ? {} : { endedAt: state.runtime.run.endedAt }),
   });
+}
+
+function gateReasons(
+  status: 'pending' | 'waiting-human' | 'failed' | 'passed',
+  reasons: readonly string[],
+): readonly string[] {
+  if (reasons.length > 0) return reasons;
+  return status === 'passed'
+    ? ['All required review gate evidence passed']
+    : ['Review gate evidence is pending'];
 }
 
 function humanDecisionRequests(state: WorkflowHostState) {

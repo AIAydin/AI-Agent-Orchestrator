@@ -53,7 +53,6 @@ export function initialWorkflowNodeData(
       lintRequired: false,
       testsRequired: false,
       retryPolicy: { maximumIterations: 3, backoffMs: 0 },
-      gateState: 'pending',
     };
   }
   if (kind === 'diff') {

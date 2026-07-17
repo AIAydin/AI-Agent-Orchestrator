@@ -41,6 +41,8 @@ describe('review gate evaluation', () => {
     const result = evaluateReviewGate(gate({ reviewer: 'reviewer-1' }), {
       checks: [check('failed')],
       reviewerAssessment: {
+        runId: 'run-1',
+        reviewEdgeId: 'review-edge-1',
         reviewerNodeId: 'reviewer-1',
         reviewerAttempt: 1,
         reviewedNodeId: 'implementation-1',

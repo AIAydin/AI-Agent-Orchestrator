@@ -8,6 +8,58 @@ import type { WorkflowExecutionRuntime } from '@forgeboard/core';
 
 const FingerprintSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 
+export const WorkflowReviewerFinalRecordSchema = z
+  .object({
+    type: z.literal('forgeboard.reviewer-assessment.final'),
+    schemaVersion: z.literal(1),
+    executionId: EntityIdSchema,
+    reviewerNodeId: EntityIdSchema,
+    reviewerAttempt: z.number().int().positive().max(10_000),
+    assessments: z
+      .array(
+        z
+          .object({
+            reviewEdgeId: EntityIdSchema,
+            reviewedNodeId: EntityIdSchema,
+            reviewedNodeAttempt: z.number().int().positive().max(10_000),
+            reviewedOutputDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+            verdict: z.enum(['approved', 'changes-requested']),
+            findings: z
+              .array(
+                z
+                  .object({
+                    id: EntityIdSchema,
+                    severity: z.enum(['info', 'warning', 'error']),
+                    message: z.string().min(1).max(100_000),
+                    blocking: z.boolean().default(false),
+                    path: z.string().min(1).max(4_096).nullable().default(null),
+                    line: z.number().int().positive().nullable().default(null),
+                  })
+                  .strict(),
+              )
+              .max(256)
+              .default([]),
+            summary: z.string().max(16_384).nullable().default(null),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(32),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (
+      new Set(record.assessments.map(({ reviewEdgeId }) => reviewEdgeId)).size !==
+      record.assessments.length
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['assessments'],
+        message: 'Final reviewer assessments must target unique review edges.',
+      });
+    }
+  });
+
 export const WorkflowAgentResolvedAttachmentSchema = z
   .object({
     attachmentId: EntityIdSchema,
@@ -32,6 +84,7 @@ export const WorkflowAgentContextResolutionSchema = z
       .optional(),
     manifestId: z.string().min(1).max(128).optional(),
     manifestDigest: FingerprintSchema.optional(),
+    projectRoot: z.string().min(1).max(32_768).optional(),
   })
   .strict()
   .superRefine((resolution, context) => {
@@ -74,6 +127,7 @@ export interface ResolvedWorkflowAgentContext {
   readonly generatedArtifacts?: readonly z.infer<typeof GeneratedAgentContextArtifactSchema>[];
   readonly manifestId?: string;
   readonly manifestDigest?: string;
+  readonly projectRoot?: string;
 }
 
 export const WorkflowAgentEvidenceSchema = z
@@ -96,6 +150,17 @@ export const WorkflowAgentEvidenceSchema = z
     changedFilesTruncated: z.boolean(),
     providerSessionId: z.string().max(512).nullable(),
     providerSessionIdTruncated: z.boolean(),
+    reviewerFinalRecord: WorkflowReviewerFinalRecordSchema.nullable().default(null),
+    reviewArtifact: z
+      .object({
+        sourceRunId: z.string().uuid(),
+        worktreePath: z.string().min(1).max(32_768),
+        content: z.string().max(600_000),
+        sha256: FingerprintSchema,
+      })
+      .strict()
+      .nullable()
+      .default(null),
   })
   .strict();
 export type WorkflowAgentEvidence = z.infer<typeof WorkflowAgentEvidenceSchema>;

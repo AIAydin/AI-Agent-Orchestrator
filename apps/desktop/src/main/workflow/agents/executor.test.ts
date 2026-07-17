@@ -1,6 +1,8 @@
 import {
   createWorkflowExecutionRuntime,
+  completeWorkflowNode,
   recordWorkflowContextResolution,
+  startWorkflowNode,
   type WorkflowEvidenceVerifier,
   type WorkflowExecutionRuntime,
 } from '@forgeboard/core';
@@ -10,6 +12,7 @@ import {
   type CanvasEdge,
   type CanvasNode,
 } from '@forgeboard/core/domain';
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -29,6 +32,7 @@ import {
   type WorkflowAgentContextResolver,
 } from './executor-contracts.js';
 import {
+  ReviewerFinalRecordCapture,
   WorkflowAgentExecutor,
   workflowAgentOwnerId,
   type WorkflowAgentExecutionBackend,
@@ -423,6 +427,68 @@ describe('WorkflowAgentExecutor preparation', () => {
     ]);
   });
 
+  it('main-composes an exact executable reviewer protocol from a normal Agent prompt', async () => {
+    const artifactContent = '{"files":[{"path":"src/a.ts","base64":"YQ=="}]}';
+    const artifactDigest = createHash('sha256').update(artifactContent).digest('hex');
+    const implementation = agentNode({ id: 'implementation', prompt: 'Implement the feature.' });
+    const reviewer = agentNode({ id: 'reviewer', prompt: 'Review this carefully.' });
+    const edge: CanvasEdge = {
+      id: 'agent-review',
+      sourceNodeId: implementation.id,
+      targetNodeId: reviewer.id,
+      type: 'review',
+      config: { reviewer: 'agent', requireApproval: true, structuredFindings: true },
+      inspector: {},
+      createdAt: NOW,
+    };
+    let runtime = workflowRuntimeForCanvas([implementation, reviewer], [edge]);
+    runtime = startWorkflowNode(
+      runtime,
+      implementation.id,
+      {
+        pid: 41,
+        startedAt: NOW,
+        identityToken: 'implementation-process',
+      },
+      NOW,
+    );
+    runtime = completeWorkflowNode(runtime, implementation.id, { status: 'succeeded' }, NOW);
+    runtime = {
+      ...runtime,
+      evidence: {
+        ...runtime.evidence,
+        nodeCompletionOutputs: {
+          implementation: {
+            runId: runtime.run.id,
+            nodeId: implementation.id,
+            nodeAttempt: 1,
+            sourceRunId: RUN_ID,
+            worktreePath: '/managed/implementation',
+            artifactContent,
+            contentDigest: `sha256:${artifactDigest}`,
+            verifiedAt: NOW,
+            verifierId: 'forgeboard.workflow-evidence-v1',
+          },
+        },
+      },
+    };
+    const backend = new FakeAgentBackend();
+    const executor = workflowAgentExecutor(
+      backend,
+      contextResolver({ attachments: [], projectRoot: '/project' }),
+    );
+    await executor.prepare(workflowContext(reviewer, runtime));
+
+    const request = backend.prepareCalls[0]!.request;
+    expect(request.reviewerProtocol).toBe(true);
+    expect(request.prompt).toContain('Review this carefully.');
+    expect(request.prompt).toContain('agent-review');
+    expect(request.prompt).toContain(`sha256:${artifactDigest}`);
+    expect(request.prompt).not.toContain('YQ==');
+    expect(request.context.generatedArtifacts?.[0]?.content).toContain('src/a.ts');
+    expect(request.prompt).toContain('forgeboard.reviewer-assessment.final');
+  });
+
   it('resolves only Task-bound Context attachments, not assignee context or related-file metadata', async () => {
     const assignee = agentNode({
       id: 'task-agent',
@@ -788,6 +854,8 @@ describe('WorkflowAgentExecutor launch and completion', () => {
         changedFilesTruncated: false,
         providerSessionId: null,
         providerSessionIdTruncated: false,
+        reviewerFinalRecord: null,
+        reviewArtifact: null,
       },
     });
   });
@@ -911,6 +979,210 @@ describe('WorkflowAgentExecutor launch and completion', () => {
     });
   });
 });
+
+describe('ReviewerFinalRecordCapture', () => {
+  it('accepts one exact Codex record only after the matching terminal and successful result', () => {
+    const capture = new ReviewerFinalRecordCapture();
+    const record = reviewerFinalRecord();
+    capture.observe(
+      reviewerEnvelope({
+        type: 'stream',
+        channel: 'stdout',
+        data: `${JSON.stringify({ type: 'item.completed' })}\n`,
+      }),
+    );
+    capture.observe(
+      reviewerEnvelope({
+        type: 'message',
+        channel: 'stdout',
+        payload: {
+          type: 'item.completed',
+          item: { type: 'agent_message', text: JSON.stringify(record) },
+        },
+      }),
+    );
+    expect(capture.finalRecord()).toBeUndefined();
+    capture.observe(
+      reviewerEnvelope({ type: 'message', channel: 'stdout', payload: { type: 'turn.completed' } }),
+    );
+    capture.observe(reviewerResultEvent('succeeded'));
+    expect(capture.finalRecord()).toEqual(record);
+  });
+
+  it('accepts one exact Claude record and ignores its non-assistant result payload', () => {
+    const capture = new ReviewerFinalRecordCapture();
+    const record = reviewerFinalRecord();
+    capture.observe(
+      reviewerEnvelope({
+        type: 'message',
+        channel: 'stdout',
+        payload: {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: JSON.stringify(record) }],
+          },
+        },
+      }),
+    );
+    capture.observe(
+      reviewerEnvelope({
+        type: 'message',
+        channel: 'stdout',
+        payload: { type: 'result', result: JSON.stringify(record) },
+      }),
+    );
+    capture.observe(reviewerResultEvent('succeeded'));
+    expect(capture.finalRecord()).toEqual(record);
+  });
+
+  it('rejects later assistant content, duplicate terminals, and failed processes', () => {
+    const record = reviewerFinalRecord();
+    const later = new ReviewerFinalRecordCapture();
+    later.observe(codexReviewerMessage(record));
+    later.observe(codexReviewerMessage({ note: 'later assistant text' }));
+    later.observe(
+      reviewerEnvelope({ type: 'message', channel: 'stdout', payload: { type: 'turn.completed' } }),
+    );
+    later.observe(reviewerResultEvent('succeeded'));
+    expect(later.finalRecord()).toBeUndefined();
+
+    const duplicateTerminal = new ReviewerFinalRecordCapture();
+    duplicateTerminal.observe(codexReviewerMessage(record));
+    duplicateTerminal.observe(
+      reviewerEnvelope({ type: 'message', channel: 'stdout', payload: { type: 'turn.completed' } }),
+    );
+    duplicateTerminal.observe(
+      reviewerEnvelope({ type: 'message', channel: 'stdout', payload: { type: 'turn.completed' } }),
+    );
+    duplicateTerminal.observe(reviewerResultEvent('succeeded'));
+    expect(duplicateTerminal.finalRecord()).toBeUndefined();
+
+    const failed = new ReviewerFinalRecordCapture();
+    failed.observe(codexReviewerMessage(record));
+    failed.observe(
+      reviewerEnvelope({ type: 'message', channel: 'stdout', payload: { type: 'turn.completed' } }),
+    );
+    failed.observe(reviewerResultEvent('failed'));
+    expect(failed.finalRecord()).toBeUndefined();
+  });
+
+  it('rejects stderr lookalikes, mixed Claude content, prose, and missing terminals', () => {
+    const record = reviewerFinalRecord();
+    const capture = new ReviewerFinalRecordCapture();
+    capture.observe(
+      reviewerEnvelope({
+        type: 'message',
+        channel: 'stderr',
+        payload: {
+          type: 'item.completed',
+          item: { type: 'agent_message', text: JSON.stringify(record) },
+        },
+      }),
+    );
+    capture.observe(
+      reviewerEnvelope({
+        type: 'message',
+        channel: 'stdout',
+        payload: {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [
+              { type: 'text', text: JSON.stringify(record) },
+              { type: 'tool_use', id: 'unsafe' },
+            ],
+          },
+        },
+      }),
+    );
+    capture.observe(codexReviewerMessage(`Result: ${JSON.stringify(record)}`));
+    capture.observe(reviewerResultEvent('succeeded'));
+    expect(capture.finalRecord()).toBeUndefined();
+  });
+
+  it('accepts the deterministic fixture metadata protocol without hand-authored prompt IDs', () => {
+    const capture = new ReviewerFinalRecordCapture();
+    const record = reviewerFinalRecord();
+    capture.observe(
+      reviewerEnvelope({
+        type: 'message',
+        channel: 'stdout',
+        payload: { type: 'completed', metadata: { reviewerFinalRecord: record } },
+      }),
+    );
+    capture.observe(reviewerResultEvent('succeeded'));
+    expect(capture.finalRecord()).toEqual(record);
+  });
+});
+
+function reviewerFinalRecord() {
+  return {
+    type: 'forgeboard.reviewer-assessment.final' as const,
+    schemaVersion: 1 as const,
+    executionId: EXECUTION_ID,
+    reviewerNodeId: 'reviewer',
+    reviewerAttempt: 1,
+    assessments: [
+      {
+        reviewEdgeId: 'review-edge',
+        reviewedNodeId: 'implementation',
+        reviewedNodeAttempt: 1,
+        reviewedOutputDigest: `sha256:${OUTPUT_DIGEST}`,
+        verdict: 'approved' as const,
+        findings: [],
+        summary: null,
+      },
+    ],
+  };
+}
+
+function reviewerEnvelope(
+  payload:
+    | { readonly type: 'stream'; readonly channel: 'stdout'; readonly data: string }
+    | {
+        readonly type: 'message';
+        readonly channel: 'stdout' | 'stderr';
+        readonly payload: unknown;
+      },
+): RunEventEnvelope {
+  return {
+    runId: RUN_ID,
+    nodeId: 'reviewer',
+    kind: 'agent-event',
+    payload: { sequence: 1, timestamp: NOW, ...payload },
+  };
+}
+
+function reviewerResultEvent(status: 'succeeded' | 'failed'): RunEventEnvelope {
+  return {
+    runId: RUN_ID,
+    nodeId: 'reviewer',
+    kind: 'agent-event',
+    payload: {
+      sequence: 2,
+      timestamp: LATER,
+      type: 'result',
+      result: {
+        status,
+        exitCode: status === 'succeeded' ? 0 : 1,
+        signal: null,
+        startedAt: NOW,
+        endedAt: LATER,
+        durationMs: 60_000,
+      },
+    },
+  };
+}
+
+function codexReviewerMessage(value: unknown): RunEventEnvelope {
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return reviewerEnvelope({
+    type: 'message',
+    channel: 'stdout',
+    payload: { type: 'item.completed', item: { type: 'agent_message', text } },
+  });
+}
 
 class FakeAgentBackend implements WorkflowAgentExecutionBackend {
   public readonly prepareCalls: Array<{ ownerId: string; request: AgentExecutionRequest }> = [];

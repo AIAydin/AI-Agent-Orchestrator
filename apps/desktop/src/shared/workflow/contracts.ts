@@ -1,5 +1,8 @@
-import { JsonValueSchema, RunStatusSchema } from '@forgeboard/core/domain';
-import { WorkflowRunScopeSchema } from '@forgeboard/core/workflow-runtime';
+import { CheckResultSchema, JsonValueSchema, RunStatusSchema } from '@forgeboard/core/domain';
+import {
+  ReviewerAssessmentSchema,
+  WorkflowRunScopeSchema,
+} from '@forgeboard/core/workflow-runtime';
 import { z } from 'zod';
 import {
   CheckArtifactReferenceSchema,
@@ -250,6 +253,40 @@ const WorkflowSchedulingViewSchema = z
   })
   .strict();
 
+export const WorkflowReviewGateCheckEvidenceSchema = CheckResultSchema.pick({
+  id: true,
+  producerNodeId: true,
+  producerAttempt: true,
+  reviewedNodeId: true,
+  reviewedNodeAttempt: true,
+  reviewedOutputDigest: true,
+  kind: true,
+  status: true,
+  exitCode: true,
+  startedAt: true,
+  endedAt: true,
+}).strict();
+export type WorkflowReviewGateCheckEvidence = z.infer<typeof WorkflowReviewGateCheckEvidenceSchema>;
+
+export const WorkflowReviewGateViewSchema = z
+  .object({
+    nodeId: WorkflowIdSchema,
+    attempt: z.number().int().positive(),
+    status: z.enum(['pending', 'waiting-human', 'failed', 'passed']),
+    deterministicStatus: z.enum(['pending', 'failed', 'passed']),
+    reviewerStatus: z.enum(['not-required', 'pending', 'failed', 'passed']),
+    humanStatus: z.enum(['not-required', 'pending', 'approved']),
+    checks: z.array(WorkflowReviewGateCheckEvidenceSchema).max(2_000),
+    reviewerAssessment: ReviewerAssessmentSchema.nullable(),
+    missingCheckIds: z.array(WorkflowIdSchema),
+    failedCheckIds: z.array(WorkflowIdSchema),
+    pendingCheckIds: z.array(WorkflowIdSchema),
+    blockingFindingIds: z.array(WorkflowIdSchema),
+    reasons: z.array(z.string().min(1).max(20_000)).min(1),
+  })
+  .strict();
+export type WorkflowReviewGateView = z.infer<typeof WorkflowReviewGateViewSchema>;
+
 export const WorkflowExecutionViewSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -265,6 +302,7 @@ export const WorkflowExecutionViewSchema = z
     approvals: z.array(WorkflowApprovalRequestSchema),
     humanDecisions: z.array(WorkflowHumanDecisionRequestSchema),
     revisionEscapes: z.array(WorkflowRevisionEscapeRequestSchema),
+    reviewGates: z.array(WorkflowReviewGateViewSchema).max(2_000).optional(),
     scheduling: WorkflowSchedulingViewSchema,
     cancellationRequested: z.boolean(),
     testResults: z.array(WorkflowTestResultSchema).max(2_000).default([]),

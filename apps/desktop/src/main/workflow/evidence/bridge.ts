@@ -5,6 +5,8 @@ import {
   publishWorkflowOutput,
   recordWorkflowContextResolution,
   recordWorkflowGateChecks,
+  recordWorkflowReview,
+  type ReviewerAssessment,
   type ContextResolution,
   type OutputPublication,
   type WorkflowEvidenceVerifier,
@@ -264,7 +266,35 @@ function recordCompletionEvidence(
     }
     const parsed = WorkflowAgentEvidenceSchema.parse(evidence);
     assertAgentRunEvidence(runtime, node, parsed, occurredAt);
-    return publishCompletionOutputs(runtime, node, parsed, occurredAt);
+    if (
+      parsed.status === 'succeeded' &&
+      parsed.reviewArtifact !== null &&
+      createHash('sha256').update(parsed.reviewArtifact.content, 'utf8').digest('hex') ===
+        parsed.reviewArtifact.sha256
+    ) {
+      runtime = {
+        ...runtime,
+        evidence: {
+          ...runtime.evidence,
+          nodeCompletionOutputs: {
+            ...runtime.evidence.nodeCompletionOutputs,
+            [node.id]: {
+              runId: runtime.run.id,
+              nodeId: node.id,
+              nodeAttempt: run.attempt,
+              contentDigest: `sha256:${parsed.reviewArtifact.sha256}`,
+              sourceRunId: parsed.reviewArtifact.sourceRunId,
+              worktreePath: parsed.reviewArtifact.worktreePath,
+              artifactContent: parsed.reviewArtifact.content,
+              verifiedAt: occurredAt,
+              verifierId: WORKFLOW_EVIDENCE_VERIFIER_ID,
+            },
+          },
+        },
+      };
+    }
+    runtime = publishCompletionOutputs(runtime, node, parsed, occurredAt);
+    return recordReviewerFinalAssessments(runtime, node, parsed);
   }
   if (node.type === 'test') {
     if (evidence === undefined) throw new Error(`Test node ${nodeId} completed without evidence.`);
@@ -275,6 +305,80 @@ function recordCompletionEvidence(
   }
   if (evidence !== undefined) {
     throw new Error(`Node ${nodeId} produced unsupported completion evidence.`);
+  }
+  return runtime;
+}
+
+function recordReviewerFinalAssessments(
+  initial: WorkflowExecutionRuntime,
+  node: Extract<CanvasNode, { type: 'agent' | 'task' }>,
+  evidence: z.infer<typeof WorkflowAgentEvidenceSchema>,
+): WorkflowExecutionRuntime {
+  if (node.type !== 'agent' || evidence.status !== 'succeeded') return initial;
+  const reviewEdges = initial.canvas.edges.filter(
+    (edge): edge is Extract<CanvasEdge, { type: 'review' }> => {
+      if (edge.type !== 'review' || !initial.plan.executableEdgeIds.includes(edge.id)) return false;
+      if (edge.config.reviewer === 'agent') return edge.targetNodeId === node.id;
+      const target = initial.canvas.nodes.find((candidate) => candidate.id === edge.targetNodeId);
+      return target?.type === 'review-gate' && target.data.reviewerAgentId === node.id;
+    },
+  );
+  if (reviewEdges.length === 0) return initial;
+  const record = evidence.reviewerFinalRecord;
+  const reviewerRun = initial.run.nodeRuns[node.id]!;
+  if (
+    record === null ||
+    record.executionId !== initial.run.id ||
+    record.reviewerNodeId !== node.id ||
+    record.reviewerAttempt !== reviewerRun.attempt
+  ) {
+    throw new Error('Reviewer agent completed without one exact final assessment record.');
+  }
+  const expectedIds = reviewEdges.map(({ id }) => id).sort();
+  const actualIds = record.assessments.map(({ reviewEdgeId }) => reviewEdgeId).sort();
+  if (JSON.stringify(expectedIds) !== JSON.stringify(actualIds)) {
+    throw new Error('Final reviewer record does not cover its exact planned review edges.');
+  }
+  let runtime = initial;
+  for (const entry of record.assessments) {
+    const edge = reviewEdges.find(({ id }) => id === entry.reviewEdgeId)!;
+    const reviewedRun = runtime.run.nodeRuns[edge.sourceNodeId];
+    const output = runtime.evidence.nodeCompletionOutputs[edge.sourceNodeId];
+    if (
+      output?.runId !== runtime.run.id ||
+      output.nodeAttempt !== reviewedRun?.attempt ||
+      output.verifierId !== WORKFLOW_EVIDENCE_VERIFIER_ID ||
+      output.contentDigest !== entry.reviewedOutputDigest ||
+      (reviewerRun.startedAt !== undefined &&
+        Date.parse(output.verifiedAt) > Date.parse(reviewerRun.startedAt))
+    ) {
+      throw new Error('Final reviewer assessment is not bound to one verified reviewed output.');
+    }
+    const assessment: ReviewerAssessment = {
+      runId: runtime.run.id,
+      reviewEdgeId: edge.id,
+      reviewerNodeId: node.id,
+      reviewerAttempt: reviewerRun.attempt,
+      reviewedNodeId: edge.sourceNodeId,
+      reviewedNodeAttempt: reviewedRun.attempt,
+      reviewedOutputDigest: entry.reviewedOutputDigest,
+      verdict: entry.verdict,
+      findings: entry.findings.map((finding) => ({
+        id: finding.id,
+        severity: finding.severity,
+        message: finding.message,
+        blocking: finding.blocking,
+        ...(finding.path === null ? {} : { path: finding.path }),
+        ...(finding.line === null ? {} : { line: finding.line }),
+      })),
+      ...(entry.summary === null ? {} : { summary: entry.summary }),
+    };
+    runtime = recordWorkflowReview(
+      runtime,
+      edge.id,
+      assessment,
+      exactVerifier({ assessment: [assessment] }),
+    );
   }
   return runtime;
 }
@@ -713,6 +817,7 @@ function exactVerifier(expected: {
   readonly context?: readonly ContextResolution[];
   readonly output?: readonly OutputPublication[];
   readonly check?: readonly CheckResult[];
+  readonly assessment?: readonly ReviewerAssessment[];
 }): WorkflowEvidenceVerifier {
   return {
     verifyContextResolution: (candidate) =>
@@ -721,7 +826,8 @@ function exactVerifier(expected: {
       expected.output?.some((entry) => sameEvidence(entry, candidate)) === true,
     verifyCheckResult: (candidate) =>
       expected.check?.some((entry) => sameEvidence(entry, candidate)) === true,
-    verifyReviewerAssessment: () => false,
+    verifyReviewerAssessment: (candidate) =>
+      expected.assessment?.some((entry) => sameEvidence(entry, candidate)) === true,
   };
 }
 

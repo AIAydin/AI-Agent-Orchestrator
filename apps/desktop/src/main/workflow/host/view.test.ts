@@ -90,6 +90,26 @@ describe('renderer-safe workflow view', () => {
     expect(JSON.stringify(view)).not.toContain('private-process-identity-token');
   });
 
+  it('projects authoritative persisted review-gate evaluation with a passed reason', () => {
+    const view = workflowHostStateToView(state(reviewGateRuntime()));
+
+    expect(view.reviewGates).toEqual([
+      expect.objectContaining({
+        nodeId: 'review-gate',
+        attempt: 1,
+        status: 'passed',
+        deterministicStatus: 'passed',
+        reviewerStatus: 'not-required',
+        humanStatus: 'not-required',
+        checks: [],
+        reviewerAssessment: null,
+        blockingFindingIds: [],
+        reasons: ['All required review gate evidence passed'],
+      }),
+    ]);
+    expect(WorkflowExecutionViewSchema.parse(view)).toEqual(view);
+  });
+
   it('forbids renderer-authored actors, timestamps, and negative confirmation', () => {
     const base = {
       executionId: RUN_ID,
@@ -133,6 +153,43 @@ function queuedRuntime(): WorkflowExecutionRuntime {
           permissionProfileId: 'worktree-write',
           promptDraft: 'Make a deterministic change.',
         },
+        createdAt: T0,
+        updatedAt: T0,
+      },
+    ],
+    edges: [],
+    groups: [],
+    viewState: { viewport: { x: 0, y: 0, zoom: 1 } },
+    revisionLoops: [],
+    workflowLimits: {},
+    createdAt: T0,
+    updatedAt: T0,
+  });
+  return createWorkflowExecutionRuntime(canvas, {
+    planId: PLAN_ID,
+    runId: RUN_ID,
+    scope: { kind: 'workflow' },
+    occurredAt: T0,
+  });
+}
+
+function reviewGateRuntime(): WorkflowExecutionRuntime {
+  const canvas = CanvasSchema.parse({
+    schemaVersion: 1,
+    id: CANVAS_ID,
+    projectId: PROJECT_ID,
+    name: 'Review gate view',
+    nodes: [
+      {
+        id: 'review-gate',
+        type: 'review-gate',
+        title: 'Review gate',
+        color: '#445566',
+        icon: 'shield',
+        position: { x: 0, y: 0 },
+        size: { width: 320, height: 180 },
+        status: 'ready',
+        data: { humanApprovalRequired: false },
         createdAt: T0,
         updatedAt: T0,
       },

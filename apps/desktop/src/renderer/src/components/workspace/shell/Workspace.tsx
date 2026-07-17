@@ -124,7 +124,10 @@ import {
   runnableWorkflowNodeCount,
   workflowSelectionEligibility,
 } from '../workflows/workflow-run-eligibility.js';
-import { workflowCanvasNodeStatus } from '../workflows/workflow-node-status.js';
+import {
+  workflowCanvasNodeStatus,
+  workflowCanvasReviewGateState,
+} from '../workflows/workflow-node-status.js';
 import {
   appendLocalComment,
   appendSharedComment,
@@ -1053,6 +1056,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       ),
     [workflows.currentExecution],
   );
+  const workflowReviewGates = useMemo(
+    () =>
+      new Map(
+        (workflows.currentExecution?.reviewGates ?? []).map((gate) => [gate.nodeId, gate] as const),
+      ),
+    [workflows.currentExecution],
+  );
   const protectedNodeIds = useMemo(() => lockedCanvasNodeIds(nodes), [nodes]);
   const removalProtectedNodeIds = useMemo(
     () => removalProtectedCanvasNodeIds(nodes, edges),
@@ -1067,15 +1077,19 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     () =>
       nodes.map((node) => {
         const status = workflowNodeStatuses.get(node.id);
+        const reviewGate = workflowReviewGates.get(node.id);
         const inheritedLock = protectedNodeIds.has(node.id) && !node.data.locked;
         const displayed =
-          status === undefined && !inheritedLock
+          status === undefined && reviewGate === undefined && !inheritedLock
             ? node
             : {
                 ...node,
                 data: {
                   ...node.data,
                   ...(status === undefined ? {} : { status }),
+                  ...(reviewGate === undefined
+                    ? {}
+                    : { gateState: workflowCanvasReviewGateState(reviewGate.status) }),
                   ...(inheritedLock ? { locked: true } : {}),
                 },
               };
@@ -1090,7 +1104,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           draggable: mutable,
         };
       }),
-    [nodes, protectedNodeIds, workflowNodeStatuses],
+    [nodes, protectedNodeIds, workflowNodeStatuses, workflowReviewGates],
   );
   const workflowEdgeStates = useMemo(
     () => new Map((workflows.currentExecution?.edges ?? []).map((edge) => [edge.edgeId, edge])),
@@ -1691,6 +1705,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           project={project}
           settings={settings}
           canvas={canvas}
+          workflowExecution={workflows.currentExecution}
           nodes={nodes}
           selectedNode={inspectorSelectedNode}
           selectedNodeLockedByGroup={selectedNodeLockedByGroup}

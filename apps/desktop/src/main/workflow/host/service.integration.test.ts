@@ -474,7 +474,7 @@ describe('durable workflow host', () => {
     });
   });
 
-  it('rejects unimplemented agent-review semantics before persistence or process preparation', async () => {
+  it('persists agent-review workflows and prepares only their current runnable source', async () => {
     await withStore(async (store) => {
       const fake = fakeExecutor();
       const host = new WorkflowHost(store, [fake.executor], { now: clock() });
@@ -492,13 +492,14 @@ describe('durable workflow host', () => {
           },
         ],
       );
-      await expect(
-        host.start({
-          projectId: PROJECT_ID,
-          canvas: directReview,
-          scope: { kind: 'workflow' },
-        }),
-      ).rejects.toThrow(/does not yet verify/u);
+      const direct = await host.start({
+        projectId: PROJECT_ID,
+        canvas: directReview,
+        scope: { kind: 'workflow' },
+      });
+      expect(direct.approvals.map(({ nodeId }) => nodeId)).toEqual(['review-source']);
+      expect(direct.runtime.run.nodeRuns['review-source']?.status).toBe('queued');
+      expect(direct.runtime.run.nodeRuns['reviewer-agent']?.status).toBe('queued');
 
       const reviewerGate = CanvasNodeSchema.parse({
         ...nodeBase('gate-agent-review', 'Reviewer gate'),
@@ -519,17 +520,18 @@ describe('durable workflow host', () => {
           },
         ],
       );
-      await expect(
-        host.start({
-          projectId: PROJECT_ID,
-          canvas: gatedReview,
-          scope: { kind: 'workflow' },
-        }),
-      ).rejects.toThrow(/does not yet verify/u);
+      const gated = await host.start({
+        projectId: PROJECT_ID,
+        canvas: gatedReview,
+        scope: { kind: 'workflow' },
+      });
+      expect(gated.approvals.map(({ nodeId }) => nodeId)).toEqual(['review-source']);
+      expect(gated.runtime.run.nodeRuns['review-source']?.status).toBe('queued');
+      expect(gated.runtime.run.nodeRuns['reviewer-agent']?.status).toBe('queued');
 
-      expect(fake.prepare).not.toHaveBeenCalled();
+      expect(fake.prepare).toHaveBeenCalledTimes(2);
       expect(fake.launch).not.toHaveBeenCalled();
-      expect(store.listProjectWorkflowExecutions(PROJECT_ID)).toEqual([]);
+      expect(store.listProjectWorkflowExecutions(PROJECT_ID)).toHaveLength(2);
       await host.dispose();
     });
   });

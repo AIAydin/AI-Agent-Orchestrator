@@ -59,6 +59,7 @@ interface WorkspaceInspectorProps {
   project: Project;
   settings: AppSettings;
   canvas: CanvasDocument | null;
+  workflowExecution?: WorkflowExecutionView | null;
   nodes: readonly WorkshopNode[];
   selectedNode: WorkshopNode | null;
   selectedNodeLockedByGroup: boolean;
@@ -161,6 +162,10 @@ function NodeInspector(
   },
 ) {
   const { selectedNode, onRecord, onUpdateSelected } = props;
+  const selectedReviewGate =
+    selectedNode.data.kind === 'review-gate'
+      ? props.workflowExecution?.reviewGates?.find((gate) => gate.nodeId === selectedNode.id)
+      : undefined;
   const configurationReadOnly = selectedNode.data.locked || props.collaborationGraphReadOnly;
   return (
     <div className="inspector-content">
@@ -231,6 +236,7 @@ function NodeInspector(
             node={selectedNode}
             nodes={props.nodes}
             settings={props.settings}
+            {...(selectedReviewGate === undefined ? {} : { reviewGate: selectedReviewGate })}
             onRecord={onRecord}
             onUpdate={onUpdateSelected}
             onError={props.onError}

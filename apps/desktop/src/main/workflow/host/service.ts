@@ -193,7 +193,6 @@ export class WorkflowHost {
     if (canvas.projectId !== input.projectId) {
       throw new Error('Workflow project does not match the selected canvas.');
     }
-    assertSupportedReviewSemantics(canvas);
     const occurredAt = this.#now().toISOString();
     const executionId = randomUUID();
     const runtime = createWorkflowExecutionRuntime(canvas, {
@@ -1732,20 +1731,6 @@ function nodeFor(runtime: WorkflowExecutionRuntime, nodeId: string): CanvasNode 
   const node = runtime.canvas.nodes.find((candidate) => candidate.id === nodeId);
   if (node === undefined) throw new Error(`Workflow canvas node does not exist: ${nodeId}`);
   return node;
-}
-
-function assertSupportedReviewSemantics(canvas: Canvas): void {
-  const agentReviewEdge = canvas.edges.find(
-    (edge) => edge.type === 'review' && edge.config.reviewer === 'agent',
-  );
-  const agentReviewGate = canvas.nodes.find(
-    (node) => node.type === 'review-gate' && node.data.reviewerAgentId !== undefined,
-  );
-  if (agentReviewEdge === undefined && agentReviewGate === undefined) return;
-  const target = agentReviewEdge?.id ?? agentReviewGate?.id ?? 'unknown';
-  throw new Error(
-    `Workflow ${target} requires agent-authored review assessments, which this release does not yet verify. Choose human or deterministic gate review before running.`,
-  );
 }
 
 function nodeKey(executionId: string, nodeId: string): string {

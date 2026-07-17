@@ -251,6 +251,11 @@ export function queueRevisionAttempt(
         !requeuedNodeIds.has(assessment.reviewedNodeId),
     ),
   );
+  const nodeCompletionOutputs = Object.fromEntries(
+    Object.entries(runtime.evidence.nodeCompletionOutputs).filter(
+      ([nodeId]) => !requeuedNodeIds.has(nodeId),
+    ),
+  );
   const gateChecks = Object.fromEntries(
     Object.entries(runtime.evidence.gateChecks).filter(
       ([gateNodeId, checks]) =>
@@ -289,6 +294,7 @@ export function queueRevisionAttempt(
       ...runtime.evidence,
       contextResolutions,
       outputPublications,
+      nodeCompletionOutputs,
       reviewerAssessments,
       gateChecks,
       humanApprovals,

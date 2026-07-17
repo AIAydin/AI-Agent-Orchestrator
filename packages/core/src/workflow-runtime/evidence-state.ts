@@ -273,6 +273,8 @@ export function currentReviewerAssessmentForEdge(
   const reviewedRun = runtime.run.nodeRuns[edge.sourceNodeId];
   if (
     expectedReviewerId === undefined ||
+    assessment.runId !== runtime.run.id ||
+    assessment.reviewEdgeId !== edge.id ||
     assessment.reviewerNodeId !== expectedReviewerId ||
     (reviewerRun?.status !== 'succeeded' &&
       reviewerRun?.status !== 'waiting-for-approval' &&
@@ -286,6 +288,14 @@ export function currentReviewerAssessmentForEdge(
     assessment.reviewedNodeAttempt !== reviewedRun.attempt
   ) {
     return undefined;
+  }
+  const completionOutput = runtime.evidence.nodeCompletionOutputs[edge.sourceNodeId];
+  if (completionOutput !== undefined) {
+    return completionOutput.runId === runtime.run.id &&
+      completionOutput.nodeAttempt === reviewedRun.attempt &&
+      completionOutput.contentDigest === assessment.reviewedOutputDigest
+      ? assessment
+      : undefined;
   }
   const currentDigests = currentOutputPublicationsForNode(runtime, edge.sourceNodeId).map(
     (publication) => publication.contentDigest,
@@ -379,6 +389,18 @@ export function reviewGateEvaluation(
   runtime: WorkflowExecutionRuntime,
   gateNodeId: string,
 ): ReviewGateEvaluation {
+  return currentReviewGateEvidence(runtime, gateNodeId).evaluation;
+}
+
+/** Returns only the causal, current-attempt evidence used by the authoritative gate evaluation. */
+export function currentReviewGateEvidence(
+  runtime: WorkflowExecutionRuntime,
+  gateNodeId: string,
+): {
+  readonly evaluation: ReviewGateEvaluation;
+  readonly checks: readonly CheckResult[];
+  readonly reviewerAssessment?: ReviewerAssessment;
+} {
   const gate = nodeById(runtime, gateNodeId);
   if (gate.type !== 'review-gate') throw new Error(`Node is not a review gate: ${gateNodeId}`);
   const reviewerAssessment = runtime.canvas.edges
@@ -388,11 +410,17 @@ export function reviewGateEvaluation(
         : [],
     )
     .find((assessment) => assessment?.reviewerNodeId === gate.data.reviewerAgentId);
-  return evaluateReviewGate(gate, {
-    checks: currentGateChecks(runtime, gateNodeId),
+  const checks = currentGateChecks(runtime, gateNodeId);
+  const evaluation = evaluateReviewGate(gate, {
+    checks,
     ...(reviewerAssessment === undefined ? {} : { reviewerAssessment }),
     humanApproved: hasCurrentHumanApproval(runtime, gateNodeId),
   });
+  return {
+    evaluation,
+    checks,
+    ...(reviewerAssessment === undefined ? {} : { reviewerAssessment }),
+  };
 }
 
 export function completed(status: RunStatus): boolean {

@@ -132,6 +132,7 @@ export type AgentExecutionContextRequest = z.infer<typeof AgentExecutionContextR
 
 export const AgentExecutionRequestSchema = PrepareRunInputSchema.extend({
   context: AgentExecutionContextRequestSchema,
+  reviewerProtocol: z.boolean().optional(),
 }).strict();
 export type AgentExecutionRequest = z.infer<typeof AgentExecutionRequestSchema>;
 

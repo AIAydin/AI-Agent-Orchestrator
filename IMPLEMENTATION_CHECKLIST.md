@@ -1080,3 +1080,21 @@ unchecked when only a subset of their required behavior has proof.
   workspace builds, 1,987 unit tests across 307 files, and 280 real-process integration tests across
   32 files. The broad Agent node item remains open solely because a real pause/continue backend is not
   yet available; Forgeboard continues to expose that limitation honestly.
+- 2026-07-17: agent-authored Review edges and reviewer-backed Review Gates now use a strict,
+  main-composed assessment protocol instead of user-authored identifiers or prose parsing. Reviewer
+  runs switch only Codex and Claude into their official headless JSON event modes while ordinary
+  Agent runs retain interactive PTY behavior; deterministic test-agent metadata remains available
+  for offline proof. Forgeboard accepts one exact current-attempt final record only after the matching
+  provider terminal and successful process result, and rejects stderr lookalikes, prose/fences,
+  duplicate or later assistant output, mixed Claude tool content, and failed or incomplete runs.
+  Reviewed changes are captured as bounded, digest-bound UTF-8 snapshots, persisted with the exact
+  source run/attempt, and injected through the existing private immutable context pipeline rather
+  than command-line prompt content. Sensitive, binary, deleted-without-prior-content, aliased,
+  truncated, oversized, and over-count artifacts fail closed; persisted review artifacts have a
+  32 MiB aggregate cap. Gate evaluation and renderer state now project the same current causal check,
+  reviewer, human, finding, and blocker evidence from main, with saved renderer gate state treated as
+  non-authoritative. Verification passed the 1,059-file structure gate, formatting, zero-warning
+  lint, all eight strict typechecks, 1,998 unit tests across 308 files, 280 real-process integration
+  tests across 32 files, and every workspace production build. Review Gate delivery binding and the
+  end-to-end reviewer/revision Electron journey remain open, so the broad checklist entry is not yet
+  marked complete.

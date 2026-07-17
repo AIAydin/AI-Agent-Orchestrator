@@ -252,6 +252,7 @@ export function createWorkflowExecutionRuntime(
       humanReviewDecisions: {},
       contextResolutions: {},
       outputPublications: {},
+      nodeCompletionOutputs: {},
       reviewerAssessments: {},
       gateChecks: {},
       revisionEscapes: {},

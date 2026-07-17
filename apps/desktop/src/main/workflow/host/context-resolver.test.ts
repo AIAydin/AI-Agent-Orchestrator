@@ -103,7 +103,7 @@ describe('FileNodeWorkflowContextResolver', () => {
       appendAudit,
     });
     const result = await resolver.resolve(request(workflowRuntime([agentNode([])]), []));
-    expect(result).toEqual({ attachments: [] });
+    expect(result).toEqual({ attachments: [], projectRoot: root });
   });
 
   it('resolves Task-bound context using only its explicitly assigned Agent adapter', async () => {
