@@ -1020,3 +1020,14 @@ unchecked when only a subset of their required behavior has proof.
   host was simultaneously CPU-constrained; assertions and timeouts were unchanged. This closes only
   the Test node entry; the broader Review gate, workflow controls, and release requirements remain
   open.
+- 2026-07-17: the frozen Test-node source checkpoint
+  `cec6bdb722808206d2e88cb2e5dfb847ecc71b91` produced a fresh macOS arm64 application, ZIP, DMG,
+  and both blockmaps after rebuilding the native `node-pty` dependency. The packaged-application
+  smoke and read-only DMG mount/copy/launch smoke passed, the latter with `FORGEBOARD_SMOKE_OK`;
+  release metadata was regenerated and independently verified against the exact source commit.
+  All four distributables received fresh SHA-256 entries, and `hdiutil` validated the DMG. The DMG
+  SHA-256 is `4cd0dd2a1460cfc94e58a2c4d9bbd2aaf23a4ccda9650d824457c73ca365d2f3`; the ZIP SHA-256 is
+  `908748178b006f7f0c10e9c0437e8fe704ebea147f9c1c56763ab0267e306125`. Electron Builder found no
+  Developer ID identity, so the executable remains an unsigned development artifact. Fresh
+  Windows/Linux/macOS Intel artifacts, signing/notarization, a tag, and GitHub Release publication
+  remain open; hosted Actions are still blocked before workflow steps by the account billing gate.
