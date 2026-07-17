@@ -878,3 +878,27 @@ unchecked when only a subset of their required behavior has proof.
   filesystem/executable paths remain outside renderer views, and failure/cancellation never produces
   a fake success state. This supersedes only the preceding checkpoint's unfinished remote/custom
   `gh` UI limitation; broad unchecked product, release, signing, and cross-platform items remain open.
+- 2026-07-17: the frozen Git-connections source checkpoint
+  `4b09b9f4efef079e9a05c856928a5fd2b71c934d` passed the 899-file structure gate,
+  repository-wide formatting, zero-warning lint, all eight workspace strict typechecks,
+  `git diff --check`, 1,743 unit tests across 258 files, 270 real-process integration tests across 31
+  files, all 15 Electron Playwright journeys, every production build, all 15 release-script tests,
+  and the production dependency audit with no known vulnerabilities. The UI journeys prove Enter in
+  Git connection inputs cannot submit the outer Settings form; cancel/approve add, exact replace and
+  removal, native-only local-path disclosure, custom-CLI validation and restart persistence, reviewed
+  return to automatic discovery, and UI-configured remote delivery through the selected CLI without
+  unintended external web traffic. Fresh packaging from that clean commit produced the macOS arm64
+  application, ZIP, DMG, and both blockmaps. The packaged-app smoke and read-only DMG
+  mount/copy/launch smoke passed, the latter with `FORGEBOARD_SMOKE_OK`; `RELEASE-INFO` records the
+  exact source commit and unsigned-development state. All four checksummed files passed independent
+  SHA-256 verification, and `hdiutil` validated the DMG. The DMG SHA-256 is
+  `d716aac8f71097ac02acd591e6ed27e76583689eb0e2e56c53ab7f3d7ad61f3c`; the ZIP SHA-256 is
+  `fad932874c77e0ba0bd89827ee94a2d53860c7014d027622517ae9b665b57d6a`. Electron Builder skipped
+  Developer ID signing; the executable is ad-hoc/linker-signed, strict code-signing and Gatekeeper
+  assessment fail, and neither the app nor DMG has a notarization ticket. Fresh Windows, Linux, and
+  macOS Intel proof remains open. Forgeboard validates and uses `gh` but does not install it or
+  authenticate the user. An operating-system or process interruption inside the remote config
+  transaction can leave its Git lock/recovery staging artifact, and UI repair for that state is not
+  implemented. The repository remains private with no tags or GitHub Release, so there is not yet a
+  public download. Hosted Actions remain excluded because the billing/payment gate stops jobs before
+  any workflow step executes.
