@@ -10,12 +10,10 @@ import {
 import {
   addEdge,
   applyEdgeChanges,
-  applyNodeChanges,
   MarkerType,
   ReactFlowProvider,
   type Connection,
   type EdgeChange,
-  type NodeChange,
   type OnSelectionChangeParams,
   type ReactFlowInstance,
 } from '@xyflow/react';
@@ -54,7 +52,8 @@ import {
   canConnectUnlocked,
   canEditEdge,
   filterLockedEdgeChanges,
-  filterLockedNodeChanges,
+  lockedCanvasNodeIds,
+  removalProtectedCanvasNodeIds,
 } from '../canvas/interactions/lock-protection.js';
 import {
   moveSelectedCanvasNodes,
@@ -66,6 +65,20 @@ import {
   instantiateClipboardSelection,
   type CanvasClipboardSelection,
 } from '../canvas/interactions/selection-clipboard.js';
+import {
+  arrangeGroupMembers,
+  fitGroupFrameToMembers,
+  reconcileGroupMembership,
+  type GroupLayout,
+} from '../canvas/interactions/groups/group-containment.js';
+import { projectGroupDisplay } from '../canvas/interactions/groups/group-display.js';
+import {
+  fitAutomaticGroupFrames,
+  frameIdsClaimingMembers,
+  frameIdsWithChangedMembership,
+  updateGroupFrameData,
+} from '../canvas/interactions/groups/group-workspace-state.js';
+import { useCanvasGraphInteractions } from '../canvas/interactions/workspace/useCanvasGraphInteractions.js';
 import { WorkspaceCommandBar } from './WorkspaceCommandBar.js';
 import { WorkflowDecisionDialog } from '../workflows/WorkflowDecisionDialog.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
@@ -77,6 +90,10 @@ import {
   type WorkshopEdgeData,
 } from '../model/edge-config.js';
 import { hydrateNodeData, isRunAdapterId, summarizeRunEvent } from '../model/helpers.js';
+import {
+  initialWorkshopNodeDimensions,
+  workshopNodeForPersistence,
+} from '../model/node-persistence.js';
 import type {
   CheckCommand,
   EdgeKind,
@@ -322,14 +339,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     if (!canvas || !loaded.current) return null;
     return {
       ...canvas,
-      nodes: nodes.map(({ id, position, width, height, data }) => ({
-        id,
-        type: data.kind,
-        position,
-        ...(width === null || width === undefined ? {} : { width }),
-        ...(height === null || height === undefined ? {} : { height }),
-        data,
-      })),
+      nodes: nodes.map(workshopNodeForPersistence),
       edges: edges.map((edge) => ({
         id: edge.id,
         source: edge.source,
@@ -388,6 +398,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       );
       setSelectedNodeId(nextSelectedNodeId);
       setSelectedEdgeId(nextSelectedEdgeId);
+      setPast([]);
+      setFuture([]);
       setEvents((items) =>
         items[0] === 'Applied authenticated collaboration metadata.'
           ? items
@@ -459,6 +471,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const record = useCallback(() => {
     recordSnapshot(nodes, edges);
   }, [edges, nodes, recordSnapshot]);
+
+  const { setNodeCollapsed, beginNodeResize, finishNodeDrag, changeCanvasNodes } =
+    useCanvasGraphInteractions({
+      nodesRef,
+      edgesRef,
+      readOnlyRef: collaborationGraphReadOnlyRef,
+      setNodes,
+      setEvents,
+      recordSnapshot,
+      reportCollaborationReadOnly,
+    });
 
   const undo = useCallback(() => {
     if (collaborationCanvas.graphReadOnly) {
@@ -572,10 +595,20 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           lockedNodeIds: selectedNodeIds,
         };
       }
-      const result = moveSelectedCanvasNodes(nodes, movement);
+      const currentNodes = nodesRef.current;
+      const result = moveSelectedCanvasNodes(currentNodes, movement);
       if (result.movedNodeIds.length > 0) {
-        if (recordUndoCheckpoint) record();
-        setNodes((items) => moveSelectedCanvasNodes(items, movement).nodes);
+        if (recordUndoCheckpoint) recordSnapshot(currentNodes, edgesRef.current);
+        const movedNodeIds = new Set(result.movedNodeIds);
+        const affectedFrameIds = [
+          ...frameIdsClaimingMembers(currentNodes, result.movedNodeIds),
+          ...currentNodes
+            .filter((node) => node.data.kind === 'group-frame' && movedNodeIds.has(node.id))
+            .map((node) => node.id),
+        ];
+        const nextNodes = fitAutomaticGroupFrames(result.nodes, affectedFrameIds);
+        nodesRef.current = nextNodes;
+        setNodes(nextNodes);
         if (recordUndoCheckpoint) {
           setEvents((items) =>
             [
@@ -593,7 +626,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         lockedNodeIds: result.lockedNodeIds,
       };
     },
-    [collaborationCanvas.graphReadOnly, nodes, record, reportCollaborationReadOnly],
+    [collaborationCanvas.graphReadOnly, recordSnapshot, reportCollaborationReadOnly],
   );
 
   useEffect(() => {
@@ -657,6 +690,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           type: 'workshop',
           selected: true,
           position: position ?? { x: 220 + offset, y: 150 + offset },
+          ...initialWorkshopNodeDimensions(kind),
           data: {
             kind,
             title: definition.label,
@@ -666,6 +700,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             collapsed: false,
             color: definition.color,
             ...initialWorkflowNodeData(kind, id, settings),
+            ...(kind === 'group-frame'
+              ? {
+                  purpose: 'custom' as const,
+                  layout: 'freeform' as const,
+                  autoFit: false,
+                  childNodeIds: [],
+                }
+              : {}),
           },
         },
       ]);
@@ -703,6 +745,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           type: 'workshop',
           selected: true,
           position: position ?? { x: 220 + offset, y: 150 + offset },
+          ...initialWorkshopNodeDimensions('extension'),
           data: {
             kind: 'extension',
             title: definition.displayName,
@@ -741,8 +784,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       if (target === undefined || target.data.kind !== 'agent') {
         throw new Error('Project files can only be attached to an Agent node.');
       }
-      if (target.data.locked) {
-        throw new Error('Unlock the Agent node before changing its context.');
+      if (lockedCanvasNodeIds(nodesRef.current).has(targetNodeId)) {
+        throw new Error('Unlock the Agent node or its group before changing its context.');
       }
       if (payload.projectId !== project.id) {
         throw new Error('The dragged file belongs to another project.');
@@ -759,6 +802,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       }
       const currentNodes = nodesRef.current;
       const currentEdges = edgesRef.current;
+      if (lockedCanvasNodeIds(currentNodes).has(targetNodeId)) {
+        throw new Error('Unlock the Agent node or its group before changing its context.');
+      }
       const result = linkProjectFileToAgent({
         projectId: project.id,
         targetNodeId,
@@ -792,6 +838,15 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         return;
       }
       const currentNodes = nodesRef.current;
+      if (lockedCanvasNodeIds(currentNodes).has(targetNodeId)) {
+        setEvents((items) =>
+          ['Unlock the Agent node or its group before changing its context.', ...items].slice(
+            0,
+            30,
+          ),
+        );
+        return;
+      }
       const result = removeProjectFileFromAgent({
         targetNodeId,
         attachmentNodeId,
@@ -881,11 +936,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       : permissionProfileUnavailableReason(selectedPermission, settings, selectedAdapter);
 
   const updateNodeData = useCallback((nodeId: string, data: Partial<WorkshopNode['data']>) => {
-    setNodes((items) =>
-      items.map((node) =>
+    setNodes((items) => {
+      const nextNodes = items.map((node) =>
         node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node,
-      ),
-    );
+      );
+      nodesRef.current = nextNodes;
+      return nextNodes;
+    });
   }, []);
   const readCurrentGraph = useCallback(
     () => ({ nodes: nodesRef.current, edges: edgesRef.current }),
@@ -947,29 +1004,50 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       ),
     [workflows.currentExecution],
   );
-  const displayedNodes = useMemo(
+  const protectedNodeIds = useMemo(() => lockedCanvasNodeIds(nodes), [nodes]);
+  const removalProtectedNodeIds = useMemo(
+    () => removalProtectedCanvasNodeIds(nodes, edges),
+    [edges, nodes],
+  );
+  const selectedNodeLockedByGroup =
+    selectedNode !== null && protectedNodeIds.has(selectedNode.id) && !selectedNode.data.locked;
+  const inspectorSelectedNode = selectedNodeLockedByGroup
+    ? { ...selectedNode, data: { ...selectedNode.data, locked: true } }
+    : selectedNode;
+  const runtimeDisplayedNodes = useMemo(
     () =>
       nodes.map((node) => {
         const status = workflowNodeStatuses.get(node.id);
-        const displayed = status === undefined ? node : { ...node, data: { ...node.data, status } };
-        const mutable = !node.data.locked;
+        const inheritedLock = protectedNodeIds.has(node.id) && !node.data.locked;
+        const displayed =
+          status === undefined && !inheritedLock
+            ? node
+            : {
+                ...node,
+                data: {
+                  ...node.data,
+                  ...(status === undefined ? {} : { status }),
+                  ...(inheritedLock ? { locked: true } : {}),
+                },
+              };
+        const mutable = !protectedNodeIds.has(node.id);
         return {
           ...displayed,
           ariaLabel: `${node.data.title}, ${NODE_DEFINITIONS[node.data.kind].label} node${
-            node.data.locked ? ', locked' : ''
+            protectedNodeIds.has(node.id) ? ', locked' : ''
           }`,
           connectable: mutable,
           deletable: mutable,
           draggable: mutable,
         };
       }),
-    [nodes, workflowNodeStatuses],
+    [nodes, protectedNodeIds, workflowNodeStatuses],
   );
   const workflowEdgeStates = useMemo(
     () => new Map((workflows.currentExecution?.edges ?? []).map((edge) => [edge.edgeId, edge])),
     [workflows.currentExecution],
   );
-  const displayedEdges = useMemo(
+  const runtimeDisplayedEdges = useMemo(
     () =>
       edges.map((edge) => {
         const runtime = workflowEdgeStates.get(edge.id);
@@ -987,6 +1065,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         };
       }),
     [edges, workflowEdgeStates],
+  );
+  const displayedGraph = useMemo(
+    () => projectGroupDisplay(runtimeDisplayedNodes, runtimeDisplayedEdges),
+    [runtimeDisplayedEdges, runtimeDisplayedNodes],
   );
   const workflowActive = workflows.activeExecution !== null;
   const workflowStartBusy =
@@ -1088,8 +1170,100 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     }
     if (!selectedNode) return;
     const keys = Object.keys(data);
-    if (selectedNode.data.locked && !(keys.length === 1 && keys[0] === 'locked')) return;
+    const unlocksSelectedNode =
+      selectedNode.data.locked &&
+      keys.length === 1 &&
+      keys[0] === 'locked' &&
+      data.locked === false;
+    if (lockedCanvasNodeIds(nodesRef.current).has(selectedNode.id) && !unlocksSelectedNode) {
+      setEvents((items) =>
+        ['Unlock the node or its group before editing it.', ...items].slice(0, 30),
+      );
+      return;
+    }
+    if (selectedNode.data.kind === 'group-frame') {
+      const currentNodes = nodesRef.current;
+      const update = updateGroupFrameData(currentNodes, selectedNode.id, data);
+      let nextNodes = update.nodes;
+      if (update.blockedChildIds.length > 0) {
+        setEvents((items) =>
+          [
+            `Unlock ${update.blockedChildIds.length} protected member${update.blockedChildIds.length === 1 ? '' : 's'} before changing group ownership.`,
+            ...items,
+          ].slice(0, 30),
+        );
+      }
+      const membershipChangedFrameIds = frameIdsWithChangedMembership(currentNodes, nextNodes);
+      nextNodes = fitAutomaticGroupFrames(nextNodes, [
+        ...membershipChangedFrameIds,
+        ...(data.autoFit === true ? [selectedNode.id] : []),
+      ]);
+      replaceCurrentNodes(nextNodes);
+      return;
+    }
     updateNodeData(selectedNode.id, data);
+  }
+
+  function fitSelectedGroupFrame() {
+    if (collaborationCanvas.graphReadOnly) {
+      reportCollaborationReadOnly();
+      return;
+    }
+    if (selectedNode?.data.kind !== 'group-frame') return;
+    const currentNodes = nodesRef.current;
+    const currentFrame = currentNodes.find(({ id }) => id === selectedNode.id);
+    if (currentFrame?.data.kind !== 'group-frame') return;
+    if (lockedCanvasNodeIds(currentNodes).has(currentFrame.id)) {
+      setEvents((items) =>
+        [`Unlock ${currentFrame.data.title} before fitting it.`, ...items].slice(0, 30),
+      );
+      return;
+    }
+    const result = fitGroupFrameToMembers(currentNodes, currentFrame.id);
+    if (result.disposition !== 'fitted') return;
+    recordSnapshot(currentNodes, edgesRef.current);
+    replaceCurrentNodes(result.nodes);
+    setEvents((items) =>
+      [`Fitted ${currentFrame.data.title} to its members.`, ...items].slice(0, 30),
+    );
+  }
+
+  function arrangeSelectedGroupFrame(layout: GroupLayout) {
+    if (collaborationCanvas.graphReadOnly) {
+      reportCollaborationReadOnly();
+      return;
+    }
+    if (selectedNode?.data.kind !== 'group-frame') return;
+    const currentNodes = nodesRef.current;
+    const currentFrame = currentNodes.find(({ id }) => id === selectedNode.id);
+    if (currentFrame?.data.kind !== 'group-frame') return;
+    if (lockedCanvasNodeIds(currentNodes).has(currentFrame.id)) {
+      setEvents((items) =>
+        [`Unlock ${currentFrame.data.title} before arranging its members.`, ...items].slice(0, 30),
+      );
+      return;
+    }
+    const result = arrangeGroupMembers(currentNodes, currentFrame.id, layout);
+    if (result.disposition === 'rejected') return;
+    const fitResult = currentFrame.data.autoFit
+      ? fitGroupFrameToMembers(result.nodes, currentFrame.id)
+      : null;
+    const nextNodes = fitResult?.nodes ?? result.nodes;
+    if (result.disposition !== 'arranged' && fitResult?.disposition !== 'fitted') return;
+    recordSnapshot(currentNodes, edgesRef.current);
+    replaceCurrentNodes(nextNodes);
+    if (result.disposition === 'arranged') {
+      setEvents((items) =>
+        [
+          `Arranged ${result.movedMemberIds.length} member${result.movedMemberIds.length === 1 ? '' : 's'} in ${currentFrame.data.title}.`,
+          ...items,
+        ].slice(0, 30),
+      );
+    } else {
+      setEvents((items) =>
+        [`Fitted ${currentFrame.data.title} to its arranged members.`, ...items].slice(0, 30),
+      );
+    }
   }
 
   function deleteSelected() {
@@ -1098,9 +1272,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       return;
     }
     if (!selectedNode) return;
-    if (selectedNode.data.locked) {
+    if (removalProtectedCanvasNodeIds(nodesRef.current, edgesRef.current).has(selectedNode.id)) {
       setEvents((items) =>
-        [`Unlock ${selectedNode.data.title} before deleting it.`, ...items].slice(0, 30),
+        [
+          `Unlock ${selectedNode.data.title}, its protected members, or connected locked nodes before deleting it.`,
+          ...items,
+        ].slice(0, 30),
       );
       return;
     }
@@ -1111,10 +1288,18 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       });
     }
     record();
-    setNodes((items) => items.filter((node) => node.id !== selectedNode.id));
-    setEdges((items) =>
-      items.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id),
+    const affectedFrameIds = frameIdsClaimingMembers(nodesRef.current, [selectedNode.id]);
+    const nextNodes = fitAutomaticGroupFrames(
+      reconcileGroupMembership(nodesRef.current.filter((node) => node.id !== selectedNode.id))
+        .nodes,
+      affectedFrameIds,
     );
+    const nextEdges = edgesRef.current.filter(
+      (edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id,
+    );
+    replaceCurrentNodes(nextNodes);
+    edgesRef.current = nextEdges;
+    setEdges(nextEdges);
     setSelectedNodeId(null);
     setEvents((items) => [`Deleted ${selectedNode.data.title}.`, ...items].slice(0, 30));
   }
@@ -1348,37 +1533,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         />
         <WorkspaceCanvas
           canvas={canvas}
-          nodes={displayedNodes}
-          edges={displayedEdges}
+          nodes={displayedGraph.nodes}
+          edges={displayedGraph.edges}
           settings={settings}
           extensionTemplates={extensionTemplates}
           instance={instance}
           onInstance={setInstance}
-          onNodesChange={(changes: NodeChange<WorkshopNode>[]) => {
-            if (collaborationCanvas.graphReadOnly) {
-              const safeChanges = changes.filter(
-                (change) => change.type === 'select' || change.type === 'dimensions',
-              );
-              setNodes((items) => applyNodeChanges(safeChanges, items));
-              if (safeChanges.length !== changes.length) reportCollaborationReadOnly();
-              return;
-            }
-            const allowedChanges = filterLockedNodeChanges(changes, nodes, edges);
-            const blockedRemoval = changes.some(
-              (change) => change.type === 'remove' && !allowedChanges.includes(change),
-            );
-            if (allowedChanges.some((change) => change.type === 'remove')) record();
-            if (blockedRemoval) {
-              setEvents((items) =>
-                items[0] === LOCKED_CONNECTION_ACTIVITY
-                  ? items
-                  : [LOCKED_CONNECTION_ACTIVITY, ...items].slice(0, 30),
-              );
-            }
-            setNodes((items) =>
-              applyNodeChanges(filterLockedNodeChanges(changes, items, edges), items),
-            );
-          }}
+          onNodesChange={changeCanvasNodes}
           onEdgesChange={(changes: EdgeChange<WorkshopEdge>[]) => {
             if (collaborationCanvas.graphReadOnly) {
               const safeChanges = changes.filter((change) => change.type === 'select');
@@ -1430,6 +1591,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             setEvents((items) => ['Connected nodes with a context edge.', ...items].slice(0, 30));
           }}
           onNodeDragStart={record}
+          onNodeDragStop={finishNodeDrag}
+          onSetNodeCollapsed={setNodeCollapsed}
+          onNodeResizeStart={beginNodeResize}
           onKeyboardMove={moveSelectedByKeyboard}
           onSelectionChange={({
             nodes: selectedNodes,
@@ -1464,7 +1628,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           settings={settings}
           canvas={canvas}
           nodes={nodes}
-          selectedNode={selectedNode}
+          selectedNode={inspectorSelectedNode}
+          selectedNodeLockedByGroup={selectedNodeLockedByGroup}
+          selectedNodeDeletionProtected={
+            selectedNode !== null && removalProtectedNodeIds.has(selectedNode.id)
+          }
           selectedEdge={selectedEdge}
           runnableAgents={runnableAgents}
           selectedAdapter={selectedAdapter}
@@ -1485,6 +1653,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           }}
           onRecord={record}
           onUpdateSelected={updateSelected}
+          onFitGroupFrame={fitSelectedGroupFrame}
+          onArrangeGroupFrame={arrangeSelectedGroupFrame}
           onUpdateEdgeType={updateEdgeType}
           onUpdateEdgeData={updateEdgeData}
           onDuplicateSelected={duplicateSelected}

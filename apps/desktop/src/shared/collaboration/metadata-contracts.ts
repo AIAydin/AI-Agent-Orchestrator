@@ -124,6 +124,22 @@ export const CollaborationEdgeMetadataSchema = z
   .strict();
 export type CollaborationEdgeMetadata = z.infer<typeof CollaborationEdgeMetadataSchema>;
 
+export const CollaborationGroupPurposeSchema = z.enum([
+  'product-surface',
+  'workflow-stage',
+  'feature-area',
+  'custom',
+]);
+export type CollaborationGroupPurpose = z.infer<typeof CollaborationGroupPurposeSchema>;
+
+export const CollaborationGroupLayoutSchema = z.enum([
+  'freeform',
+  'horizontal',
+  'vertical',
+  'grid',
+]);
+export type CollaborationGroupLayout = z.infer<typeof CollaborationGroupLayoutSchema>;
+
 export const CollaborationGroupMetadataSchema = z
   .object({
     id: CollaborationIdSchema,
@@ -133,6 +149,9 @@ export const CollaborationGroupMetadataSchema = z
     color: CollaborationColorSchema.optional(),
     locked: z.boolean().optional(),
     collapsed: z.boolean().optional(),
+    purpose: CollaborationGroupPurposeSchema.optional(),
+    layout: CollaborationGroupLayoutSchema.optional(),
+    autoFit: z.boolean().optional(),
     order: z.number().finite().optional(),
     createdAt: CollaborationTimestampSchema.optional(),
     updatedAt: CollaborationTimestampSchema.optional(),

@@ -54,6 +54,52 @@ function legacy(overrides: Partial<LegacyCanvasDocument> = {}): LegacyCanvasDocu
 }
 
 describe('canonical desktop canvas adapter', () => {
+  it('materializes stable canonical dimensions for an unresized legacy node', () => {
+    const sized = node('task-1', 'task');
+    const unresized: LegacyCanvasNode = {
+      id: sized.id,
+      type: sized.type,
+      position: sized.position,
+      data: sized.data,
+    };
+    const synchronized = synchronizeCanvasDocument(legacy({ nodes: [unresized], edges: [] }));
+
+    expect(synchronized.ok).toBe(true);
+    if (!synchronized.ok) return;
+    expect(synchronized.document.nodes[0]).toMatchObject({ width: 320, height: 180 });
+    expect(synchronized.document.canonical.nodes[0]?.size).toEqual({ width: 320, height: 180 });
+
+    const reloaded = synchronizeCanvasDocument(synchronized.document);
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) return;
+    expect(reloaded.document.nodes[0]).toMatchObject({ width: 320, height: 180 });
+  });
+
+  it('normalizes legacy group bounds to the shared default and rendering floor', () => {
+    const sized = node('group-default', 'group-frame', { childNodeIds: [] });
+    const unresized: LegacyCanvasNode = {
+      id: sized.id,
+      type: sized.type,
+      position: sized.position,
+      data: sized.data,
+    };
+    const undersized = {
+      ...node('group-small', 'group-frame', { childNodeIds: [] }),
+      width: 200,
+      height: 100,
+    };
+    const synchronized = synchronizeCanvasDocument(
+      legacy({ nodes: [unresized, undersized], edges: [] }),
+    );
+
+    expect(synchronized.ok).toBe(true);
+    if (!synchronized.ok) return;
+    expect(synchronized.document.nodes).toMatchObject([
+      { id: 'group-default', width: 520, height: 360 },
+      { id: 'group-small', width: 360, height: 240 },
+    ]);
+  });
+
   it('migrates legacy nodes and edges into a complete typed canvas without fake resources', () => {
     const migrated = canonicalCanvasFromLegacy(legacy());
     expect(migrated.ok).toBe(true);
@@ -174,6 +220,149 @@ describe('canonical desktop canvas adapter', () => {
     expect(synchronized.document.name).toBe('Canonical name');
     expect(synchronized.document.canonical).toEqual(canonical);
     expect(synchronized.document.schemaVersion).toBe(2);
+  });
+
+  it('derives one canonical group owner from frame membership and removes stale ownership', () => {
+    const initial = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('frame-a', 'group-frame', {
+            childNodeIds: ['child-1', 'missing-child', 'frame-b', 'child-1'],
+            purpose: 'feature-area',
+            layout: 'horizontal',
+            autoFit: true,
+          }),
+          node('frame-b', 'group-frame', {
+            childNodeIds: ['child-1', 'child-2'],
+            purpose: 'workflow-stage',
+          }),
+          node('child-1', 'task'),
+          node('child-2', 'agent'),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(initial.ok).toBe(true);
+    if (!initial.ok) return;
+    expect(initial.canvas.nodes.find((candidate) => candidate.id === 'frame-a')).toMatchObject({
+      data: { childNodeIds: ['child-1'] },
+    });
+    expect(initial.canvas.nodes.find((candidate) => candidate.id === 'frame-b')).toMatchObject({
+      data: { childNodeIds: ['child-2'] },
+    });
+    expect(initial.canvas.nodes.find((candidate) => candidate.id === 'child-1')?.groupId).toBe(
+      'frame-a',
+    );
+    expect(initial.canvas.nodes.find((candidate) => candidate.id === 'child-2')?.groupId).toBe(
+      'frame-b',
+    );
+    expect(initial.canvas.groups).toMatchObject([
+      { id: 'frame-a', nodeIds: ['child-1'], locked: false },
+      { id: 'frame-b', nodeIds: ['child-2'], locked: false },
+    ]);
+
+    const edited = legacySurfaceFromCanonical(initial.canvas);
+    const reconciled = canonicalCanvasFromLegacy({
+      ...edited,
+      canonical: initial.canvas,
+      updatedAt: T2,
+      nodes: edited.nodes.map((candidate) =>
+        candidate.id === 'frame-a'
+          ? { ...candidate, data: { ...candidate.data, childNodeIds: [] } }
+          : candidate,
+      ),
+    });
+    expect(reconciled.ok).toBe(true);
+    if (!reconciled.ok) return;
+    expect(
+      reconciled.canvas.nodes.find((candidate) => candidate.id === 'child-1'),
+    ).not.toHaveProperty('groupId');
+    expect(reconciled.canvas.groups.find((group) => group.id === 'frame-a')?.nodeIds).toEqual([]);
+
+    const deletedSurface = legacySurfaceFromCanonical(initial.canvas);
+    const deletedFrame = canonicalCanvasFromLegacy({
+      ...deletedSurface,
+      canonical: initial.canvas,
+      updatedAt: T2,
+      nodes: deletedSurface.nodes.filter((candidate) => candidate.id !== 'frame-b'),
+    });
+    expect(deletedFrame.ok).toBe(true);
+    if (!deletedFrame.ok) return;
+    expect(deletedFrame.canvas.groups.some((group) => group.id === 'frame-b')).toBe(false);
+    expect(
+      deletedFrame.canvas.nodes.find((candidate) => candidate.id === 'child-2'),
+    ).not.toHaveProperty('groupId');
+  });
+
+  it('reconciles competing frame claims by geometry, floor-resolved area, and stable ID', () => {
+    const child = {
+      ...node('child', 'task'),
+      position: { x: 20, y: 20 },
+      width: 100,
+      height: 80,
+    };
+    const outside = {
+      ...node('outside-first', 'group-frame', { childNodeIds: ['child'] }),
+      position: { x: 1_000, y: 1_000 },
+      width: 100,
+      height: 100,
+    };
+    const large = {
+      ...node('large-containing', 'group-frame', { childNodeIds: ['child'] }),
+      position: { x: 0, y: 0 },
+      width: 800,
+      height: 600,
+    };
+    const tiedZ = {
+      ...node('z-containing', 'group-frame', { childNodeIds: ['child'] }),
+      position: { x: 0, y: 0 },
+      width: 200,
+      height: 100,
+    };
+    const tiedA = {
+      ...node('a-containing', 'group-frame', {
+        childNodeIds: ['missing', 'large-containing', 'child', 'child'],
+      }),
+      position: { x: 0, y: 0 },
+      width: 200,
+      height: 100,
+    };
+    const orders = [
+      [outside, large, tiedZ, tiedA, child],
+      [child, tiedA, tiedZ, large, outside],
+    ];
+
+    for (const nodes of orders) {
+      const migrated = canonicalCanvasFromLegacy(legacy({ nodes, edges: [] }));
+      expect(migrated.ok).toBe(true);
+      if (!migrated.ok) continue;
+
+      expect(migrated.canvas.nodes.find((candidate) => candidate.id === 'child')?.groupId).toBe(
+        'a-containing',
+      );
+      expect(
+        migrated.canvas.nodes.find((candidate) => candidate.id === 'a-containing'),
+      ).toMatchObject({
+        size: { width: 360, height: 240 },
+        data: { childNodeIds: ['child'] },
+      });
+      for (const frameId of ['outside-first', 'large-containing', 'z-containing']) {
+        expect(migrated.canvas.nodes.find((candidate) => candidate.id === frameId)).toMatchObject({
+          data: { childNodeIds: [] },
+        });
+      }
+      expect(
+        migrated.canvas.groups
+          .map((group) => ({ id: group.id, nodeIds: group.nodeIds }))
+          .sort((left, right) => left.id.localeCompare(right.id)),
+      ).toEqual([
+        { id: 'a-containing', nodeIds: ['child'] },
+        { id: 'large-containing', nodeIds: [] },
+        { id: 'outside-first', nodeIds: [] },
+        { id: 'z-containing', nodeIds: [] },
+      ]);
+    }
   });
 
   it('maps every built-in draft plus declarative extension nodes', () => {

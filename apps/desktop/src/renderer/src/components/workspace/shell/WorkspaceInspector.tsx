@@ -65,6 +65,8 @@ interface WorkspaceInspectorProps {
   canvas: CanvasDocument | null;
   nodes: readonly WorkshopNode[];
   selectedNode: WorkshopNode | null;
+  selectedNodeLockedByGroup: boolean;
+  selectedNodeDeletionProtected: boolean;
   selectedEdge: WorkshopEdge | null;
   runnableAgents: RunnableAgent[];
   selectedAdapter: RunAdapterId;
@@ -80,6 +82,8 @@ interface WorkspaceInspectorProps {
   onClearSelection: () => void;
   onRecord: () => void;
   onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
+  onFitGroupFrame: () => void;
+  onArrangeGroupFrame: (layout: NonNullable<WorkshopNode['data']['layout']>) => void;
   onUpdateEdgeType: (edgeType: WorkshopEdgeData['edgeType']) => void;
   onUpdateEdgeData: (data: WorkshopEdgeData) => void;
   onDuplicateSelected: () => void;
@@ -144,17 +148,26 @@ function NodeInspector(
   },
 ) {
   const { selectedNode, onRecord, onUpdateSelected } = props;
+  const configurationReadOnly = selectedNode.data.locked || props.collaborationGraphReadOnly;
   return (
     <div className="inspector-content">
+      {props.collaborationGraphReadOnly && (
+        <p className="node-lock-notice" role="status">
+          <Lock size={13} />
+          This collaboration role can inspect the shared node but cannot change it.
+        </p>
+      )}
       {selectedNode.data.locked && (
         <p className="node-lock-notice" role="status">
           <Lock size={13} />
-          This node is locked. Unlock it to edit, move, connect, or delete it.
+          {props.selectedNodeLockedByGroup
+            ? 'This node is protected by a locked group frame. Unlock the frame to edit it.'
+            : 'This node is locked. Unlock it to edit, move, connect, or delete it.'}
         </p>
       )}
       <fieldset
         className="node-edit-fields"
-        disabled={selectedNode.data.locked}
+        disabled={configurationReadOnly}
         aria-label="Node configuration"
       >
         <label>
@@ -218,6 +231,8 @@ function NodeInspector(
             nodes={props.nodes}
             onRecord={onRecord}
             onUpdate={onUpdateSelected}
+            onFit={props.onFitGroupFrame}
+            onArrange={props.onArrangeGroupFrame}
           />
         )}
         {(selectedNode.data.kind === 'brief' || selectedNode.data.kind === 'note-image') && (
@@ -307,6 +322,14 @@ function NodeInspector(
       <div className="inspector-actions">
         <button
           type="button"
+          disabled={props.selectedNodeLockedByGroup || props.collaborationGraphReadOnly}
+          title={
+            props.collaborationGraphReadOnly
+              ? 'This collaboration role cannot change node locks.'
+              : props.selectedNodeLockedByGroup
+                ? 'Unlock the containing group frame before changing this node lock.'
+                : undefined
+          }
           onClick={() => {
             onRecord();
             onUpdateSelected({ locked: !selectedNode.data.locked });
@@ -315,14 +338,23 @@ function NodeInspector(
           {selectedNode.data.locked ? <Unlock size={14} /> : <Lock size={14} />}
           {selectedNode.data.locked ? 'Unlock' : 'Lock'}
         </button>
-        <button type="button" onClick={props.onDuplicateSelected}>
+        <button
+          type="button"
+          disabled={props.collaborationGraphReadOnly}
+          onClick={props.onDuplicateSelected}
+        >
           <Copy size={14} />
           Duplicate
         </button>
         <button
           type="button"
           className="danger-text"
-          disabled={selectedNode.data.locked}
+          disabled={configurationReadOnly || props.selectedNodeDeletionProtected}
+          title={
+            props.selectedNodeDeletionProtected && !configurationReadOnly
+              ? 'Unlock protected members or connected locked nodes before deleting this node.'
+              : undefined
+          }
           onClick={props.onDeleteSelected}
         >
           <Trash2 size={14} />

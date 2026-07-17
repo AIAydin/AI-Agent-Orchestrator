@@ -6,6 +6,12 @@ import {
 } from '@forgeboard/core/domain';
 
 import { booleanValue, jsonRecord, stringArray, stringValue, unknownRecord } from './json.js';
+import {
+  CANVAS_NODE_MINIMUM_DIMENSIONS,
+  DEFAULT_CANVAS_NODE_DIMENSIONS,
+  DEFAULT_GROUP_FRAME_DIMENSIONS,
+  GROUP_FRAME_MINIMUM_DIMENSIONS,
+} from './node-dimensions.js';
 import type { CanvasMigrationIssue, LegacyCanvasNode } from './types.js';
 
 const KIND_ALIASES: Readonly<Record<string, CanvasNodeType>> = {
@@ -77,6 +83,10 @@ export function canonicalNodeFromLegacy(
   }
   const matchingPrevious = previous?.type === type ? previous : undefined;
   const typedData = canonicalData(type, node.data, matchingPrevious?.data);
+  const fallbackDimensions =
+    type === 'group-frame' ? DEFAULT_GROUP_FRAME_DIMENSIONS : DEFAULT_CANVAS_NODE_DIMENSIONS;
+  const minimumDimensions =
+    type === 'group-frame' ? GROUP_FRAME_MINIMUM_DIMENSIONS : CANVAS_NODE_MINIMUM_DIMENSIONS;
   const parsed = CanvasNodeSchema.safeParse({
     id: node.id,
     type,
@@ -85,8 +95,14 @@ export function canonicalNodeFromLegacy(
     icon: stringValue(node.data['icon']) ?? matchingPrevious?.icon ?? LEGACY_KINDS[type],
     position: node.position,
     size: {
-      width: positiveNumber(node.width) ?? matchingPrevious?.size.width ?? 320,
-      height: positiveNumber(node.height) ?? matchingPrevious?.size.height ?? 180,
+      width: Math.max(
+        minimumDimensions.width,
+        positiveNumber(node.width) ?? matchingPrevious?.size.width ?? fallbackDimensions.width,
+      ),
+      height: Math.max(
+        minimumDimensions.height,
+        positiveNumber(node.height) ?? matchingPrevious?.size.height ?? fallbackDimensions.height,
+      ),
     },
     collapsed: booleanValue(node.data['collapsed']) ?? matchingPrevious?.collapsed ?? false,
     locked: booleanValue(node.data['locked']) ?? matchingPrevious?.locked ?? false,

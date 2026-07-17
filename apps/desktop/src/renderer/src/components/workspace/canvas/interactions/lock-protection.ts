@@ -8,14 +8,8 @@ export function filterLockedNodeChanges(
   nodes: readonly WorkshopNode[],
   edges: readonly WorkshopEdge[],
 ): NodeChange<WorkshopNode>[] {
-  const lockedNodeIds = new Set(nodes.filter((node) => node.data.locked).map((node) => node.id));
-  const removalProtectedNodeIds = new Set(lockedNodeIds);
-  for (const edge of edges) {
-    if (lockedNodeIds.has(edge.source) || lockedNodeIds.has(edge.target)) {
-      removalProtectedNodeIds.add(edge.source);
-      removalProtectedNodeIds.add(edge.target);
-    }
-  }
+  const lockedNodeIds = lockedCanvasNodeIds(nodes);
+  const removalProtectedNodeIds = removalProtectedCanvasNodeIds(nodes, edges);
   return changes.filter((change) => {
     if (!('id' in change)) return true;
     if (change.type === 'remove' && removalProtectedNodeIds.has(change.id)) return false;
@@ -52,7 +46,7 @@ export function filterLockedEdgeChanges(
   edges: readonly WorkshopEdge[],
   nodes: readonly WorkshopNode[],
 ): EdgeChange<WorkshopEdge>[] {
-  const lockedNodeIds = new Set(nodes.filter((node) => node.data.locked).map((node) => node.id));
+  const lockedNodeIds = lockedCanvasNodeIds(nodes);
   const edgesById = new Map(edges.map((edge) => [edge.id, edge] as const));
   const touchesLockedNode = (edge: WorkshopEdge | undefined) =>
     edge !== undefined && (lockedNodeIds.has(edge.source) || lockedNodeIds.has(edge.target));
@@ -72,5 +66,45 @@ function endpointsAreUnlocked(
   if (sourceId === null || targetId === null) return false;
   const source = nodes.find((node) => node.id === sourceId);
   const target = nodes.find((node) => node.id === targetId);
-  return source !== undefined && target !== undefined && !source.data.locked && !target.data.locked;
+  const lockedNodeIds = lockedCanvasNodeIds(nodes);
+  return (
+    source !== undefined &&
+    target !== undefined &&
+    !lockedNodeIds.has(source.id) &&
+    !lockedNodeIds.has(target.id)
+  );
+}
+
+export function lockedCanvasNodeIds(nodes: readonly WorkshopNode[]): Set<string> {
+  const lockedNodeIds = new Set(nodes.filter((node) => node.data.locked).map((node) => node.id));
+  for (const frame of nodes) {
+    if (frame.data.kind !== 'group-frame' || !frame.data.locked) continue;
+    for (const childId of frame.data.childNodeIds ?? []) lockedNodeIds.add(childId);
+  }
+  return lockedNodeIds;
+}
+
+/**
+ * Extends effective locks to deletions that would mutate a protected edge or indirectly ungroup a
+ * locked child by removing its otherwise-unlocked frame.
+ */
+export function removalProtectedCanvasNodeIds(
+  nodes: readonly WorkshopNode[],
+  edges: readonly WorkshopEdge[],
+): Set<string> {
+  const lockedNodeIds = lockedCanvasNodeIds(nodes);
+  const protectedIds = new Set(lockedNodeIds);
+  for (const edge of edges) {
+    if (lockedNodeIds.has(edge.source) || lockedNodeIds.has(edge.target)) {
+      protectedIds.add(edge.source);
+      protectedIds.add(edge.target);
+    }
+  }
+  for (const frame of nodes) {
+    if (frame.data.kind !== 'group-frame') continue;
+    if ((frame.data.childNodeIds ?? []).some((childId) => lockedNodeIds.has(childId))) {
+      protectedIds.add(frame.id);
+    }
+  }
+  return protectedIds;
 }

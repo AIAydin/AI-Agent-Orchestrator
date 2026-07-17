@@ -1,5 +1,6 @@
 import type { WorkshopNode } from '../CanvasNode.js';
 import type { WorkshopEdge } from '../../model/types.js';
+import { persistedWorkshopNodeDimensions } from '../../model/node-persistence.js';
 
 export interface CanvasClipboardSelection {
   nodes: WorkshopNode[];
@@ -34,10 +35,10 @@ export function captureSelectedSubgraph(
     explicitlySelected.length > 0
       ? explicitlySelected
       : nodes.filter((node) => node.id === fallbackNodeId);
-  const selectedIds = new Set(selectedNodes.map((node) => node.id));
+  const selectedIds = selectedNodeClosure(selectedNodes, nodes);
 
   return {
-    nodes: selectedNodes,
+    nodes: nodes.filter((node) => selectedIds.has(node.id)),
     edges: edges.filter((edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target)),
   };
 }
@@ -64,6 +65,7 @@ export function instantiateClipboardSelection(
       id,
       selected: true,
       position: { x: node.position.x + offset, y: node.position.y + offset },
+      ...persistedWorkshopNodeDimensions(node),
       data: duplicateNodeData(node.data, nodeIds, referenceIds, id),
     };
   });
@@ -113,14 +115,32 @@ function duplicateNodeData(
   for (const key of NODE_ID_ARRAY_KEYS) {
     const value = record[key];
     if (!Array.isArray(value)) continue;
-    record[key] = (value as unknown[]).map((id: unknown) =>
-      typeof id === 'string' ? (nodeIds.get(id) ?? id) : id,
-    );
+    record[key] = (value as unknown[]).flatMap((id: unknown) => {
+      if (typeof id !== 'string') return [id];
+      const remapped = nodeIds.get(id);
+      if (remapped !== undefined) return [remapped];
+      return source.kind === 'group-frame' && key === 'childNodeIds' ? [] : [id];
+    });
   }
   if (Array.isArray(data.requiredCheckIds)) {
     data.requiredCheckIds = data.requiredCheckIds.map((id) => referenceIds.get(id) ?? id);
   }
   return data;
+}
+
+function selectedNodeClosure(
+  selectedNodes: readonly WorkshopNode[],
+  allNodes: readonly WorkshopNode[],
+): Set<string> {
+  const availableIds = new Set(allNodes.map((node) => node.id));
+  const selectedIds = new Set(selectedNodes.map((node) => node.id));
+  for (const frame of selectedNodes) {
+    if (frame.data.kind !== 'group-frame') continue;
+    for (const childId of frame.data.childNodeIds ?? []) {
+      if (availableIds.has(childId)) selectedIds.add(childId);
+    }
+  }
+  return selectedIds;
 }
 
 function remapEdgeData(

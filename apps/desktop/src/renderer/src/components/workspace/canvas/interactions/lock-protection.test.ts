@@ -8,6 +8,7 @@ import {
   canEditEdge,
   filterLockedEdgeChanges,
   filterLockedNodeChanges,
+  removalProtectedCanvasNodeIds,
 } from './lock-protection.js';
 
 describe('canvas lock protection', () => {
@@ -67,6 +68,60 @@ describe('canvas lock protection', () => {
     ]);
     expect(
       filterLockedNodeChanges([{ type: 'remove', id: 'open' }], [locked, open], edges),
+    ).toEqual([]);
+  });
+
+  it('treats members of a locked frame as locked for graph mutations', () => {
+    const member = node('member', false);
+    const peer = node('peer', false);
+    const frame: WorkshopNode = {
+      ...node('frame', true),
+      data: {
+        ...node('frame', true).data,
+        kind: 'group-frame',
+        childNodeIds: ['member'],
+      },
+    };
+    const memberEdge = edge('member-edge', 'member', 'peer');
+
+    expect(
+      filterLockedNodeChanges(
+        [
+          { type: 'position', id: 'member', position: { x: 10, y: 20 }, dragging: true },
+          { type: 'remove', id: 'member' },
+          { type: 'select', id: 'member', selected: true },
+        ],
+        [frame, member, peer],
+        [memberEdge],
+      ),
+    ).toEqual([{ type: 'select', id: 'member', selected: true }]);
+    expect(canConnectUnlocked(connection('member', 'peer'), [frame, member, peer])).toBe(false);
+    expect(canEditEdge(memberEdge, [frame, member, peer])).toBe(false);
+    expect(
+      filterLockedEdgeChanges(
+        [{ type: 'remove', id: 'member-edge' }],
+        [memberEdge],
+        [frame, member, peer],
+      ),
+    ).toEqual([]);
+  });
+
+  it('protects an unlocked frame from deletion while it owns an individually locked child', () => {
+    const lockedMember = node('locked-member', true);
+    const frame: WorkshopNode = {
+      ...node('frame', false),
+      data: {
+        ...node('frame', false).data,
+        kind: 'group-frame',
+        childNodeIds: ['locked-member'],
+      },
+    };
+
+    expect(removalProtectedCanvasNodeIds([frame, lockedMember], [])).toEqual(
+      new Set(['locked-member', 'frame']),
+    );
+    expect(
+      filterLockedNodeChanges([{ type: 'remove', id: 'frame' }], [frame, lockedMember], []),
     ).toEqual([]);
   });
 });

@@ -7,6 +7,7 @@ import {
 
 import { canonicalEdgeFromLegacy, legacyEdgeFromCanonical } from './edge-adapter.js';
 import { canonicalNodeFromLegacy, legacyNodeFromCanonical } from './node-adapter.js';
+import { GROUP_FRAME_MINIMUM_DIMENSIONS } from './node-dimensions.js';
 import { reconcileRevisionLoops } from './revision-loop-adapter.js';
 import type {
   CanvasMigrationIssue,
@@ -39,14 +40,39 @@ export function canonicalCanvasFromLegacy(document: LegacyCanvasDocument): Canva
 
   const nodeIds = new Set(nodes.map((node) => node.id));
   const edgeIds = new Set(edges.map((edge) => edge.id));
-  const groups = (previous?.groups ?? []).map((group) => ({
-    ...group,
-    nodeIds: group.nodeIds.filter((nodeId) => nodeIds.has(nodeId)),
-  }));
+  const groupFrames = reconcileGroupFrameNodes(nodes);
+  const groupFrameIds = new Set(groupFrames.nodesById.keys());
+  const knownGroupFrameIds = new Set([
+    ...groupFrameIds,
+    ...(previous?.nodes.filter((node) => node.type === 'group-frame').map((node) => node.id) ?? []),
+  ]);
+  const retainedGroups = (previous?.groups ?? [])
+    .filter((group) => !knownGroupFrameIds.has(group.id))
+    .map((group) => ({
+      ...group,
+      nodeIds: group.nodeIds.filter((nodeId) => nodeIds.has(nodeId)),
+    }));
+  const groups = [
+    ...retainedGroups,
+    ...groupFrames.frames.map((frame) => ({
+      id: frame.id,
+      title: frame.title,
+      nodeIds: [...frame.data.childNodeIds],
+      position: frame.position,
+      size: frame.size,
+      color: frame.color,
+      locked: frame.locked,
+    })),
+  ];
   const groupIds = new Set(groups.map((group) => group.id));
-  const normalizedNodes = nodes.map((node) =>
-    node.groupId !== undefined && !groupIds.has(node.groupId) ? nodeWithoutGroup(node) : node,
-  );
+  const normalizedNodes = groupFrames.nodes.map((node) => {
+    const frameId = groupFrames.parentByChildId.get(node.id);
+    if (frameId !== undefined) return nodeWithGroup(node, frameId);
+    return node.groupId !== undefined &&
+      (groupFrameIds.has(node.groupId) || !groupIds.has(node.groupId))
+      ? nodeWithoutGroup(node)
+      : node;
+  });
   const reconciledLoops = reconcileRevisionLoops(
     document.edges,
     edges,
@@ -138,4 +164,102 @@ function nodeWithoutGroup(node: CanvasNode): CanvasNode {
   const withoutGroup: Partial<CanvasNode> = { ...node };
   delete withoutGroup.groupId;
   return CanvasNodeSchema.parse(withoutGroup);
+}
+
+function nodeWithGroup(node: CanvasNode, groupId: string): CanvasNode {
+  return CanvasNodeSchema.parse({ ...node, groupId });
+}
+
+function reconcileGroupFrameNodes(nodes: readonly CanvasNode[]): {
+  readonly nodes: CanvasNode[];
+  readonly frames: Array<Extract<CanvasNode, { type: 'group-frame' }>>;
+  readonly nodesById: ReadonlyMap<string, Extract<CanvasNode, { type: 'group-frame' }>>;
+  readonly parentByChildId: ReadonlyMap<string, string>;
+} {
+  const byId = new Map(nodes.map((node) => [node.id, node] as const));
+  const sourceFrames = nodes.filter(isGroupFrameNode);
+  const claimsByChildId = new Map<string, GroupFrameNode[]>();
+
+  for (const frame of sourceFrames) {
+    const seenChildIds = new Set<string>();
+    for (const childId of frame.data.childNodeIds) {
+      if (seenChildIds.has(childId)) continue;
+      seenChildIds.add(childId);
+      const child = byId.get(childId);
+      if (child === undefined || child.id === frame.id || isGroupFrameNode(child)) continue;
+      const claims = claimsByChildId.get(childId) ?? [];
+      claims.push(frame);
+      claimsByChildId.set(childId, claims);
+    }
+  }
+
+  const parentByChildId = new Map<string, string>();
+  const childrenByFrameId = new Map<string, string[]>();
+  for (const childId of [...claimsByChildId.keys()].sort(compareIds)) {
+    const child = byId.get(childId);
+    if (child === undefined || isGroupFrameNode(child)) continue;
+    const winner = [...(claimsByChildId.get(childId) ?? [])].sort((left, right) =>
+      compareGroupFrameClaims(left, right, child),
+    )[0];
+    if (winner === undefined) continue;
+    parentByChildId.set(childId, winner.id);
+    const children = childrenByFrameId.get(winner.id) ?? [];
+    children.push(childId);
+    childrenByFrameId.set(winner.id, children);
+  }
+
+  const reconciled = nodes.map((node) => {
+    if (!isGroupFrameNode(node)) return node;
+    return CanvasNodeSchema.parse({
+      ...node,
+      data: { ...node.data, childNodeIds: childrenByFrameId.get(node.id) ?? [] },
+    }) as Extract<CanvasNode, { type: 'group-frame' }>;
+  });
+  const frames = reconciled.filter(isGroupFrameNode);
+  return {
+    nodes: reconciled,
+    frames,
+    nodesById: new Map(frames.map((frame) => [frame.id, frame] as const)),
+    parentByChildId,
+  };
+}
+
+type GroupFrameNode = Extract<CanvasNode, { type: 'group-frame' }>;
+
+function isGroupFrameNode(node: CanvasNode): node is GroupFrameNode {
+  return node.type === 'group-frame';
+}
+
+function compareGroupFrameClaims(
+  left: GroupFrameNode,
+  right: GroupFrameNode,
+  child: CanvasNode,
+): number {
+  const leftContains = groupFrameContainsNode(left, child);
+  const rightContains = groupFrameContainsNode(right, child);
+  if (leftContains !== rightContains) return leftContains ? -1 : 1;
+  const areaDifference = groupFrameArea(left) - groupFrameArea(right);
+  return areaDifference === 0 ? compareIds(left.id, right.id) : areaDifference;
+}
+
+function groupFrameContainsNode(frame: GroupFrameNode, child: CanvasNode): boolean {
+  const frameWidth = Math.max(GROUP_FRAME_MINIMUM_DIMENSIONS.width, frame.size.width);
+  const frameHeight = Math.max(GROUP_FRAME_MINIMUM_DIMENSIONS.height, frame.size.height);
+  return (
+    child.position.x >= frame.position.x &&
+    child.position.y >= frame.position.y &&
+    child.position.x + child.size.width <= frame.position.x + frameWidth &&
+    child.position.y + child.size.height <= frame.position.y + frameHeight
+  );
+}
+
+function groupFrameArea(frame: GroupFrameNode): number {
+  return (
+    Math.max(GROUP_FRAME_MINIMUM_DIMENSIONS.width, frame.size.width) *
+    Math.max(GROUP_FRAME_MINIMUM_DIMENSIONS.height, frame.size.height)
+  );
+}
+
+function compareIds(left: string, right: string): number {
+  return left.localeCompare(right);
 }

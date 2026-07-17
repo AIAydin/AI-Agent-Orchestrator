@@ -1,4 +1,6 @@
 import type { WorkshopNode } from '../CanvasNode.js';
+import { reconcileGroupMembership } from './groups/group-containment.js';
+import { lockedCanvasNodeIds } from './lock-protection.js';
 
 export interface CanvasKeyboardMovement {
   x: number;
@@ -35,17 +37,31 @@ export function moveSelectedCanvasNodes(
   nodes: readonly WorkshopNode[],
   movement: CanvasKeyboardMovement,
 ): CanvasKeyboardMoveResult {
+  const lockedIds = lockedCanvasNodeIds(nodes);
   const selectedNodeIds: string[] = [];
-  const movedNodeIds: string[] = [];
   const lockedNodeIds: string[] = [];
-  const movedNodes = nodes.map((node) => {
-    if (node.selected !== true) return node;
+  const movedIds = new Set<string>();
+  for (const node of nodes) {
+    if (node.selected !== true) continue;
     selectedNodeIds.push(node.id);
-    if (node.data.locked) {
-      lockedNodeIds.push(node.id);
-      return node;
+    if (lockedIds.has(node.id)) lockedNodeIds.push(node.id);
+    else movedIds.add(node.id);
+  }
+  const selectedMovableFrameIds = new Set(
+    nodes
+      .filter(
+        (node) =>
+          node.selected === true && node.data.kind === 'group-frame' && !lockedIds.has(node.id),
+      )
+      .map((node) => node.id),
+  );
+  for (const membership of reconcileGroupMembership(nodes).memberships) {
+    if (selectedMovableFrameIds.has(membership.frameId) && !lockedIds.has(membership.childId)) {
+      movedIds.add(membership.childId);
     }
-    movedNodeIds.push(node.id);
+  }
+  const movedNodes = nodes.map((node) => {
+    if (!movedIds.has(node.id)) return node;
     return {
       ...node,
       position: {
@@ -55,5 +71,10 @@ export function moveSelectedCanvasNodes(
     };
   });
 
-  return { nodes: movedNodes, selectedNodeIds, movedNodeIds, lockedNodeIds };
+  return {
+    nodes: movedNodes,
+    selectedNodeIds,
+    movedNodeIds: nodes.filter(({ id }) => movedIds.has(id)).map(({ id }) => id),
+    lockedNodeIds,
+  };
 }

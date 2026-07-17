@@ -10,6 +10,7 @@ import {
 import type { WorkshopNode } from './CanvasNode.js';
 import { WorkspaceCanvas } from './WorkspaceCanvas.js';
 import { WORKSPACE_CONTEXT_DRAG_MIME } from '../context-dnd/contracts.js';
+import type { ExtensionTemplate } from '../model/types.js';
 
 const mocks = vi.hoisted(() => ({ reactFlowProps: null as unknown }));
 
@@ -76,7 +77,7 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
       shiftKey: true,
     });
     expect(onKeyboardMove).toHaveBeenLastCalledWith({ x: 10, y: 0 }, true);
-    expect(screen.getByText(/Moved 1 selected node right 10 pixels/u)).toBeTruthy();
+    expect(screen.getByText(/Moved 1 canvas node right 10 pixels/u)).toBeTruthy();
 
     fireEvent.keyDown(screen.getByTestId('focusable-node'), {
       key: 'ArrowDown',
@@ -100,6 +101,7 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
       snapGrid: [number, number];
       nodesFocusable: boolean;
       autoPanOnNodeFocus: boolean;
+      fitViewOptions: { maxZoom: number };
       'aria-label': string;
     };
     expect(flowProps.snapGrid).toEqual([
@@ -108,6 +110,7 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     ]);
     expect(flowProps.nodesFocusable).toBe(true);
     expect(flowProps.autoPanOnNodeFocus).toBe(true);
+    expect(flowProps.fitViewOptions).toEqual({ maxZoom: 1.25 });
     expect(flowProps['aria-label']).toBe('Canvas canvas');
   });
 
@@ -147,6 +150,86 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
   });
 });
 
+describe('WorkspaceCanvas palette drops', () => {
+  it('preserves pointer snapping while measuring panned viewport bounds without snapping', () => {
+    const canvasProps = props(vi.fn());
+    const pan = { x: -138.5, y: 0 };
+    const zoom = 2.5;
+    const grid = 128;
+    const screenToFlowPosition = vi.fn(
+      (point: { x: number; y: number }, options?: { snapToGrid: boolean }) => {
+        const position = {
+          x: (point.x - pan.x) / zoom,
+          y: (point.y - pan.y) / zoom,
+        };
+        if (options?.snapToGrid === false) return position;
+        return {
+          x: grid * Math.round(position.x / grid),
+          y: grid * Math.round(position.y / grid),
+        };
+      },
+    );
+    canvasProps.instance = {
+      getZoom: () => zoom,
+      screenToFlowPosition,
+    } as unknown as React.ComponentProps<typeof WorkspaceCanvas>['instance'];
+    const view = render(<WorkspaceCanvas {...canvasProps} />);
+    const region = canvasRegion(view.container);
+    vi.spyOn(region, 'getBoundingClientRect').mockReturnValue(canvasBounds());
+
+    fireEvent(
+      region,
+      paletteDropEvent(paletteDataTransfer('application/x-forgeboard-node', 'task')),
+    );
+
+    expect(screenToFlowPosition).toHaveBeenNthCalledWith(1, { x: 900, y: 700 }, undefined);
+    expect(screenToFlowPosition).toHaveBeenNthCalledWith(
+      2,
+      { x: 16, y: 16 },
+      { snapToGrid: false },
+    );
+    expect(screenToFlowPosition).toHaveBeenNthCalledWith(
+      3,
+      { x: 984, y: 734 },
+      { snapToGrid: false },
+    );
+    const position = vi.mocked(canvasProps.onAddNode).mock.calls[0]?.[1];
+    expect(position?.x).toBeCloseTo(129);
+    expect(position?.y).toBeCloseTo(113.6);
+  });
+
+  it('uses the rendered group-frame and extension dimensions when clamping drops', () => {
+    const groupProps = props(vi.fn());
+    const groupView = render(<WorkspaceCanvas {...groupProps} />);
+    const groupRegion = canvasRegion(groupView.container);
+    vi.spyOn(groupRegion, 'getBoundingClientRect').mockReturnValue(canvasBounds());
+
+    fireEvent(
+      groupRegion,
+      paletteDropEvent(paletteDataTransfer('application/x-forgeboard-node', 'group-frame')),
+    );
+
+    expect(groupProps.onAddNode).toHaveBeenCalledWith('group-frame', { x: 464, y: 374 });
+    groupView.unmount();
+
+    const extensionProps = props(vi.fn());
+    const template = extensionTemplate();
+    extensionProps.extensionTemplates = [template];
+    const extensionView = render(<WorkspaceCanvas {...extensionProps} />);
+    const extensionRegion = canvasRegion(extensionView.container);
+    vi.spyOn(extensionRegion, 'getBoundingClientRect').mockReturnValue(canvasBounds());
+
+    fireEvent(
+      extensionRegion,
+      paletteDropEvent(
+        paletteDataTransfer('application/x-forgeboard-extension-node', template.key),
+      ),
+    );
+
+    expect(extensionProps.onAddExtensionNode).toHaveBeenCalledWith(template, { x: 664, y: 554 });
+  });
+});
+
 describe('WorkspaceCanvas Agent context drops', () => {
   it('links a configured File node dropped directly on an Agent after preserving its move', async () => {
     const onAttachAgentContext = vi.fn().mockResolvedValue(undefined);
@@ -161,6 +244,7 @@ describe('WorkspaceCanvas Agent context drops', () => {
 
     act(() => flowProps.onNodeDragStop({}, source, [source]));
 
+    expect(canvasProps.onNodeDragStop).toHaveBeenCalledWith(source, [source]);
     await waitFor(() =>
       expect(onAttachAgentContext).toHaveBeenCalledWith('agent', {
         schemaVersion: 1,
@@ -302,6 +386,9 @@ function props(
     onEdgesChange: vi.fn(),
     onConnect: vi.fn(),
     onNodeDragStart: vi.fn(),
+    onNodeDragStop: vi.fn(),
+    onSetNodeCollapsed: vi.fn(),
+    onNodeResizeStart: vi.fn(),
     onKeyboardMove,
     onSelectionChange: vi.fn(),
     onAddNode: vi.fn(),
@@ -376,6 +463,88 @@ function contextDataTransfer(serialized = JSON.stringify(contextPayload())): Dat
     getData: vi.fn((type: string) => (type === WORKSPACE_CONTEXT_DRAG_MIME ? serialized : '')),
     dropEffect: 'none',
   } as unknown as DataTransfer;
+}
+
+function paletteDataTransfer(type: string, value: string): DataTransfer {
+  return {
+    types: [type],
+    getData: vi.fn((requestedType: string) => (requestedType === type ? value : '')),
+    dropEffect: 'none',
+  } as unknown as DataTransfer;
+}
+
+function paletteDropEvent(dataTransfer: DataTransfer): Event {
+  const event = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperties(event, {
+    clientX: { value: 900 },
+    clientY: { value: 700 },
+    dataTransfer: { value: dataTransfer },
+  });
+  return event;
+}
+
+function canvasRegion(container: HTMLElement): HTMLElement {
+  const region = container.querySelector<HTMLElement>('.canvas-region');
+  if (region === null) throw new Error('Missing canvas region.');
+  return region;
+}
+
+function canvasBounds(): DOMRect {
+  return {
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 1_000,
+    bottom: 750,
+    width: 1_000,
+    height: 750,
+    toJSON: () => ({}),
+  };
+}
+
+function extensionTemplate(): ExtensionTemplate {
+  const definition: ExtensionTemplate['definition'] = {
+    id: 'decision',
+    displayName: 'Decision',
+    description: 'Records a bounded decision.',
+    category: 'Planning',
+    icon: 'note',
+    color: '#4F46E5',
+    capabilities: ['human-editable'],
+    fields: [],
+    ports: [],
+  };
+  return {
+    key: 'example.notes:decision',
+    definition,
+    extension: {
+      record: {
+        schemaVersion: 1,
+        extensionId: 'example.notes',
+        version: '1.0.0',
+        manifestDigest: 'a'.repeat(64),
+        snapshotDigest: 'b'.repeat(64),
+        grantedPermissions: ['canvas.data.persist', 'canvas.node.register'],
+        sourcePath: '/tmp/example.notes',
+        installedAt: '2026-07-14T16:00:00.000Z',
+        updatedAt: '2026-07-14T16:00:00.000Z',
+      },
+      manifest: {
+        schemaVersion: 1,
+        id: 'example.notes',
+        name: 'Example notes',
+        version: '1.0.0',
+        description: 'Adds decision notes.',
+        publisher: 'Example',
+        requestedPermissions: ['canvas.data.persist', 'canvas.node.register'],
+        contributes: { agentAdapters: [], canvasNodeTypes: [definition] },
+      },
+      manifestJson: '{}',
+      trustState: 'active',
+      approvedAt: '2026-07-14T16:00:00.000Z',
+    },
+  };
 }
 
 function canvas(): CanvasDocument {

@@ -51,7 +51,9 @@ export function preserveRemoteCollaborationMetadata(
         id,
         {
           ...group,
-          ...(old?.collapsed === undefined ? {} : { collapsed: old.collapsed }),
+          ...(group.collapsed !== undefined || old?.collapsed === undefined
+            ? {}
+            : { collapsed: old.collapsed }),
           ...(old?.order === undefined ? {} : { order: old.order }),
           ...(old?.createdAt === undefined ? {} : { createdAt: old.createdAt }),
           ...(old?.updatedAt === undefined ? {} : { updatedAt: old.updatedAt }),

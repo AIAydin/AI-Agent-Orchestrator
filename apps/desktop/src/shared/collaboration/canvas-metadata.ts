@@ -106,14 +106,38 @@ export function collaborationMetadataSnapshotFromCanvas(
   }
 
   const groups: Record<string, CollaborationGroupMetadata> = {};
+  const groupFrames = new Map(
+    canonical.nodes
+      .filter(
+        (node): node is Extract<CanvasNode, { type: 'group-frame' }> => node.type === 'group-frame',
+      )
+      .map((node) => [node.id, node] as const),
+  );
   for (const group of canonical.groups) {
+    const frame = groupFrames.get(group.id);
     insertUnique(groups, {
       id: group.id,
-      title: boundedRequiredText(group.title, 160, 'Untitled group'),
-      position: { x: group.position.x, y: group.position.y },
-      size: { width: group.size.width, height: group.size.height },
-      ...(sixDigitColor(group.color) === undefined ? {} : { color: group.color }),
-      locked: group.locked,
+      title: boundedRequiredText(frame?.title ?? group.title, 160, 'Untitled group'),
+      position: {
+        x: frame?.position.x ?? group.position.x,
+        y: frame?.position.y ?? group.position.y,
+      },
+      size: {
+        width: frame?.size.width ?? group.size.width,
+        height: frame?.size.height ?? group.size.height,
+      },
+      ...(sixDigitColor(frame?.color ?? group.color) === undefined
+        ? {}
+        : { color: frame?.color ?? group.color }),
+      locked: frame?.locked ?? group.locked,
+      ...(frame === undefined
+        ? {}
+        : {
+            collapsed: frame.collapsed,
+            purpose: frame.data.purpose,
+            layout: frame.data.layout,
+            autoFit: frame.data.autoFit,
+          }),
     });
   }
 

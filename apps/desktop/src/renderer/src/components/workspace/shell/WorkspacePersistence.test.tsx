@@ -11,6 +11,10 @@ import {
   type Project,
 } from '../../../../../shared/application/contracts.js';
 import type { FileDocument } from '../../../../../shared/files/contracts.js';
+import {
+  CollaborationMetadataSnapshotSchema,
+  type CollaborationMetadataSnapshot,
+} from '../../../../../shared/collaboration/index.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { Workspace } from './Workspace.js';
@@ -19,6 +23,12 @@ import type { WorkspaceHandle } from '../model/types.js';
 const mocks = vi.hoisted(() => ({
   flushCanvas: vi.fn<() => Promise<boolean>>(),
   collaborationGraphReadOnly: false,
+  applyCollaborationSnapshot: null as
+    | null
+    | ((
+        snapshot: CollaborationMetadataSnapshot,
+        context: { readonly initial: boolean },
+      ) => boolean),
 }));
 
 vi.mock('../canvas/useCanvasPersistence.js', () => ({
@@ -28,15 +38,25 @@ vi.mock('../canvas/useCanvasPersistence.js', () => ({
   }),
 }));
 vi.mock('../collaboration/useCollaborationCanvas.js', () => ({
-  useCollaborationCanvas: () => ({
-    awareness: [],
-    graphReadOnly: mocks.collaborationGraphReadOnly,
-    rejectedComments: [],
-    rejectedCommentEntries: [],
-    discardRejectedComment: vi.fn().mockResolvedValue(false),
-    updateCursor: vi.fn(),
-    clearCursor: vi.fn(),
-  }),
+  useCollaborationCanvas: ({
+    onSnapshot,
+  }: {
+    onSnapshot: (
+      snapshot: CollaborationMetadataSnapshot,
+      context: { readonly initial: boolean },
+    ) => boolean;
+  }) => {
+    mocks.applyCollaborationSnapshot = onSnapshot;
+    return {
+      awareness: [],
+      graphReadOnly: mocks.collaborationGraphReadOnly,
+      rejectedComments: [],
+      rejectedCommentEntries: [],
+      discardRejectedComment: vi.fn().mockResolvedValue(false),
+      updateCursor: vi.fn(),
+      clearCursor: vi.fn(),
+    };
+  },
 }));
 vi.mock('./WorkspaceCommandBar.js', () => ({
   WorkspaceCommandBar: ({
@@ -61,6 +81,7 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
     nodes,
     onNodesChange,
     onKeyboardMove,
+    onSelectionChange,
     collaborationGraphReadOnly,
   }: {
     nodes: WorkshopNode[];
@@ -70,6 +91,7 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
       >,
     ) => void;
     onKeyboardMove: (movement: { x: number; y: number }, recordUndoCheckpoint: boolean) => unknown;
+    onSelectionChange: (selection: { nodes: WorkshopNode[]; edges: [] }) => void;
     collaborationGraphReadOnly: boolean;
   }) => (
     <div>
@@ -99,6 +121,12 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
       </button>
       <button
         type="button"
+        onClick={() => onSelectionChange({ nodes: nodes.slice(0, 1), edges: [] })}
+      >
+        Inspect first node
+      </button>
+      <button
+        type="button"
         onClick={() => {
           const first = nodes[0];
           if (first !== undefined) onNodesChange([{ type: 'remove', id: first.id }]);
@@ -113,29 +141,53 @@ vi.mock('./WorkspaceRail.js', () => ({ WorkspaceRail: () => null }));
 vi.mock('./WorkspaceInspector.js', () => ({
   WorkspaceInspector: ({
     onAttachAgentContext,
+    onFitGroupFrame,
+    onArrangeGroupFrame,
+    onUpdateSelected,
+    onDeleteSelected,
   }: {
     onAttachAgentContext: (
       targetNodeId: string,
       payload: WorkspaceContextDragPayload,
     ) => Promise<void>;
+    onFitGroupFrame: () => void;
+    onArrangeGroupFrame: (layout: 'vertical') => void;
+    onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
+    onDeleteSelected: () => void;
   }) => (
-    <button
-      type="button"
-      onClick={() =>
-        void onAttachAgentContext('agent-node', {
-          schemaVersion: 1,
-          kind: 'project-file',
-          projectId: '70000000-0000-4000-8000-000000000001',
-          relativePath: 'src/context.ts',
-        })
-      }
-    >
-      Attach project file
-    </button>
+    <div>
+      <button
+        type="button"
+        onClick={() =>
+          void onAttachAgentContext('agent-node', {
+            schemaVersion: 1,
+            kind: 'project-file',
+            projectId: '70000000-0000-4000-8000-000000000001',
+            relativePath: 'src/context.ts',
+          })
+        }
+      >
+        Attach project file
+      </button>
+      <button type="button" onClick={onFitGroupFrame}>
+        Fit inspected group
+      </button>
+      <button type="button" onClick={() => onArrangeGroupFrame('vertical')}>
+        Arrange inspected group
+      </button>
+      <button type="button" onClick={() => onUpdateSelected({ childNodeIds: ['member'] })}>
+        Assign member to inspected group
+      </button>
+      <button type="button" onClick={onDeleteSelected}>
+        Delete inspected node
+      </button>
+    </div>
   ),
 }));
 vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
-  WorkspaceActivityDrawer: () => null,
+  WorkspaceActivityDrawer: ({ events }: { events: string[] }) => (
+    <output data-testid="workspace-events">{JSON.stringify(events)}</output>
+  ),
 }));
 vi.mock('./WorkspaceOverlays.js', () => ({
   WorkspaceNotifications: () => null,
@@ -203,6 +255,7 @@ vi.mock('../workflows/useWorkflowRuns.js', () => ({
 
 beforeEach(() => {
   mocks.collaborationGraphReadOnly = false;
+  mocks.applyCollaborationSnapshot = null;
   mocks.flushCanvas.mockReset();
   mocks.flushCanvas.mockResolvedValue(true);
   Object.defineProperty(window, 'forgeboard', {
@@ -413,6 +466,347 @@ describe('Workspace persistence boundary', () => {
     });
   });
 
+  it('records only a real group fit and restores its prior bounds through undo', async () => {
+    const document = canvas([
+      groupFrameCanvasNode('group-frame', 10, ['member']),
+      sizedCanvasNode('member', 130, 80, 100, 80),
+    ]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(canvasNodes()[0]?.position.x).toBe(10));
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect first node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fit inspected group' }));
+    await waitFor(() => expect(canvasNodes()[0]?.position).toEqual({ x: 55, y: 6 }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo canvas' }));
+    await waitFor(() => expect(canvasNodes()[0]?.position.x).toBe(10));
+  });
+
+  it('keeps an automatic frame fitted when keyboard movement cannot carry a locked member', async () => {
+    const group = groupFrameCanvasNode('group-frame', 55, ['locked-member']);
+    const member = sizedCanvasNode('locked-member', 130, 80, 100, 80);
+    const document = canvas([
+      { ...group, position: { x: 55, y: 6 }, data: { ...group.data, autoFit: true } },
+      { ...member, data: { ...member.data, locked: true } },
+    ]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(canvasNodes()[0]?.position).toEqual({ x: 55, y: 6 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select canvas nodes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move selected right' }));
+
+    await waitFor(() => expect(canvasNodes()[0]?.position).toEqual({ x: 55, y: 6 }));
+    expect(canvasNodes()[1]?.position).toEqual({ x: 130, y: 80 });
+  });
+
+  it('does not create an undo checkpoint when a group fit is already satisfied', async () => {
+    const document = canvas([
+      {
+        ...groupFrameCanvasNode('group-frame', 55, ['member']),
+        position: { x: 55, y: 6 },
+      },
+      sizedCanvasNode('member', 130, 80, 100, 80),
+    ]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(canvasNodes()[0]?.position).toEqual({ x: 55, y: 6 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect first node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fit inspected group' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo canvas' }));
+
+    expect(screen.getByTestId('workspace-events').textContent).not.toContain(
+      'Undid the last canvas change.',
+    );
+  });
+
+  it('rejects group geometry actions at the owner boundary for read-only collaborators', async () => {
+    mocks.collaborationGraphReadOnly = true;
+    const document = canvas([
+      groupFrameCanvasNode('group-frame', 10, ['member'], 'vertical'),
+      sizedCanvasNode('member', 130, 80, 100, 80),
+    ]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(canvasNodes()[0]?.position.x).toBe(10));
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect first node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fit inspected group' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Arrange inspected group' }));
+
+    expect(canvasNodes()[0]?.position.x).toBe(10);
+    expect(canvasNodes()[1]?.position).toEqual({ x: 130, y: 80 });
+    expect(screen.getByTestId('workspace-events').textContent).toContain(
+      'This collaboration role cannot edit the shared graph.',
+    );
+  });
+
+  it('re-fits both target and donor automatic frames after inspector reassignment', async () => {
+    const target = groupFrameCanvasNode('target', 0, []);
+    const donor = groupFrameCanvasNode('donor', 106, ['member', 'retained']);
+    const document = canvas([
+      { ...target, data: { ...target.data, autoFit: true } },
+      {
+        ...donor,
+        position: { x: 106, y: 6 },
+        width: 628,
+        height: 240,
+        data: { ...donor.data, autoFit: true },
+      },
+      sizedCanvasNode('member', 130, 80, 210, 92),
+      sizedCanvasNode('retained', 500, 80, 210, 92),
+    ]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(canvasNodes()).toHaveLength(4));
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect first node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Assign member to inspected group' }));
+
+    await waitFor(() => {
+      const current = canvasNodes();
+      expect(current.find(({ id }) => id === 'target')).toMatchObject({
+        position: { x: 55, y: 6 },
+        width: 360,
+        height: 240,
+        data: { childNodeIds: ['member'] },
+      });
+      expect(current.find(({ id }) => id === 'donor')).toMatchObject({
+        position: { x: 425, y: 6 },
+        width: 360,
+        height: 240,
+        data: { childNodeIds: ['retained'] },
+      });
+    });
+  });
+
+  it('does not delete an unlocked frame when that would ungroup a locked child', async () => {
+    const group = groupFrameCanvasNode('group-frame', 0, ['locked-member']);
+    const member = sizedCanvasNode('locked-member', 130, 80, 210, 92);
+    const document = canvas([group, { ...member, data: { ...member.data, locked: true } }]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(canvasNodes()).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect first node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete inspected node' }));
+
+    expect(canvasNodes()).toHaveLength(2);
+    expect(screen.getByTestId('workspace-events').textContent).toMatch(/protected members/u);
+  });
+
+  it('rebases undo history when an authoritative collaboration snapshot replaces the graph', async () => {
+    const document = canvas([canvasNode('shared-node', 10, false)]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(canvasNodes()[0]?.position.x).toBe(10));
+    fireEvent.click(screen.getByRole('button', { name: 'Select canvas nodes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move selected right' }));
+    await waitFor(() => expect(canvasNodes()[0]?.position.x).toBe(11));
+
+    const remote = CollaborationMetadataSnapshotSchema.parse({
+      canvas: {
+        id: document.id,
+        title: document.name,
+        version: 1,
+        updatedAt: '2026-07-16T22:00:00.000Z',
+      },
+      nodes: {
+        'shared-node': {
+          id: 'shared-node',
+          type: 'task',
+          title: 'Remote task',
+          position: { x: 100, y: 20 },
+          size: { width: 320, height: 180 },
+        },
+      },
+      edges: {},
+      groups: {},
+      tasks: {},
+      comments: {},
+      workflow: {},
+      reviews: {},
+    });
+    act(() => {
+      expect(mocks.applyCollaborationSnapshot?.(remote, { initial: false })).toBe(true);
+    });
+    await waitFor(() => expect(canvasNodes()[0]?.position.x).toBe(100));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo canvas' }));
+    expect(canvasNodes()[0]?.position.x).toBe(100);
+  });
+
   it('keeps a viewer collaboration graph read-only across canvas mutation callbacks', async () => {
     mocks.collaborationGraphReadOnly = true;
     const document = canvas([canvasNode('shared-node', 10, false)]);
@@ -501,6 +895,49 @@ function canvasNode(id: string, x: number, locked: boolean): CanvasDocument['nod
       locked,
       collapsed: false,
       color: '#445566',
+    },
+  };
+}
+
+function sizedCanvasNode(
+  id: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): CanvasDocument['nodes'][number] {
+  return {
+    ...canvasNode(id, x, false),
+    position: { x, y },
+    width,
+    height,
+  };
+}
+
+function groupFrameCanvasNode(
+  id: string,
+  x: number,
+  childNodeIds: readonly string[],
+  layout: 'freeform' | 'vertical' = 'freeform',
+): CanvasDocument['nodes'][number] {
+  return {
+    id,
+    type: 'group-frame',
+    position: { x, y: 0 },
+    width: 360,
+    height: 240,
+    data: {
+      kind: 'group-frame',
+      title: id,
+      description: id,
+      status: 'idle',
+      locked: false,
+      collapsed: false,
+      color: '#445566',
+      purpose: 'custom',
+      layout,
+      autoFit: false,
+      childNodeIds: [...childNodeIds],
     },
   };
 }

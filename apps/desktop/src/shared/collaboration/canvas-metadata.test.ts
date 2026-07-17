@@ -301,6 +301,87 @@ describe('canonical Canvas collaboration metadata projection', () => {
     expect(CollaborationMetadataSnapshotSchema.parse(roundTrip)).toEqual(snapshot);
   });
 
+  it('shares group-frame behavior through explicit group fields and node ownership only', () => {
+    const canonical = canvas();
+    const group = canonical.groups[0];
+    if (group === undefined) throw new Error('Missing group fixture.');
+    const withFrame = CanvasSchema.parse({
+      ...canonical,
+      groups: canonical.groups.map((candidate) =>
+        candidate.id === group.id
+          ? {
+              ...candidate,
+              title: 'Stale group title',
+              position: { x: 900, y: 900 },
+              size: { width: 900, height: 700 },
+              color: '#112233',
+              locked: false,
+            }
+          : candidate,
+      ),
+      nodes: [
+        ...canonical.nodes,
+        CanvasNodeSchema.parse({
+          id: group.id,
+          type: 'group-frame',
+          title: group.title,
+          color: group.color,
+          icon: 'group-frame',
+          position: group.position,
+          size: group.size,
+          collapsed: true,
+          locked: true,
+          inspector: { privateNote: 'PRIVATE_GROUP_NOTE' },
+          createdAt: NOW,
+          updatedAt: NOW,
+          data: {
+            purpose: 'feature-area',
+            childNodeIds: group.nodeIds,
+            layout: 'grid',
+            autoFit: true,
+          },
+        }),
+      ],
+    });
+
+    const snapshot = collaborationMetadataSnapshotFromCanvas(withFrame);
+
+    expect(snapshot.groups['group-1']).toMatchObject({
+      id: 'group-1',
+      title: group.title,
+      position: group.position,
+      size: group.size,
+      color: group.color,
+      locked: true,
+      collapsed: true,
+      purpose: 'feature-area',
+      layout: 'grid',
+      autoFit: true,
+    });
+    expect(snapshot.groups['group-1']).not.toHaveProperty('childNodeIds');
+    expect(snapshot.nodes['group-1']).toMatchObject({
+      id: 'group-1',
+      type: 'group-frame',
+      collapsed: true,
+    });
+    expect(snapshot.nodes['group-1']).not.toHaveProperty('data');
+    expect(
+      Object.values(snapshot.nodes)
+        .filter((node) => node.groupId === 'group-1')
+        .map((node) => node.id),
+    ).toEqual([
+      'agent-1',
+      'task-1',
+      'file-1',
+      'diff-1',
+      'terminal-1',
+      'diagram-1',
+      'whiteboard-1',
+      'note-1',
+    ]);
+    expect(JSON.stringify(snapshot)).not.toContain('PRIVATE_GROUP_NOTE');
+  });
+
   it.each([
     ['agent', { promptDraft: 'PRIVATE_PAYLOAD' }, 'agent'],
     ['product-brief', { markdown: 'PRIVATE_PAYLOAD' }, 'product-brief'],

@@ -107,7 +107,7 @@ not be reclassified as future work.
 - [ ] Mermaid diagram node with synchronized source/render/export.
 - [ ] Excalidraw-compatible whiteboard/mockup node with annotations/export/context.
 - [ ] Note/image node with safe local references.
-- [ ] Group/frame node with real containment behavior.
+- [x] Group/frame node with real containment behavior.
 - [ ] Recoverable missing-local-reference warnings.
 
 ## Typed workflows
@@ -785,3 +785,18 @@ unchecked when only a subset of their required behavior has proof.
   arm64 application, ZIP, DMG, and blockmaps packaged successfully; both packaged-app and native
   installer-artifact smoke tests passed, with the latter returning `FORGEBOARD_SMOKE_OK`. Signing
   remains inactive because this machine has no Developer ID identity.
+- 2026-07-16: Group/frame nodes gained real persistent containment configured entirely in the UI:
+  inspector and drag assignment, deterministic single-owner resolution, member-aware movement,
+  auto-fit plus explicit fit/arrange, collapse, manual resize, inherited locking and deletion
+  protection, copy/duplicate, undo/redo, autosave/reload, and privacy-bounded collaboration
+  round-trips. Shared logical/rendered dimension floors keep new, legacy, remote, and restored nodes
+  consistent; viewport-aware drops keep full nodes reachable through pan, zoom, and snap-to-grid.
+  Adversarial tests cover ownership transfer between auto-fit frames, locked descendants, stale
+  collaboration undo history, malformed legacy claims, collapsed frames, and local-only extension
+  data. The final checkpoint passed the 784-file structure gate, repository-wide Prettier and
+  zero-warning ESLint, all eight participating strict typechecks, 1,429 unit tests across 227 files,
+  202 integration tests across 27 files, all 12 Electron Playwright journeys, every workspace
+  production build, `git diff --check`, and the production dependency audit with no known
+  vulnerabilities. A fresh macOS arm64 app, ZIP, DMG, and blockmaps packaged successfully; both the
+  packaged-app smoke and read-only DMG mount/copy/launch smoke passed, with the latter returning
+  `FORGEBOARD_SMOKE_OK`. Signing remains inactive because this machine has no Developer ID identity.

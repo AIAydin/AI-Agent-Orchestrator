@@ -1,8 +1,6 @@
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import { CANVAS_NODE_MINIMUM_DIMENSIONS } from '../../../../../shared/canvas/node-dimensions.js';
 import type { WorkspaceContextDragPayload } from './contracts.js';
-
-const DEFAULT_NODE_WIDTH = 210;
-const DEFAULT_NODE_HEIGHT = 92;
 
 export type FileNodeContextDropResolution =
   | {
@@ -69,8 +67,14 @@ export function resolveFileNodeContextDrop(input: {
 }
 
 function containsPoint(node: WorkshopNode, point: { readonly x: number; readonly y: number }) {
-  const width = positiveDimension(node.measured?.width ?? node.width) ?? DEFAULT_NODE_WIDTH;
-  const height = positiveDimension(node.measured?.height ?? node.height) ?? DEFAULT_NODE_HEIGHT;
+  const width = resolvedDimension(
+    node.measured?.width ?? node.width,
+    CANVAS_NODE_MINIMUM_DIMENSIONS.width,
+  );
+  const height = resolvedDimension(
+    node.measured?.height ?? node.height,
+    CANVAS_NODE_MINIMUM_DIMENSIONS.height,
+  );
   return (
     point.x >= node.position.x &&
     point.x <= node.position.x + width &&
@@ -80,11 +84,19 @@ function containsPoint(node: WorkshopNode, point: { readonly x: number; readonly
 }
 
 function nodeCenter(node: WorkshopNode): { readonly x: number; readonly y: number } {
-  const width = positiveDimension(node.measured?.width ?? node.width) ?? DEFAULT_NODE_WIDTH;
-  const height = positiveDimension(node.measured?.height ?? node.height) ?? DEFAULT_NODE_HEIGHT;
+  const width = resolvedDimension(
+    node.measured?.width ?? node.width,
+    CANVAS_NODE_MINIMUM_DIMENSIONS.width,
+  );
+  const height = resolvedDimension(
+    node.measured?.height ?? node.height,
+    CANVAS_NODE_MINIMUM_DIMENSIONS.height,
+  );
   return { x: node.position.x + width / 2, y: node.position.y + height / 2 };
 }
 
-function positiveDimension(value: number | null | undefined): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+function resolvedDimension(value: number | null | undefined, minimum: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.max(minimum, value)
+    : minimum;
 }

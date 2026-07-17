@@ -18,9 +18,14 @@ import {
 } from '../../../../../shared/canvas/adapter.js';
 import type { LegacyCanvasEdge, LegacyCanvasNode } from '../../../../../shared/canvas/types.js';
 import {
+  CANVAS_NODE_MINIMUM_DIMENSIONS,
+  GROUP_FRAME_MINIMUM_DIMENSIONS,
+} from '../../../../../shared/canvas/node-dimensions.js';
+import {
   CollaborationMetadataSnapshotSchema,
   type CollaborationCommentMetadata,
   type CollaborationEdgeMetadata,
+  type CollaborationGroupMetadata,
   type CollaborationMetadataSnapshot,
   type CollaborationNodeMetadata,
   type CollaborationNodeType,
@@ -68,8 +73,14 @@ export function mergeCollaborationCanvasSnapshot(
     local.canvas.nodes.filter((node) => node.type === 'extension').map((node) => node.id),
   );
   const localLegacyNodes = new Map(document.nodes.map((node) => [node.id, node]));
+  const groupMemberIds = collaborationGroupMemberIds(snapshot, local.canvas);
   const remoteNodes: LegacyCanvasNode[] = Object.values(snapshot.nodes).map((node) =>
-    legacyNodeFromCollaboration(node, localLegacyNodes.get(node.id)),
+    legacyNodeFromCollaboration(
+      node,
+      localLegacyNodes.get(node.id),
+      snapshot.groups[node.id],
+      groupMemberIds.get(node.id) ?? [],
+    ),
   );
   const includedNodeIds = new Set(remoteNodes.map((node) => node.id));
   for (const node of document.nodes) {
@@ -151,6 +162,7 @@ function applyCollaborationMetadata(
       node,
       localNodes.get(node.id),
       metadata,
+      snapshot.groups[node.id],
       snapshot.tasks[node.id],
       remoteComments.get(node.id) ?? [],
       workflowByNode.get(node.id) ?? [],
@@ -164,7 +176,7 @@ function applyCollaborationMetadata(
     return metadata === undefined ? edge : applyEdgeMetadata(edge, metadata);
   });
   const nodeIds = new Set(nodes.map((node) => node.id));
-  const groups = mergedGroups(migrated, local, snapshot, options, nodeIds);
+  const groups = mergedGroups(migrated, local, snapshot, options, nodeIds, nodes);
   const edgeIds = new Set(edges.map((edge) => edge.id));
 
   return CanvasSchema.parse({
@@ -198,6 +210,7 @@ function applyNodeMetadata(
   node: CanvasNode,
   localNode: CanvasNode | undefined,
   metadata: CollaborationNodeMetadata,
+  group: CollaborationGroupMetadata | undefined,
   task: CollaborationTaskMetadata | undefined,
   comments: readonly CollaborationCommentMetadata[],
   workflow: readonly CollaborationWorkflowMetadata[],
@@ -237,18 +250,27 @@ function applyNodeMetadata(
   delete withoutGroup['groupId'];
   const inspector = inspectorWithoutStaleTaskAssignee(node, task);
   delete inspector['collaboration'];
+  const frameGroup = node.type === 'group-frame' ? group : undefined;
+  const requestedSize = metadata.size ?? frameGroup?.size ?? node.size;
+  const minimumSize =
+    node.type === 'group-frame' ? GROUP_FRAME_MINIMUM_DIMENSIONS : CANVAS_NODE_MINIMUM_DIMENSIONS;
 
   return CanvasNodeSchema.parse({
     ...withoutGroup,
     title: metadata.title,
     position: metadata.position,
-    size: metadata.size ?? node.size,
+    size: {
+      width: Math.max(minimumSize.width, requestedSize.width),
+      height: Math.max(minimumSize.height, requestedSize.height),
+    },
     color: metadata.color ?? node.color,
     icon: metadata.icon ?? node.icon,
     status: localNodeStatus(metadata.status, node.status),
-    locked: metadata.locked ?? false,
-    collapsed: metadata.collapsed ?? false,
-    ...(metadata.groupId === undefined ? {} : { groupId: metadata.groupId }),
+    locked: metadata.locked ?? frameGroup?.locked ?? false,
+    collapsed: metadata.collapsed ?? frameGroup?.collapsed ?? false,
+    ...(metadata.groupId === undefined || node.type === 'group-frame'
+      ? {}
+      : { groupId: metadata.groupId }),
     comments: [...mergedComments.values()],
     inspector: {
       ...inspector,
@@ -326,32 +348,41 @@ function mergedGroups(
   snapshot: CollaborationMetadataSnapshot,
   options: CollaborationCanvasMergeOptions,
   nodeIds: ReadonlySet<string>,
+  nodes: readonly CanvasNode[],
 ): Canvas['groups'] {
   const localGroups = new Map(local.groups.map((group) => [group.id, group]));
   const localNodes = new Map(local.nodes.map((node) => [node.id, node]));
   const remoteMembers = new Map<string, string[]>();
   for (const node of Object.values(snapshot.nodes)) {
-    if (node.groupId === undefined) continue;
+    if (node.groupId === undefined || node.type === 'group-frame') continue;
     const members = remoteMembers.get(node.groupId) ?? [];
     members.push(node.id);
     remoteMembers.set(node.groupId, members);
   }
   const remoteGroupIds = new Set(Object.keys(snapshot.groups));
+  const framesById = new Map(
+    nodes
+      .filter(
+        (node): node is Extract<CanvasNode, { type: 'group-frame' }> => node.type === 'group-frame',
+      )
+      .map((node) => [node.id, node] as const),
+  );
   const remoteGroups = Object.values(snapshot.groups).map((group) => {
     const localGroup = localGroups.get(group.id);
+    const frame = framesById.get(group.id);
     const localOnlyMembers = (localGroup?.nodeIds ?? []).filter((nodeId) => {
       return localNodes.get(nodeId)?.type === 'extension';
     });
     return {
       id: group.id,
-      title: group.title,
+      title: frame?.title ?? group.title,
       nodeIds: [...new Set([...(remoteMembers.get(group.id) ?? []), ...localOnlyMembers])].filter(
         (id) => nodeIds.has(id),
       ),
-      position: group.position,
-      size: group.size,
-      color: group.color ?? localGroup?.color ?? '#82909b',
-      locked: group.locked ?? false,
+      position: frame?.position ?? group.position,
+      size: frame?.size ?? group.size,
+      color: frame?.color ?? group.color ?? localGroup?.color ?? '#82909b',
+      locked: frame?.locked ?? group.locked ?? false,
     };
   });
   for (const group of migrated.groups) {
@@ -377,9 +408,13 @@ function legacyNodeFromCollaboration(
         readonly data: Readonly<Record<string, unknown>>;
       }
     | undefined,
+  group: CollaborationGroupMetadata | undefined,
+  groupMemberIds: readonly string[],
 ): LegacyCanvasNode {
   const type = legacyNodeType(node.type);
   const matchingLocal = local !== undefined && collaborationNodeType(local) === node.type;
+  const frameGroup = node.type === 'group-frame' ? group : undefined;
+  const size = node.size ?? frameGroup?.size;
   const data = {
     ...(matchingLocal ? local.data : {}),
     kind: type,
@@ -387,10 +422,18 @@ function legacyNodeFromCollaboration(
     ...(node.color === undefined ? {} : { color: node.color }),
     ...(node.icon === undefined ? {} : { icon: node.icon }),
     status: localLegacyStatus(node.status),
-    locked: node.locked ?? false,
-    collapsed: node.collapsed ?? false,
+    locked: node.locked ?? frameGroup?.locked ?? false,
+    collapsed: node.collapsed ?? frameGroup?.collapsed ?? false,
     ...(node.assigneeId === undefined ? {} : { assigneeId: node.assigneeId }),
     ...(node.taskId === undefined ? {} : { taskId: node.taskId }),
+    ...(node.type !== 'group-frame'
+      ? {}
+      : {
+          purpose: frameGroup?.purpose ?? 'custom',
+          childNodeIds: [...groupMemberIds],
+          layout: frameGroup?.layout ?? 'freeform',
+          autoFit: frameGroup?.autoFit ?? false,
+        }),
     ...(node.type === 'file' && !matchingLocal
       ? {
           readOnly: true,
@@ -403,9 +446,42 @@ function legacyNodeFromCollaboration(
     id: node.id,
     type,
     position: node.position,
-    ...(node.size === undefined ? {} : { width: node.size.width, height: node.size.height }),
+    ...(size === undefined ? {} : { width: size.width, height: size.height }),
     data,
   };
+}
+
+function collaborationGroupMemberIds(
+  snapshot: CollaborationMetadataSnapshot,
+  local: Canvas,
+): ReadonlyMap<string, string[]> {
+  const membersByGroup = new Map<string, Set<string>>();
+  for (const node of Object.values(snapshot.nodes)) {
+    if (node.groupId === undefined || node.type === 'group-frame') continue;
+    appendUnique(membersByGroup, node.groupId, node.id);
+  }
+
+  // Declarative extension payloads are deliberately local-only, including their frame membership.
+  const localNodes = new Map(local.nodes.map((node) => [node.id, node]));
+  for (const group of local.groups) {
+    for (const nodeId of group.nodeIds) {
+      if (localNodes.get(nodeId)?.type === 'extension') {
+        appendUnique(membersByGroup, group.id, nodeId);
+      }
+    }
+  }
+  return new Map(
+    [...membersByGroup].map(([groupId, memberIds]) => [groupId, [...memberIds]] as const),
+  );
+}
+
+function appendUnique(target: Map<string, Set<string>>, groupId: string, nodeId: string): void {
+  const members = target.get(groupId);
+  if (members === undefined) {
+    target.set(groupId, new Set([nodeId]));
+    return;
+  }
+  members.add(nodeId);
 }
 
 function legacyEdgeFromCollaboration(edge: CollaborationEdgeMetadata): LegacyCanvasEdge {

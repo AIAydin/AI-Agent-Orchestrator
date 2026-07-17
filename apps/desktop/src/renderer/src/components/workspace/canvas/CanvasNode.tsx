@@ -22,14 +22,17 @@ import {
   TestTube2,
   Workflow,
 } from 'lucide-react';
-import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
 
 import type {
   ExtensionCanvasNodeTypeView,
   PermissionProfile,
 } from '../../../../../shared/application/contracts.js';
+import { CANVAS_NODE_MINIMUM_DIMENSIONS } from '../../../../../shared/canvas/node-dimensions.js';
 import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
+import { useCanvasNodeInteractions } from './interactions/CanvasNodeInteractionContext.js';
+import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
 
 export interface WorkshopNodeData extends Record<string, unknown> {
   kind: NodeKind;
@@ -115,6 +118,9 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   };
   gateState?: 'pending' | 'passed' | 'failed' | 'waiting-for-human';
   childNodeIds?: string[];
+  purpose?: 'product-surface' | 'workflow-stage' | 'feature-area' | 'custom';
+  layout?: 'freeform' | 'horizontal' | 'vertical' | 'grid';
+  autoFit?: boolean;
   runId?: string;
   transcript?: string;
   lastRunSummary?: string;
@@ -281,7 +287,8 @@ const EXTENSION_ICONS: Readonly<Record<ExtensionCanvasNodeTypeView['icon'], type
   workflow: Workflow,
 };
 
-export function CanvasNode({ data, selected }: NodeProps<WorkshopNode>) {
+export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
+  const interactions = useCanvasNodeInteractions();
   const builtInDefinition = NODE_DEFINITIONS[data.kind];
   const extensionDefinition = data.kind === 'extension' ? data.extensionDefinition : undefined;
   const definition =
@@ -299,12 +306,40 @@ export function CanvasNode({ data, selected }: NodeProps<WorkshopNode>) {
     extensionDefinition?.ports.filter((port) => port.direction === 'output') ?? [];
   const targetHandles = extensionDefinition === undefined ? [{ id: 'input' }] : inputPorts;
   const sourceHandles = extensionDefinition === undefined ? [{ id: 'output' }] : outputPorts;
+  const groupFrame = data.kind === 'group-frame';
+  const minimum = groupFrame ? GROUP_FRAME_MINIMUM : CANVAS_NODE_MINIMUM_DIMENSIONS;
+  const canChangePresentation = !interactions.readOnly && !data.locked;
+  const automaticallySized = groupFrame && data.autoFit === true;
   return (
     <article
-      className={`canvas-node ${selected ? 'selected' : ''} ${data.collapsed ? 'collapsed' : ''}`}
+      className={[
+        'canvas-node',
+        selected ? 'selected' : '',
+        data.collapsed ? 'collapsed' : '',
+        groupFrame ? 'group-frame' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       style={{ '--node-accent': data.color } as React.CSSProperties}
+      role={groupFrame ? 'group' : undefined}
+      aria-roledescription={groupFrame ? 'group frame' : 'canvas node'}
       aria-label={`${definition.label}: ${data.title}`}
+      data-node-kind={data.kind}
     >
+      <NodeResizer
+        nodeId={id}
+        isVisible={selected && canChangePresentation && !data.collapsed && !automaticallySized}
+        minWidth={minimum.width}
+        minHeight={minimum.height}
+        handleClassName="canvas-node-resize-handle"
+        lineClassName="canvas-node-resize-line"
+        color={data.color}
+        onResizeStart={() => {
+          if (selected && canChangePresentation && !data.collapsed && !automaticallySized) {
+            interactions.onResizeStart?.(id);
+          }
+        }}
+      />
       {targetHandles.map((port, index) => (
         <Handle
           key={port.id}
@@ -317,33 +352,57 @@ export function CanvasNode({ data, selected }: NodeProps<WorkshopNode>) {
       ))}
       <header>
         <span className="node-kind-icon">
-          <Icon size={15} />
+          <Icon size={15} aria-hidden="true" />
         </span>
         <span className="node-kind">{definition.label}</span>
+        {data.collapsed && <strong className="collapsed-node-title">{data.title}</strong>}
         <span className={`run-status ${data.status}`} title={data.status} />
         {data.locked && <Lock size={12} aria-label="Locked" />}
-        <ChevronDown className="collapse-glyph" size={13} aria-hidden="true" />
+        <button
+          className="node-collapse-button nodrag"
+          type="button"
+          aria-label={`${data.collapsed ? 'Expand' : 'Collapse'} ${data.title}`}
+          aria-expanded={!data.collapsed}
+          disabled={!canChangePresentation}
+          title={
+            interactions.readOnly
+              ? 'This collaboration role cannot change the shared node.'
+              : data.locked
+                ? 'Unlock this node before changing its presentation.'
+                : data.collapsed
+                  ? 'Expand node'
+                  : 'Collapse node'
+          }
+          onClick={(event) => {
+            event.stopPropagation();
+            interactions.setCollapsed(id, !data.collapsed);
+          }}
+        >
+          <ChevronDown className="collapse-glyph" size={13} aria-hidden="true" />
+        </button>
       </header>
-      <div className="node-body">
-        <strong>{data.title}</strong>
-        <p>{data.description || definition.description}</p>
-        {data.status !== 'idle' && (
-          <span className={`node-status-label ${data.status}`}>
-            <Play size={10} />
-            {data.status}
-          </span>
-        )}
-        {data.kind === 'agent' && data.permissionProfile !== undefined && (
-          <span className="node-permission-chip">
-            {permissionProfileLabel(data.permissionProfile)}
-          </span>
-        )}
-        {data.kind === 'extension' && data.extensionAvailability !== 'active' && (
-          <span className="extension-node-state">
-            {data.extensionAvailability === 'quarantined' ? 'Quarantined' : 'Unavailable'}
-          </span>
-        )}
-      </div>
+      {!data.collapsed && (
+        <div className="node-body">
+          <strong>{data.title}</strong>
+          <p>{data.description || definition.description}</p>
+          {data.status !== 'idle' && (
+            <span className={`node-status-label ${data.status}`}>
+              <Play size={10} aria-hidden="true" />
+              {data.status}
+            </span>
+          )}
+          {data.kind === 'agent' && data.permissionProfile !== undefined && (
+            <span className="node-permission-chip">
+              {permissionProfileLabel(data.permissionProfile)}
+            </span>
+          )}
+          {data.kind === 'extension' && data.extensionAvailability !== 'active' && (
+            <span className="extension-node-state">
+              {data.extensionAvailability === 'quarantined' ? 'Quarantined' : 'Unavailable'}
+            </span>
+          )}
+        </div>
+      )}
       {sourceHandles.map((port, index) => (
         <Handle
           key={port.id}

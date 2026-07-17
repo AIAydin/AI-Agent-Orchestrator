@@ -23,6 +23,22 @@ describe('canvas selection clipboard', () => {
     expect(captureSelectedSubgraph([fallback], [], 'fallback').nodes).toEqual([fallback]);
   });
 
+  it('captures a selected frame with its valid members and their internal edges', () => {
+    const frame = node('frame', true, {
+      kind: 'group-frame',
+      childNodeIds: ['child', 'missing'],
+    });
+    const child = node('child', false);
+    const outside = node('outside', false);
+    const internal = edge('internal', 'frame', 'child');
+    const external = edge('external', 'child', 'outside');
+
+    expect(captureSelectedSubgraph([frame, child, outside], [internal, external])).toEqual({
+      nodes: [frame, child],
+      edges: [internal],
+    });
+  });
+
   it('creates fresh unlocked nodes and remaps internal references and edges', () => {
     const first = node('first', true, {
       locked: true,
@@ -44,14 +60,28 @@ describe('canvas selection clipboard', () => {
     );
 
     expect(
-      duplicate.nodes.map(({ id, position, selected }) => ({
+      duplicate.nodes.map(({ id, position, selected, width, height }) => ({
         id,
         position,
         selected,
+        width,
+        height,
       })),
     ).toEqual([
-      { id: 'first-copy', position: { x: 58, y: 68 }, selected: true },
-      { id: 'second-copy', position: { x: 58, y: 68 }, selected: true },
+      {
+        id: 'first-copy',
+        position: { x: 58, y: 68 },
+        selected: true,
+        width: 320,
+        height: 180,
+      },
+      {
+        id: 'second-copy',
+        position: { x: 58, y: 68 },
+        selected: true,
+        width: 320,
+        height: 180,
+      },
     ]);
     expect(duplicate.nodes[0]?.data).toMatchObject({
       title: 'first copy',
@@ -87,7 +117,7 @@ describe('canvas selection clipboard', () => {
       { createId: () => ids.shift() as string },
     );
 
-    expect(duplicate.nodes[0]?.data.childNodeIds).toEqual(['child-copy', 'outside']);
+    expect(duplicate.nodes[0]?.data.childNodeIds).toEqual(['child-copy']);
   });
 
   it('remaps product-brief attachments that are included in the duplicated selection', () => {

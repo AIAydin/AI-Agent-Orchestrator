@@ -32,6 +32,9 @@ describe('preserveRemoteCollaborationMetadata', () => {
           position: { x: 0, y: 0 },
           size: { width: 400, height: 300 },
           collapsed: true,
+          purpose: 'custom',
+          layout: 'horizontal',
+          autoFit: false,
           order: 3,
         },
       },
@@ -63,7 +66,13 @@ describe('preserveRemoteCollaborationMetadata', () => {
       taskId: 'task-1',
     });
     expect(result.nodes['file-1']).not.toHaveProperty('localResourceId');
-    expect(result.groups['group-1']).toMatchObject({ collapsed: true, order: 3 });
+    expect(result.groups['group-1']).toMatchObject({
+      collapsed: true,
+      purpose: 'feature-area',
+      layout: 'grid',
+      autoFit: true,
+      order: 3,
+    });
     expect(result.workflow).toHaveProperty('workflow-1');
     expect(result.reviews).toHaveProperty('review-1');
   });
@@ -83,6 +92,25 @@ describe('preserveRemoteCollaborationMetadata', () => {
     expect(result.nodes).toEqual({});
     expect(result.workflow).toEqual({});
     expect(result.reviews).toEqual({});
+  });
+
+  it('publishes a locally authored frame collapse change instead of restoring stale room state', () => {
+    const remote = snapshot();
+    const remoteGroup = remote.groups['group-1'];
+    if (remoteGroup === undefined) throw new Error('Missing group fixture.');
+    const local = snapshot({
+      groups: { 'group-1': { ...remoteGroup, collapsed: false } },
+    });
+    const staleRemote = snapshot({
+      groups: { 'group-1': { ...remoteGroup, collapsed: true, order: 7 } },
+    });
+
+    expect(preserveRemoteCollaborationMetadata(local, staleRemote).groups['group-1']).toMatchObject(
+      {
+        collapsed: false,
+        order: 7,
+      },
+    );
   });
 });
 
@@ -113,6 +141,9 @@ function snapshot(
         title: 'Group',
         position: { x: 0, y: 0 },
         size: { width: 400, height: 300 },
+        purpose: 'feature-area',
+        layout: 'grid',
+        autoFit: true,
       },
     },
     tasks: {

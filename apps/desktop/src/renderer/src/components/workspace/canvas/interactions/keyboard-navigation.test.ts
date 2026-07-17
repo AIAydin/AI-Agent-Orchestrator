@@ -30,6 +30,52 @@ describe('canvas keyboard navigation', () => {
     expect(result.nodes[1]).toBe(locked);
     expect(result.nodes[2]).toBe(unselected);
   });
+
+  it('keeps a selected member in place when its containing frame is locked', () => {
+    const member = node('member', { x: 20, y: 30 }, true, false);
+    const frame: WorkshopNode = {
+      ...node('frame', { x: 0, y: 0 }, false, true),
+      data: {
+        ...node('frame', { x: 0, y: 0 }, false, true).data,
+        kind: 'group-frame',
+        childNodeIds: ['member'],
+      },
+    };
+
+    const result = moveSelectedCanvasNodes([frame, member], { x: 10, y: 0 });
+
+    expect(result.movedNodeIds).toEqual([]);
+    expect(result.lockedNodeIds).toEqual(['member']);
+    expect(result.nodes[1]?.position).toEqual({ x: 20, y: 30 });
+  });
+
+  it('moves an unlocked frame and each unlocked resolved member exactly once', () => {
+    const frame: WorkshopNode = {
+      ...node('frame', { x: 0, y: 0 }, true, false),
+      data: {
+        ...node('frame', { x: 0, y: 0 }, true, false).data,
+        kind: 'group-frame',
+        childNodeIds: ['member', 'selected-member', 'locked-member'],
+      },
+    };
+    const member = node('member', { x: 20, y: 30 }, false, false);
+    const selectedMember = node('selected-member', { x: 40, y: 50 }, true, false);
+    const lockedMember = node('locked-member', { x: 60, y: 70 }, false, true);
+
+    const result = moveSelectedCanvasNodes([frame, member, selectedMember, lockedMember], {
+      x: 10,
+      y: -5,
+    });
+
+    expect(result.selectedNodeIds).toEqual(['frame', 'selected-member']);
+    expect(result.movedNodeIds).toEqual(['frame', 'member', 'selected-member']);
+    expect(result.nodes.map((item) => item.position)).toEqual([
+      { x: 10, y: -5 },
+      { x: 30, y: 25 },
+      { x: 50, y: 45 },
+      { x: 60, y: 70 },
+    ]);
+  });
 });
 
 function node(

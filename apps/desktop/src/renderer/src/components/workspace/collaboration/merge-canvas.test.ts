@@ -13,7 +13,9 @@ const PROJECT_ID = '70000000-0000-4000-8000-000000000001';
 
 describe('mergeCollaborationCanvasSnapshot', () => {
   it('applies safe shared metadata while preserving machine-local typed data', () => {
-    const result = mergeCollaborationCanvasSnapshot(document(), snapshot(), { initial: false });
+    const result = mergeCollaborationCanvasSnapshot(document(), snapshot(), {
+      initial: false,
+    });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -59,6 +61,25 @@ describe('mergeCollaborationCanvasSnapshot', () => {
     expect(result.document.canonical?.groups).toEqual([
       expect.objectContaining({ id: 'group-1', nodeIds: ['agent-1'] }),
     ]);
+    expect(result.document.nodes.find((node) => node.id === 'group-1')).toMatchObject({
+      data: {
+        kind: 'group-frame',
+        purpose: 'feature-area',
+        childNodeIds: ['agent-1'],
+        layout: 'grid',
+        autoFit: true,
+      },
+    });
+    expect(result.document.canonical?.nodes.find((node) => node.id === 'group-1')).toMatchObject({
+      type: 'group-frame',
+      collapsed: true,
+      data: {
+        purpose: 'feature-area',
+        childNodeIds: ['agent-1'],
+        layout: 'grid',
+        autoFit: true,
+      },
+    });
     expect(result.document.canonical?.edges).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -71,7 +92,9 @@ describe('mergeCollaborationCanvasSnapshot', () => {
   });
 
   it('unions unsent local work only for the first room snapshot', () => {
-    const initial = mergeCollaborationCanvasSnapshot(document(), snapshot(), { initial: true });
+    const initial = mergeCollaborationCanvasSnapshot(document(), snapshot(), {
+      initial: true,
+    });
     expect(initial.ok).toBe(true);
     if (!initial.ok) return;
     expect(initial.document.nodes.map((node) => node.id)).toEqual(
@@ -81,7 +104,9 @@ describe('mergeCollaborationCanvasSnapshot', () => {
       expect.arrayContaining(['local-edge', 'extension-edge', 'edge-remote']),
     );
 
-    const later = mergeCollaborationCanvasSnapshot(document(), snapshot(), { initial: false });
+    const later = mergeCollaborationCanvasSnapshot(document(), snapshot(), {
+      initial: false,
+    });
     expect(later.ok).toBe(true);
     if (!later.ok) return;
     expect(later.document.nodes.map((node) => node.id)).not.toContain('local-task');
@@ -148,7 +173,9 @@ describe('mergeCollaborationCanvasSnapshot', () => {
   });
 
   it('removes stale workflow and review metadata after the room deletes it', () => {
-    const first = mergeCollaborationCanvasSnapshot(document(), snapshot(), { initial: false });
+    const first = mergeCollaborationCanvasSnapshot(document(), snapshot(), {
+      initial: false,
+    });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
     expect(
@@ -161,7 +188,9 @@ describe('mergeCollaborationCanvasSnapshot', () => {
       reviews: {},
     });
 
-    const second = mergeCollaborationCanvasSnapshot(first.document, cleared, { initial: false });
+    const second = mergeCollaborationCanvasSnapshot(first.document, cleared, {
+      initial: false,
+    });
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     expect(
@@ -169,17 +198,199 @@ describe('mergeCollaborationCanvasSnapshot', () => {
     ).not.toHaveProperty('collaboration');
   });
 
-  it('indexes large bounded workflow and review sets by node before merging', () => {
-    const count = 500;
-    const nodes = Object.fromEntries(
-      Array.from({ length: count }, (_, index) => {
-        const id = `agent-${index}`;
-        return [
-          id,
-          { id, type: 'agent', title: `Agent ${index}`, position: { x: index, y: index } },
-        ];
-      }),
+  it('replaces stale local group-frame behavior and membership on every remote snapshot', () => {
+    const local = document();
+    const staleFrame: CanvasDocument['nodes'][number] = {
+      id: 'group-1',
+      type: 'group-frame',
+      position: { x: 0, y: 0 },
+      width: 380,
+      height: 260,
+      data: {
+        kind: 'group-frame',
+        title: 'Stale local group',
+        color: '#223344',
+        purpose: 'custom',
+        childNodeIds: ['local-task', 'local-extension'],
+        layout: 'horizontal',
+        autoFit: false,
+        localOnlyNote: 'PRIVATE_LOCAL_GROUP_NOTE',
+      },
+    };
+    const first = mergeCollaborationCanvasSnapshot(
+      { ...local, nodes: [...local.nodes, staleFrame] },
+      snapshot(),
+      { initial: false },
     );
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.document.nodes.find((node) => node.id === 'group-1')?.data).toMatchObject({
+      purpose: 'feature-area',
+      childNodeIds: ['agent-1', 'local-extension'],
+      layout: 'grid',
+      autoFit: true,
+      localOnlyNote: 'PRIVATE_LOCAL_GROUP_NOTE',
+    });
+
+    const shared = snapshot();
+    const agent = shared.nodes['agent-1'];
+    const file = shared.nodes['file-remote'];
+    const group = shared.groups['group-1'];
+    if (agent === undefined || file === undefined || group === undefined) {
+      throw new Error('Missing collaboration group fixture.');
+    }
+    const ungroupedAgent = { ...agent };
+    delete ungroupedAgent.groupId;
+    const updated = CollaborationMetadataSnapshotSchema.parse({
+      ...shared,
+      nodes: {
+        ...shared.nodes,
+        'agent-1': ungroupedAgent,
+        'file-remote': { ...file, groupId: 'group-1' },
+      },
+      groups: {
+        'group-1': {
+          ...group,
+          purpose: 'product-surface',
+          layout: 'vertical',
+          autoFit: false,
+        },
+      },
+    });
+    const second = mergeCollaborationCanvasSnapshot(first.document, updated, {
+      initial: false,
+    });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    const frame = second.document.canonical?.nodes.find((node) => node.id === 'group-1');
+    expect(frame).toMatchObject({
+      type: 'group-frame',
+      data: {
+        purpose: 'product-surface',
+        childNodeIds: ['file-remote', 'local-extension'],
+        layout: 'vertical',
+        autoFit: false,
+      },
+    });
+    expect(second.document.canonical?.groups).toEqual([
+      expect.objectContaining({
+        id: 'group-1',
+        nodeIds: ['file-remote', 'local-extension'],
+      }),
+    ]);
+    expect(
+      second.document.canonical?.nodes.find((node) => node.id === 'agent-1'),
+    ).not.toHaveProperty('groupId');
+    expect(
+      second.document.canonical?.nodes.find((node) => node.id === 'file-remote'),
+    ).toMatchObject({
+      groupId: 'group-1',
+    });
+    expect(
+      second.document.canonical?.nodes.find((node) => node.id === 'local-extension'),
+    ).toMatchObject({ groupId: 'group-1' });
+  });
+
+  it('accepts older group metadata and clears unsupported stale frame settings to safe defaults', () => {
+    const shared = snapshot();
+    const group = shared.groups['group-1'];
+    if (group === undefined) throw new Error('Missing collaboration group fixture.');
+    const legacyGroup = { ...group };
+    delete legacyGroup.purpose;
+    delete legacyGroup.layout;
+    delete legacyGroup.autoFit;
+    const legacySnapshot = CollaborationMetadataSnapshotSchema.parse({
+      ...shared,
+      groups: { 'group-1': legacyGroup },
+    });
+
+    const result = mergeCollaborationCanvasSnapshot(document(), legacySnapshot, {
+      initial: false,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.document.nodes.find((node) => node.id === 'group-1')?.data).toMatchObject({
+      purpose: 'custom',
+      childNodeIds: ['agent-1'],
+      layout: 'freeform',
+      autoFit: false,
+    });
+  });
+
+  it('normalizes remote node and group geometry to the same rendered bounds contract', () => {
+    const shared = snapshot();
+    const agent = shared.nodes['agent-1'];
+    const frame = shared.nodes['group-1'];
+    const group = shared.groups['group-1'];
+    if (agent === undefined || frame === undefined || group === undefined) {
+      throw new Error('Missing collaboration group fixture.');
+    }
+    const frameWithoutCollapsed = { ...frame };
+    delete frameWithoutCollapsed.collapsed;
+    const normalizedInput = CollaborationMetadataSnapshotSchema.parse({
+      ...shared,
+      nodes: {
+        ...shared.nodes,
+        'agent-1': { ...agent, size: { width: 1, height: 1 } },
+        'group-1': { ...frameWithoutCollapsed, size: { width: 2, height: 2 } },
+      },
+      groups: {
+        'group-1': {
+          ...group,
+          size: { width: 3, height: 3 },
+          collapsed: true,
+        },
+      },
+    });
+
+    const result = mergeCollaborationCanvasSnapshot(document(), normalizedInput, {
+      initial: false,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.document.nodes.find((node) => node.id === 'agent-1')).toMatchObject({
+      width: 210,
+      height: 92,
+    });
+    expect(result.document.nodes.find((node) => node.id === 'group-1')).toMatchObject({
+      width: 360,
+      height: 240,
+      data: { collapsed: true },
+    });
+    expect(result.document.canonical?.groups.find(({ id }) => id === 'group-1')).toMatchObject({
+      position: { x: 80, y: 90 },
+      size: { width: 360, height: 240 },
+    });
+  });
+
+  it('indexes large bounded workflow, review, and group membership sets before merging', () => {
+    const count = 500;
+    const groupId = 'performance-group';
+    const nodes = {
+      ...Object.fromEntries(
+        Array.from({ length: count }, (_, index) => {
+          const id = `agent-${index}`;
+          return [
+            id,
+            {
+              id,
+              type: 'agent',
+              title: `Agent ${index}`,
+              position: { x: index, y: index },
+              groupId,
+            },
+          ] as const;
+        }),
+      ),
+      [groupId]: {
+        id: groupId,
+        type: 'group-frame',
+        title: 'Performance group',
+        position: { x: 0, y: 0 },
+        size: { width: 2_000, height: 2_000 },
+      },
+    };
     const workflow = Object.fromEntries(
       Array.from({ length: count }, (_, index) => {
         const id = `workflow-${index}`;
@@ -202,10 +413,22 @@ describe('mergeCollaborationCanvasSnapshot', () => {
       }),
     );
     const shared = CollaborationMetadataSnapshotSchema.parse({
-      canvas: { id: CANVAS_ID, title: 'Large canvas', version: 1, updatedAt: NOW },
+      canvas: {
+        id: CANVAS_ID,
+        title: 'Large canvas',
+        version: 1,
+        updatedAt: NOW,
+      },
       nodes,
       edges: {},
-      groups: {},
+      groups: {
+        [groupId]: {
+          id: groupId,
+          title: 'Performance group',
+          position: { x: 0, y: 0 },
+          size: { width: 2_000, height: 2_000 },
+        },
+      },
       tasks: {},
       comments: {},
       workflow,
@@ -215,21 +438,40 @@ describe('mergeCollaborationCanvasSnapshot', () => {
       id: CANVAS_ID,
       projectId: PROJECT_ID,
       name: 'Large canvas',
-      nodes: Object.values(shared.nodes).map((node) => ({
-        id: node.id,
-        type: 'agent',
-        position: node.position,
-        data: { kind: 'agent', title: node.title, color: '#445566' },
-      })),
+      nodes: Object.values(shared.nodes).map((node) =>
+        node.type === 'group-frame'
+          ? {
+              id: node.id,
+              type: 'group-frame',
+              position: node.position,
+              data: {
+                kind: 'group-frame',
+                title: node.title,
+                color: '#445566',
+                purpose: 'custom',
+                childNodeIds: [],
+                layout: 'freeform',
+                autoFit: false,
+              },
+            }
+          : {
+              id: node.id,
+              type: 'agent',
+              position: node.position,
+              data: { kind: 'agent', title: node.title, color: '#445566' },
+            },
+      ),
       edges: [],
       viewport: { x: 0, y: 0, zoom: 1 },
       updatedAt: NOW,
     };
 
-    const result = mergeCollaborationCanvasSnapshot(local, shared, { initial: false });
+    const result = mergeCollaborationCanvasSnapshot(local, shared, {
+      initial: false,
+    });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.document.nodes).toHaveLength(count);
+    expect(result.document.nodes).toHaveLength(count + 1);
     expect(
       result.document.canonical?.nodes.find((node) => node.id === 'agent-499')?.inspector,
     ).toMatchObject({
@@ -238,6 +480,12 @@ describe('mergeCollaborationCanvasSnapshot', () => {
         reviews: [expect.objectContaining({ id: 'review-499' })],
       },
     });
+    const frame = result.document.canonical?.nodes.find((node) => node.id === groupId);
+    expect(frame).toMatchObject({ type: 'group-frame' });
+    if (frame?.type !== 'group-frame') return;
+    expect(frame.data.childNodeIds).toHaveLength(count);
+    expect(new Set(frame.data.childNodeIds).size).toBe(count);
+    expect(frame.data.childNodeIds).toContain('agent-499');
   });
 });
 
@@ -339,6 +587,15 @@ function snapshot(
         position: { x: 400, y: 100 },
         availability: 'local',
       },
+      'group-1': {
+        id: 'group-1',
+        type: 'group-frame',
+        title: 'Shared group',
+        position: { x: 80, y: 90 },
+        size: { width: 450, height: 300 },
+        color: '#556677',
+        collapsed: true,
+      },
     },
     edges: {
       'edge-remote': {
@@ -357,6 +614,10 @@ function snapshot(
         position: { x: 80, y: 90 },
         size: { width: 450, height: 300 },
         color: '#556677',
+        collapsed: true,
+        purpose: 'feature-area',
+        layout: 'grid',
+        autoFit: true,
       },
     },
     tasks: {},

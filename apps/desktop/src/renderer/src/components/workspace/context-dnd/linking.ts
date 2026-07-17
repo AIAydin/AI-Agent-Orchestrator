@@ -2,6 +2,7 @@ import { AGENT_CONTEXT_ATTACHMENT_LIMIT } from '@forgeboard/core/domain';
 
 import type { FileDocument } from '../../../../../shared/files/contracts.js';
 import { NODE_DEFINITIONS, type WorkshopNode } from '../canvas/CanvasNode.js';
+import { initialWorkshopNodeDimensions } from '../model/node-persistence.js';
 import type { WorkspaceContextDragPayload } from './contracts.js';
 
 export const MAX_AGENT_CONTEXT_ATTACHMENTS = AGENT_CONTEXT_ATTACHMENT_LIMIT;
@@ -215,6 +216,7 @@ function resolveSourceNode(input: {
       x: target.position.x - 320,
       y: target.position.y + (target.data.contextAttachmentIds?.length ?? 0) * 36,
     },
+    ...initialWorkshopNodeDimensions('file'),
     data: {
       kind: 'file',
       title: fileName(input.payload.relativePath),

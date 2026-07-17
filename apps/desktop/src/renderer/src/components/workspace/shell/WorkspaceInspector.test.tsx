@@ -126,6 +126,60 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', false);
   });
 
+  it('explains inherited group protection and prevents a misleading child unlock action', () => {
+    const selectedNode = agentNode({ locked: true });
+    render(<WorkspaceInspector {...props(settings(), selectedNode)} selectedNodeLockedByGroup />);
+
+    expect(screen.getByText(/protected by a locked group frame/u)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Unlock' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', true);
+  });
+
+  it('makes shared graph configuration actions honestly read-only for collaboration roles', () => {
+    const selectedNode = groupNode({ childNodeIds: ['member'], layout: 'horizontal' });
+    const inspectorProps = props(settings(), selectedNode);
+    inspectorProps.nodes = [selectedNode, { ...agentNode({}), id: 'member' }];
+    inspectorProps.collaborationGraphReadOnly = true;
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    expect(screen.getByText(/can inspect the shared node but cannot change it/u)).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Node configuration' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByRole('button', { name: 'Lock' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', true);
+  });
+
+  it('honestly disables deletion when it would mutate a protected relationship', () => {
+    const selectedNode = groupNode({});
+    render(
+      <WorkspaceInspector {...props(settings(), selectedNode)} selectedNodeDeletionProtected />,
+    );
+
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
+    expect(deleteButton).toHaveProperty('disabled', true);
+    expect(deleteButton.getAttribute('title')).toMatch(/protected members|connected locked/u);
+    expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', false);
+  });
+
+  it('wires group frame fit and arrange actions to workspace-owned mutations', () => {
+    const selectedNode = groupNode({
+      childNodeIds: ['member'],
+      layout: 'horizontal',
+    });
+    const inspectorProps = props(settings(), selectedNode);
+    inspectorProps.nodes = [selectedNode, { ...agentNode({}), id: 'member' }];
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fit frame' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Arrange members' }));
+
+    expect(inspectorProps.onFitGroupFrame).toHaveBeenCalledOnce();
+    expect(inspectorProps.onArrangeGroupFrame).toHaveBeenCalledWith('horizontal');
+  });
+
   it('keeps live run cancellation available when an Agent node is locked', () => {
     const selectedNode = agentNode({ locked: true, status: 'running' });
     const inspectorProps = props(settings(), selectedNode);
@@ -366,6 +420,8 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     canvas: null,
     nodes: [selectedNode],
     selectedNode,
+    selectedNodeLockedByGroup: false,
+    selectedNodeDeletionProtected: false,
     selectedEdge: null,
     runnableAgents: [testAgent],
     selectedAdapter: 'test-agent' as const,
@@ -381,6 +437,8 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     onClearSelection: vi.fn(),
     onRecord: vi.fn(),
     onUpdateSelected: vi.fn(),
+    onFitGroupFrame: vi.fn(),
+    onArrangeGroupFrame: vi.fn(),
     onUpdateEdgeType: vi.fn(),
     onUpdateEdgeData: vi.fn(),
     onDuplicateSelected: vi.fn(),
@@ -446,6 +504,30 @@ function fileNode(data: Partial<WorkshopNode['data']>): WorkshopNode {
         kind: 'file',
         missing: false,
       },
+      ...data,
+    },
+  };
+}
+
+function groupNode(data: Partial<WorkshopNode['data']>): WorkshopNode {
+  return {
+    id: 'group-1',
+    type: 'workshop',
+    position: { x: 0, y: 0 },
+    width: 520,
+    height: 360,
+    data: {
+      kind: 'group-frame',
+      title: 'Review stage',
+      description: 'Review workflow region',
+      status: 'idle',
+      locked: false,
+      collapsed: false,
+      color: '#82909b',
+      purpose: 'workflow-stage',
+      layout: 'freeform',
+      autoFit: false,
+      childNodeIds: [],
       ...data,
     },
   };

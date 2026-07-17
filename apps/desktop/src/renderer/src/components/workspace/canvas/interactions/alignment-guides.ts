@@ -1,4 +1,5 @@
 import type { WorkshopNode } from '../CanvasNode.js';
+import { canvasNodeBounds } from './groups/group-containment.js';
 
 export interface AlignmentGuideLine {
   coordinate: number;
@@ -19,9 +20,6 @@ interface NodeBounds {
   centerX: number;
   centerY: number;
 }
-
-const DEFAULT_NODE_WIDTH = 210;
-const DEFAULT_NODE_HEIGHT = 92;
 
 export function alignmentGuidesForDrag(
   draggedNodes: readonly WorkshopNode[],
@@ -95,12 +93,7 @@ function combinedBounds(nodes: readonly WorkshopNode[]): NodeBounds | null {
 }
 
 function nodeBounds(node: WorkshopNode): NodeBounds {
-  const width =
-    positiveDimension(node.width) ?? positiveDimension(node.measured?.width) ?? DEFAULT_NODE_WIDTH;
-  const height =
-    positiveDimension(node.height) ??
-    positiveDimension(node.measured?.height) ??
-    DEFAULT_NODE_HEIGHT;
+  const { width, height } = canvasNodeBounds(node);
   return boundsFromEdges(
     node.position.x,
     node.position.y,
@@ -118,8 +111,4 @@ function boundsFromEdges(left: number, top: number, right: number, bottom: numbe
     centerX: left + (right - left) / 2,
     centerY: top + (bottom - top) / 2,
   };
-}
-
-function positiveDimension(value: number | null | undefined): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }

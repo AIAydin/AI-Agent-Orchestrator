@@ -9,8 +9,8 @@ describe('canvas alignment guides', () => {
     const target = node('target', { x: 100, y: 100 }, 120, 80);
 
     expect(alignmentGuidesForDrag([dragged], [dragged, target], 2)).toEqual({
-      vertical: { coordinate: 100, start: 99, end: 180 },
-      horizontal: { coordinate: 100, start: 100, end: 220 },
+      vertical: { coordinate: 100, start: 99, end: 192 },
+      horizontal: { coordinate: 100, start: 100, end: 311 },
     });
   });
 
@@ -21,7 +21,7 @@ describe('canvas alignment guides', () => {
     const hidden = { ...node('hidden', { x: 0, y: 10 }, 220, 50), hidden: true };
 
     expect(alignmentGuidesForDrag([first, second], [first, second, target, hidden], 2)).toEqual({
-      vertical: { coordinate: 1, start: 10, end: 150 },
+      vertical: { coordinate: 1, start: 10, end: 192 },
     });
   });
 

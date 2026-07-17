@@ -1,0 +1,5 @@
+import { GROUP_FRAME_MINIMUM_DIMENSIONS } from '../../../../../../../shared/canvas/node-dimensions.js';
+
+export const GROUP_FRAME_MINIMUM_WIDTH = GROUP_FRAME_MINIMUM_DIMENSIONS.width;
+export const GROUP_FRAME_MINIMUM_HEIGHT = GROUP_FRAME_MINIMUM_DIMENSIONS.height;
+export const GROUP_FRAME_MINIMUM = GROUP_FRAME_MINIMUM_DIMENSIONS;
