@@ -44,6 +44,9 @@ export function GitShippingDisclosure({
 
   const strategy =
     plan.strategy === 'fast-forward-only' ? 'Fast-forward-only merge' : 'Ordered cherry-pick';
+  const qualityApproval = plan.readiness.approvals.find(
+    (approval) => approval.approvalId === plan.readinessApprovalId,
+  );
   return (
     <div className="git-disclosure-backdrop" role="presentation">
       <section
@@ -114,6 +117,24 @@ export function GitShippingDisclosure({
               <code key={path}>{displayEscapedText(path)}</code>
             ))}
           </div>
+          <h4>Content-bound delivery readiness</h4>
+          <div className="git-disclosure-paths">
+            {plan.readiness.requiredChecks.map((check) => (
+              <span key={check.checkId}>
+                {displayEscapedText(check.label)} · passed{' '}
+                {check.endedAt === null
+                  ? 'without a reported finish time'
+                  : formatTime(check.endedAt)}
+              </span>
+            ))}
+          </div>
+          <small>
+            {qualityApproval === undefined
+              ? 'Exact human quality approval is unavailable.'
+              : `${displayEscapedText(qualityApproval.actorLabel)} approved this exact check evidence ${formatTime(qualityApproval.approvedAt)}.`}{' '}
+            Evidence <code>{plan.readiness.evidenceFingerprint.slice(0, 12)}</code> is revalidated
+            before the system confirmation and again before Git changes primary.
+          </small>
           <small>
             Plan expires at{' '}
             <time dateTime={plan.expiresAt}>{new Date(plan.expiresAt).toLocaleTimeString()}</time>.
@@ -136,6 +157,11 @@ export function GitShippingDisclosure({
       </section>
     </div>
   );
+}
+
+function formatTime(value: string): string {
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toLocaleString() : 'at an unknown time';
 }
 
 function identitySource(source: GitShippingPlanView['identity']['nameSource']): string {

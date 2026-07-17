@@ -9,6 +9,9 @@ export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOp
     plan.strategy === 'fast-forward-only' ? 'Fast-forward-only merge' : 'Ordered cherry-pick';
   const action =
     plan.strategy === 'fast-forward-only' ? 'Fast-forward primary' : 'Cherry-pick commits';
+  const qualityApproval = plan.readiness.approvals.find(
+    (approval) => approval.approvalId === plan.readinessApprovalId,
+  );
   return {
     type: 'warning',
     title: 'Deliver reviewed agent commits',
@@ -30,7 +33,15 @@ export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOp
       `Affected files (${String(plan.affectedPaths.length)}):`,
       ...plan.affectedPaths.map((path) => `• ${displayLiteral(path)}`),
       '',
-      'Forgeboard will refuse delivery if the owned source, primary branch, primary HEAD, or either working tree changed after review.',
+      `Required deterministic checks (${String(plan.readiness.requiredChecks.length)}):`,
+      ...plan.readiness.requiredChecks.map(
+        (check) =>
+          `• ${displayLiteral(check.label)}: passed${check.endedAt === null ? '' : ` at ${check.endedAt}`}`,
+      ),
+      `Human quality approval: ${qualityApproval === undefined ? 'missing' : `${displayLiteral(qualityApproval.actorLabel)} at ${qualityApproval.approvedAt}`}`,
+      `Readiness evidence: ${plan.readiness.evidenceFingerprint}`,
+      '',
+      'Forgeboard will refuse delivery if readiness evidence, the owned source, primary branch, primary HEAD, or either working tree changed after review.',
       'This exact bound identity is supplied to Git. Fast-forward creates no commit; cherry-pick uses it as the committer identity.',
       'No force, reset, clean, push, or automatic conflict resolution will run.',
     ].join('\n'),

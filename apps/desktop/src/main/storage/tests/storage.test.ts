@@ -263,6 +263,7 @@ describe('LocalStore', () => {
                 'workflow_execution_events', 'workflow_node_bindings', 'approval_records',
                 'git_review_notes', 'collaboration_sync_states', 'collaboration_sync_deliveries',
                 'collaboration_rejected_comment_dismissals',
+                'delivery_readiness_records', 'delivery_readiness_approvals',
                 'audit_chain_state', 'audit_chain_checkpoints', 'settings_repair_history')
              ORDER BY name`,
           )
@@ -282,6 +283,8 @@ describe('LocalStore', () => {
         { name: 'collaboration_rejected_comment_dismissals' },
         { name: 'collaboration_sync_deliveries' },
         { name: 'collaboration_sync_states' },
+        { name: 'delivery_readiness_approvals' },
+        { name: 'delivery_readiness_records' },
         { name: 'git_review_notes' },
         { name: 'project_path_history' },
         { name: 'recent_projects' },

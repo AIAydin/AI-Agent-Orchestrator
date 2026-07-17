@@ -125,6 +125,29 @@ The exact in-container entrypoint is disclosed separately from the outer Docker 
 uses the Custom network and resource limits shown in the approval dialog and never mounts host CLI
 credentials.
 
+## Delivery readiness is content-bound
+
+Managed agent commits cannot be delivered to the primary checkout until the user completes the
+readiness panel in Git review. The ordinary flow is entirely in the UI: select one or more
+configured project checks, save the requirements, run every check, review the results, and record
+human quality approval. Source edits, environment files, and hand-written manifests are not
+required.
+
+The renderer sends only stored project, run, readiness, and check identifiers. Electron main
+resolves the managed worktree and exact configured commands, then binds results to the clean source
+HEAD and tree, worktree ownership, check configuration, executable and working-directory
+identities, inherited environment values through a private digest, and relevant file identities.
+The native check-launch confirmation discloses the executable, literal argument array, working
+directory, and environment-variable names without exposing values to the renderer.
+
+Human quality approval is available only after every required check has passed for the same exact
+evidence. AI or reviewer approval is intentionally insufficient. Re-running a check or changing the
+source, command, executable, environment, or bound file identities makes the approval stale. A
+delivery plan carries the matching human approval and is checked once before its cancel-default
+native delivery confirmation and again immediately before Git changes primary. This gate currently
+applies to the local managed-worktree-to-primary delivery flow; it does not claim remote push or
+pull-request delivery.
+
 ## Remembered project-check approvals
 
 Remembered approvals are deliberately limited to project checks. After reviewing a lint, typecheck,

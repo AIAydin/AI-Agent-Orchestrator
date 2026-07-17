@@ -15,7 +15,12 @@ vi.mock('electron', () => ({
 }));
 
 import type { AppSettings, Project } from '../../../shared/application/contracts.js';
+import {
+  evaluateGitDeliveryReadiness,
+  type GitDeliveryReadinessView,
+} from '../../../shared/git/readiness/index.js';
 import { GitIpcService } from '../git-ipc.js';
+import type { GitShippingReadinessAuthority } from './git-shipping-service.js';
 import { LocalStore, type StoredRunRecord } from '../../storage.js';
 
 const PROJECT_ID = '81000000-0000-4000-8000-000000000001';
@@ -118,6 +123,48 @@ describe('managed agent commit delivery', () => {
       'allowed',
       expect.objectContaining({ strategy: 'fast-forward-only', commitCount: 2 }),
     );
+    expect(harness.shippingReadiness.revalidate).toHaveBeenCalledTimes(3);
+    await harness.service.dispose();
+  });
+
+  it('fails closed when readiness drifts before either delivery confirmation boundary', async () => {
+    const fixture = await createFixture();
+    await commitAgentFile(fixture.worktreePath, 'ready.txt', 'ready\n', 'Ready agent work');
+    const shippingReadiness = readinessAuthority(fixture);
+    const harness = createHarness(
+      fixture,
+      [1],
+      { name: 'Forgeboard UI', email: 'ui@forgeboard.invalid' },
+      shippingReadiness,
+    );
+    const event = liveEvent(111);
+    const headBefore = await git(fixture.repository, ['rev-parse', 'HEAD']);
+
+    const preConfirmationPlan = await harness.service.prepareShipping(event.sender.id, {
+      target: agentTarget(),
+      strategy: 'fast-forward-only',
+    });
+    shippingReadiness.revalidate.mockRejectedValueOnce(
+      new Error('Delivery readiness changed before confirmation.'),
+    );
+    await expect(
+      harness.service.confirmShipping(event, preConfirmationPlan.planId),
+    ).rejects.toThrow(/readiness changed before confirmation/iu);
+    expect(harness.showMessageBox).not.toHaveBeenCalled();
+    expect(await git(fixture.repository, ['rev-parse', 'HEAD'])).toBe(headBefore);
+
+    const preMutationPlan = await harness.service.prepareShipping(event.sender.id, {
+      target: agentTarget(),
+      strategy: 'fast-forward-only',
+    });
+    shippingReadiness.revalidate
+      .mockImplementationOnce((_target, binding) => Promise.resolve(binding.view))
+      .mockRejectedValueOnce(new Error('Delivery readiness changed before Git mutation.'));
+    await expect(harness.service.confirmShipping(event, preMutationPlan.planId)).rejects.toThrow(
+      /readiness changed before Git mutation/iu,
+    );
+    expect(harness.showMessageBox).toHaveBeenCalledTimes(1);
+    expect(await git(fixture.repository, ['rev-parse', 'HEAD'])).toBe(headBefore);
     await harness.service.dispose();
   });
 
@@ -452,6 +499,7 @@ function createHarness(
     name: 'Forgeboard UI',
     email: 'ui@forgeboard.invalid',
   },
+  shippingReadiness = readinessAuthority(fixture),
 ) {
   const store = new LocalStore(path.join(fixture.root, 'state', 'forgeboard.sqlite3'));
   stores.add(store);
@@ -481,10 +529,83 @@ function createHarness(
       new RepositoryService(),
       () => settings,
       () => window,
+      { shippingReadiness },
     ),
     appendAudit,
     showMessageBox,
     settings,
+    shippingReadiness,
+  };
+}
+
+function readinessAuthority(fixture: Fixture): GitShippingReadinessAuthority & {
+  readonly revalidate: ReturnType<typeof vi.fn<GitShippingReadinessAuthority['revalidate']>>;
+} {
+  const revalidate = vi.fn<GitShippingReadinessAuthority['revalidate']>((_target, binding) =>
+    Promise.resolve(binding.view),
+  );
+  return {
+    bind: async (target) => {
+      const sourceHead = await git(fixture.worktreePath, ['rev-parse', 'HEAD']);
+      const sourceTree = await git(fixture.worktreePath, ['rev-parse', 'HEAD^{tree}']);
+      const sourceFingerprint = {
+        sourceHead,
+        sourceTree,
+        worktreeId: fixture.worktreeId,
+        runId: target.runId,
+        requiredCheckConfigurationDigest: 'a'.repeat(64),
+        digest: 'b'.repeat(64),
+      };
+      const evidenceFingerprint = 'c'.repeat(64);
+      const approvalId = '81000000-0000-4000-8000-000000000020';
+      const snapshot = {
+        readinessId: '81000000-0000-4000-8000-000000000021',
+        target,
+        sourceFingerprint,
+        availableChecks: [
+          {
+            checkId: 'test' as const,
+            label: 'Delivery tests',
+            kind: 'test' as const,
+            availability: 'configured' as const,
+            configurationDigest: 'd'.repeat(64),
+          },
+        ],
+        requiredChecks: [
+          {
+            checkId: 'test' as const,
+            label: 'Delivery tests',
+            kind: 'test' as const,
+            configurationDigest: 'd'.repeat(64),
+            state: 'passed' as const,
+            executionId: '81000000-0000-4000-8000-000000000022',
+            sourceFingerprint,
+            startedAt: '2026-07-15T15:00:00.000Z',
+            endedAt: '2026-07-15T15:00:30.000Z',
+            updatedAt: '2026-07-15T15:00:30.000Z',
+          },
+        ],
+        approvals: [
+          {
+            approvalId,
+            authority: 'human' as const,
+            actorId: 'local-human',
+            actorLabel: 'Local human',
+            sourceFingerprint,
+            evidenceFingerprint,
+            approvedAt: '2026-07-15T15:00:31.000Z',
+          },
+        ],
+        evidenceFingerprint,
+        updatedAt: '2026-07-15T15:00:31.000Z',
+      };
+      const view: GitDeliveryReadinessView = {
+        ...snapshot,
+        evaluation: evaluateGitDeliveryReadiness(snapshot),
+      };
+      return { approvalId, view };
+    },
+    revalidate,
   };
 }
 

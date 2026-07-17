@@ -33,6 +33,11 @@ interface TargetBinding {
   readonly baseCommit: string | null;
   readonly headCommit: string | null;
   readonly commonDirectory: string | null;
+  readonly managedWorktreeState: {
+    readonly dirty: boolean;
+    readonly conflicted: boolean;
+    readonly detached: boolean;
+  } | null;
 }
 
 export interface ResolvedExactCheck {
@@ -116,6 +121,7 @@ export class ExactCheckResolver {
           baseCommit: null,
           headCommit: null,
           commonDirectory: null,
+          managedWorktreeState: null,
         },
       };
     }
@@ -124,6 +130,7 @@ export class ExactCheckResolver {
       projectId: target.projectId,
       runId: target.runId,
     });
+    const status = resolved.state.status;
     return {
       repositoryRoot: resolved.worktreeRepositoryPath,
       binding: {
@@ -135,6 +142,14 @@ export class ExactCheckResolver {
         baseCommit: resolved.ownership.baseCommit,
         headCommit: resolved.state.branchOid,
         commonDirectory: resolved.commonDirectory,
+        managedWorktreeState:
+          status === null
+            ? null
+            : {
+                dirty: status.dirty,
+                conflicted: status.conflicted,
+                detached: status.detached,
+              },
       },
     };
   }

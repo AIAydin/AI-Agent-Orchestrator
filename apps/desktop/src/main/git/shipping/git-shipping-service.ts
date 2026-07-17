@@ -17,6 +17,10 @@ import {
   type GitShippingPlanView,
   type GitShippingStrategy,
 } from '../../../shared/git/shipping-contracts.js';
+import type {
+  GitDeliveryReadinessTarget,
+  GitDeliveryReadinessView,
+} from '../../../shared/git/readiness/index.js';
 import type { GitTargetResolver, ResolvedGitTarget } from '../git-target-resolver.js';
 
 const MAX_COMMITS = 256;
@@ -44,6 +48,21 @@ export interface PendingGitShippingPlan {
   readonly commits: readonly string[];
   readonly affectedPaths: readonly string[];
   readonly identity: GitIdentityView;
+  readonly readinessApprovalId: string;
+  readonly readiness: GitDeliveryReadinessView;
+}
+
+export interface GitShippingReadinessBinding {
+  readonly approvalId: string;
+  readonly view: GitDeliveryReadinessView;
+}
+
+export interface GitShippingReadinessAuthority {
+  bind(target: GitDeliveryReadinessTarget): Promise<GitShippingReadinessBinding>;
+  revalidate(
+    target: GitDeliveryReadinessTarget,
+    binding: GitShippingReadinessBinding,
+  ): Promise<GitDeliveryReadinessView>;
 }
 
 interface NewPlanOptions {
@@ -60,6 +79,7 @@ export class GitShippingService {
     private readonly targets: GitTargetResolver,
     private readonly repositories: RepositoryService,
     private readonly changes: ChangeService,
+    private readonly readiness: GitShippingReadinessAuthority,
   ) {}
 
   public async prepare(options: NewPlanOptions): Promise<PendingGitShippingPlan> {
@@ -139,6 +159,8 @@ export class GitShippingService {
       baseRef: source.ownership.baseRef,
       baseCommit: source.ownership.baseCommit,
     });
+    const readinessTarget = deliveryReadinessTarget(target);
+    const readiness = await this.readiness.bind(readinessTarget);
     return {
       kind: 'ship-agent-commits',
       id: options.id,
@@ -158,6 +180,8 @@ export class GitShippingService {
       commits,
       affectedPaths,
       identity,
+      readinessApprovalId: readiness.approvalId,
+      readiness: readiness.view,
     };
   }
 
@@ -180,6 +204,8 @@ export class GitShippingService {
       commits: [...plan.commits],
       affectedPaths: [...plan.affectedPaths],
       identity: plan.identity,
+      readinessApprovalId: plan.readinessApprovalId,
+      readiness: plan.readiness,
     });
   }
 
@@ -207,6 +233,20 @@ export class GitShippingService {
     if (primaryStatus.branch !== plan.targetBranch || primaryStatus.headOid !== plan.targetHead) {
       throw new Error(
         'The primary branch or HEAD changed after review. Prepare a new delivery plan.',
+      );
+    }
+    const currentReadiness = await this.readiness.revalidate(deliveryReadinessTarget(plan.target), {
+      approvalId: plan.readinessApprovalId,
+      view: plan.readiness,
+    });
+    if (
+      currentReadiness.readinessId !== plan.readiness.readinessId ||
+      currentReadiness.evidenceFingerprint !== plan.readiness.evidenceFingerprint ||
+      currentReadiness.sourceFingerprint.digest !== plan.readiness.sourceFingerprint.digest ||
+      !currentReadiness.evaluation.ready
+    ) {
+      throw new Error(
+        'Delivery readiness changed after review. Run the required checks and approve quality again.',
       );
     }
   }
@@ -392,6 +432,11 @@ export class GitShippingService {
     }
     return parents;
   }
+}
+
+function deliveryReadinessTarget(target: GitReviewTargetView): GitDeliveryReadinessTarget {
+  if (target.kind !== 'agent-worktree') throw new Error('Invalid delivery readiness target.');
+  return { kind: 'agent-worktree', projectId: target.projectId, runId: target.runId };
 }
 
 function assertCleanSource(source: ResolvedGitTarget): void {

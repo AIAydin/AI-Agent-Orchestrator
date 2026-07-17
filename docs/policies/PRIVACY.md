@@ -11,7 +11,8 @@ analytics, crash upload, session recording, model proxy, or cloud dependency.
 - Git diffs and local review comments
 - agent transcripts and normalized events
 - project-check status and bounded raw output
-- canvas data, project settings, scoped approval records, audit records, and local snapshots
+- canvas data, project settings, scoped approval records, content-bound delivery-readiness evidence,
+  audit records, and local snapshots
 - device-local settings-repair evidence when an upgrade replaces an unsafe legacy value, with each
   original or repaired JSON value capped at 16 MiB of UTF-8 data
 - verified SQLite backups when local backups are enabled
@@ -73,12 +74,13 @@ in the UI.
 
 Portable JSON export/import covers Forgeboard settings, projects, canvases, agent runs, check
 executions, snapshots, and audit history. It never embeds repository files or extension source
-folders. Saved approvals and settings-repair evidence are device-local and are not included in this
-ordinary export. Repair evidence can be reviewed and explicitly exported only from **Settings → Data
-& privacy**; complete local-data deletion clears it, while portable merge/replace leaves the local
-evidence ledger intact. SQLite and IPC enforce the 16 MiB UTF-8 boundary before loading or exporting
-either full JSON value; an over-limit legacy setting fails with recovery guidance and no partial
-evidence row. A replace import clears saved approvals. Import is an explicit
+folders. Saved approvals, delivery-readiness records, and settings-repair evidence are device-local
+and are not included in this ordinary export. Repair evidence can be reviewed and explicitly
+exported only from **Settings → Data & privacy**; complete local-data deletion clears it, while
+portable merge/replace leaves the local repair-evidence ledger intact. SQLite and IPC enforce the 16
+MiB UTF-8 boundary before loading or exporting either full JSON value; an over-limit legacy setting
+fails with recovery guidance and no partial evidence row. A replace import clears saved approvals
+and delivery-readiness records. Import is an explicit
 merge-or-replace action with a renderer disclosure and native confirmation; the selected file is
 validated again before the transaction. Deletion does not remove repository/build
 artifacts or separately exported portable JSON files. It does remove every

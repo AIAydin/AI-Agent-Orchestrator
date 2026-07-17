@@ -15,6 +15,11 @@ import type {
 import type { CheckExecutionView } from '../shared/checks/contracts.js';
 import type { GitTargetInput } from '../shared/git/contracts.js';
 import type {
+  DeliveryHumanApprovalRecord,
+  DeliveryReadinessRecord,
+  DeliveryReadinessTarget,
+} from './git/readiness/contracts.js';
+import type {
   CollaborationCommentMetadata,
   CollaborationMetadataSnapshot,
   CollaborationSyncRecovery,
@@ -150,6 +155,10 @@ import type {
 } from './storage/workflow/contracts.js';
 import { writeSettings } from './storage/writes.js';
 import {
+  SqliteDeliveryReadinessStore,
+  type DeliveryReadinessStore,
+} from './storage/git-readiness/repository.js';
+import {
   checkpointCollaborationSyncState as checkpointDatabaseCollaborationSyncState,
   discardRejectedCollaborationComment as discardDatabaseRejectedCollaborationComment,
   pruneExpiredCollaborationSyncStates as pruneDatabaseCollaborationSyncStates,
@@ -217,9 +226,10 @@ export {
  * Domain behavior lives in focused modules under `storage/`; this facade intentionally keeps the
  * public API that callers and tests use while owning the database lifetime and startup sequence.
  */
-export class LocalStore {
+export class LocalStore implements DeliveryReadinessStore {
   readonly databasePath: string;
   private readonly database: DatabaseSync;
+  private readonly deliveryReadiness: SqliteDeliveryReadinessStore;
   private readonly durableChangeListeners = new Set<() => void>();
   private startupRecovery: InterruptedRunRecoveryReport = {
     lostRunIds: [],
@@ -233,6 +243,7 @@ export class LocalStore {
   constructor(databasePath: string, options: { legacySettingsDefaults?: AppSettings } = {}) {
     this.databasePath = databasePath;
     this.database = openDatabase(databasePath);
+    this.deliveryReadiness = new SqliteDeliveryReadinessStore(this.database);
     try {
       const sourceDatabaseVersion = (
         this.database.prepare('PRAGMA user_version;').get() as { user_version: number }
@@ -284,6 +295,74 @@ export class LocalStore {
     writeSettings(this.database, parsed);
     this.notifyDurableChange();
     return parsed;
+  }
+
+  createDeliveryReadiness(
+    record: DeliveryReadinessRecord,
+    targetRecordLimit?: number,
+  ): DeliveryReadinessRecord {
+    const created = this.deliveryReadiness.createDeliveryReadiness(record, targetRecordLimit);
+    this.notifyDurableChange();
+    return created;
+  }
+
+  replaceDeliveryReadiness(
+    record: DeliveryReadinessRecord,
+    expectedRevision: number,
+  ): DeliveryReadinessRecord {
+    const replaced = this.deliveryReadiness.replaceDeliveryReadiness(record, expectedRevision);
+    this.notifyDurableChange();
+    return replaced;
+  }
+
+  getDeliveryReadiness(readinessId: string): DeliveryReadinessRecord | undefined {
+    return this.deliveryReadiness.getDeliveryReadiness(readinessId);
+  }
+
+  listDeliveryReadinessForTarget(
+    target: DeliveryReadinessTarget,
+    limit?: number,
+  ): DeliveryReadinessRecord[] {
+    return this.deliveryReadiness.listDeliveryReadinessForTarget(target, limit);
+  }
+
+  pruneDeliveryReadinessForTarget(target: DeliveryReadinessTarget, keep?: number): number {
+    const deleted = this.deliveryReadiness.pruneDeliveryReadinessForTarget(target, keep);
+    if (deleted > 0) this.notifyDurableChange();
+    return deleted;
+  }
+
+  saveDeliveryReadinessApproval(
+    approval: DeliveryHumanApprovalRecord,
+    expectedReadinessRevision: number,
+  ): DeliveryHumanApprovalRecord {
+    const saved = this.deliveryReadiness.saveDeliveryReadinessApproval(
+      approval,
+      expectedReadinessRevision,
+    );
+    this.notifyDurableChange();
+    return saved;
+  }
+
+  getDeliveryReadinessApproval(approvalId: string): DeliveryHumanApprovalRecord | undefined {
+    return this.deliveryReadiness.getDeliveryReadinessApproval(approvalId);
+  }
+
+  findDeliveryReadinessApprovalForEvidence(
+    readinessId: string,
+    evidenceFingerprint: string,
+  ): DeliveryHumanApprovalRecord | undefined {
+    return this.deliveryReadiness.findDeliveryReadinessApprovalForEvidence(
+      readinessId,
+      evidenceFingerprint,
+    );
+  }
+
+  listDeliveryReadinessApprovals(
+    readinessId: string,
+    limit?: number,
+  ): DeliveryHumanApprovalRecord[] {
+    return this.deliveryReadiness.listDeliveryReadinessApprovals(readinessId, limit);
   }
 
   listSettingsRepairs(): SettingsRepairSummary[] {

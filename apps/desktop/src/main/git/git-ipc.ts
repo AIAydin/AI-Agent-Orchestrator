@@ -86,6 +86,7 @@ import {
 } from './lifecycle/worktree-cleanup-service.js';
 import {
   GitShippingService,
+  type GitShippingReadinessAuthority,
   type PendingGitShippingPlan,
 } from './shipping/git-shipping-service.js';
 import { shippingConfirmation } from './shipping/native-confirmation.js';
@@ -93,6 +94,18 @@ import { GitReviewNotesService } from './reviews/review-notes-service.js';
 
 const PLAN_TTL_MS = 5 * 60_000;
 const MAX_PENDING_PLANS_PER_OWNER = 32;
+const denyShippingWithoutReadiness: GitShippingReadinessAuthority = {
+  bind: () =>
+    Promise.reject(
+      new Error(
+        'Run at least one required delivery check and record human quality approval before delivery.',
+      ),
+    ),
+  revalidate: () =>
+    Promise.reject(
+      new Error('The delivery readiness authority is unavailable. Prepare a new delivery review.'),
+    ),
+};
 
 interface PendingPlanBase {
   readonly id: string;
@@ -144,6 +157,7 @@ type WindowResolver = (event: IpcMainInvokeEvent) => BrowserWindow | null;
 
 export interface GitIpcServiceOptions {
   readonly withCleanupAdmission?: WorktreeCleanupAdmission;
+  readonly shippingReadiness?: GitShippingReadinessAuthority;
 }
 
 export class GitIpcService {
@@ -184,7 +198,12 @@ export class GitIpcService {
   ) {
     this.#changes = new ChangeService(repositories);
     this.#targets = new GitTargetResolver(store, repositories, getSettings);
-    this.#shipping = new GitShippingService(this.#targets, repositories, this.#changes);
+    this.#shipping = new GitShippingService(
+      this.#targets,
+      repositories,
+      this.#changes,
+      options.shippingReadiness ?? denyShippingWithoutReadiness,
+    );
     this.#reviewNotes = new GitReviewNotesService(store);
     this.#cleanup = new WorktreeCleanupService(this.dialog, store, this.#targets, repositories, {
       ...(options.withCleanupAdmission === undefined

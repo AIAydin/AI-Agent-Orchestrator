@@ -800,3 +800,28 @@ unchecked when only a subset of their required behavior has proof.
   vulnerabilities. A fresh macOS arm64 app, ZIP, DMG, and blockmaps packaged successfully; both the
   packaged-app smoke and read-only DMG mount/copy/launch smoke passed, with the latter returning
   `FORGEBOARD_SMOKE_OK`. Signing remains inactive because this machine has no Developer ID identity.
+- 2026-07-16: managed terminal-agent worktree delivery gained a separate UI-configured,
+  content-bound readiness gate. Main resolves the clean committed HEAD and tree, durable ownership,
+  selected configured commands, executable and working-directory identities, private environment
+  and relevant-file identities, and exact terminal results. Every selected exact execution must
+  pass before a local human can approve the same evidence; AI and reviewer outcomes cannot satisfy
+  the gate. Check launch and human approval use cancel-default native disclosures. The approval is
+  revalidated before delivery confirmation and immediately before primary mutation. Source,
+  command, environment, executable, file, result, lifecycle, window, rerun, and superseding
+  requirement drift all fail closed; interrupted nonterminal evidence becomes honestly `lost` after
+  restart. Readiness generations are transactionally capped at 32 per target, while exact human
+  approvals are immutable while retained and preserve the current decision within a physical cap
+  of 64. Device-local evidence survives portable merge and is cleared by replace or full deletion.
+  This closes only the implemented local fast-forward/cherry-pick readiness slice, not remote
+  push/PR, generic workflow merge/push governance, or the broad Git/PR, Test, and Review Gate node
+  entries, so no broader checkbox changed. The focused mapping passed 134 unit tests across 10 files
+  and 32 real integration tests across 3 files. The frozen checkpoint passed the 810-file structure
+  gate, repository-wide Prettier and zero-warning ESLint, all eight workspace strict typechecks,
+  1,527 unit tests across 234 files, 216 integration tests across 28 files, all 12 Electron
+  Playwright journeys, every workspace production build, `git diff --check`, and the production
+  dependency audit with no known vulnerabilities. A fresh macOS arm64 app, ZIP, DMG, and blockmaps
+  packaged successfully; both packaged-app and read-only DMG mount/copy/launch smokes passed, with
+  the latter returning `FORGEBOARD_SMOKE_OK`. The DMG SHA-256 is
+  `d2e28ae86006227f47ce0944373afb2e7e17701e68759f05b0a164c80ba95dbe`; the ZIP SHA-256 is
+  `e20fc2e7701364493fa42a865fd6729327e781e6e900cc94fe5105a8457e4458`. Signing and notarization
+  remain inactive because this machine has no Developer ID identity.

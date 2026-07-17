@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { SETTINGS_REPAIR_EVIDENCE_MAX_BYTES } from '../../shared/settings/repair/contracts.js';
 import { COLLABORATION_REJECTED_DISMISSAL_MAX_COMMENT_BYTES } from './collaboration/rejected-comment-dismissals.js';
+import { DELIVERY_READINESS_STORAGE_SQL } from './git-readiness/schema.js';
 import { resetAuditChain } from './security/audit-integrity.js';
 
 export const MIGRATIONS = [
@@ -384,6 +385,7 @@ export const MIGRATIONS = [
     CREATE INDEX IF NOT EXISTS idx_collaboration_rejected_dismissal_expiry
       ON collaboration_rejected_comment_dismissals(expires_at, sequence);
   `,
+  DELIVERY_READINESS_STORAGE_SQL,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {
@@ -439,6 +441,8 @@ export function migrate(database: DatabaseSync): void {
 export function clearAllTables(database: DatabaseSync): void {
   database.prepare('DELETE FROM settings_repair_history').run();
   database.prepare('DELETE FROM backup_health').run();
+  database.prepare('DELETE FROM delivery_readiness_approvals').run();
+  database.prepare('DELETE FROM delivery_readiness_records').run();
   database.prepare('DELETE FROM git_review_notes').run();
   database.prepare('DELETE FROM collaboration_rejected_comment_dismissals').run();
   database.prepare('DELETE FROM collaboration_sync_deliveries').run();
@@ -468,6 +472,8 @@ export function clearPortableTables(database: DatabaseSync): void {
   // Workflow recovery records are not part of portable export version 3. Clear them before the
   // canvases they bind to so a replace import cannot retain orphaned runtime state.
   database.prepare('DELETE FROM workflow_executions').run();
+  database.prepare('DELETE FROM delivery_readiness_approvals').run();
+  database.prepare('DELETE FROM delivery_readiness_records').run();
   database.prepare('DELETE FROM git_review_notes').run();
   database.prepare('DELETE FROM collaboration_rejected_comment_dismissals').run();
   database.prepare('DELETE FROM collaboration_sync_deliveries').run();

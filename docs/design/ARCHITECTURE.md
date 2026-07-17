@@ -97,6 +97,17 @@ patch or staged-content digests immediately before mutation; Forgeboard commits 
 reviewed author identity while disabling repository hooks and signing. Worktree review never writes
 primary-checkout health state.
 
+Primary delivery adds a separate content-bound readiness authority. From the Git review UI, the
+user chooses one or more configured project checks; the renderer never supplies a command, path,
+environment value, or worktree identity. Electron main resolves the managed worktree, clean source
+HEAD and tree, configured checks, executable and working-directory identities, inherited
+environment-value digest, and relevant private file identities into an exact readiness fingerprint.
+Each check result is bound to that fingerprint. A local human can approve quality only after every
+required check passes, and reviewer or AI decisions never satisfy this gate. Any source, check,
+executable, environment, or evidence drift makes the approval stale. Commit delivery binds the exact
+human approval into its single-use plan, revalidates it before the cancel-default native delivery
+confirmation, then revalidates it again immediately before the Git engine mutates primary.
+
 Project checks follow the same renderer-untrusted boundary. The renderer selects only a stored
 check identity. Electron main resolves the canonical project root and configured executable,
 constructs an owner-bound, short-lived, single-use plan, and discloses the exact executable,

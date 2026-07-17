@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { GitShippingPlanInputSchema, GitShippingPlanViewSchema } from './shipping-contracts.js';
+import {
+  readinessApproval,
+  readinessCheck,
+  readinessFingerprint,
+  readinessView,
+} from './readiness/test-fixtures.js';
 
 const projectId = '91000000-0000-4000-8000-000000000001';
 const runId = '91000000-0000-4000-8000-000000000002';
@@ -32,6 +38,22 @@ describe('Git shipping contracts', () => {
 
   it('rejects truncated or unbounded disclosure data', () => {
     const oid = 'a'.repeat(40);
+    const worktreeId = '91000000-0000-4000-8000-000000000004';
+    const sourceFingerprint = readinessFingerprint({
+      sourceHead: 'b'.repeat(40),
+      sourceTree: 'c'.repeat(40),
+      worktreeId,
+      runId,
+      digest: 'd'.repeat(64),
+    });
+    const evidenceFingerprint = 'e'.repeat(64);
+    const readiness = readinessView({
+      target: { kind: 'agent-worktree', projectId, runId },
+      sourceFingerprint,
+      requiredChecks: [readinessCheck('passed', { sourceFingerprint })],
+      approvals: [readinessApproval('human', sourceFingerprint, evidenceFingerprint)],
+      evidenceFingerprint,
+    });
     const input = {
       kind: 'ship-agent-commits',
       planId: '91000000-0000-4000-8000-000000000003',
@@ -39,7 +61,7 @@ describe('Git shipping contracts', () => {
       strategy: 'fast-forward-only',
       projectId,
       runId,
-      worktreeId: '91000000-0000-4000-8000-000000000004',
+      worktreeId,
       projectName: 'Strict fixture',
       sourceBranch: 'forgeboard/agent',
       targetBranch: 'main',
@@ -56,6 +78,8 @@ describe('Git shipping contracts', () => {
         emailSource: 'settings',
         ready: true,
       },
+      readinessApprovalId: readiness.approvals[0]!.approvalId,
+      readiness,
     };
     expect(GitShippingPlanViewSchema.parse(input)).toEqual(input);
     expect(
@@ -65,6 +89,15 @@ describe('Git shipping contracts', () => {
       GitShippingPlanViewSchema.safeParse({
         ...input,
         identity: { ...input.identity, ready: false, emailSource: 'missing' },
+      }).success,
+    ).toBe(false);
+    expect(
+      GitShippingPlanViewSchema.safeParse({
+        ...input,
+        readiness: {
+          ...readiness,
+          evaluation: { ready: false, humanApprovalState: 'approved', blockers: [] },
+        },
       }).success,
     ).toBe(false);
     expect(

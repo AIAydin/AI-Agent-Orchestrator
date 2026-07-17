@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,8 +18,10 @@ const COMMIT_IDENTITY = {
   email: 'worktree-e2e@forgeboard.invalid',
 };
 const COMMIT_MESSAGE = 'Commit isolated deterministic agent work';
+const DELIVERY_CHECK_MARKER = 'FORGEBOARD_DELIVERY_E2E';
+const DELIVERY_DRIFT_FILE = 'delivery-evidence-drift.txt';
 
-test('onboarding can run, review, commit, restart, and deliver isolated agent work to primary', async () => {
+test('onboarding gates exact isolated delivery on deterministic checks and human approval', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-worktree-review-e2e-'));
   const managedWorktreeRoot = join(await realpath(userDataDirectory), 'ui-configured-worktrees');
   const externalRequests: string[] = [];
@@ -114,7 +116,7 @@ test('onboarding can run, review, commit, restart, and deliver isolated agent wo
     await expect(commitDisclosure).toContainText(COMMIT_IDENTITY.email);
     await expect(commitDisclosure).toContainText(changedFile);
 
-    await approveNativeCommitDialogs(electronApp);
+    await approveNativeDialogs(electronApp);
     await commitDisclosure.getByRole('button', { name: 'Continue to system confirmation' }).click();
     await expect(reviewDialog).toContainText(/Created local commit [a-f0-9]{12}\./u);
     await expect(reviewDialog).toContainText(
@@ -142,6 +144,7 @@ test('onboarding can run, review, commit, restart, and deliver isolated agent wo
     electronApp = secondSession.app;
     page = secondSession.page;
     watchExternalRequests(page, externalRequests);
+    await approveNativeDialogs(electronApp);
     await page
       .locator('.recent-list button.recent-open')
       .filter({ hasText: 'forgeboard-demo' })
@@ -180,14 +183,86 @@ test('onboarding can run, review, commit, restart, and deliver isolated agent wo
     });
 
     await reviewDialog.getByRole('tab', { name: 'Changes vs base' }).click();
+    const readiness = reviewDialog.getByRole('region', { name: 'Delivery readiness' });
     const delivery = reviewDialog.getByRole('region', {
       name: 'Deliver reviewed commits to primary',
     });
+    const reviewDelivery = delivery.getByRole('button', { name: /Review delivery/ });
+    await expect(readiness).toContainText('Not ready for delivery');
+    await expect(reviewDelivery).toBeDisabled();
+    await expect(delivery).toContainText(
+      'Complete the exact required checks and current human quality approval first.',
+    );
+
+    const lintRequirement = readiness.getByRole('checkbox', { name: /^Lint\b/ });
+    await expect(lintRequirement).toBeChecked();
+    await lintRequirement.uncheck();
+    await expect(readiness.getByRole('button', { name: 'Save required checks' })).toBeDisabled();
+    await lintRequirement.check();
+    await readiness.getByRole('button', { name: 'Save required checks' }).click();
+    await expect(readiness.getByRole('button', { name: 'Run Lint' })).toBeEnabled();
+    await expect(reviewDelivery).toBeDisabled();
+
+    const dialogsBeforeCheck = await nativeDialogs(electronApp);
+    await readiness.getByRole('button', { name: 'Run Lint' }).click();
+    await expect(readiness).toContainText('Passed', { timeout: 20_000 });
+    await expect(reviewDialog).toContainText('The exact delivery check passed.');
+    const checkDialog = (await nativeDialogs(electronApp)).at(dialogsBeforeCheck.length);
+    expectNativeCancelDefault(checkDialog, 'Run delivery check', ['Cancel', 'Run exact check']);
+    expect(nativeDialogText(checkDialog)).toContain('Lint');
+    expect(nativeDialogText(checkDialog)).toContain(DELIVERY_CHECK_MARKER);
+    await expect(reviewDelivery).toBeDisabled();
+
+    const dialogsBeforeApproval = await nativeDialogs(electronApp);
+    await readiness.getByRole('button', { name: 'Approve reviewed quality' }).click();
+    await expect(readiness).toContainText('Ready for delivery review');
+    await expect(readiness.locator('.git-delivery-quality-binding')).toContainText(
+      worktreeHeadAfter.slice(0, 12),
+    );
+    const approvalDialog = (await nativeDialogs(electronApp)).at(dialogsBeforeApproval.length);
+    expectNativeCancelDefault(approvalDialog, 'Approve delivery readiness', [
+      'Cancel',
+      'Approve readiness',
+    ]);
+    expect(nativeDialogText(approvalDialog)).toContain(
+      'Approve this exact source and deterministic check evidence for delivery?',
+    );
+    await expect(reviewDelivery).toBeEnabled();
     await expect(delivery).toContainText(
       'Forgeboard will verify the source and primary checkout again before delivery.',
     );
+
+    await writeFile(join(worktreePath, DELIVERY_DRIFT_FILE), 'new exact delivery source\n', 'utf8');
+    git(worktreePath, ['add', '--', DELIVERY_DRIFT_FILE]);
+    git(worktreePath, [
+      '-c',
+      `user.name=${COMMIT_IDENTITY.name}`,
+      '-c',
+      `user.email=${COMMIT_IDENTITY.email}`,
+      'commit',
+      '-m',
+      'Change exact delivery evidence',
+    ]);
+    const deliveryHead = git(worktreePath, ['rev-parse', 'HEAD']);
+    expect(deliveryHead).not.toBe(worktreeHeadAfter);
+
+    await reviewDialog.getByRole('button', { name: 'Refresh Git changes' }).click();
+    await expect(readiness).toContainText('Not ready for delivery');
+    await expect(readiness).toContainText('Existing delivery readiness is stale');
+    await expect(reviewDelivery).toBeDisabled();
+
+    await readiness.getByRole('button', { name: 'Save required checks' }).click();
+    await readiness.getByRole('button', { name: 'Run Lint' }).click();
+    await expect(readiness).toContainText('Passed', { timeout: 20_000 });
+    await readiness.getByRole('button', { name: 'Approve reviewed quality' }).click();
+    await expect(readiness).toContainText('Ready for delivery review');
+    await expect(readiness.locator('.git-delivery-quality-binding')).toContainText(
+      deliveryHead.slice(0, 12),
+    );
+    await expect(reviewDelivery).toBeEnabled();
+
     await delivery.getByLabel('Delivery strategy').selectOption('fast-forward-only');
-    await delivery.getByRole('button', { name: /Review delivery/ }).click();
+    await reviewDelivery.click();
 
     const deliveryDisclosure = page.getByRole('alertdialog', {
       name: 'Review exact primary delivery',
@@ -195,10 +270,15 @@ test('onboarding can run, review, commit, restart, and deliver isolated agent wo
     await expect(deliveryDisclosure).toContainText('Fast-forward-only merge');
     await expect(deliveryDisclosure).toContainText(COMMIT_IDENTITY.name);
     await expect(deliveryDisclosure).toContainText(COMMIT_IDENTITY.email);
-    await expect(deliveryDisclosure).toContainText(worktreeHeadAfter);
+    await expect(deliveryDisclosure).toContainText(deliveryHead);
     await expect(deliveryDisclosure).toContainText(changedFile);
+    await expect(deliveryDisclosure).toContainText(DELIVERY_DRIFT_FILE);
+    await expect(deliveryDisclosure).toContainText('Content-bound delivery readiness');
+    await expect(deliveryDisclosure).toContainText('approved this exact check evidence');
+    await expect(deliveryDisclosure).toContainText(
+      'revalidated before the system confirmation and again before Git changes primary',
+    );
 
-    await approveNativeCommitDialogs(electronApp);
     await deliveryDisclosure
       .getByRole('button', { name: 'Continue to system confirmation' })
       .click();
@@ -207,9 +287,12 @@ test('onboarding can run, review, commit, restart, and deliver isolated agent wo
     });
     await expect(delivery).toContainText('Delivered to primary at');
 
-    expect(git(primaryPath, ['rev-parse', 'HEAD'])).toBe(worktreeHeadAfter);
+    expect(git(primaryPath, ['rev-parse', 'HEAD'])).toBe(deliveryHead);
     expect(git(primaryPath, ['status', '--porcelain=v1', '--untracked-files=all'])).toBe('');
     expect(await readFile(join(primaryPath, changedFile), 'utf8')).toBe(agentFileContent);
+    expect(await readFile(join(primaryPath, DELIVERY_DRIFT_FILE), 'utf8')).toBe(
+      'new exact delivery source\n',
+    );
     expect(externalRequests).toEqual([]);
   } finally {
     await electronApp?.close().catch(() => undefined);
@@ -224,6 +307,10 @@ async function configureGitThroughUi(page: Page, managedWorktreeRoot: string): P
   await settings.getByLabel('Managed worktree location').fill(managedWorktreeRoot);
   await settings.getByLabel('Git identity name').fill(COMMIT_IDENTITY.name);
   await settings.getByLabel('Git identity email').fill(COMMIT_IDENTITY.email);
+  await settings.getByRole('button', { name: 'Checks', exact: true }).click();
+  const lint = settings.getByRole('group', { name: 'Lint command' });
+  await lint.getByLabel('Executable').fill(process.execPath);
+  await lint.getByLabel('Arguments').fill(`-e\nprocess.stdout.write("${DELIVERY_CHECK_MARKER}")`);
   await settings.getByRole('button', { name: /Save settings/ }).click();
   await expect(settings).toBeHidden();
 }
@@ -253,13 +340,58 @@ async function openOnlyChangeReport(page: Page) {
   return report;
 }
 
-async function approveNativeCommitDialogs(electronApp: ElectronApplication): Promise<void> {
+interface NativeDialogRecord {
+  readonly buttons?: readonly string[] | undefined;
+  readonly cancelId?: number | undefined;
+  readonly defaultId?: number | undefined;
+  readonly detail?: string | undefined;
+  readonly message?: string | undefined;
+  readonly title?: string | undefined;
+}
+
+async function approveNativeDialogs(electronApp: ElectronApplication): Promise<void> {
   await electronApp.evaluate(({ dialog }) => {
+    const state = globalThis as typeof globalThis & {
+      __forgeboardWorktreeReviewDialogs?: NativeDialogRecord[];
+    };
+    state.__forgeboardWorktreeReviewDialogs = [];
     Object.defineProperty(dialog, 'showMessageBox', {
       configurable: true,
-      value: () => Promise.resolve({ response: 1, checkboxChecked: false }),
+      value: (...args: unknown[]) => {
+        const options = args.at(-1) as NativeDialogRecord;
+        state.__forgeboardWorktreeReviewDialogs?.push({
+          buttons: options.buttons,
+          cancelId: options.cancelId,
+          defaultId: options.defaultId,
+          detail: options.detail,
+          message: options.message,
+          title: options.title,
+        });
+        return Promise.resolve({ response: 1, checkboxChecked: false });
+      },
     });
   });
+}
+
+async function nativeDialogs(electronApp: ElectronApplication): Promise<NativeDialogRecord[]> {
+  return await electronApp.evaluate(() => {
+    const state = globalThis as typeof globalThis & {
+      __forgeboardWorktreeReviewDialogs?: NativeDialogRecord[];
+    };
+    return state.__forgeboardWorktreeReviewDialogs ?? [];
+  });
+}
+
+function expectNativeCancelDefault(
+  record: NativeDialogRecord | undefined,
+  title: string,
+  buttons: readonly string[],
+): void {
+  expect(record).toMatchObject({ title, buttons, defaultId: 0, cancelId: 0 });
+}
+
+function nativeDialogText(record: NativeDialogRecord | undefined): string {
+  return [record?.title, record?.message, record?.detail].filter(Boolean).join('\n');
 }
 
 async function findChangedWorktree(primaryPath: string, changedFile: string): Promise<string> {

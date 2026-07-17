@@ -240,6 +240,28 @@ describe('ExactCheckExecutor', () => {
     expect(fixture.store.listCheckExecutions(PROJECT_ID)).toEqual([]);
   });
 
+  it('rejects a managed-worktree plan when clean state changes after disclosure', async () => {
+    const fixture = await createFixture();
+    const marker = path.join(fixture.ownershipOne.worktreePath, 'should-not-launch.txt');
+    const disclosure = await fixture.executor.prepare(
+      OWNER,
+      exactRequest(worktreeTarget(RUN_ONE_ID), [
+        '-e',
+        `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'launched')`,
+      ]),
+    );
+    await writeFile(path.join(fixture.ownershipOne.worktreePath, 'late-drift.txt'), 'dirty\n');
+
+    await expect(
+      fixture.executor.launchApproved(OWNER, {
+        planId: disclosure.planId,
+        fingerprint: disclosure.fingerprint,
+      }),
+    ).rejects.toThrow('changed. Review a new disclosure');
+    await expect(access(marker)).rejects.toThrow();
+    expect(fixture.store.listCheckExecutions(PROJECT_ID)).toEqual([]);
+  });
+
   it('rejects a relative cwd symlink that resolves outside the selected repository', async () => {
     const fixture = await createFixture();
     const outside = path.join(fixture.root, 'outside');

@@ -10,11 +10,13 @@ import type {
 export function GitShippingPanel({
   review,
   busy,
+  deliveryReady,
   result,
   onPrepare,
 }: {
   review: GitReviewView;
   busy: boolean;
+  deliveryReady: boolean;
   result: GitShippingResultView | null;
   onPrepare: (strategy: GitShippingStrategy) => void;
 }) {
@@ -25,14 +27,17 @@ export function GitShippingPanel({
     comparison !== undefined &&
     comparison.ahead > 0 &&
     !review.dirty &&
-    !review.conflicted;
+    !review.conflicted &&
+    deliveryReady;
   const reason = review.dirty
     ? 'Commit or discard all agent worktree edits first.'
     : review.conflicted
       ? 'Resolve the agent worktree conflicts first.'
       : comparison?.ahead === 0
         ? 'There are no committed agent changes to deliver.'
-        : 'Forgeboard will verify the source and primary checkout again before delivery.';
+        : !deliveryReady
+          ? 'Complete the exact required checks and current human quality approval first.'
+          : 'Forgeboard will verify the source and primary checkout again before delivery.';
 
   return (
     <section className="git-shipping-panel" aria-labelledby="git-shipping-title">

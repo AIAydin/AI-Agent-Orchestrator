@@ -84,6 +84,16 @@ import type {
   GitShippingResultView,
 } from './git/shipping-contracts.js';
 import type {
+  GitDeliveryReadinessApproveInput,
+  GitDeliveryReadinessApproveView,
+  GitDeliveryReadinessGetInput,
+  GitDeliveryReadinessGetView,
+  GitDeliveryReadinessPrepareInput,
+  GitDeliveryReadinessPrepareView,
+  GitDeliveryReadinessRunInput,
+  GitDeliveryReadinessRunView,
+} from './git/readiness/index.js';
+import type {
   GitWorktreeCleanupConfirmationInput,
   GitWorktreeCleanupPrepareOutcome,
   GitWorktreeCleanupResultView,
@@ -295,6 +305,18 @@ export interface ForgeboardApi {
     confirmShipping(
       input: GitPlanConfirmationInput,
     ): Promise<IpcResult<GitShippingResultView | null>>;
+    readiness: {
+      get(input: GitDeliveryReadinessGetInput): Promise<IpcResult<GitDeliveryReadinessGetView>>;
+      prepare(
+        input: GitDeliveryReadinessPrepareInput,
+      ): Promise<IpcResult<GitDeliveryReadinessPrepareView>>;
+      run(
+        input: GitDeliveryReadinessRunInput,
+      ): Promise<IpcResult<GitDeliveryReadinessRunView | null>>;
+      approve(
+        input: GitDeliveryReadinessApproveInput,
+      ): Promise<IpcResult<GitDeliveryReadinessApproveView | null>>;
+    };
     lifecycle: {
       prepareCleanup(
         input: GitWorktreeCleanupTargetInput,

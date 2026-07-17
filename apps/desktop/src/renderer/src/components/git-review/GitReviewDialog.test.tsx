@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IpcResult } from '../../../../shared/application/contracts.js';
@@ -20,6 +20,17 @@ import type {
   GitShippingResultView,
 } from '../../../../shared/git/shipping-contracts.js';
 import type { GitReviewNotesView } from '../../../../shared/git/reviews/contracts.js';
+import type {
+  GitDeliveryReadinessGetView,
+  GitDeliveryRequiredCheckState,
+} from '../../../../shared/git/readiness/index.js';
+import {
+  readinessApproval,
+  readinessCheck,
+  readinessFingerprint,
+  readinessGetView,
+  readinessView,
+} from '../../../../shared/git/readiness/test-fixtures.js';
 import { GitReviewDialog } from './GitReviewDialog.js';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
@@ -137,6 +148,35 @@ const commitPlan: GitCommitPlanView = {
   identity: review.identity,
 };
 
+const deliverySourceFingerprint = readinessFingerprint({
+  sourceHead: agentHeadOid,
+  sourceTree: '4'.repeat(40),
+  worktreeId,
+  runId,
+  digest: '3'.repeat(64),
+});
+const deliveryEvidenceFingerprint = '2'.repeat(64);
+const deliveryReadiness = readinessView({
+  target: worktreeTarget,
+  sourceFingerprint: deliverySourceFingerprint,
+  requiredChecks: [readinessCheck('passed', { sourceFingerprint: deliverySourceFingerprint })],
+  approvals: [readinessApproval('human', deliverySourceFingerprint, deliveryEvidenceFingerprint)],
+  evidenceFingerprint: deliveryEvidenceFingerprint,
+});
+const deliveryReadinessGetView: GitDeliveryReadinessGetView = {
+  ...readinessGetView(),
+  target: worktreeTarget,
+  source: {
+    sourceHead: deliverySourceFingerprint.sourceHead,
+    sourceTree: deliverySourceFingerprint.sourceTree,
+    worktreeId,
+    runId,
+  },
+  availableChecks: deliveryReadiness.availableChecks,
+  readiness: deliveryReadiness,
+  staleReason: null,
+};
+
 const shippingPlan: GitShippingPlanView = {
   kind: 'ship-agent-commits',
   planId: shippingPlanId,
@@ -155,6 +195,8 @@ const shippingPlan: GitShippingPlanView = {
   commits: [agentHeadOid],
   affectedPaths: ['src/committed.ts'],
   identity: review.identity,
+  readinessApprovalId: deliveryReadiness.approvals[0]!.approvalId,
+  readiness: deliveryReadiness,
 };
 
 const shippingResult: GitShippingResultView = {
@@ -211,6 +253,14 @@ const confirmCommitMock = vi.fn(() =>
 );
 const prepareShippingMock = vi.fn(() => Promise.resolve(success(shippingPlan)));
 const confirmShippingMock = vi.fn(() => Promise.resolve(success(shippingResult)));
+const readinessGetMock = vi.fn(() => Promise.resolve(success(deliveryReadinessGetView)));
+const readinessPrepareMock = vi.fn(() => Promise.resolve(success(deliveryReadiness)));
+const readinessRunMock = vi.fn(() =>
+  Promise.resolve(success<typeof deliveryReadiness | null>(null)),
+);
+const readinessApproveMock = vi.fn(() =>
+  Promise.resolve(success<typeof deliveryReadiness | null>(null)),
+);
 const prepareCleanupMock = vi.fn<() => Promise<IpcResult<GitWorktreeCleanupPrepareOutcome>>>(() =>
   Promise.resolve(success(cleanupPlan)),
 );
@@ -243,6 +293,10 @@ beforeEach(() => {
     confirmCommitMock,
     prepareShippingMock,
     confirmShippingMock,
+    readinessGetMock,
+    readinessPrepareMock,
+    readinessRunMock,
+    readinessApproveMock,
     prepareCleanupMock,
     confirmCleanupMock,
     reviewNotesListMock,
@@ -267,6 +321,12 @@ beforeEach(() => {
         confirmCommit: confirmCommitMock,
         prepareShipping: prepareShippingMock,
         confirmShipping: confirmShippingMock,
+        readiness: {
+          get: readinessGetMock,
+          prepare: readinessPrepareMock,
+          run: readinessRunMock,
+          approve: readinessApproveMock,
+        },
         lifecycle: {
           prepareCleanup: prepareCleanupMock,
           confirmCleanup: confirmCleanupMock,
@@ -463,7 +523,7 @@ describe('GitReviewDialog', () => {
       'true',
     );
     expect(screen.getAllByText(baseOid.slice(0, 12))).toHaveLength(2);
-    expect(screen.getByText(agentHeadOid.slice(0, 12))).toBeTruthy();
+    expect(screen.getAllByText(agentHeadOid.slice(0, 12))).toHaveLength(2);
     expect(screen.getByText('1 ahead · 0 behind')).toBeTruthy();
     expect(screen.getAllByText('src/committed.ts')).toHaveLength(2);
     expect(screen.getByText('committed line')).toBeTruthy();
@@ -679,7 +739,9 @@ describe('GitReviewDialog', () => {
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
     await screen.findByText('Deliver reviewed commits to primary');
-    fireEvent.click(screen.getByRole('button', { name: 'Review delivery…' }));
+    const reviewDelivery = screen.getByRole('button', { name: 'Review delivery…' });
+    await waitFor(() => expect(reviewDelivery).toHaveProperty('disabled', false));
+    fireEvent.click(reviewDelivery);
     const disclosure = await screen.findByRole('alertdialog', {
       name: 'Review exact primary delivery',
     });
@@ -706,6 +768,151 @@ describe('GitReviewDialog', () => {
       expect(confirmShippingMock).toHaveBeenCalledWith({ planId: shippingPlanId }),
     );
     expect(await screen.findByText(/Delivered reviewed commits to primary/)).toBeTruthy();
+  });
+
+  it('keeps delivery fail-closed when earlier readiness evidence became stale', async () => {
+    const staleReason =
+      'The managed source changed after its checks ran. Prepare and approve the new exact source.';
+    readinessGetMock.mockResolvedValueOnce(
+      success({
+        ...deliveryReadinessGetView,
+        readiness: null,
+        staleReason,
+      }),
+    );
+    reviewMock.mockResolvedValueOnce(
+      success({
+        ...agentReview,
+        dirty: false,
+        entries: [],
+        staged: { files: [], additions: 0, deletions: 0 },
+        unstaged: { files: [], additions: 0, deletions: 0 },
+      }),
+    );
+
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    expect((await screen.findByRole('alert')).textContent).toContain(staleReason);
+    const reviewDelivery = screen.getByRole('button', { name: 'Review delivery…' });
+    expect(reviewDelivery).toHaveProperty('disabled', true);
+    fireEvent.click(reviewDelivery);
+    expect(prepareShippingMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/Complete the exact required checks/u)).toBeTruthy();
+  });
+
+  it('reports native check cancellation without claiming a delivery check started', async () => {
+    const confirmation = deferred<ReturnType<typeof success<typeof deliveryReadiness | null>>>();
+    readinessRunMock.mockReturnValueOnce(confirmation.promise);
+    reviewMock.mockResolvedValueOnce(success(agentReview));
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Re-run Deterministic verification' }),
+    );
+
+    await waitFor(() =>
+      expect(readinessRunMock).toHaveBeenCalledWith({
+        readinessId: deliveryReadiness.readinessId,
+        checkId: deliveryReadiness.requiredChecks[0]!.checkId,
+        expectedSourceFingerprint: deliveryReadiness.sourceFingerprint.digest,
+      }),
+    );
+    const busyNotice = await screen.findByText(
+      'Waiting for check confirmation and exact completion',
+    );
+    expect(busyNotice.closest('.git-review-status')?.getAttribute('data-tone')).toBe('neutral');
+    await act(async () => {
+      confirmation.resolve(success(null));
+      await confirmation.promise;
+    });
+    expect(
+      await screen.findByText(
+        'Check run cancelled in the system confirmation. No check was started.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/approved delivery check started/iu)).toBeNull();
+  });
+
+  it.each<readonly [GitDeliveryRequiredCheckState, string, 'neutral' | 'success' | 'warning']>([
+    ['passed', 'The exact delivery check passed. Readiness was refreshed.', 'success'],
+    ['failed', 'The delivery check finished unsuccessfully. Delivery remains blocked.', 'warning'],
+    [
+      'cancelled',
+      'The delivery check was cancelled before passing evidence was recorded.',
+      'neutral',
+    ],
+    [
+      'lost',
+      'Forgeboard lost the terminal delivery-check evidence. Delivery remains blocked; run the check again.',
+      'warning',
+    ],
+    [
+      'stale',
+      'The delivery-check evidence is stale for the current binding. Run the check again.',
+      'warning',
+    ],
+  ])('uses an honest %s completion notice and tone', async (state, message, tone) => {
+    const terminalReadiness = readinessView({
+      target: worktreeTarget,
+      sourceFingerprint: deliverySourceFingerprint,
+      requiredChecks: [readinessCheck(state, { sourceFingerprint: deliverySourceFingerprint })],
+      approvals: deliveryReadiness.approvals,
+      evidenceFingerprint: '7'.repeat(64),
+    });
+    readinessRunMock.mockResolvedValueOnce(success(terminalReadiness));
+    readinessGetMock.mockResolvedValueOnce(success(deliveryReadinessGetView)).mockResolvedValueOnce(
+      success({
+        ...deliveryReadinessGetView,
+        availableChecks: terminalReadiness.availableChecks,
+        readiness: terminalReadiness,
+      }),
+    );
+    reviewMock.mockResolvedValueOnce(success(agentReview));
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Re-run Deterministic verification' }),
+    );
+
+    const notice = await screen.findByText(message);
+    expect(notice.closest('.git-review-status')?.getAttribute('data-tone')).toBe(tone);
+  });
+
+  it('disables delivery from an authoritative refresh after a check-run error', async () => {
+    const lostReadiness = readinessView({
+      target: worktreeTarget,
+      sourceFingerprint: deliverySourceFingerprint,
+      requiredChecks: [readinessCheck('lost', { sourceFingerprint: deliverySourceFingerprint })],
+      approvals: deliveryReadiness.approvals,
+      evidenceFingerprint: '6'.repeat(64),
+    });
+    readinessRunMock.mockRejectedValueOnce(new Error('Check completion evidence was lost.'));
+    readinessGetMock.mockResolvedValueOnce(success(deliveryReadinessGetView)).mockResolvedValueOnce(
+      success({
+        ...deliveryReadinessGetView,
+        availableChecks: lostReadiness.availableChecks,
+        readiness: lostReadiness,
+      }),
+    );
+    reviewMock.mockResolvedValueOnce(
+      success({
+        ...agentReview,
+        dirty: false,
+        entries: [],
+        staged: { files: [], additions: 0, deletions: 0 },
+        unstaged: { files: [], additions: 0, deletions: 0 },
+      }),
+    );
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    const reviewDelivery = await screen.findByRole('button', { name: 'Review delivery…' });
+    await waitFor(() => expect(reviewDelivery).toHaveProperty('disabled', false));
+    fireEvent.click(screen.getByRole('button', { name: 'Re-run Deterministic verification' }));
+
+    expect(await screen.findByText('Check completion evidence was lost.')).toBeTruthy();
+    await waitFor(() => expect(reviewDelivery).toHaveProperty('disabled', true));
+    expect(readinessGetMock).toHaveBeenCalledTimes(2);
+    expect(prepareShippingMock).not.toHaveBeenCalled();
   });
 
   it('shows an honest empty committed comparison while preserving working-tree changes', async () => {
@@ -999,4 +1206,14 @@ function reviewNotesFor(target: GitTargetInput): GitReviewNotesView {
 
 function success<T>(value: T) {
   return { ok: true as const, value };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (cause: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }

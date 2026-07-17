@@ -5,4 +5,5 @@
 @import '../../components/git-review/actions/git-review-actions.css';
 @import '../../components/git-review/git-base-comparison.css';
 @import '../../components/git-review/shipping/git-shipping.css';
+@import '../../components/git-review/readiness/delivery-readiness.css';
 @import '../../components/git-review/lifecycle/git-worktree-cleanup.css';

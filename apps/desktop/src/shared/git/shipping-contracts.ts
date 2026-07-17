@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { GitIdentityViewSchema, GitReviewViewSchema, GitTargetInputSchema } from './contracts.js';
+import { GitDeliveryReadinessViewSchema } from './readiness/index.js';
 
 const OidSchema = z.string().regex(/^[a-f0-9]{40,64}$/u);
 const MAX_DISCLOSED_PATH_CHARACTERS = 64 * 1_024;
@@ -49,6 +50,8 @@ export const GitShippingPlanViewSchema = z
     commits: z.array(OidSchema).min(1).max(256),
     affectedPaths: z.array(GitPathSchema).min(1).max(256),
     identity: GitIdentityViewSchema,
+    readinessApprovalId: z.string().uuid(),
+    readiness: GitDeliveryReadinessViewSchema,
   })
   .strict()
   .superRefine((plan, context) => {
@@ -73,6 +76,28 @@ export const GitShippingPlanViewSchema = z
         code: z.ZodIssueCode.custom,
         path: ['affectedPaths'],
         message: `Git delivery disclosure exceeds ${String(MAX_DISCLOSED_PATH_CHARACTERS)} path characters.`,
+      });
+    }
+    const exactHumanApproval = plan.readiness.approvals.find(
+      (approval) =>
+        approval.approvalId === plan.readinessApprovalId &&
+        approval.authority === 'human' &&
+        approval.evidenceFingerprint === plan.readiness.evidenceFingerprint &&
+        approval.sourceFingerprint.digest === plan.readiness.sourceFingerprint.digest,
+    );
+    if (
+      !plan.readiness.evaluation.ready ||
+      exactHumanApproval === undefined ||
+      plan.readiness.target.projectId !== plan.projectId ||
+      plan.readiness.target.runId !== plan.runId ||
+      plan.readiness.sourceFingerprint.worktreeId !== plan.worktreeId ||
+      plan.readiness.sourceFingerprint.sourceHead !== plan.sourceHead
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['readiness'],
+        message:
+          'Git delivery plans require exact passing checks and current human approval for their source.',
       });
     }
   });

@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  CircleDashed,
   GitCompareArrows,
   LoaderCircle,
   RefreshCw,
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import type { CheckId } from '../../../../shared/checks/contracts.js';
 import type {
   GitCommitPlanView,
   GitDiscardPlanView,
@@ -35,6 +37,12 @@ import { GitReviewSummary } from './GitReviewSummary.js';
 import { GitWorktreeCleanupDisclosure } from './lifecycle/GitWorktreeCleanupDisclosure.js';
 import { GitWorktreeCleanupPanel } from './lifecycle/GitWorktreeCleanupPanel.js';
 import { useGitWorktreeCleanup } from './lifecycle/useGitWorktreeCleanup.js';
+import { GitDeliveryReadinessPanel } from './readiness/GitDeliveryReadinessPanel.js';
+import {
+  useGitDeliveryReadiness,
+  type GitDeliveryReadinessBusy,
+  type GitDeliveryReadinessNotice,
+} from './readiness/useGitDeliveryReadiness.js';
 import { GitStaleReviewNotes } from './review-notes/GitStaleReviewNotes.js';
 import { useGitReviewNotes } from './review-notes/useGitReviewNotes.js';
 import {
@@ -60,6 +68,13 @@ export interface GitReviewDialogProps {
   onCleanupStateUncertain?: () => void;
 }
 
+type GitReviewNoticeTone = 'neutral' | 'success' | 'warning';
+
+interface GitReviewNotice {
+  readonly message: string;
+  readonly tone: GitReviewNoticeTone;
+}
+
 export function GitReviewDialog({
   target,
   projectName,
@@ -77,6 +92,11 @@ export function GitReviewDialog({
     target.kind === 'agent-worktree' ? { projectId: target.projectId, runId: target.runId } : null,
     onError,
   );
+  const deliveryReadiness = useGitDeliveryReadiness(
+    target.kind === 'agent-worktree'
+      ? { kind: 'agent-worktree', projectId: target.projectId, runId: target.runId }
+      : null,
+  );
   const reviewNotes = useGitReviewNotes(target, controller.review?.refreshedAt ?? null, onError);
   const [selection, setSelection] = useState<GitFileSelection | null>(null);
   const [discardPlan, setDiscardPlan] = useState<GitDiscardPlanView | null>(null);
@@ -84,7 +104,7 @@ export function GitReviewDialog({
   const [shippingPlan, setShippingPlan] = useState<GitShippingPlanView | null>(null);
   const [shippingResult, setShippingResult] = useState<GitShippingResultView | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<GitWorktreeCleanupPlanView | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<GitReviewNotice | null>(null);
   const [reviewMode, setReviewMode] = useState<GitReviewMode>(
     target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree',
   );
@@ -102,10 +122,26 @@ export function GitReviewDialog({
   );
   const staleReviewNotes =
     reviewNotes.context?.notes.filter((note) => note.anchorState !== 'current') ?? [];
-  const busy = controller.busyLabel !== null || cleanupController.busyLabel !== null;
-  const busyLabel = controller.busyLabel ?? cleanupController.busyLabel;
-  const actionError = controller.error ?? cleanupController.error;
+  const readinessBusyLabel = deliveryReadinessBusyLabel(deliveryReadiness.busy);
+  const busy =
+    controller.busyLabel !== null ||
+    cleanupController.busyLabel !== null ||
+    deliveryReadiness.busy !== null;
+  const busyLabel = controller.busyLabel ?? cleanupController.busyLabel ?? readinessBusyLabel;
+  const actionError = controller.error ?? cleanupController.error ?? deliveryReadiness.error;
   const cleanupRecoveryOnly = target.kind === 'agent-worktree' && cleanupRecovery;
+  const deliveryReady =
+    deliveryReadiness.ready &&
+    controller.review?.target.kind === 'agent-worktree' &&
+    controller.review.baseComparison?.headCommit === deliveryReadiness.view?.source.sourceHead;
+  const actionStatusTone: GitReviewNoticeTone =
+    actionError !== null ? 'warning' : busy ? 'neutral' : (notice?.tone ?? 'neutral');
+  const cleanupStatusTone: GitReviewNoticeTone =
+    cleanupController.error !== null
+      ? 'warning'
+      : cleanupController.busyLabel !== null
+        ? 'neutral'
+        : (notice?.tone ?? 'neutral');
 
   useEffect(() => {
     const previousFocus =
@@ -147,8 +183,16 @@ export function GitReviewDialog({
     void controller.confirmDiscard(discardPlan.planId).then((result) => {
       setDiscardPlan(null);
       if (result === null)
-        setNotice('Discard cancelled in the system confirmation. No content changed.');
-      else if (result !== undefined) setNotice('Selected working-tree content was discarded.');
+        setNotice(
+          gitReviewNotice(
+            'Discard cancelled in the system confirmation. No content changed.',
+            'neutral',
+          ),
+        );
+      else if (result !== undefined) {
+        setNotice(gitReviewNotice('Selected working-tree content was discarded.', 'success'));
+        void deliveryReadiness.refresh();
+      }
     });
   };
 
@@ -164,18 +208,66 @@ export function GitReviewDialog({
     void controller.confirmCommit(commitPlan.planId).then((result) => {
       setCommitPlan(null);
       if (result === null)
-        setNotice('Commit cancelled in the system confirmation. Nothing was committed.');
-      else if (result !== undefined)
-        setNotice(`Created local commit ${result.headAfter.slice(0, 12)}.`);
+        setNotice(
+          gitReviewNotice(
+            'Commit cancelled in the system confirmation. Nothing was committed.',
+            'neutral',
+          ),
+        );
+      else if (result !== undefined) {
+        setNotice(
+          gitReviewNotice(`Created local commit ${result.headAfter.slice(0, 12)}.`, 'success'),
+        );
+        void deliveryReadiness.refresh();
+      }
     });
   };
 
   const prepareShipping = (strategy: GitShippingStrategy) => {
     setNotice(null);
     setShippingResult(null);
+    if (!deliveryReady) {
+      setNotice(
+        gitReviewNotice(
+          'Delivery readiness is not current. Complete the exact checks and human quality approval first.',
+          'warning',
+        ),
+      );
+      return;
+    }
     void controller.prepareShipping(strategy).then((plan) => {
       if (plan !== undefined) setShippingPlan(plan);
     });
+  };
+
+  const prepareReadinessRequirements = (checkIds: readonly CheckId[]) => {
+    setNotice(null);
+    void deliveryReadiness.prepareRequirements(checkIds).then((saved) => {
+      if (saved) {
+        setNotice(
+          gitReviewNotice('Saved the required checks for this exact delivery source.', 'success'),
+        );
+      }
+    });
+  };
+
+  const runReadinessCheck = (checkId: CheckId) => {
+    setNotice(null);
+    void deliveryReadiness.runCheck(checkId).then((nextNotice) => {
+      if (nextNotice !== undefined) setNotice(deliveryReadinessNoticeMessage(nextNotice));
+    });
+  };
+
+  const approveReadinessQuality = () => {
+    setNotice(null);
+    void deliveryReadiness.approveQuality().then((nextNotice) => {
+      if (nextNotice !== undefined) setNotice(deliveryReadinessNoticeMessage(nextNotice));
+    });
+  };
+
+  const refreshReview = () => {
+    void controller.refresh();
+    void deliveryReadiness.refresh();
   };
 
   const confirmShipping = () => {
@@ -183,13 +275,21 @@ export function GitReviewDialog({
     void controller.confirmShipping(shippingPlan.planId).then((result) => {
       setShippingPlan(null);
       if (result === null) {
-        setNotice('Delivery cancelled in the system confirmation. Primary was not changed.');
+        setNotice(
+          gitReviewNotice(
+            'Delivery cancelled in the system confirmation. Primary was not changed.',
+            'neutral',
+          ),
+        );
       } else if (result !== undefined) {
         setShippingResult(result);
         setNotice(
-          result.state === 'completed'
-            ? `Delivered reviewed commits to primary at ${result.headAfter.slice(0, 12)}.`
-            : 'Git stopped at conflicts. Primary was left in a reviewable conflict state.',
+          gitReviewNotice(
+            result.state === 'completed'
+              ? `Delivered reviewed commits to primary at ${result.headAfter.slice(0, 12)}.`
+              : 'Git stopped at conflicts. Primary was left in a reviewable conflict state.',
+            result.state === 'completed' ? 'success' : 'warning',
+          ),
         );
       }
     });
@@ -225,7 +325,12 @@ export function GitReviewDialog({
     void cleanupController.confirm(cleanupPlan.planId).then((result) => {
       if (result === null) {
         setCleanupPlan(null);
-        setNotice('Cleanup cancelled in the system confirmation. The worktree was preserved.');
+        setNotice(
+          gitReviewNotice(
+            'Cleanup cancelled in the system confirmation. The worktree was preserved.',
+            'neutral',
+          ),
+        );
       } else if (result === undefined) {
         setCleanupPlan(null);
         onCleanupStateUncertain?.();
@@ -246,7 +351,7 @@ export function GitReviewDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="git-review-title"
-        aria-busy={busy || reviewNotes.busy}
+        aria-busy={busy || reviewNotes.busy || deliveryReadiness.loading}
       >
         <header className="git-review-header">
           <span className="modal-title-icon">
@@ -271,7 +376,7 @@ export function GitReviewDialog({
             type="button"
             disabled={busy}
             aria-label="Refresh Git changes"
-            onClick={() => void controller.refresh()}
+            onClick={refreshReview}
           >
             <RefreshCw className={busy ? 'spin' : ''} size={16} />
           </button>
@@ -318,17 +423,20 @@ export function GitReviewDialog({
                   cleanupController.busyLabel !== null ||
                   notice !== null) && (
                   <div
-                    className={`git-review-status ${cleanupController.error ? 'error' : ''}`}
-                    aria-live="polite"
+                    className={`git-review-status ${cleanupStatusTone === 'warning' ? 'error' : ''}`}
+                    data-tone={cleanupStatusTone}
+                    role={cleanupStatusTone === 'warning' ? 'alert' : 'status'}
                   >
                     {cleanupController.busyLabel !== null ? (
-                      <LoaderCircle className="spin" size={13} />
-                    ) : cleanupController.error !== null ? (
-                      <TriangleAlert size={13} />
+                      <LoaderCircle className="spin" size={13} aria-hidden="true" />
+                    ) : cleanupStatusTone === 'warning' ? (
+                      <TriangleAlert size={13} aria-hidden="true" />
+                    ) : cleanupStatusTone === 'success' ? (
+                      <CheckCircle2 size={13} aria-hidden="true" />
                     ) : (
-                      <CheckCircle2 size={13} />
+                      <CircleDashed size={13} aria-hidden="true" />
                     )}
-                    {cleanupController.busyLabel ?? cleanupController.error ?? notice}
+                    {cleanupController.busyLabel ?? cleanupController.error ?? notice?.message}
                   </div>
                 )}
                 <GitWorktreeCleanupPanel
@@ -364,15 +472,21 @@ export function GitReviewDialog({
               </p>
             )}
             {(actionError !== null || notice !== null || busy) && (
-              <div className={`git-review-status ${actionError ? 'error' : ''}`} aria-live="polite">
+              <div
+                className={`git-review-status ${actionStatusTone === 'warning' ? 'error' : ''}`}
+                data-tone={actionStatusTone}
+                role={actionStatusTone === 'warning' ? 'alert' : 'status'}
+              >
                 {busy ? (
-                  <LoaderCircle className="spin" size={13} />
-                ) : actionError ? (
-                  <TriangleAlert size={13} />
+                  <LoaderCircle className="spin" size={13} aria-hidden="true" />
+                ) : actionStatusTone === 'warning' ? (
+                  <TriangleAlert size={13} aria-hidden="true" />
+                ) : actionStatusTone === 'success' ? (
+                  <CheckCircle2 size={13} aria-hidden="true" />
                 ) : (
-                  <CheckCircle2 size={13} />
+                  <CircleDashed size={13} aria-hidden="true" />
                 )}
-                {busyLabel ?? actionError ?? notice}
+                {busyLabel ?? actionError ?? notice?.message}
               </div>
             )}
             {reviewNotes.error !== null && (
@@ -410,9 +524,38 @@ export function GitReviewDialog({
                     : { onDisplayPreferencesChange })}
                   footer={
                     <>
+                      {deliveryReadiness.view === null ? (
+                        <section className="git-delivery-readiness" aria-label="Delivery readiness">
+                          <strong>Delivery readiness</strong>
+                          <p role={deliveryReadiness.error === null ? 'status' : 'alert'}>
+                            {deliveryReadiness.loading
+                              ? 'Loading exact delivery checks and approval evidence…'
+                              : (deliveryReadiness.error ??
+                                'Delivery readiness is unavailable. Refresh before delivery.')}
+                          </p>
+                        </section>
+                      ) : (
+                        <GitDeliveryReadinessPanel
+                          view={deliveryReadiness.view}
+                          selectedCheckIds={deliveryReadiness.selectedCheckIds}
+                          disabled={busy || deliveryReadiness.loading}
+                          runningCheckId={
+                            deliveryReadiness.busy?.kind === 'run-check'
+                              ? deliveryReadiness.busy.checkId
+                              : null
+                          }
+                          requirementsBusy={deliveryReadiness.busy?.kind === 'prepare-requirements'}
+                          approvalBusy={deliveryReadiness.busy?.kind === 'approve-quality'}
+                          onRunCheck={runReadinessCheck}
+                          onSelectedCheckIdsChange={deliveryReadiness.setSelectedCheckIds}
+                          onPrepareRequirements={prepareReadinessRequirements}
+                          onApproveQuality={approveReadinessQuality}
+                        />
+                      )}
                       <GitShippingPanel
                         review={controller.review}
-                        busy={busy}
+                        busy={busy || deliveryReadiness.loading}
+                        deliveryReady={deliveryReady}
                         result={shippingResult}
                         onPrepare={prepareShipping}
                       />
@@ -529,6 +672,84 @@ export function GitReviewDialog({
       </section>
     </div>
   );
+}
+
+function deliveryReadinessBusyLabel(busy: GitDeliveryReadinessBusy | null): string | null {
+  if (busy === null) return null;
+  if (busy.kind === 'prepare-requirements') return 'Saving required delivery checks';
+  if (busy.kind === 'run-check') return 'Waiting for check confirmation and exact completion';
+  return 'Waiting for human quality approval confirmation';
+}
+
+function deliveryReadinessNoticeMessage(notice: GitDeliveryReadinessNotice): GitReviewNotice {
+  if (notice.kind === 'check-run-result') {
+    if (notice.state === 'passed') {
+      return gitReviewNotice(
+        'The exact delivery check passed. Readiness was refreshed.',
+        'success',
+      );
+    }
+    if (notice.state === 'failed') {
+      return gitReviewNotice(
+        'The delivery check finished unsuccessfully. Delivery remains blocked.',
+        'warning',
+      );
+    }
+    if (notice.state === 'cancelled') {
+      return gitReviewNotice(
+        'The delivery check was cancelled before passing evidence was recorded.',
+        'neutral',
+      );
+    }
+    if (notice.state === 'lost') {
+      return gitReviewNotice(
+        'Forgeboard lost the terminal delivery-check evidence. Delivery remains blocked; run the check again.',
+        'warning',
+      );
+    }
+    if (notice.state === 'stale') {
+      return gitReviewNotice(
+        'The delivery-check evidence is stale for the current binding. Run the check again.',
+        'warning',
+      );
+    }
+    if (notice.state === 'running') {
+      return gitReviewNotice(
+        'The delivery check is still running. Refresh to load its latest state.',
+        'neutral',
+      );
+    }
+    if (notice.state === 'queued') {
+      return gitReviewNotice(
+        'The delivery check is queued. Refresh to load its latest state.',
+        'neutral',
+      );
+    }
+    return gitReviewNotice(
+      'No current delivery-check evidence was recorded. Delivery remains blocked.',
+      'warning',
+    );
+  }
+  if (notice.kind === 'check-run-cancelled') {
+    return gitReviewNotice(
+      'Check run cancelled in the system confirmation. No check was started.',
+      'neutral',
+    );
+  }
+  if (notice.kind === 'quality-approved') {
+    return gitReviewNotice(
+      'Human quality approval was recorded for the exact current evidence.',
+      'success',
+    );
+  }
+  return gitReviewNotice(
+    'Quality approval cancelled in the system confirmation. No approval was recorded.',
+    'neutral',
+  );
+}
+
+function gitReviewNotice(message: string, tone: GitReviewNoticeTone): GitReviewNotice {
+  return { message, tone };
 }
 
 function GitReviewState({

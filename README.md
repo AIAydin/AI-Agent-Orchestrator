@@ -6,6 +6,8 @@ Git worktrees, streamed agent sessions, loopback web/mobile previews, and explic
 workflow approval gates, authoritative primary-checkout Git review, staging, and commits, plus
 UI-configured project checks with persisted output. Completed writable runs can also be reopened as
 authoritative, isolated agent-worktree reviews without entering a path or editing configuration.
+Their local delivery flow requires selected configured checks bound to exact evidence and explicit
+human quality approval bound to the exact committed source before primary can change.
 The permission centre exposes Plan/read-only, Worktree write, Docker isolated, and a reusable
 Custom profile with complete host/Docker controls and honest enforcement disclosures.
 The first-run agent step requires main-process readiness evidence for the selected bundled,
@@ -121,6 +123,14 @@ Remembered approvals are listed and immediately revocable in **Settings → Perm
 approvals**. Agent launches, selected/expanded context, Docker pulls, external sends, and destructive
 Git actions never reuse this check grant.
 
+Managed agent delivery has its own stricter gate in Git review. Choose the required configured
+checks, run each one, and record human quality approval entirely in the UI. The evidence binds the
+clean managed-worktree HEAD and tree, ownership, resolved check configuration, executable,
+working-directory and environment identities, and exact terminal results. Re-running a check or
+changing any bound source or command evidence invalidates approval. Forgeboard revalidates that
+evidence before the cancel-default native delivery confirmation and again before Git changes the
+primary checkout; AI or reviewer outcomes cannot replace the human decision.
+
 Existing folders can be opened without Git. Forgeboard then offers an **Initialize Git** action in
 the project rail. A cancel-default native confirmation names the exact folder before Forgeboard
 creates Git metadata; existing files are left untouched, unstaged, and uncommitted.
@@ -168,9 +178,10 @@ The release workflow is designed to emit clearly identified unsigned development
 the optional signing secrets documented in the release guide are configured. Such artifacts may
 trigger the operating system's standard warning.
 
-Still unfinished are agent comparison and merge/push flows, the interactive terminal node, updater,
-direct SQLite backup restore UI, and complete wiring of every persisted setting. See
-`IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
+Still unfinished are remote push/pull-request delivery, broader merge and visual conflict-resolution
+flows, the interactive terminal node, updater, direct SQLite backup restore UI, and complete wiring
+of every persisted setting. See `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed
+status.
 
 Optional collaboration is explicitly enabled and configured under **Settings → Connectivity**.
 After native network confirmation, the desktop joins the named self-hosted room with a short-lived

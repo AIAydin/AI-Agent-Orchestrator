@@ -38,6 +38,10 @@ import { ExtensionIpcService } from './extensions/extension-ipc.js';
 import { FileIpcService } from './file-domain/ipc.js';
 import { ProjectFileService } from './file-domain/service.js';
 import { GitIpcService } from './git/git-ipc.js';
+import { GitTargetResolver } from './git/git-target-resolver.js';
+import { GitDeliveryReadinessIpcService } from './git/readiness/ipc.js';
+import { DeliveryReadinessService } from './git/readiness/service.js';
+import { DeliveryReadinessShippingAuthority } from './git/readiness/shipping-authority.js';
 import { createNativeGitDelegateAuthorizer } from './git/delegates/native-confirmation.js';
 import { createBundledGitRepositoryService } from './git/git-runtime.js';
 import { IntegrityService } from './integrity/service.js';
@@ -59,6 +63,8 @@ import { FolderReadinessService } from './settings/folder-readiness/service.js';
 import type { LocalStore } from './storage.js';
 import { createWorkflowRuntimeComposition } from './workflow/host/composition.js';
 import { WorkflowIpcService } from './workflow/host/ipc.js';
+import { ExactCheckExecutor } from './workflow/exact-check/executor.js';
+import { ExactCheckResolver } from './workflow/exact-check/resolution.js';
 import { assertLiveMainFrame } from './security/ipc-authority.js';
 
 const PathSchema = z.string().min(1).max(32_768);
@@ -171,6 +177,7 @@ export interface ApplicationServices {
   extensions: ExtensionIpcService;
   files: FileIpcService;
   git: GitIpcService;
+  deliveryReadiness: GitDeliveryReadinessIpcService;
   checks: CheckIpcService;
   collaboration: CollaborationIpcService;
   workflows: WorkflowIpcService;
@@ -294,6 +301,26 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     withGitDelegateAuthorization: async (authorize, operation) =>
       await repositories.git.withDelegateAuthorization(authorize, operation),
   });
+  const deliveryTargets = new GitTargetResolver(store, repositories, () =>
+    store.getSettings(createDefaultSettings()),
+  );
+  const deliveryExactResolver = new ExactCheckResolver(store, deliveryTargets, () =>
+    store.getSettings(createDefaultSettings()),
+  );
+  const deliveryExactExecutor = new ExactCheckExecutor(store, deliveryTargets, () =>
+    store.getSettings(createDefaultSettings()),
+  );
+  const deliveryAuthority = new DeliveryReadinessService(
+    store,
+    deliveryTargets,
+    repositories,
+    () => store.getSettings(createDefaultSettings()),
+    deliveryExactResolver,
+    deliveryExactExecutor,
+    { audit: store, ownsExactExecutor: true },
+  );
+  const deliveryReadiness = new GitDeliveryReadinessIpcService(dialog, deliveryAuthority, store);
+  const shippingReadiness = new DeliveryReadinessShippingAuthority(deliveryAuthority);
   const git = new GitIpcService(
     dialog,
     store,
@@ -306,7 +333,9 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         runs,
         previews,
         checks,
+        deliveryReadiness,
       ]),
+      shippingReadiness,
     },
   );
   const resumeDataServices = (): void => {
@@ -315,6 +344,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     projectClones.resume();
     docker.resumeAfterShutdownPause();
     git.resumeAfterPrivacyReset();
+    deliveryReadiness.resumeAfterPrivacyReset();
     extensions.resumeAfterPrivacyReset();
     previews.resumeAfterPrivacyReset();
     runs.resumeAfterPrivacyReset();
@@ -340,6 +370,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       docker.pauseForShutdown(),
       extensions.pauseForShutdown(),
       git.pauseForShutdown(),
+      deliveryReadiness.pauseForShutdown(),
       collaboration.pauseForShutdown(),
     ];
     if (includeRecovery) operations.push(recovery.pauseForExternalDataMutation());
@@ -359,6 +390,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           checks.resetForPrivacy(),
           extensions.pauseForDataMutation(),
           git.resetForPrivacy(),
+          deliveryReadiness.resetForPrivacy(),
           collaboration.resetForPrivacy(),
         ]);
       } else {
@@ -366,6 +398,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         runs.pauseForDataMutation();
         previews.pauseForDataMutation();
         checks.pauseForDataMutation();
+        deliveryReadiness.pauseForDataMutation();
         await awaitDataServices([
           extensions.pauseForDataMutation(),
           git.resetForPrivacy(),
@@ -709,6 +742,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
               previews.resetForPrivacy(),
               extensions.resetForPrivacy(),
               git.resetForPrivacy(),
+              deliveryReadiness.resetForPrivacy(),
               checks.resetForPrivacy(),
               docker.pauseForShutdown(),
               recovery.pauseForExternalDataMutation(),
@@ -741,6 +775,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   files.registerIpcHandlers();
   docker.registerIpcHandlers();
   git.registerIpcHandlers();
+  deliveryReadiness.registerIpcHandlers();
   checks.registerIpcHandlers();
   collaboration.registerIpcHandlers();
   workflows.registerIpcHandlers();
@@ -756,6 +791,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     extensions,
     files,
     git,
+    deliveryReadiness,
     checks,
     collaboration,
     workflows,
@@ -804,6 +840,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         runs.dispose(),
         extensions.dispose(),
         git.dispose(),
+        deliveryReadiness.dispose(),
         collaboration.dispose(),
       ]);
       for (const result of [...workflowStopped, ...stopped]) {
