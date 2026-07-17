@@ -386,6 +386,14 @@ export const MIGRATIONS = [
       ON collaboration_rejected_comment_dismissals(expires_at, sequence);
   `,
   DELIVERY_READINESS_STORAGE_SQL,
+  `
+    CREATE TABLE IF NOT EXISTS github_cli_executable_binding (
+      singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+      value_json TEXT NOT NULL CHECK(
+        length(CAST(value_json AS BLOB)) BETWEEN 2 AND 131072
+      )
+    );
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {
@@ -439,6 +447,7 @@ export function migrate(database: DatabaseSync): void {
 }
 
 export function clearAllTables(database: DatabaseSync): void {
+  database.prepare('DELETE FROM github_cli_executable_binding').run();
   database.prepare('DELETE FROM settings_repair_history').run();
   database.prepare('DELETE FROM backup_health').run();
   database.prepare('DELETE FROM delivery_readiness_approvals').run();
@@ -464,9 +473,9 @@ export function clearAllTables(database: DatabaseSync): void {
 /**
  * Clears only data represented by a portable Forgeboard export.
  *
- * Backup ownership records and the trusted-extension ledger are intentionally device-local
- * security state. A portable replace import must not orphan verified backup files or silently
- * revoke extensions that the user approved on this installation.
+ * Backup ownership records, the trusted-extension ledger, and the selected GitHub CLI binding are
+ * intentionally device-local security state. A portable replace import must not orphan verified
+ * backup files, silently revoke extensions, or import another device's executable identity.
  */
 export function clearPortableTables(database: DatabaseSync): void {
   // Workflow recovery records are not part of portable export version 3. Clear them before the

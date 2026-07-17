@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
+import { GitRemoteConfigurationService } from '@forgeboard/git-engine';
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
 
@@ -38,6 +39,9 @@ import { ExtensionIpcService } from './extensions/extension-ipc.js';
 import { FileIpcService } from './file-domain/ipc.js';
 import { ProjectFileService } from './file-domain/service.js';
 import { GitIpcService } from './git/git-ipc.js';
+import { GitConnectionsIpcService, GitConnectionsService } from './git/connections/index.js';
+import { GitConnectionsMutationCoordinator } from './git/connections/mutation-coordinator.js';
+import { GitHubCliRuntimeService } from './git/github-cli/runtime.js';
 import { GitTargetResolver } from './git/git-target-resolver.js';
 import { GitDeliveryReadinessIpcService } from './git/readiness/ipc.js';
 import { DeliveryReadinessService } from './git/readiness/service.js';
@@ -50,6 +54,7 @@ import { DataOperationGate } from './lifecycle/data-operation-gate.js';
 import { createProcessQuiescenceAdmission } from './lifecycle/process-quiescence.js';
 import { performPrivacyDeletion } from './lifecycle/privacy-deletion.js';
 import { OutboundActionGate } from './outbound/outbound-action-gate.js';
+import { createGitHubCliCommandRunner } from './outbound/git/executors.js';
 import { PreviewIpcService } from './previews/preview-ipc.js';
 import { ProjectCloneIpcService } from './projects/project-clone-ipc.js';
 import { AgentReadinessIpcService } from './readiness/ipc.js';
@@ -180,6 +185,7 @@ export interface ApplicationServices {
   git: GitIpcService;
   deliveryReadiness: GitDeliveryReadinessIpcService;
   gitRemote: GitRemoteDeliveryIpcService;
+  gitConnections: GitConnectionsIpcService;
   checks: CheckIpcService;
   collaboration: CollaborationIpcService;
   workflows: WorkflowIpcService;
@@ -224,7 +230,9 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const projectFiles = new ProjectFileService(store);
   const files = new FileIpcService(projectFiles, shell, runDataOperation);
   const outbound = new OutboundActionGate(store);
-  const collaboration = new CollaborationIpcService(dialog, outbound, { store });
+  const collaboration = new CollaborationIpcService(dialog, outbound, {
+    store,
+  });
   const projectClones = new ProjectCloneIpcService(dialog, projects, outbound, runDataOperation);
   const transcripts = join(app.getPath('userData'), 'transcripts');
   const testAgentPath = app.isPackaged
@@ -323,6 +331,18 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   );
   const deliveryReadiness = new GitDeliveryReadinessIpcService(dialog, deliveryAuthority, store);
   const shippingReadiness = new DeliveryReadinessShippingAuthority(deliveryAuthority);
+  const githubCli = new GitHubCliRuntimeService(store, {
+    createRunner: (executable, beforeSpawn) =>
+      createGitHubCliCommandRunner(executable, {
+        ...(beforeSpawn === undefined ? {} : { beforeSpawn }),
+      }),
+    createValidationRunner: (executable, beforeSpawn) =>
+      createGitHubCliCommandRunner(executable, {
+        environment: gitHubCliValidationEnvironment(),
+        ...(beforeSpawn === undefined ? {} : { beforeSpawn }),
+        inheritEnvironment: false,
+      }),
+  });
   const gitRemote = new GitRemoteDeliveryIpcService(
     dialog,
     new GitRemoteDeliveryService(
@@ -332,9 +352,26 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       shippingReadiness,
       outbound,
       store,
-      { defaultRemote: () => store.getSettings(createDefaultSettings()).gitRemote },
+      {
+        defaultRemote: () => store.getSettings(createDefaultSettings()).gitRemote,
+        githubCliRuntime: githubCli,
+      },
     ),
     store,
+  );
+  const gitConnectionsMutations = new GitConnectionsMutationCoordinator(gitRemote);
+  const gitConnections = new GitConnectionsIpcService(
+    dialog,
+    new GitConnectionsService(store, new GitRemoteConfigurationService(repositories), {
+      withMutationAdmission: async (operation) =>
+        await gitConnectionsMutations.withRemoteConfigurationMutation(operation),
+    }),
+    githubCli,
+    store,
+    runDataOperation,
+    () => gitRemote.invalidateGitHubRuntime(),
+    undefined,
+    async (operation) => await gitConnectionsMutations.withGitHubCliMutation(operation),
   );
   const git = new GitIpcService(
     dialog,
@@ -350,6 +387,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         checks,
         deliveryReadiness,
         gitRemote,
+        gitConnections,
       ]),
       shippingReadiness,
     },
@@ -362,6 +400,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     git.resumeAfterPrivacyReset();
     deliveryReadiness.resumeAfterPrivacyReset();
     gitRemote.resumeAfterPrivacyReset();
+    gitConnections.resumeAfterPrivacyReset();
     extensions.resumeAfterPrivacyReset();
     previews.resumeAfterPrivacyReset();
     runs.resumeAfterPrivacyReset();
@@ -378,6 +417,9 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const pauseForShutdown = async (includeRecovery = true): Promise<void> => {
     if (shutdownServicesPaused) return;
     await workflows.pauseForShutdown();
+    // Git connection changes can temporarily pause remote delivery; drain them before pausing the
+    // delivery service itself so a finishing local mutation cannot reopen shutdown admissions.
+    await gitConnections.pauseForShutdown();
     const operations = [
       runs.pauseForShutdown(),
       previews.pauseForShutdown(),
@@ -410,6 +452,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           git.resetForPrivacy(),
           deliveryReadiness.resetForPrivacy(),
           gitRemote.resetForPrivacy(),
+          gitConnections.resetForPrivacy(),
           collaboration.resetForPrivacy(),
         ]);
       } else {
@@ -422,6 +465,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           extensions.pauseForDataMutation(),
           git.resetForPrivacy(),
           gitRemote.resetForPrivacy(),
+          gitConnections.pauseForDataMutation(),
           collaboration.pauseForDataMutation(),
         ]);
       }
@@ -764,6 +808,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
               git.resetForPrivacy(),
               deliveryReadiness.resetForPrivacy(),
               gitRemote.resetForPrivacy(),
+              gitConnections.resetForPrivacy(),
               checks.resetForPrivacy(),
               docker.pauseForShutdown(),
               recovery.pauseForExternalDataMutation(),
@@ -798,6 +843,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   git.registerIpcHandlers();
   deliveryReadiness.registerIpcHandlers();
   gitRemote.registerIpcHandlers();
+  gitConnections.registerIpcHandlers();
   checks.registerIpcHandlers();
   collaboration.registerIpcHandlers();
   workflows.registerIpcHandlers();
@@ -815,6 +861,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     git,
     deliveryReadiness,
     gitRemote,
+    gitConnections,
     checks,
     collaboration,
     workflows,
@@ -865,6 +912,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         git.dispose(),
         deliveryReadiness.dispose(),
         gitRemote.dispose(),
+        gitConnections.dispose(),
         collaboration.dispose(),
       ]);
       for (const result of [...workflowStopped, ...stopped]) {
@@ -962,4 +1010,26 @@ function requireIpcWindowAuthority(
     }
   };
   return { parent, assertCurrent };
+}
+
+/** Environment needed to resolve and start a local executable, intentionally excluding auth data. */
+function gitHubCliValidationEnvironment(): Readonly<Record<string, string | undefined>> {
+  const environment: Record<string, string> = {};
+  const allowedNames = [
+    'PATH',
+    'PATHEXT',
+    'SystemRoot',
+    'WINDIR',
+    'LANG',
+    'LC_ALL',
+    'LC_CTYPE',
+    'TMPDIR',
+    'TEMP',
+    'TMP',
+  ] as const;
+  for (const name of allowedNames) {
+    const value = process.env[name];
+    if (value !== undefined) environment[name] = value;
+  }
+  return environment;
 }

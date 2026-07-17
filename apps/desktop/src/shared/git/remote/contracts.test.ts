@@ -53,8 +53,10 @@ describe('remote delivery contracts', () => {
       acknowledged: true,
     });
     expect(
-      GitRemotePlanCancelInputSchema.safeParse({ planId: PLAN_ID, ownerId: 'renderer-owner' })
-        .success,
+      GitRemotePlanCancelInputSchema.safeParse({
+        planId: PLAN_ID,
+        ownerId: 'renderer-owner',
+      }).success,
     ).toBe(false);
     expect(
       GitRemotePlanCancelInputSchema.safeParse({
@@ -63,7 +65,10 @@ describe('remote delivery contracts', () => {
       }).success,
     ).toBe(false);
     expect(
-      GitRemotePlanCancelResultSchema.safeParse({ acknowledged: true, cancelled: true }).success,
+      GitRemotePlanCancelResultSchema.safeParse({
+        acknowledged: true,
+        cancelled: true,
+      }).success,
     ).toBe(false);
   });
 
@@ -251,6 +256,24 @@ describe('remote delivery contracts', () => {
         headMatchesSource: false,
         checkedAt: NOW,
       }).authenticated,
+    ).toBe(false);
+    expect(
+      GitHubStatusResultViewSchema.safeParse({
+        installed: true,
+        version: null,
+        hostname: 'github.com',
+        authenticated: false,
+        ownerRepository: null,
+        repositoryUrl: null,
+        defaultBranch: null,
+        baseBranch: 'main',
+        headBranch: 'feature/remote-delivery',
+        sourceHead: SOURCE_HEAD,
+        baseOid: null,
+        headOid: null,
+        headMatchesSource: false,
+        checkedAt: NOW,
+      }).success,
     ).toBe(false);
 
     const pullRequestPlan = {

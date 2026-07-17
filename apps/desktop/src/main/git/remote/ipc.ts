@@ -31,6 +31,7 @@ import {
   GitRemotePushResultViewSchema,
 } from '../../../shared/git/remote/index.js';
 import { createNativeOutboundConfirmation } from '../../outbound/native-confirmation.js';
+import { assertLiveMainFrame } from '../../security/ipc-authority.js';
 import type { GitRemoteDeliveryService } from './service.js';
 
 export type GitRemoteDeliveryOperations = Pick<
@@ -45,6 +46,7 @@ export type GitRemoteDeliveryOperations = Pick<
   | 'confirmPullRequest'
   | 'prepareCi'
   | 'confirmCi'
+  | 'invalidateGitHubRuntime'
   | 'discardOwner'
   | 'resetForPrivacy'
   | 'pauseForShutdown'
@@ -170,6 +172,22 @@ export class GitRemoteDeliveryIpcService {
     await this.delivery.resetForPrivacy();
     await this.#drain();
     this.#clearOwners();
+  }
+
+  /** Invalidates only CLI-bound plans/cache; active and pending Git pushes remain independent. */
+  public invalidateGitHubRuntime(): void {
+    this.#assertNotDisposed();
+    this.delivery.invalidateGitHubRuntime();
+  }
+
+  /** Pauses new delivery requests while preserving pending push plans during a CLI-only change. */
+  public pauseForGitHubRuntimeMutation(): void {
+    this.#assertNotDisposed();
+    this.#paused = true;
+    if (this.#operations.size > 0) {
+      this.#paused = false;
+      throw new Error('Wait for every Git remote-delivery operation before changing GitHub CLI.');
+    }
   }
 
   public async pauseForDataMutation(): Promise<void> {
@@ -323,9 +341,7 @@ export class GitRemoteDeliveryIpcService {
   }
 
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {
-    if (event.sender.isDestroyed() || event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Remote delivery is allowed only from a live main Forgeboard frame.');
-    }
+    assertLiveMainFrame(event, 'Git remote-delivery request');
   }
 
   #assertNotDisposed(): void {

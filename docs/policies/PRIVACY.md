@@ -50,6 +50,15 @@ and retains an action-specific cancel-default native confirmation. Forgeboard st
 token, never polls CI, sends a pull-request body only through `gh` standard input, and keeps only
 bounded redacted audit metadata and digests rather than that body. Git and `gh` may use credentials
 already managed by the operating system, SSH agent, process environment, or `gh` authentication.
+Users can choose automatic discovery or a custom GitHub CLI executable in Settings. A custom
+selection stores its canonical path, file identity, SHA-256, validated version, and timestamp in the
+device-local database; the renderer receives only path-free identity/status. The local `--version`
+validation receives a minimal environment that excludes ambient authentication values. After
+startup or privacy reset, a passively detected automatic executable remains unverified and cannot
+run auth or API commands until an explicitly confirmed status action validates that exact identity
+the same way. Actual separately confirmed GitHub actions may then use the selected CLI's existing
+authentication. The binding is excluded from portable JSON, survives merge/replace import as
+machine-specific configuration, and is removed by complete local-data deletion.
 
 Optional collaboration sends only collaboration-safe canvas metadata to the configured self-hosted
 server. It never sends repository files, file contents, diffs, prompts, terminal output, environment
@@ -77,9 +86,10 @@ in the UI.
 
 Portable JSON export/import covers Forgeboard settings, projects, canvases, agent runs, check
 executions, snapshots, and audit history. It never embeds repository files or extension source
-folders. Saved approvals, delivery-readiness records, and settings-repair evidence are device-local
-and are not included in this ordinary export. Repair evidence can be reviewed and explicitly
-exported only from **Settings → Data & privacy**; complete local-data deletion clears it, while
+folders. Saved approvals, delivery-readiness records, the selected GitHub CLI binding, and
+settings-repair evidence are device-local and are not included in this ordinary export. Repair
+evidence can be reviewed and explicitly exported only from **Settings → Data & privacy**;
+complete local-data deletion clears it, while
 portable merge/replace leaves the local repair-evidence ledger intact. SQLite and IPC enforce the 16
 MiB UTF-8 boundary before loading or exporting either full JSON value; an over-limit legacy setting
 fails with recovery guidance and no partial evidence row. A replace import clears saved approvals

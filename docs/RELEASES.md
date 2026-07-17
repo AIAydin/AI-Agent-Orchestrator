@@ -1,21 +1,24 @@
 # Releases and signing
 
-End users download Forgeboard from GitHub Releases; they do not need Node.js, pnpm, a source
-checkout, or config-file edits. Each tagged release builds native installers on GitHub-hosted macOS,
-Windows, and Linux runners, executes the verification and packaged-app smoke suites, and publishes
-platform-and-architecture-specific SHA-256 checksums. Releases also attach the immutable
-corresponding source archives for the bundled Git toolchain; see
+Forgeboard is intended to be downloaded by end users from GitHub Releases without Node.js, pnpm, a
+source checkout, or config-file edits. The repository is currently private and has no tags or
+published end-user release. For a matching release tag, the workflow is configured to build native
+installers on GitHub-hosted macOS, Windows, and Linux runners, execute the verification and
+packaged-app smoke suites, and publish platform-and-architecture-specific SHA-256 checksums only
+after every required job succeeds. The current repository-account billing state prevents hosted jobs
+from starting, so pushing a tag now would not produce a release. Published releases also attach the
+immutable corresponding source archives for the bundled Git toolchain; see
 [`THIRD_PARTY_NOTICES.md`](legal/THIRD_PARTY_NOTICES.md).
 
 ## Installing Forgeboard
 
 Follow the concise [platform install guide](install/README.md) for exact architecture-specific
-filenames, checksum commands, and first-launch instructions. Each build attaches a machine-readable
-`RELEASE-INFO` file that binds its source commit, installer names, and actual signing/notarization
-credential state. The bundled deterministic demo requires no provider account, API key, development
-tools, or configuration file.
+filenames, checksum commands, and first-launch instructions. Each published build will attach a
+machine-readable `RELEASE-INFO` file that binds its source commit, installer names, and declared
+signing/notarization credential state. The bundled deterministic demo requires no provider account,
+API key, development tools, or configuration file.
 
-Unsigned development releases trigger normal operating-system provenance warnings. Signed and
+Unsigned development artifacts can trigger normal operating-system provenance warnings. Signed and
 notarized releases remove or reduce those warnings; release notes must always state which kind was
 produced.
 

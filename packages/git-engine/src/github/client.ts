@@ -74,9 +74,23 @@ const GH_NONDETERMINISTIC_ENVIRONMENT = [
   'GIT_EDITOR',
   'VISUAL',
 ] as const;
+const GH_FORCED_ENVIRONMENT = {
+  GH_PROMPT_DISABLED: '1',
+  GH_PAGER: 'cat',
+  GH_TELEMETRY: 'false',
+  GH_NO_UPDATE_NOTIFIER: '1',
+  GH_NO_EXTENSION_UPDATE_NOTIFIER: '1',
+  DO_NOT_TRACK: '1',
+  NO_COLOR: '1',
+  GIT_TERMINAL_PROMPT: '0',
+  GIT_NO_LAZY_FETCH: '1',
+} as const;
+
+export type GitHubExecutableResolutionState = 'resolved' | 'missing' | 'unverifiable';
 
 interface ExecutableResolution {
   readonly executable: string;
+  readonly state: GitHubExecutableResolutionState;
   readonly error?: Error;
 }
 
@@ -97,34 +111,39 @@ export interface GitHubCommandResult {
 
 export interface GitHubCommandRunner {
   readonly executable: string;
+  /** Optional passive discovery evidence. Non-absolute automatic runners fail closed without it. */
+  readonly executableResolution?: GitHubExecutableResolutionState;
   run(args: readonly string[], options?: GitHubCommandOptions): Promise<GitHubCommandResult>;
+}
+
+export interface GitHubCliExecutorOptions {
+  /** Defaults to true for ordinary outbound GitHub actions. */
+  readonly inheritEnvironment?: boolean;
 }
 
 /** Executes the optional GitHub CLI directly with prompting disabled and no shell. */
 export class GitHubCliExecutor implements GitHubCommandRunner {
   public readonly executable: string;
+  public readonly executableResolution: GitHubExecutableResolutionState;
   readonly #environment: NodeJS.ProcessEnv;
   readonly #resolutionError: Error | undefined;
+  readonly #beforeSpawn: (executable: string) => void | Promise<void>;
 
   public constructor(
     executable = 'gh',
     environment: Readonly<Record<string, string | undefined>> = {},
+    beforeSpawn: (executable: string) => void | Promise<void> = () => undefined,
+    options: GitHubCliExecutorOptions = {},
   ) {
-    this.#environment = { ...process.env, ...environment };
-    for (const name of GH_DANGEROUS_GIT_ENVIRONMENT) delete this.#environment[name];
-    for (const name of GH_NONDETERMINISTIC_ENVIRONMENT) delete this.#environment[name];
+    this.#environment = buildGitHubCliEnvironment(
+      options.inheritEnvironment === false ? {} : process.env,
+      environment,
+    );
     const resolution = resolveExecutable(executable, this.#environment);
     this.executable = resolution.executable;
+    this.executableResolution = resolution.state;
     this.#resolutionError = resolution.error;
-    this.#environment.GH_PROMPT_DISABLED = '1';
-    this.#environment.GH_PAGER = 'cat';
-    this.#environment.GH_TELEMETRY = 'false';
-    this.#environment.GH_NO_UPDATE_NOTIFIER = '1';
-    this.#environment.GH_NO_EXTENSION_UPDATE_NOTIFIER = '1';
-    this.#environment.DO_NOT_TRACK = '1';
-    this.#environment.NO_COLOR = '1';
-    this.#environment.GIT_TERMINAL_PROMPT = '0';
-    this.#environment.GIT_NO_LAZY_FETCH = '1';
+    this.#beforeSpawn = beforeSpawn;
   }
 
   public async run(
@@ -144,9 +163,13 @@ export class GitHubCliExecutor implements GitHubCommandRunner {
       throw new GitEngineError(
         'COMMAND_FAILED',
         `Unable to resolve ${this.executable} to a trusted executable path.`,
-        { executableMissing: true },
+        { executableMissing: this.executableResolution === 'missing' },
         { cause: this.#resolutionError },
       );
+    }
+    await this.#beforeSpawn(this.executable);
+    if (signalIsAborted(options.signal)) {
+      throw new GitEngineError('ABORTED', 'GitHub CLI command was aborted before launch.');
     }
     return await new Promise<GitHubCommandResult>((resolve, reject) => {
       if (signalIsAborted(options.signal)) {
@@ -225,7 +248,9 @@ export class GitHubCliExecutor implements GitHubCommandRunner {
           new GitEngineError(
             'COMMAND_FAILED',
             `Unable to start ${this.executable}.`,
-            { executableMissing: (error as NodeJS.ErrnoException).code === 'ENOENT' },
+            {
+              executableMissing: (error as NodeJS.ErrnoException).code === 'ENOENT',
+            },
             { cause: error },
           ),
         );
@@ -319,25 +344,88 @@ function changedFiles(disclosure: GitHubChangeDisclosure): readonly GitHubChange
 }
 
 function parseVersion(output: string): string | null {
-  return /^gh version ([^\s]+)/mu.exec(output)?.[1] ?? null;
+  const version = /^gh version ([A-Za-z0-9][A-Za-z0-9.+_-]*)(?:\s|$)/mu.exec(output)?.[1];
+  return version !== undefined && version.length <= 128 ? version : null;
+}
+
+/**
+ * Builds the exact child environment. Windows names are normalized case-insensitively before
+ * blocked keys are removed; POSIX keeps its ordinary case-sensitive environment semantics.
+ */
+export function buildGitHubCliEnvironment(
+  inherited: Readonly<Record<string, string | undefined>>,
+  overrides: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv {
+  const environment = Object.create(null) as NodeJS.ProcessEnv;
+  for (const source of [inherited, overrides]) {
+    for (const [name, value] of Object.entries(source)) {
+      if (platform === 'win32') deleteEnvironmentName(environment, name, platform);
+      environment[name] = value;
+    }
+  }
+
+  const blocked = new Set<string>([
+    ...GH_DANGEROUS_GIT_ENVIRONMENT,
+    ...GH_NONDETERMINISTIC_ENVIRONMENT,
+    ...Object.keys(GH_FORCED_ENVIRONMENT),
+  ]);
+  for (const name of Object.keys(environment)) {
+    if (blocked.has(normalizeEnvironmentName(name, platform))) delete environment[name];
+  }
+  Object.assign(environment, GH_FORCED_ENVIRONMENT);
+  return environment;
+}
+
+function deleteEnvironmentName(
+  environment: NodeJS.ProcessEnv,
+  name: string,
+  platform: NodeJS.Platform,
+): void {
+  const normalized = normalizeEnvironmentName(name, platform);
+  for (const existing of Object.keys(environment)) {
+    if (normalizeEnvironmentName(existing, platform) === normalized) delete environment[existing];
+  }
+}
+
+function normalizeEnvironmentName(name: string, platform: NodeJS.Platform): string {
+  return platform === 'win32' ? name.toUpperCase() : name;
+}
+
+function environmentValue(
+  environment: Readonly<NodeJS.ProcessEnv>,
+  name: string,
+  platform: NodeJS.Platform,
+): string | undefined {
+  if (platform !== 'win32') return environment[name];
+  const normalized = normalizeEnvironmentName(name, platform);
+  const matchingName = Object.keys(environment).find(
+    (candidate) => normalizeEnvironmentName(candidate, platform) === normalized,
+  );
+  return matchingName === undefined ? undefined : environment[matchingName];
 }
 
 function resolveExecutable(
   executable: string,
   environment: Readonly<NodeJS.ProcessEnv>,
 ): ExecutableResolution {
+  let unverifiableError: Error | undefined;
   for (const candidate of executableCandidates(executable, environment)) {
     try {
       accessSync(candidate, fsConstants.X_OK);
       const resolved = realpathSync(candidate);
-      if (path.isAbsolute(resolved)) return { executable: resolved };
-    } catch {
-      // Continue through the PATH snapshot captured for this executor.
+      if (path.isAbsolute(resolved)) return { executable: resolved, state: 'resolved' };
+    } catch (error) {
+      if (!isDefinitiveAbsenceError(error)) unverifiableError ??= asError(error);
     }
   }
+  const state = unverifiableError === undefined ? 'missing' : 'unverifiable';
   return {
     executable,
-    error: new Error(`Executable ${executable} was not found on the captured PATH.`),
+    state,
+    error:
+      unverifiableError ??
+      new Error(`Executable ${executable} was not found on the captured PATH.`),
   };
 }
 
@@ -350,14 +438,25 @@ function executableCandidates(
   }
   const extensions =
     process.platform === 'win32'
-      ? (environment.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
+      ? (environmentValue(environment, 'PATHEXT', process.platform) ?? '.EXE;.CMD;.BAT;.COM')
+          .split(';')
+          .filter(Boolean)
       : [''];
-  return (environment.PATH ?? '')
+  return (environmentValue(environment, 'PATH', process.platform) ?? '')
     .split(path.delimiter)
     .filter((entry) => entry.length > 0)
     .flatMap((entry) =>
       extensions.map((extension) => path.join(entry, `${executable}${extension}`)),
     );
+}
+
+function isDefinitiveAbsenceError(error: unknown): boolean {
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+  return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error('Executable resolution could not be verified.');
 }
 
 function isMissingExecutableError(error: unknown): boolean {
@@ -380,10 +479,20 @@ export class GitHubService {
         timeoutMs: 10_000,
         ...(signal === undefined ? {} : { signal }),
       });
+      const version = result.exitCode === 0 ? parseVersion(result.stdout) : null;
+      if (version === null) {
+        throw new GitEngineError(
+          'COMMAND_FAILED',
+          result.exitCode === 0
+            ? 'GitHub CLI returned an invalid version response.'
+            : 'GitHub CLI version validation failed.',
+          { args: result.args, exitCode: result.exitCode },
+        );
+      }
       return {
         installed: true,
         executable: this.runner.executable,
-        version: result.exitCode === 0 ? parseVersion(result.stdout) : null,
+        version,
       };
     } catch (error) {
       if (!isMissingExecutableError(error)) throw error;
@@ -1000,7 +1109,10 @@ function parseIncludedApiResponse(output: string): {
   if (status === null) {
     throw new GitEngineError('COMMAND_FAILED', 'GitHub CLI returned a malformed branch status.');
   }
-  return { statusCode: Number(status[1]), body: normalized.slice(separator + 2) };
+  return {
+    statusCode: Number(status[1]),
+    body: normalized.slice(separator + 2),
+  };
 }
 
 function signalIsAborted(signal: AbortSignal | undefined): boolean {

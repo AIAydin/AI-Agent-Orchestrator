@@ -290,10 +290,13 @@ export function SettingsPanel(props: SettingsPanelProps) {
             )}
             {tab === 'git' && (
               <GitPreviewSettings
+                projects={props.projects}
+                activeProject={props.activeProject}
                 draft={draft}
                 setDraft={setDraft}
                 busy={busy}
                 perform={perform}
+                onError={props.onError}
                 developmentReadiness={commandReadiness.statuses['development']}
                 managedWorktreeReadiness={folderReadiness.statuses['managed-worktrees']}
               />

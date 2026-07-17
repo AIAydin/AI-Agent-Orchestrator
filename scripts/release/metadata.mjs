@@ -116,7 +116,7 @@ function validateReleaseNotes(releaseNotes, version) {
 function validateDesktopPackageMetadata(desktopPackage) {
   assert(
     desktopPackage.homepage === 'https://github.com/AIAydin/AI-Agent-Orchestrator',
-    'Desktop package homepage must identify the public Forgeboard repository.',
+    'Desktop package homepage must identify the Forgeboard repository URL.',
   );
   assertRecord(desktopPackage.author, 'Desktop package author');
   assertString(desktopPackage.author.name, 'Desktop package author name');

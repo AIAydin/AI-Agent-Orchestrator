@@ -1,33 +1,53 @@
 # Remote Git and GitHub delivery
 
-Forgeboard can push a completed managed agent run and, when the optional GitHub CLI is available,
-inspect GitHub, create a pull request from a revalidated pushed-commit snapshot, and read CI for the
-exact selected commit. Once the existing
-remote and optional GitHub CLI prerequisites below are available, delivery choices and actions are
-configured in the desktop UI. They do not require source edits, environment files, JSON, or
-hand-written manifests.
+Forgeboard can configure a project's ordinary Git remotes, push a completed managed agent run and,
+when the optional GitHub CLI is available, inspect GitHub, create a pull request from a revalidated
+pushed-commit snapshot, and read CI for the exact selected commit. Remote and GitHub CLI setup,
+delivery choices, and actions are available in the desktop UI. They do not require source edits,
+environment files, JSON, or hand-written manifests.
 
 ## What you need
 
-- A project with an existing credential-free local filesystem, HTTPS, or SSH Git remote. Projects
-  cloned in Forgeboard normally have an `origin` remote. Local filesystem remotes can be used for
-  push testing and local delivery.
+- A Git project. Projects cloned in Forgeboard normally have an `origin` remote. Otherwise use
+  **Settings → Git & previews → Git connections** to add a credential-free HTTPS/SSH target or choose
+  a local bare/worktree Git repository. Local filesystem remotes can be used for push testing and
+  local delivery.
 - A completed writable Agent run with committed changes in its Forgeboard-managed worktree.
 - One or more project checks configured under **Settings → Commands & checks**.
-- For GitHub repository, pull-request, and CI actions only: the optional `gh` executable installed
-  on `PATH` and authenticated for the selected GitHub or GitHub Enterprise host. Forgeboard reports
-  missing or unauthenticated CLI state in the node and never asks for or stores a GitHub token.
-  The `gh` installation found on the desktop process `PATH` is a trusted local executable.
-  Forgeboard resolves and pins its absolute real path for the session, disables CLI telemetry and
-  update checks for its child process, and rejects configured HTTP Unix-socket routing before API
-  actions.
+- For GitHub repository, pull-request, and CI actions only: an optional `gh` executable authenticated
+  for the selected GitHub or GitHub Enterprise host. Settings can use automatic desktop `PATH`
+  discovery or a native picker for a custom executable. Forgeboard reports missing, unverified,
+  identity-changed, or unauthenticated state and never asks for or stores a GitHub token. It resolves,
+  hashes, version-validates, and pins the selected executable; disables CLI telemetry, prompts, and
+  update checks; and rejects configured HTTP Unix-socket routing before API actions. Automatic
+  discovery is passive after startup or a privacy reset. The first explicitly confirmed **Check
+  GitHub** action first runs only the disclosed path and SHA-256 with literal `--version` in a
+  credential-free environment. Authentication and API commands stay blocked unless that exact probe
+  succeeds and returns a valid GitHub CLI version; after it succeeds, the same confirmed status action
+  may continue with its disclosed authentication and repository checks. Reviewing **Use automatic
+  GitHub CLI** in Settings performs the same validation before applying the selection.
 
 Choose the default remote name under **Settings → Git & previews → Remote automation**. A Git / PR
-node can override that name for its own saved configuration. Forgeboard resolves the name from the
-selected repository. Main captures the one exact effective push URL while the renderer remains free
-of filesystem paths and exact Git remote/push URLs. Validated PR and CI result URLs cross the typed
-boundary only so the UI can display or copy them. Adding or editing remote URLs is not yet a UI
-feature.
+node can override that name for its own saved configuration. The **Git connections** section can:
+
+- inspect path-free fetch/push descriptors for any saved Git project;
+- add a credential-free HTTPS/SSH target entered in the form or a local Git target selected natively;
+- replace the one URL of a simple repository-local managed remote;
+- remove an exactly reviewed repository-local remote section and its complete disclosed
+  remote-tracking refs; and
+- choose, validate, refresh, or return to automatic GitHub CLI discovery.
+
+Each change has a renderer review followed by a separate cancel-default native confirmation and
+applies immediately rather than waiting for **Save settings**. Main rechecks the repository, config
+revision, local destination or executable identity, and window authority before mutation. Remote
+configuration changes are local-only: they do not fetch, push, authenticate, run `ls-remote`, or test
+reachability. Included, inherited, worktree-specific, ambiguous, or otherwise advanced remotes remain
+visible but read-only unless their exact repository-local state can be changed safely.
+
+For delivery, main captures the one exact effective push URL while the Git / PR renderer remains
+free of filesystem paths and configured effective Git URLs. The Settings form can submit a network
+URL the user entered; local target and custom executable paths remain native-only. Validated PR and
+CI result URLs cross the typed boundary only so the UI can display or copy them.
 
 ## Push a reviewed run
 
@@ -90,6 +110,24 @@ matching current CI was returned; it is not displayed as a passing check.
   native dialog, after it, and immediately before Git or `gh` can contact the destination. Plans are
   owner-bound, expiring, single-use, and cleared on window loss, import/reset, privacy deletion, or
   shutdown.
+- Git connection plans are separately owner-bound, expiring, single-use, and revision-bound. A local
+  target must be a real worktree or bare Git repository whose root/common-directory identity still
+  matches. Removal deletes only the reviewed `remote.<name>` local section and disclosed refs with
+  exact old-object checks; branch upstream/push settings and `remote.pushDefault` are not rewritten.
+- Remote removal holds Git's conventional configuration lock and retains the byte-exact original
+  config until the exact ref transaction and postconditions verify. Caught failures roll back when
+  the ref transaction provably did not apply. If the app or operating system stops inside that
+  narrow cross-file window, the lock and recovery staging file can remain and block later Git config
+  writes; automated repair for this interrupted state is not yet available in the UI.
+- Custom GitHub CLI validation runs only the exact selected executable with literal `--version` in a
+  minimal environment that excludes ambient GitHub tokens and authentication variables. Actual
+  explicitly confirmed GitHub actions may use the chosen CLI's existing authenticated account and
+  user-owned network configuration. Every plan binds CLI source, filename, absolute native-only
+  path, SHA-256, and executable identity; the binding is checked before every `gh` command.
+- A passively detected automatic CLI is not treated as available after startup or privacy reset.
+  Its first confirmed status check routes the exact identity-bound `--version` probe through the
+  same credential-free validation runner. Nonzero or malformed version output fails before any
+  authentication, Unix-socket configuration, repository, pull-request, or CI command can run.
 - Network Git remotes must use credential-free HTTPS or SSH transport. Plain HTTP and Git protocol
   remotes, embedded credentials, URL query values, fragments, unsupported helpers, and ambiguous
   remote identities fail closed. Repository- and worktree-scope `credential.*`, `http.*`, and URL
@@ -127,11 +165,11 @@ characters. Pull-request bodies support at most 32,768 characters. A repository 
 32 remotes to this surface. Forgeboard refuses oversized or truncated impact instead of presenting
 partial approval as complete.
 
-Remote status used for PR/CI planning expires after five minutes and is invalidated by a push or by
-any bound source, remote, or branch change. Adding or editing remote URLs is not yet a UI feature.
-Forgeboard does not perform a force push, merge the pull request, resolve remote conflicts, change
-repository visibility, or configure GitHub credentials. The `gh` executable must already be
-discoverable on `PATH` and authenticated; choosing a custom `gh` executable is not yet a UI feature.
+Remote status used for PR/CI planning expires after five minutes and is invalidated by a push, a
+GitHub CLI selection change, or any bound source, remote, or branch change. Forgeboard does not
+perform a force push, merge the pull request, resolve remote conflicts, change repository visibility,
+or configure GitHub credentials. The selected `gh` executable must already be installed and
+authenticated; Forgeboard validates and uses it but does not install it or sign into GitHub.
 
 Exact delivery also rejects multiple push destinations and custom remote helpers. Signed pushes,
 push options, custom receive-pack commands, and submodule-recursive pushes are unsupported and are

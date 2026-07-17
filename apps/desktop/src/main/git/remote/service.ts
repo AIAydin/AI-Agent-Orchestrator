@@ -76,6 +76,12 @@ import type {
   GitShippingReadinessAuthority,
   GitShippingReadinessBinding,
 } from '../shipping/git-shipping-service.js';
+import {
+  assertGitHubRuntimeCurrent,
+  bindGitHubRuntime,
+  type GitHubRuntimeAuthority,
+  type GitHubRuntimeBinding,
+} from './github-runtime.js';
 import { assertCompleteSourceHistory, assertNoLfsPointerHistory } from './lfs-history.js';
 
 const MAX_REMOTES = 32;
@@ -97,6 +103,7 @@ export interface GitRemoteDeliveryServiceOptions {
   readonly now?: () => Date;
   readonly defaultRemote?: () => string;
   readonly operations?: GitRemoteOutboundOperations;
+  readonly githubCliRuntime: GitHubRuntimeAuthority;
 }
 
 interface SourceCapture {
@@ -145,6 +152,8 @@ interface PendingGitHubStatusPlan extends PendingPlanBase {
   readonly kind: 'github-status';
   readonly baseBranch: string;
   readonly headBranch: string;
+  readonly githubRuntime: GitHubRuntimeBinding;
+  readonly githubRuntimeRevision: number;
   readonly disclosure: OutboundActionDisclosure;
 }
 
@@ -152,12 +161,16 @@ interface PendingPullRequestPlan extends PendingPlanBase {
   readonly kind: 'github-pull-request';
   readonly readiness: GitShippingReadinessBinding;
   readonly enginePlan: GitHubPullRequestPlan;
+  readonly githubRuntime: GitHubRuntimeBinding;
+  readonly githubRuntimeRevision: number;
   readonly disclosure: OutboundActionDisclosure;
 }
 
 interface PendingCiPlan extends PendingPlanBase {
   readonly kind: 'github-ci';
   readonly enginePlan: GitHubCiStatusPlan;
+  readonly githubRuntime: GitHubRuntimeBinding;
+  readonly githubRuntimeRevision: number;
   readonly disclosure: OutboundActionDisclosure;
 }
 
@@ -172,6 +185,7 @@ interface CachedGitHubState {
   readonly ownerId: string;
   readonly snapshot: GitHubRemoteSnapshot;
   readonly sourceFingerprint: string;
+  readonly githubRuntimeFingerprint: string;
   readonly checkedAt: string;
 }
 
@@ -179,12 +193,14 @@ interface CachedGitHubState {
 export class GitRemoteDeliveryService {
   readonly #changes: ChangeService;
   readonly #operations: GitRemoteOutboundOperations;
+  readonly #githubCliRuntime: GitHubRuntimeAuthority;
   readonly #now: () => Date;
   readonly #defaultRemote: () => string;
   readonly #plans = new Map<string, PendingPlan>();
   readonly #githubStates = new Map<string, CachedGitHubState>();
   readonly #lfsSafeSources = new Set<string>();
   readonly #active = new Map<Promise<unknown>, { ownerId: string; controller: AbortController }>();
+  #githubRuntimeRevision = 0;
   #paused = false;
   #disposed = false;
 
@@ -195,11 +211,12 @@ export class GitRemoteDeliveryService {
     private readonly readinessAuthority: GitShippingReadinessAuthority,
     private readonly outbound: OutboundActionGate,
     private readonly audit: GitRemoteAuditSink,
-    options: GitRemoteDeliveryServiceOptions = {},
+    options: GitRemoteDeliveryServiceOptions,
   ) {
     this.#changes = new ChangeService(repositories);
     this.#operations =
       options.operations ?? new PermitBoundGitRemoteOperations(repositories, this.#changes);
+    this.#githubCliRuntime = options.githubCliRuntime;
     this.#now = options.now ?? (() => new Date());
     this.#defaultRemote = options.defaultRemote ?? (() => 'origin');
   }
@@ -344,12 +361,15 @@ export class GitRemoteDeliveryService {
         source.resolved.worktreeRepositoryPath,
         input.destinationBranch,
       );
+      const { binding: githubRuntime, revision: githubRuntimeRevision } =
+        await this.#bindGitHubRuntime(false);
       const disclosure = gitHubStatusDisclosure({
         projectName: source.projectName,
         destination,
         baseBranch,
         headBranch,
         sourceHead: source.sourceHead,
+        githubCli: githubRuntime.disclosure,
       });
       const outboundPlan = this.outbound.prepare(ownerId, disclosure);
       const plan: PendingGitHubStatusPlan = {
@@ -362,6 +382,8 @@ export class GitRemoteDeliveryService {
         destination,
         baseBranch,
         headBranch,
+        githubRuntime,
+        githubRuntimeRevision,
         disclosure,
       };
       this.#plans.set(plan.id, plan);
@@ -398,6 +420,7 @@ export class GitRemoteDeliveryService {
           await this.#assertStatusCurrent(plan, true);
           return await this.#operations.status(
             permit,
+            plan.githubRuntime.runner,
             plan.source.resolved.worktreeRepositoryPath,
             {
               remote: plan.destination.name,
@@ -412,6 +435,7 @@ export class GitRemoteDeliveryService {
         },
       });
       if (result.outcome === 'denied') return null;
+      await this.#assertStatusCurrent(plan, true);
       const checkedAt = this.#now().toISOString();
       if (result.value.snapshot !== null) {
         this.#cacheGitHubState(plan, result.value.snapshot, checkedAt);
@@ -455,7 +479,16 @@ export class GitRemoteDeliveryService {
         source.resolved.worktreeRepositoryPath,
         input.destinationBranch,
       );
-      const cached = this.#requireGitHubState(ownerId, source, destination, baseBranch, headBranch);
+      const { binding: githubRuntime, revision: githubRuntimeRevision } =
+        await this.#bindGitHubRuntime(true);
+      const cached = this.#requireGitHubState(
+        ownerId,
+        source,
+        destination,
+        baseBranch,
+        headBranch,
+        githubRuntime.identityFingerprint,
+      );
       if (cached.snapshot.headOid !== source.sourceHead) {
         throw new Error(
           'Push the exact reviewed source to this remote branch, then check GitHub again.',
@@ -464,6 +497,7 @@ export class GitRemoteDeliveryService {
       const readiness = await this.readinessAuthority.bind(readinessTarget(source.target));
       assertReadinessSource(readiness, source);
       const enginePlan = await this.#operations.planPullRequest(
+        githubRuntime.runner,
         source.resolved.worktreeRepositoryPath,
         {
           remote: destination.name,
@@ -476,6 +510,7 @@ export class GitRemoteDeliveryService {
         },
         cached.snapshot,
       );
+      await this.#assertGitHubRuntimeBindingCurrent(githubRuntime, githubRuntimeRevision, true);
       const pullRequestChanges = exactGitHubChanges(enginePlan.disclosure);
       assertActionableChanges(pullRequestChanges.commits, pullRequestChanges.files);
       const disclosure = gitHubPullRequestDisclosure({
@@ -496,6 +531,7 @@ export class GitRemoteDeliveryService {
         bodySha256: enginePlan.bodySha256,
         bodyCharacters: enginePlan.body.length,
         draft: enginePlan.draft,
+        githubCli: githubRuntime.disclosure,
       });
       const outboundPlan = this.outbound.prepare(ownerId, disclosure);
       const plan: PendingPullRequestPlan = {
@@ -508,6 +544,8 @@ export class GitRemoteDeliveryService {
         destination,
         readiness,
         enginePlan,
+        githubRuntime,
+        githubRuntimeRevision,
         disclosure,
       };
       this.#plans.set(plan.id, plan);
@@ -559,6 +597,7 @@ export class GitRemoteDeliveryService {
           const approval = pullRequestApproval(plan, this.#now());
           return await this.#operations.createPullRequest(
             permit,
+            plan.githubRuntime.runner,
             plan.source.resolved.worktreeRepositoryPath,
             plan.enginePlan,
             approval,
@@ -597,11 +636,21 @@ export class GitRemoteDeliveryService {
         source.resolved.worktreeRepositoryPath,
         input.destinationBranch,
       );
-      const cached = this.#requireGitHubState(ownerId, source, destination, baseBranch, headBranch);
+      const { binding: githubRuntime, revision: githubRuntimeRevision } =
+        await this.#bindGitHubRuntime(true);
+      const cached = this.#requireGitHubState(
+        ownerId,
+        source,
+        destination,
+        baseBranch,
+        headBranch,
+        githubRuntime.identityFingerprint,
+      );
       if (cached.snapshot.headOid !== source.sourceHead) {
         throw new Error('CI status is unavailable until the exact reviewed source is pushed.');
       }
       const enginePlan = await this.#operations.planCiStatus(
+        githubRuntime.runner,
         source.resolved.worktreeRepositoryPath,
         {
           remote: destination.name,
@@ -611,11 +660,13 @@ export class GitRemoteDeliveryService {
         },
         cached.snapshot,
       );
+      await this.#assertGitHubRuntimeBindingCurrent(githubRuntime, githubRuntimeRevision, true);
       const disclosure = gitHubCiDisclosure({
         projectName: source.projectName,
         destination,
         snapshot: cached.snapshot,
         sourceHead: source.sourceHead,
+        githubCli: githubRuntime.disclosure,
       });
       const outboundPlan = this.outbound.prepare(ownerId, disclosure);
       const plan: PendingCiPlan = {
@@ -627,6 +678,8 @@ export class GitRemoteDeliveryService {
         source,
         destination,
         enginePlan,
+        githubRuntime,
+        githubRuntimeRevision,
         disclosure,
       };
       this.#plans.set(plan.id, plan);
@@ -662,10 +715,15 @@ export class GitRemoteDeliveryService {
         },
         execute: async (permit) => {
           await this.#assertCiCurrent(plan, true);
-          return await this.#operations.readCiStatus(permit, plan.enginePlan, {
-            signal,
-            beforeCommand: async () => await this.#assertCiCurrent(plan, true),
-          });
+          return await this.#operations.readCiStatus(
+            permit,
+            plan.githubRuntime.runner,
+            plan.enginePlan,
+            {
+              signal,
+              beforeCommand: async () => await this.#assertCiCurrent(plan, true),
+            },
+          );
         },
       });
       if (result.outcome === 'denied') return null;
@@ -691,6 +749,17 @@ export class GitRemoteDeliveryService {
       if (state.ownerId === ownerId) this.#githubStates.delete(key);
     }
     this.outbound.discardOwner(ownerId);
+  }
+
+  /** Drops only GitHub CLI-bound plans/state after the Settings selection changes. */
+  public invalidateGitHubRuntime(): void {
+    this.#advanceGitHubRuntimeRevision();
+    for (const [id, plan] of this.#plans) {
+      if (plan.kind === 'git-push') continue;
+      this.#plans.delete(id);
+      this.outbound.cancel(plan.ownerId, id);
+    }
+    this.#githubStates.clear();
   }
 
   public async resetForPrivacy(): Promise<void> {
@@ -1023,8 +1092,14 @@ export class GitRemoteDeliveryService {
   }
 
   async #assertStatusCurrent(plan: PendingGitHubStatusPlan, enforceExpiry = false): Promise<void> {
+    await this.#assertGitHubRuntimeBindingCurrent(
+      plan.githubRuntime,
+      plan.githubRuntimeRevision,
+      false,
+    );
     const current = await this.#assertSourceCurrent(plan.source);
     this.#assertDestinationCurrent(current, plan.destination);
+    this.#assertGitHubRuntimeRevision(plan.githubRuntimeRevision);
     if (enforceExpiry) this.#assertPlanUnexpired(plan);
   }
 
@@ -1032,6 +1107,11 @@ export class GitRemoteDeliveryService {
     plan: PendingPullRequestPlan,
     enforceExpiry = false,
   ): Promise<void> {
+    await this.#assertGitHubRuntimeBindingCurrent(
+      plan.githubRuntime,
+      plan.githubRuntimeRevision,
+      true,
+    );
     const current = await this.#assertSourceCurrent(plan.source);
     this.#assertDestinationCurrent(current, plan.destination);
     const readiness = await this.readinessAuthority.revalidate(
@@ -1046,14 +1126,21 @@ export class GitRemoteDeliveryService {
       plan.destination,
       plan.enginePlan.disclosure.baseBranch,
       plan.enginePlan.disclosure.headBranch,
+      plan.githubRuntime.identityFingerprint,
     );
     if (stableJson(cached.snapshot) !== stableJson(plan.enginePlan.remoteSnapshot)) {
       throw new Error('The reviewed GitHub status changed. Check GitHub and prepare a new plan.');
     }
+    this.#assertGitHubRuntimeRevision(plan.githubRuntimeRevision);
     if (enforceExpiry) this.#assertPlanUnexpired(plan);
   }
 
   async #assertCiCurrent(plan: PendingCiPlan, enforceExpiry = false): Promise<void> {
+    await this.#assertGitHubRuntimeBindingCurrent(
+      plan.githubRuntime,
+      plan.githubRuntimeRevision,
+      true,
+    );
     const current = await this.#assertSourceCurrent(plan.source);
     this.#assertDestinationCurrent(current, plan.destination);
     const cached = this.#requireGitHubState(
@@ -1062,11 +1149,40 @@ export class GitRemoteDeliveryService {
       plan.destination,
       plan.enginePlan.disclosure.baseBranch,
       plan.enginePlan.disclosure.headBranch,
+      plan.githubRuntime.identityFingerprint,
     );
     if (stableJson(cached.snapshot) !== stableJson(plan.enginePlan.remoteSnapshot)) {
       throw new Error('The reviewed GitHub status changed. Check GitHub and prepare a new plan.');
     }
+    this.#assertGitHubRuntimeRevision(plan.githubRuntimeRevision);
     if (enforceExpiry) this.#assertPlanUnexpired(plan);
+  }
+
+  async #bindGitHubRuntime(requireAvailable: boolean): Promise<{
+    readonly binding: GitHubRuntimeBinding;
+    readonly revision: number;
+  }> {
+    const revision = this.#githubRuntimeRevision;
+    const binding = await bindGitHubRuntime(this.#githubCliRuntime);
+    this.#assertGitHubRuntimeRevision(revision);
+    if (requireAvailable) this.#assertGitHubRuntimeAvailable(binding);
+    return { binding, revision };
+  }
+
+  async #assertGitHubRuntimeBindingCurrent(
+    binding: GitHubRuntimeBinding,
+    revision: number,
+    requireAvailable: boolean,
+  ): Promise<void> {
+    this.#assertGitHubRuntimeRevision(revision);
+    await assertGitHubRuntimeCurrent(this.#githubCliRuntime, binding, requireAvailable);
+    this.#assertGitHubRuntimeRevision(revision);
+  }
+
+  #assertGitHubRuntimeRevision(revision: number): void {
+    if (revision !== this.#githubRuntimeRevision) {
+      throw new Error('The GitHub CLI setting changed. Check GitHub and prepare a new plan.');
+    }
   }
 
   #assertPlanUnexpired(plan: PendingPlan): void {
@@ -1081,6 +1197,7 @@ export class GitRemoteDeliveryService {
     destination: GitRemoteDestination,
     baseBranch: string,
     headBranch: string,
+    githubRuntimeFingerprint: string,
   ): CachedGitHubState {
     const state = this.#githubStates.get(
       githubStateKey(ownerId, source.target, destination, baseBranch, headBranch),
@@ -1089,6 +1206,7 @@ export class GitRemoteDeliveryService {
     if (
       state === undefined ||
       state.sourceFingerprint !== source.fingerprint ||
+      state.githubRuntimeFingerprint !== githubRuntimeFingerprint ||
       !Number.isFinite(checkedAt) ||
       checkedAt + 5 * 60_000 <= this.#now().getTime()
     ) {
@@ -1131,8 +1249,20 @@ export class GitRemoteDeliveryService {
       ownerId: plan.ownerId,
       snapshot,
       sourceFingerprint: plan.source.fingerprint,
+      githubRuntimeFingerprint: plan.githubRuntime.identityFingerprint,
       checkedAt,
     });
+  }
+
+  #assertGitHubRuntimeAvailable(binding: GitHubRuntimeBinding): void {
+    if (!binding.available) {
+      if (binding.validationState === 'unverified') {
+        throw new Error(
+          'GitHub CLI was detected but its version is not validated. Check GitHub first, or review automatic discovery in Settings.',
+        );
+      }
+      throw new Error('GitHub CLI is unavailable. Choose or install it, then check GitHub again.');
+    }
   }
 
   #invalidateGitHubState(target: GitRemoteDeliveryTargetInput): void {
@@ -1163,6 +1293,13 @@ export class GitRemoteDeliveryService {
             planSha256: plan.enginePlan.planSha256,
           }
         : {}),
+      ...(plan.kind === 'git-push'
+        ? {}
+        : {
+            githubCliSource: plan.githubRuntime.source,
+            githubCliSha256: plan.githubRuntime.disclosure.sha256,
+            githubCliFingerprint: plan.githubRuntime.identityFingerprint,
+          }),
     });
   }
 
@@ -1180,6 +1317,7 @@ export class GitRemoteDeliveryService {
   }
 
   #clearAll(): void {
+    this.#advanceGitHubRuntimeRevision();
     const owners = new Set([...this.#plans.values()].map((plan) => plan.ownerId));
     for (const active of this.#active.values()) owners.add(active.ownerId);
     this.#plans.clear();
@@ -1196,6 +1334,11 @@ export class GitRemoteDeliveryService {
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('Remote delivery is unavailable after disposal.');
     if (this.#paused) throw new Error('Remote delivery is paused during reset or shutdown.');
+  }
+
+  #advanceGitHubRuntimeRevision(): void {
+    this.#githubRuntimeRevision =
+      this.#githubRuntimeRevision === Number.MAX_SAFE_INTEGER ? 0 : this.#githubRuntimeRevision + 1;
   }
 
   #discardExpired(): void {

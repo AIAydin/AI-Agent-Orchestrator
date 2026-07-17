@@ -94,6 +94,19 @@ import type {
   GitDeliveryReadinessRunView,
 } from './git/readiness/index.js';
 import type {
+  GitConnectionConfirmInput,
+  GitConnectionMutationPlanView,
+  GitConnectionPlanCancelResult,
+  GitConnectionPlanConfirmationInput,
+  GitConnectionPrepareLocalInput,
+  GitConnectionPrepareNetworkInput,
+  GitConnectionPrepareRemoveInput,
+  GitConnectionProjectInput,
+  GitConnectionsView,
+  GitHubCliSelectionPlanView,
+  GitHubCliStatusView,
+} from './git/connections/index.js';
+import type {
   GitRemotePlanCancelInput,
   GitRemotePlanCancelResult,
   GitHubCiPlanView,
@@ -335,6 +348,29 @@ export interface ForgeboardApi {
       approve(
         input: GitDeliveryReadinessApproveInput,
       ): Promise<IpcResult<GitDeliveryReadinessApproveView | null>>;
+    };
+    connections: {
+      list(input: GitConnectionProjectInput): Promise<IpcResult<GitConnectionsView>>;
+      prepareNetwork(
+        input: GitConnectionPrepareNetworkInput,
+      ): Promise<IpcResult<GitConnectionMutationPlanView>>;
+      prepareLocal(
+        input: GitConnectionPrepareLocalInput,
+      ): Promise<IpcResult<GitConnectionMutationPlanView | null>>;
+      prepareRemove(
+        input: GitConnectionPrepareRemoveInput,
+      ): Promise<IpcResult<GitConnectionMutationPlanView>>;
+      confirm(input: GitConnectionConfirmInput): Promise<IpcResult<GitConnectionsView | null>>;
+      cancelPlan(
+        input: GitConnectionPlanConfirmationInput,
+      ): Promise<IpcResult<GitConnectionPlanCancelResult>>;
+      status(): Promise<IpcResult<GitHubCliStatusView>>;
+      refresh(): Promise<IpcResult<GitHubCliStatusView>>;
+      chooseGitHubCli(): Promise<IpcResult<GitHubCliSelectionPlanView | null>>;
+      useAutomaticGitHubCli(): Promise<IpcResult<GitHubCliSelectionPlanView>>;
+      confirmGitHubCli(
+        input: GitConnectionPlanConfirmationInput,
+      ): Promise<IpcResult<GitHubCliStatusView | null>>;
     };
     remote: {
       inspect(input: GitRemoteInspectInput): Promise<IpcResult<GitRemoteInspectView>>;

@@ -189,6 +189,19 @@ the disclosure; changed destinations, source evidence, or actions fail closed. O
 mint the opaque permit accepted by the low-level outbound executors. See
 [Remote Git and GitHub delivery](git/GITHUB_DELIVERY.md).
 
+Git remote and GitHub CLI configuration use a separate local-only review path under **Settings →
+Git & previews → Git connections**. A renderer plan is path-free; the native confirmation shows an
+exact local repository or custom executable path when one is involved. Main rechecks project/config
+revision, filesystem or executable identity, and originating-window authority immediately before a
+change. Remote configuration does not contact the destination. A selected custom GitHub CLI is
+version-checked with a minimal credential-free environment, while later separately confirmed
+GitHub actions may use that trusted executable's existing authenticated session. A passively
+detected automatic CLI remains unavailable after startup or privacy reset until Settings review or a
+confirmed GitHub status action validates its exact identity with that same credential-free probe;
+failed or malformed version output blocks all auth and API commands. Changing the CLI invalidates
+CLI-bound delivery approvals and cache, but does not authorize or cancel an unrelated ordinary Git
+push.
+
 ## Context is separately approved
 
 Permission to read visible worktree content is not permission to attach it to a provider prompt.

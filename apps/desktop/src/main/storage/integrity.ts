@@ -42,6 +42,7 @@ import { reviewNoteIntegrityMessages } from './reviews/repository.js';
 import { collaborationSyncIntegrityMessages } from './collaboration/sync-state.js';
 import { settingsRepairIntegrityMessages } from './settings-repair/repository.js';
 import { deliveryReadinessIntegrityMessages } from './git-readiness/repository.js';
+import { gitHubCliBindingIntegrityMessages } from './github-cli/repository.js';
 
 interface IntegrityRow {
   integrity_check?: string;
@@ -90,6 +91,7 @@ export function checkDatabaseIntegrity(
     messages.push(...collaborationSyncIntegrityMessages(database));
     messages.push(...settingsRepairIntegrityMessages(database));
     messages.push(...deliveryReadinessIntegrityMessages(database));
+    messages.push(...gitHubCliBindingIntegrityMessages(database));
   } catch (error) {
     messages.push(error instanceof Error ? error.message : 'Unknown integrity-check failure.');
   }

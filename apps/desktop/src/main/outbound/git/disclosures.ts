@@ -41,12 +41,23 @@ export interface GitPushDisclosureInput {
   readonly readinessEvidence: string;
 }
 
+export interface GitHubCliDisclosure {
+  readonly source: 'automatic' | 'custom';
+  /** False for both a missing executable and an exact detected executable awaiting validation. */
+  readonly available: boolean;
+  readonly filename: string | null;
+  readonly sha256: string | null;
+  /** Exact main/native-only path. Never expose this value through renderer IPC. */
+  readonly executablePath: string | null;
+}
+
 export interface GitHubStatusDisclosureInput {
   readonly projectName: string;
   readonly destination: GitRemoteDestination;
   readonly baseBranch: string;
   readonly headBranch: string;
   readonly sourceHead: string;
+  readonly githubCli: GitHubCliDisclosure;
 }
 
 export interface GitHubPullRequestDisclosureInput extends GitPushDisclosureInput {
@@ -56,6 +67,7 @@ export interface GitHubPullRequestDisclosureInput extends GitPushDisclosureInput
   readonly bodySha256: string;
   readonly bodyCharacters: number;
   readonly draft: boolean;
+  readonly githubCli: GitHubCliDisclosure;
 }
 
 export interface GitHubCiDisclosureInput {
@@ -63,6 +75,7 @@ export interface GitHubCiDisclosureInput {
   readonly destination: GitRemoteDestination;
   readonly snapshot: GitHubRemoteSnapshot;
   readonly sourceHead: string;
+  readonly githubCli: GitHubCliDisclosure;
 }
 
 export function gitRemoteDestination(
@@ -154,7 +167,9 @@ export function gitRemoteDestination(
     try {
       decodedPath = fileURLToPath(parsed);
     } catch (error) {
-      throw new Error('The selected local Git URL has invalid path encoding.', { cause: error });
+      throw new Error('The selected local Git URL has invalid path encoding.', {
+        cause: error,
+      });
     }
     const exactPath = boundedSingleLine(decodedPath, 'Local Git path', MAX_REMOTE_URL);
     if (exactPath !== decodedPath || isNetworkSharePath(exactPath)) {
@@ -283,13 +298,16 @@ export function gitHubStatusDisclosure(
     destination: outboundDestination(input.destination, 'github'),
     details: [
       { label: 'Project', value: input.projectName },
+      ...gitHubCliDetails(input.githubCli),
       { label: 'Remote', value: input.destination.name },
       { label: 'Base branch', value: input.baseBranch },
       { label: 'Head branch', value: input.headBranch },
       { label: 'Approved source HEAD', value: input.sourceHead },
     ],
-    warning:
-      'The GitHub CLI installation resolved from the desktop process PATH is trusted code and may use its existing authenticated account and user network configuration. Forgeboard pins its absolute resolved executable for this session, rejects HTTP Unix-socket routing, and does not read or store the token. This one action reads authentication, repository, and exact base/head status and does not create or change GitHub data.',
+    warning: gitHubCliWarning(
+      input.githubCli,
+      'Forgeboard rejects HTTP Unix-socket routing and does not read or store the token. This action reads authentication, repository, and exact base/head status and does not create or change GitHub data.',
+    ),
   };
 }
 
@@ -305,6 +323,7 @@ export function gitHubPullRequestDisclosure(
     destination: outboundDestination(input.destination, 'github'),
     details: [
       ...impactDetails(input),
+      ...gitHubCliDetails(input.githubCli),
       { label: 'GitHub repository', value: input.snapshot.ownerRepository },
       { label: 'Remote base HEAD', value: input.snapshot.baseOid },
       {
@@ -323,8 +342,10 @@ export function gitHubPullRequestDisclosure(
         value: input.draft ? 'Draft pull request' : 'Ready pull request',
       },
     ],
-    warning:
-      'The GitHub CLI installation resolved from the desktop process PATH is trusted code and may use its existing authenticated account and user network configuration. Forgeboard pins its absolute resolved executable for this session, rejects HTTP Unix-socket routing, and sends the exact reviewed title and body only after revalidating human approval, deterministic checks, local source, remote base, and remote source HEAD immediately before the request. GitHub pull requests follow a branch name: concurrent or later movement of that branch can change the pull request contents. Repository visibility and settings are never changed.',
+    warning: gitHubCliWarning(
+      input.githubCli,
+      'Forgeboard rejects HTTP Unix-socket routing and sends the exact reviewed title and body only after revalidating human approval, deterministic checks, local source, remote base, and remote source HEAD immediately before the request. GitHub pull requests follow a branch name: concurrent or later movement of that branch can change the pull request contents. Repository visibility and settings are never changed.',
+    ),
   };
 }
 
@@ -337,14 +358,91 @@ export function gitHubCiDisclosure(input: GitHubCiDisclosureInput): OutboundActi
     destination: outboundDestination(input.destination, 'github'),
     details: [
       { label: 'Project', value: input.projectName },
+      ...gitHubCliDetails(input.githubCli),
       { label: 'GitHub repository', value: input.snapshot.ownerRepository },
       { label: 'Base branch', value: input.snapshot.baseBranch },
       { label: 'Head branch', value: input.snapshot.headBranch },
       { label: 'Exact source HEAD', value: input.sourceHead },
     ],
-    warning:
-      'The GitHub CLI installation resolved from the desktop process PATH is trusted code and may use its existing authenticated account and user network configuration. Forgeboard pins its absolute resolved executable for this session and rejects HTTP Unix-socket routing. This explicit action reads up to 20 recent workflow runs. Forgeboard displays as current only runs whose branch and head SHA exactly match the approved source HEAD.',
+    warning: gitHubCliWarning(
+      input.githubCli,
+      'Forgeboard rejects HTTP Unix-socket routing. This action reads up to 20 recent workflow runs. Forgeboard displays as current only runs whose branch and head SHA exactly match the approved source HEAD.',
+    ),
   };
+}
+
+function gitHubCliDetails(cli: GitHubCliDisclosure) {
+  assertGitHubCliDisclosure(cli);
+  const detected = cli.executablePath !== null;
+  return [
+    {
+      label: 'GitHub CLI source',
+      value: cli.source === 'automatic' ? 'Automatic desktop PATH discovery' : 'Custom selection',
+    },
+    {
+      label: 'GitHub CLI file',
+      value: cli.filename ?? 'Not found on the desktop PATH',
+    },
+    { label: 'GitHub CLI SHA-256', value: cli.sha256 ?? 'Unavailable' },
+    {
+      label: 'Exact GitHub CLI path',
+      value: cli.executablePath ?? 'No executable is currently resolved',
+    },
+    {
+      label: 'GitHub CLI validation',
+      value: cli.available
+        ? 'Version validated'
+        : detected
+          ? 'Detected; version validation pending'
+          : 'Executable not found',
+    },
+  ];
+}
+
+function assertGitHubCliDisclosure(cli: GitHubCliDisclosure): void {
+  if (!cli.available) {
+    if (cli.source !== 'automatic') {
+      throw new Error('Unavailable GitHub CLI disclosure evidence is inconsistent.');
+    }
+    const missing = cli.filename === null && cli.sha256 === null && cli.executablePath === null;
+    const unverified = cli.filename !== null && cli.sha256 !== null && cli.executablePath !== null;
+    if (!missing && !unverified) {
+      throw new Error('Unavailable GitHub CLI disclosure evidence is inconsistent.');
+    }
+    if (unverified) assertResolvedGitHubCliDisclosure(cli);
+    return;
+  }
+  assertResolvedGitHubCliDisclosure(cli);
+}
+
+function assertResolvedGitHubCliDisclosure(cli: GitHubCliDisclosure): void {
+  if (
+    cli.filename === null ||
+    cli.filename.length > 255 ||
+    cli.filename !== path.basename(cli.filename) ||
+    cli.filename !== path.basename(cli.executablePath ?? '') ||
+    cli.executablePath === null ||
+    !path.isAbsolute(cli.executablePath) ||
+    boundedSingleLine(cli.executablePath, 'GitHub CLI path', 32_768) !== cli.executablePath ||
+    cli.sha256 === null ||
+    !/^[a-f0-9]{64}$/u.test(cli.sha256)
+  ) {
+    throw new Error('Available GitHub CLI disclosure evidence is invalid.');
+  }
+}
+
+function gitHubCliWarning(cli: GitHubCliDisclosure, action: string): string {
+  if (!cli.available) {
+    if (cli.executablePath !== null) {
+      return `The automatically discovered GitHub CLI shown above was detected but its version is not yet validated. After this approval, Forgeboard first runs only that exact path and SHA-256 with the literal --version argument in a credential-free environment. Authentication and GitHub API commands remain blocked unless that probe exits successfully and returns a valid GitHub CLI version. ${action}`;
+    }
+    return `Automatic discovery did not find GitHub CLI on the desktop process PATH. Confirming this check preserves that exact unavailable state; Forgeboard cannot contact GitHub through gh unless a new executable is detected and reviewed. ${action}`;
+  }
+  const selection =
+    cli.source === 'automatic'
+      ? 'The automatically discovered GitHub CLI shown above'
+      : 'The custom GitHub CLI selected in Settings and shown above';
+  return `${selection} is trusted local code and may use its existing authenticated account and user network configuration. Forgeboard binds this action to its exact path and SHA-256 and verifies the binding again before every command. ${action}`;
 }
 
 function impactDetails(input: GitPushDisclosureInput) {

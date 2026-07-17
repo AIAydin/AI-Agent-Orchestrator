@@ -15,12 +15,24 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import type { IpcResult, Project } from '../../src/shared/application/contracts.js';
 import {
   approveNextNativeAgentLaunch,
   launchDesktop,
   watchExternalRequests,
 } from '../support/electron.js';
+import {
+  expectNativeCancelDefault,
+  installNativeDialogHarness,
+  nativeDialogs,
+  queueNativeDialogResponse,
+  waitForNativeDialog,
+} from './connections/native-dialogs.js';
+import { writeConfiguredFakeGitHubCli } from './connections/fake-github-cli.js';
+import { currentProjectPath, git, gitRemoteUrl } from './connections/repository.js';
+import {
+  configureCustomGitHubCliThroughUi,
+  configureNetworkRemoteThroughUi,
+} from './connections/settings.js';
 
 const COMMIT_IDENTITY = {
   name: 'Forgeboard Remote E2E',
@@ -39,7 +51,8 @@ test('push and GitHub PR delivery require exact review while all transport stays
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-remote-delivery-e2e-'));
   const sandboxRoot = await realpath(userDataDirectory);
   const managedWorktreeRoot = join(sandboxRoot, 'ui-configured-worktrees');
-  const fixtureBin = join(sandboxRoot, 'fixture-bin');
+  const sshFixtureBin = join(sandboxRoot, 'ssh-fixture-bin');
+  const fakeGhExecutable = join(sandboxRoot, 'fake-gh.mjs');
   const fakeGhStatePath = join(sandboxRoot, 'fake-gh-state.json');
   const fakeGhLogPath = join(sandboxRoot, 'fake-gh.jsonl');
   const fakeSshLogPath = join(sandboxRoot, 'fake-ssh.jsonl');
@@ -75,21 +88,22 @@ test('push and GitHub PR delivery require exact review while all transport stays
   };
 
   try {
-    await mkdir(fixtureBin, { recursive: true });
+    await mkdir(sshFixtureBin, { recursive: true });
     await Promise.all([
       symlink(
-        join(import.meta.dirname, 'scripts', 'fixtures', 'fake-gh.mjs'),
-        join(fixtureBin, 'gh'),
-      ),
-      symlink(
         join(import.meta.dirname, 'scripts', 'fixtures', 'fake-ssh.mjs'),
-        join(fixtureBin, 'ssh'),
+        join(sshFixtureBin, 'ssh'),
       ),
       writeFile(fakeGhLogPath, '', 'utf8'),
       writeFile(fakeSshLogPath, '', 'utf8'),
       writeFakeGhState(fakeGhStatePath, fakeGhState),
+      writeConfiguredFakeGitHubCli({
+        executablePath: fakeGhExecutable,
+        statePath: fakeGhStatePath,
+        logPath: fakeGhLogPath,
+      }),
     ]);
-    process.env.PATH = `${fixtureBin}:${environment.PATH ?? ''}`;
+    process.env.PATH = `${sshFixtureBin}:${environment.PATH ?? ''}`;
     process.env.FORGEBOARD_FAKE_GH_STATE = fakeGhStatePath;
     process.env.FORGEBOARD_FAKE_GH_LOG = fakeGhLogPath;
     process.env.FORGEBOARD_FAKE_SSH_REPOSITORY = bareRemotePath;
@@ -114,11 +128,25 @@ test('push and GitHub PR delivery require exact review while all transport stays
       env: process.env,
       stdio: 'pipe',
     });
-    git(primaryPath, ['remote', 'add', 'origin', REMOTE_URL]);
     fakeGhState.repository.defaultBranch = baseBranch;
     fakeGhState.expectedBaseBranch = baseBranch;
     fakeGhState.baseOid = baseOid;
     await writeFakeGhState(fakeGhStatePath, fakeGhState);
+    await installNativeDialogHarness(electronApp);
+    await configureNetworkRemoteThroughUi({
+      app: electronApp,
+      page,
+      name: 'origin',
+      url: REMOTE_URL,
+    });
+    await expect.poll(() => gitRemoteUrl(primaryPath, 'origin')).toBe(REMOTE_URL);
+    await configureCustomGitHubCliThroughUi({
+      app: electronApp,
+      page,
+      executablePath: fakeGhExecutable,
+      executableFileName: 'fake-gh.mjs',
+    });
+    expect(await countGhCommand(fakeGhLogPath, ['--version'])).toBe(1);
 
     await page
       .locator('.template-section')
@@ -156,7 +184,6 @@ test('push and GitHub PR delivery require exact review while all transport stays
       name: 'Review the exact local commit',
     });
     await expect(commitDisclosure).toContainText(COMMIT_MESSAGE);
-    await installNativeDialogHarness(electronApp);
     await commitDisclosure.getByRole('button', { name: 'Continue to system confirmation' }).click();
     await expect(reviewDialog).toContainText(/Created local commit [a-f0-9]{12}\./u);
     const sourceHead = git(worktreePath, ['rev-parse', 'HEAD']);
@@ -388,21 +415,6 @@ async function configureGitThroughUi(page: Page, managedWorktreeRoot: string): P
   await expect(settings).toBeHidden();
 }
 
-async function currentProjectPath(page: Page): Promise<string> {
-  return await page.evaluate(async () => {
-    const forgeboard = (
-      window as unknown as {
-        forgeboard: { projects: { recent(): Promise<IpcResult<Project[]>> } };
-      }
-    ).forgeboard;
-    const result = await forgeboard.projects.recent();
-    if (!result.ok) throw new Error(result.error.message);
-    const project = result.value.find((candidate) => !candidate.missing);
-    if (project === undefined) throw new Error('The local demo project is missing.');
-    return project.path;
-  });
-}
-
 async function openOnlyChangeReport(page: Page) {
   const drawer = page.locator('.activity-drawer');
   await drawer.getByRole('tab', { name: /Changes/ }).click();
@@ -431,14 +443,6 @@ async function findChangedWorktree(primaryPath: string, changedFile: string): Pr
   throw new Error(`No managed worktree contains ${changedFile}.`);
 }
 
-function git(repository: string, arguments_: readonly string[]): string {
-  return execFileSync('git', ['-C', repository, ...arguments_], {
-    encoding: 'utf8',
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
-}
-
 function gitBareRef(repository: string, branch: string): string | null {
   try {
     return execFileSync('git', [`--git-dir=${repository}`, 'rev-parse', `refs/heads/${branch}`], {
@@ -449,86 +453,6 @@ function gitBareRef(repository: string, branch: string): string | null {
   } catch {
     return null;
   }
-}
-
-interface NativeDialogRecord {
-  readonly buttons?: readonly string[] | undefined;
-  readonly cancelId?: number | undefined;
-  readonly defaultId?: number | undefined;
-  readonly detail?: string | undefined;
-  readonly message?: string | undefined;
-  readonly response: number;
-  readonly title?: string | undefined;
-}
-
-async function installNativeDialogHarness(electronApp: ElectronApplication): Promise<void> {
-  await electronApp.evaluate(({ dialog }) => {
-    const state = globalThis as typeof globalThis & {
-      __forgeboardRemoteDeliveryDialogs?: NativeDialogRecord[];
-      __forgeboardRemoteDeliveryResponses?: number[];
-    };
-    state.__forgeboardRemoteDeliveryDialogs = [];
-    state.__forgeboardRemoteDeliveryResponses = [];
-    Object.defineProperty(dialog, 'showMessageBox', {
-      configurable: true,
-      value: (...arguments_: unknown[]) => {
-        const options = arguments_.at(-1) as Omit<NativeDialogRecord, 'response'>;
-        const response = state.__forgeboardRemoteDeliveryResponses?.shift() ?? 1;
-        state.__forgeboardRemoteDeliveryDialogs?.push({
-          buttons: options.buttons,
-          cancelId: options.cancelId,
-          defaultId: options.defaultId,
-          detail: options.detail,
-          message: options.message,
-          response,
-          title: options.title,
-        });
-        return Promise.resolve({ response, checkboxChecked: false });
-      },
-    });
-  });
-}
-
-async function queueNativeDialogResponse(
-  electronApp: ElectronApplication,
-  response: 0 | 1,
-): Promise<void> {
-  await electronApp.evaluate((_, nextResponse) => {
-    const state = globalThis as typeof globalThis & {
-      __forgeboardRemoteDeliveryResponses?: number[];
-    };
-    if (state.__forgeboardRemoteDeliveryResponses === undefined) {
-      throw new Error('The native dialog harness is not installed.');
-    }
-    state.__forgeboardRemoteDeliveryResponses.push(nextResponse);
-  }, response);
-}
-
-async function nativeDialogs(electronApp: ElectronApplication): Promise<NativeDialogRecord[]> {
-  return await electronApp.evaluate(() => {
-    const state = globalThis as typeof globalThis & {
-      __forgeboardRemoteDeliveryDialogs?: NativeDialogRecord[];
-    };
-    return state.__forgeboardRemoteDeliveryDialogs ?? [];
-  });
-}
-
-async function waitForNativeDialog(
-  electronApp: ElectronApplication,
-  index: number,
-): Promise<NativeDialogRecord> {
-  await expect.poll(async () => (await nativeDialogs(electronApp)).length).toBeGreaterThan(index);
-  const record = (await nativeDialogs(electronApp))[index];
-  if (record === undefined) throw new Error(`Native dialog ${String(index)} was not recorded.`);
-  return record;
-}
-
-function expectNativeCancelDefault(
-  record: NativeDialogRecord,
-  title: string,
-  buttons: readonly string[],
-): void {
-  expect(record).toMatchObject({ title, buttons, defaultId: 0, cancelId: 0 });
 }
 
 interface FakeGhState {

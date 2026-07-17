@@ -16,6 +16,19 @@ export {
   exactPushDestination,
   readExactRemotePushUrl,
 } from './repository/push-security.js';
+export {
+  assertGitRemoteConfigurationName,
+  classifyConfiguredRemoteTarget,
+  resolveGitRemoteTarget,
+  type ConfiguredRemoteTargetClassification,
+} from './repository/remotes/identity.js';
+export {
+  inspectGitRemoteConfiguration,
+  remoteEntryName,
+  remoteEntryProperty,
+} from './repository/remotes/inspection.js';
+export { GitRemoteConfigurationService } from './repository/remotes/service.js';
+export type * from './repository/remotes/contracts.js';
 export type {
   GitActiveFilter,
   GitAttributeSource,

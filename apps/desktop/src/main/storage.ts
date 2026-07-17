@@ -159,6 +159,12 @@ import {
   type DeliveryReadinessStore,
 } from './storage/git-readiness/repository.js';
 import {
+  clearGitHubCliBinding as clearDatabaseGitHubCliBinding,
+  getGitHubCliBinding as getDatabaseGitHubCliBinding,
+  saveGitHubCliBinding as saveDatabaseGitHubCliBinding,
+} from './storage/github-cli/repository.js';
+import type { StoredGitHubCliBinding } from './storage/github-cli/contracts.js';
+import {
   checkpointCollaborationSyncState as checkpointDatabaseCollaborationSyncState,
   discardRejectedCollaborationComment as discardDatabaseRejectedCollaborationComment,
   pruneExpiredCollaborationSyncStates as pruneDatabaseCollaborationSyncStates,
@@ -181,6 +187,10 @@ export type {
 export type { TransactionalAuditEvent } from './storage/database.js';
 export type { AuditedCanvasSnapshotRestore } from './storage/projects-canvases.js';
 export type { PortableImportOptions } from './storage/transfers.js';
+export type {
+  GitHubCliExecutableIdentity,
+  StoredGitHubCliBinding,
+} from './storage/github-cli/contracts.js';
 export {
   WorkflowExecutionEventReplayConflictError,
   WorkflowExecutionRevisionConflictError,
@@ -295,6 +305,22 @@ export class LocalStore implements DeliveryReadinessStore {
     writeSettings(this.database, parsed);
     this.notifyDurableChange();
     return parsed;
+  }
+
+  getGitHubCliBinding(): StoredGitHubCliBinding | undefined {
+    return getDatabaseGitHubCliBinding(this.database);
+  }
+
+  saveGitHubCliBinding(binding: StoredGitHubCliBinding): StoredGitHubCliBinding {
+    const saved = saveDatabaseGitHubCliBinding(this.database, binding);
+    this.notifyDurableChange();
+    return saved;
+  }
+
+  clearGitHubCliBinding(): boolean {
+    const cleared = clearDatabaseGitHubCliBinding(this.database);
+    if (cleared) this.notifyDurableChange();
+    return cleared;
   }
 
   createDeliveryReadiness(

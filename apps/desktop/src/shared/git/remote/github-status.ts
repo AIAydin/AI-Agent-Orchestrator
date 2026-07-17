@@ -65,11 +65,11 @@ export const GitHubStatusResultViewSchema = z
   })
   .strict()
   .superRefine((status, context) => {
-    if (!status.installed && status.version !== null) {
+    if (status.installed !== (status.version !== null)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['version'],
-        message: 'An unavailable GitHub CLI cannot expose a version.',
+        message: 'GitHub CLI availability requires one validated version.',
       });
     }
     if (!status.installed && status.authenticated) {

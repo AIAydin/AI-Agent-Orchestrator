@@ -858,3 +858,23 @@ unchecked when only a subset of their required behavior has proof.
   remain unchecked. Adding/editing remote URLs and choosing a custom `gh` executable also remain
   unfinished UI configuration. Hosted Actions are not counted as evidence because the repository's
   billing/payment gate currently stops jobs before any workflow step executes.
+- 2026-07-17: **Settings → Git & previews → Git connections** gained complete UI-managed
+  configuration for ordinary project remotes and the optional GitHub CLI. Users can inspect
+  path-free remote identities; add credential-free HTTPS/SSH or natively selected local Git targets;
+  replace a simple managed remote URL; and remove an exactly reviewed repository-local remote
+  section and its disclosed tracking refs. Each action uses an owner-bound, expiring, single-use
+  renderer review plus a separate cancel-default native confirmation and applies independently of
+  **Save settings**. Main rechecks the live window, project, repository, configuration, selected local
+  destination, and final mutation authority. Add, replace, and remove share Git-compatible config
+  locking, exact-byte preservation, async and final synchronous compare-and-swap checks, safe
+  rollback when ownership is provable, and explicit uncertain-outcome recovery when it is not;
+  removal also uses one exact-OID ref transaction. Concurrent remote and GitHub CLI changes share one
+  main-owned admission so neither can reopen delivery while the other is active. Settings can select
+  automatic discovery or a custom `gh`; the device-local binding survives restart, never enters
+  portable export, and is content-bound with bounded SHA-256 hashing. Passive automatic discovery is
+  unverified after restart or privacy reset and cannot run authentication/API commands until an
+  explicitly confirmed, credential-free literal `--version` validation succeeds for that exact path
+  and digest. GitHub status, PR, and CI then use the selected identity-guarded runner. Native
+  filesystem/executable paths remain outside renderer views, and failure/cancellation never produces
+  a fake success state. This supersedes only the preceding checkpoint's unfinished remote/custom
+  `gh` UI limitation; broad unchecked product, release, signing, and cross-platform items remain open.

@@ -1,10 +1,12 @@
 # Install Forgeboard
 
-Forgeboard is distributed through
-[GitHub Releases](https://github.com/AIAydin/AI-Agent-Orchestrator/releases). A release installer is
-self-contained: end users do not need Node.js, pnpm, an API key, an environment file, or source-code
-edits. The current repository may be ahead of the newest published release; check that release's
-notes and signing status before installing it.
+Forgeboard is intended to be distributed through
+[GitHub Releases](https://github.com/AIAydin/AI-Agent-Orchestrator/releases), but this repository is
+currently private and has no tags, published end-user release, or public installer download. When a
+release is published, its installer will be self-contained: end users will not need Node.js, pnpm, an
+API key, an environment file, or source-code edits. Check the release notes, source commit, checksums,
+and signing status before installing it; do not treat an unpublished local build as an official
+release.
 
 ## Choose the download
 
@@ -62,8 +64,9 @@ and corresponding-source archive attached to the release.
 - **Debian/Ubuntu:** run `sudo apt install ./forgeboard_<version>_amd64.deb`.
 
 On first launch, choose **Use safe defaults** or complete the setup wizard. Agent detection,
-permissions, worktree location, commands, Docker, collaboration, backups, and other ordinary
-implemented options are configured in the app. Hand-written configuration remains optional.
+permissions, worktree location, commands, Git remotes and GitHub CLI selection, Docker,
+collaboration, backups, and other ordinary implemented options are configured in the app.
+Hand-written configuration remains optional.
 
 Unsigned development builds can trigger macOS Gatekeeper or Windows SmartScreen warnings. Verify
 the checksum and `RELEASE-INFO` file first, then use only the operating system's per-app approval if

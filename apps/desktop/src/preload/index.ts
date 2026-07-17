@@ -85,6 +85,7 @@ import {
   WorkflowStartInputSchema,
 } from '../shared/workflow/contracts.js';
 import { createFileApi } from './files.js';
+import { createGitConnectionsApi } from './git/connections/index.js';
 import { createGitLifecycleApi } from './git/lifecycle/cleanup.js';
 import { createGitDeliveryReadinessApi } from './git/readiness/bridge.js';
 import { createGitRemoteDeliveryApi } from './git/remote/index.js';
@@ -425,6 +426,9 @@ const api: ForgeboardApi = {
         input,
       ),
     readiness: createGitDeliveryReadinessApi((channel, ...args) =>
+      ipcRenderer.invoke(channel, ...args),
+    ),
+    connections: createGitConnectionsApi((channel, ...args) =>
       ipcRenderer.invoke(channel, ...args),
     ),
     remote: createGitRemoteDeliveryApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),

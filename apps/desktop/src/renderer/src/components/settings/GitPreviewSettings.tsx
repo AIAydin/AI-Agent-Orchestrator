@@ -1,12 +1,16 @@
-import { GitRemoteSettingSchema } from '../../../../shared/application/contracts.js';
+import { GitRemoteSettingSchema, type Project } from '../../../../shared/application/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 import type { CommandReadinessStatus } from '../configuration/useCommandReadiness.js';
 import { numericDraftValue } from './fields/numeric-draft.js';
+import { GitConnectionsSettings } from './git-connections/index.js';
 import { FolderReadinessEvidence } from './readiness/FolderReadinessEvidence.js';
 import type { FolderReadinessStatus } from './readiness/useSettingsFolderReadiness.js';
 import { CommandEditor, SettingsSection, type AsyncSettingsProps } from './shared.js';
 
 interface GitPreviewSettingsProps extends AsyncSettingsProps {
+  readonly projects: readonly Project[];
+  readonly activeProject: Project | null;
+  readonly onError: (message: string) => void;
   readonly developmentReadiness?: CommandReadinessStatus | undefined;
   readonly managedWorktreeReadiness?: FolderReadinessStatus | undefined;
 }
@@ -14,7 +18,11 @@ interface GitPreviewSettingsProps extends AsyncSettingsProps {
 export function GitPreviewSettings({
   draft,
   setDraft,
+  busy,
   perform,
+  projects,
+  activeProject,
+  onError,
   developmentReadiness,
   managedWorktreeReadiness,
 }: GitPreviewSettingsProps) {
@@ -29,6 +37,12 @@ export function GitPreviewSettings({
 
   return (
     <>
+      <GitConnectionsSettings
+        projects={projects}
+        activeProject={activeProject}
+        settingsBusy={busy}
+        onError={onError}
+      />
       <SettingsSection
         title="Git worktrees"
         description="Writable agents are isolated from your primary checkout by default."

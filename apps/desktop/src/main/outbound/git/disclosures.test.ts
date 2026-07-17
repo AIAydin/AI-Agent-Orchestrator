@@ -1,4 +1,5 @@
 import process from 'node:process';
+import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -204,6 +205,7 @@ describe('remote Git outbound disclosures', () => {
       bodySha256: 'c'.repeat(64),
       bodyCharacters: body.length,
       draft: false,
+      githubCli: customGitHubCli(),
     });
     expect(disclosure.details).toContainEqual({
       label: 'Exact pull request body',
@@ -235,6 +237,7 @@ describe('remote Git outbound disclosures', () => {
         baseBranch: 'main',
         headBranch: 'forgeboard/task/agent-1',
         sourceHead: 'b'.repeat(40),
+        githubCli: customGitHubCli(),
       }),
       gitHubPullRequestDisclosure({
         ...pushInput(destination),
@@ -244,12 +247,14 @@ describe('remote Git outbound disclosures', () => {
         bodySha256: 'c'.repeat(64),
         bodyCharacters: 0,
         draft: false,
+        githubCli: customGitHubCli(),
       }),
       gitHubCiDisclosure({
         projectName: 'Fixture',
         destination,
         snapshot,
         sourceHead: 'b'.repeat(40),
+        githubCli: customGitHubCli(),
       }),
     ];
     for (const disclosure of disclosures) {
@@ -260,6 +265,87 @@ describe('remote Git outbound disclosures', () => {
         transport: 'GitHub CLI HTTPS API',
       });
     }
+  });
+
+  it('discloses exact ready, unverified, and missing GitHub CLI states', () => {
+    const destination = gitRemoteDestination(
+      remote('https://github.com/owner/repository.git'),
+      '/tmp/project',
+    );
+    const custom = gitHubStatusDisclosure({
+      projectName: 'Fixture',
+      destination,
+      baseBranch: 'main',
+      headBranch: 'topic',
+      sourceHead: 'b'.repeat(40),
+      githubCli: customGitHubCli(),
+    });
+    expect(custom.details).toEqual(
+      expect.arrayContaining([
+        { label: 'GitHub CLI source', value: 'Custom selection' },
+        { label: 'GitHub CLI file', value: 'gh-custom' },
+        { label: 'GitHub CLI SHA-256', value: 'd'.repeat(64) },
+        {
+          label: 'Exact GitHub CLI path',
+          value: customGitHubCli().executablePath,
+        },
+      ]),
+    );
+    expect(custom.warning).toMatch(/custom GitHub CLI selected in Settings/iu);
+
+    const automaticExecutable = path.resolve('/opt/forgeboard/bin/gh-auto');
+    const unverified = gitHubStatusDisclosure({
+      projectName: 'Fixture',
+      destination,
+      baseBranch: 'main',
+      headBranch: 'topic',
+      sourceHead: 'b'.repeat(40),
+      githubCli: {
+        source: 'automatic',
+        available: false,
+        filename: 'gh-auto',
+        sha256: 'e'.repeat(64),
+        executablePath: automaticExecutable,
+      },
+    });
+    expect(unverified.details).toEqual(
+      expect.arrayContaining([
+        { label: 'GitHub CLI file', value: 'gh-auto' },
+        { label: 'GitHub CLI SHA-256', value: 'e'.repeat(64) },
+        { label: 'Exact GitHub CLI path', value: automaticExecutable },
+        {
+          label: 'GitHub CLI validation',
+          value: 'Detected; version validation pending',
+        },
+      ]),
+    );
+    expect(unverified.warning).toMatch(
+      /not yet validated.*--version.*credential-free.*remain blocked/iu,
+    );
+
+    const missing = gitHubStatusDisclosure({
+      projectName: 'Fixture',
+      destination,
+      baseBranch: 'main',
+      headBranch: 'topic',
+      sourceHead: 'b'.repeat(40),
+      githubCli: {
+        source: 'automatic',
+        available: false,
+        filename: null,
+        sha256: null,
+        executablePath: null,
+      },
+    });
+    expect(missing.details).toContainEqual({
+      label: 'Exact GitHub CLI path',
+      value: 'No executable is currently resolved',
+    });
+    expect(missing.details).toContainEqual({
+      label: 'GitHub CLI validation',
+      value: 'Executable not found',
+    });
+    expect(missing.warning).toMatch(/did not find GitHub CLI.*cannot contact GitHub/iu);
   });
 
   it('chunks the full advertised file-path disclosure into bounded native fields', () => {
@@ -303,5 +389,15 @@ function pushInput(destination: ReturnType<typeof gitRemoteDestination>): GitPus
     additions: 2,
     deletions: 1,
     readinessEvidence: 'c'.repeat(64),
+  };
+}
+
+function customGitHubCli() {
+  return {
+    source: 'custom' as const,
+    available: true,
+    filename: 'gh-custom',
+    sha256: 'd'.repeat(64),
+    executablePath: path.resolve(path.parse(process.cwd()).root, 'opt', 'forgeboard', 'gh-custom'),
   };
 }

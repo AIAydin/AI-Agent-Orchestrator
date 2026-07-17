@@ -172,6 +172,34 @@ beforeEach(() => {
       },
       commands: { checkReadiness: commandCheck },
       agents: { checkReadiness: agentCheck },
+      git: {
+        connections: {
+          list: vi.fn(({ projectId }: { projectId: string }) =>
+            Promise.resolve({
+              ok: true,
+              value: {
+                projectId,
+                projectName: 'Detected project',
+                configurationRevision: 'a'.repeat(64),
+                remotes: [],
+                capturedAt: '2026-07-15T18:00:00.000Z',
+              },
+            }),
+          ),
+          status: vi.fn(() =>
+            Promise.resolve({
+              ok: true,
+              value: {
+                source: 'automatic',
+                state: 'unavailable',
+                identity: null,
+                verifiedAt: null,
+                checkedAt: '2026-07-15T18:00:00.000Z',
+              },
+            }),
+          ),
+        },
+      },
       privacy: {
         export: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },

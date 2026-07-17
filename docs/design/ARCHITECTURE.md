@@ -130,6 +130,19 @@ check evidence and exact human approval, then revalidate source, remote, branche
 GitHub head state immediately before execution. PR bodies travel on standard input; CI results are
 filtered to the exact branch and full SHA.
 
+Git connection configuration is a separate local-only authority. The renderer selects a saved
+project and may submit a credential-free network URL, while local repository and custom `gh` paths
+come only from main-owned native pickers. Main inspects exact local Git configuration, filesystem and
+executable identity, creates an owner-bound expiring plan, and requires both renderer review and a
+cancel-default native confirmation. Remote changes never test reachability or contact a destination.
+The optional custom `gh` binding is device-local and content-bound; its reviewed `--version` probe
+uses a minimal credential-free environment. Automatic discovery remains unavailable after startup or
+privacy reset until either its Settings review or an explicitly confirmed GitHub status action runs
+the same credential-free probe successfully. Nonzero or malformed output cannot unlock auth or API
+commands. Outbound GitHub plans bind the selected source, path, SHA-256, validation state, and
+identity-guarded runner again before every command. GitHub CLI changes are serialized against
+delivery and invalidate only CLI-bound plans and status, preserving unrelated push plans.
+
 ## Configuration and distribution
 
 The settings database is the canonical configuration source. Implemented desktop screens cover
@@ -138,12 +151,13 @@ preview and project-check commands, worktree locations, Docker profiles, extensi
 storage/retention. Backup settings cover the destination picker, automatic interval, quit-time
 behavior, and a per-folder retention target. The optional Git commit identity override and default
 Git remote name are active; identity falls back to repository/global Git config when both UI fields
-are blank. Existing credential-free remotes can be selected by the Git / PR node, while adding or
-editing a remote URL remains outside the current UI. Collaboration connection settings drive the
-explicit desktop join/leave boundary; its access token remains volatile and is not persisted with
-those settings. Several persisted settings are not yet connected to a complete runtime surface,
-including terminal and updates. Direct SQLite backup restore UI remains unfinished; its presence in
-a schema is not treated as implemented behavior.
+are blank. The Git connections screen inspects a selected saved project, adds credential-free
+network or picker-selected local remotes, replaces simple managed targets, removes exactly disclosed
+managed configuration and tracking refs, and selects automatic or custom GitHub CLI discovery.
+Collaboration connection settings drive the explicit desktop join/leave boundary; its access token
+remains volatile and is not persisted with those settings. Several persisted settings are not yet
+connected to a complete runtime surface, including terminal and updates. Direct SQLite backup
+restore UI remains unfinished; its presence in a schema is not treated as implemented behavior.
 
 First-run setup treats agent readiness as a trusted gate. Main resolves and probes only the selected
 bundled, detected, overridden, or custom executable and returns strict ready/failure evidence;
@@ -210,13 +224,14 @@ manifests re-enter the same launch disclosure and approval pipeline as built-in 
 
 The release workflow is configured to build platform artifacts and checksums on each target
 operating system, enabling code signing/notarization only when maintainers configure the relevant
-repository secrets. Unpacked packaged applications have passed smoke tests on macOS arm64, macOS
-Intel, Windows, and Linux. Unsigned native macOS arm64 and Intel DMGs have also passed generation,
-installation, launch, smoke, and checksum checks; full Windows/Linux installer proof and GitHub
-Release publication remain open. A copied macOS arm64 application proved its bundled Git runtime
-outside the repository under a minimal `PATH`. The verified packaged app bundles its
-renderer/runtime and does not require Node.js or pnpm on the end user's machine. External agent CLIs
-remain optional capabilities detected and explained in the UI.
+repository secrets. Earlier exact-commit ledger checkpoints record unpacked-application smoke proof
+on macOS arm64, macOS Intel, Windows, and Linux, unsigned native macOS arm64 and Intel DMG generation,
+installation, launch, smoke, and checksums, and a copied macOS arm64 application's bundled Git runtime
+outside the repository under a minimal `PATH`. Those historical results do not prove the current
+tree: fresh Windows, Linux, macOS Intel, signed/notarized native-installer, and GitHub Release evidence
+remain open. Packaged applications bundle their renderer/runtime and do not require Node.js or pnpm
+on the end user's machine. External agent CLIs remain optional capabilities detected and explained in
+the UI.
 
 ## Persistence
 

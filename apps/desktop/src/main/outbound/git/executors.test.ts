@@ -16,14 +16,20 @@ describe('permit-bound Git remote operations', () => {
     await expect(operations.push(invalidPermit, '/not-reached', null as never)).rejects.toThrow(
       /gate-issued permit/u,
     );
-    await expect(operations.status(invalidPermit, '/not-reached', null as never)).rejects.toThrow(
-      /gate-issued permit/u,
-    );
     await expect(
-      operations.createPullRequest(invalidPermit, '/not-reached', null as never, null as never),
+      operations.status(invalidPermit, null as never, '/not-reached', null as never),
     ).rejects.toThrow(/gate-issued permit/u);
-    await expect(operations.readCiStatus(invalidPermit, null as never)).rejects.toThrow(
-      /gate-issued permit/u,
-    );
+    await expect(
+      operations.createPullRequest(
+        invalidPermit,
+        null as never,
+        '/not-reached',
+        null as never,
+        null as never,
+      ),
+    ).rejects.toThrow(/gate-issued permit/u);
+    await expect(
+      operations.readCiStatus(invalidPermit, null as never, null as never),
+    ).rejects.toThrow(/gate-issued permit/u);
   });
 });

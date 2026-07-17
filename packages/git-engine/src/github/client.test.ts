@@ -7,9 +7,56 @@ import process from 'node:process';
 import { describe, expect, it } from 'vitest';
 
 import { GitEngineError } from '../model/errors.js';
-import { GitHubCliExecutor, GitHubService } from './client.js';
+import { buildGitHubCliEnvironment, GitHubCliExecutor, GitHubService } from './client.js';
 
 describe('GitHubCliExecutor', () => {
+  it('scrubs Windows environment names case-insensitively and makes explicit casing win', () => {
+    const environment = buildGitHubCliEnvironment(
+      {
+        PATH: 'ambient-path',
+        Git_Dir: 'ambient-repository',
+        gh_debug: 'ambient-debug',
+        gh_prompt_disabled: '0',
+      },
+      {
+        Path: 'explicit-path',
+        gIt_sSh_CoMmAnD: 'explicit-wrapper',
+        Gh_BrOwSeR: 'explicit-browser',
+      },
+      'win32',
+    );
+
+    expect(environment.Path).toBe('explicit-path');
+    expect(environment.GH_PROMPT_DISABLED).toBe('1');
+    expect(Object.keys(environment).filter((name) => name.toUpperCase() === 'PATH')).toEqual([
+      'Path',
+    ]);
+    for (const blocked of ['GIT_DIR', 'GIT_SSH_COMMAND', 'GH_DEBUG', 'GH_BROWSER']) {
+      expect(Object.keys(environment).some((name) => name.toUpperCase() === blocked)).toBe(false);
+    }
+    expect(
+      Object.keys(environment).filter((name) => name.toUpperCase() === 'GH_PROMPT_DISABLED'),
+    ).toEqual(['GH_PROMPT_DISABLED']);
+  });
+
+  it('preserves POSIX case-sensitive names while scrubbing the exact blocked variables', () => {
+    const environment = buildGitHubCliEnvironment(
+      {
+        GIT_DIR: '/blocked',
+        git_dir: '/ordinary-lowercase-name',
+        GH_DEBUG: 'blocked',
+        gh_debug: 'ordinary-lowercase-name',
+      },
+      {},
+      'linux',
+    );
+
+    expect(environment.GIT_DIR).toBeUndefined();
+    expect(environment.GH_DEBUG).toBeUndefined();
+    expect(environment.git_dir).toBe('/ordinary-lowercase-name');
+    expect(environment.gh_debug).toBe('ordinary-lowercase-name');
+  });
+
   it('passes metacharacters as one literal argument without a shell', async () => {
     const literal = 'title; $(touch never) && echo unsafe';
     const executor = new GitHubCliExecutor(process.execPath);
@@ -35,7 +82,9 @@ describe('GitHubCliExecutor', () => {
     const executor = new GitHubCliExecutor(process.execPath);
 
     await expect(
-      executor.run(['-e', 'process.exit(0)'], { input: 'x'.repeat(8 * 1_024 * 1_024) }),
+      executor.run(['-e', 'process.exit(0)'], {
+        input: 'x'.repeat(8 * 1_024 * 1_024),
+      }),
     ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
   });
 
@@ -56,6 +105,33 @@ describe('GitHubCliExecutor', () => {
       proxy: null,
       noLazyFetch: '1',
     });
+  });
+
+  it('can validate an executable without inheriting ambient credentials or process state', async () => {
+    const variable = 'FORGEBOARD_AMBIENT_VALIDATION_SECRET';
+    const previous = process.env[variable];
+    process.env[variable] = 'must-not-reach-child';
+    try {
+      const executor = new GitHubCliExecutor(
+        process.execPath,
+        { FORGEBOARD_EXPLICIT_VALIDATION_VALUE: 'allowed' },
+        () => undefined,
+        { inheritEnvironment: false },
+      );
+      const result = await executor.run([
+        '-e',
+        `process.stdout.write(JSON.stringify({ambient:process.env.${variable}??null,explicit:process.env.FORGEBOARD_EXPLICIT_VALIDATION_VALUE??null,prompt:process.env.GH_PROMPT_DISABLED??null}))`,
+      ]);
+
+      expect(JSON.parse(result.stdout)).toEqual({
+        ambient: null,
+        explicit: 'allowed',
+        prompt: '1',
+      });
+    } finally {
+      if (previous === undefined) delete process.env[variable];
+      else process.env[variable] = previous;
+    }
   });
 
   it('pins its executable and disables ambient telemetry, update, debug, and UI overrides', async () => {
@@ -88,6 +164,35 @@ describe('GitHubCliExecutor', () => {
     });
   });
 
+  it('rechecks the bound executable identity immediately before every spawn', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'forgeboard-gh-identity-'));
+    const marker = path.join(root, 'must-not-exist');
+    const checked: string[] = [];
+    let current = true;
+    try {
+      const executor = new GitHubCliExecutor(process.execPath, {}, (executable) => {
+        checked.push(executable);
+        if (!current) throw new Error('The selected GitHub CLI executable changed.');
+      });
+      await expect(executor.run(['-e', 'process.stdout.write("first")'])).resolves.toMatchObject({
+        stdout: 'first',
+      });
+
+      current = false;
+      await expect(
+        executor.run([
+          '-e',
+          "require('node:fs').writeFileSync(process.argv[1], 'launched')",
+          marker,
+        ]),
+      ).rejects.toThrow(/executable changed/iu);
+      expect(checked).toEqual([realpathSync(process.execPath), realpathSync(process.execPath)]);
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('does not launch an already-aborted command', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'forgeboard-gh-pre-abort-'));
     const marker = path.join(root, 'must-not-exist');
@@ -112,13 +217,17 @@ describe('GitHubCliExecutor', () => {
       undefined,
       new GitHubCliExecutor('forgeboard-definitely-missing-gh', { PATH: '' }),
     );
-    await expect(missing.availability()).resolves.toMatchObject({ installed: false });
+    await expect(missing.availability()).resolves.toMatchObject({
+      installed: false,
+    });
 
     const timeout = new GitHubService(undefined, {
       executable: '/absolute/gh',
       run: () => Promise.reject(new GitEngineError('TIMEOUT', 'timed out')),
     });
-    await expect(timeout.availability()).rejects.toMatchObject({ code: 'TIMEOUT' });
+    await expect(timeout.availability()).rejects.toMatchObject({
+      code: 'TIMEOUT',
+    });
 
     const controller = new AbortController();
     controller.abort();
@@ -126,6 +235,31 @@ describe('GitHubCliExecutor', () => {
     await expect(available.availability(controller.signal)).rejects.toMatchObject({
       code: 'ABORTED',
     });
+  });
+
+  it.each([
+    { label: 'nonzero', exitCode: 7, stdout: 'gh version 2.80.0\n' },
+    { label: 'malformed', exitCode: 0, stdout: 'not GitHub CLI\n' },
+  ])('blocks auth commands after a $label version response', async ({ exitCode, stdout }) => {
+    const calls: string[][] = [];
+    const service = new GitHubService(undefined, {
+      executable: '/absolute/gh',
+      run: (args) => {
+        calls.push([...args]);
+        return Promise.resolve({
+          executable: '/absolute/gh',
+          args: [...args],
+          stdout,
+          stderr: '',
+          exitCode,
+        });
+      },
+    });
+
+    await expect(service.authStatus('github.com')).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+    });
+    expect(calls).toEqual([['--version']]);
   });
 
   it('waits for an aborted child to terminate before reporting lifecycle drain', async () => {

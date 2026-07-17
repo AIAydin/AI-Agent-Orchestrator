@@ -22,7 +22,10 @@ const electronMock = vi.hoisted(() => {
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: electronMock.fromWebContents },
-  ipcMain: { handle: electronMock.handle, removeHandler: electronMock.removeHandler },
+  ipcMain: {
+    handle: electronMock.handle,
+    removeHandler: electronMock.removeHandler,
+  },
 }));
 
 import {
@@ -116,13 +119,38 @@ describe('GitRemoteDeliveryIpcService', () => {
     Object.defineProperty(subframe, 'senderFrame', { value: {} });
     await expect(
       handler(GIT_REMOTE_IPC_CHANNELS.preparePush)(subframe, PUSH_INPUT),
-    ).resolves.toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+
+    const detachedMainFrame = liveEvent();
+    Object.defineProperty(detachedMainFrame.senderFrame, 'detached', {
+      value: true,
+    });
+    await expect(
+      handler(GIT_REMOTE_IPC_CHANNELS.preparePush)(detachedMainFrame, PUSH_INPUT),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+
+    const missingFrame = liveEvent();
+    Object.defineProperty(missingFrame, 'senderFrame', { value: null });
+    await expect(
+      handler(GIT_REMOTE_IPC_CHANNELS.preparePush)(missingFrame, PUSH_INPUT),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
 
     expect(fixture.inspect).not.toHaveBeenCalled();
     expect(fixture.preparePush).not.toHaveBeenCalled();
     expect(fixture.cancelPlan).not.toHaveBeenCalled();
     expect(event.sender.destroyedListenerCount()).toBe(0);
     expect(subframe.sender.destroyedListenerCount()).toBe(0);
+    expect(detachedMainFrame.sender.destroyedListenerCount()).toBe(0);
+    expect(missingFrame.sender.destroyedListenerCount()).toBe(0);
     await fixture.service.dispose();
   });
 
@@ -297,7 +325,9 @@ describe('GitRemoteDeliveryIpcService', () => {
     fixture.inspect.mockImplementationOnce(() => pending.promise);
     fixture.service.registerIpcHandlers();
     const event = liveEvent();
-    const request = handler(GIT_REMOTE_IPC_CHANNELS.inspect)(event, { target: TARGET });
+    const request = handler(GIT_REMOTE_IPC_CHANNELS.inspect)(event, {
+      target: TARGET,
+    });
     await vi.waitFor(() => expect(fixture.inspect).toHaveBeenCalledTimes(1));
 
     await expect(fixture.service.pauseForDataMutation()).rejects.toThrow(
@@ -313,6 +343,55 @@ describe('GitRemoteDeliveryIpcService', () => {
     await fixture.service.dispose();
   });
 
+  it('invalidates CLI-bound delivery state without pausing ordinary IPC admission', async () => {
+    const fixture = createFixture();
+    fixture.service.registerIpcHandlers();
+
+    fixture.service.invalidateGitHubRuntime();
+
+    expect(fixture.invalidateGitHubRuntime).toHaveBeenCalledTimes(1);
+    await expect(
+      handler(GIT_REMOTE_IPC_CHANNELS.inspect)(liveEvent(), { target: TARGET }),
+    ).resolves.toEqual({ ok: true, value: inspectView() });
+    await fixture.service.dispose();
+  });
+
+  it('admits a CLI-only mutation only while delivery is idle and does not reset push state', async () => {
+    const fixture = createFixture();
+    const pending = deferred<ReturnType<typeof inspectView>>();
+    fixture.inspect.mockImplementationOnce(() => pending.promise);
+    fixture.service.registerIpcHandlers();
+    const event = liveEvent();
+    const request = handler(GIT_REMOTE_IPC_CHANNELS.inspect)(event, {
+      target: TARGET,
+    });
+    await vi.waitFor(() => expect(fixture.inspect).toHaveBeenCalledTimes(1));
+
+    expect(() => fixture.service.pauseForGitHubRuntimeMutation()).toThrow(
+      'Wait for every Git remote-delivery operation before changing GitHub CLI.',
+    );
+    pending.resolve(inspectView());
+    await expect(request).resolves.toEqual({ ok: true, value: inspectView() });
+
+    fixture.service.pauseForGitHubRuntimeMutation();
+    expect(fixture.resetForPrivacy).not.toHaveBeenCalled();
+    expect(fixture.invalidateGitHubRuntime).not.toHaveBeenCalled();
+    await expect(
+      handler(GIT_REMOTE_IPC_CHANNELS.inspect)(event, { target: TARGET }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+
+    fixture.service.invalidateGitHubRuntime();
+    fixture.service.resumeAfterPrivacyReset();
+    expect(fixture.invalidateGitHubRuntime).toHaveBeenCalledOnce();
+    await expect(
+      handler(GIT_REMOTE_IPC_CHANNELS.inspect)(event, { target: TARGET }),
+    ).resolves.toEqual({ ok: true, value: inspectView() });
+    await fixture.service.dispose();
+  });
+
   it('removes every handler and owner listener, drains admitted work, and cannot revive', async () => {
     const fixture = createFixture();
     const pending = deferred<ReturnType<typeof inspectView>>();
@@ -320,7 +399,9 @@ describe('GitRemoteDeliveryIpcService', () => {
     fixture.service.registerIpcHandlers();
     const event = liveEvent();
     await handler(GIT_REMOTE_IPC_CHANNELS.preparePush)(event, PUSH_INPUT);
-    const request = handler(GIT_REMOTE_IPC_CHANNELS.inspect)(event, { target: TARGET });
+    const request = handler(GIT_REMOTE_IPC_CHANNELS.inspect)(event, {
+      target: TARGET,
+    });
     await vi.waitFor(() => expect(fixture.inspect).toHaveBeenCalledTimes(1));
 
     const disposal = fixture.service.dispose();
@@ -388,6 +469,7 @@ function createFixture(
     .mockResolvedValue(null);
   const prepareCi = vi.fn<GitRemoteDeliveryOperations['prepareCi']>();
   const confirmCi = vi.fn<GitRemoteDeliveryOperations['confirmCi']>().mockResolvedValue(null);
+  const invalidateGitHubRuntime = vi.fn<GitRemoteDeliveryOperations['invalidateGitHubRuntime']>();
   const discardOwner = vi.fn<GitRemoteDeliveryOperations['discardOwner']>();
   const resetForPrivacy = vi
     .fn<GitRemoteDeliveryOperations['resetForPrivacy']>()
@@ -408,6 +490,7 @@ function createFixture(
     confirmPullRequest,
     prepareCi,
     confirmCi,
+    invalidateGitHubRuntime,
     discardOwner,
     resetForPrivacy,
     pauseForShutdown,
@@ -419,7 +502,10 @@ function createFixture(
   >(
     () =>
       options.decision ??
-      Promise.resolve({ response: options.nativeResponse ?? 0, checkboxChecked: false }),
+      Promise.resolve({
+        response: options.nativeResponse ?? 0,
+        checkboxChecked: false,
+      }),
   );
   const appendAudit = vi.fn();
   const service = new GitRemoteDeliveryIpcService(
@@ -434,6 +520,7 @@ function createFixture(
     cancelPlan,
     preparePush,
     confirmPush,
+    invalidateGitHubRuntime,
     discardOwner,
     resetForPrivacy,
     dispose,

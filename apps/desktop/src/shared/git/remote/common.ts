@@ -31,6 +31,20 @@ export const GitRemoteNameSchema = z
   .max(128)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, 'Invalid Git remote name.');
 
+/** Safe display identity for existing Git remotes, including names this UI will not mutate. */
+export const GitRemoteDisplayNameSchema = z
+  .string()
+  .min(1)
+  .max(512)
+  .refine(
+    (value) =>
+      ![...value].some((character) => {
+        const code = character.codePointAt(0) ?? 0;
+        return code <= 31 || code === 127;
+      }),
+    'Git remote display names cannot contain control characters.',
+  );
+
 export const GitRemoteBranchSchema = z
   .string()
   .min(1)
@@ -83,7 +97,7 @@ export const GitHubOwnerRepositorySchema = z
 export const GitRemoteDescriptorViewSchema = z
   .object({
     kind: z.enum(['network', 'local-filesystem']),
-    name: GitRemoteNameSchema,
+    name: GitRemoteDisplayNameSchema,
     endpoint: GitRemoteEndpointSchema,
     resource: GitRemoteResourceSchema,
     transport: z.enum(['https', 'http', 'ssh', 'git', 'local']),

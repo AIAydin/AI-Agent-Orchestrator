@@ -1,6 +1,6 @@
 # Forgeboard
 
-Forgeboard is an open-source, local-first visual workshop for building software with locally
+Forgeboard is an MIT-licensed, local-first visual workshop for building software with locally
 installed coding-agent CLIs. The current desktop application combines a spatial canvas, isolated
 Git worktrees, streamed agent sessions, loopback web/mobile previews, and explicit launch and
 workflow approval gates, authoritative primary-checkout Git review, staging, and commits, plus
@@ -82,17 +82,19 @@ subfolder before that limit is exceeded.
 
 ## Current availability
 
-Forgeboard does not yet claim a published, end-user-ready GitHub Release. The current checkpoint
-has a passing production build and verified unpacked applications on macOS arm64, macOS Intel,
-Windows, and Linux. Unsigned native macOS arm64 and Intel DMGs have also been generated, installed,
-launched, smoke-tested, and checksummed. The current Windows and Linux installer rerun, and GitHub
-Release publication for every platform, remain open; the latest hosted rerun was prevented from
-starting by the repository account's GitHub Actions billing state.
+This repository is currently private, has no published tags or GitHub Releases, and therefore has no
+public installer download. Earlier exact-commit checkpoints recorded passing production builds and
+unpacked-application smoke tests on macOS arm64, macOS Intel, Windows, and Linux, plus unsigned native
+macOS arm64 and Intel DMG generation, installation, launch, smoke, and checksum evidence. The current
+tree still needs fresh Windows, Linux, and macOS Intel hosted proof, signing/notarization, and GitHub
+Release publication. The latest hosted rerun was prevented from starting by the repository account's
+GitHub Actions billing state.
 
 For implemented solo workflows, the first-run wizard and Settings provide UI controls for agent
 detection and executable selection, custom CLI setup, permission profile selection, Docker,
-project/worktree locations, the default Git remote name, preview commands, extensions, and local
-storage, backup, and retention behavior. Source and config-file edits are optional for these flows.
+project/worktree locations, Git remotes and the optional GitHub CLI, preview commands, extensions,
+and local storage, backup, and retention behavior. Source and config-file edits are optional for
+these flows.
 Lint, typecheck, test, build, and custom project checks can likewise be configured, approved, run,
 cancelled, and inspected entirely in the UI. See [Permission profiles](docs/PERMISSIONS.md) for the
 exact technical and disclosure-only boundaries.
@@ -135,19 +137,24 @@ primary checkout; AI or reviewer outcomes cannot replace the human decision.
 
 A Git / PR node can select the same opaque completed run, inspect its exact committed impact and
 credential-free remote, open that readiness UI, and prepare a normal non-force push of exactly one
-branch ref. Once an existing local, HTTPS, or SSH remote is available, every ordinary delivery
-choice and action is in the UI; source, environment, JSON, and manifest editing are not required.
+branch ref. **Settings → Git & previews → Git connections** can add credential-free HTTPS/SSH or
+picker-selected local Git remotes, replace a simple managed target, remove an exactly reviewed
+managed remote, and select either automatic discovery or a custom `gh` executable. These ordinary
+flows require no source, environment, JSON, or manifest editing.
+
 Main captures and revalidates the one exact effective push URL, then gives Git that approved literal
 directly—an absolute path for a local destination—with only its selected protocol enabled. The
-renderer never receives or supplies a filesystem path or exact Git remote/push URL. Validated PR and
-CI result URLs cross the typed boundary only so the UI can display or copy them. With an authenticated local `gh` CLI
-already on `PATH`, explicit on-demand confirmations also inspect the bound GitHub host and
-repository, require the remote head to equal the approved source before PR creation, send the exact
-natively disclosed PR body through standard input, and return only CI runs matching the full source
-SHA. Pull requests remain branch-following GitHub objects, so concurrent or later branch movement
-can change their contents even though Forgeboard revalidates the reviewed snapshot immediately
-before the request. No object ID, command, force flag, token, or approval evidence comes from the renderer. The
-exact unsupported configurations and user-owned Git/network trust boundaries are documented in
+delivery renderer never receives a filesystem path or the configured effective push URL. The
+Settings form can send a network URL the user typed; local paths remain native-picker and
+native-confirmation data only. Validated PR and CI result URLs cross the typed boundary only so the
+UI can display or copy them. With an authenticated selected `gh`, explicit on-demand confirmations
+also inspect the bound GitHub host and repository, require the remote head to equal the approved
+source before PR creation, send the exact natively disclosed PR body through standard input, and
+return only CI runs matching the full source SHA. Pull requests remain branch-following GitHub
+objects, so concurrent or later branch movement can change their contents even though Forgeboard
+revalidates the reviewed snapshot immediately before the request. No object ID, command, force flag,
+token, or approval evidence comes from the renderer. The exact unsupported configurations and
+user-owned Git/network trust boundaries are documented in
 [Remote Git and GitHub delivery](docs/git/GITHUB_DELIVERY.md).
 
 Existing folders can be opened without Git. Forgeboard then offers an **Initialize Git** action in
@@ -197,9 +204,8 @@ The release workflow is designed to emit clearly identified unsigned development
 the optional signing secrets documented in the release guide are configured. Such artifacts may
 trigger the operating system's standard warning.
 
-Still unfinished are adding or editing Git remote URLs, selecting a custom `gh` executable, broader
-merge and visual conflict-resolution flows, the interactive terminal node, updater, direct SQLite
-backup restore UI, and complete wiring of every persisted setting. See
+Still unfinished are broader merge and visual conflict-resolution flows, the interactive terminal
+node, updater, direct SQLite backup restore UI, and complete wiring of every persisted setting. See
 `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
 
 Optional collaboration is explicitly enabled and configured under **Settings → Connectivity**.

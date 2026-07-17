@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import {
   ChangeService,
+  GitEngineError,
   RepositoryService,
   WorktreeService,
   type GitHubCommandOptions,
@@ -25,6 +26,7 @@ import type { OutboundApprovalPlan } from '../../outbound/outbound-action-gate.j
 import { OutboundActionGate } from '../../outbound/outbound-action-gate.js';
 import { PermitBoundGitRemoteOperations } from '../../outbound/git/executors.js';
 import { LocalStore, type StoredRunRecord } from '../../storage.js';
+import type { GitHubCliCommandRuntime } from '../github-cli/runtime.js';
 import { GitTargetResolver } from '../git-target-resolver.js';
 import type {
   GitShippingReadinessAuthority,
@@ -735,7 +737,146 @@ describe('main-owned Git remote delivery', () => {
     });
     expect(ciResult?.runs).toHaveLength(1);
     expect(ciResult?.runs[0]?.headSha).toBe(fixture.sourceHead);
-    expect(runner.calls.every((call) => call.executable === 'fake-gh')).toBe(true);
+    expect(runner.calls.every((call) => call.executable === runner.executable)).toBe(true);
+  }, 45_000);
+
+  it('binds native review, cached status, and every command to one CLI fingerprint', async () => {
+    const fixture = await createFixture();
+    const runner = new FakeGitHubRunner();
+    runner.branches.set('main', fixture.baseCommit);
+    runner.branches.set('remote-topic', fixture.sourceHead);
+    const harness = createHarness(fixture, runner);
+    const target = deliveryTarget();
+
+    const changed = await harness.service.prepareGitHubStatus('window-cli-binding', {
+      target,
+      remote: 'github',
+      baseBranch: 'main',
+      destinationBranch: 'remote-topic',
+    });
+    harness.githubRuntime.identityFingerprint = 'f'.repeat(64);
+    let nativeOpened = false;
+    await expect(
+      harness.service.confirmGitHubStatus('window-cli-binding', changed.planId, {
+        confirm: () => {
+          nativeOpened = true;
+          return Promise.resolve('approved');
+        },
+      }),
+    ).rejects.toThrow(/selected GitHub CLI changed/iu);
+    expect(nativeOpened).toBe(false);
+    expect(runner.calls).toHaveLength(0);
+
+    const currentPlan = await harness.service.prepareGitHubStatus('window-cli-binding', {
+      target,
+      remote: 'github',
+      baseBranch: 'main',
+      destinationBranch: 'remote-topic',
+    });
+    const resolvesBeforeConfirm = harness.githubRuntime.resolveCalls;
+    let nativePlan: OutboundApprovalPlan | undefined;
+    await harness.service.confirmGitHubStatus('window-cli-binding', currentPlan.planId, {
+      confirm: (plan) => {
+        nativePlan = plan;
+        return Promise.resolve('approved');
+      },
+    });
+    expect(nativePlan?.disclosure.details).toEqual(
+      expect.arrayContaining([
+        { label: 'GitHub CLI source', value: 'Custom selection' },
+        { label: 'GitHub CLI file', value: 'fake-gh' },
+        { label: 'GitHub CLI SHA-256', value: 'd'.repeat(64) },
+        { label: 'Exact GitHub CLI path', value: runner.executable },
+      ]),
+    );
+    expect(harness.githubRuntime.resolveCalls - resolvesBeforeConfirm).toBeGreaterThanOrEqual(
+      runner.calls.length,
+    );
+
+    harness.githubRuntime.identityFingerprint = 'a'.repeat(64);
+    await expect(
+      harness.service.preparePullRequest('window-cli-binding', {
+        target,
+        remote: 'github',
+        baseBranch: 'main',
+        destinationBranch: 'remote-topic',
+        title: 'Must recheck after CLI change',
+        body: '',
+        draft: false,
+      }),
+    ).rejects.toThrow(/check this exact GitHub destination/iu);
+  });
+
+  it('allows missing automatic CLI status while keeping Git push independent', async () => {
+    const fixture = await createFixture();
+    const harness = createHarness(fixture);
+    const target = deliveryTarget();
+    harness.githubRuntime.available = false;
+    harness.githubRuntime.identityFingerprint = 'f'.repeat(64);
+
+    const statusPlan = await harness.service.prepareGitHubStatus('window-cli-missing', {
+      target,
+      remote: 'github',
+      baseBranch: 'main',
+      destinationBranch: 'remote-topic',
+    });
+    let nativePlan: OutboundApprovalPlan | undefined;
+    const status = await harness.service.confirmGitHubStatus(
+      'window-cli-missing',
+      statusPlan.planId,
+      {
+        confirm: (plan) => {
+          nativePlan = plan;
+          return Promise.resolve('approved');
+        },
+      },
+    );
+    expect(status).toMatchObject({ installed: false, authenticated: false });
+    expect(nativePlan?.disclosure.warning).toMatch(/did not find GitHub CLI/iu);
+    await expect(
+      harness.service.prepareCi('window-cli-missing', {
+        target,
+        remote: 'github',
+        baseBranch: 'main',
+        destinationBranch: 'remote-topic',
+      }),
+    ).rejects.toThrow(/GitHub CLI is unavailable/iu);
+
+    const resolvesBeforePush = harness.githubRuntime.resolveCalls;
+    const push = await harness.service.preparePush('window-cli-missing', {
+      target,
+      remote: 'origin',
+      destinationBranch: 'published/without-gh',
+    });
+    await expect(
+      harness.service.confirmPush('window-cli-missing', push.planId, {
+        confirm: () => Promise.resolve('denied'),
+      }),
+    ).resolves.toBeNull();
+    expect(harness.githubRuntime.resolveCalls).toBe(resolvesBeforePush);
+
+    const pendingStatus = await harness.service.prepareGitHubStatus('window-cli-missing', {
+      target,
+      remote: 'github',
+      baseBranch: 'main',
+      destinationBranch: 'remote-topic',
+    });
+    const preservedPush = await harness.service.preparePush('window-cli-missing', {
+      target,
+      remote: 'origin',
+      destinationBranch: 'published/still-independent',
+    });
+    harness.service.invalidateGitHubRuntime();
+    await expect(
+      harness.service.confirmGitHubStatus('window-cli-missing', pendingStatus.planId, {
+        confirm: () => Promise.resolve('denied'),
+      }),
+    ).rejects.toThrow(/approval plan is unavailable/iu);
+    await expect(
+      harness.service.confirmPush('window-cli-missing', preservedPush.planId, {
+        confirm: () => Promise.resolve('denied'),
+      }),
+    ).resolves.toBeNull();
   });
 
   it('discloses the selected GitHub base to source impact when it differs from the recorded run-base impact', async () => {
@@ -885,9 +1026,8 @@ function createHarness(fixture: Fixture, runner = new FakeGitHubRunner()) {
   const operations = new PermitBoundGitRemoteOperations(
     repositories,
     new ChangeService(repositories),
-    () => runner,
-    runner.executable,
   );
+  const githubRuntime = new MutableGitHubRuntime(runner);
   const service = new GitRemoteDeliveryService(
     targets,
     repositories,
@@ -895,10 +1035,10 @@ function createHarness(fixture: Fixture, runner = new FakeGitHubRunner()) {
     readiness,
     outbound,
     audit,
-    { operations },
+    { operations, githubCliRuntime: githubRuntime },
   );
   services.add(service);
-  return { service, readiness, runner, audit, outbound };
+  return { service, readiness, runner, githubRuntime, audit, outbound };
 }
 
 class MutableReadiness implements GitShippingReadinessAuthority {
@@ -1006,7 +1146,7 @@ interface FakeCall {
 }
 
 class FakeGitHubRunner implements GitHubCommandRunner {
-  public readonly executable = 'fake-gh';
+  public readonly executable = path.resolve(path.parse(process.cwd()).root, 'test-bin', 'fake-gh');
   public readonly calls: FakeCall[] = [];
   public readonly branches = new Map<string, string>();
 
@@ -1078,6 +1218,70 @@ class FakeGitHubRunner implements GitHubCommandRunner {
       stdout,
       stderr,
       exitCode,
+    });
+  }
+}
+
+class MutableGitHubRuntime {
+  public identityFingerprint = 'e'.repeat(64);
+  public resolveCalls = 0;
+  public available = true;
+  readonly #missingRunner: GitHubCommandRunner = {
+    executable: 'gh',
+    run: () =>
+      Promise.reject(
+        new GitEngineError('COMMAND_FAILED', 'GitHub CLI is unavailable.', {
+          executableMissing: true,
+        }),
+      ),
+  };
+
+  public constructor(private readonly runner: GitHubCommandRunner) {}
+
+  public resolveCommandRuntime(): Promise<GitHubCliCommandRuntime> {
+    this.resolveCalls += 1;
+    if (!this.available) {
+      return Promise.resolve({
+        source: 'automatic',
+        available: false,
+        executable: this.#missingRunner.executable,
+        identityFingerprint: this.identityFingerprint,
+        review: null,
+        status: {
+          source: 'automatic',
+          state: 'unavailable',
+          identity: null,
+          verifiedAt: null,
+          checkedAt: NOW,
+        },
+        runner: this.#missingRunner,
+      });
+    }
+    const identity = {
+      source: 'custom' as const,
+      filename: path.basename(this.runner.executable),
+      sizeBytes: 42,
+      sha256: 'd'.repeat(64),
+      version: '99.0.0',
+    };
+    return Promise.resolve({
+      source: 'custom',
+      available: true,
+      executable: this.runner.executable,
+      identityFingerprint: this.identityFingerprint,
+      review: {
+        source: 'custom',
+        executablePath: this.runner.executable,
+        identity,
+      },
+      status: {
+        source: 'custom',
+        state: 'ready',
+        identity,
+        verifiedAt: NOW,
+        checkedAt: NOW,
+      },
+      runner: this.runner,
     });
   }
 }
