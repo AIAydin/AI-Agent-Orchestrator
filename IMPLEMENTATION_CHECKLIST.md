@@ -923,3 +923,24 @@ unchecked when only a subset of their required behavior has proof.
   and output floods keep lifecycle cleanup deterministic and never fabricate success. This closes
   only the Interactive Terminal node entry; broader preview, node-registry, workflow, and release
   requirements remain open.
+- 2026-07-17: the frozen Interactive Terminal source checkpoint
+  `495030d8073b36f227152920723d8d6804710308` passed the 934-file structure gate, repository-wide
+  formatting and zero-warning lint, all eight workspace strict typechecks, 1,799 unit tests across
+  268 files, 271 real-process integration tests across 32 files, every workspace production build,
+  and `git diff --check`. Direct Terminal IPC coverage proves reviewer/viewer denial,
+  owner/editor admission, role downgrade during native confirmation and immediately before spawn,
+  read-only history access, and the owner-bound stop-control exception. The focused Electron journey
+  proves UI-only configuration, renderer cancellation, exact native review, real ANSI/raw PTY I/O,
+  exit/history, a full app close and restart with configuration persistence, reviewed restart, and
+  confirmed termination without external web traffic. Fresh packaging from that commit rebuilt the
+  native `node-pty` dependency and produced the macOS arm64 application, ZIP, DMG, and both blockmaps.
+  Packaged-app and read-only DMG mount/copy/launch smokes passed, the latter with
+  `FORGEBOARD_SMOKE_OK`; release metadata records the exact source commit and
+  `unsigned-development` status, all four distributables passed independent SHA-256 generation, and
+  `hdiutil` validated the DMG. The DMG SHA-256 is
+  `17cd2c054b1ed0d054f8b96dc4fdd88334941e6633d69c890b7f04b89c93637a`; the ZIP SHA-256 is
+  `09681a91fd0b956d08ae33ee012838da39d67810646648e32380620bad14ce8e`. Electron Builder found no
+  Developer ID identity, so the executable remains ad-hoc/linker-signed and Gatekeeper assessment
+  fails. The full multi-journey Electron suite was not rerun for this checkpoint; the dedicated
+  Terminal journey passed. Fresh Windows/Linux/macOS Intel artifacts, signing/notarization, public
+  repository visibility, a tag, and GitHub Release publication remain open.
