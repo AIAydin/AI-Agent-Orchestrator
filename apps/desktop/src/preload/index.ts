@@ -87,6 +87,7 @@ import {
 import { createFileApi } from './files.js';
 import { createGitLifecycleApi } from './git/lifecycle/cleanup.js';
 import { createGitDeliveryReadinessApi } from './git/readiness/bridge.js';
+import { createGitRemoteDeliveryApi } from './git/remote/index.js';
 import { createGitReviewNotesApi } from './git-review-notes.js';
 import { createRunHistoryApi } from './runs/history.js';
 import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
@@ -426,6 +427,7 @@ const api: ForgeboardApi = {
     readiness: createGitDeliveryReadinessApi((channel, ...args) =>
       ipcRenderer.invoke(channel, ...args),
     ),
+    remote: createGitRemoteDeliveryApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     lifecycle: createGitLifecycleApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     reviewNotes: createGitReviewNotesApi(async (channel, ...args) => {
       const result: unknown = await ipcRenderer.invoke(channel, ...args);

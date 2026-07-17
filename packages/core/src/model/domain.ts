@@ -367,25 +367,121 @@ export const ReviewGateNodeSchema = createNodeSchema(
     .strict(),
 );
 
+export const GitPullRequestDeliveryTargetSchema = z
+  .object({
+    kind: z.literal('agent-run'),
+    runId: z.string().uuid(),
+  })
+  .strict();
+export type GitPullRequestDeliveryTarget = z.infer<typeof GitPullRequestDeliveryTargetSchema>;
+
+const GitRemoteNameSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'Invalid Git remote name');
+
+const GitBranchNameSchema = z
+  .string()
+  .min(1)
+  .max(1_024)
+  .refine(isSafeGitBranchName, 'Invalid Git branch name');
+
+const PullRequestTitleSchema = z
+  .string()
+  .max(512)
+  .refine((value) => !value.includes('\0'), 'Pull request text cannot contain NUL bytes');
+
+const PullRequestBodySchema = z
+  .string()
+  .max(32_768)
+  .refine((value) => !value.includes('\0'), 'Pull request text cannot contain NUL bytes');
+
+const PullRequestWebUrlSchema = z
+  .string()
+  .max(2_048)
+  .url()
+  .refine(
+    isCredentialFreePullRequestUrl,
+    'Pull request URLs must be credential-free HTTP(S) pull request links',
+  );
+
 export const GitPullRequestNodeSchema = createNodeSchema(
   'git-pr',
   z
     .object({
+      // Main resolves this opaque persisted identity. Every branch, OID, path, check, and URL below
+      // is configuration or cached display only and never grants delivery authority.
+      deliveryTarget: GitPullRequestDeliveryTargetSchema.optional(),
+      // Retained so legacy canvases remain openable; delivery never resolves authority from it.
       worktreeId: EntityIdSchema.optional(),
       branch: z.string().min(1).max(1024).optional(),
-      baseBranch: z.string().min(1).max(1024).optional(),
-      remote: z.string().min(1).max(1024).optional(),
+      remote: GitRemoteNameSchema.optional(),
+      destinationBranch: GitBranchNameSchema.optional(),
+      baseBranch: GitBranchNameSchema.optional(),
+      pullRequestTitle: PullRequestTitleSchema.optional(),
+      pullRequestBody: PullRequestBodySchema.optional(),
+      pullRequestDraft: z.boolean().default(false),
       commitIds: z.array(z.string().regex(/^[0-9a-f]{7,64}$/i)).default([]),
       ahead: z.number().int().nonnegative().default(0),
       behind: z.number().int().nonnegative().default(0),
       mergeReadiness: z
         .enum(['unknown', 'ready', 'conflicts', 'checks-failing'])
         .default('unknown'),
-      pullRequestUrl: z.string().url().optional(),
+      pullRequestUrl: PullRequestWebUrlSchema.optional(),
       checkIds: z.array(EntityIdSchema).default([]),
     })
     .strict(),
 );
+
+function isSafeGitBranchName(value: string): boolean {
+  if (value.trim() !== value || value === '@') return false;
+  if (
+    value.startsWith('/') ||
+    value.endsWith('/') ||
+    value.startsWith('.') ||
+    value.endsWith('.') ||
+    value.endsWith('.lock') ||
+    value.includes('..') ||
+    value.includes('//') ||
+    value.includes('@{') ||
+    /[\\\s~^:?*[\]]/u.test(value)
+  ) {
+    return false;
+  }
+  return (
+    ![...value].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 32 || code === 127;
+    }) &&
+    value
+      .split('/')
+      .every(
+        (segment) =>
+          segment !== '' &&
+          !segment.startsWith('.') &&
+          !segment.endsWith('.') &&
+          !segment.endsWith('.lock'),
+      )
+  );
+}
+
+function isCredentialFreePullRequestUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return (
+      (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+      parsed.hostname !== '' &&
+      parsed.username === '' &&
+      parsed.password === '' &&
+      parsed.search === '' &&
+      parsed.hash === '' &&
+      /^\/[^/]+\/[^/]+\/pull\/[1-9]\d*\/?$/u.test(parsed.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
 
 export const DiagramNodeSchema = createNodeSchema(
   'diagram',

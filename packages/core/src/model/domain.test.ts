@@ -6,6 +6,7 @@ import {
   CanvasSchema,
   DiffReviewTargetSchema,
   ExecuteEdgeSchema,
+  GitPullRequestDeliveryTargetSchema,
   ProjectSchema,
   type CanvasNodeType,
 } from './domain.js';
@@ -173,6 +174,91 @@ describe('domain schemas', () => {
       data: { viewMode: 'split', showWhitespace: false, ignoreWhitespace: false },
     });
     if (parsed.type === 'diff-review') expect(parsed.data.reviewTarget).toBeUndefined();
+  });
+
+  it('persists only an opaque agent-run Git delivery target plus bounded UI configuration', () => {
+    expect(
+      GitPullRequestDeliveryTargetSchema.parse({ kind: 'agent-run', runId: AGENT_RUN_ID }),
+    ).toEqual({ kind: 'agent-run', runId: AGENT_RUN_ID });
+    const parsed = CanvasNodeSchema.parse({
+      ...baseNode,
+      id: 'git-delivery',
+      type: 'git-pr',
+      data: {
+        deliveryTarget: { kind: 'agent-run', runId: AGENT_RUN_ID },
+        remote: 'origin',
+        destinationBranch: 'feature/remote-delivery',
+        baseBranch: 'main',
+        pullRequestTitle: 'Add safe remote delivery',
+        pullRequestBody: 'Confirm the exact disclosed impact before publication.',
+        pullRequestDraft: true,
+        pullRequestUrl: 'https://github.com/forgeboard/example/pull/42',
+      },
+    });
+
+    expect(parsed).toMatchObject({
+      type: 'git-pr',
+      data: {
+        deliveryTarget: { kind: 'agent-run', runId: AGENT_RUN_ID },
+        remote: 'origin',
+        destinationBranch: 'feature/remote-delivery',
+        baseBranch: 'main',
+        pullRequestDraft: true,
+      },
+    });
+
+    const unsafeData = [
+      { deliveryTarget: { kind: 'agent-run', runId: AGENT_RUN_ID, worktreePath: '/tmp/run' } },
+      { deliveryTarget: { kind: 'agent-run', runId: 'renderer-selected-folder' } },
+      { deliveryTarget: { kind: 'agent-worktree', runId: AGENT_RUN_ID } },
+      { remote: '../origin' },
+      { destinationBranch: 'feature/.hidden/delivery' },
+      { baseBranch: 'release.lock' },
+      { pullRequestBody: 'unsafe\0body' },
+      { pullRequestBody: 'x'.repeat(32_769) },
+      { pullRequestUrl: 'file:///private/repository/pull/42' },
+      { pullRequestUrl: 'https://token@example.com/owner/repository/pull/42' },
+      { pullRequestUrl: 'https://example.com/owner/repository/pull/42?token=secret' },
+      { pullRequestUrl: 'https://example.com/owner/repository/pull/42#deceptive' },
+      { pullRequestUrl: 'https://example.com/owner/repository/issues/42' },
+    ];
+    for (const data of unsafeData) {
+      expect(
+        CanvasNodeSchema.safeParse({
+          ...baseNode,
+          id: 'unsafe-git-delivery',
+          type: 'git-pr',
+          data,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('opens legacy Git/PR nodes without manufacturing remote-delivery authority', () => {
+    const parsed = CanvasNodeSchema.parse({
+      ...baseNode,
+      id: 'legacy-git-delivery',
+      type: 'git-pr',
+      data: {
+        worktreeId: 'legacy-worktree',
+        branch: 'legacy/agent-branch',
+        baseBranch: 'main',
+        commitIds: ['abcdef1'],
+        ahead: 1,
+      },
+    });
+
+    expect(parsed).toMatchObject({
+      type: 'git-pr',
+      data: {
+        worktreeId: 'legacy-worktree',
+        branch: 'legacy/agent-branch',
+        commitIds: ['abcdef1'],
+        ahead: 1,
+        pullRequestDraft: false,
+      },
+    });
+    if (parsed.type === 'git-pr') expect(parsed.data.deliveryTarget).toBeUndefined();
   });
 
   it('rejects unknown node fields instead of silently persisting them', () => {

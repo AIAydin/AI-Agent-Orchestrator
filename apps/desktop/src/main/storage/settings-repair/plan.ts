@@ -6,6 +6,7 @@ import {
   AppSettingsSchema,
   CustomAgentConfigurationSchema,
   CustomChecksSchema,
+  GitRemoteSettingSchema,
   type AppSettings,
 } from '../../../shared/application/contracts.js';
 import { CommandConfigurationSchema } from '../../../shared/commands/configuration.js';
@@ -35,6 +36,7 @@ import {
   LegacyCustomPermissionProfileSchema,
   LegacyDockerContainerExecutableSchema,
   LegacyDockerExecutableSchema,
+  LegacyGitRemoteSchema,
   LegacyPreviewTrustedHostsSchema,
   LegacyTerminalShellSchema,
   LegacyWorktreeRootSchema,
@@ -81,6 +83,14 @@ export function planLegacySettingsRepair(
     MachineSpecificPathSchema,
     LegacyWorktreeRootSchema,
     defaults.worktreeRoot,
+    mark,
+  );
+  repairSimpleField(
+    candidate,
+    'gitRemote',
+    GitRemoteSettingSchema,
+    LegacyGitRemoteSchema,
+    defaults.gitRemote,
     mark,
   );
   repairSimpleField(

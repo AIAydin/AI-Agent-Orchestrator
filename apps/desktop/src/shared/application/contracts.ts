@@ -168,6 +168,13 @@ export const CustomAgentConfigurationSchema = z
   .strict();
 export type CustomAgentConfiguration = z.infer<typeof CustomAgentConfigurationSchema>;
 
+/** UI-configured Git remote name. The main process still resolves it from the selected repository. */
+export const GitRemoteSettingSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, 'Invalid Git remote name.');
+
 export const AppSettingsSchema = z
   .object({
     onboardingCompleted: z.boolean().default(false),
@@ -196,7 +203,7 @@ export const AppSettingsSchema = z
       .max(512)
       .refine((value) => !containsControlCharacter(value))
       .default(''),
-    gitRemote: z.string().min(1).max(512).default('origin'),
+    gitRemote: GitRemoteSettingSchema.default('origin'),
     terminalShell: OptionalMachineSpecificValueSchema,
     envAllowlist: EnvironmentAllowlistSchema,
     developmentCommand: CommandConfigurationSchema.default({

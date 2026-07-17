@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { access, writeFile } from 'node:fs/promises';
+import { access, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -85,6 +85,12 @@ describe('RepositoryService and GitExecutor', () => {
       /unsafe git environment override/iu,
     );
     expect(
+      () => new GitExecutor({ environment: { GIT_TRACE_CURL: '/tmp/unreviewed-trace' } }),
+    ).toThrow(/unsafe git environment override/iu);
+    expect(
+      () => new GitExecutor({ environment: { GIT_SSL_CERT: '/tmp/unreviewed-client-cert' } }),
+    ).toThrow(/unsafe git environment override/iu);
+    expect(
       () =>
         new GitExecutor({
           trustedRuntimeEnvironment: { FORGEBOARD_UNTRUSTED: '/tmp/value' },
@@ -95,6 +101,57 @@ describe('RepositoryService and GitExecutor', () => {
       trustedRuntimeEnvironment: { PATH: process.env.PATH },
     }).run(['--version']);
     expect(result.stdout).toMatch(/^git version /u);
+  });
+
+  it('reports an early stdin close as a controlled Git command failure', async () => {
+    const executor = new GitExecutor({ executable: process.execPath });
+
+    await expect(
+      executor.run(['--version'], { input: 'x'.repeat(8 * 1_024 * 1_024) }),
+    ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+  });
+
+  it('does not launch an already-aborted Git command', async () => {
+    if (process.platform === 'win32') return;
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const executable = path.join(fixture.root, 'must-not-launch');
+    const marker = path.join(fixture.root, 'launched');
+    await writeFile(executable, `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`, { mode: 0o755 });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      new GitExecutor({ executable }).run(['--version'], { signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'ABORTED' });
+    await expect(access(marker)).rejects.toThrow();
+  });
+
+  it('waits for an aborted Git child to be force-terminated without leaving it running', async () => {
+    if (process.platform === 'win32') return;
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const executable = path.join(fixture.root, 'ignore-term-git');
+    const pidFile = path.join(fixture.root, 'ignore-term-git.pid');
+    await writeFile(
+      executable,
+      `#!/usr/bin/env node\nconst fs = require('node:fs');\nfs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));\nprocess.on('SIGTERM', () => {});\nsetInterval(() => {}, 1_000);\n`,
+      { mode: 0o755 },
+    );
+    const controller = new AbortController();
+    const running = new GitExecutor({ executable }).run(['--version'], {
+      signal: controller.signal,
+      timeoutMs: 10_000,
+    });
+    await waitForFile(pidFile);
+    const childPid = Number((await readFile(pidFile, 'utf8')).trim());
+    expect(Number.isSafeInteger(childPid)).toBe(true);
+    const abortedAt = Date.now();
+    controller.abort();
+
+    await expect(running).rejects.toMatchObject({ code: 'ABORTED' });
+    expect(Date.now() - abortedAt).toBeGreaterThanOrEqual(750);
+    expect(() => process.kill(childPid, 0)).toThrow();
   });
 
   it('rejects non-repositories with a structured error', async () => {
@@ -150,3 +207,15 @@ describe('RepositoryService and GitExecutor', () => {
     });
   });
 });
+
+async function waitForFile(filePath: string): Promise<void> {
+  for (let attempts = 0; attempts < 200; attempts += 1) {
+    try {
+      await access(filePath);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error('Timed out waiting for the Git fixture process to start.');
+}

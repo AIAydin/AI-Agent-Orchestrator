@@ -87,6 +87,17 @@ export function PrivacySettings({
             <strong>Forgeboard telemetry</strong>
             <span className="status-chip ok">None</span>
           </div>
+          <div>
+            <span>
+              <strong>GitHub CLI</strong>
+              <small>
+                Optional local gh authentication. Repository, pull-request, and CI actions run only
+                after explicit review; Forgeboard stores no token. Git pushes use the selected Git
+                remote and its existing credential helper or SSH configuration.
+              </small>
+            </span>
+            <span className="status-chip">On demand</span>
+          </div>
           {agents
             .filter((agent) => agent.installed && isCodingAgent(agent.id))
             .map((agent) => (

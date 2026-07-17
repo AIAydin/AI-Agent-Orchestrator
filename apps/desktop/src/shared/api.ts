@@ -94,6 +94,25 @@ import type {
   GitDeliveryReadinessRunView,
 } from './git/readiness/index.js';
 import type {
+  GitRemotePlanCancelInput,
+  GitRemotePlanCancelResult,
+  GitHubCiPlanView,
+  GitHubCiPrepareInput,
+  GitHubCiResultView,
+  GitHubPullRequestPlanView,
+  GitHubPullRequestPrepareInput,
+  GitHubPullRequestResultView,
+  GitHubStatusPlanView,
+  GitHubStatusPrepareInput,
+  GitHubStatusResultView,
+  GitRemoteInspectInput,
+  GitRemoteInspectView,
+  GitRemotePlanConfirmationInput,
+  GitRemotePushPlanView,
+  GitRemotePushPrepareInput,
+  GitRemotePushResultView,
+} from './git/remote/index.js';
+import type {
   GitWorktreeCleanupConfirmationInput,
   GitWorktreeCleanupPrepareOutcome,
   GitWorktreeCleanupResultView,
@@ -316,6 +335,30 @@ export interface ForgeboardApi {
       approve(
         input: GitDeliveryReadinessApproveInput,
       ): Promise<IpcResult<GitDeliveryReadinessApproveView | null>>;
+    };
+    remote: {
+      inspect(input: GitRemoteInspectInput): Promise<IpcResult<GitRemoteInspectView>>;
+      cancelPlan(input: GitRemotePlanCancelInput): Promise<IpcResult<GitRemotePlanCancelResult>>;
+      preparePush(input: GitRemotePushPrepareInput): Promise<IpcResult<GitRemotePushPlanView>>;
+      confirmPush(
+        input: GitRemotePlanConfirmationInput,
+      ): Promise<IpcResult<GitRemotePushResultView | null>>;
+      prepareGitHubStatus(
+        input: GitHubStatusPrepareInput,
+      ): Promise<IpcResult<GitHubStatusPlanView>>;
+      confirmGitHubStatus(
+        input: GitRemotePlanConfirmationInput,
+      ): Promise<IpcResult<GitHubStatusResultView | null>>;
+      preparePullRequest(
+        input: GitHubPullRequestPrepareInput,
+      ): Promise<IpcResult<GitHubPullRequestPlanView>>;
+      confirmPullRequest(
+        input: GitRemotePlanConfirmationInput,
+      ): Promise<IpcResult<GitHubPullRequestResultView | null>>;
+      prepareCi(input: GitHubCiPrepareInput): Promise<IpcResult<GitHubCiPlanView>>;
+      confirmCi(
+        input: GitRemotePlanConfirmationInput,
+      ): Promise<IpcResult<GitHubCiResultView | null>>;
     };
     lifecycle: {
       prepareCleanup(

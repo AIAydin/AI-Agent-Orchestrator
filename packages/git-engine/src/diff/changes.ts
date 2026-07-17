@@ -23,10 +23,23 @@ import type {
   RefComparison,
   WorktreeComparison,
 } from '../model/types.js';
+import {
+  assertExactPushDestination,
+  assertNoMatchingPushUrlRewrites,
+  assertNoPushTargetRemoteNameCollision,
+  assertNoRepositoryPushOverrides,
+  readExactRemotePushUrl,
+} from '../repository/push-security.js';
 import { RepositoryService } from '../repository/service.js';
 import { parseUnifiedDiff, patchSha256, selectDiffHunks } from './parser.js';
 
 export type WorktreeDiffMode = 'unstaged' | 'staged' | 'head';
+
+export interface PushExecutionOptions {
+  readonly signal?: AbortSignal;
+  /** Final trusted revalidation hook invoked immediately before native Git contacts the remote. */
+  readonly beforePush?: () => void | Promise<void>;
+}
 
 function conflictsFromDiff(files: readonly DiffFile[]): boolean {
   return files.some((file) => file.status === 'unknown');
@@ -576,7 +589,11 @@ export class ChangeService {
     return await this.operationResult(repositoryRoot, headBefore);
   }
 
-  public async push(repositoryPath: string, approval: PushApproval): Promise<PushResult> {
+  public async push(
+    repositoryPath: string,
+    approval: PushApproval,
+    options: PushExecutionOptions = {},
+  ): Promise<PushResult> {
     assertExplicitApproval(approval, 'push');
     const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(approval.remote)) {
@@ -592,14 +609,78 @@ export class ChangeService {
     if (refCheck.exitCode !== 0)
       throw new GitEngineError('INVALID_ARGUMENT', 'Invalid push destination ref.');
     const remotes = await this.repositories.remotes(repositoryRoot);
-    if (!remotes.some((remote) => remote.name === approval.remote)) {
+    const remote = remotes.find((candidate) => candidate.name === approval.remote);
+    if (remote === undefined) {
       throw new GitEngineError('STALE_APPROVAL', 'The approved Git remote no longer exists.');
     }
+    if (remote.hasMultiplePushUrls) {
+      throw new GitEngineError(
+        'APPROVAL_MISMATCH',
+        'An exact push approval cannot target a remote with multiple push URLs.',
+      );
+    }
+    const remoteHelper = await this.repositories.git.run(
+      ['-C', repositoryRoot, 'config', '--get', `remote.${approval.remote}.vcs`],
+      { allowNonZeroExit: true, maxOutputBytes: 16 * 1_024 },
+    );
+    if (remoteHelper.exitCode !== 1) {
+      throw new GitEngineError(
+        'APPROVAL_MISMATCH',
+        'An exact push approval cannot use a configured Git remote helper override.',
+      );
+    }
+    const effectivePushUrl = await readExactRemotePushUrl(
+      this.repositories.git,
+      repositoryRoot,
+      approval.remote,
+    );
+    assertExactPushDestination(approval.destination, effectivePushUrl, repositoryRoot);
+    await assertNoRepositoryPushOverrides(this.repositories.git, repositoryRoot);
+    await assertNoMatchingPushUrlRewrites(
+      this.repositories.git,
+      repositoryRoot,
+      approval.destination.pushTarget,
+    );
+    await assertNoPushTargetRemoteNameCollision(
+      this.repositories.git,
+      repositoryRoot,
+      approval.destination.pushTarget,
+    );
     const sourceOid = await this.repositories.resolveRef(repositoryRoot, approval.sourceRef);
     if (sourceOid !== approval.expectedSourceOid) {
       throw new GitEngineError('STALE_APPROVAL', 'The approved push source changed.');
     }
-    const args = ['-C', repositoryRoot, 'push', '--porcelain'];
+    const args = [
+      '-C',
+      repositoryRoot,
+      '-c',
+      'push.followTags=false',
+      '-c',
+      'push.negotiate=false',
+      '-c',
+      'push.pushOption=',
+      '-c',
+      'push.recurseSubmodules=no',
+      '-c',
+      'protocol.allow=never',
+      '-c',
+      `protocol.${approval.destination.protocol}.allow=always`,
+    ];
+    if (approval.destination.protocol === 'https') {
+      args.push('-c', 'http.followRedirects=false');
+    }
+    args.push(
+      'push',
+      '--porcelain',
+      '--no-force',
+      '--no-follow-tags',
+      '--no-mirror',
+      '--no-prune',
+      '--no-push-option',
+      '--no-verify',
+      '--recurse-submodules=no',
+      '--receive-pack=git-receive-pack',
+    );
     if (approval.forceWithLease) {
       if (
         approval.expectedRemoteOid === null ||
@@ -614,8 +695,69 @@ export class ChangeService {
     } else if (approval.expectedRemoteOid !== null) {
       throw new GitEngineError('APPROVAL_MISMATCH', 'Unexpected remote lease on a normal push.');
     }
-    args.push('--', approval.remote, `${sourceOid}:${approval.destinationRef}`);
-    await this.repositories.git.run(args, { timeoutMs: 120_000 });
+    args.push('--', approval.destination.pushTarget, `${sourceOid}:${approval.destinationRef}`);
+    const shallow = await this.repositories.git.run(
+      ['-C', repositoryRoot, 'rev-parse', '--is-shallow-repository'],
+      {
+        maxOutputBytes: 1_024,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      },
+    );
+    if (shallow.stdout.trim() !== 'false') {
+      throw new GitEngineError(
+        'APPROVAL_MISMATCH',
+        'Shallow repositories are unsupported for exact pushes.',
+      );
+    }
+    await this.repositories.git.run(
+      [
+        '-C',
+        repositoryRoot,
+        'rev-list',
+        '--objects',
+        '--quiet',
+        '--missing=error',
+        sourceOid,
+        '--',
+      ],
+      {
+        timeoutMs: 120_000,
+        maxOutputBytes: 16 * 1_024,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      },
+    );
+    await options.beforePush?.();
+    const currentEffectivePushUrl = await readExactRemotePushUrl(
+      this.repositories.git,
+      repositoryRoot,
+      approval.remote,
+    );
+    assertExactPushDestination(approval.destination, currentEffectivePushUrl, repositoryRoot);
+    const currentRemoteHelper = await this.repositories.git.run(
+      ['-C', repositoryRoot, 'config', '--get', `remote.${approval.remote}.vcs`],
+      { allowNonZeroExit: true, maxOutputBytes: 16 * 1_024 },
+    );
+    if (currentRemoteHelper.exitCode !== 1) {
+      throw new GitEngineError(
+        'APPROVAL_MISMATCH',
+        'An exact push approval cannot use a configured Git remote helper override.',
+      );
+    }
+    await assertNoRepositoryPushOverrides(this.repositories.git, repositoryRoot);
+    await assertNoMatchingPushUrlRewrites(
+      this.repositories.git,
+      repositoryRoot,
+      approval.destination.pushTarget,
+    );
+    await assertNoPushTargetRemoteNameCollision(
+      this.repositories.git,
+      repositoryRoot,
+      approval.destination.pushTarget,
+    );
+    await this.repositories.git.run(args, {
+      timeoutMs: 120_000,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
     return {
       remote: approval.remote,
       sourceOid,
@@ -723,7 +865,10 @@ export class ChangeService {
   private async stagedPathSelection(
     repositoryRoot: string,
     paths: readonly string[],
-  ): Promise<{ readonly headOid: string | null; readonly resetPaths: readonly string[] }> {
+  ): Promise<{
+    readonly headOid: string | null;
+    readonly resetPaths: readonly string[];
+  }> {
     assertPathSelection(paths);
     const status = await this.repositories.status(repositoryRoot);
     const entries = new Map(
@@ -770,7 +915,9 @@ export class ChangeService {
       ...options,
       '-',
     ];
-    await this.repositories.git.run([...common.slice(0, -1), '--check', '-'], { input: patch });
+    await this.repositories.git.run([...common.slice(0, -1), '--check', '-'], {
+      input: patch,
+    });
     await this.repositories.git.run(common, { input: patch });
   }
 

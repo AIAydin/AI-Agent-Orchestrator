@@ -46,6 +46,7 @@ export const SettingsRepairFieldPathSchema = z.enum([
   'customPermissionProfile',
   'defaultPermissionProfile',
   'worktreeRoot',
+  'gitRemote',
   'terminalShell',
   'developmentCommand',
   'testCommand',

@@ -13,6 +13,7 @@ import { CollaborationMetadataSnapshotSchema } from './metadata-contracts.js';
 
 const NOW = '2026-07-15T12:00:00.000Z';
 const FILE_RESOURCE_ID = '56cf42a7-a889-4eab-8f0e-31b3d9da0f28';
+const GIT_RUN_ID = '11111111-1111-4111-8111-111111111111';
 const SENSITIVE_VALUES = [
   'PROMPT_DO_NOT_SHARE',
   '/Users/private/repository',
@@ -26,6 +27,10 @@ const SENSITIVE_VALUES = [
   'MARKDOWN_DO_NOT_SHARE',
   'EXCALIDRAW_DO_NOT_SHARE',
   'EXTENSION_DO_NOT_SHARE',
+  'PRIVATE_REMOTE_DO_NOT_SHARE',
+  'private/BRANCH_DO_NOT_SHARE',
+  'PR_BODY_DO_NOT_SHARE',
+  'https://github.example.invalid/private/REPO_DO_NOT_SHARE/pull/1',
 ] as const;
 
 function canvas(): Canvas {
@@ -176,6 +181,24 @@ function canvas(): Canvas {
           values: { token: SENSITIVE_VALUES[5] },
         },
       },
+      {
+        ...baseNode,
+        id: 'git-pr-1',
+        type: 'git-pr',
+        data: {
+          deliveryTarget: {
+            kind: 'agent-run',
+            runId: GIT_RUN_ID,
+          },
+          remote: SENSITIVE_VALUES[12],
+          destinationBranch: SENSITIVE_VALUES[13],
+          baseBranch: 'main',
+          pullRequestTitle: 'Safe title',
+          pullRequestBody: SENSITIVE_VALUES[14],
+          pullRequestDraft: false,
+          pullRequestUrl: SENSITIVE_VALUES[15],
+        },
+      },
     ],
     edges: [
       {
@@ -210,6 +233,7 @@ function canvas(): Canvas {
           'whiteboard-1',
           'note-1',
           'extension-1',
+          'git-pr-1',
         ],
         position: { x: 0, y: 0 },
         size: { width: 1_200, height: 800 },
@@ -237,6 +261,7 @@ describe('canonical Canvas collaboration metadata projection', () => {
     const serialized = JSON.stringify(snapshot);
 
     for (const sensitiveValue of SENSITIVE_VALUES) expect(serialized).not.toContain(sensitiveValue);
+    expect(serialized).not.toContain(GIT_RUN_ID);
     expect(snapshot.nodes['file-1']).toEqual({
       id: 'file-1',
       type: 'file',
@@ -257,6 +282,8 @@ describe('canonical Canvas collaboration metadata projection', () => {
     expect(snapshot.nodes['extension-1']).toBeUndefined();
     expect(snapshot.edges['extension-edge']).toBeUndefined();
     expect(snapshot.nodes['whiteboard-1']?.type).toBe('whiteboard');
+    expect(snapshot.nodes['git-pr-1']).toMatchObject({ id: 'git-pr-1', type: 'git-pr' });
+    expect(snapshot.nodes['git-pr-1']).not.toHaveProperty('deliveryTarget');
     expect(snapshot.tasks['task-1']).toMatchObject({
       status: 'running',
       acceptanceState: 'passed',
@@ -378,6 +405,7 @@ describe('canonical Canvas collaboration metadata projection', () => {
       'diagram-1',
       'whiteboard-1',
       'note-1',
+      'git-pr-1',
     ]);
     expect(JSON.stringify(snapshot)).not.toContain('PRIVATE_GROUP_NOTE');
   });

@@ -20,6 +20,7 @@ describe('legacy settings repair planning', () => {
       allowedExecutables: [' /usr/bin/node '],
     };
     source.worktreeRoot = 'relative/worktrees';
+    source.gitRemote = 'origin with spaces';
     source.terminalShell = ' /bin/sh ';
     source.developmentCommand = { executable: ' npm ', arguments: ['run', 'dev'] };
     source.testCommand = { executable: ' npm ', arguments: ['test'] };
@@ -51,6 +52,7 @@ describe('legacy settings repair planning', () => {
     if (planned === undefined) throw new Error('Expected a repair plan.');
     expect(planned.settings.theme).toBe('dark');
     expect(planned.settings.worktreeRoot).toBe(defaults.worktreeRoot);
+    expect(planned.settings.gitRemote).toBe(defaults.gitRemote);
     expect(planned.settings.previewTrustedHosts).toHaveLength(128);
     expect(planned.settings.previewTrustedHosts).not.toContain('example.com');
     expect(planned.settings.customChecks?.[0]?.command).toEqual({
@@ -70,6 +72,7 @@ describe('legacy settings repair planning', () => {
         'customPermissionProfile',
         'defaultPermissionProfile',
         'worktreeRoot',
+        'gitRemote',
         'terminalShell',
         'developmentCommand',
         'testCommand',

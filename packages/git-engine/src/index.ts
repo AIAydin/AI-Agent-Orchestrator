@@ -1,12 +1,21 @@
-export { ChangeService, type WorktreeDiffMode } from './diff/changes.js';
+export { ChangeService, type PushExecutionOptions, type WorktreeDiffMode } from './diff/changes.js';
 export { parseUnifiedDiff, patchSha256, selectDiffHunks } from './diff/parser.js';
 export { GitEngineError, type GitEngineErrorCode } from './model/errors.js';
 export {
   GitExecutor,
+  type GitBinaryCommandResult,
   type GitCommandOptions,
   type GitCommandResult,
   type GitExecutorOptions,
 } from './repository/executor.js';
+export {
+  assertExactPushDestination,
+  assertNoMatchingPushUrlRewrites,
+  assertNoPushTargetRemoteNameCollision,
+  assertNoRepositoryPushOverrides,
+  exactPushDestination,
+  readExactRemotePushUrl,
+} from './repository/push-security.js';
 export type {
   GitActiveFilter,
   GitAttributeSource,
@@ -31,8 +40,17 @@ export {
   type GitHubCommandOptions,
   type GitHubCommandResult,
   type GitHubCommandRunner,
+  type GitHubExecutionOptions,
   type PullRequestPlanInput,
+  type RemoteSnapshotInput,
 } from './github/client.js';
+export {
+  assertGitBranchName,
+  assertGitHubRepositoryIdentity,
+  assertGitHubResultUrl,
+  parseGitHubRemoteIdentity,
+  type GitHubRemoteIdentity,
+} from './github/remote-identity.js';
 export {
   assertPathUnderManagedRoot,
   canonicalDirectory,

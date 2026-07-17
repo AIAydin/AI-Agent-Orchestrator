@@ -50,6 +50,10 @@ function pathFromMarker(line: string): string | null {
   return decoded.startsWith('a/') || decoded.startsWith('b/') ? decoded.slice(2) : decoded;
 }
 
+function pathFromMetadata(line: string, prefix: string): string {
+  return decodeQuotedGitPath(line.slice(prefix.length));
+}
+
 function statusFromHeader(header: string, binary: boolean): DiffFileStatus {
   if (binary) return 'binary';
   if (/^new file mode /mu.test(header)) return 'added';
@@ -66,7 +70,9 @@ function buildHunk(
 ): DiffHunk {
   const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(header);
   if (match === null)
-    throw new GitEngineError('INVALID_PATCH', 'Malformed unified diff hunk.', { header });
+    throw new GitEngineError('INVALID_PATCH', 'Malformed unified diff hunk.', {
+      header,
+    });
   const oldStart = Number(match[1]);
   const oldLines = match[2] === undefined ? 1 : Number(match[2]);
   const newStart = Number(match[3]);
@@ -78,17 +84,37 @@ function buildHunk(
   for (const rawLine of body) {
     const prefix = rawLine[0] ?? '';
     if (prefix === '+') {
-      lines.push({ kind: 'addition', content: rawLine.slice(1), oldLine: null, newLine });
+      lines.push({
+        kind: 'addition',
+        content: rawLine.slice(1),
+        oldLine: null,
+        newLine,
+      });
       newLine += 1;
     } else if (prefix === '-') {
-      lines.push({ kind: 'deletion', content: rawLine.slice(1), oldLine, newLine: null });
+      lines.push({
+        kind: 'deletion',
+        content: rawLine.slice(1),
+        oldLine,
+        newLine: null,
+      });
       oldLine += 1;
     } else if (prefix === ' ') {
-      lines.push({ kind: 'context', content: rawLine.slice(1), oldLine, newLine });
+      lines.push({
+        kind: 'context',
+        content: rawLine.slice(1),
+        oldLine,
+        newLine,
+      });
       oldLine += 1;
       newLine += 1;
     } else {
-      lines.push({ kind: 'metadata', content: rawLine, oldLine: null, newLine: null });
+      lines.push({
+        kind: 'metadata',
+        content: rawLine,
+        oldLine: null,
+        newLine: null,
+      });
     }
   }
 
@@ -128,8 +154,30 @@ export function parseUnifiedDiff(raw: string): ParsedDiff {
 
     const oldMarker = headerLines.find((line) => line.startsWith('--- '));
     const newMarker = headerLines.find((line) => line.startsWith('+++ '));
-    const oldPath = oldMarker === undefined ? null : pathFromMarker(oldMarker);
-    const newPath = newMarker === undefined ? null : pathFromMarker(newMarker);
+    const oldMetadata = headerLines.find(
+      (line) => line.startsWith('rename from ') || line.startsWith('copy from '),
+    );
+    const newMetadata = headerLines.find(
+      (line) => line.startsWith('rename to ') || line.startsWith('copy to '),
+    );
+    const oldPath =
+      oldMarker !== undefined
+        ? pathFromMarker(oldMarker)
+        : oldMetadata === undefined
+          ? null
+          : pathFromMetadata(
+              oldMetadata,
+              oldMetadata.startsWith('rename from ') ? 'rename from ' : 'copy from ',
+            );
+    const newPath =
+      newMarker !== undefined
+        ? pathFromMarker(newMarker)
+        : newMetadata === undefined
+          ? null
+          : pathFromMetadata(
+              newMetadata,
+              newMetadata.startsWith('rename to ') ? 'rename to ' : 'copy to ',
+            );
     const binary = headerLines.some(
       (line) => line.startsWith('Binary files ') || line === 'GIT binary patch',
     );

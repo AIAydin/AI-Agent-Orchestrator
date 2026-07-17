@@ -55,16 +55,17 @@ describe('HelpSettings', () => {
     expect(screen.queryByText('Docker isolation is unavailable')).toBeNull();
   });
 
-  it('describes the implemented Git views and Docker action without claiming unavailable flows', () => {
+  it('describes exact reviewed remote delivery and the implemented Docker action', () => {
     render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
       target: { value: 'committed immutable base' },
     });
     expect(screen.getByText(/read-only view of committed work/u)).toBeTruthy();
-    expect(
-      screen.getByText(/Merge, push, and pull-request controls are not available yet/u),
-    ).toBeTruthy();
+    expect(screen.getByText(/select the completed terminal agent run/u)).toBeTruthy();
+    expect(screen.getByText(/Forgeboard never force-pushes/u)).toBeTruthy();
+    expect(screen.getByText(/queried only when requested/u)).toBeTruthy();
+    expect(screen.queryByText(/push, and pull-request controls are not available yet/u)).toBeNull();
     expect(screen.queryByText(/include both committed and uncommitted/u)).toBeNull();
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
@@ -72,6 +73,21 @@ describe('HelpSettings', () => {
     });
     expect(screen.getByText(/Select Check Docker/u)).toBeTruthy();
     expect(screen.queryByText(/Select Test Docker/u)).toBeNull();
+  });
+
+  it('troubleshoots remote delivery entirely through visible reviewed actions', () => {
+    render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
+      target: { value: 'non-fast-forward expired gh' },
+    });
+
+    expect(screen.getByRole('status').textContent).toBe('1 matching guide');
+    expect(screen.getByText('Remote delivery is blocked')).toBeTruthy();
+    expect(screen.getByText(/Use a remote name discovered beside the Remote field/u)).toBeTruthy();
+    expect(screen.getByText(/Normal Git push still uses the selected remote/u)).toBeTruthy();
+    expect(screen.getByText(/reports a head mismatch/u)).toBeTruthy();
+    expect(screen.getByText(/rejected without force/u)).toBeTruthy();
   });
 
   it('renders an actionable empty state for an unmatched search', () => {

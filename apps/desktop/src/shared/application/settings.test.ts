@@ -52,6 +52,23 @@ describe('Git identity settings', () => {
   });
 });
 
+describe('Git remote settings', () => {
+  it('accepts one bounded remote name and rejects path, ref, and option-like input', () => {
+    expect(AppSettingsSchema.safeParse({ ...baseSettings, gitRemote: 'upstream-2' }).success).toBe(
+      true,
+    );
+    for (const gitRemote of [
+      '../origin',
+      'remote/name',
+      '-force',
+      'origin with spaces',
+      'x'.repeat(129),
+    ]) {
+      expect(AppSettingsSchema.safeParse({ ...baseSettings, gitRemote }).success).toBe(false);
+    }
+  });
+});
+
 describe('process settings', () => {
   it('rejects command values that cannot be launched literally and safely', () => {
     const oversizedUtf8 = 'é'.repeat(20_000);

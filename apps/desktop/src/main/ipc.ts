@@ -42,6 +42,7 @@ import { GitTargetResolver } from './git/git-target-resolver.js';
 import { GitDeliveryReadinessIpcService } from './git/readiness/ipc.js';
 import { DeliveryReadinessService } from './git/readiness/service.js';
 import { DeliveryReadinessShippingAuthority } from './git/readiness/shipping-authority.js';
+import { GitRemoteDeliveryIpcService, GitRemoteDeliveryService } from './git/remote/index.js';
 import { createNativeGitDelegateAuthorizer } from './git/delegates/native-confirmation.js';
 import { createBundledGitRepositoryService } from './git/git-runtime.js';
 import { IntegrityService } from './integrity/service.js';
@@ -178,6 +179,7 @@ export interface ApplicationServices {
   files: FileIpcService;
   git: GitIpcService;
   deliveryReadiness: GitDeliveryReadinessIpcService;
+  gitRemote: GitRemoteDeliveryIpcService;
   checks: CheckIpcService;
   collaboration: CollaborationIpcService;
   workflows: WorkflowIpcService;
@@ -321,6 +323,19 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   );
   const deliveryReadiness = new GitDeliveryReadinessIpcService(dialog, deliveryAuthority, store);
   const shippingReadiness = new DeliveryReadinessShippingAuthority(deliveryAuthority);
+  const gitRemote = new GitRemoteDeliveryIpcService(
+    dialog,
+    new GitRemoteDeliveryService(
+      deliveryTargets,
+      repositories,
+      deliveryAuthority,
+      shippingReadiness,
+      outbound,
+      store,
+      { defaultRemote: () => store.getSettings(createDefaultSettings()).gitRemote },
+    ),
+    store,
+  );
   const git = new GitIpcService(
     dialog,
     store,
@@ -334,6 +349,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         previews,
         checks,
         deliveryReadiness,
+        gitRemote,
       ]),
       shippingReadiness,
     },
@@ -345,6 +361,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     docker.resumeAfterShutdownPause();
     git.resumeAfterPrivacyReset();
     deliveryReadiness.resumeAfterPrivacyReset();
+    gitRemote.resumeAfterPrivacyReset();
     extensions.resumeAfterPrivacyReset();
     previews.resumeAfterPrivacyReset();
     runs.resumeAfterPrivacyReset();
@@ -371,6 +388,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       extensions.pauseForShutdown(),
       git.pauseForShutdown(),
       deliveryReadiness.pauseForShutdown(),
+      gitRemote.pauseForShutdown(),
       collaboration.pauseForShutdown(),
     ];
     if (includeRecovery) operations.push(recovery.pauseForExternalDataMutation());
@@ -391,6 +409,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           extensions.pauseForDataMutation(),
           git.resetForPrivacy(),
           deliveryReadiness.resetForPrivacy(),
+          gitRemote.resetForPrivacy(),
           collaboration.resetForPrivacy(),
         ]);
       } else {
@@ -402,6 +421,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         await awaitDataServices([
           extensions.pauseForDataMutation(),
           git.resetForPrivacy(),
+          gitRemote.resetForPrivacy(),
           collaboration.pauseForDataMutation(),
         ]);
       }
@@ -743,6 +763,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
               extensions.resetForPrivacy(),
               git.resetForPrivacy(),
               deliveryReadiness.resetForPrivacy(),
+              gitRemote.resetForPrivacy(),
               checks.resetForPrivacy(),
               docker.pauseForShutdown(),
               recovery.pauseForExternalDataMutation(),
@@ -776,6 +797,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   docker.registerIpcHandlers();
   git.registerIpcHandlers();
   deliveryReadiness.registerIpcHandlers();
+  gitRemote.registerIpcHandlers();
   checks.registerIpcHandlers();
   collaboration.registerIpcHandlers();
   workflows.registerIpcHandlers();
@@ -792,6 +814,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     files,
     git,
     deliveryReadiness,
+    gitRemote,
     checks,
     collaboration,
     workflows,
@@ -841,6 +864,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         extensions.dispose(),
         git.dispose(),
         deliveryReadiness.dispose(),
+        gitRemote.dispose(),
         collaboration.dispose(),
       ]);
       for (const result of [...workflowStopped, ...stopped]) {

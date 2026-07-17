@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const MAX_MACHINE_VALUE_BYTES = 32_768;
 
+export const LegacyGitRemoteSchema = z.string().min(1).max(512);
+
 const LegacyCommandArgumentSchema = z
   .string()
   .max(MAX_MACHINE_VALUE_BYTES)

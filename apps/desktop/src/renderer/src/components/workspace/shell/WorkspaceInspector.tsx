@@ -55,6 +55,7 @@ import type {
 import { SharedComments } from '../collaboration/comments/SharedComments.js';
 import { DiffReviewNodeInspector, type DiffReviewOpenRequest } from '../diff-review/index.js';
 import type { DiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
+import { OperationalGitPrNodeInspector, type GitPrNodeConfiguration } from '../git-pr/index.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
 type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
@@ -95,6 +96,7 @@ interface WorkspaceInspectorProps {
   onPreviewSession: (session: PreviewSessionSnapshot | null) => void;
   diffReview: DiffReviewNodeController;
   onOpenDiffReview: (request: DiffReviewOpenRequest) => void;
+  onOpenGitPrReadiness: (runId: string) => void;
   collaborationGraphReadOnly: boolean;
   onAttachAgentContext: (
     targetNodeId: string,
@@ -271,6 +273,22 @@ function NodeInspector(
           onOpenReview={props.onOpenDiffReview}
         />
       )}
+      {selectedNode.data.kind === 'git-pr' && (
+        <OperationalGitPrNodeInspector
+          projectId={props.project.id}
+          projectName={props.project.name}
+          nodeId={selectedNode.id}
+          locked={selectedNode.data.locked}
+          configurationReadOnly={props.collaborationGraphReadOnly}
+          configuration={gitPrConfiguration(selectedNode, props.settings.gitRemote)}
+          nodes={props.nodes}
+          agents={props.runnableAgents}
+          onRecord={onRecord}
+          onConfigurationChange={(patch) => onUpdateSelected(gitPrNodeDataPatch(patch))}
+          onOpenReadiness={props.onOpenGitPrReadiness}
+          onError={props.onError}
+        />
+      )}
       {selectedNode.data.kind === 'agent' && (
         <>
           <AgentRunInspector {...props} />
@@ -375,6 +393,37 @@ function NodeInspector(
       </section>
     </div>
   );
+}
+
+function gitPrConfiguration(node: WorkshopNode, defaultRemote: string): GitPrNodeConfiguration {
+  return {
+    ...(node.data.deliveryTarget === undefined
+      ? {}
+      : { targetRunId: node.data.deliveryTarget.runId }),
+    remote: node.data.remote ?? defaultRemote,
+    destinationBranch: node.data.destinationBranch ?? '',
+    baseBranch: node.data.baseBranch ?? 'main',
+    pullRequestTitle: node.data.pullRequestTitle ?? node.data.title,
+    pullRequestBody: node.data.pullRequestBody ?? '',
+    pullRequestDraft: node.data.pullRequestDraft ?? false,
+    ...(node.data.pullRequestUrl === undefined ? {} : { pullRequestUrl: node.data.pullRequestUrl }),
+  };
+}
+
+function gitPrNodeDataPatch(patch: Partial<GitPrNodeConfiguration>): Partial<WorkshopNode['data']> {
+  const data: Partial<WorkshopNode['data']> = {};
+  if ('targetRunId' in patch) {
+    data.deliveryTarget =
+      patch.targetRunId === undefined ? undefined : { kind: 'agent-run', runId: patch.targetRunId };
+  }
+  if (patch.remote !== undefined) data.remote = patch.remote;
+  if (patch.destinationBranch !== undefined) data.destinationBranch = patch.destinationBranch;
+  if (patch.baseBranch !== undefined) data.baseBranch = patch.baseBranch;
+  if (patch.pullRequestTitle !== undefined) data.pullRequestTitle = patch.pullRequestTitle;
+  if (patch.pullRequestBody !== undefined) data.pullRequestBody = patch.pullRequestBody;
+  if (patch.pullRequestDraft !== undefined) data.pullRequestDraft = patch.pullRequestDraft;
+  if ('pullRequestUrl' in patch) data.pullRequestUrl = patch.pullRequestUrl;
+  return data;
 }
 
 function FileNodeEditor({

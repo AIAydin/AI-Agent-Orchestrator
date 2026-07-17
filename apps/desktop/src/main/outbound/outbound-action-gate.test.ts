@@ -80,13 +80,13 @@ describe('OutboundActionGate', () => {
     expect(auditJson).not.toContain('/usr/local/bin');
   });
 
-  it('binds a plan to one owner and consumes it before confirmation', async () => {
+  it('binds a plan to one owner without letting another owner consume it', async () => {
     const { gate } = harness();
     const plan = gate.prepare('owner-a', disclosure());
     const execute = vi.fn();
     const input = {
       planId: plan.id,
-      confirmation: { confirm: vi.fn(() => Promise.resolve<'approved'>('approved')) },
+      confirmation: { confirm: vi.fn(() => Promise.resolve<'denied'>('denied')) },
       currentDisclosure: () => disclosure(),
       execute,
     };
@@ -94,11 +94,45 @@ describe('OutboundActionGate', () => {
     await expect(gate.confirmAndExecute({ ...input, ownerId: 'owner-b' })).rejects.toThrow(
       /belongs to another owner/u,
     );
+    await expect(gate.confirmAndExecute({ ...input, ownerId: 'owner-a' })).resolves.toEqual({
+      outcome: 'denied',
+    });
     await expect(gate.confirmAndExecute({ ...input, ownerId: 'owner-a' })).rejects.toThrow(
       /already used/u,
     );
-    expect(input.confirmation.confirm).not.toHaveBeenCalled();
+    expect(input.confirmation.confirm).toHaveBeenCalledTimes(1);
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('cancels only the matching owner plan without revealing cross-owner state', async () => {
+    const { gate } = harness();
+    const plan = gate.prepare('owner-a', disclosure());
+    const confirmation = { confirm: vi.fn(() => Promise.resolve<'denied'>('denied')) };
+
+    gate.cancel('owner-b', plan.id);
+    await expect(
+      gate.confirmAndExecute({
+        ownerId: 'owner-a',
+        planId: plan.id,
+        confirmation,
+        currentDisclosure: () => disclosure(),
+        execute: vi.fn(),
+      }),
+    ).resolves.toEqual({ outcome: 'denied' });
+    expect(confirmation.confirm).toHaveBeenCalledTimes(1);
+
+    const cancelled = gate.prepare('owner-a', disclosure());
+    gate.cancel('owner-a', cancelled.id);
+    await expect(
+      gate.confirmAndExecute({
+        ownerId: 'owner-a',
+        planId: cancelled.id,
+        confirmation,
+        currentDisclosure: () => disclosure(),
+        execute: vi.fn(),
+      }),
+    ).rejects.toThrow(/missing|already used/iu);
+    expect(confirmation.confirm).toHaveBeenCalledTimes(1);
   });
 
   it('expires per-use plans and never reaches confirmation after expiry', async () => {
@@ -169,6 +203,32 @@ describe('OutboundActionGate', () => {
       'docker-image-pull',
       'failed',
       expect.objectContaining({ failureKind: 'approved-disclosure-changed' }),
+    );
+  });
+
+  it('refuses execution when disclosure revalidation crosses the approval expiry', async () => {
+    const { gate, advance, appendAudit } = harness();
+    const plan = gate.prepare('owner-a', disclosure());
+    const execute = vi.fn();
+
+    await expect(
+      gate.confirmAndExecute({
+        ownerId: 'owner-a',
+        planId: plan.id,
+        confirmation: { confirm: () => Promise.resolve('approved') },
+        currentDisclosure: () => {
+          advance(60_001);
+          return Promise.resolve(disclosure());
+        },
+        execute,
+      }),
+    ).resolves.toEqual({ outcome: 'denied' });
+    expect(execute).not.toHaveBeenCalled();
+    expect(appendAudit).toHaveBeenLastCalledWith(
+      'external-send',
+      'docker-image-pull',
+      'denied',
+      expect.objectContaining({ reason: 'approval-expired-after-revalidation' }),
     );
   });
 

@@ -71,7 +71,7 @@ not be reclassified as future work.
 - [x] Predictable accept/reject individual hunks while preserving unselected changes.
 - [ ] Commit, compare agents/base, rename, archive, external editor, and safe cleanup.
 - [ ] Merge, squash, rebase, cherry-pick, and visual conflict resolution with explicit approvals.
-- [ ] Optional `gh` auth/repository/PR/CI integration with push and PR impact confirmation.
+- [x] Optional `gh` auth/repository/PR/CI integration with push and PR impact confirmation.
 
 ## Desktop shell and onboarding
 
@@ -103,7 +103,7 @@ not be reclassified as future work.
 - [ ] Mobile preview node with device frames, rotation, touch, and side-by-side screens.
 - [ ] Test node with cancel, streaming, parsed summary, history, and artifacts.
 - [ ] Review gate node with human/deterministic/agent checks and bounded retries.
-- [ ] Git/PR node with commits, divergence, remote, readiness, CI, and approved actions.
+- [x] Git/PR node with commits, divergence, remote, readiness, CI, and approved actions.
 - [ ] Mermaid diagram node with synchronized source/render/export.
 - [ ] Excalidraw-compatible whiteboard/mockup node with annotations/export/context.
 - [ ] Note/image node with safe local references.
@@ -116,7 +116,7 @@ not be reclassified as future work.
 - [x] Cycle validation and explicit bounded loop configuration with escape hatch.
 - [ ] Run node/selection/group/workflow controls and all lifecycle states on nodes and edges.
 - [x] Persistent run recovery never presents dead child processes as alive.
-- [ ] Human and deterministic quality gates govern merge/push regardless of AI-review outcome.
+- [x] Human and deterministic quality gates govern merge/push regardless of AI-review outcome.
 
 ## Editors, previews, tests, and feedback
 
@@ -825,3 +825,36 @@ unchecked when only a subset of their required behavior has proof.
   `d2e28ae86006227f47ce0944373afb2e7e17701e68759f05b0a164c80ba95dbe`; the ZIP SHA-256 is
   `e20fc2e7701364493fa42a865fd6729327e781e6e900cc94fe5105a8457e4458`. Signing and notarization
   remain inactive because this machine has no Developer ID identity.
+- 2026-07-17: completed managed terminal-agent worktrees gained a separate operational Git / PR
+  canvas node. The renderer selects only an opaque persisted run and ordinary delivery fields;
+  Electron main resolves ownership, repositories, branches, object IDs, the exact effective push
+  URL, committed impact, deterministic readiness evidence, and human approval. A push plan sends
+  one approved object ID to one full branch ref with normal non-force semantics after an expiring,
+  owner-bound UI review and cancel-default native confirmation. Main revalidates source, remote,
+  readiness, and complete object availability before destination contact; disallowed hooks,
+  rewrites, ambiguous destinations, shallow history, and Git LFS pointer history fail closed. Local
+  merge/cherry-pick and remote push now share the same rule that selected deterministic checks and
+  exact human quality approval govern delivery; AI and reviewer results remain non-authoritative.
+  Optional, explicit `gh` actions pin the resolved local executable, confirm each network read or
+  mutation natively, verify GitHub host/repository/base/head identity, send the disclosed PR body
+  through standard input, validate returned URLs, and show only CI runs matching the complete source
+  SHA. The UI explicitly warns that GitHub pull requests follow a branch and can race or move after
+  the point-in-time recheck. Automated remote coverage used local deterministic `gh` and SSH
+  fixtures and made no real GitHub mutation.
+- 2026-07-17: the frozen remote-delivery checkpoint passed the 850-file structure gate, keeping
+  every checked source/config file at or below 2,000 lines, every maintained folder at 12 or fewer
+  direct hand-written files, and the root allowlist clean. Repository-wide Prettier, zero-warning
+  ESLint, all eight workspace strict typechecks, `git diff --check`, 1,622 unit tests across 246
+  files, 242 integration tests across 29 files, all 13 Electron Playwright journeys, every
+  production build, and the production dependency audit passed. The focused Electron journey
+  proves cancel and approve paths for exact push and PR actions plus exact-head CI without external
+  web traffic. A fresh macOS arm64 application, ZIP, DMG, and blockmaps packaged successfully; both
+  the packaged-app smoke and read-only DMG mount/copy/launch smoke passed, with the latter returning
+  `FORGEBOARD_SMOKE_OK`. The DMG SHA-256 is
+  `ced0aacd6ad94703c25953f18b1ffa145e0582d928d483efb3ec87c301eb68d6`; the ZIP SHA-256 is
+  `7fb04d112991bb0dc30d9bbefc2abc08e7695b8b413c04575a43524f253505b9`. Electron Builder found no
+  Developer ID, and strict code-signing/Gatekeeper verification fails for this ad-hoc executable,
+  so signing, notarization, GitHub Release publication, and fresh Windows/Linux installer proof
+  remain unchecked. Adding/editing remote URLs and choosing a custom `gh` executable also remain
+  unfinished UI configuration. Hosted Actions are not counted as evidence because the repository's
+  billing/payment gate currently stops jobs before any workflow step executes.

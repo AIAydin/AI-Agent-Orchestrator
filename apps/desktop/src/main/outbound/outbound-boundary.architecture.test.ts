@@ -13,6 +13,9 @@ describe('Forgeboard-owned outbound architecture', () => {
       'outbound/outbound-executors.ts',
     ]);
     expect(importSites(sources, 'pullDockerImage')).toEqual(['outbound/outbound-executors.ts']);
+    expect(callSites(sources, /\bnew\s+GitHubCliExecutor\s*\(/gu)).toEqual([
+      'outbound/git/executors.ts',
+    ]);
 
     const executor = requiredSource(sources, 'outbound/outbound-executors.ts');
     expect(executor).toContain('assertOutboundExecutionPermit(permit)');
@@ -23,6 +26,8 @@ describe('Forgeboard-owned outbound architecture', () => {
     expect(requiredSource(sources, 'docker/docker-ipc.ts')).toContain(
       'this.#outbound.confirmAndExecute',
     );
+    const gitRemoteExecutor = requiredSource(sources, 'outbound/git/executors.ts');
+    expect(gitRemoteExecutor.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(4);
   });
 
   it('has no unenumerated direct external network API in desktop main', async () => {
@@ -32,7 +37,6 @@ describe('Forgeboard-owned outbound architecture', () => {
       ['Node HTTP request', /\bhttps?\.request\s*\(/gu],
       ['Electron net request', /\bnet\.request\s*\(/gu],
       ['WebSocket construction', /\bnew\s+WebSocket\s*\(/gu],
-      ['GitHub CLI construction', /\bnew\s+GitHubCliExecutor\s*\(/gu],
     ];
     const violations = patterns.flatMap(([label, pattern]) =>
       callSites(sources, pattern).map((file) => `${label}: ${file}`),

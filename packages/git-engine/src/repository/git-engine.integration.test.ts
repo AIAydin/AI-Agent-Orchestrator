@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import process from 'node:process';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChangeService } from '../diff/changes.js';
 import { patchSha256, selectDiffHunks } from '../diff/parser.js';
 import { RepositoryService } from './service.js';
+import { GitExecutor } from './executor.js';
+import { exactPushDestination } from './push-security.js';
 import type {
   AbortGitOperationApproval,
   ArchiveWorktreeApproval,
@@ -293,7 +297,11 @@ describe('parallel worktree change lifecycle', () => {
     expect(unstaged.staged.raw).toBe('');
     expect(unstaged.status.entries).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: 'tracked.bin', index: '.', worktree: 'M' }),
+        expect.objectContaining({
+          path: 'tracked.bin',
+          index: '.',
+          worktree: 'M',
+        }),
         expect.objectContaining({ path: 'added.bin', kind: 'untracked' }),
       ]),
     );
@@ -349,10 +357,16 @@ describe('parallel worktree change lifecycle', () => {
     };
 
     await expect(
-      changes.commit(fixture.repository, { ...approval, authorName: 'invalid\nname' }),
+      changes.commit(fixture.repository, {
+        ...approval,
+        authorName: 'invalid\nname',
+      }),
     ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
     await expect(
-      changes.commit(fixture.repository, { ...approval, authorName: 'invalid\tname' }),
+      changes.commit(fixture.repository, {
+        ...approval,
+        authorName: 'invalid\tname',
+      }),
     ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
     await expect(
       changes.commit(fixture.repository, { ...approval, authorEmail: '   ' }),
@@ -467,17 +481,45 @@ describe('parallel worktree change lifecycle', () => {
     const remotePath = path.join(fixture.root, 'remote.git');
     await runGit(fixture.root, ['init', '--bare', remotePath]);
     await runGit(fixture.repository, ['remote', 'add', 'local-fixture', remotePath]);
+    await runGit(fixture.repository, ['tag', '-a', 'not-approved-for-push', '-m', 'Local only']);
+    await runGit(fixture.repository, ['config', 'push.followTags', 'true']);
+    await runGit(fixture.repository, ['config', 'push.pushOption', 'not-approved']);
+    await runGit(fixture.repository, ['config', 'push.recurseSubmodules', 'only']);
+    await runGit(fixture.repository, ['config', 'remote.local-fixture.mirror', 'true']);
+    await runGit(fixture.repository, ['config', 'remote.local-fixture.receivepack', 'false']);
+    await writeFile(
+      path.join(fixture.repository, '.git', 'hooks', 'pre-push'),
+      '#!/bin/sh\nexit 77\n',
+      { mode: 0o755 },
+    );
+    await runGit(remotePath, ['config', 'receive.advertisePushOptions', 'true']);
+    await writeFile(
+      path.join(remotePath, 'hooks', 'pre-receive'),
+      '#!/bin/sh\ntest "${GIT_PUSH_OPTION_COUNT:-0}" = 0\n',
+      { mode: 0o755 },
+    );
     const beforePush = await changes.approvalSnapshot(fixture.repository);
-    const pushResult = await changes.push(fixture.repository, {
-      action: 'push',
-      ...approvalBase(beforePush.repositoryRoot, beforePush.expectedHead),
-      remote: 'local-fixture',
-      sourceRef: 'main',
-      expectedSourceOid: beforePush.expectedHead,
-      destinationRef: 'refs/heads/main',
-      forceWithLease: false,
-      expectedRemoteOid: null,
-    });
+    let finalRevalidation = 0;
+    const pushResult = await changes.push(
+      fixture.repository,
+      {
+        action: 'push',
+        ...approvalBase(beforePush.repositoryRoot, beforePush.expectedHead),
+        remote: 'local-fixture',
+        destination: exactPushDestination(remotePath, fixture.repository),
+        sourceRef: 'main',
+        expectedSourceOid: beforePush.expectedHead,
+        destinationRef: 'refs/heads/main',
+        forceWithLease: false,
+        expectedRemoteOid: null,
+      },
+      {
+        beforePush: () => {
+          finalRevalidation += 1;
+        },
+      },
+    );
+    expect(finalRevalidation).toBe(1);
     expect(pushResult).toMatchObject({
       remote: 'local-fixture',
       sourceOid: beforePush.expectedHead,
@@ -487,6 +529,385 @@ describe('parallel worktree change lifecycle', () => {
     expect((await runGit(remotePath, ['rev-parse', 'refs/heads/main'])).trim()).toBe(
       beforePush.expectedHead,
     );
+    expect(
+      (await runGit(remotePath, ['for-each-ref', '--format=%(refname)']))
+        .trim()
+        .split('\n')
+        .filter(Boolean),
+    ).toEqual(['refs/heads/main']);
+  });
+
+  it('rejects an exact push when the selected remote expands to multiple push destinations', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const firstRemote = path.join(fixture.root, 'first.git');
+    const secondRemote = path.join(fixture.root, 'second.git');
+    await runGit(fixture.root, ['init', '--bare', firstRemote]);
+    await runGit(fixture.root, ['init', '--bare', secondRemote]);
+    await runGit(fixture.repository, ['remote', 'add', 'multi', firstRemote]);
+    await runGit(fixture.repository, [
+      'remote',
+      'set-url',
+      '--add',
+      '--push',
+      'multi',
+      firstRemote,
+    ]);
+    await runGit(fixture.repository, [
+      'remote',
+      'set-url',
+      '--add',
+      '--push',
+      'multi',
+      secondRemote,
+    ]);
+    const changes = new ChangeService(new RepositoryService());
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+
+    await expect(
+      changes.push(fixture.repository, {
+        action: 'push',
+        ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+        remote: 'multi',
+        destination: exactPushDestination(firstRemote, fixture.repository),
+        sourceRef: 'main',
+        expectedSourceOid: snapshot.expectedHead,
+        destinationRef: 'refs/heads/main',
+        forceWithLease: false,
+        expectedRemoteOid: null,
+      }),
+    ).rejects.toMatchObject({ code: 'APPROVAL_MISMATCH' });
+    await expect(
+      runGit(firstRemote, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+    await expect(
+      runGit(secondRemote, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+  });
+
+  it('rejects remote URL drift after final revalidation and before native push', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const reviewedRemote = path.join(fixture.root, 'reviewed.git');
+    const changedRemote = path.join(fixture.root, 'changed.git');
+    await runGit(fixture.root, ['init', '--bare', reviewedRemote]);
+    await runGit(fixture.root, ['init', '--bare', changedRemote]);
+    await runGit(fixture.repository, ['remote', 'add', 'drift', reviewedRemote]);
+    const changes = new ChangeService(new RepositoryService());
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+
+    await expect(
+      changes.push(
+        fixture.repository,
+        {
+          action: 'push',
+          ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+          remote: 'drift',
+          destination: exactPushDestination(reviewedRemote, fixture.repository),
+          sourceRef: 'main',
+          expectedSourceOid: snapshot.expectedHead,
+          destinationRef: 'refs/heads/main',
+          forceWithLease: false,
+          expectedRemoteOid: null,
+        },
+        {
+          beforePush: async () => {
+            await runGit(fixture.repository, ['remote', 'set-url', 'drift', changedRemote]);
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'STALE_APPROVAL' });
+    await expect(
+      runGit(reviewedRemote, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+    await expect(
+      runGit(changedRemote, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a configured same-protocol remote name that collides with the literal target', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const reviewedRemote = path.join(fixture.root, 'collision-reviewed.git');
+    const attackerRemote = path.join(fixture.root, 'collision-attacker.git');
+    await runGit(fixture.root, ['init', '--bare', reviewedRemote]);
+    await runGit(fixture.root, ['init', '--bare', attackerRemote]);
+    await runGit(fixture.repository, ['remote', 'add', 'reviewed', reviewedRemote]);
+    await runGit(fixture.repository, [
+      'config',
+      '--local',
+      `remote.${reviewedRemote}.url`,
+      attackerRemote,
+    ]);
+    const changes = new ChangeService(new RepositoryService());
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+
+    await expect(
+      changes.push(fixture.repository, {
+        action: 'push',
+        ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+        remote: 'reviewed',
+        destination: exactPushDestination(reviewedRemote, fixture.repository),
+        sourceRef: 'main',
+        expectedSourceOid: snapshot.expectedHead,
+        destinationRef: 'refs/heads/main',
+        forceWithLease: false,
+        expectedRemoteOid: null,
+      }),
+    ).rejects.toMatchObject({ code: 'APPROVAL_MISMATCH' });
+    await expect(
+      runGit(reviewedRemote, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+    await expect(
+      runGit(attackerRemote, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+  });
+
+  it('pushes a relative local URL as an absolute literal rather than a same-named remote', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const relativeTarget = path.join(fixture.repository, 'origin');
+    const sameNamedRemote = path.join(fixture.root, 'same-named.git');
+    await runGit(fixture.root, ['init', '--bare', relativeTarget]);
+    await runGit(fixture.root, ['init', '--bare', sameNamedRemote]);
+    await runGit(fixture.repository, ['remote', 'add', 'origin', sameNamedRemote]);
+    await runGit(fixture.repository, ['remote', 'add', 'relative', 'origin']);
+    const changes = new ChangeService(new RepositoryService());
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+
+    await changes.push(fixture.repository, {
+      action: 'push',
+      ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+      remote: 'relative',
+      destination: exactPushDestination('origin', snapshot.repositoryRoot),
+      sourceRef: 'main',
+      expectedSourceOid: snapshot.expectedHead,
+      destinationRef: 'refs/heads/main',
+      forceWithLease: false,
+      expectedRemoteOid: null,
+    });
+    expect((await runGit(relativeTarget, ['rev-parse', 'refs/heads/main'])).trim()).toBe(
+      snapshot.expectedHead,
+    );
+    await expect(
+      runGit(sameNamedRemote, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a chained all-scope pushInsteadOf rule that can retarget the literal URL', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const reviewedRemote = path.join(fixture.root, 'rewrite-reviewed.git');
+    const changedRemote = path.join(fixture.root, 'rewrite-changed.git');
+    const fakeHome = path.join(fixture.root, 'rewrite-home');
+    await mkdir(fakeHome);
+    await runGit(fixture.root, ['init', '--bare', reviewedRemote]);
+    await runGit(fixture.root, ['init', '--bare', changedRemote]);
+    await runGit(fixture.repository, ['remote', 'add', 'chain', 'alias-target']);
+    const executor = new GitExecutor({ environment: { HOME: fakeHome } });
+    await executor.run([
+      'config',
+      '--global',
+      `url.${reviewedRemote}.pushInsteadOf`,
+      'alias-target',
+    ]);
+    await executor.run([
+      'config',
+      '--global',
+      `url.${changedRemote}.pushInsteadOf`,
+      reviewedRemote,
+    ]);
+    const changes = new ChangeService(new RepositoryService(executor));
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+
+    await expect(
+      changes.push(fixture.repository, {
+        action: 'push',
+        ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+        remote: 'chain',
+        destination: exactPushDestination(reviewedRemote, fixture.repository),
+        sourceRef: 'main',
+        expectedSourceOid: snapshot.expectedHead,
+        destinationRef: 'refs/heads/main',
+        forceWithLease: false,
+        expectedRemoteOid: null,
+      }),
+    ).rejects.toMatchObject({ code: 'APPROVAL_MISMATCH' });
+    await expect(
+      runGit(reviewedRemote, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+    await expect(
+      runGit(changedRemote, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+  });
+
+  it('ignores replacement refs while reviewing and pushing the original approved object graph', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const repositories = new RepositoryService();
+    const changes = new ChangeService(repositories);
+    const baseOid = (await runGit(fixture.repository, ['rev-parse', 'HEAD'])).trim();
+    await writeFile(path.join(fixture.repository, 'reviewed.txt'), 'original reviewed content\n');
+    await runGit(fixture.repository, ['add', '--', 'reviewed.txt']);
+    await runGit(fixture.repository, ['commit', '-m', 'Reviewed original graph']);
+    const sourceOid = (await runGit(fixture.repository, ['rev-parse', 'HEAD'])).trim();
+    const baseTree = (await runGit(fixture.repository, ['rev-parse', `${baseOid}^{tree}`])).trim();
+    const replacementOid = (
+      await runGit(fixture.repository, ['commit-tree', baseTree, '-m', 'Unreviewed replacement'])
+    ).trim();
+    await runGit(fixture.repository, ['replace', sourceOid, replacementOid]);
+
+    const comparison = await changes.compareRefs(fixture.repository, baseOid, sourceOid);
+    expect(comparison.commits).toEqual([sourceOid]);
+    expect(comparison.diff.files.map((file) => file.newPath)).toEqual(['reviewed.txt']);
+
+    const remotePath = path.join(fixture.root, 'replace-safe.git');
+    await runGit(fixture.root, ['init', '--bare', remotePath]);
+    await runGit(fixture.repository, ['remote', 'add', 'replace-safe', remotePath]);
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+    await changes.push(fixture.repository, {
+      action: 'push',
+      ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+      remote: 'replace-safe',
+      destination: exactPushDestination(remotePath, fixture.repository),
+      sourceRef: sourceOid,
+      expectedSourceOid: sourceOid,
+      destinationRef: 'refs/heads/reviewed',
+      forceWithLease: false,
+      expectedRemoteOid: null,
+    });
+    expect((await runGit(remotePath, ['rev-parse', 'refs/heads/reviewed^'])).trim()).toBe(baseOid);
+    expect((await runGit(remotePath, ['show', 'refs/heads/reviewed:reviewed.txt'])).trim()).toBe(
+      'original reviewed content',
+    );
+  });
+
+  it('blocks a configured remote helper before the helper process can execute', async () => {
+    if (process.platform === 'win32') return;
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const bin = path.join(fixture.root, 'bin');
+    await mkdir(bin);
+    const marker = path.join(fixture.root, 'helper-executed');
+    await writeFile(
+      path.join(bin, 'git-remote-file'),
+      `#!/bin/sh\ntouch ${JSON.stringify(marker)}\nexit 99\n`,
+      { mode: 0o755 },
+    );
+    const repositories = new RepositoryService(
+      new GitExecutor({
+        environment: {
+          PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}`,
+        },
+      }),
+    );
+    const changes = new ChangeService(repositories);
+    await runGit(fixture.repository, [
+      'remote',
+      'add',
+      'helper-target',
+      'https://example.invalid/owner/repository.git',
+    ]);
+    await runGit(fixture.repository, ['config', 'remote.helper-target.vcs', 'file']);
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+
+    await expect(
+      changes.push(fixture.repository, {
+        action: 'push',
+        ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+        remote: 'helper-target',
+        destination: exactPushDestination(
+          'https://example.invalid/owner/repository.git',
+          fixture.repository,
+        ),
+        sourceRef: 'main',
+        expectedSourceOid: snapshot.expectedHead,
+        destinationRef: 'refs/heads/main',
+        forceWithLease: false,
+        expectedRemoteOid: null,
+      }),
+    ).rejects.toMatchObject({ code: 'APPROVAL_MISMATCH' });
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it('rejects credential helpers inherited through local includes and worktree config', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const remotePath = path.join(fixture.root, 'credential-safe.git');
+    const includedConfig = path.join(fixture.root, 'included-credentials.config');
+    await runGit(fixture.root, ['init', '--bare', remotePath]);
+    await runGit(fixture.repository, ['remote', 'add', 'credential-safe', remotePath]);
+    await writeFile(includedConfig, '[credential]\n\thelper = !unreviewed-included-helper\n');
+    await runGit(fixture.repository, ['config', '--local', 'include.path', includedConfig]);
+    const changes = new ChangeService(new RepositoryService());
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+    const approval = {
+      action: 'push' as const,
+      ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+      remote: 'credential-safe',
+      destination: exactPushDestination(remotePath, fixture.repository),
+      sourceRef: 'main',
+      expectedSourceOid: snapshot.expectedHead,
+      destinationRef: 'refs/heads/main',
+      forceWithLease: false,
+      expectedRemoteOid: null,
+    };
+
+    await expect(changes.push(fixture.repository, approval)).rejects.toMatchObject({
+      code: 'APPROVAL_MISMATCH',
+    });
+
+    await runGit(fixture.repository, ['config', '--local', '--unset-all', 'include.path']);
+    await runGit(fixture.repository, ['config', 'extensions.worktreeConfig', 'true']);
+    await runGit(fixture.repository, [
+      'config',
+      '--worktree',
+      'credential.helper',
+      '!unreviewed-worktree-helper',
+    ]);
+    await expect(changes.push(fixture.repository, approval)).rejects.toMatchObject({
+      code: 'APPROVAL_MISMATCH',
+    });
+    await expect(
+      runGit(remotePath, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
+  });
+
+  it('verifies the complete approved source object closure before contacting a remote', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const remotePath = path.join(fixture.root, 'complete-objects.git');
+    await runGit(fixture.root, ['init', '--bare', remotePath]);
+    await runGit(fixture.repository, ['remote', 'add', 'complete-objects', remotePath]);
+    const changes = new ChangeService(new RepositoryService());
+    const snapshot = await changes.approvalSnapshot(fixture.repository);
+    const blobOid = (await runGit(fixture.repository, ['rev-parse', 'HEAD:README.md'])).trim();
+    await rm(
+      path.join(fixture.repository, '.git', 'objects', blobOid.slice(0, 2), blobOid.slice(2)),
+    );
+    const beforePush = vi.fn();
+
+    await expect(
+      changes.push(
+        fixture.repository,
+        {
+          action: 'push',
+          ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+          remote: 'complete-objects',
+          destination: exactPushDestination(remotePath, fixture.repository),
+          sourceRef: 'main',
+          expectedSourceOid: snapshot.expectedHead,
+          destinationRef: 'refs/heads/main',
+          forceWithLease: false,
+          expectedRemoteOid: null,
+        },
+        { beforePush },
+      ),
+    ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+    expect(beforePush).not.toHaveBeenCalled();
+    await expect(
+      runGit(remotePath, ['rev-parse', '--verify', 'refs/heads/main']),
+    ).rejects.toThrow();
   });
 
   it('rebases only the approved branch onto the exact approved commit', async () => {
@@ -551,11 +972,20 @@ describe('parallel worktree change lifecycle', () => {
       worktrees.summary(left.ownership),
     ]);
     expect(baseComparison.comparison.headOid).toBe(leftCommit);
-    expect(baseComparison.comparison.aheadBehind).toEqual({ ahead: 1, behind: 0 });
+    expect(baseComparison.comparison.aheadBehind).toEqual({
+      ahead: 1,
+      behind: 0,
+    });
     expect(worktreeComparison.left.headOid).toBe(leftCommit);
     expect(worktreeComparison.right.headOid).toBe(rightCommit);
-    expect(worktreeComparison.comparison.aheadBehind).toEqual({ ahead: 1, behind: 1 });
-    expect(leftSummary.comparison?.aheadBehind).toEqual({ ahead: 1, behind: 0 });
+    expect(worktreeComparison.comparison.aheadBehind).toEqual({
+      ahead: 1,
+      behind: 1,
+    });
+    expect(leftSummary.comparison?.aheadBehind).toEqual({
+      ahead: 1,
+      behind: 0,
+    });
     expect(leftSummary.dirtyPaths).toEqual([]);
 
     const renameImpact = await worktrees.branchRenameImpact(

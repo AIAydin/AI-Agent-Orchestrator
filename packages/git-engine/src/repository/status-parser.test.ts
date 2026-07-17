@@ -56,6 +56,42 @@ describe('Git status parsers', () => {
         fetchUrl: 'https://REDACTED@example.test/org/repo.git',
         pushUrl: 'https://REDACTED@example.test/org/repo.git',
         hasRedactedCredentials: true,
+        hasMultiplePushUrls: false,
+      },
+    ]);
+  });
+
+  it('marks a remote with more than one push URL as non-exact', () => {
+    expect(
+      parseRemotes(
+        'origin\thttps://example.test/org/repo.git (fetch)\n' +
+          'origin\thttps://one.test/org/repo.git (push)\n' +
+          'origin\thttps://two.test/org/repo.git (push)\n',
+      ),
+    ).toEqual([
+      {
+        name: 'origin',
+        fetchUrl: 'https://example.test/org/repo.git',
+        pushUrl: 'https://two.test/org/repo.git',
+        hasRedactedCredentials: false,
+        hasMultiplePushUrls: true,
+      },
+    ]);
+  });
+
+  it('preserves the standard credential-free git user in URL-form SSH remotes', () => {
+    expect(
+      parseRemotes(
+        'origin\tssh://git@github.com/owner/repository.git (fetch)\n' +
+          'origin\tssh://git@github.com/owner/repository.git (push)\n',
+      ),
+    ).toEqual([
+      {
+        name: 'origin',
+        fetchUrl: 'ssh://git@github.com/owner/repository.git',
+        pushUrl: 'ssh://git@github.com/owner/repository.git',
+        hasRedactedCredentials: false,
+        hasMultiplePushUrls: false,
       },
     ]);
   });

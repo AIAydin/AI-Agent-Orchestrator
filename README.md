@@ -8,6 +8,8 @@ UI-configured project checks with persisted output. Completed writable runs can 
 authoritative, isolated agent-worktree reviews without entering a path or editing configuration.
 Their local delivery flow requires selected configured checks bound to exact evidence and explicit
 human quality approval bound to the exact committed source before primary can change.
+The Git / PR node applies that same authority to an exact normal branch push and optional on-demand
+GitHub repository, pull-request, and exact-head CI actions through the user's local `gh` CLI.
 The permission centre exposes Plan/read-only, Worktree write, Docker isolated, and a reusable
 Custom profile with complete host/Docker controls and honest enforcement disclosures.
 The first-run agent step requires main-process readiness evidence for the selected bundled,
@@ -89,11 +91,11 @@ starting by the repository account's GitHub Actions billing state.
 
 For implemented solo workflows, the first-run wizard and Settings provide UI controls for agent
 detection and executable selection, custom CLI setup, permission profile selection, Docker,
-project/worktree locations, preview commands, extensions, and local storage, backup, and retention
-behavior. Source and config-file edits are optional for these flows. Lint, typecheck, test, build,
-and custom project checks can likewise be configured, approved, run, cancelled, and inspected
-entirely in the UI. See [Permission profiles](docs/PERMISSIONS.md) for the exact technical and
-disclosure-only boundaries.
+project/worktree locations, the default Git remote name, preview commands, extensions, and local
+storage, backup, and retention behavior. Source and config-file edits are optional for these flows.
+Lint, typecheck, test, build, and custom project checks can likewise be configured, approved, run,
+cancelled, and inspected entirely in the UI. See [Permission profiles](docs/PERMISSIONS.md) for the
+exact technical and disclosure-only boundaries.
 
 The selected first-run CLI must have current ready evidence from the trusted process: Forgeboard
 resolves the exact executable and runs its bounded version/capability probe, while missing,
@@ -130,6 +132,23 @@ working-directory and environment identities, and exact terminal results. Re-run
 changing any bound source or command evidence invalidates approval. Forgeboard revalidates that
 evidence before the cancel-default native delivery confirmation and again before Git changes the
 primary checkout; AI or reviewer outcomes cannot replace the human decision.
+
+A Git / PR node can select the same opaque completed run, inspect its exact committed impact and
+credential-free remote, open that readiness UI, and prepare a normal non-force push of exactly one
+branch ref. Once an existing local, HTTPS, or SSH remote is available, every ordinary delivery
+choice and action is in the UI; source, environment, JSON, and manifest editing are not required.
+Main captures and revalidates the one exact effective push URL, then gives Git that approved literal
+directly—an absolute path for a local destination—with only its selected protocol enabled. The
+renderer never receives or supplies a filesystem path or exact Git remote/push URL. Validated PR and
+CI result URLs cross the typed boundary only so the UI can display or copy them. With an authenticated local `gh` CLI
+already on `PATH`, explicit on-demand confirmations also inspect the bound GitHub host and
+repository, require the remote head to equal the approved source before PR creation, send the exact
+natively disclosed PR body through standard input, and return only CI runs matching the full source
+SHA. Pull requests remain branch-following GitHub objects, so concurrent or later branch movement
+can change their contents even though Forgeboard revalidates the reviewed snapshot immediately
+before the request. No object ID, command, force flag, token, or approval evidence comes from the renderer. The
+exact unsupported configurations and user-owned Git/network trust boundaries are documented in
+[Remote Git and GitHub delivery](docs/git/GITHUB_DELIVERY.md).
 
 Existing folders can be opened without Git. Forgeboard then offers an **Initialize Git** action in
 the project rail. A cancel-default native confirmation names the exact folder before Forgeboard
@@ -178,10 +197,10 @@ The release workflow is designed to emit clearly identified unsigned development
 the optional signing secrets documented in the release guide are configured. Such artifacts may
 trigger the operating system's standard warning.
 
-Still unfinished are remote push/pull-request delivery, broader merge and visual conflict-resolution
-flows, the interactive terminal node, updater, direct SQLite backup restore UI, and complete wiring
-of every persisted setting. See `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed
-status.
+Still unfinished are adding or editing Git remote URLs, selecting a custom `gh` executable, broader
+merge and visual conflict-resolution flows, the interactive terminal node, updater, direct SQLite
+backup restore UI, and complete wiring of every persisted setting. See
+`IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
 
 Optional collaboration is explicitly enabled and configured under **Settings → Connectivity**.
 After native network confirmation, the desktop joins the named self-hosted room with a short-lived

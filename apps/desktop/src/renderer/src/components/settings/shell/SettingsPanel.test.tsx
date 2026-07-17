@@ -271,6 +271,21 @@ describe('SettingsPanel draft transactions', () => {
     expect(screen.getByText('Run your first agent')).toBeTruthy();
   });
 
+  it('distinguishes Git push credentials from optional GitHub CLI actions', () => {
+    render(<SettingsPanel {...props()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
+
+    expect(
+      screen.getByText(/Repository, pull-request, and CI actions run only after explicit review/u),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Git pushes use the selected Git remote and its existing credential helper/u,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/CI lookups, pushes, and pull requests/u)).toBeNull();
+  });
+
   it('keeps restored defaults as a local draft and closing discards them', async () => {
     const onClose = vi.fn();
     render(<SettingsPanel {...props({ onClose })} />);
@@ -966,7 +981,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(updateSettings.mock.calls[0]?.[0].keyboardPreset).toBe('vscode');
   });
 
-  it('preserves unavailable legacy settings while exposing explicit collaboration controls', async () => {
+  it('preserves unavailable legacy settings while exposing remote and collaboration controls', async () => {
     render(
       <SettingsPanel
         {...props({
@@ -992,8 +1007,10 @@ describe('SettingsPanel draft transactions', () => {
     expect(screen.getByLabelText('Git identity name')).toBeTruthy();
     expect(screen.getByLabelText('Git identity email')).toBeTruthy();
     const remote = screen.getByLabelText<HTMLInputElement>('Default remote');
-    expect(remote.disabled).toBe(true);
+    expect(remote.disabled).toBe(false);
     expect(remote.value).toBe('origin');
+    fireEvent.change(remote, { target: { value: 'upstream' } });
+    expect(screen.getByText(/Forgeboard stores no token/u)).toBeTruthy();
     const cleanupPolicy = screen.getByLabelText<HTMLSelectElement>(/Cleanup policy/u);
     expect(cleanupPolicy.disabled).toBe(false);
     expect([...cleanupPolicy.options].filter((option) => !option.disabled)).toHaveLength(1);
@@ -1044,12 +1061,34 @@ describe('SettingsPanel draft transactions', () => {
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
       terminalShell: '/bin/sh',
-      gitRemote: 'origin',
+      gitRemote: 'upstream',
       collaborationEnabled: true,
       collaborationSubject: 'team-editor',
       collaborationColor: '#123456',
       automaticUpdateDownloads: true,
     });
+  });
+
+  it('blocks an invalid default remote with in-context UI guidance', async () => {
+    render(<SettingsPanel {...props()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
+    const remote = screen.getByLabelText<HTMLInputElement>('Default remote');
+    const save = screen.getByRole<HTMLButtonElement>('button', { name: 'Save settings' });
+    await waitFor(() => expect(save.disabled).toBe(false));
+
+    fireEvent.change(remote, { target: { value: 'bad/remote' } });
+    expect(remote.getAttribute('aria-invalid')).toBe('true');
+    expect(
+      screen.getByText(
+        /The Git \/ PR node verifies that it exists in the selected agent worktree/u,
+      ),
+    ).toBeTruthy();
+    expect(save.disabled).toBe(true);
+    expect(updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(remote, { target: { value: 'upstream' } });
+    expect(remote.getAttribute('aria-invalid')).toBe('false');
+    await waitFor(() => expect(save.disabled).toBe(false));
   });
 
   it('lets an imported inactive cleanup policy be replaced only with supported manual cleanup', async () => {

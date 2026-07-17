@@ -19,7 +19,9 @@ export type ForgeboardOutboundAction =
   | 'docker-image-pull'
   | 'git-clone'
   | 'git-push'
+  | 'github-status-check'
   | 'github-pull-request'
+  | 'github-ci-status'
   | 'collaboration-connect'
   | 'diagnostics-send'
   | 'update-check';
@@ -206,6 +208,13 @@ export class OutboundActionGate {
       if (disclosureFingerprint(current) !== plan.disclosureSha256) {
         throw new OutboundDisclosureChangedError();
       }
+      if (plan.expiresAtMs <= this.#now().getTime()) {
+        this.audit.appendAudit('external-send', plan.disclosure.action, 'denied', {
+          ...audit,
+          reason: 'approval-expired-after-revalidation',
+        });
+        return { outcome: 'denied' };
+      }
       const value = await input.execute(EXECUTION_PERMIT);
       this.audit.appendAudit('external-send', plan.disclosure.action, 'allowed', audit);
       return { outcome: 'allowed', value };
@@ -229,16 +238,24 @@ export class OutboundActionGate {
     }
   }
 
+  /** Idempotently releases one plan without revealing another owner's plan state. */
+  public cancel(ownerId: string, planId: string): void {
+    assertOwnerId(ownerId);
+    this.#discardExpiredPlans();
+    const plan = this.#plans.get(planId);
+    if (plan?.ownerId === ownerId) this.#plans.delete(planId);
+  }
+
   #takePlan(ownerId: string, planId: string): PendingOutboundPlan {
     assertOwnerId(ownerId);
     this.#discardExpiredPlans();
     const plan = this.#plans.get(planId);
-    this.#plans.delete(planId);
     if (plan === undefined || plan.ownerId !== ownerId) {
       throw new Error(
         'The outbound approval is missing, expired, already used, or belongs to another owner.',
       );
     }
+    this.#plans.delete(planId);
     return plan;
   }
 
@@ -310,7 +327,9 @@ function assertDisclosure(disclosure: OutboundActionDisclosure): void {
     'docker-image-pull',
     'git-clone',
     'git-push',
+    'github-status-check',
     'github-pull-request',
+    'github-ci-status',
     'collaboration-connect',
     'diagnostics-send',
     'update-check',

@@ -37,6 +37,8 @@ export interface GitRemote {
   readonly fetchUrl: string | null;
   readonly pushUrl: string | null;
   readonly hasRedactedCredentials: boolean;
+  /** A named push can contact every configured push URL, so exact delivery must reject multiples. */
+  readonly hasMultiplePushUrls: boolean;
 }
 
 export interface GitSubmodule {
@@ -276,8 +278,15 @@ export interface RebaseApproval extends ApprovalBase<'rebase'> {
   readonly branch: string;
 }
 
+export interface ExactPushDestination {
+  readonly expectedRemoteUrl: string;
+  readonly pushTarget: string;
+  readonly protocol: 'file' | 'ssh' | 'https';
+}
+
 export interface PushApproval extends ApprovalBase<'push'> {
   readonly remote: string;
+  readonly destination: ExactPushDestination;
   readonly sourceRef: string;
   readonly expectedSourceOid: string;
   readonly destinationRef: string;
@@ -372,6 +381,8 @@ export interface GitHubPullRequestPlan {
   readonly kind: 'create-pull-request';
   readonly repositoryRoot: string;
   readonly expectedHead: string;
+  readonly sourceRef: string;
+  readonly remoteSnapshot: GitHubRemoteSnapshot;
   readonly disclosure: GitHubChangeDisclosure;
   readonly title: string;
   readonly body: string;
@@ -384,6 +395,8 @@ export interface GitHubPullRequestPlan {
 export interface GitHubCiStatusPlan {
   readonly kind: 'read-ci-status';
   readonly repositoryRoot: string;
+  readonly sourceRef: string;
+  readonly remoteSnapshot: GitHubRemoteSnapshot;
   readonly disclosure: GitHubChangeDisclosure;
   readonly command: ArgumentArrayCommand;
   readonly planSha256: string;
@@ -472,6 +485,16 @@ export interface GitHubRepositoryStatus {
   readonly ownerRepository: string;
   readonly url: string;
   readonly defaultBranch: string;
+}
+
+export interface GitHubRemoteSnapshot extends GitHubRepositoryStatus {
+  readonly remote: string;
+  /** Credential-free, normalized Git remote URL used only for exact disclosure binding. */
+  readonly remoteUrl: string;
+  readonly baseBranch: string;
+  readonly headBranch: string;
+  readonly baseOid: string;
+  readonly headOid: string | null;
 }
 
 export interface GitHubPullRequestResult {

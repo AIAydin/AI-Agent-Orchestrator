@@ -120,11 +120,15 @@ executable identity, and recognized package-script metadata immediately before l
 supervises and cancels the complete process tree. The renderer cannot provide a command, working
 directory, environment value, or authorizing grant identity.
 
-Forgeboard-owned Git clone and Docker image pull use a separate outbound boundary. Main creates an
-owner-bound, expiring, single-use plan over the exact destination disclosure, parents a
-cancel-default native dialog to the originating window, rebuilds the disclosure after approval, and
-issues an opaque permit only if its SHA-256 fingerprint still matches. The low-level clone and pull
-executors reject calls without that permit.
+Forgeboard-owned Git clone, Docker image pull, normal branch push, and GitHub status/PR/CI actions
+use a separate outbound boundary. Main creates an owner-bound, expiring, single-use plan over the
+exact destination and impact disclosure, parents a cancel-default native dialog to the originating
+window, rebuilds the disclosure after approval, and issues an opaque permit only if its SHA-256
+fingerprint still matches. Permit-bound executors are the sole production construction/call site
+for network-capable Git and `gh` operations. Push/PR additionally bind content-bound deterministic
+check evidence and exact human approval, then revalidate source, remote, branches, evidence, and
+GitHub head state immediately before execution. PR bodies travel on standard input; CI results are
+filtered to the exact branch and full SHA.
 
 ## Configuration and distribution
 
@@ -132,12 +136,14 @@ The settings database is the canonical configuration source. Implemented desktop
 agent discovery and executable pickers, custom CLI setup, permission profiles, argument-array
 preview and project-check commands, worktree locations, Docker profiles, extensions, and local
 storage/retention. Backup settings cover the destination picker, automatic interval, quit-time
-behavior, and a per-folder retention target. The optional Git commit identity override is active and
-falls back to repository/global Git config when both UI fields are blank. Collaboration connection
-settings drive the explicit desktop join/leave boundary; its access token remains volatile and is
-not persisted with those settings. Several persisted settings are not yet connected to a complete
-runtime surface, including Git remote behavior, terminal, and updates. Direct SQLite backup restore
-UI remains unfinished; its presence in a schema is not treated as implemented behavior.
+behavior, and a per-folder retention target. The optional Git commit identity override and default
+Git remote name are active; identity falls back to repository/global Git config when both UI fields
+are blank. Existing credential-free remotes can be selected by the Git / PR node, while adding or
+editing a remote URL remains outside the current UI. Collaboration connection settings drive the
+explicit desktop join/leave boundary; its access token remains volatile and is not persisted with
+those settings. Several persisted settings are not yet connected to a complete runtime surface,
+including terminal and updates. Direct SQLite backup restore UI remains unfinished; its presence in
+a schema is not treated as implemented behavior.
 
 First-run setup treats agent readiness as a trusted gate. Main resolves and probes only the selected
 bundled, detected, overridden, or custom executable and returns strict ready/failure evidence;

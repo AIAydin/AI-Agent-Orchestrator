@@ -44,9 +44,12 @@ approvals** lists and immediately revokes these records. Agent launches, context
 pulls, implemented external sends, and destructive Git actions remain per-use and do not inherit the
 check grant; unfinished action surfaces remain unavailable.
 
-Direct GitHub operations remain incomplete. Forgeboard may detect a local `gh` CLI, but it does not
-claim that as an active push or pull-request surface; any future operation must retain an
-impact-specific confirmation.
+The Git / PR node can perform an exact normal push and, through an optional local `gh` CLI, explicit
+GitHub repository, pull-request, and exact-head CI actions. Every operation is initiated in the UI
+and retains an action-specific cancel-default native confirmation. Forgeboard stores no GitHub
+token, never polls CI, sends a pull-request body only through `gh` standard input, and keeps only
+bounded redacted audit metadata and digests rather than that body. Git and `gh` may use credentials
+already managed by the operating system, SSH agent, process environment, or `gh` authentication.
 
 Optional collaboration sends only collaboration-safe canvas metadata to the configured self-hosted
 server. It never sends repository files, file contents, diffs, prompts, terminal output, environment

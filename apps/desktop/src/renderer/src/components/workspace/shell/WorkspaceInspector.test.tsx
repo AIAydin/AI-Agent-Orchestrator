@@ -458,6 +458,7 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
       refreshSummary: vi.fn(),
     },
     onOpenDiffReview: vi.fn(),
+    onOpenGitPrReadiness: vi.fn(),
     collaborationGraphReadOnly: false,
     onAttachAgentContext: vi.fn().mockResolvedValue(undefined),
     onRemoveAgentContext: vi.fn(),

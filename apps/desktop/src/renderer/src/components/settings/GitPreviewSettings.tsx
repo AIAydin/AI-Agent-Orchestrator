@@ -1,3 +1,4 @@
+import { GitRemoteSettingSchema } from '../../../../shared/application/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
 import type { CommandReadinessStatus } from '../configuration/useCommandReadiness.js';
 import { numericDraftValue } from './fields/numeric-draft.js';
@@ -17,6 +18,8 @@ export function GitPreviewSettings({
   developmentReadiness,
   managedWorktreeReadiness,
 }: GitPreviewSettingsProps) {
+  const gitRemoteValid = GitRemoteSettingSchema.safeParse(draft.gitRemote).success;
+
   async function chooseExecutable(onSelected: (path: string) => void) {
     await perform(async () => {
       const selected = unwrap(await window.forgeboard.projects.pickExecutable());
@@ -139,23 +142,35 @@ export function GitPreviewSettings({
       </SettingsSection>
       <SettingsSection
         title="Remote automation"
-        description="Git review, staging, discard, and commit are local today. Forgeboard does not yet push branches or create pull requests."
+        description="Choose the default remote offered by Git / PR nodes. Every push, GitHub lookup, and pull request remains an explicit reviewed action."
       >
         <label>
           Default remote
           <input
             name="git-default-remote"
             value={draft.gitRemote}
-            readOnly
-            disabled
-            aria-describedby="git-default-remote-unavailable"
+            maxLength={128}
+            aria-invalid={!gitRemoteValid}
+            aria-describedby={
+              gitRemoteValid
+                ? 'git-default-remote-help'
+                : 'git-default-remote-help git-default-remote-error'
+            }
+            onChange={(event) => setDraft({ ...draft, gitRemote: event.target.value })}
           />
         </label>
-        <p id="git-default-remote-unavailable" className="recovery-guidance" role="status">
-          Remote selection is not active because no remote-changing action is available. This stored
-          or imported legacy value is shown for transparency and is not used by current Git
-          operations.
-        </p>
+        <small id="git-default-remote-help">
+          A Git / PR node verifies this name against the selected agent worktree and shows the exact
+          credential-free remote identity, branch, commits, and files before anything is pushed.
+          GitHub authentication remains owned by the optional local gh CLI; Forgeboard stores no
+          token.
+        </small>
+        {!gitRemoteValid ? (
+          <p id="git-default-remote-error" className="recovery-guidance warning" role="alert">
+            Enter a Git remote name using letters, numbers, dots, underscores, or hyphens. The Git /
+            PR node verifies that it exists in the selected agent worktree.
+          </p>
+        ) : null}
       </SettingsSection>
       <SettingsSection
         title="Development preview"

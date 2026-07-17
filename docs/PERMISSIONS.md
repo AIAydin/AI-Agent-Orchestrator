@@ -144,9 +144,10 @@ Human quality approval is available only after every required check has passed f
 evidence. AI or reviewer approval is intentionally insufficient. Re-running a check or changing the
 source, command, executable, environment, or bound file identities makes the approval stale. A
 delivery plan carries the matching human approval and is checked once before its cancel-default
-native delivery confirmation and again immediately before Git changes primary. This gate currently
-applies to the local managed-worktree-to-primary delivery flow; it does not claim remote push or
-pull-request delivery.
+native delivery confirmation and again immediately before Git changes primary or contacts a remote.
+The same authority now governs both the local managed-worktree-to-primary delivery flow and the
+Git / PR node's normal push and pull-request creation. GitHub status and exact-head CI are explicit
+read-only actions and do not themselves satisfy delivery readiness.
 
 ## Remembered project-check approvals
 
@@ -178,12 +179,15 @@ A remembered check never authorizes an agent launch, a context attachment or sen
 override, a Docker pull, a Git clone, another external send, or a destructive Git action. Those
 implemented operations retain their own per-use review or confirmation.
 
-Git clone and Docker image pull pass through a main-owned outbound gate. The cancel-default native
-dialog displays the exact action, transport, credential-free endpoint/resource, and local or Docker
-details. The plan is bound to the originating window, expires after a short interval, and is consumed
-once. After approval, Forgeboard rebuilds and fingerprints the disclosure; changed destinations or
-actions fail closed. Only the gate can mint the opaque permit accepted by the low-level clone and
-pull executors.
+Git clone, Docker image pull, normal branch push, GitHub repository status, pull-request creation,
+and exact-head CI reads pass through a main-owned outbound gate. The cancel-default native dialog
+displays the exact action, transport, credential-free endpoint/resource, and action-specific impact.
+For a pull request this includes the exact bounded title and body; the body is sent through standard
+input and is not stored in audit metadata. The plan is bound to the originating window, expires
+after a short interval, and is consumed once. After approval, Forgeboard rebuilds and fingerprints
+the disclosure; changed destinations, source evidence, or actions fail closed. Only the gate can
+mint the opaque permit accepted by the low-level outbound executors. See
+[Remote Git and GitHub delivery](git/GITHUB_DELIVERY.md).
 
 ## Context is separately approved
 

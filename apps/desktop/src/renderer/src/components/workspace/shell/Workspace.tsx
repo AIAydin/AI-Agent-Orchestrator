@@ -1677,6 +1677,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             if (selectedNode?.data.kind !== 'diff') return;
             gitReview.openNodeReview(selectedNode.id, selectedNode.data.reviewTarget, request);
           }}
+          onOpenGitPrReadiness={(runId) =>
+            gitReview.openTarget({
+              kind: 'agent-worktree',
+              projectId: project.id,
+              runId,
+            })
+          }
           collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
           onAttachAgentContext={attachProjectFileContext}
           onRemoveAgentContext={removeProjectFileContext}

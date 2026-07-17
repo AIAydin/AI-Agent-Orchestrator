@@ -264,16 +264,22 @@ function canonicalData(
     case 'git-pr':
       return compact({
         ...base,
-        worktreeId: stringValue(raw['worktreeId']),
-        branch: stringValue(raw['branch']),
-        baseBranch: stringValue(raw['baseBranch']),
-        remote: stringValue(raw['remote']),
-        commitIds: stringArray(raw['commitIds']),
-        ahead: raw['ahead'],
-        behind: raw['behind'],
-        mergeReadiness: raw['mergeReadiness'],
-        pullRequestUrl: stringValue(raw['pullRequestUrl']),
-        checkIds: stringArray(raw['checkIds']),
+        deliveryTarget: rendererValueOrPrevious(raw, previous, 'deliveryTarget'),
+        // These legacy/cache fields remain display data. Only deliveryTarget resolves authority.
+        worktreeId: stringValue(rendererValueOrPrevious(raw, previous, 'worktreeId')),
+        branch: stringValue(rendererValueOrPrevious(raw, previous, 'branch')),
+        remote: stringValue(rendererValueOrPrevious(raw, previous, 'remote')),
+        destinationBranch: stringValue(rendererValueOrPrevious(raw, previous, 'destinationBranch')),
+        baseBranch: stringValue(rendererValueOrPrevious(raw, previous, 'baseBranch')),
+        pullRequestTitle: stringValue(rendererValueOrPrevious(raw, previous, 'pullRequestTitle')),
+        pullRequestBody: stringRendererValueOrPrevious(raw, previous, 'pullRequestBody'),
+        pullRequestDraft: booleanValue(rendererValueOrPrevious(raw, previous, 'pullRequestDraft')),
+        commitIds: stringArray(rendererValueOrPrevious(raw, previous, 'commitIds')),
+        ahead: rendererValueOrPrevious(raw, previous, 'ahead'),
+        behind: rendererValueOrPrevious(raw, previous, 'behind'),
+        mergeReadiness: rendererValueOrPrevious(raw, previous, 'mergeReadiness'),
+        pullRequestUrl: stringValue(rendererValueOrPrevious(raw, previous, 'pullRequestUrl')),
+        checkIds: stringArray(rendererValueOrPrevious(raw, previous, 'checkIds')),
       });
     case 'diagram':
       return compact({
@@ -363,6 +369,15 @@ function rendererValueOrPrevious(
   key: string,
 ): unknown {
   return Object.prototype.hasOwnProperty.call(raw, key) ? raw[key] : unknownRecord(previous)?.[key];
+}
+
+function stringRendererValueOrPrevious(
+  raw: Readonly<Record<string, unknown>>,
+  previous: CanvasNode['data'] | undefined,
+  key: string,
+): string | undefined {
+  const value = rendererValueOrPrevious(raw, previous, key);
+  return typeof value === 'string' ? value : undefined;
 }
 
 function positiveNumber(value: unknown): number | undefined {

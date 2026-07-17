@@ -16,10 +16,13 @@ import { inspectGitDelegates } from './delegates/guard.js';
 const DANGEROUS_GIT_ENVIRONMENT = [
   'EMAIL',
   'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_ALLOW_PROTOCOL',
+  'GIT_ASKPASS',
   'GIT_AUTHOR_DATE',
   'GIT_AUTHOR_EMAIL',
   'GIT_AUTHOR_NAME',
   'GIT_CEILING_DIRECTORIES',
+  'GIT_CURL_VERBOSE',
   'GIT_COMMITTER_DATE',
   'GIT_COMMITTER_EMAIL',
   'GIT_COMMITTER_NAME',
@@ -29,18 +32,35 @@ const DANGEROUS_GIT_ENVIRONMENT = [
   'GIT_CONFIG_GLOBAL',
   'GIT_CONFIG_NOSYSTEM',
   'GIT_CONFIG_PARAMETERS',
+  'GIT_CONFIG_SYSTEM',
   'GIT_DIR',
   'GIT_EDITOR',
   'GIT_EXEC_PATH',
   'GIT_EXTERNAL_DIFF',
+  'GIT_GRAFT_FILE',
   'GIT_INDEX_FILE',
   'GIT_OBJECT_DIRECTORY',
+  'GIT_NO_LAZY_FETCH',
   'GIT_PAGER',
   'GIT_PREFIX',
   'GIT_PROXY_COMMAND',
+  'GIT_PROXY_SSL_CAINFO',
+  'GIT_PROXY_SSL_CERT',
+  'GIT_PROXY_SSL_CERT_PASSWORD_PROTECTED',
+  'GIT_PROXY_SSL_KEY',
+  'GIT_PROTOCOL_FROM_USER',
   'GIT_SEQUENCE_EDITOR',
   'GIT_SSH',
   'GIT_SSH_COMMAND',
+  'GIT_SSH_VARIANT',
+  'GIT_SSL_CAINFO',
+  'GIT_SSL_CAPATH',
+  'GIT_SSL_CERT',
+  'GIT_SSL_CERT_PASSWORD_PROTECTED',
+  'GIT_SSL_CIPHER_LIST',
+  'GIT_SSL_KEY',
+  'GIT_SSL_NO_VERIFY',
+  'GIT_SSL_VERSION',
   'GIT_TEMPLATE_DIR',
   'GIT_WORK_TREE',
   'PAGER',
@@ -65,6 +85,19 @@ export interface GitCommandResult {
   readonly exitCode: number;
 }
 
+export interface GitBinaryCommandResult extends Omit<GitCommandResult, 'stdout'> {
+  readonly stdout: Uint8Array;
+}
+
+interface GitCommandBufferResult {
+  readonly executable: string;
+  readonly args: readonly string[];
+  readonly cwd: string;
+  readonly stdout: Buffer;
+  readonly stderr: Buffer;
+  readonly exitCode: number;
+}
+
 export interface GitExecutorOptions {
   readonly executable?: string;
   readonly environment?: Readonly<Record<string, string | undefined>>;
@@ -84,9 +117,11 @@ function safeEnvironment(
   trustedRuntimeEnvironment: Readonly<Record<string, string | undefined>> | undefined,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { ...process.env };
-  for (const name of DANGEROUS_GIT_ENVIRONMENT) delete environment[name];
+  for (const name of Object.keys(environment)) {
+    if (isDangerousGitEnvironment(name)) delete environment[name];
+  }
   for (const [name, value] of Object.entries(overrides ?? {})) {
-    if (DANGEROUS_GIT_ENVIRONMENT.includes(name as (typeof DANGEROUS_GIT_ENVIRONMENT)[number])) {
+    if (isDangerousGitEnvironment(name)) {
       throw new GitEngineError(
         'INVALID_ARGUMENT',
         `Unsafe Git environment override is not permitted: ${name}`,
@@ -123,9 +158,17 @@ function safeEnvironment(
     environment[name] = value;
   }
   environment.GIT_TERMINAL_PROMPT = '0';
+  environment.GIT_NO_LAZY_FETCH = '1';
   environment.GCM_INTERACTIVE = 'Never';
   environment.LC_ALL = 'C';
   return environment;
+}
+
+function isDangerousGitEnvironment(name: string): boolean {
+  return (
+    name.startsWith('GIT_TRACE') ||
+    DANGEROUS_GIT_ENVIRONMENT.includes(name as (typeof DANGEROUS_GIT_ENVIRONMENT)[number])
+  );
 }
 
 function resolveExecutable(requested: string, environment: NodeJS.ProcessEnv): string {
@@ -193,6 +236,24 @@ export class GitExecutor {
     assertArguments(args);
     assertUnguardedCommandIsSafe(args);
     return await this.#runInternal(args, options);
+  }
+
+  /** Executes a safe Git command while preserving stdout bytes for framed object protocols. */
+  public async runBinary(
+    args: readonly string[],
+    options: GitCommandOptions = {},
+  ): Promise<GitBinaryCommandResult> {
+    assertArguments(args);
+    assertUnguardedCommandIsSafe(args);
+    const result = await this.#runInternalBuffers(args, options);
+    return {
+      executable: result.executable,
+      args: result.args,
+      cwd: result.cwd,
+      stdout: result.stdout,
+      stderr: result.stderr.toString('utf8'),
+      exitCode: result.exitCode,
+    };
   }
 
   /**
@@ -272,16 +333,43 @@ export class GitExecutor {
     options: GitCommandOptions = {},
     assertCurrent?: () => void,
   ): Promise<GitCommandResult> {
+    const result = await this.#runInternalBuffers(requestedArgs, options, assertCurrent);
+    return {
+      executable: result.executable,
+      args: result.args,
+      cwd: result.cwd,
+      stdout: result.stdout.toString('utf8'),
+      stderr: result.stderr.toString('utf8'),
+      exitCode: result.exitCode,
+    };
+  }
+
+  async #runInternalBuffers(
+    requestedArgs: readonly string[],
+    options: GitCommandOptions = {},
+    assertCurrent?: () => void,
+  ): Promise<GitCommandBufferResult> {
     const args = hardenDiffArguments(requestedArgs);
     if (args.some((argument) => argument.includes('\0'))) {
       throw new GitEngineError('INVALID_ARGUMENT', 'Git arguments cannot contain NUL bytes.');
+    }
+    if (signalIsAborted(options.signal)) {
+      throw new GitEngineError('ABORTED', 'Git command was aborted before launch.');
     }
 
     const safetyConfig = [
       '-c',
       'core.fsmonitor=false',
       '-c',
+      'core.askPass=',
+      '-c',
+      'core.alternateRefsCommand=',
+      '-c',
       `core.editor=${this.#editorCommand}`,
+      '-c',
+      'core.sshCommand=ssh',
+      '-c',
+      'ssh.variant=ssh',
       '-c',
       'protocol.ext.allow=never',
       '-c',
@@ -301,14 +389,19 @@ export class GitExecutor {
     const effectiveArgs = [
       '--no-pager',
       '--no-optional-locks',
+      '--no-replace-objects',
       ...insertBeforeCommand(args, safetyConfig),
     ];
     const cwd = options.cwd ?? process.cwd();
     const timeoutMs = options.timeoutMs ?? this.#defaultTimeoutMs;
     const outputLimit = options.maxOutputBytes ?? this.#maxOutputBytes;
 
-    return await new Promise<GitCommandResult>((resolve, reject) => {
+    return await new Promise<GitCommandBufferResult>((resolve, reject) => {
       assertCurrent?.();
+      if (signalIsAborted(options.signal)) {
+        reject(new GitEngineError('ABORTED', 'Git command was aborted before launch.'));
+        return;
+      }
       const child = spawn(this.#executable, effectiveArgs, {
         cwd,
         env: this.#environment,
@@ -321,25 +414,41 @@ export class GitExecutor {
       let outputBytes = 0;
       let settled = false;
       let timedOut = false;
+      let stdinComplete = options.input === undefined;
       let forceTimer: NodeJS.Timeout | undefined;
+      let terminationError: GitEngineError | undefined;
 
       const terminate = (): void => {
         child.kill('SIGTERM');
-        forceTimer = setTimeout(() => child.kill('SIGKILL'), 1_000);
-        forceTimer.unref();
+        if (forceTimer === undefined) {
+          forceTimer = setTimeout(() => child.kill('SIGKILL'), 1_000);
+          forceTimer.unref();
+        }
       };
 
       const finishWithError = (error: Error): void => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (forceTimer !== undefined) clearTimeout(forceTimer);
         options.signal?.removeEventListener('abort', onAbort);
         reject(error);
       };
 
       const onAbort = (): void => {
+        if (settled || timedOut || terminationError !== undefined) return;
+        terminationError = new GitEngineError('ABORTED', 'Git command was aborted.');
         terminate();
-        finishWithError(new GitEngineError('ABORTED', 'Git command was aborted.'));
+      };
+      const onStdinError = (error: Error): void => {
+        if (settled || timedOut || terminationError !== undefined) return;
+        terminationError = new GitEngineError(
+          'COMMAND_FAILED',
+          'Git closed command input before Forgeboard finished writing it.',
+          {},
+          { cause: error },
+        );
+        terminate();
       };
 
       const timer = setTimeout(() => {
@@ -355,12 +464,12 @@ export class GitExecutor {
         if (settled) return;
         outputBytes += chunk.byteLength;
         if (outputBytes > outputLimit) {
-          terminate();
-          finishWithError(
-            new GitEngineError('OUTPUT_LIMIT', 'Git command exceeded its output limit.', {
-              outputLimit,
-            }),
+          terminationError ??= new GitEngineError(
+            'OUTPUT_LIMIT',
+            'Git command exceeded its output limit.',
+            { outputLimit },
           );
+          terminate();
           return;
         }
         target.push(chunk);
@@ -368,6 +477,7 @@ export class GitExecutor {
 
       child.stdout.on('data', (chunk: Buffer) => collect(stdout, chunk));
       child.stderr.on('data', (chunk: Buffer) => collect(stderr, chunk));
+      child.stdin.once('error', onStdinError);
       child.once('error', (error) => {
         finishWithError(
           new GitEngineError(
@@ -384,19 +494,28 @@ export class GitExecutor {
         settled = true;
         clearTimeout(timer);
         options.signal?.removeEventListener('abort', onAbort);
-        const result: GitCommandResult = {
+        const result: GitCommandBufferResult = {
           executable: this.#executable,
           args: [...args],
           cwd,
-          stdout: Buffer.concat(stdout).toString('utf8'),
-          stderr: Buffer.concat(stderr).toString('utf8'),
+          stdout: Buffer.concat(stdout),
+          stderr: Buffer.concat(stderr),
           exitCode: exitCode ?? -1,
         };
-        if (timedOut) {
+        if (terminationError !== undefined) {
+          reject(terminationError);
+        } else if (timedOut) {
           reject(
             new GitEngineError('TIMEOUT', `Git command timed out after ${timeoutMs} ms.`, {
               timeoutMs,
             }),
+          );
+        } else if (!stdinComplete) {
+          reject(
+            new GitEngineError(
+              'COMMAND_FAILED',
+              'Git closed command input before Forgeboard finished writing it.',
+            ),
           );
         } else if (result.exitCode !== 0 && options.allowNonZeroExit !== true) {
           reject(
@@ -407,8 +526,8 @@ export class GitExecutor {
                 args: result.args,
                 cwd: result.cwd,
                 exitCode: result.exitCode,
-                stdout: result.stdout,
-                stderr: result.stderr,
+                stdout: result.stdout.toString('utf8'),
+                stderr: result.stderr.toString('utf8'),
               },
             ),
           );
@@ -418,9 +537,13 @@ export class GitExecutor {
       });
 
       if (options.input === undefined) child.stdin.end();
-      else child.stdin.end(options.input);
+      else child.stdin.end(options.input, () => (stdinComplete = true));
     });
   }
+}
+
+function signalIsAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
 }
 
 function assertArguments(args: readonly string[]): void {
@@ -507,7 +630,7 @@ function assertGuardMatchesCommand(args: readonly string[], guard: GitDelegateGu
     if (command !== 'diff' || !isObjectOnlyDiff(args)) {
       throw new GitEngineError(
         'INVALID_ARGUMENT',
-        'Object-only Git inspection must compare the index or immutable commit identifiers.',
+        'Object-only Git inspection must use an exact bounded query over immutable commit identifiers.',
       );
     }
     return;

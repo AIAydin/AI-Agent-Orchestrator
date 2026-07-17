@@ -171,7 +171,9 @@ function redactRemoteUrl(url: string): { url: string; redacted: boolean } {
   try {
     const parsed = new URL(url);
     let redacted = false;
-    if (parsed.username !== '' || parsed.password !== '') {
+    const standardSshGitUser =
+      parsed.protocol === 'ssh:' && parsed.username === 'git' && parsed.password === '';
+    if (!standardSshGitUser && (parsed.username !== '' || parsed.password !== '')) {
       parsed.username = 'REDACTED';
       parsed.password = '';
       redacted = true;
@@ -190,7 +192,10 @@ function redactRemoteUrl(url: string): { url: string; redacted: boolean } {
   } catch {
     const httpCredentials = /^(https?:\/\/)([^/@]+)@/i;
     if (httpCredentials.test(url)) {
-      return { url: url.replace(httpCredentials, '$1REDACTED@'), redacted: true };
+      return {
+        url: url.replace(httpCredentials, '$1REDACTED@'),
+        redacted: true,
+      };
     }
     return { url, redacted: false };
   }
@@ -199,7 +204,12 @@ function redactRemoteUrl(url: string): { url: string; redacted: boolean } {
 export function parseRemotes(output: string): readonly GitRemote[] {
   const byName = new Map<
     string,
-    { fetchUrl: string | null; pushUrl: string | null; hasRedactedCredentials: boolean }
+    {
+      fetchUrl: string | null;
+      pushUrl: string | null;
+      hasRedactedCredentials: boolean;
+      pushUrlCount: number;
+    }
   >();
   for (const line of output.split(/\r?\n/u)) {
     if (line.trim() === '') continue;
@@ -211,14 +221,24 @@ export function parseRemotes(output: string): readonly GitRemote[] {
       fetchUrl: null,
       pushUrl: null,
       hasRedactedCredentials: false,
+      pushUrlCount: 0,
     };
     if (match[3] === 'fetch') current.fetchUrl = redacted.url;
-    else current.pushUrl = redacted.url;
+    else {
+      current.pushUrl = redacted.url;
+      current.pushUrlCount += 1;
+    }
     current.hasRedactedCredentials ||= redacted.redacted;
     byName.set(name, current);
   }
   return [...byName.entries()]
-    .map(([name, remote]) => ({ name, ...remote }))
+    .map(([name, remote]) => ({
+      name,
+      fetchUrl: remote.fetchUrl,
+      pushUrl: remote.pushUrl,
+      hasRedactedCredentials: remote.hasRedactedCredentials,
+      hasMultiplePushUrls: remote.pushUrlCount > 1,
+    }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 

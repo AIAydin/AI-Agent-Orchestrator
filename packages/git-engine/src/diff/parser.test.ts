@@ -34,6 +34,12 @@ index 1234567..89abcde 100644
 +new
 `;
 
+const PURE_RENAME = `diff --git "a/old name.txt" "b/new name.txt"
+similarity index 100%
+rename from old name.txt
+rename to new name.txt
+`;
+
 describe('unified diff parser', () => {
   it('returns stable, individually selectable hunks and line counts', () => {
     const parsed = parseUnifiedDiff(TWO_HUNK_DIFF);
@@ -73,5 +79,16 @@ describe('unified diff parser', () => {
     const selected = selectDiffHunks(parsed, [betaId]);
     expect(selected).toContain('diff --git a/beta.txt b/beta.txt');
     expect(selected).not.toContain('diff --git a/alpha.txt b/alpha.txt');
+  });
+
+  it('retains both paths for a pure rename that has no old/new patch markers', () => {
+    expect(parseUnifiedDiff(PURE_RENAME).files).toEqual([
+      expect.objectContaining({
+        oldPath: 'old name.txt',
+        newPath: 'new name.txt',
+        status: 'renamed',
+        hunks: [],
+      }),
+    ]);
   });
 });
