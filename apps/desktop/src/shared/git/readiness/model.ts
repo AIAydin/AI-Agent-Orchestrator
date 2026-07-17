@@ -5,6 +5,7 @@ import { CheckIdSchema, CheckKindSchema } from '../../checks/contracts.js';
 export const GIT_DELIVERY_READINESS_MAX_AVAILABLE_CHECKS = 256;
 export const GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS = 32;
 export const GIT_DELIVERY_READINESS_MAX_APPROVALS = 64;
+export const GIT_DELIVERY_READINESS_MAX_WORKFLOW_GATES = 256;
 
 const GitDeliveryIdSchema = z.string().uuid();
 const GitDeliveryOidSchema = z.string().regex(/^[a-f0-9]{40,64}$/u);
@@ -21,6 +22,11 @@ const SafeActorIdSchema = z
   .min(1)
   .max(512)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:@-]*$/u);
+export const WorkflowEntityIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u);
 
 /** Renderer authority is limited to the persisted project/run ownership pair. */
 export const GitDeliveryReadinessTargetSchema = z
@@ -55,6 +61,43 @@ export const GitDeliverySourceFingerprintSchema = z
   })
   .strict();
 export type GitDeliverySourceFingerprint = z.infer<typeof GitDeliverySourceFingerprintSchema>;
+
+/**
+ * Main-authored, path-free proof that delivery is tied to one exact successful workflow result.
+ * The digest is recomputed from current workflow evidence before any privileged Git mutation.
+ */
+export const GitDeliveryWorkflowGateBindingSchema = z
+  .object({
+    gateNodeId: WorkflowEntityIdSchema,
+    gateAttempt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    evidenceDigest: GitDeliverySha256Schema,
+    derivedCheckIds: z.array(CheckIdSchema).max(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS),
+  })
+  .strict()
+  .superRefine((gate, context) => {
+    requireUnique(gate.derivedCheckIds, (checkId) => checkId, ['derivedCheckIds'], context);
+  });
+export type GitDeliveryWorkflowGateBinding = z.infer<typeof GitDeliveryWorkflowGateBindingSchema>;
+
+export const GitDeliveryWorkflowBindingSchema = z
+  .object({
+    executionId: WorkflowEntityIdSchema,
+    executionRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    canvasId: WorkflowEntityIdSchema,
+    sourceNodeId: WorkflowEntityIdSchema,
+    sourceAttempt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    sourceOutputDigest: GitDeliverySha256Schema,
+    gates: z
+      .array(GitDeliveryWorkflowGateBindingSchema)
+      .min(1)
+      .max(GIT_DELIVERY_READINESS_MAX_WORKFLOW_GATES),
+    bindingDigest: GitDeliverySha256Schema,
+  })
+  .strict()
+  .superRefine((binding, context) => {
+    requireUnique(binding.gates, (gate) => gate.gateNodeId, ['gates'], context);
+  });
+export type GitDeliveryWorkflowBinding = z.infer<typeof GitDeliveryWorkflowBindingSchema>;
 
 export const GitDeliveryCheckAvailabilitySchema = z.enum([
   'configured',
@@ -142,6 +185,7 @@ const GitDeliveryReadinessSnapshotFields = {
   readinessId: GitDeliveryIdSchema,
   target: GitDeliveryReadinessTargetSchema,
   sourceFingerprint: GitDeliverySourceFingerprintSchema,
+  workflowBinding: GitDeliveryWorkflowBindingSchema,
   availableChecks: z
     .array(GitDeliveryAvailableCheckSchema)
     .max(GIT_DELIVERY_READINESS_MAX_AVAILABLE_CHECKS),

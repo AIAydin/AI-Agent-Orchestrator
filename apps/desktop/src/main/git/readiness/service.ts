@@ -61,6 +61,11 @@ import {
   sourceIdentity,
   stableSha256,
 } from './fingerprints.js';
+import {
+  DeliveryWorkflowGateAuthority,
+  type DeliveryWorkflowGateOperations,
+  type WorkflowExecutionReader,
+} from './workflow-gate-authority.js';
 
 const SOURCE_OID = /^[a-f0-9]{40,64}$/u;
 const MAX_READINESS_RECORDS_PER_TARGET = 32;
@@ -98,6 +103,7 @@ export interface DeliveryReadinessServiceOptions {
   readonly humanActorLabel?: string;
   readonly audit?: DeliveryReadinessAuditSink;
   readonly ownsExactExecutor?: boolean;
+  readonly workflowGateAuthority?: DeliveryWorkflowGateOperations;
 }
 
 /** Native cancellation is an expected denial, not an execution failure. */
@@ -132,6 +138,7 @@ export class DeliveryReadinessService {
   readonly #humanActorLabel: string;
   readonly #audit: DeliveryReadinessAuditSink | undefined;
   readonly #ownsExactExecutor: boolean;
+  readonly #workflowGateAuthority: DeliveryWorkflowGateOperations;
   readonly #activeChecks = new Set<string>();
   readonly #knownOwners = new Set<string>();
   readonly #mutationTails = new Map<string, Promise<void>>();
@@ -155,6 +162,9 @@ export class DeliveryReadinessService {
     this.#humanActorLabel = options.humanActorLabel ?? 'Local human';
     this.#audit = options.audit;
     this.#ownsExactExecutor = options.ownsExactExecutor ?? false;
+    this.#workflowGateAuthority =
+      options.workflowGateAuthority ??
+      new DeliveryWorkflowGateAuthority(store as DeliveryReadinessStore & WorkflowExecutionReader);
   }
 
   public async get(inputValue: GitDeliveryReadinessGetInput): Promise<GitDeliveryReadinessGetView> {
@@ -176,6 +186,7 @@ export class DeliveryReadinessService {
       this.#discover(input.target, settings),
     ]);
     const availableChecks = discovery.map((check) => check.available);
+    const compatibleWorkflowExecutions = this.#workflowGateAuthority.listCompatible(input.target);
     let latest = this.store.listDeliveryReadinessForTarget(input.target, 1)[0];
     this.#assertLifecycle(lifecycleEpoch);
     let readiness: GitDeliveryReadinessView | null = null;
@@ -196,6 +207,11 @@ export class DeliveryReadinessService {
       target: input.target,
       source,
       availableChecks,
+      compatibleWorkflowExecutions,
+      workflowUnavailableReason:
+        compatibleWorkflowExecutions.length === 0
+          ? 'No succeeded workflow execution has current passed Review Gates for this agent run.'
+          : null,
       readiness,
       staleReason,
       refreshedAt: this.#now().toISOString(),
@@ -219,8 +235,22 @@ export class DeliveryReadinessService {
     this.#assertLifecycle(lifecycleEpoch);
     const settings = AppSettingsSchema.parse(this.getSettings());
     const sourceBefore = await this.#captureSource(input.target);
+    const workflowAuthority = this.#workflowGateAuthority.bind(
+      input.target,
+      input.workflowExecutionId,
+    );
     const discovery = await this.#discover(input.target, settings);
-    const required = input.requiredCheckIds.map((checkId) => {
+    const requiredCheckIds = uniqueCheckIds([
+      ...workflowAuthority.mandatoryCheckIds,
+      ...(input.additionalCheckIds ?? []),
+    ]);
+    if (requiredCheckIds.length > 32) {
+      throw new Error('Workflow and additional delivery checks exceed the 32-check limit.');
+    }
+    if (requiredCheckIds.length === 0) {
+      throw new Error('Delivery readiness requires at least one deterministic check.');
+    }
+    const required = requiredCheckIds.map((checkId) => {
       const check = discovery.find((candidate) => candidate.definition.checkId === checkId);
       if (check === undefined) throw new Error(`Delivery check ${String(checkId)} is unavailable.`);
       if (check.resolution === null || check.available.availability !== 'configured') {
@@ -235,6 +265,7 @@ export class DeliveryReadinessService {
       })),
     );
     const sourceAfter = await this.#captureSource(input.target);
+    this.#workflowGateAuthority.assertCurrent(input.target, workflowAuthority.binding);
     this.#assertLifecycle(lifecycleEpoch);
     assertSourceIdentity(sourceBefore, sourceAfter);
     for (const check of required) assertResolutionSource(check.resolution!, sourceAfter);
@@ -250,6 +281,7 @@ export class DeliveryReadinessService {
       revision: 0,
       target: input.target,
       sourceFingerprint: fingerprint,
+      workflowBinding: workflowAuthority.binding,
       sourceBranch: required[0]!.resolution!.targetBinding.branch,
       baseCommit: required[0]!.resolution!.targetBinding.baseCommit,
       availableChecks: discovery.map((check) => check.available),
@@ -259,7 +291,8 @@ export class DeliveryReadinessService {
     });
     this.store.createDeliveryReadiness(record, MAX_READINESS_RECORDS_PER_TARGET);
     this.#safeAudit('prepare', 'allowed', record, {
-      requiredCheckIds: input.requiredCheckIds,
+      workflowExecutionId: input.workflowExecutionId,
+      requiredCheckIds,
     });
     return this.#view(record, record.availableChecks);
   }
@@ -587,6 +620,17 @@ export class DeliveryReadinessService {
     knownDiscovery?: readonly DiscoveredCheck[],
   ): Promise<FreshRecord> {
     this.#assertActiveRecord(record);
+    const workflowAuthority = this.#workflowGateAuthority.assertCurrent(
+      record.target,
+      record.workflowBinding,
+    );
+    const storedCheckIds = uniqueCheckIds(record.requiredChecks.map((check) => check.checkId));
+    const missingMandatory = workflowAuthority.mandatoryCheckIds.find(
+      (checkId) => !storedCheckIds.includes(checkId),
+    );
+    if (missingMandatory !== undefined) {
+      throw new Error(`Workflow-required delivery check ${String(missingMandatory)} is missing.`);
+    }
     const settings = AppSettingsSchema.parse(this.getSettings());
     const [source, discovery] = await Promise.all([
       knownSource === undefined ? this.#captureSource(record.target) : knownSource,
@@ -624,6 +668,7 @@ export class DeliveryReadinessService {
     if (!gitDeliverySourceFingerprintsEqual(expected, record.sourceFingerprint)) {
       throw new Error('The delivery source or required check configuration changed.');
     }
+    this.#workflowGateAuthority.assertCurrent(record.target, record.workflowBinding);
     this.#assertActiveRecord(record);
     return { source, availableChecks: discovery.map((check) => check.available), required };
   }
@@ -739,6 +784,7 @@ export class DeliveryReadinessService {
       readinessId: record.id,
       target: record.target,
       sourceFingerprint: record.sourceFingerprint,
+      workflowBinding: record.workflowBinding,
       availableChecks: [...availableChecks],
       requiredChecks: record.requiredChecks.map((check) => ({
         checkId: check.checkId,
@@ -987,6 +1033,10 @@ function requiredCheck(record: DeliveryReadinessRecord, checkId: CheckId) {
   const check = record.requiredChecks.find((candidate) => candidate.checkId === checkId);
   if (check === undefined) throw new Error('The selected check is not required by this delivery.');
   return check;
+}
+
+function uniqueCheckIds(checkIds: readonly CheckId[]): CheckId[] {
+  return [...new Set(checkIds)].sort((left, right) => String(left).localeCompare(String(right)));
 }
 
 function assertExpectedSource(record: DeliveryReadinessRecord, expected: string): void {

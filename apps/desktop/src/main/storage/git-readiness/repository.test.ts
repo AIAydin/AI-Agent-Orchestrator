@@ -41,6 +41,18 @@ describe('delivery readiness SQLite repository', () => {
     expect(() =>
       store.replaceDeliveryReadiness({ ...updated, sourceBranch: 'forgeboard/retargeted' }, 0),
     ).toThrow('authority are immutable');
+    expect(() =>
+      store.replaceDeliveryReadiness(
+        {
+          ...updated,
+          workflowBinding: {
+            ...updated.workflowBinding,
+            bindingDigest: 'f'.repeat(64),
+          },
+        },
+        0,
+      ),
+    ).toThrow('authority are immutable');
     expect(store.replaceDeliveryReadiness(updated, 0)).toEqual(updated);
     expect(() => store.replaceDeliveryReadiness(updated, 0)).toThrow('changed before this update');
 
@@ -80,6 +92,21 @@ describe('delivery readiness SQLite repository', () => {
       .prepare('UPDATE delivery_readiness_records SET source_fingerprint = ? WHERE id = ?')
       .run('f'.repeat(64), READINESS_ID);
     expect(() => store.getDeliveryReadiness(READINESS_ID)).toThrow('indexed columns do not match');
+  });
+
+  it('includes the exact workflow binding in human-approval evidence', () => {
+    const record = readiness();
+    const changedWorkflow: DeliveryReadinessRecord = {
+      ...record,
+      workflowBinding: {
+        ...record.workflowBinding,
+        executionRevision: record.workflowBinding.executionRevision + 1,
+      },
+    };
+
+    expect(deliveryEvidenceFingerprint(changedWorkflow)).not.toBe(
+      deliveryEvidenceFingerprint(record),
+    );
   });
 
   it('bounds historical approval views to the shared renderer contract limit', () => {
@@ -267,6 +294,23 @@ function readiness(): DeliveryReadinessRecord {
     revision: 0,
     target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID },
     sourceFingerprint,
+    workflowBinding: {
+      executionId: 'workflow-execution-1',
+      executionRevision: 12,
+      canvasId: 'canvas-1',
+      sourceNodeId: 'agent-1',
+      sourceAttempt: 1,
+      sourceOutputDigest: 'e'.repeat(64),
+      gates: [
+        {
+          gateNodeId: 'review-gate-1',
+          gateAttempt: 1,
+          evidenceDigest: 'f'.repeat(64),
+          derivedCheckIds: ['lint'],
+        },
+      ],
+      bindingDigest: '0'.repeat(64),
+    },
     sourceBranch: 'forgeboard/test',
     baseCommit: '0'.repeat(40),
     availableChecks: [

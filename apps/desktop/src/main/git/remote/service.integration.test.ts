@@ -1060,6 +1060,8 @@ class MutableReadiness implements GitShippingReadinessAuthority {
         runId: binding.view.sourceFingerprint.runId,
       },
       availableChecks: binding.view.availableChecks,
+      compatibleWorkflowExecutions: [],
+      workflowUnavailableReason: 'No compatible workflow execution in shipping fixture.',
       readiness: binding.view,
       staleReason: null,
       refreshedAt: NOW,
@@ -1082,6 +1084,7 @@ class MutableReadiness implements GitShippingReadinessAuthority {
       readinessId: READINESS_ID,
       target,
       sourceFingerprint,
+      workflowBinding: workflowBinding(),
       availableChecks: [
         {
           checkId: 'test' as const,
@@ -1137,6 +1140,26 @@ class MutableReadiness implements GitShippingReadinessAuthority {
     }
     return Promise.resolve(binding.view);
   }
+}
+
+function workflowBinding() {
+  return {
+    executionId: 'workflow-execution-1',
+    executionRevision: 1,
+    canvasId: 'canvas-1',
+    sourceNodeId: 'agent-1',
+    sourceAttempt: 1,
+    sourceOutputDigest: hash('workflow-output'),
+    gates: [
+      {
+        gateNodeId: 'gate-1',
+        gateAttempt: 1,
+        evidenceDigest: hash('gate-evidence'),
+        derivedCheckIds: ['test' as const],
+      },
+    ],
+    bindingDigest: hash('workflow-binding'),
+  };
 }
 
 interface FakeCall {

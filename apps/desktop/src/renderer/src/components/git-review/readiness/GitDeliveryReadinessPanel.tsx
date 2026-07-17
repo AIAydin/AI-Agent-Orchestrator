@@ -30,12 +30,14 @@ type CheckId = AvailableCheck['checkId'];
 
 export interface GitDeliveryReadinessPanelProps {
   readonly view: GitDeliveryReadinessGetView;
+  readonly selectedWorkflowExecutionId: string | null;
   readonly selectedCheckIds: readonly CheckId[];
   readonly disabled?: boolean;
   readonly runningCheckId?: RequiredCheck['checkId'] | null;
   readonly requirementsBusy?: boolean;
   readonly approvalBusy?: boolean;
   readonly onRunCheck: (checkId: RequiredCheck['checkId']) => void;
+  readonly onSelectedWorkflowExecutionIdChange: (executionId: string) => void;
   readonly onSelectedCheckIdsChange: (checkIds: readonly CheckId[]) => void;
   readonly onPrepareRequirements: (checkIds: readonly CheckId[]) => void;
   readonly onApproveQuality: () => void;
@@ -88,12 +90,14 @@ const CHECK_PRESENTATION: Readonly<
 
 export function GitDeliveryReadinessPanel({
   view,
+  selectedWorkflowExecutionId,
   selectedCheckIds,
   disabled = false,
   runningCheckId = null,
   requirementsBusy = false,
   approvalBusy = false,
   onRunCheck,
+  onSelectedWorkflowExecutionIdChange,
   onSelectedCheckIdsChange,
   onPrepareRequirements,
   onApproveQuality,
@@ -102,6 +106,12 @@ export function GitDeliveryReadinessPanel({
   const qualityTitleId = useId();
   const approvalDescriptionId = useId();
   const readiness = view.readiness;
+  const selectedWorkflowExecution =
+    view.compatibleWorkflowExecutions.find(
+      (execution) => execution.executionId === selectedWorkflowExecutionId,
+    ) ?? null;
+  const mandatoryCheckIds = selectedWorkflowExecution?.derivedCheckIds ?? [];
+  const selectedRequiredCheckIds = [...mandatoryCheckIds, ...selectedCheckIds];
   const currentHumanApproval = readiness === null ? null : latestHumanApproval(readiness, true);
   const previousHumanApproval = readiness === null ? null : latestHumanApproval(readiness, false);
   const approvalState = readiness?.evaluation.humanApprovalState ?? 'missing';
@@ -112,15 +122,18 @@ export function GitDeliveryReadinessPanel({
   const readinessBusy = runningCheckId !== null || requirementsBusy || approvalBusy || activeCheck;
   const requirementsPrepared =
     readiness !== null &&
+    readiness.workflowBinding.executionId === selectedWorkflowExecutionId &&
     sameCheckIds(
-      selectedCheckIds,
+      selectedRequiredCheckIds,
       requiredChecks.map((check) => check.checkId),
     );
   const selectedChecksValid =
-    selectedCheckIds.length > 0 &&
-    selectedCheckIds.length <= GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS &&
+    selectedWorkflowExecution !== null &&
+    selectedRequiredCheckIds.length > 0 &&
+    selectedRequiredCheckIds.length <= GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS &&
     new Set(selectedCheckIds).size === selectedCheckIds.length &&
-    selectedCheckIds.every((checkId) =>
+    selectedCheckIds.every((checkId) => !mandatoryCheckIds.includes(checkId)) &&
+    selectedRequiredCheckIds.every((checkId) =>
       view.availableChecks.some(
         (available) => available.checkId === checkId && available.availability === 'configured',
       ),
@@ -157,11 +170,16 @@ export function GitDeliveryReadinessPanel({
 
       <CheckRequirementSelector
         checks={view.availableChecks}
+        workflowExecutions={view.compatibleWorkflowExecutions}
+        workflowUnavailableReason={view.workflowUnavailableReason}
+        selectedWorkflowExecutionId={selectedWorkflowExecutionId}
+        mandatoryCheckIds={mandatoryCheckIds}
         selectedCheckIds={selectedCheckIds}
         disabled={disabled || readinessBusy}
         busy={requirementsBusy}
         prepared={requirementsPrepared}
         valid={selectedChecksValid}
+        onWorkflowExecutionChange={onSelectedWorkflowExecutionIdChange}
         onChange={onSelectedCheckIdsChange}
         onPrepare={() => onPrepareRequirements(selectedCheckIds)}
       />
@@ -175,7 +193,8 @@ export function GitDeliveryReadinessPanel({
             </p>
           )}
           <p role="status">
-            Select and save at least one configured check before running delivery checks.
+            Select a verified workflow execution and save its requirements before running delivery
+            checks.
           </p>
         </div>
       ) : (
@@ -274,27 +293,40 @@ export function GitDeliveryReadinessPanel({
 
 function CheckRequirementSelector({
   checks,
+  workflowExecutions,
+  workflowUnavailableReason,
+  selectedWorkflowExecutionId,
+  mandatoryCheckIds,
   selectedCheckIds,
   disabled,
   busy,
   prepared,
   valid,
+  onWorkflowExecutionChange,
   onChange,
   onPrepare,
 }: {
   readonly checks: readonly AvailableCheck[];
+  readonly workflowExecutions: GitDeliveryReadinessGetView['compatibleWorkflowExecutions'];
+  readonly workflowUnavailableReason: string | null;
+  readonly selectedWorkflowExecutionId: string | null;
+  readonly mandatoryCheckIds: readonly CheckId[];
   readonly selectedCheckIds: readonly CheckId[];
   readonly disabled: boolean;
   readonly busy: boolean;
   readonly prepared: boolean;
   readonly valid: boolean;
+  readonly onWorkflowExecutionChange: (executionId: string) => void;
   readonly onChange: (checkIds: readonly CheckId[]) => void;
   readonly onPrepare: () => void;
 }) {
   const helpId = useId();
+  const workflowHelpId = useId();
   const selected = new Set(selectedCheckIds);
+  const mandatory = new Set(mandatoryCheckIds);
   const configuredCount = checks.filter((check) => check.availability === 'configured').length;
-  const maximumReached = selected.size >= GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS;
+  const maximumReached =
+    selected.size + mandatory.size >= GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS;
 
   function toggle(checkId: CheckId, checked: boolean): void {
     const next = new Set(selected);
@@ -305,10 +337,45 @@ function CheckRequirementSelector({
 
   return (
     <fieldset className="git-delivery-requirements" aria-describedby={helpId}>
-      <legend>Required checks</legend>
+      <legend>Workflow evidence and required checks</legend>
+      <label className="git-delivery-workflow-selector">
+        <span>
+          <strong>Verified workflow execution</strong>
+          <small id={workflowHelpId}>
+            Options are verified and supplied by Forgeboard. Changing execution invalidates earlier
+            delivery evidence.
+          </small>
+        </span>
+        <select
+          name="delivery-readiness-workflow-execution"
+          value={selectedWorkflowExecutionId ?? ''}
+          disabled={disabled || workflowExecutions.length === 0}
+          aria-describedby={workflowHelpId}
+          onChange={(event) => onWorkflowExecutionChange(event.target.value)}
+        >
+          {workflowExecutions.length === 0 && <option value="">No compatible execution</option>}
+          {selectedWorkflowExecutionId === null && workflowExecutions.length > 0 && (
+            <option value="" disabled>
+              Select a verified execution
+            </option>
+          )}
+          {workflowExecutions.map((execution) => (
+            <option key={execution.executionId} value={execution.executionId}>
+              {workflowExecutionLabel(execution)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {workflowUnavailableReason !== null && (
+        <p className="git-delivery-stale-reason" role="alert">
+          <TriangleAlert size={12} aria-hidden="true" />
+          {workflowUnavailableReason}
+        </p>
+      )}
       <div className="git-delivery-available-checks">
         {checks.map((check) => {
           const checked = selected.has(check.checkId);
+          const requiredByWorkflow = mandatory.has(check.checkId);
           const unavailable = check.availability !== 'configured';
           return (
             <label key={check.checkId}>
@@ -316,18 +383,22 @@ function CheckRequirementSelector({
                 type="checkbox"
                 name="delivery-readiness-required-checks"
                 value={check.checkId}
-                checked={checked}
-                disabled={disabled || (!checked && (unavailable || maximumReached))}
+                checked={checked || requiredByWorkflow}
+                disabled={
+                  disabled || requiredByWorkflow || (!checked && (unavailable || maximumReached))
+                }
                 onChange={(event) => toggle(check.checkId, event.target.checked)}
               />
               <span>
                 <strong>{check.label}</strong>
                 <small>
-                  {check.availability === 'configured'
-                    ? `${check.kind} check · configured in Settings`
-                    : check.availability === 'disabled'
-                      ? 'Disabled in Settings.'
-                      : 'Not configured in Settings.'}
+                  {requiredByWorkflow
+                    ? `${check.kind} check · required by the selected workflow gate`
+                    : check.availability === 'configured'
+                      ? `${check.kind} check · optional extra configured in Settings`
+                      : check.availability === 'disabled'
+                        ? 'Disabled in Settings.'
+                        : 'Not configured in Settings.'}
                 </small>
               </span>
             </label>
@@ -341,13 +412,13 @@ function CheckRequirementSelector({
         <small id={helpId} role="status">
           {configuredCount === 0
             ? 'Configure at least one check before creating a delivery gate.'
-            : selectedCheckIds.length === 0
-              ? 'Select at least one configured check. Delivery cannot proceed without it.'
+            : selectedWorkflowExecutionId === null
+              ? 'A compatible verified workflow execution is required. Refresh after its review gates pass.'
               : !valid
-                ? `Choose no more than ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} unique, configured checks and remove unavailable selections.`
+                ? `The workflow requirements and optional extras must contain no more than ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} unique, configured checks.`
                 : prepared
-                  ? 'This exact required-check selection is bound to the reviewed source.'
-                  : 'Save this selection before running checks. Changing it makes earlier evidence and quality approval stale.'}
+                  ? 'This exact workflow execution and check set are bound to the reviewed source.'
+                  : 'Workflow-gate checks are locked. Optional extras can be added before saving; changes make earlier evidence and quality approval stale.'}
         </small>
         <button
           className="button"
@@ -367,11 +438,17 @@ function CheckRequirementSelector({
             ? 'Saving requirements…'
             : prepared
               ? 'Requirements current'
-              : 'Save required checks'}
+              : 'Bind workflow requirements'}
         </button>
       </div>
     </fieldset>
   );
+}
+
+function workflowExecutionLabel(
+  execution: GitDeliveryReadinessGetView['compatibleWorkflowExecutions'][number],
+): string {
+  return `Canvas ${execution.canvasId} · revision ${String(execution.executionRevision)} · ${new Date(execution.endedAt).toLocaleString()}`;
 }
 
 function RequiredCheckRow({

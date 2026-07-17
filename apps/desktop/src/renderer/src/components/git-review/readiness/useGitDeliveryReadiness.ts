@@ -27,11 +27,13 @@ export type GitDeliveryReadinessNotice =
 
 export interface GitDeliveryReadinessController {
   readonly view: GitDeliveryReadinessGetView | null;
+  readonly selectedWorkflowExecutionId: string | null;
   readonly selectedCheckIds: readonly CheckId[];
   readonly ready: boolean;
   readonly loading: boolean;
   readonly busy: GitDeliveryReadinessBusy | null;
   readonly error: string | null;
+  readonly setSelectedWorkflowExecutionId: (executionId: string) => void;
   readonly setSelectedCheckIds: (checkIds: readonly CheckId[]) => void;
   readonly refresh: () => Promise<boolean>;
   readonly prepareRequirements: (checkIds: readonly CheckId[]) => Promise<boolean>;
@@ -50,6 +52,7 @@ interface OperationToken {
 interface ReadinessState {
   readonly activation: TargetActivation;
   readonly view: GitDeliveryReadinessGetView | null;
+  readonly selectedWorkflowExecutionId: string | null;
   readonly selectedCheckIds: readonly CheckId[];
   readonly loading: boolean;
   readonly busy: GitDeliveryReadinessBusy | null;
@@ -82,11 +85,14 @@ export function useGitDeliveryReadiness(
 
   const stateIsCurrent = state.activation === activation;
   const view = stateIsCurrent ? state.view : null;
+  const selectedWorkflowExecutionId = stateIsCurrent ? state.selectedWorkflowExecutionId : null;
   const selectedCheckIds = stateIsCurrent ? state.selectedCheckIds : EMPTY_CHECK_IDS;
   const loading = stateIsCurrent ? state.loading : managedTarget !== null;
   const busy = stateIsCurrent ? state.busy : null;
   const error = stateIsCurrent ? state.error : null;
-  const ready = preparedReadiness(view, selectedCheckIds)?.evaluation.ready === true;
+  const ready =
+    preparedReadiness(view, selectedWorkflowExecutionId, selectedCheckIds)?.evaluation.ready ===
+    true;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -113,6 +119,8 @@ export function useGitDeliveryReadiness(
       setState((current) => ({
         activation: expected,
         view: null,
+        selectedWorkflowExecutionId:
+          current.activation === expected ? current.selectedWorkflowExecutionId : null,
         selectedCheckIds:
           current.activation === expected ? current.selectedCheckIds : EMPTY_CHECK_IDS,
         loading: true,
@@ -128,15 +136,15 @@ export function useGitDeliveryReadiness(
         ) {
           return false;
         }
-        setState((current) =>
-          current.activation === expected
-            ? {
-                ...current,
-                view: next,
-                selectedCheckIds: initialCheckSelection(next),
-              }
-            : current,
-        );
+        setState((current) => {
+          if (current.activation !== expected) return current;
+          const selection = selectionAfterRefresh(
+            next,
+            current.selectedWorkflowExecutionId,
+            current.selectedCheckIds,
+          );
+          return { ...current, view: next, ...selection };
+        });
         return true;
       } catch (cause) {
         if (isCurrent(expected) && requestVersionRef.current === requestVersion) {
@@ -181,6 +189,33 @@ export function useGitDeliveryReadiness(
           ? { ...current, selectedCheckIds: [...checkIds], error: null }
           : current,
       );
+    },
+    [activation, isCurrent],
+  );
+
+  const setSelectedWorkflowExecutionId = useCallback(
+    (executionId: string) => {
+      if (!isCurrent(activation)) return;
+      setState((current) => {
+        if (current.activation !== activation || current.view === null) return current;
+        const candidate = current.view.compatibleWorkflowExecutions.find(
+          (execution) => execution.executionId === executionId,
+        );
+        if (candidate === undefined) {
+          return {
+            ...current,
+            selectedWorkflowExecutionId: null,
+            selectedCheckIds: EMPTY_CHECK_IDS,
+            error: 'Refresh delivery readiness before selecting this workflow execution.',
+          };
+        }
+        return {
+          ...current,
+          selectedWorkflowExecutionId: candidate.executionId,
+          selectedCheckIds: EMPTY_CHECK_IDS,
+          error: null,
+        };
+      });
     },
     [activation, isCurrent],
   );
@@ -230,13 +265,14 @@ export function useGitDeliveryReadiness(
   const prepareRequirements = useCallback(
     async (checkIds: readonly CheckId[]): Promise<boolean> => {
       if (managedTarget === null || view === null) return false;
-      if (!validSelection(view, checkIds)) {
+      const candidate = selectedWorkflowExecution(view, selectedWorkflowExecutionId);
+      if (candidate === null || !validSelection(view, candidate, checkIds)) {
         setCurrentError(
           activation,
           new Error(
-            `Select between 1 and ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} unique, configured checks before saving delivery requirements.`,
+            `Select a compatible workflow execution and no more than ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} total unique, configured checks before saving delivery requirements.`,
           ),
-          'Select at least one configured check before saving delivery requirements.',
+          'Select a compatible workflow execution before saving delivery requirements.',
         );
         return false;
       }
@@ -246,7 +282,8 @@ export function useGitDeliveryReadiness(
         unwrap(
           await window.forgeboard.git.readiness.prepare({
             target: managedTarget,
-            requiredCheckIds: [...checkIds],
+            workflowExecutionId: candidate.executionId,
+            additionalCheckIds: [...checkIds],
           }),
         );
         if (!isCurrent(activation)) return false;
@@ -269,6 +306,7 @@ export function useGitDeliveryReadiness(
       isCurrent,
       managedTarget,
       refreshFor,
+      selectedWorkflowExecutionId,
       setCurrentError,
       view,
     ],
@@ -276,7 +314,7 @@ export function useGitDeliveryReadiness(
 
   const runCheck = useCallback(
     async (checkId: CheckId): Promise<GitDeliveryReadinessNotice | undefined> => {
-      const readiness = preparedReadiness(view, selectedCheckIds);
+      const readiness = preparedReadiness(view, selectedWorkflowExecutionId, selectedCheckIds);
       if (managedTarget === null || readiness === null) {
         setCurrentError(
           activation,
@@ -344,13 +382,14 @@ export function useGitDeliveryReadiness(
       managedTarget,
       refreshFor,
       selectedCheckIds,
+      selectedWorkflowExecutionId,
       setCurrentError,
       view,
     ],
   );
 
   const approveQuality = useCallback(async (): Promise<GitDeliveryReadinessNotice | undefined> => {
-    const readiness = preparedReadiness(view, selectedCheckIds);
+    const readiness = preparedReadiness(view, selectedWorkflowExecutionId, selectedCheckIds);
     if (managedTarget === null || readiness === null) {
       setCurrentError(
         activation,
@@ -397,17 +436,20 @@ export function useGitDeliveryReadiness(
     managedTarget,
     refreshFor,
     selectedCheckIds,
+    selectedWorkflowExecutionId,
     setCurrentError,
     view,
   ]);
 
   return {
     view,
+    selectedWorkflowExecutionId,
     selectedCheckIds,
     ready,
     loading,
     busy,
     error,
+    setSelectedWorkflowExecutionId,
     setSelectedCheckIds,
     refresh,
     prepareRequirements,
@@ -420,6 +462,7 @@ function emptyState(activation: TargetActivation, loading: boolean): ReadinessSt
   return {
     activation,
     view: null,
+    selectedWorkflowExecutionId: null,
     selectedCheckIds: EMPTY_CHECK_IDS,
     loading,
     busy: null,
@@ -427,20 +470,61 @@ function emptyState(activation: TargetActivation, loading: boolean): ReadinessSt
   };
 }
 
-function initialCheckSelection(view: GitDeliveryReadinessGetView): readonly CheckId[] {
-  return view.readiness === null
-    ? view.availableChecks
-        .filter((check) => check.availability === 'configured')
-        .map((check) => check.checkId)
-    : view.readiness.requiredChecks.map((check) => check.checkId);
+function selectionAfterRefresh(
+  view: GitDeliveryReadinessGetView,
+  previousExecutionId: string | null,
+  previousCheckIds: readonly CheckId[],
+): Pick<ReadinessState, 'selectedWorkflowExecutionId' | 'selectedCheckIds'> {
+  const executionId = view.readiness?.workflowBinding.executionId;
+  const preparedCandidate =
+    executionId === undefined
+      ? undefined
+      : view.compatibleWorkflowExecutions.find(
+          (execution) => execution.executionId === executionId,
+        );
+  if (executionId !== undefined && preparedCandidate === undefined) {
+    return { selectedWorkflowExecutionId: null, selectedCheckIds: EMPTY_CHECK_IDS };
+  }
+  const previousCandidate =
+    previousExecutionId === null
+      ? undefined
+      : view.compatibleWorkflowExecutions.find(
+          (execution) => execution.executionId === previousExecutionId,
+        );
+  const candidate =
+    preparedCandidate ??
+    previousCandidate ??
+    (previousExecutionId === null && view.compatibleWorkflowExecutions.length === 1
+      ? view.compatibleWorkflowExecutions[0]
+      : undefined);
+  if (candidate === undefined) {
+    return { selectedWorkflowExecutionId: null, selectedCheckIds: EMPTY_CHECK_IDS };
+  }
+  const mandatory = new Set(candidate.derivedCheckIds);
+  const selectedCheckIds =
+    view.readiness?.workflowBinding.executionId === candidate.executionId
+      ? view.readiness.requiredChecks
+          .map((check) => check.checkId)
+          .filter((checkId) => !mandatory.has(checkId))
+      : previousCandidate === candidate
+        ? previousCheckIds
+        : EMPTY_CHECK_IDS;
+  return { selectedWorkflowExecutionId: candidate.executionId, selectedCheckIds };
 }
 
-function validSelection(view: GitDeliveryReadinessGetView, checkIds: readonly CheckId[]): boolean {
+function validSelection(
+  view: GitDeliveryReadinessGetView,
+  candidate: GitDeliveryReadinessGetView['compatibleWorkflowExecutions'][number],
+  checkIds: readonly CheckId[],
+): boolean {
+  const mandatory = new Set(candidate.derivedCheckIds);
+  const totalCheckIds = [...candidate.derivedCheckIds, ...checkIds];
   return (
-    checkIds.length > 0 &&
-    checkIds.length <= GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS &&
+    totalCheckIds.length > 0 &&
+    totalCheckIds.length <= GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS &&
     new Set(checkIds).size === checkIds.length &&
-    checkIds.every((checkId) =>
+    checkIds.every((checkId) => !mandatory.has(checkId)) &&
+    totalCheckIds.every((checkId) =>
       view.availableChecks.some(
         (check) => check.checkId === checkId && check.availability === 'configured',
       ),
@@ -450,11 +534,28 @@ function validSelection(view: GitDeliveryReadinessGetView, checkIds: readonly Ch
 
 function preparedReadiness(
   view: GitDeliveryReadinessGetView | null,
+  selectedWorkflowExecutionId: string | null,
   selectedCheckIds: readonly CheckId[],
 ): NonNullable<GitDeliveryReadinessGetView['readiness']> | null {
   if (view?.readiness === null || view === null) return null;
+  const candidate = selectedWorkflowExecution(view, selectedWorkflowExecutionId);
+  if (candidate === null || view.readiness.workflowBinding.executionId !== candidate.executionId) {
+    return null;
+  }
   const requiredCheckIds = view.readiness.requiredChecks.map((check) => check.checkId);
-  return sameCheckIds(selectedCheckIds, requiredCheckIds) ? view.readiness : null;
+  const selectedRequiredCheckIds = [...candidate.derivedCheckIds, ...selectedCheckIds];
+  return sameCheckIds(selectedRequiredCheckIds, requiredCheckIds) ? view.readiness : null;
+}
+
+function selectedWorkflowExecution(
+  view: GitDeliveryReadinessGetView,
+  executionId: string | null,
+): GitDeliveryReadinessGetView['compatibleWorkflowExecutions'][number] | null {
+  if (executionId === null) return null;
+  return (
+    view.compatibleWorkflowExecutions.find((execution) => execution.executionId === executionId) ??
+    null
+  );
 }
 
 function sameCheckIds(left: readonly CheckId[], right: readonly CheckId[]): boolean {

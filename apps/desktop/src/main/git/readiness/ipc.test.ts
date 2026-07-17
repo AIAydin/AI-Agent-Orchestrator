@@ -41,6 +41,11 @@ const RUN_INPUT = {
   checkId: READINESS_TEST_IDS.checkId,
   expectedSourceFingerprint: readinessFingerprint().digest,
 };
+const PREPARE_INPUT = {
+  target: TARGET,
+  workflowExecutionId: READINESS_TEST_IDS.workflowExecutionId,
+  additionalCheckIds: [READINESS_TEST_IDS.checkId],
+};
 const APPROVE_INPUT = {
   readinessId: READINESS_TEST_IDS.readinessId,
   expectedSourceFingerprint: readinessFingerprint().digest,
@@ -55,6 +60,24 @@ beforeEach(() => {
 });
 
 describe('GitDeliveryReadinessIpcService', () => {
+  it('validates and forwards the exact workflow-bound prepare request', async () => {
+    const fixture = createFixture();
+    fixture.service.registerIpcHandlers();
+
+    await expect(
+      handler(GIT_DELIVERY_READINESS_IPC_CHANNELS.prepare)(liveEvent(), PREPARE_INPUT),
+    ).resolves.toEqual({ ok: true, value: unapprovedReadiness() });
+    expect(fixture.prepare).toHaveBeenCalledWith(PREPARE_INPUT);
+    await expect(
+      handler(GIT_DELIVERY_READINESS_IPC_CHANNELS.prepare)(liveEvent(), {
+        ...PREPARE_INPUT,
+        additionalCheckIds: [READINESS_TEST_IDS.checkId, READINESS_TEST_IDS.checkId],
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    expect(fixture.prepare).toHaveBeenCalledTimes(1);
+    await fixture.service.dispose();
+  });
+
   it('keeps native check cancellation default-safe and launches no exact process', async () => {
     const fixture = createFixture({ responses: [0] });
     fixture.service.registerIpcHandlers();
@@ -279,6 +302,7 @@ function createFixture(
     service,
     parent,
     get,
+    prepare,
     run,
     approve,
     stopOwner,
@@ -296,6 +320,7 @@ function unapprovedReadiness() {
     readinessId: base.readinessId,
     target: base.target,
     sourceFingerprint: base.sourceFingerprint,
+    workflowBinding: base.workflowBinding,
     availableChecks: base.availableChecks,
     requiredChecks: base.requiredChecks,
     approvals: [],

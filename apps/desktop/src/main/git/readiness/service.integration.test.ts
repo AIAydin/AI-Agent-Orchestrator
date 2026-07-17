@@ -17,10 +17,12 @@ import { LocalStore, type StoredRunRecord } from '../../storage.js';
 import { ExactCheckExecutor } from '../../workflow/exact-check/executor.js';
 import { ExactCheckResolver } from '../../workflow/exact-check/resolution.js';
 import { DeliveryReadinessService, type DeliveryReadinessServiceOptions } from './service.js';
+import type { DeliveryWorkflowGateOperations } from './workflow-gate-authority.js';
 
 const PROJECT_ID = '92000000-0000-4000-8000-000000000001';
 const RUN_ID = '92000000-0000-4000-8000-000000000002';
 const OTHER_RUN_ID = '92000000-0000-4000-8000-000000000003';
+const WORKFLOW_EXECUTION_ID = 'workflow-execution-1';
 const ENVIRONMENT_NAME = 'FORGEBOARD_DELIVERY_READINESS_TEST';
 const roots: string[] = [];
 const fixtures: Fixture[] = [];
@@ -47,6 +49,56 @@ afterEach(async () => {
 });
 
 describe('main-owned delivery readiness authority', () => {
+  it('persists nothing when workflow evidence changes during preparation', async () => {
+    const authority = workflowAuthority();
+    const fixture = await createFixture("process.stdout.write('race\\n')", [], {
+      workflowGateAuthority: {
+        ...authority,
+        assertCurrent: () => {
+          throw new Error('Workflow evidence changed during preparation.');
+        },
+      },
+    });
+    const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
+
+    await expect(prepare(fixture, target)).rejects.toThrow('changed during preparation');
+    expect(fixture.readinessStore.listDeliveryReadinessForTarget(target)).toEqual([]);
+  });
+
+  it('rejects workflow evidence that changes during revalidation', async () => {
+    let revalidating = false;
+    let revalidationAssertions = 0;
+    const authority = workflowAuthority();
+    const fixture = await createFixture("process.stdout.write('workflow-revalidate\\n')", [], {
+      workflowGateAuthority: {
+        ...authority,
+        assertCurrent: (target, binding) => {
+          if (revalidating && ++revalidationAssertions === 2) {
+            throw new Error('Workflow Review Gate evidence changed.');
+          }
+          return authority.assertCurrent(target, binding);
+        },
+      },
+    });
+    const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
+    const prepared = await prepare(fixture, target);
+    const checked = await runLint(fixture, prepared.readinessId, prepared.sourceFingerprint.digest);
+    const approved = await fixture.service.approve(
+      {
+        readinessId: checked.readinessId,
+        expectedSourceFingerprint: checked.sourceFingerprint.digest,
+        confirmed: true,
+      },
+      checked.evidenceFingerprint,
+    );
+    revalidating = true;
+
+    await expect(
+      fixture.service.revalidate({ approvalId: approved.approvals[0]!.approvalId, target }),
+    ).rejects.toThrow('Workflow Review Gate evidence changed');
+    expect(revalidationAssertions).toBe(2);
+  });
+
   it('requires exact passing worktree checks before durable human approval', async () => {
     const fixture = await createFixture("process.stdout.write('delivery-check-ok\\n')");
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
@@ -57,7 +109,7 @@ describe('main-owned delivery readiness authority', () => {
       availability: 'configured',
     });
 
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
     expect(prepared.evaluation).toMatchObject({ ready: false, humanApprovalState: 'missing' });
     expect(JSON.stringify(prepared)).not.toContain(fixture.ownership.worktreePath);
     await expect(
@@ -130,7 +182,7 @@ describe('main-owned delivery readiness authority', () => {
       [ENVIRONMENT_NAME],
     );
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
     const checked = await runLint(fixture, prepared.readinessId, prepared.sourceFingerprint.digest);
     const approved = await fixture.service.approve(
       {
@@ -169,7 +221,7 @@ describe('main-owned delivery readiness authority', () => {
       "require('node:fs').writeFileSync('check-mutated.txt', 'unsafe\\n')",
     );
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
 
     const result = await runLint(fixture, prepared.readinessId, prepared.sourceFingerprint.digest);
     expect(result.requiredChecks[0]?.state).toBe('stale');
@@ -191,7 +243,7 @@ describe('main-owned delivery readiness authority', () => {
       "require('node:fs').writeFileSync('cancelled-check-launched.txt', 'unsafe\\n')",
     );
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
 
     await expect(
       fixture.service.run(
@@ -218,7 +270,7 @@ describe('main-owned delivery readiness authority', () => {
   it('blocks shipping revalidation behind a rerun and invalidates the old approval', async () => {
     const fixture = await createFixture("process.stdout.write('rerun-ok\\n')");
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
     const first = await runLint(fixture, prepared.readinessId, prepared.sourceFingerprint.digest);
     const approved = await fixture.service.approve(
       {
@@ -268,7 +320,7 @@ describe('main-owned delivery readiness authority', () => {
   it('cannot resume an authorization and write evidence after a privacy reset', async () => {
     const fixture = await createFixture("process.stdout.write('must-not-launch\\n')");
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
     const authorizationEntered = deferred<void>();
     const authorize = deferred<void>();
     const running = fixture.service.run(
@@ -298,7 +350,7 @@ describe('main-owned delivery readiness authority', () => {
   it('keeps device-local evidence on merge but clears it on replace and full deletion', async () => {
     const fixture = await createFixture("process.stdout.write('portable-policy\\n')");
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
     const emptyStore = new LocalStore(path.join(fixture.root, 'empty', 'forgeboard.sqlite3'));
     const portable = emptyStore.exportData();
     emptyStore.close();
@@ -320,10 +372,7 @@ describe('main-owned delivery readiness authority', () => {
       projectId: PROJECT_ID,
       runId: RUN_ID,
     } as const;
-    const replacementPrepared = await replacement.service.prepare({
-      target: replacementTarget,
-      requiredCheckIds: ['lint'],
-    });
+    const replacementPrepared = await prepare(replacement, replacementTarget);
     await replacement.localStore.deleteAllLocalData();
     expect(
       replacement.localStore.getDeliveryReadiness(replacementPrepared.readinessId),
@@ -333,7 +382,7 @@ describe('main-owned delivery readiness authority', () => {
   it('reports readiness mirror or trigger tampering through root database integrity', async () => {
     const fixture = await createFixture("process.stdout.write('integrity-policy\\n')");
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
     const tamper = new DatabaseSync(fixture.localStore.databasePath);
     tamper
       .prepare('UPDATE delivery_readiness_records SET source_fingerprint = ? WHERE id = ?')
@@ -349,7 +398,7 @@ describe('main-owned delivery readiness authority', () => {
   it('reconciles persisted nonterminal evidence as lost and permits an honest rerun', async () => {
     const fixture = await createFixture("process.stdout.write('restart-rerun\\n')");
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
     const stored = fixture.localStore.getDeliveryReadiness(prepared.readinessId)!;
     const updatedAt = new Date(Date.parse(stored.updatedAt) + 1_000).toISOString();
     fixture.localStore.replaceDeliveryReadiness(
@@ -383,7 +432,7 @@ describe('main-owned delivery readiness authority', () => {
   it('supersedes old approval when required-check selection changes on the same HEAD', async () => {
     const fixture = await createFixture("process.stdout.write('selection-one\\n')");
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const first = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const first = await prepare(fixture, target);
     const checked = await runLint(fixture, first.readinessId, first.sourceFingerprint.digest);
     const approved = await fixture.service.approve(
       {
@@ -402,10 +451,7 @@ describe('main-owned delivery readiness authority', () => {
       },
     });
 
-    const replacement = await fixture.service.prepare({
-      target,
-      requiredCheckIds: ['lint', 'typecheck'],
-    });
+    const replacement = await prepare(fixture, target, ['lint', 'typecheck']);
     expect(replacement.sourceFingerprint.sourceHead).toBe(first.sourceFingerprint.sourceHead);
     expect(replacement.readinessId).not.toBe(first.readinessId);
     await expect(fixture.service.revalidate({ approvalId, target })).rejects.toThrow(
@@ -419,7 +465,7 @@ describe('main-owned delivery readiness authority', () => {
   it('serializes a new prepare behind an old run so the old record cannot retake active status', async () => {
     const fixture = await createFixture("process.stdout.write('old-run\\n')");
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const first = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const first = await prepare(fixture, target);
     const authorizationEntered = deferred<void>();
     const authorize = deferred<void>();
     const oldRun = fixture.service.run(
@@ -438,7 +484,7 @@ describe('main-owned delivery readiness authority', () => {
     );
     await authorizationEntered.promise;
     let prepareSettled = false;
-    const replacementPromise = fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const replacementPromise = prepare(fixture, target);
     void replacementPromise.then(
       () => {
         prepareSettled = true;
@@ -468,7 +514,7 @@ describe('main-owned delivery readiness authority', () => {
       },
     });
     const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
-    const prepared = await fixture.service.prepare({ target, requiredCheckIds: ['lint'] });
+    const prepared = await prepare(fixture, target);
     const checked = await runLint(fixture, prepared.readinessId, prepared.sourceFingerprint.digest);
     const approved = await fixture.service.approve(
       {
@@ -603,6 +649,7 @@ async function createFixture(
     exactResolver,
     exactExecutor,
     {
+      workflowGateAuthority: workflowAuthority(),
       ...serviceOptions,
       humanActorId: 'local-human',
       humanActorLabel: 'Local human',
@@ -621,6 +668,55 @@ async function createFixture(
   };
   fixtures.push(fixture);
   return fixture;
+}
+
+function workflowAuthority(): DeliveryWorkflowGateOperations {
+  const binding = {
+    executionId: WORKFLOW_EXECUTION_ID,
+    executionRevision: 7,
+    canvasId: 'canvas-1',
+    sourceNodeId: 'agent-1',
+    sourceAttempt: 1,
+    sourceOutputDigest: '1'.repeat(64),
+    gates: [
+      {
+        gateNodeId: 'gate-1',
+        gateAttempt: 1,
+        evidenceDigest: '2'.repeat(64),
+        derivedCheckIds: ['lint' as const],
+      },
+    ],
+    bindingDigest: '3'.repeat(64),
+  };
+  const result = { binding, mandatoryCheckIds: ['lint' as const] };
+  return {
+    bind: (_target, executionId) => {
+      if (executionId !== WORKFLOW_EXECUTION_ID) throw new Error('Unknown workflow execution.');
+      return result;
+    },
+    assertCurrent: () => result,
+    listCompatible: () => [
+      {
+        executionId: WORKFLOW_EXECUTION_ID,
+        canvasId: 'canvas-1',
+        executionRevision: 7,
+        endedAt: '2026-07-16T20:00:00.000Z',
+        derivedCheckIds: ['lint'],
+      },
+    ],
+  };
+}
+
+function prepare(
+  fixture: Fixture,
+  target: { readonly kind: 'agent-worktree'; readonly projectId: string; readonly runId: string },
+  additionalCheckIds: readonly ('lint' | 'typecheck' | 'test' | 'build')[] = ['lint'],
+) {
+  return fixture.service.prepare({
+    target,
+    workflowExecutionId: WORKFLOW_EXECUTION_ID,
+    additionalCheckIds: [...additionalCheckIds],
+  });
 }
 
 function project(repository: string): Project {

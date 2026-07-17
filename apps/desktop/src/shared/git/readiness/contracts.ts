@@ -11,6 +11,7 @@ import {
   GitDeliveryReadinessTargetSchema,
   GitDeliverySha256Schema,
   GitDeliverySourceIdentitySchema,
+  WorkflowEntityIdSchema,
 } from './model.js';
 
 export const GIT_DELIVERY_READINESS_IPC_CHANNELS = Object.freeze({
@@ -27,7 +28,6 @@ export type GitDeliveryReadinessGetInput = z.infer<typeof GitDeliveryReadinessGe
 
 export const GitDeliveryRequiredCheckSelectionSchema = z
   .array(CheckIdSchema)
-  .min(1)
   .max(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)
   .superRefine((checkIds, context) => {
     if (new Set(checkIds).size !== checkIds.length) {
@@ -44,7 +44,8 @@ export type GitDeliveryRequiredCheckSelection = z.infer<
 export const GitDeliveryReadinessPrepareInputSchema = z
   .object({
     target: GitDeliveryReadinessTargetSchema,
-    requiredCheckIds: GitDeliveryRequiredCheckSelectionSchema,
+    workflowExecutionId: WorkflowEntityIdSchema,
+    additionalCheckIds: GitDeliveryRequiredCheckSelectionSchema.optional(),
   })
   .strict();
 export type GitDeliveryReadinessPrepareInput = z.infer<
@@ -95,6 +96,19 @@ export const GitDeliveryReadinessViewSchema = z
   });
 export type GitDeliveryReadinessView = z.infer<typeof GitDeliveryReadinessViewSchema>;
 
+export const GitDeliveryCompatibleWorkflowExecutionSchema = z
+  .object({
+    executionId: WorkflowEntityIdSchema,
+    canvasId: WorkflowEntityIdSchema,
+    executionRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    endedAt: z.string().datetime(),
+    derivedCheckIds: GitDeliveryRequiredCheckSelectionSchema,
+  })
+  .strict();
+export type GitDeliveryCompatibleWorkflowExecution = z.infer<
+  typeof GitDeliveryCompatibleWorkflowExecutionSchema
+>;
+
 /**
  * Get always returns bounded path-free discovery. A null readiness is explicitly unprepared and can
  * never be mistaken for an empty set of passing requirements.
@@ -104,6 +118,8 @@ export const GitDeliveryReadinessGetViewSchema = z
     target: GitDeliveryReadinessTargetSchema,
     source: GitDeliverySourceIdentitySchema,
     availableChecks: z.array(GitDeliveryAvailableCheckSchema).max(256),
+    compatibleWorkflowExecutions: z.array(GitDeliveryCompatibleWorkflowExecutionSchema).max(100),
+    workflowUnavailableReason: z.string().trim().min(1).max(1_024).nullable(),
     readiness: GitDeliveryReadinessViewSchema.nullable(),
     staleReason: z.string().trim().min(1).max(1_024).nullable(),
     refreshedAt: z.string().datetime(),
@@ -125,6 +141,17 @@ export const GitDeliveryReadinessGetViewSchema = z
         code: z.ZodIssueCode.custom,
         path: ['availableChecks'],
         message: 'Available delivery check identifiers must be unique.',
+      });
+    }
+    if (
+      (view.compatibleWorkflowExecutions.length === 0) !==
+      (view.workflowUnavailableReason !== null)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['workflowUnavailableReason'],
+        message:
+          'Workflow unavailability must be explained exactly when no compatible execution exists.',
       });
     }
     if (view.readiness === null) return;

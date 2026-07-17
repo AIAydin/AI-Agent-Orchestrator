@@ -11,7 +11,8 @@ import type {
   Project,
 } from '../../../shared/application/contracts.js';
 import { LocalStore, type StoredRunRecord } from '../../storage.js';
-import { MIGRATIONS } from '../database.js';
+import { MIGRATIONS, openDatabase } from '../database.js';
+import { deliveryReadinessIntegrityMessages } from '../git-readiness/repository.js';
 
 const NOW = '2026-07-14T16:00:00.000Z';
 const PROJECT_ID = '00000000-0000-4000-8000-000000000001';
@@ -219,6 +220,148 @@ function storedRun(overrides: Partial<StoredRunRecord> = {}): StoredRunRecord {
 }
 
 describe('LocalStore', () => {
+  it('removes only valid legacy readiness rows in the workflow-binding migration', () => {
+    const database = new DatabaseSync(':memory:');
+    try {
+      database.exec(`
+        CREATE TABLE delivery_readiness_records(id TEXT PRIMARY KEY, value_json TEXT NOT NULL);
+        CREATE TABLE delivery_readiness_approvals(
+          id TEXT PRIMARY KEY,
+          readiness_id TEXT NOT NULL REFERENCES delivery_readiness_records(id) ON DELETE CASCADE
+        );
+      `);
+      database
+        .prepare('INSERT INTO delivery_readiness_records(id, value_json) VALUES(?, ?)')
+        .run('legacy', JSON.stringify({ schemaVersion: 1 }));
+      database
+        .prepare('INSERT INTO delivery_readiness_records(id, value_json) VALUES(?, ?)')
+        .run('current', JSON.stringify({ schemaVersion: 1, workflowBinding: {} }));
+      database
+        .prepare('INSERT INTO delivery_readiness_records(id, value_json) VALUES(?, ?)')
+        .run('malformed', '{');
+      database
+        .prepare('INSERT INTO delivery_readiness_approvals(id, readiness_id) VALUES(?, ?)')
+        .run('approval', 'legacy');
+
+      const migration = MIGRATIONS.at(-1)!;
+      database.exec(migration);
+      database.exec(migration);
+
+      expect(
+        database.prepare('SELECT id FROM delivery_readiness_records ORDER BY id').all(),
+      ).toEqual([{ id: 'current' }, { id: 'malformed' }]);
+      expect(database.prepare('SELECT id FROM delivery_readiness_approvals').all()).toEqual([]);
+      const integrityMessages = deliveryReadinessIntegrityMessages(database).join('\n');
+      expect(integrityMessages).toMatch(/delivery_readiness_records row 1/iu);
+      expect(integrityMessages).toMatch(/delivery_readiness_records row 2/iu);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('upgrades legacy readiness without blocking startup or deleting its project and run', () => {
+    const databasePath = createDatabasePath();
+    const legacy = openDatabase(databasePath);
+    for (const [index, migration] of MIGRATIONS.slice(0, -1).entries()) {
+      legacy.exec(migration);
+      legacy
+        .prepare('INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)')
+        .run(index + 1, NOW);
+      legacy.exec(`PRAGMA user_version = ${String(index + 1)}`);
+    }
+    const savedProject = project();
+    legacy
+      .prepare('INSERT INTO recent_projects(id, path, value_json, opened_at) VALUES(?, ?, ?, ?)')
+      .run(savedProject.id, savedProject.path, JSON.stringify(savedProject), savedProject.openedAt);
+    const savedRun = storedRun();
+    legacy
+      .prepare(
+        `INSERT INTO agent_runs(
+           id, project_id, node_id, adapter_id, status, value_json, created_at, updated_at
+         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        savedRun.id,
+        savedRun.projectId,
+        savedRun.nodeId,
+        savedRun.adapterId,
+        savedRun.status,
+        JSON.stringify(savedRun),
+        savedRun.createdAt,
+        savedRun.updatedAt,
+      );
+    const readinessId = uuidFor(701);
+    const approvalId = uuidFor(702);
+    const sourceFingerprint = 'c'.repeat(64);
+    const legacyReadiness = {
+      schemaVersion: 1,
+      id: readinessId,
+      revision: 0,
+      target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: savedRun.id },
+      sourceFingerprint: {
+        sourceHead: '1'.repeat(40),
+        sourceTree: '2'.repeat(40),
+        worktreeId: savedRun.worktreeId,
+        runId: savedRun.id,
+        requiredCheckConfigurationDigest: 'b'.repeat(64),
+        digest: sourceFingerprint,
+      },
+      sourceBranch: savedRun.branch,
+      baseCommit: savedRun.baseCommit,
+      availableChecks: [],
+      requiredChecks: [],
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    legacy
+      .prepare(
+        `INSERT INTO delivery_readiness_records(
+           id, project_id, run_id, worktree_id, source_fingerprint, revision,
+           value_json, created_at, updated_at
+         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        readinessId,
+        PROJECT_ID,
+        savedRun.id,
+        savedRun.worktreeId,
+        sourceFingerprint,
+        0,
+        JSON.stringify(legacyReadiness),
+        NOW,
+        NOW,
+      );
+    legacy
+      .prepare(
+        `INSERT INTO delivery_readiness_approvals(
+           id, readiness_id, project_id, run_id, authority, source_fingerprint,
+           evidence_fingerprint, approved_at, value_json
+         ) VALUES(?, ?, ?, ?, 'human', ?, ?, ?, ?)`,
+      )
+      .run(
+        approvalId,
+        readinessId,
+        PROJECT_ID,
+        savedRun.id,
+        sourceFingerprint,
+        'd'.repeat(64),
+        NOW,
+        JSON.stringify({ schemaVersion: 1, id: approvalId }),
+      );
+    legacy.close();
+
+    const upgraded = openStore(databasePath);
+    expect(upgraded.checkIntegrity()).toMatchObject({ ok: true });
+    expect(upgraded.getProject(PROJECT_ID)).toEqual(savedProject);
+    expect(upgraded.getRun(savedRun.id)).toEqual(savedRun);
+    expect(upgraded.getDeliveryReadiness(readinessId)).toBeUndefined();
+    closeStore(upgraded);
+
+    const reopened = openStore(databasePath);
+    expect(reopened.checkIntegrity()).toMatchObject({ ok: true });
+    expect(reopened.getProject(PROJECT_ID)?.id).toBe(PROJECT_ID);
+  });
+
   it('notifies backup observers only for durable user-data mutations', () => {
     const store = openStore();
     let changes = 0;

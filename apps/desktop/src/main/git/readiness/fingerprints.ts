@@ -103,6 +103,7 @@ export function deliveryEvidenceFingerprint(record: DeliveryReadinessRecord): st
     readinessId: record.id,
     target: record.target,
     sourceFingerprint: record.sourceFingerprint,
+    workflowBinding: record.workflowBinding,
     requiredChecks: [...record.requiredChecks]
       .sort((left, right) => String(left.checkId).localeCompare(String(right.checkId)))
       .map(checkEvidence),

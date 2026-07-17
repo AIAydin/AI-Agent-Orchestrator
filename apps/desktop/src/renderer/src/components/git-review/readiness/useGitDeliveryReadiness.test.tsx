@@ -50,12 +50,13 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('useGitDeliveryReadiness', () => {
-  it('stays fail-closed for a null target and selects every configured check after discovery', async () => {
+  it('stays fail-closed for a null target and selects only main-authored workflow evidence after discovery', async () => {
     const request = deferred<ReturnType<typeof ok<GitDeliveryReadinessGetView>>>();
     get.mockReturnValueOnce(request.promise);
     const hook = renderReadiness(null);
 
     expect(hook.result.current.view).toBeNull();
+    expect(hook.result.current.selectedWorkflowExecutionId).toBeNull();
     expect(hook.result.current.selectedCheckIds).toEqual([]);
     expect(hook.result.current.loading).toBe(false);
     expect(get).not.toHaveBeenCalled();
@@ -91,7 +92,10 @@ describe('useGitDeliveryReadiness', () => {
 
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     expect(hook.result.current.view?.staleReason).toBe(discovered.staleReason);
-    expect(hook.result.current.selectedCheckIds).toEqual([READINESS_TEST_IDS.checkId, 'lint']);
+    expect(hook.result.current.selectedWorkflowExecutionId).toBe(
+      READINESS_TEST_IDS.workflowExecutionId,
+    );
+    expect(hook.result.current.selectedCheckIds).toEqual([]);
   });
 
   it('initializes selection from prepared requirements instead of every available check', async () => {
@@ -108,7 +112,10 @@ describe('useGitDeliveryReadiness', () => {
     const hook = renderReadiness(TARGET_A);
 
     await waitFor(() => expect(hook.result.current.view).toBe(discovered));
-    expect(hook.result.current.selectedCheckIds).toEqual([READINESS_TEST_IDS.checkId]);
+    expect(hook.result.current.selectedWorkflowExecutionId).toBe(
+      READINESS_TEST_IDS.workflowExecutionId,
+    );
+    expect(hook.result.current.selectedCheckIds).toEqual([]);
   });
 
   it('ignores a discovery response after the managed target changes', async () => {
@@ -135,7 +142,10 @@ describe('useGitDeliveryReadiness', () => {
       await first.promise;
     });
     expect(hook.result.current.view?.target.projectId).toBe(TARGET_B.projectId);
-    expect(hook.result.current.selectedCheckIds).toEqual([READINESS_TEST_IDS.checkId]);
+    expect(hook.result.current.selectedWorkflowExecutionId).toBe(
+      READINESS_TEST_IDS.workflowExecutionId,
+    );
+    expect(hook.result.current.selectedCheckIds).toEqual([]);
   });
 
   it('saves the UI-selected required checks and refreshes the authoritative GetView', async () => {
@@ -151,7 +161,7 @@ describe('useGitDeliveryReadiness', () => {
 
     let pending!: Promise<boolean>;
     act(() => {
-      pending = hook.result.current.prepareRequirements([READINESS_TEST_IDS.checkId]);
+      pending = hook.result.current.prepareRequirements([]);
     });
     expect(hook.result.current.busy).toEqual({ kind: 'prepare-requirements' });
     await act(async () => {
@@ -162,11 +172,147 @@ describe('useGitDeliveryReadiness', () => {
 
     expect(prepare).toHaveBeenCalledWith({
       target: TARGET_A,
-      requiredCheckIds: [READINESS_TEST_IDS.checkId],
+      workflowExecutionId: READINESS_TEST_IDS.workflowExecutionId,
+      additionalCheckIds: [],
     });
     expect(get).toHaveBeenCalledTimes(2);
     expect(hook.result.current.view).toBe(refreshed);
     expect(hook.result.current.busy).toBeNull();
+  });
+
+  it('sends only a selected main-provided execution and optional extra checks', async () => {
+    const secondExecutionId = 'workflow-execution-2';
+    const optionalCheck = {
+      checkId: 'lint' as const,
+      label: 'Lint',
+      kind: 'lint' as const,
+      availability: 'configured' as const,
+      configurationDigest: '8'.repeat(64),
+    };
+    const discovered = readinessGetView();
+    discovered.availableChecks.push(optionalCheck);
+    discovered.compatibleWorkflowExecutions.push({
+      executionId: secondExecutionId,
+      canvasId: 'canvas-2',
+      executionRevision: 9,
+      endedAt: '2026-07-16T21:00:00.000Z',
+      derivedCheckIds: [READINESS_TEST_IDS.checkId],
+    });
+    get.mockReset();
+    get.mockResolvedValue(ok(discovered));
+    const hook = renderReadiness(TARGET_A);
+    await waitFor(() => expect(hook.result.current.view).toBe(discovered));
+
+    expect(hook.result.current.selectedWorkflowExecutionId).toBeNull();
+    act(() =>
+      hook.result.current.setSelectedWorkflowExecutionId(READINESS_TEST_IDS.workflowExecutionId),
+    );
+    act(() => hook.result.current.setSelectedCheckIds(['lint']));
+    act(() => hook.result.current.setSelectedWorkflowExecutionId(secondExecutionId));
+    expect(hook.result.current.selectedCheckIds).toEqual([]);
+    act(() => hook.result.current.setSelectedCheckIds(['lint']));
+    await act(async () => {
+      await hook.result.current.prepareRequirements(['lint']);
+    });
+
+    expect(prepare).toHaveBeenCalledWith({
+      target: TARGET_A,
+      workflowExecutionId: secondExecutionId,
+      additionalCheckIds: ['lint'],
+    });
+  });
+
+  it('fails closed when main reports no compatible workflow execution', async () => {
+    const discovered = {
+      ...readinessGetView(),
+      compatibleWorkflowExecutions: [],
+      workflowUnavailableReason: 'No passed workflow review gate matches this managed run.',
+    };
+    get.mockResolvedValueOnce(ok(discovered));
+    const hook = renderReadiness(TARGET_A);
+    await waitFor(() => expect(hook.result.current.view).toBe(discovered));
+
+    let saved = true;
+    await act(async () => {
+      saved = await hook.result.current.prepareRequirements([]);
+    });
+
+    expect(saved).toBe(false);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(hook.result.current.selectedWorkflowExecutionId).toBeNull();
+    expect(hook.result.current.ready).toBe(false);
+  });
+
+  it('preserves an explicit unprepared selection only while main still offers that candidate', async () => {
+    const secondExecutionId = 'workflow-execution-2';
+    const optionalCheck = {
+      checkId: 'lint' as const,
+      label: 'Lint',
+      kind: 'lint' as const,
+      availability: 'configured' as const,
+      configurationDigest: '8'.repeat(64),
+    };
+    const discovered = readinessGetView();
+    discovered.availableChecks.push(optionalCheck);
+    discovered.compatibleWorkflowExecutions.push({
+      executionId: secondExecutionId,
+      canvasId: 'canvas-2',
+      executionRevision: 9,
+      endedAt: '2026-07-16T21:00:00.000Z',
+      derivedCheckIds: [READINESS_TEST_IDS.checkId],
+    });
+    const removed = {
+      ...discovered,
+      compatibleWorkflowExecutions: [discovered.compatibleWorkflowExecutions[0]],
+    };
+    get.mockReset();
+    get
+      .mockResolvedValueOnce(ok(discovered))
+      .mockResolvedValueOnce(ok(discovered))
+      .mockResolvedValueOnce(ok(removed));
+    const hook = renderReadiness(TARGET_A);
+    await waitFor(() => expect(hook.result.current.view).toBe(discovered));
+    act(() => hook.result.current.setSelectedWorkflowExecutionId(secondExecutionId));
+    act(() => hook.result.current.setSelectedCheckIds(['lint']));
+
+    await act(async () => {
+      await hook.result.current.refresh();
+    });
+    expect(hook.result.current.selectedWorkflowExecutionId).toBe(secondExecutionId);
+    expect(hook.result.current.selectedCheckIds).toEqual(['lint']);
+
+    await act(async () => {
+      await hook.result.current.refresh();
+    });
+    expect(hook.result.current.selectedWorkflowExecutionId).toBeNull();
+    expect(hook.result.current.selectedCheckIds).toEqual([]);
+    expect(hook.result.current.ready).toBe(false);
+  });
+
+  it('clears a prepared selection when refresh removes its authoritative candidate', async () => {
+    const prepared = preparedReadiness('passed');
+    const current = readinessGetView(prepared);
+    const removed = {
+      ...current,
+      compatibleWorkflowExecutions: [
+        {
+          ...current.compatibleWorkflowExecutions[0],
+          executionId: 'workflow-execution-replacement',
+        },
+      ],
+    };
+    get.mockReset();
+    get.mockResolvedValueOnce(ok(current)).mockResolvedValueOnce(ok(removed));
+    const hook = renderReadiness(TARGET_A);
+    await waitFor(() => expect(hook.result.current.selectedWorkflowExecutionId).not.toBeNull());
+
+    await act(async () => {
+      await hook.result.current.refresh();
+    });
+
+    expect(hook.result.current.selectedWorkflowExecutionId).toBeNull();
+    expect(hook.result.current.selectedCheckIds).toEqual([]);
+    expect(hook.result.current.ready).toBe(false);
   });
 
   it('refreshes after native run cancellation and returns a cancellation notice', async () => {

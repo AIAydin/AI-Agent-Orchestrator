@@ -98,6 +98,36 @@
   font-weight: 650;
 }
 
+.git-delivery-workflow-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.git-delivery-workflow-selector > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.git-delivery-workflow-selector select {
+  max-width: min(460px, 55%);
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 9px;
+}
+
+.git-delivery-workflow-selector select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .git-delivery-available-checks {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -285,6 +315,15 @@
   .git-delivery-requirement-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .git-delivery-workflow-selector {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .git-delivery-workflow-selector select {
+    max-width: none;
   }
 
   .git-delivery-requirement-actions .button {

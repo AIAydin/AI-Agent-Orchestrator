@@ -13,6 +13,7 @@ import {
   GitDeliveryReadinessViewSchema,
   GitDeliveryRequiredCheckSchema,
   GitDeliverySourceFingerprintSchema,
+  GitDeliveryWorkflowBindingSchema,
 } from './index.js';
 import {
   READINESS_TEST_ENDED,
@@ -58,25 +59,36 @@ describe('Git delivery readiness contracts', () => {
     expect(GitDeliveryReadinessGetInputSchema.parse({ target })).toEqual({ target });
   });
 
-  it('requires one unique configured check and enforces the selection bound', () => {
+  it('requires a workflow execution and bounds unique optional additional checks', () => {
     const target = {
       kind: 'agent-worktree' as const,
       projectId: READINESS_TEST_IDS.projectId,
       runId: READINESS_TEST_IDS.runId,
     };
     expect(
-      GitDeliveryReadinessPrepareInputSchema.safeParse({ target, requiredCheckIds: [] }).success,
+      GitDeliveryReadinessPrepareInputSchema.parse({
+        target,
+        workflowExecutionId: READINESS_TEST_IDS.workflowExecutionId,
+      }),
+    ).toEqual({
+      target,
+      workflowExecutionId: READINESS_TEST_IDS.workflowExecutionId,
+    });
+    expect(
+      GitDeliveryReadinessPrepareInputSchema.safeParse({ target, additionalCheckIds: [] }).success,
     ).toBe(false);
     expect(
       GitDeliveryReadinessPrepareInputSchema.safeParse({
         target,
-        requiredCheckIds: [READINESS_TEST_IDS.checkId, READINESS_TEST_IDS.checkId],
+        workflowExecutionId: READINESS_TEST_IDS.workflowExecutionId,
+        additionalCheckIds: [READINESS_TEST_IDS.checkId, READINESS_TEST_IDS.checkId],
       }).success,
     ).toBe(false);
     expect(
       GitDeliveryReadinessPrepareInputSchema.safeParse({
         target,
-        requiredCheckIds: Array.from(
+        workflowExecutionId: READINESS_TEST_IDS.workflowExecutionId,
+        additionalCheckIds: Array.from(
           { length: GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS + 1 },
           (_, index) => uuidFor(index + 100),
         ),
@@ -155,6 +167,35 @@ describe('Git delivery readiness contracts', () => {
           runId: uuidFor(800),
         },
       }).success,
+    ).toBe(false);
+  });
+
+  it('accepts only bounded, path-free, unique workflow gate authority', () => {
+    const binding = readinessSnapshot().workflowBinding;
+    expect(GitDeliveryWorkflowBindingSchema.parse(binding)).toEqual(binding);
+    expect(
+      GitDeliveryWorkflowBindingSchema.safeParse({ ...binding, repositoryRoot: '/tmp/project' })
+        .success,
+    ).toBe(false);
+    expect(
+      GitDeliveryWorkflowBindingSchema.safeParse({
+        ...binding,
+        gates: [binding.gates[0], binding.gates[0]],
+      }).success,
+    ).toBe(false);
+    expect(
+      GitDeliveryWorkflowBindingSchema.safeParse({
+        ...binding,
+        gates: [
+          {
+            ...binding.gates[0],
+            derivedCheckIds: [READINESS_TEST_IDS.checkId, READINESS_TEST_IDS.checkId],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      GitDeliveryWorkflowBindingSchema.safeParse({ ...binding, sourceAttempt: 0 }).success,
     ).toBe(false);
   });
 

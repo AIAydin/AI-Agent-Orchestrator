@@ -391,6 +391,7 @@ function assertImmutableReadinessAuthority(
     id: record.id,
     target: record.target,
     sourceFingerprint: record.sourceFingerprint,
+    workflowBinding: record.workflowBinding,
     sourceBranch: record.sourceBranch,
     baseCommit: record.baseCommit,
     availableChecks: record.availableChecks,

@@ -20,6 +20,7 @@ const PREVIOUS_DIGEST = 'd'.repeat(64);
 const CONFIGURATION_DIGEST = 'e'.repeat(64);
 const EVIDENCE_FINGERPRINT = '1'.repeat(64);
 const NOW = '2026-07-16T20:00:00.000Z';
+const WORKFLOW_EXECUTION_ID = 'workflow-execution-1';
 
 type RequiredCheck = GitDeliveryReadinessView['requiredChecks'][number];
 type RequiredCheckState = RequiredCheck['state'];
@@ -67,8 +68,10 @@ describe('GitDeliveryReadinessPanel', () => {
     render(
       <GitDeliveryReadinessPanel
         view={getView(prepared)}
-        selectedCheckIds={[check.checkId]}
+        selectedWorkflowExecutionId={WORKFLOW_EXECUTION_ID}
+        selectedCheckIds={[]}
         onRunCheck={onRunCheck}
+        onSelectedWorkflowExecutionIdChange={vi.fn()}
         onSelectedCheckIdsChange={vi.fn()}
         onPrepareRequirements={vi.fn()}
         onApproveQuality={onApproveQuality}
@@ -88,16 +91,21 @@ describe('GitDeliveryReadinessPanel', () => {
     expect(onApproveQuality).toHaveBeenCalledTimes(1);
   });
 
-  it('initializes required checks from configured UI choices and fails closed before preparation', () => {
-    const configured = availableCheck(30, 'configured');
+  it('locks workflow-derived checks and permits only configured optional extras', () => {
+    const mandatory = availableCheck(30, 'configured');
+    const optional = availableCheck(33, 'configured');
     const unconfigured = availableCheck(31, 'unconfigured');
     const disabled = availableCheck(32, 'disabled');
-    const view = getView(null, { availableChecks: [configured, unconfigured, disabled] });
+    const view = getView(null, {
+      availableChecks: [mandatory, optional, unconfigured, disabled],
+    });
     const onSelectedCheckIdsChange = vi.fn<(checkIds: readonly CheckId[]) => void>();
     const onPrepareRequirements = vi.fn<(checkIds: readonly CheckId[]) => void>();
     const commonProps = {
       view,
+      selectedWorkflowExecutionId: WORKFLOW_EXECUTION_ID,
       onRunCheck: vi.fn<(checkId: CheckId) => void>(),
+      onSelectedWorkflowExecutionIdChange: vi.fn<(executionId: string) => void>(),
       onSelectedCheckIdsChange,
       onPrepareRequirements,
       onApproveQuality: vi.fn<() => void>(),
@@ -106,29 +114,78 @@ describe('GitDeliveryReadinessPanel', () => {
       <GitDeliveryReadinessPanel {...commonProps} selectedCheckIds={[]} />,
     );
 
-    expect(screen.getByText(/Select at least one configured check/u)).toBeTruthy();
+    expect(screen.getByText(/Workflow-gate checks are locked/u)).toBeTruthy();
     expect(screen.queryByText(/no checks are required/iu)).toBeNull();
     expect(screen.queryByRole('button', { name: /^Run /u })).toBeNull();
-    expect(button('Save required checks').disabled).toBe(true);
+    expect(button('Bind workflow requirements').disabled).toBe(false);
     expect(button('Approve reviewed quality').disabled).toBe(true);
 
-    const configuredChoice = checkbox(configured.label);
-    configuredChoice.focus();
-    expect(document.activeElement).toBe(configuredChoice);
-    fireEvent.click(configuredChoice);
-    expect(onSelectedCheckIdsChange).toHaveBeenCalledWith([configured.checkId]);
+    expect(checkbox(mandatory.label).checked).toBe(true);
+    expect(checkbox(mandatory.label).disabled).toBe(true);
+    const optionalChoice = checkbox(optional.label);
+    optionalChoice.focus();
+    expect(document.activeElement).toBe(optionalChoice);
+    fireEvent.click(optionalChoice);
+    expect(onSelectedCheckIdsChange).toHaveBeenCalledWith([optional.checkId]);
     expect(checkbox(unconfigured.label).disabled).toBe(true);
     expect(checkbox(disabled.label).disabled).toBe(true);
 
-    rerender(
-      <GitDeliveryReadinessPanel {...commonProps} selectedCheckIds={[configured.checkId]} />,
-    );
-    const save = button('Save required checks');
+    rerender(<GitDeliveryReadinessPanel {...commonProps} selectedCheckIds={[optional.checkId]} />);
+    const save = button('Bind workflow requirements');
     expect(save.disabled).toBe(false);
     save.focus();
     expect(document.activeElement).toBe(save);
     fireEvent.click(save);
-    expect(onPrepareRequirements).toHaveBeenCalledWith([configured.checkId]);
+    expect(onPrepareRequirements).toHaveBeenCalledWith([optional.checkId]);
+  });
+
+  it('selects only from the main-provided compatible workflow executions', () => {
+    const required = availableCheck(35, 'configured');
+    const secondExecutionId = 'workflow-execution-2';
+    const view = getView(null, {
+      availableChecks: [required],
+      compatibleWorkflowExecutions: [
+        {
+          executionId: WORKFLOW_EXECUTION_ID,
+          canvasId: 'canvas-1',
+          executionRevision: 7,
+          endedAt: NOW,
+          derivedCheckIds: [required.checkId],
+        },
+        {
+          executionId: secondExecutionId,
+          canvasId: 'canvas-2',
+          executionRevision: 8,
+          endedAt: '2026-07-16T21:00:00.000Z',
+          derivedCheckIds: [required.checkId],
+        },
+      ],
+    });
+    const onWorkflowChange = vi.fn<(executionId: string) => void>();
+    render(
+      <GitDeliveryReadinessPanel
+        view={view}
+        selectedWorkflowExecutionId={null}
+        selectedCheckIds={[]}
+        onRunCheck={vi.fn()}
+        onSelectedWorkflowExecutionIdChange={onWorkflowChange}
+        onSelectedCheckIdsChange={vi.fn()}
+        onPrepareRequirements={vi.fn()}
+        onApproveQuality={vi.fn()}
+      />,
+    );
+
+    const selector = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: /^Verified workflow execution/u,
+    });
+    expect([...selector.options].map((option) => option.value)).toEqual([
+      '',
+      WORKFLOW_EXECUTION_ID,
+      secondExecutionId,
+    ]);
+    expect(selector.value).toBe('');
+    fireEvent.change(selector, { target: { value: secondExecutionId } });
+    expect(onWorkflowChange).toHaveBeenCalledWith(secondExecutionId);
   });
 
   it('invalidates run and approval actions until a changed required-check selection is saved', () => {
@@ -141,15 +198,17 @@ describe('GitDeliveryReadinessPanel', () => {
     render(
       <GitDeliveryReadinessPanel
         view={getView(prepared)}
-        selectedCheckIds={[first.checkId, second.checkId]}
+        selectedWorkflowExecutionId={WORKFLOW_EXECUTION_ID}
+        selectedCheckIds={[second.checkId]}
         onRunCheck={vi.fn()}
+        onSelectedWorkflowExecutionIdChange={vi.fn()}
         onSelectedCheckIdsChange={vi.fn()}
         onPrepareRequirements={vi.fn()}
         onApproveQuality={vi.fn()}
       />,
     );
 
-    expect(button('Save required checks').disabled).toBe(false);
+    expect(button('Bind workflow requirements').disabled).toBe(false);
     expect(button(`Re-run ${first.label}`).disabled).toBe(true);
     expect(button('Approve reviewed quality').disabled).toBe(true);
     expect(screen.getByRole('alert').textContent).toContain('earlier evidence is not reused');
@@ -160,16 +219,22 @@ describe('GitDeliveryReadinessPanel', () => {
       'The managed source changed after its delivery checks ran; prepare a new exact binding.';
     render(
       <GitDeliveryReadinessPanel
-        view={getView(null, { staleReason })}
+        view={getView(null, {
+          compatibleWorkflowExecutions: [],
+          workflowUnavailableReason: 'Run and pass a workflow review gate before delivery.',
+          staleReason,
+        })}
+        selectedWorkflowExecutionId={null}
         selectedCheckIds={[]}
         onRunCheck={vi.fn()}
+        onSelectedWorkflowExecutionIdChange={vi.fn()}
         onSelectedCheckIdsChange={vi.fn()}
         onPrepareRequirements={vi.fn()}
         onApproveQuality={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole('alert').textContent).toContain(staleReason);
+    expect(screen.getByText(staleReason).textContent).toContain(staleReason);
     expect(button('Approve reviewed quality').disabled).toBe(true);
   });
 
@@ -192,6 +257,7 @@ describe('GitDeliveryReadinessPanel', () => {
     const active = readiness({ requiredChecks: [queued, missing] });
     const commonCallbacks = {
       onRunCheck: vi.fn<(checkId: CheckId) => void>(),
+      onSelectedWorkflowExecutionIdChange: vi.fn<(executionId: string) => void>(),
       onSelectedCheckIdsChange: vi.fn<(checkIds: readonly CheckId[]) => void>(),
       onPrepareRequirements: vi.fn<(checkIds: readonly CheckId[]) => void>(),
       onApproveQuality: vi.fn<() => void>(),
@@ -199,7 +265,8 @@ describe('GitDeliveryReadinessPanel', () => {
     const { rerender } = render(
       <GitDeliveryReadinessPanel
         view={getView(active)}
-        selectedCheckIds={[queued.checkId, missing.checkId]}
+        selectedWorkflowExecutionId={WORKFLOW_EXECUTION_ID}
+        selectedCheckIds={[]}
         {...commonCallbacks}
       />,
     );
@@ -214,7 +281,8 @@ describe('GitDeliveryReadinessPanel', () => {
     rerender(
       <GitDeliveryReadinessPanel
         view={getView(prepared)}
-        selectedCheckIds={[passed.checkId]}
+        selectedWorkflowExecutionId={WORKFLOW_EXECUTION_ID}
+        selectedCheckIds={[]}
         disabled
         {...commonCallbacks}
       />,
@@ -335,8 +403,10 @@ function renderPreparedPanel(
   return render(
     <GitDeliveryReadinessPanel
       view={getView(prepared)}
-      selectedCheckIds={prepared.requiredChecks.map((check) => check.checkId)}
+      selectedWorkflowExecutionId={WORKFLOW_EXECUTION_ID}
+      selectedCheckIds={[]}
       onRunCheck={callbacks.onRunCheck ?? vi.fn()}
+      onSelectedWorkflowExecutionIdChange={vi.fn()}
       onSelectedCheckIdsChange={vi.fn()}
       onPrepareRequirements={vi.fn()}
       onApproveQuality={callbacks.onApproveQuality ?? vi.fn()}
@@ -357,6 +427,20 @@ function getView(
       runId: RUN_ID,
     },
     availableChecks: prepared?.availableChecks ?? [],
+    compatibleWorkflowExecutions: [
+      {
+        executionId: WORKFLOW_EXECUTION_ID,
+        canvasId: 'canvas-1',
+        executionRevision: 7,
+        endedAt: NOW,
+        derivedCheckIds:
+          prepared?.requiredChecks.map((check) => check.checkId) ??
+          (overrides.availableChecks?.[0] === undefined
+            ? []
+            : [overrides.availableChecks[0].checkId]),
+      },
+    ],
+    workflowUnavailableReason: null,
     readiness: prepared,
     staleReason: null,
     refreshedAt: NOW,
@@ -376,6 +460,23 @@ function readiness(
     readinessId: READINESS_ID,
     target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID },
     sourceFingerprint: currentFingerprint(),
+    workflowBinding: {
+      executionId: WORKFLOW_EXECUTION_ID,
+      executionRevision: 7,
+      canvasId: 'canvas-1',
+      sourceNodeId: 'agent-1',
+      sourceAttempt: 2,
+      sourceOutputDigest: '2'.repeat(64),
+      gates: [
+        {
+          gateNodeId: 'review-gate-1',
+          gateAttempt: 2,
+          evidenceDigest: '3'.repeat(64),
+          derivedCheckIds: requiredChecks.map((check) => check.checkId),
+        },
+      ],
+      bindingDigest: '4'.repeat(64),
+    },
     availableChecks,
     requiredChecks,
     approvals: [],

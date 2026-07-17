@@ -18,7 +18,8 @@ const TARGET = {
 const GET_INPUT = { target: TARGET };
 const PREPARE_INPUT = {
   target: TARGET,
-  requiredCheckIds: [READINESS_TEST_IDS.checkId],
+  workflowExecutionId: READINESS_TEST_IDS.workflowExecutionId,
+  additionalCheckIds: [READINESS_TEST_IDS.checkId],
 };
 const RUN_INPUT = {
   readinessId: READINESS_TEST_IDS.readinessId,
@@ -85,15 +86,15 @@ describe('createGitDeliveryReadinessApi', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it('enforces required-check, fingerprint, and explicit-confirmation constraints', async () => {
+  it('enforces workflow, additional-check, fingerprint, and confirmation constraints', async () => {
     const invoke = vi.fn();
     const api = createGitDeliveryReadinessApi(invoke);
 
-    await expect(api.prepare({ ...PREPARE_INPUT, requiredCheckIds: [] })).rejects.toBeTruthy();
+    await expect(api.prepare({ ...PREPARE_INPUT, workflowExecutionId: '' })).rejects.toBeTruthy();
     await expect(
       api.prepare({
         ...PREPARE_INPUT,
-        requiredCheckIds: [READINESS_TEST_IDS.checkId, READINESS_TEST_IDS.checkId],
+        additionalCheckIds: [READINESS_TEST_IDS.checkId, READINESS_TEST_IDS.checkId],
       }),
     ).rejects.toBeTruthy();
     await expect(

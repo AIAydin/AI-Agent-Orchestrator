@@ -417,6 +417,25 @@ export const MIGRATIONS = [
     CREATE INDEX IF NOT EXISTS idx_agent_runs_project_node_updated
       ON agent_runs(project_id, node_id, updated_at DESC, id DESC);
   `,
+  `
+    DELETE FROM delivery_readiness_approvals
+    WHERE readiness_id IN (
+      SELECT id FROM delivery_readiness_records
+      WHERE CASE
+        WHEN json_valid(value_json) = 1 THEN
+          json_extract(value_json, '$.schemaVersion') = 1
+          AND json_type(value_json, '$.workflowBinding') IS NULL
+        ELSE 0
+      END
+    );
+    DELETE FROM delivery_readiness_records
+    WHERE CASE
+      WHEN json_valid(value_json) = 1 THEN
+        json_extract(value_json, '$.schemaVersion') = 1
+        AND json_type(value_json, '$.workflowBinding') IS NULL
+      ELSE 0
+    END;
+  `,
 ] as const;
 
 export function openDatabase(databasePath: string): DatabaseSync {

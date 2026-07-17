@@ -537,6 +537,9 @@ export function GitReviewDialog({
                       ) : (
                         <GitDeliveryReadinessPanel
                           view={deliveryReadiness.view}
+                          selectedWorkflowExecutionId={
+                            deliveryReadiness.selectedWorkflowExecutionId
+                          }
                           selectedCheckIds={deliveryReadiness.selectedCheckIds}
                           disabled={busy || deliveryReadiness.loading}
                           runningCheckId={
@@ -547,6 +550,9 @@ export function GitReviewDialog({
                           requirementsBusy={deliveryReadiness.busy?.kind === 'prepare-requirements'}
                           approvalBusy={deliveryReadiness.busy?.kind === 'approve-quality'}
                           onRunCheck={runReadinessCheck}
+                          onSelectedWorkflowExecutionIdChange={
+                            deliveryReadiness.setSelectedWorkflowExecutionId
+                          }
                           onSelectedCheckIdsChange={deliveryReadiness.setSelectedCheckIds}
                           onPrepareRequirements={prepareReadinessRequirements}
                           onApproveQuality={approveReadinessQuality}

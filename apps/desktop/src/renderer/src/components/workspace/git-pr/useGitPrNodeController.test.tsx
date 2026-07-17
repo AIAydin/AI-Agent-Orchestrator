@@ -880,7 +880,17 @@ function unpreparedDiscovery() {
       worktreeId: '50000000-0000-4000-8000-000000000001',
       runId: RUN_ID,
     },
-    availableChecks: [],
+    availableChecks: [deliveryCheckAvailability()],
+    compatibleWorkflowExecutions: [
+      {
+        executionId: 'workflow-execution-1',
+        canvasId: 'canvas-1',
+        executionRevision: 7,
+        endedAt: '2026-07-17T01:02:00.000Z',
+        derivedCheckIds: ['delivery-check-1'],
+      },
+    ],
+    workflowUnavailableReason: null,
     readiness: null,
     staleReason: null,
     refreshedAt: '2026-07-17T01:03:00.000Z',
@@ -892,22 +902,77 @@ function readyDiscovery() {
 }
 
 function readyReadiness() {
+  const sourceFingerprint = deliverySourceFingerprint();
   return {
     readinessId: '60000000-0000-4000-8000-000000000001',
     target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID },
-    sourceFingerprint: {
-      sourceHead: SOURCE_OID,
-      sourceTree: 'd'.repeat(40),
-      worktreeId: '50000000-0000-4000-8000-000000000001',
-      runId: RUN_ID,
-      requiredCheckConfigurationDigest: 'e'.repeat(64),
-      digest: 'f'.repeat(64),
+    sourceFingerprint,
+    workflowBinding: {
+      executionId: 'workflow-execution-1',
+      executionRevision: 7,
+      canvasId: 'canvas-1',
+      sourceNodeId: 'agent-node',
+      sourceAttempt: 1,
+      sourceOutputDigest: '2'.repeat(64),
+      gates: [
+        {
+          gateNodeId: 'review-gate-1',
+          gateAttempt: 1,
+          evidenceDigest: '3'.repeat(64),
+          derivedCheckIds: ['delivery-check-1'],
+        },
+      ],
+      bindingDigest: '4'.repeat(64),
     },
-    availableChecks: [],
-    requiredChecks: [],
-    approvals: [],
+    availableChecks: [deliveryCheckAvailability()],
+    requiredChecks: [
+      {
+        checkId: 'delivery-check-1',
+        label: 'Delivery verification',
+        kind: 'custom' as const,
+        configurationDigest: 'e'.repeat(64),
+        state: 'passed' as const,
+        executionId: '65000000-0000-4000-8000-000000000001',
+        sourceFingerprint,
+        startedAt: '2026-07-17T01:02:30.000Z',
+        endedAt: '2026-07-17T01:03:00.000Z',
+        updatedAt: '2026-07-17T01:03:00.000Z',
+      },
+    ],
+    approvals: [
+      {
+        approvalId: APPROVAL_ID,
+        authority: 'human' as const,
+        actorId: 'local-reviewer',
+        actorLabel: 'Local reviewer',
+        sourceFingerprint,
+        evidenceFingerprint: '1'.repeat(64),
+        approvedAt: '2026-07-17T01:04:00.000Z',
+      },
+    ],
     evidenceFingerprint: '1'.repeat(64),
     updatedAt: '2026-07-17T01:04:00.000Z',
     evaluation: { ready: true, humanApprovalState: 'approved', blockers: [] },
+  };
+}
+
+function deliveryCheckAvailability() {
+  return {
+    checkId: 'delivery-check-1',
+    label: 'Delivery verification',
+    kind: 'custom' as const,
+    availability: 'configured' as const,
+    configurationDigest: 'e'.repeat(64),
+  };
+}
+
+function deliverySourceFingerprint() {
+  return {
+    sourceHead: SOURCE_OID,
+    sourceTree: 'd'.repeat(40),
+    worktreeId: '50000000-0000-4000-8000-000000000001',
+    runId: RUN_ID,
+    requiredCheckConfigurationDigest: 'e'.repeat(64),
+    digest: 'f'.repeat(64),
   };
 }

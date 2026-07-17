@@ -129,7 +129,7 @@ not be reclassified as future work.
 - [x] Port allocation, readiness, multiple worktree dev servers, logs, cleanup, and collisions.
 - [ ] Side-by-side desktop/tablet/phone previews bound to competing worktrees.
 - [x] Lint/typecheck/test/build/custom checks with raw output and best-effort parsing.
-- [ ] Review gates enforce selected passing commands before merge/push.
+- [x] Review gates enforce selected passing commands before merge/push.
 
 ## Optional multiplayer
 
@@ -1098,3 +1098,17 @@ unchecked when only a subset of their required behavior has proof.
   tests across 32 files, and every workspace production build. Review Gate delivery binding and the
   end-to-end reviewer/revision Electron journey remain open, so the broad checklist entry is not yet
   marked complete.
+- 2026-07-17: Git delivery readiness is now bound to one exact succeeded workflow execution, source
+  node attempt, output digest, and the complete current set of relevant Review Gates. Main derives
+  mandatory lint/test/custom check IDs from gate configuration; the renderer can select only bounded
+  main-authored compatible executions, cannot remove gate-required checks, and may add only optional
+  configured checks. Failed, ambiguous, stale, or mixed-source gates fail closed even when another
+  relevant gate passed. Workflow and Git source authority are revalidated before and after
+  asynchronous discovery, and the immutable binding participates in readiness persistence, human
+  approval evidence, push/PR, merge, and cherry-pick revalidation. The append-only SQLite migration
+  removes only obsolete pre-binding readiness and approvals while preserving projects, runs, and
+  strict corruption detection. Verification passed the 1,061-file structure gate, formatting,
+  zero-warning lint, all eight strict typechecks, 2,012 unit tests across 309 files, 282 real-process
+  integration tests across 32 files, every workspace production build, and `git diff --check`. The
+  broad Review Gate node and typed-workflow entries remain open pending the dedicated
+  reviewer/revision Electron journey and the remaining lifecycle controls.

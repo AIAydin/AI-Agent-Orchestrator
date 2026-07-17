@@ -16,6 +16,7 @@ export const READINESS_TEST_IDS = Object.freeze({
   readinessId: '40000000-0000-4000-8000-000000000001',
   checkId: '50000000-0000-4000-8000-000000000001',
   executionId: '60000000-0000-4000-8000-000000000001',
+  workflowExecutionId: 'workflow-execution-1',
   approvalId: '70000000-0000-4000-8000-000000000001',
 });
 
@@ -75,6 +76,23 @@ export function readinessSnapshot(
       runId: READINESS_TEST_IDS.runId,
     },
     sourceFingerprint,
+    workflowBinding: {
+      executionId: READINESS_TEST_IDS.workflowExecutionId,
+      executionRevision: 7,
+      canvasId: 'canvas-1',
+      sourceNodeId: 'agent-1',
+      sourceAttempt: 2,
+      sourceOutputDigest: '1'.repeat(64),
+      gates: [
+        {
+          gateNodeId: 'review-gate-1',
+          gateAttempt: 2,
+          evidenceDigest: '2'.repeat(64),
+          derivedCheckIds: [READINESS_TEST_IDS.checkId],
+        },
+      ],
+      bindingDigest: '3'.repeat(64),
+    },
     availableChecks: requiredChecks.map((check) => ({
       checkId: check.checkId,
       label: check.label,
@@ -138,6 +156,16 @@ export function readinessGetView(
         configurationDigest: 'e'.repeat(64),
       },
     ],
+    compatibleWorkflowExecutions: [
+      {
+        executionId: READINESS_TEST_IDS.workflowExecutionId,
+        canvasId: 'canvas-1',
+        executionRevision: 7,
+        endedAt: READINESS_TEST_ENDED,
+        derivedCheckIds: [READINESS_TEST_IDS.checkId],
+      },
+    ],
+    workflowUnavailableReason: null,
     readiness,
     staleReason: null,
     refreshedAt: READINESS_TEST_NOW,

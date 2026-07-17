@@ -562,6 +562,23 @@ function readinessAuthority(fixture: Fixture): GitShippingReadinessAuthority & {
         readinessId: '81000000-0000-4000-8000-000000000021',
         target,
         sourceFingerprint,
+        workflowBinding: {
+          executionId: 'workflow-execution-1',
+          executionRevision: 1,
+          canvasId: 'canvas-1',
+          sourceNodeId: 'agent-1',
+          sourceAttempt: 1,
+          sourceOutputDigest: 'e'.repeat(64),
+          gates: [
+            {
+              gateNodeId: 'gate-1',
+              gateAttempt: 1,
+              evidenceDigest: 'f'.repeat(64),
+              derivedCheckIds: ['test' as const],
+            },
+          ],
+          bindingDigest: '0'.repeat(64),
+        },
         availableChecks: [
           {
             checkId: 'test' as const,
