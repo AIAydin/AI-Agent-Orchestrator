@@ -22,6 +22,7 @@ const electronMock = vi.hoisted(() => {
 vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: electronMock.fromWebContents },
   ipcMain: { handle: electronMock.handle, removeHandler: electronMock.removeHandler },
+  shell: { openExternal: vi.fn() },
 }));
 
 import {
@@ -33,6 +34,7 @@ import {
 import { PreviewIpcService, type PreviewOperations } from './preview-ipc.js';
 import type { PreviewLaunchPlan } from './preview-runtime.js';
 import type { LocalStore } from '../storage.js';
+import { PREVIEW_TARGET_IPC_CHANNELS } from '../../shared/preview/targets.js';
 
 const input: PreviewStartInput = {
   projectId: '123fae6e-e213-4a10-a0db-0f85b791f7e9',
@@ -103,6 +105,31 @@ beforeEach(() => {
 });
 
 describe('PreviewIpcService launch authority', () => {
+  it('lists renderer-safe targets through a strict passive request', async () => {
+    const fixture = createFixture();
+    fixture.runtime.listTargets.mockResolvedValueOnce([
+      {
+        target: { kind: 'primary' },
+        label: 'Primary checkout',
+        badge: 'Primary checkout',
+        available: true,
+      },
+    ]);
+    await expect(
+      requiredHandler(PREVIEW_TARGET_IPC_CHANNELS.list)(liveEvent(), {
+        projectId: input.projectId,
+      }),
+    ).resolves.toMatchObject({ ok: true, value: [{ target: { kind: 'primary' } }] });
+    await expect(
+      requiredHandler(PREVIEW_TARGET_IPC_CHANNELS.list)(liveEvent(), {
+        projectId: input.projectId,
+        path: '/private/repository',
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    expect(fixture.runtime.listTargets).toHaveBeenCalledTimes(1);
+    await fixture.service.dispose();
+  });
+
   it('rejects invalid renderer input and subframes before passive preparation', async () => {
     const fixture = createFixture();
     const parent = liveParent();
@@ -274,6 +301,7 @@ function createFixture(options: { nativeResponse?: number; now?: () => Date } = 
 
 function createRuntime() {
   return {
+    listTargets: vi.fn<PreviewOperations['listTargets']>().mockResolvedValue([]),
     prepare: vi.fn<PreviewOperations['prepare']>().mockResolvedValue(plan),
     startPrepared: vi.fn<PreviewOperations['startPrepared']>().mockResolvedValue(snapshot),
     restartPrepared: vi.fn<PreviewOperations['restartPrepared']>().mockResolvedValue(snapshot),

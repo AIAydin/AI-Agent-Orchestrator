@@ -152,6 +152,56 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', true);
   });
 
+  it('passes collaboration read-only authority into preview runtime controls', async () => {
+    const getPreview = vi.fn().mockResolvedValue({ ok: true, value: null });
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        previews: {
+          listTargets: vi.fn(),
+          get: getPreview,
+          start: vi.fn(),
+          restart: vi.fn(),
+          stop: vi.fn(),
+          navigate: vi.fn(),
+          onEvent: vi.fn(),
+        },
+      },
+    });
+    const selectedNode: WorkshopNode = {
+      id: 'preview-node',
+      type: 'workshop',
+      position: { x: 0, y: 0 },
+      data: {
+        kind: 'web-preview',
+        title: 'Preview',
+        description: 'Local preview',
+        status: 'idle',
+        locked: false,
+        collapsed: false,
+        color: '#6099c5',
+        previewPackageScript: '',
+      },
+    };
+    const inspectorProps = props(
+      settings({ developmentCommand: { executable: 'pnpm', arguments: ['run', 'dev'] } }),
+      selectedNode,
+    );
+    inspectorProps.collaborationGraphReadOnly = true;
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    await waitFor(() => expect(getPreview).toHaveBeenCalled());
+    expect(screen.getByRole('combobox', { name: 'Preview target' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByRole('button', { name: /Start preview/u })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Open preview settings' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+  });
+
   it('honestly disables deletion when it would mutate a protected relationship', () => {
     const selectedNode = groupNode({});
     render(

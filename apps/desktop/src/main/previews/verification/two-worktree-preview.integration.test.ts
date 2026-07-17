@@ -16,13 +16,14 @@ import {
   type PreviewStartInput,
   type Project,
 } from '../../../shared/application/contracts.js';
-import { LocalStore } from '../../storage.js';
+import type { PreviewTarget } from '../../../shared/preview/targets.js';
+import { LocalStore, type StoredRunRecord } from '../../storage.js';
 import { PreviewRuntime } from '../preview-runtime.js';
 import type { PreviewProcessLaunch } from '../preview-service.js';
 
 const PRIMARY_PROJECT_ID = 'a3000000-0000-4000-8000-000000000001';
-const WORKTREE_A_PROJECT_ID = 'a3000000-0000-4000-8000-000000000002';
-const WORKTREE_B_PROJECT_ID = 'a3000000-0000-4000-8000-000000000003';
+const RUN_A_ID = 'a3000000-0000-4000-8000-000000000002';
+const RUN_B_ID = 'a3000000-0000-4000-8000-000000000003';
 const CREATED_AT = '2026-07-15T23:30:00.000Z';
 const MAX_PROCESS_LOG_BYTES = 1024 * 1024;
 const MAX_RENDERER_EVENT_BYTES = 65_536;
@@ -88,22 +89,8 @@ describe('production two-worktree preview verification', () => {
       store = new LocalStore(fixture.databasePath);
       store.saveSettings(settings);
       store.saveProject(project(PRIMARY_PROJECT_ID, 'Dirty primary', fixture.repository, 'main'));
-      store.saveProject(
-        project(
-          WORKTREE_A_PROJECT_ID,
-          'Managed preview A',
-          fixture.ownershipA.worktreePath,
-          fixture.ownershipA.branch,
-        ),
-      );
-      store.saveProject(
-        project(
-          WORKTREE_B_PROJECT_ID,
-          'Managed preview B',
-          fixture.ownershipB.worktreePath,
-          fixture.ownershipB.branch,
-        ),
-      );
+      store.saveRun(runRecord(RUN_A_ID, fixture.ownershipA, CREATED_AT));
+      store.saveRun(runRecord(RUN_B_ID, fixture.ownershipB, '2026-07-15T23:31:00.000Z'));
 
       const eventEvidence: EventEvidence = {
         outputTailByOwner: new Map(),
@@ -117,8 +104,38 @@ describe('production two-worktree preview verification', () => {
         { serviceOptions: { gracefulStopMs: 250, forceStopMs: 250 } },
       );
 
-      const inputA = previewInput(WORKTREE_A_PROJECT_ID, 'preview-a');
-      const inputB = previewInput(WORKTREE_B_PROJECT_ID, 'preview-b');
+      const targets = await runtime.listTargets(PRIMARY_PROJECT_ID);
+      expect(targets).toEqual([
+        {
+          target: { kind: 'primary' },
+          label: 'Dirty primary',
+          badge: 'Primary checkout',
+          available: true,
+        },
+        {
+          target: { kind: 'agent-run', runId: RUN_B_ID },
+          label: 'preview-agent-b · competing-preview-b',
+          badge: 'Agent worktree',
+          available: true,
+        },
+        {
+          target: { kind: 'agent-run', runId: RUN_A_ID },
+          label: 'preview-agent-a · competing-preview-a',
+          badge: 'Agent worktree',
+          available: true,
+        },
+      ]);
+      expect(JSON.stringify(targets)).not.toContain(fixture.repository);
+      expect(JSON.stringify(targets)).not.toContain(fixture.managedRoot);
+
+      const inputA = previewInput(PRIMARY_PROJECT_ID, 'preview-a', {
+        kind: 'agent-run',
+        runId: RUN_A_ID,
+      });
+      const inputB = previewInput(PRIMARY_PROJECT_ID, 'preview-b', {
+        kind: 'agent-run',
+        runId: RUN_B_ID,
+      });
       const [planA, planB] = await Promise.all([runtime.prepare(inputA), runtime.prepare(inputB)]);
       expect(planA.projectRoot).toBe(fixture.ownershipA.worktreePath);
       expect(planA.cwd).toBe(fixture.ownershipA.worktreePath);
@@ -147,10 +164,16 @@ describe('production two-worktree preview verification', () => {
       expect(processA.port).not.toBe(processB.port);
       expect(processA.pid).not.toBe(processB.pid);
       expect(launchesA).toEqual([
-        expect.objectContaining({ cwd: fixture.ownershipA.worktreePath, port: processA.port }),
+        expect.objectContaining({
+          cwd: fixture.ownershipA.worktreePath,
+          port: processA.port,
+        }),
       ]);
       expect(launchesB).toEqual([
-        expect.objectContaining({ cwd: fixture.ownershipB.worktreePath, port: processB.port }),
+        expect.objectContaining({
+          cwd: fixture.ownershipB.worktreePath,
+          port: processB.port,
+        }),
       ]);
 
       await expect(previewResponse(startedA)).resolves.toEqual({
@@ -189,7 +212,9 @@ describe('production two-worktree preview verification', () => {
       expect(eventEvidence.outputTailByOwner.get('renderer-b')).toContain('READY:worktree-beta-v1');
 
       const rejectedAuthorization = vi.fn();
-      const primaryInput = previewInput(PRIMARY_PROJECT_ID, 'preview-port-exhaustion');
+      const primaryInput = previewInput(PRIMARY_PROJECT_ID, 'preview-port-exhaustion', {
+        kind: 'primary',
+      });
       const primaryPlan = await runtime.prepare(primaryInput);
       await expect(
         runtime.startPrepared('renderer-primary', primaryPlan, {
@@ -281,13 +306,19 @@ describe('production two-worktree preview verification', () => {
         previewPortStart: collision.start,
         previewPortEnd: collision.end,
       });
-      expect(new Set(reopened.listProjects().map((candidate) => candidate.path))).toEqual(
-        new Set([
-          fixture.repository,
-          fixture.ownershipA.worktreePath,
-          fixture.ownershipB.worktreePath,
-        ]),
-      );
+      expect(reopened.listProjects().map((candidate) => candidate.path)).toEqual([
+        fixture.repository,
+      ]);
+      expect(reopened.getRun(RUN_A_ID)).toMatchObject({
+        projectId: PRIMARY_PROJECT_ID,
+        worktreeId: fixture.ownershipA.id,
+        worktreeState: 'active',
+      });
+      expect(reopened.getRun(RUN_B_ID)).toMatchObject({
+        projectId: PRIMARY_PROJECT_ID,
+        worktreeId: fixture.ownershipB.id,
+        worktreeState: 'active',
+      });
       expect(
         reopened
           .listAuditEvents(20)
@@ -448,13 +479,38 @@ function project(id: string, name: string, projectPath: string, branch: string):
   };
 }
 
-function previewInput(projectId: string, nodeId: string): PreviewStartInput {
+function previewInput(projectId: string, nodeId: string, target: PreviewTarget): PreviewStartInput {
   return {
     projectId,
     nodeId,
+    target,
     cwdRelative: '.',
     readinessPath: '/health',
     urlPath: '/preview',
+  };
+}
+
+function runRecord(id: string, ownership: WorktreeOwnership, updatedAt: string): StoredRunRecord {
+  if (ownership.taskId === null) throw new Error('Expected a task-bound preview worktree.');
+  return {
+    id,
+    projectId: PRIMARY_PROJECT_ID,
+    nodeId: ownership.taskId,
+    adapterId: ownership.agentId,
+    status: 'succeeded',
+    cwd: ownership.worktreePath,
+    branch: ownership.branch,
+    worktreeId: ownership.id,
+    worktreeState: 'active',
+    repositoryRoot: ownership.repositoryRoot,
+    managedRoot: ownership.managedRoot,
+    baseRef: ownership.baseRef,
+    baseCommit: ownership.baseCommit,
+    startedAt: CREATED_AT,
+    endedAt: updatedAt,
+    exitCode: 0,
+    createdAt: CREATED_AT,
+    updatedAt,
   };
 }
 

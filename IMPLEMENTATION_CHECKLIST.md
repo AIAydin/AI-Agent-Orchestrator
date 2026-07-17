@@ -101,8 +101,8 @@ not be reclassified as future work.
 - [x] Interactive terminal node with UI-only literal process configuration, two-step native-reviewed
       PTY launch, ANSI/raw input/resize, bounded private replay/history, and honest
       interrupt/terminate/lost recovery.
-- [ ] Isolated web preview node with logs/console/errors/navigation/viewports/screenshots.
-- [ ] Mobile preview node with device frames, rotation, touch, and side-by-side screens.
+- [x] Isolated web preview node with logs/console/errors/navigation/viewports/screenshots.
+- [x] Mobile preview node with device frames, rotation, touch, and side-by-side screens.
 - [ ] Test node with cancel, streaming, parsed summary, history, and artifacts.
 - [ ] Review gate node with human/deterministic/agent checks and bounded retries.
 - [x] Git/PR node with commits, divergence, remote, readiness, CI, and approved actions.
@@ -944,3 +944,26 @@ unchecked when only a subset of their required behavior has proof.
   fails. The full multi-journey Electron suite was not rerun for this checkpoint; the dedicated
   Terminal journey passed. Fresh Windows/Linux/macOS Intel artifacts, signing/notarization, public
   repository visibility, a tag, and GitHub Release publication remain open.
+- 2026-07-17: Web Preview and Mobile Preview nodes gained durable UI-only target, command, working
+  directory, readiness/initial-path, device, rotation, and side-by-side configuration. Targets are
+  either the primary checkout or an opaque, application-owned active agent run; renderer views never
+  receive a worktree path. Main launches only exact argument arrays in the resolved checkout after a
+  cancel-default native review, owns the loopback server lifecycle, and exposes a sandboxed
+  `WebContentsView` with Node and preload access disabled. Surface policy denies permissions, popups,
+  downloads, webviews, non-loopback traffic, and cross-origin/port navigation; bounds are intersected
+  with the visible renderer stage so native content cannot cover trusted controls. Browser console
+  capture is redacted, memory-bounded, and notification-coalesced. Navigation, history, reload,
+  native-reviewed PNG screenshots, and exact-URL external opening are audited without filesystem
+  paths or raw URLs. Phone/tablet frames enable real Chromium touch emulation after the approved page
+  loads; collaboration reviewer/viewer mode blocks configuration and surface mutation while retaining
+  Stop and Close safety controls. The dedicated Electron journey proves UI configuration, exact
+  native launch review, real native page content and navigation, blocked outbound navigation, browser
+  console capture, screenshot output, restart/stop, two simultaneous mobile surfaces, touch-confirmed
+  UI state, and no unintended external request. A real integration uses one project with two durable
+  owned worktrees to prove distinct roots/content/ports, independent restart, preservation, cleanup,
+  and restart persistence. The 967-file structure gate, repository formatting, zero-warning lint,
+  eight strict workspace typechecks, 1,843 unit tests across 277 files, 273 real-process integration
+  tests across 32 files, all workspace production builds, and `git diff --check` passed. This closes
+  the isolated web/mobile preview entries only; one simultaneous comparison surface bound to multiple
+  competing worktrees, exact fixed device-metric scaling inside a clipped stage, broader product
+  items, cross-platform installers, signing/notarization, and public release remain open.

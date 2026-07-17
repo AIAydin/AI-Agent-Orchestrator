@@ -259,6 +259,22 @@ describe('GitTargetResolver', () => {
     );
   });
 
+  it('resolves an actively owned running worktree for live preview without weakening review', async () => {
+    const fixture = await createFixture({ status: 'running', endedAt: null, exitCode: null });
+
+    await expect(
+      resolver(fixture).resolveActiveWorktree({ projectId: PROJECT_ID, runId: RUN_ID }),
+    ).resolves.toMatchObject({
+      worktreeRepositoryPath: fixture.ownership.worktreePath,
+      ownership: { id: fixture.ownership.id, status: 'active' },
+      run: { id: RUN_ID, status: 'running', endedAt: null },
+    });
+    await expectResolutionCode(
+      resolver(fixture).resolve({ projectId: PROJECT_ID, runId: RUN_ID }),
+      'RUN_NOT_TERMINAL',
+    );
+  });
+
   it.each(['cleanup-pending', 'cleaned'] as const)(
     'rejects a terminal run whose worktree lifecycle is %s',
     async (worktreeState) => {

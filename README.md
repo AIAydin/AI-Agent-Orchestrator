@@ -108,6 +108,14 @@ ANSI output, raw input, resize, search, display clearing, replay, interrupt, ter
 reviewed restart. See [Interactive Terminal](docs/terminal/README.md) for its unsandboxed host
 boundary and retention behavior.
 
+Web Preview and Mobile Preview nodes are also configured entirely in the inspector. Users choose the
+primary checkout or an available application-owned agent worktree, enter a literal command or select
+a detected package script, and set readiness/navigation paths and device controls without editing a
+manifest. The running page is displayed in a main-owned sandboxed loopback-only surface with browser
+console capture, navigation/history/reload, native-reviewed screenshots, and confirmed external
+opening. Mobile frames use Chromium touch emulation; side-by-side frames share the same selected
+target, while separate target-bound nodes can run competing worktrees concurrently.
+
 The selected first-run CLI must have current ready evidence from the trusted process: Forgeboard
 resolves the exact executable and runs its bounded version/capability probe, while missing,
 mismatched, or invalid configurations keep **Continue** disabled. Checking a draft executable does

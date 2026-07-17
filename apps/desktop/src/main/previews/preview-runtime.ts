@@ -3,6 +3,8 @@ import { constants } from 'node:fs';
 import { access, readFile, realpath, stat } from 'node:fs/promises';
 import { delimiter, extname, isAbsolute, join, resolve } from 'node:path';
 
+import { RepositoryService } from '@forgeboard/git-engine';
+
 import type {
   AppSettings,
   PreviewEventEnvelope,
@@ -12,6 +14,7 @@ import type {
   PreviewStartInput,
   Project,
 } from '../../shared/application/contracts.js';
+import type { PreviewTargetView } from '../../shared/preview/targets.js';
 import {
   PreviewService,
   canonicalPreviewCwd,
@@ -26,6 +29,8 @@ import {
   type LaunchExecutableIdentity,
   type LaunchFileIdentity,
 } from '../agent-execution/launch-integrity.js';
+import type { StoredRunRecord } from '../storage.js';
+import { PreviewTargetResolver, type ResolvedPreviewTarget } from './targets/resolver.js';
 
 const PORT_PLACEHOLDER = '{PORT}';
 const HOST_PLACEHOLDER = '{HOST}';
@@ -33,6 +38,9 @@ const MAX_RENDERER_OUTPUT_BYTES = 65_536;
 
 export interface PreviewRuntimeStore {
   listProjects(): Project[];
+  getProject?(projectId: string): Project | undefined;
+  getRun?(runId: string): StoredRunRecord | undefined;
+  listProjectRuns?(projectId: string, limit?: number): StoredRunRecord[];
   appendAudit(
     category: string,
     action: string,
@@ -43,6 +51,7 @@ export interface PreviewRuntimeStore {
 
 export interface PreviewRuntimeOptions {
   serviceOptions?: ConstructorParameters<typeof PreviewService>[0];
+  targetResolver?: Pick<PreviewTargetResolver, 'resolve' | 'list'>;
 }
 
 interface PreviewAttempt {
@@ -76,7 +85,7 @@ export interface PreviewPackageScriptEvidence {
 
 export interface PreviewLaunchPlan {
   readonly input: PreviewStartInput;
-  readonly source: 'settings' | 'package-script';
+  readonly source: 'settings' | 'node-command' | 'package-script';
   readonly executable: string;
   readonly arguments: readonly string[];
   readonly cwd: string;
@@ -101,6 +110,7 @@ export interface PreviewLaunchAuthorization {
 
 export class PreviewRuntime {
   readonly #service: PreviewService;
+  readonly #targets: Pick<PreviewTargetResolver, 'resolve' | 'list'>;
   readonly #attempts = new Map<string, PreviewAttempt>();
   readonly #sessionsByNode = new Map<string, OwnedSession>();
   readonly #nodesBySession = new Map<string, OwnedSession>();
@@ -114,6 +124,19 @@ export class PreviewRuntime {
     private readonly emit: (ownerId: string, event: PreviewEventEnvelope) => void,
     options: PreviewRuntimeOptions = {},
   ) {
+    this.#targets =
+      options.targetResolver ??
+      new PreviewTargetResolver(
+        {
+          getProject: (projectId) =>
+            store.getProject?.(projectId) ??
+            store.listProjects().find((candidate) => candidate.id === projectId),
+          getRun: (runId) => store.getRun?.(runId),
+          listProjectRuns: (projectId, limit) => store.listProjectRuns?.(projectId, limit) ?? [],
+        },
+        new RepositoryService(),
+        getSettings,
+      );
     this.#service = new PreviewService({
       ...options.serviceOptions,
       onEvent: (event) => {
@@ -126,6 +149,11 @@ export class PreviewRuntime {
   async prepare(input: PreviewStartInput): Promise<PreviewLaunchPlan> {
     this.#assertAvailable();
     return await this.#resolveLaunchPlan(input);
+  }
+
+  async listTargets(projectId: string): Promise<PreviewTargetView[]> {
+    this.#assertAvailable();
+    return await this.#targets.list(projectId);
   }
 
   async startPrepared(
@@ -440,10 +468,11 @@ export class PreviewRuntime {
 
   async #resolveLaunchPlan(input: PreviewStartInput): Promise<PreviewLaunchPlan> {
     this.#assertAvailable();
-    const project = this.#project(input.projectId);
+    const target = await this.#resolveTarget(input);
+    const project = target.project;
     const settings = this.getSettings();
-    const command = await resolvePreviewLaunchCommand(project, input, settings);
-    const projectIdentity = await captureDirectoryIdentity(project.path, 'preview project');
+    const command = await resolvePreviewLaunchCommand(project, input, settings, target.root);
+    const projectIdentity = await captureDirectoryIdentity(target.root, 'preview target');
     const cwdIdentity = await captureDirectoryIdentity(command.cwd, 'preview working directory');
     const executableIdentity = await captureLaunchExecutableIdentity(command.executable);
     const indirectExecutableIdentity =
@@ -479,10 +508,8 @@ export class PreviewRuntime {
     return current;
   }
 
-  #project(projectId: string): Project {
-    const project = this.store.listProjects().find((candidate) => candidate.id === projectId);
-    if (!project || project.missing) throw new Error('The selected project is not available.');
-    return project;
+  async #resolveTarget(input: PreviewStartInput): Promise<ResolvedPreviewTarget> {
+    return await this.#targets.resolve(input.projectId, input.target ?? { kind: 'primary' });
   }
 
   #forget(owned: OwnedSession): void {
@@ -503,7 +530,7 @@ export class PreviewRuntime {
 }
 
 export interface ResolvedPreviewLaunchCommand {
-  source: 'settings' | 'package-script';
+  source: 'settings' | 'node-command' | 'package-script';
   executable: string;
   arguments: string[];
   cwd: string;
@@ -515,13 +542,16 @@ export async function resolvePreviewLaunchCommand(
   project: Project,
   input: PreviewStartInput,
   settings: AppSettings,
+  targetRoot = project.path,
 ): Promise<ResolvedPreviewLaunchCommand> {
   const cwd = await canonicalPreviewCwd(
-    project.path,
-    input.packageScript ? project.path : resolve(project.path, input.cwdRelative),
+    targetRoot,
+    input.packageScript ? targetRoot : resolve(targetRoot, input.cwdRelative),
   );
   if (!input.packageScript) {
-    const configuredExecutable = settings.developmentCommand.executable.trim();
+    const configuredExecutable = (
+      input.command?.executable ?? settings.developmentCommand.executable
+    ).trim();
     if (!configuredExecutable) {
       throw new Error(
         'Choose a detected package script in the Preview panel or configure a Development server command in Settings.',
@@ -534,9 +564,9 @@ export async function resolvePreviewLaunchCommand(
       );
     }
     return {
-      source: 'settings',
+      source: input.command === undefined ? 'settings' : 'node-command',
       executable,
-      arguments: [...settings.developmentCommand.arguments],
+      arguments: [...(input.command?.args ?? settings.developmentCommand.arguments)],
       cwd,
       packageScript: null,
       indirectExecutable: null,
@@ -779,6 +809,10 @@ function clonePreviewInput(input: PreviewStartInput): PreviewStartInput {
     cwdRelative: input.cwdRelative,
     readinessPath: input.readinessPath,
     urlPath: input.urlPath,
+    ...(input.target === undefined ? {} : { target: { ...input.target } }),
+    ...(input.command === undefined
+      ? {}
+      : { command: { executable: input.command.executable, args: [...input.command.args] } }),
     ...(input.packageScript === undefined ? {} : { packageScript: input.packageScript }),
   };
 }

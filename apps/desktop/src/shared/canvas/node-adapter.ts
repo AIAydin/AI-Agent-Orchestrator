@@ -228,6 +228,7 @@ function canonicalData(
     case 'web-preview':
       return compact({
         ...base,
+        ...canonicalPreviewConfiguration(raw, previous),
         serverId: stringValue(raw['serverId']),
         worktreeId: stringValue(raw['worktreeId']),
         url: stringValue(raw['previewUrl']) ?? stringValue(raw['url']),
@@ -236,6 +237,7 @@ function canonicalData(
     case 'mobile-preview':
       return compact({
         ...base,
+        ...canonicalPreviewConfiguration(raw, previous),
         serverId: stringValue(raw['serverId']),
         worktreeId: stringValue(raw['worktreeId']),
         url: stringValue(raw['previewUrl']) ?? stringValue(raw['url']),
@@ -347,9 +349,66 @@ function legacyDataFromCanonical(node: CanvasNode): Record<string, unknown> {
         ...node.data,
         command: legacyCommandFromCanonical(node.data.command),
       };
+    case 'web-preview':
+    case 'mobile-preview':
+      return compact({
+        ...node.data,
+        previewTarget: node.data.target,
+        previewCommand: legacyCommandFromCanonical(node.data.command),
+        previewPackageScript: node.data.packageScript,
+        previewCwdRelative: node.data.cwdRelative,
+        previewReadinessPath: node.data.readinessPath,
+        previewUrlPath: node.data.urlPath,
+        previewPreset: node.data.preset,
+        previewSecondaryPreset: node.data.secondaryPreset,
+        previewOrientation: node.data.orientation,
+        previewSideBySide: node.data.sideBySide,
+      });
     default:
       return { ...node.data };
   }
+}
+
+function canonicalPreviewConfiguration(
+  raw: Readonly<Record<string, unknown>>,
+  previous: CanvasNode['data'] | undefined,
+): Record<string, unknown> {
+  const previewCommand = previewValueOrPrevious(raw, previous, 'previewCommand', 'command');
+  return compact({
+    target: previewValueOrPrevious(raw, previous, 'previewTarget', 'target'),
+    command: commandValue(previewCommand),
+    packageScript: stringValue(
+      previewValueOrPrevious(raw, previous, 'previewPackageScript', 'packageScript'),
+    ),
+    cwdRelative: stringValue(
+      previewValueOrPrevious(raw, previous, 'previewCwdRelative', 'cwdRelative'),
+    ),
+    readinessPath: stringValue(
+      previewValueOrPrevious(raw, previous, 'previewReadinessPath', 'readinessPath'),
+    ),
+    urlPath: stringValue(previewValueOrPrevious(raw, previous, 'previewUrlPath', 'urlPath')),
+    preset: previewValueOrPrevious(raw, previous, 'previewPreset', 'preset'),
+    secondaryPreset: previewValueOrPrevious(
+      raw,
+      previous,
+      'previewSecondaryPreset',
+      'secondaryPreset',
+    ),
+    orientation: previewValueOrPrevious(raw, previous, 'previewOrientation', 'orientation'),
+    sideBySide: booleanValue(
+      previewValueOrPrevious(raw, previous, 'previewSideBySide', 'sideBySide'),
+    ),
+  });
+}
+
+function previewValueOrPrevious(
+  raw: Readonly<Record<string, unknown>>,
+  previous: CanvasNode['data'] | undefined,
+  rendererKey: string,
+  canonicalKey: string,
+): unknown {
+  if (Object.prototype.hasOwnProperty.call(raw, rendererKey)) return raw[rendererKey];
+  return unknownRecord(previous)?.[canonicalKey];
 }
 
 function legacyCommandFromCanonical(

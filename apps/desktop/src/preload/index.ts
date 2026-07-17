@@ -60,6 +60,7 @@ import {
   GitShippingResultViewSchema,
 } from '../shared/git/shipping-contracts.js';
 import { IntegrityCheckResultSchema } from '../shared/integrity/contracts.js';
+import { PREVIEW_TARGET_IPC_CHANNELS, PreviewTargetListSchema } from '../shared/preview/targets.js';
 import {
   RECOVERY_IPC_CHANNELS,
   RecoveryImportCountsSchema,
@@ -93,6 +94,7 @@ import { createGitReviewNotesApi } from './git-review-notes.js';
 import { createRunHistoryApi } from './runs/history.js';
 import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
 import { createTerminalApi } from './terminal/index.js';
+import { createPreviewSurfaceApi } from './preview/surface/index.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -291,6 +293,8 @@ const api: ForgeboardApi = {
     },
   ),
   previews: {
+    listTargets: (input) =>
+      invokeValidated(PREVIEW_TARGET_IPC_CHANNELS.list, PreviewTargetListSchema, input),
     start: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsStart, input),
     restart: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsRestart, input),
     stop: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsStop, input),
@@ -304,6 +308,7 @@ const api: ForgeboardApi = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.previewsEvent, handler);
     },
   },
+  previewSurfaces: createPreviewSurfaceApi(ipcRenderer),
   checks: {
     prepare: (input) => invokeValidated(IPC_CHANNELS.checksPrepare, CheckPlanViewSchema, input),
     confirm: (input) =>

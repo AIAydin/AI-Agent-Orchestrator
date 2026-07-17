@@ -1,0 +1,34 @@
+.preview-console {
+  margin-top: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-raised);
+}
+
+.preview-console summary {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px;
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 8px;
+}
+
+.preview-console pre {
+  max-height: 150px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+  white-space: pre-wrap;
+  font-size: 7px;
+  line-height: 1.45;
+}
+
+.preview-console-truncated {
+  margin: 0;
+  padding: 6px 8px 0;
+  color: var(--amber);
+  font-size: 7px;
+}

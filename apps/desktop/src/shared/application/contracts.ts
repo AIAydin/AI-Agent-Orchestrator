@@ -2,6 +2,8 @@ import { NamespacedAgentAdapterIdSchema } from '@forgeboard/agent-adapters/ident
 import { CanvasSchema as CanonicalCanvasSchema, type Canvas } from '@forgeboard/core/domain';
 import { z } from 'zod';
 
+import { PreviewCommandSchema, PreviewTargetSchema } from '../preview/targets.js';
+
 import {
   DockerContainerExecutableSchema,
   DockerExecutableSettingSchema,
@@ -559,6 +561,8 @@ const PreviewPathSchema = z
   });
 
 export const PreviewStartInputSchema = PreviewNodeKeySchema.extend({
+  target: PreviewTargetSchema.optional(),
+  command: PreviewCommandSchema.optional(),
   cwdRelative: z.string().min(1).max(4096),
   readinessPath: PreviewPathSchema,
   urlPath: PreviewPathSchema,

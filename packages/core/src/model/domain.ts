@@ -285,10 +285,42 @@ export const TerminalNodeSchema = createNodeSchema(
     .strict(),
 );
 
+const PreviewTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('primary') }).strict(),
+  z.object({ kind: z.literal('agent-run'), runId: z.string().uuid() }).strict(),
+]);
+
+const PreviewUrlPathSchema = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine((value) => value.startsWith('/') && !value.startsWith('//') && !value.includes('\0'), {
+    message: 'Preview paths must be absolute URL paths.',
+  });
+
+const PreviewPresetSchema = z.enum(['desktop', 'laptop', 'iphone', 'pixel', 'tablet']);
+
+const PreviewConfigurationShape = {
+  target: PreviewTargetSchema.default({ kind: 'primary' }),
+  command: CommandSpecSchema.optional(),
+  packageScript: z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/u)
+    .optional(),
+  cwdRelative: RelativePathSchema.default('.'),
+  readinessPath: PreviewUrlPathSchema.default('/'),
+  urlPath: PreviewUrlPathSchema.default('/'),
+  preset: PreviewPresetSchema.optional(),
+  secondaryPreset: PreviewPresetSchema.optional(),
+  orientation: z.enum(['portrait', 'landscape']).default('portrait'),
+  sideBySide: z.boolean().default(false),
+} as const;
+
 export const WebPreviewNodeSchema = createNodeSchema(
   'web-preview',
   z
     .object({
+      ...PreviewConfigurationShape,
       serverId: EntityIdSchema.optional(),
       worktreeId: EntityIdSchema.optional(),
       url: z.string().url().optional(),
@@ -317,6 +349,7 @@ export const MobilePreviewNodeSchema = createNodeSchema(
   'mobile-preview',
   z
     .object({
+      ...PreviewConfigurationShape,
       serverId: EntityIdSchema.optional(),
       worktreeId: EntityIdSchema.optional(),
       url: z.string().url().optional(),

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   BrowserWindow,
   ipcMain,
+  shell,
   type IpcMainInvokeEvent,
   type MessageBoxReturnValue,
   type MessageBoxOptions,
@@ -30,10 +31,26 @@ import {
   type PreviewLaunchPlan,
 } from './preview-runtime.js';
 import type { LocalStore } from '../storage.js';
+import {
+  PREVIEW_SURFACE_IPC_CHANNELS,
+  PreviewSurfaceBoundsInputSchema,
+  PreviewSurfaceCreateInputSchema,
+  PreviewSurfaceEventSchema,
+  PreviewSurfaceHistoryInputSchema,
+  PreviewSurfaceNavigateInputSchema,
+  PreviewSurfaceTargetSchema,
+} from '../../shared/preview/surface/index.js';
+import { PreviewSurfaceRuntime } from './surface/runtime.js';
+import {
+  PREVIEW_TARGET_IPC_CHANNELS,
+  PreviewTargetListInputSchema,
+  type PreviewTargetView,
+} from '../../shared/preview/targets.js';
 
 const PREVIEW_APPROVAL_TTL_MS = 5 * 60_000;
 
 export interface PreviewOperations {
+  listTargets(projectId: string): Promise<PreviewTargetView[]>;
   prepare(input: PreviewStartInput): Promise<PreviewLaunchPlan>;
   startPrepared(
     ownerId: string,
@@ -67,6 +84,7 @@ export interface PreviewDialog {
 export class PreviewIpcService {
   readonly #operations = new Set<Promise<unknown>>();
   readonly #runtime: PreviewOperations;
+  readonly #surfaces: PreviewSurfaceRuntime;
   readonly #registeredChannels: string[] = [];
   readonly #ownerIds = new WeakMap<WebContents, string>();
   readonly #owners = new Map<string, WebContents>();
@@ -82,6 +100,13 @@ export class PreviewIpcService {
   ) {
     const emit = (ownerId: string, event: PreviewEventEnvelope): void => this.#send(ownerId, event);
     this.#runtime = runtimeFactory?.(emit) ?? new PreviewRuntime(store, getSettings, emit);
+    this.#surfaces = new PreviewSurfaceRuntime({
+      dialog: this.dialog as ConstructorParameters<typeof PreviewSurfaceRuntime>[0]['dialog'],
+      shell,
+      emit: (ownerId, event) => this.#sendSurface(ownerId, event),
+      audit: (action, outcome, metadata) =>
+        this.store.appendAudit('preview-surface', action, outcome, metadata),
+    });
   }
 
   registerIpcHandlers(): void {
@@ -91,15 +116,31 @@ export class PreviewIpcService {
     this.#handle(
       IPC_CHANNELS.previewsStart,
       z.tuple([PreviewStartInputSchema]),
-      async (event, input) => await this.#confirmAndLaunch(event, input, false),
+      async (event, input) =>
+        await this.#confirmAndLaunch(event, PreviewStartInputSchema.parse(input), false),
     );
     this.#handle(
       IPC_CHANNELS.previewsRestart,
       z.tuple([PreviewStartInputSchema]),
-      async (event, input) => await this.#confirmAndLaunch(event, input, true),
+      async (event, input) =>
+        await this.#confirmAndLaunch(event, PreviewStartInputSchema.parse(input), true),
     );
-    this.#handle(IPC_CHANNELS.previewsStop, z.tuple([PreviewNodeKeySchema]), (event, input) =>
-      this.#runtime.stop(this.#ownerId(event.sender), input),
+    this.#handle(
+      PREVIEW_TARGET_IPC_CHANNELS.list,
+      z.tuple([PreviewTargetListInputSchema]),
+      async (_event, input) => await this.#runtime.listTargets(input.projectId),
+    );
+    this.#handle(
+      IPC_CHANNELS.previewsStop,
+      z.tuple([PreviewNodeKeySchema]),
+      async (event, input) => {
+        const ownerId = this.#ownerId(event.sender);
+        try {
+          return await this.#runtime.stop(ownerId, input);
+        } finally {
+          this.#surfaces.closeNode(ownerId, input.projectId, input.nodeId);
+        }
+      },
     );
     this.#handle(IPC_CHANNELS.previewsGet, z.tuple([PreviewNodeKeySchema]), (event, input) =>
       this.#runtime.get(this.#ownerId(event.sender), input),
@@ -109,18 +150,90 @@ export class PreviewIpcService {
       z.tuple([PreviewNavigateInputSchema]),
       (event, input) => this.#runtime.validateNavigation(this.#ownerId(event.sender), input),
     );
+    this.#handle(
+      PREVIEW_SURFACE_IPC_CHANNELS.create,
+      z.tuple([PreviewSurfaceCreateInputSchema]),
+      async (event, input) => {
+        const ownerId = this.#ownerId(event.sender);
+        const authorizedUrl = this.#runtime.validateNavigation(ownerId, input);
+        return await this.#surfaces.create(
+          ownerId,
+          this.#requireLiveParent(event),
+          input,
+          authorizedUrl,
+        );
+      },
+    );
+    this.#handle(
+      PREVIEW_SURFACE_IPC_CHANNELS.bounds,
+      z.tuple([PreviewSurfaceBoundsInputSchema]),
+      (event, input) =>
+        this.#surfaces.setBounds(this.#ownerId(event.sender), input.surfaceId, input.bounds),
+    );
+    this.#handle(
+      PREVIEW_SURFACE_IPC_CHANNELS.navigate,
+      z.tuple([PreviewSurfaceNavigateInputSchema]),
+      async (event, input) => {
+        const ownerId = this.#ownerId(event.sender);
+        const binding = this.#surfaces.binding(ownerId, input.surfaceId);
+        const authorizedUrl = this.#runtime.validateNavigation(ownerId, {
+          ...binding,
+          url: input.url,
+        });
+        return await this.#surfaces.navigate(ownerId, input.surfaceId, authorizedUrl);
+      },
+    );
+    this.#handle(
+      PREVIEW_SURFACE_IPC_CHANNELS.reload,
+      z.tuple([PreviewSurfaceTargetSchema]),
+      (event, input) => this.#surfaces.reload(this.#ownerId(event.sender), input.surfaceId),
+    );
+    this.#handle(
+      PREVIEW_SURFACE_IPC_CHANNELS.history,
+      z.tuple([PreviewSurfaceHistoryInputSchema]),
+      (event, input) => this.#surfaces.history(this.#ownerId(event.sender), input),
+    );
+    this.#handle(
+      PREVIEW_SURFACE_IPC_CHANNELS.console,
+      z.tuple([PreviewSurfaceTargetSchema]),
+      (event, input) => this.#surfaces.console(this.#ownerId(event.sender), input.surfaceId),
+    );
+    this.#handle(
+      PREVIEW_SURFACE_IPC_CHANNELS.screenshot,
+      z.tuple([PreviewSurfaceTargetSchema]),
+      (event, input) => this.#surfaces.screenshot(this.#ownerId(event.sender), input.surfaceId),
+    );
+    this.#handle(
+      PREVIEW_SURFACE_IPC_CHANNELS.openExternal,
+      z.tuple([PreviewSurfaceTargetSchema]),
+      (event, input) => this.#surfaces.openExternal(this.#ownerId(event.sender), input.surfaceId),
+    );
+    this.#handle(
+      PREVIEW_SURFACE_IPC_CHANNELS.close,
+      z.tuple([PreviewSurfaceTargetSchema]),
+      (event, input) => this.#surfaces.close(this.#ownerId(event.sender), input.surfaceId),
+    );
   }
 
   isAllowedFrameNavigation(candidate: string): boolean {
     return this.#runtime.isAllowedFrameNavigation(candidate);
   }
 
-  resetForPrivacy(): Promise<void> {
-    return this.#runtime.resetForPrivacy();
+  async resetForPrivacy(): Promise<void> {
+    this.#paused = true;
+    await this.#drainOperations();
+    this.#surfaces.reset();
+    await this.#runtime.resetForPrivacy();
   }
 
   pauseForDataMutation(): void {
-    this.#runtime.pauseForDataMutation();
+    this.#paused = true;
+    try {
+      this.#runtime.pauseForDataMutation();
+    } catch (error) {
+      this.#paused = false;
+      throw error;
+    }
   }
 
   async pauseForShutdown(): Promise<void> {
@@ -141,6 +254,7 @@ export class PreviewIpcService {
     for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
     this.#registeredChannels.length = 0;
     await this.#drainOperations();
+    this.#surfaces.dispose();
     await this.#runtime.dispose();
     this.#owners.clear();
   }
@@ -205,6 +319,15 @@ export class PreviewIpcService {
     owner.send(IPC_CHANNELS.previewsEvent, PreviewEventEnvelopeSchema.parse(event));
   }
 
+  #sendSurface(
+    ownerId: string,
+    event: Parameters<typeof PreviewSurfaceEventSchema.parse>[0],
+  ): void {
+    const owner = this.#owners.get(ownerId);
+    if (!owner || owner.isDestroyed() || this.#ownerIds.get(owner) !== ownerId) return;
+    owner.send(PREVIEW_SURFACE_IPC_CHANNELS.event, PreviewSurfaceEventSchema.parse(event));
+  }
+
   #ownerId(owner: WebContents): string {
     const existing = this.#ownerIds.get(owner);
     if (existing !== undefined && this.#owners.get(existing) === owner) return existing;
@@ -216,6 +339,7 @@ export class PreviewIpcService {
       if (this.#ownerIds.get(owner) !== ownerId) return;
       this.#ownerIds.delete(owner);
       this.#owners.delete(ownerId);
+      this.#surfaces.closeOwner(ownerId);
       if (!this.#disposed) void this.#trackOperation(this.#runtime.stopOwner(ownerId));
     });
     return ownerId;
@@ -307,9 +431,11 @@ export class PreviewIpcService {
 
 function previewConfirmation(plan: PreviewLaunchPlan, restart: boolean): MessageBoxOptions {
   const source =
-    plan.packageScript === null
-      ? 'Development command configured in Settings'
-      : `package.json script "${plan.packageScript.name}"`;
+    plan.source === 'package-script'
+      ? `package.json script "${plan.packageScript?.name ?? 'unknown'}"`
+      : plan.source === 'node-command'
+        ? 'Literal preview command configured on this canvas node in the UI'
+        : 'Default development command configured in Settings';
   const details = [
     `Project: ${plan.projectRoot}`,
     `Working directory: ${plan.cwd}`,

@@ -11,9 +11,11 @@ Forgeboard uses three desktop trust zones:
    dialogs.
 
 The preview runtime binds and probes loopback-only servers with validated commands and bounded
-logs. Web and mobile preview nodes embed only runtime-owned loopback ports in sandboxed frames with
-Node disabled, a restrictive session, validated navigation, denied popups/downloads/permissions,
-and no Forgeboard preload access. Native development commands are never described as an OS sandbox.
+logs. Web and mobile preview nodes display runtime-owned loopback ports in main-owned sandboxed
+`WebContentsView` surfaces with Node disabled, ephemeral restrictive sessions, validated navigation,
+denied popups/downloads/permissions, and no Forgeboard preload access. The renderer supplies only
+validated visible bounds; main hides clipped views so native content cannot cover trusted controls.
+Native development commands are never described as an OS sandbox.
 Docker-isolated agent profiles use a separate main-owned runner with an exact worktree mount,
 non-root identity, resource limits, no implicit host credentials or sockets, and network denial by
 default.

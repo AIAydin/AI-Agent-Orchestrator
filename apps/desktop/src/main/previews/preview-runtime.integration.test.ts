@@ -1,4 +1,4 @@
-import { access, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -517,6 +517,72 @@ describe('PreviewRuntime', () => {
       else process.env.PATH = originalPath;
     }
   });
+
+  it('uses a node-local literal command in the opaque target and revalidates ownership before spawn', async () => {
+    root = await mkdtemp(join(tmpdir(), 'forgeboard-preview-runtime-'));
+    const primaryRoot = join(root, 'primary');
+    const agentRoot = join(root, 'owned-agent-worktree');
+    await Promise.all([mkdir(primaryRoot), mkdir(agentRoot)]);
+    const project = projectAt(await realpath(primaryRoot));
+    const store: PreviewRuntimeStore = {
+      listProjects: () => [project],
+      appendAudit: () => undefined,
+    };
+    const settings = AppSettingsSchema.parse({
+      theme: 'system',
+      reducedMotion: false,
+      density: 'comfortable',
+      defaultAgent: 'test-agent',
+      defaultPermissionProfile: 'worktree-write',
+      worktreeRoot: join(root, 'worktrees'),
+      branchPrefix: 'forgeboard/',
+      gitRemote: 'origin',
+      terminalShell: '/bin/sh',
+      envAllowlist: ['PATH'],
+      developmentCommand: { executable: '', arguments: [] },
+      previewPortStart: 43_000,
+      previewPortEnd: 43_100,
+      transcriptRetentionDays: 30,
+      collaborationEnabled: false,
+      collaborationUrl: '',
+    });
+    let resolvedRoot = await realpath(agentRoot);
+    const resolveTarget = vi.fn(() =>
+      Promise.resolve({
+        project,
+        target: { kind: 'agent-run' as const, runId: '91111111-1111-4111-8111-111111111111' },
+        root: resolvedRoot,
+        run: null,
+      }),
+    );
+    runtime = new PreviewRuntime(
+      store,
+      () => settings,
+      () => undefined,
+      {
+        targetResolver: { resolve: resolveTarget, list: () => Promise.resolve([]) },
+      },
+    );
+    const input: PreviewStartInput = {
+      projectId: PROJECT_ID,
+      nodeId: 'web-preview-owned-target',
+      target: { kind: 'agent-run', runId: '91111111-1111-4111-8111-111111111111' },
+      command: { executable: process.execPath, args: ['-e', SERVER_SCRIPT] },
+      cwdRelative: '.',
+      readinessPath: '/',
+      urlPath: '/owned',
+    };
+    const plan = await runtime.prepare(input);
+    expect(plan).toMatchObject({ source: 'node-command', cwd: await realpath(agentRoot) });
+
+    resolvedRoot = await realpath(primaryRoot);
+    const authorizeSpawn = vi.fn();
+    await expect(runtime.startPrepared('owner-a', plan, { authorizeSpawn })).rejects.toThrow(
+      'reviewed preview launch changed',
+    );
+    expect(authorizeSpawn).not.toHaveBeenCalled();
+    expect(resolveTarget).toHaveBeenCalledTimes(2);
+  });
 });
 
 function projectAt(path: string): Project {
@@ -527,7 +593,7 @@ function projectAt(path: string): Project {
     openedAt: '2026-07-14T16:00:00.000Z',
     missing: false,
     health: {
-      isGitRepository: true,
+      isGitRepository: false,
       branch: 'main',
       dirty: false,
       remotes: [],

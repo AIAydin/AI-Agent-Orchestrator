@@ -32,6 +32,8 @@ import type {
   CommandReadinessRequest,
   CommandReadinessResult,
 } from './command-readiness/contracts.js';
+import type { PreviewSurfaceApi } from './preview/surface/index.js';
+import type { PreviewTargetListInput, PreviewTargetView } from './preview/targets.js';
 import type {
   ApprovalListInput,
   ApprovalRevocationInput,
@@ -316,6 +318,7 @@ export interface ForgeboardApi {
     onEvent(listener: (event: TerminalEvent) => void): () => void;
   };
   previews: {
+    listTargets(input: PreviewTargetListInput): Promise<IpcResult<PreviewTargetView[]>>;
     start(input: PreviewStartInput): Promise<IpcResult<PreviewSessionSnapshot | null>>;
     restart(input: PreviewStartInput): Promise<IpcResult<PreviewSessionSnapshot | null>>;
     stop(input: PreviewNodeKey): Promise<IpcResult<PreviewSessionSnapshot | null>>;
@@ -323,6 +326,7 @@ export interface ForgeboardApi {
     navigate(input: PreviewNavigateInput): Promise<IpcResult<string>>;
     onEvent(listener: (event: PreviewEventEnvelope) => void): () => void;
   };
+  previewSurfaces: PreviewSurfaceApi;
   checks: {
     prepare(input: CheckPrepareInput): Promise<IpcResult<CheckPlanView>>;
     confirm(input: CheckPlanConfirmationInput): Promise<IpcResult<CheckExecutionView | null>>;

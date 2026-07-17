@@ -15,6 +15,7 @@ const server = createServer((request, response) => {
       <body>
         <h1>Preview server is ready</h1>
         <p data-testid="request-path">${request.url ?? '/'}</p>
+        <script>console.info('forgeboard-browser-console', window.location.pathname)</script>
       </body>
     </html>`);
 });

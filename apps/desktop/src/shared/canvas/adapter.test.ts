@@ -509,6 +509,133 @@ describe('canonical desktop canvas adapter', () => {
     }
   });
 
+  it('round-trips every UI-authored preview setting with an opaque checkout target', () => {
+    const previewTarget = { kind: 'agent-run', runId: AGENT_RUN_ID } as const;
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('web-1', 'web-preview', {
+            previewTarget,
+            previewCommand: {
+              executable: 'pnpm',
+              arguments: ['run', 'dev', '--host', '{HOST}', '--port', '{PORT}'],
+            },
+            previewPackageScript: 'dev:web',
+            previewCwdRelative: 'apps/web',
+            previewReadinessPath: '/health',
+            previewUrlPath: '/workshop',
+            previewPreset: 'laptop',
+            previewSecondaryPreset: 'tablet',
+            previewOrientation: 'landscape',
+            previewSideBySide: true,
+          }),
+          node('mobile-1', 'mobile-preview', {
+            previewTarget: { kind: 'primary' },
+            previewCommand: { executable: 'npm', arguments: ['run', 'start'] },
+            previewCwdRelative: '.',
+            previewReadinessPath: '/',
+            previewUrlPath: '/mobile',
+            previewPreset: 'iphone',
+            previewSecondaryPreset: 'pixel',
+            previewOrientation: 'portrait',
+            previewSideBySide: true,
+          }),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.canvas.nodes[0]).toMatchObject({
+      type: 'web-preview',
+      data: {
+        target: previewTarget,
+        command: {
+          executable: 'pnpm',
+          args: ['run', 'dev', '--host', '{HOST}', '--port', '{PORT}'],
+        },
+        packageScript: 'dev:web',
+        cwdRelative: 'apps/web',
+        readinessPath: '/health',
+        urlPath: '/workshop',
+        preset: 'laptop',
+        secondaryPreset: 'tablet',
+        orientation: 'landscape',
+        sideBySide: true,
+      },
+    });
+
+    const surface = legacySurfaceFromCanonical(migrated.canvas);
+    expect(surface.nodes[0]?.data).toMatchObject({
+      previewTarget,
+      previewCommand: {
+        executable: 'pnpm',
+        arguments: ['run', 'dev', '--host', '{HOST}', '--port', '{PORT}'],
+      },
+      previewPackageScript: 'dev:web',
+      previewCwdRelative: 'apps/web',
+      previewReadinessPath: '/health',
+      previewUrlPath: '/workshop',
+      previewPreset: 'laptop',
+      previewSecondaryPreset: 'tablet',
+      previewOrientation: 'landscape',
+      previewSideBySide: true,
+    });
+
+    const roundTripped = canonicalCanvasFromLegacy({
+      ...surface,
+      canonical: migrated.canvas,
+      updatedAt: T2,
+    });
+    expect(roundTripped.ok).toBe(true);
+    if (!roundTripped.ok) return;
+    expect(roundTripped.canvas.nodes.map((candidate) => candidate.data)).toEqual(
+      migrated.canvas.nodes.map((candidate) => candidate.data),
+    );
+
+    const olderRenderer = {
+      ...surface,
+      nodes: surface.nodes.map((candidate) => ({
+        ...candidate,
+        data: Object.fromEntries(
+          Object.entries(candidate.data).filter(([key]) => !key.startsWith('preview')),
+        ),
+      })),
+    };
+    const preserved = canonicalCanvasFromLegacy({
+      ...olderRenderer,
+      canonical: migrated.canvas,
+      updatedAt: T2,
+    });
+    expect(preserved.ok).toBe(true);
+    if (!preserved.ok) return;
+    expect(preserved.canvas.nodes.map((candidate) => candidate.data)).toEqual(
+      migrated.canvas.nodes.map((candidate) => candidate.data),
+    );
+  });
+
+  it('rejects preview targets that contain a renderer-selected checkout path', () => {
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('preview-1', 'web-preview', {
+            previewTarget: {
+              kind: 'agent-run',
+              runId: AGENT_RUN_ID,
+              worktreePath: '/private/renderer-selected-worktree',
+            },
+          }),
+        ],
+        edges: [],
+      }),
+    );
+    expect(migrated).toMatchObject({
+      ok: false,
+      issues: [{ code: 'INVALID_TYPED_NODE', entityId: 'preview-1' }],
+    });
+  });
+
   it('persists UI-authored Task execution configuration without a source edit', () => {
     const document = legacy({
       nodes: [

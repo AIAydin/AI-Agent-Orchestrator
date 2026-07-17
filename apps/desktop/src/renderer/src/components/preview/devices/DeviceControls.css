@@ -1,0 +1,54 @@
+.preview-device-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+  gap: 7px;
+  margin: 10px 0 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.preview-device-controls legend {
+  padding: 0 4px;
+  color: var(--text-faint);
+  font-size: 7px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.preview-device-controls > label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.preview-device-controls button {
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 8px;
+}
+
+.preview-checkbox-option {
+  flex-direction: row !important;
+  align-items: center;
+  min-height: 29px;
+}
+
+.preview-capability-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 7px;
+  line-height: 1.45;
+}

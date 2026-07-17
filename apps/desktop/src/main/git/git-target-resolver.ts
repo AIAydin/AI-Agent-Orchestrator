@@ -93,6 +93,21 @@ export class GitTargetResolver {
   }
 
   public async resolve(input: { projectId: string; runId: string }): Promise<ResolvedGitTarget> {
+    return await this.#resolve(input, true);
+  }
+
+  /** Resolves the same durable ownership binding while allowing an in-progress agent run. */
+  public async resolveActiveWorktree(input: {
+    projectId: string;
+    runId: string;
+  }): Promise<ResolvedGitTarget> {
+    return await this.#resolve(input, false);
+  }
+
+  async #resolve(
+    input: { projectId: string; runId: string },
+    requireTerminalRun: boolean,
+  ): Promise<ResolvedGitTarget> {
     const parsed = ResolveInputSchema.safeParse(input);
     if (!parsed.success) {
       throw new GitTargetResolutionError(
@@ -136,7 +151,7 @@ export class GitTargetResolver {
         'The selected agent run does not belong to this project.',
       );
     }
-    if (!TERMINAL_RUN_STATUSES.has(run.status) || run.endedAt === null) {
+    if (requireTerminalRun && (!TERMINAL_RUN_STATUSES.has(run.status) || run.endedAt === null)) {
       throw new GitTargetResolutionError(
         'RUN_NOT_TERMINAL',
         'Wait for the agent run to finish before reviewing its worktree.',

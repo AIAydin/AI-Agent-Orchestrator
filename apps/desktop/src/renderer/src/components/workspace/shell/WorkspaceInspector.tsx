@@ -341,6 +341,7 @@ function NodeInspector(
           onSession={props.onPreviewSession}
           onOpenSettings={props.onOpenSettings}
           onError={props.onError}
+          configurationReadOnly={props.collaborationGraphReadOnly}
         />
       )}
       {selectedNode.data.kind === 'file' && (
