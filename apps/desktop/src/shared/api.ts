@@ -84,6 +84,12 @@ import type {
   GitShippingResultView,
 } from './git/shipping-contracts.js';
 import type {
+  GitWorktreeCleanupConfirmationInput,
+  GitWorktreeCleanupPrepareOutcome,
+  GitWorktreeCleanupResultView,
+  GitWorktreeCleanupTargetInput,
+} from './git/lifecycle/contracts.js';
+import type {
   GitReviewNoteCreateInput,
   GitReviewNoteDeleteInput,
   GitReviewNotesListInput,
@@ -289,6 +295,14 @@ export interface ForgeboardApi {
     confirmShipping(
       input: GitPlanConfirmationInput,
     ): Promise<IpcResult<GitShippingResultView | null>>;
+    lifecycle: {
+      prepareCleanup(
+        input: GitWorktreeCleanupTargetInput,
+      ): Promise<IpcResult<GitWorktreeCleanupPrepareOutcome>>;
+      confirmCleanup(
+        input: GitWorktreeCleanupConfirmationInput,
+      ): Promise<IpcResult<GitWorktreeCleanupResultView | null>>;
+    };
     reviewNotes: {
       list(input: GitReviewNotesListInput): Promise<IpcResult<GitReviewNotesView>>;
       create(input: GitReviewNoteCreateInput): Promise<IpcResult<GitReviewNotesView>>;

@@ -53,6 +53,16 @@ import {
   type GitShippingResultView,
 } from '../../shared/git/shipping-contracts.js';
 import {
+  GIT_LIFECYCLE_IPC_CHANNELS,
+  GitWorktreeCleanupConfirmationInputSchema,
+  GitWorktreeCleanupPrepareOutcomeSchema,
+  GitWorktreeCleanupResultViewSchema,
+  GitWorktreeCleanupTargetInputSchema,
+  type GitWorktreeCleanupPrepareOutcome,
+  type GitWorktreeCleanupResultView,
+  type GitWorktreeCleanupTargetInput,
+} from '../../shared/git/lifecycle/contracts.js';
+import {
   GIT_REVIEW_NOTE_IPC_CHANNELS,
   GitReviewNoteCreateInputSchema,
   GitReviewNoteDeleteInputSchema,
@@ -70,6 +80,10 @@ import { GitTargetResolver } from './git-target-resolver.js';
 import type { LocalStore } from '../storage.js';
 import { createAgentBaseComparison } from './git-base-comparison.js';
 import { createNativeGitDelegateAuthorizer } from './delegates/native-confirmation.js';
+import {
+  WorktreeCleanupService,
+  type WorktreeCleanupAdmission,
+} from './lifecycle/worktree-cleanup-service.js';
 import {
   GitShippingService,
   type PendingGitShippingPlan,
@@ -128,6 +142,10 @@ interface GitTarget {
 
 type WindowResolver = (event: IpcMainInvokeEvent) => BrowserWindow | null;
 
+export interface GitIpcServiceOptions {
+  readonly withCleanupAdmission?: WorktreeCleanupAdmission;
+}
+
 export class GitIpcService {
   readonly #changes: ChangeService;
   readonly #registeredChannels: string[] = [];
@@ -137,6 +155,7 @@ export class GitIpcService {
   readonly #targets: GitTargetResolver;
   readonly #shipping: GitShippingService;
   readonly #reviewNotes: GitReviewNotesService;
+  readonly #cleanup: WorktreeCleanupService;
   #disposed = false;
   #disposePromise: Promise<void> | null = null;
   #privacyResetting = false;
@@ -154,17 +173,24 @@ export class GitIpcService {
       | 'getRun'
       | 'listReviewNotes'
       | 'saveProject'
+      | 'transitionRunWorktreeState'
       | 'updateReviewNote'
     >,
     private readonly repositories: RepositoryService,
     private readonly getSettings: () => AppSettings,
     private readonly resolveWindow: WindowResolver = (event) =>
       BrowserWindow.fromWebContents(event.sender),
+    options: GitIpcServiceOptions = {},
   ) {
     this.#changes = new ChangeService(repositories);
     this.#targets = new GitTargetResolver(store, repositories, getSettings);
     this.#shipping = new GitShippingService(this.#targets, repositories, this.#changes);
     this.#reviewNotes = new GitReviewNotesService(store);
+    this.#cleanup = new WorktreeCleanupService(this.dialog, store, this.#targets, repositories, {
+      ...(options.withCleanupAdmission === undefined
+        ? {}
+        : { withCleanupAdmission: options.withCleanupAdmission }),
+    });
   }
 
   public registerIpcHandlers(): void {
@@ -259,6 +285,21 @@ export class GitIpcService {
       (event, input) => this.confirmShipping(event, input.planId),
     );
     this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.prepareCleanup,
+      z.tuple([GitWorktreeCleanupTargetInputSchema]),
+      GitWorktreeCleanupPrepareOutcomeSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.prepareCleanup(event.sender.id, input);
+      },
+    );
+    this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.confirmCleanup,
+      z.tuple([GitWorktreeCleanupConfirmationInputSchema]),
+      GitWorktreeCleanupResultViewSchema.nullable(),
+      (event, input) => this.confirmCleanup(event, input.planId),
+    );
+    this.#handle(
       GIT_REVIEW_NOTE_IPC_CHANNELS.list,
       z.tuple([GitReviewNotesListInputSchema]),
       GitReviewNotesViewSchema,
@@ -303,9 +344,10 @@ export class GitIpcService {
       for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
       this.#registeredChannels.length = 0;
       this.#plans.clear();
+      this.#cleanup.clearPlans();
       this.#trackedOwners.clear();
     }
-    this.#disposePromise ??= this.#operationTail;
+    this.#disposePromise ??= this.#operationTail.then(async () => await this.#cleanup.dispose());
     return this.#disposePromise;
   }
 
@@ -313,12 +355,14 @@ export class GitIpcService {
     if (this.#disposed) throw new Error('The Git review service has been disposed.');
     this.#privacyResetting = true;
     this.#plans.clear();
+    this.#cleanup.clearPlans();
     await this.#operationTail;
   }
 
   public async pauseForShutdown(): Promise<void> {
     if (this.#disposed) throw new Error('The Git review service has been disposed.');
     this.#privacyResetting = true;
+    this.#cleanup.clearPlans();
     await this.#operationTail;
   }
 
@@ -511,6 +555,13 @@ export class GitIpcService {
     });
   }
 
+  public prepareCleanup(
+    ownerId: number,
+    input: GitWorktreeCleanupTargetInput,
+  ): Promise<GitWorktreeCleanupPrepareOutcome> {
+    return this.#withOperation(async () => await this.#cleanup.prepare(ownerId, input));
+  }
+
   public confirmCommit(
     event: IpcMainInvokeEvent,
     planId: string,
@@ -554,7 +605,11 @@ export class GitIpcService {
           headBefore: committed.headBefore,
           headAfter: committed.headAfter,
         });
-        return { headBefore: committed.headBefore, headAfter: committed.headAfter, review };
+        return {
+          headBefore: committed.headBefore,
+          headAfter: committed.headAfter,
+          review,
+        };
       } catch (error) {
         this.#auditFailure('commit', plan.target, error);
         throw error;
@@ -629,7 +684,10 @@ export class GitIpcService {
         }
         const result = await this.#shipping.apply(plan);
         const review = await this.#reviewUnlocked(
-          await this.#resolveTarget({ kind: 'primary', projectId: plan.target.projectId }),
+          await this.#resolveTarget({
+            kind: 'primary',
+            projectId: plan.target.projectId,
+          }),
         );
         const conflictedPaths = result.status.entries
           .filter((entry) => entry.kind === 'unmerged')
@@ -664,6 +722,28 @@ export class GitIpcService {
         this.#auditFailure('ship-agent-commits', plan.target, error);
         throw error;
       }
+    });
+  }
+
+  public confirmCleanup(
+    event: IpcMainInvokeEvent,
+    planId: string,
+  ): Promise<GitWorktreeCleanupResultView | null> {
+    return this.#withOperation(async () => {
+      const parent = this.#requireLiveWindow(event);
+      return await this.#cleanup.confirm(
+        {
+          ownerId: event.sender.id,
+          parent,
+          assertCurrent: () => {
+            const current = this.#requireLiveWindow(event);
+            if (current !== parent) {
+              throw new Error('The originating Forgeboard window changed during worktree cleanup.');
+            }
+          },
+        },
+        planId,
+      );
     });
   }
 
@@ -736,7 +816,11 @@ export class GitIpcService {
     if (target.view.kind === 'primary' && project !== undefined) {
       this.store.saveProject({
         ...project,
-        health: { ...project.health, branch: status.branch, dirty: status.dirty },
+        health: {
+          ...project.health,
+          branch: status.branch,
+          dirty: status.dirty,
+        },
       });
     }
     return GitReviewViewSchema.parse({
@@ -939,6 +1023,7 @@ export class GitIpcService {
       for (const [id, plan] of this.#plans) {
         if (plan.ownerId === ownerId) this.#plans.delete(id);
       }
+      this.#cleanup.discardOwner(ownerId);
     });
   }
 

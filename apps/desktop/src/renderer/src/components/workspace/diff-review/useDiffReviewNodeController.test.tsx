@@ -11,6 +11,8 @@ import { useDiffReviewNodeController } from './useDiffReviewNodeController.js';
 
 const PROJECT_ID = '91000000-0000-4000-8000-000000000001';
 const RUN_ID = '91000000-0000-4000-8000-000000000002';
+const PENDING_RUN_ID = '91000000-0000-4000-8000-000000000004';
+const CLEANED_RUN_ID = '91000000-0000-4000-8000-000000000005';
 
 const listRuns = vi.fn();
 const reviewGit = vi.fn();
@@ -25,10 +27,15 @@ beforeEach(() => {
 });
 
 describe('useDiffReviewNodeController', () => {
-  it('maps only path-free available run suggestions and loads authoritative primary state', async () => {
+  it('maps active and cleanup-pending path-free choices while excluding cleaned runs', async () => {
     listRuns.mockResolvedValue({
       ok: true,
-      value: [runSummary(true), { ...runSummary(false), id: crypto.randomUUID() }],
+      value: [
+        runSummary(true),
+        { ...runSummary(false), id: crypto.randomUUID() },
+        runSummary(false, 'cleanup-pending', PENDING_RUN_ID),
+        runSummary(false, 'cleaned', CLEANED_RUN_ID),
+      ],
     });
     reviewGit.mockResolvedValue({
       ok: true,
@@ -55,6 +62,16 @@ describe('useDiffReviewNodeController', () => {
         agentLabel: 'Deterministic test agent',
         status: 'succeeded',
         branch: 'forgeboard/implementation',
+        worktreeState: 'active',
+        endedAt: '2026-07-16T15:02:00.000Z',
+      },
+      {
+        runId: PENDING_RUN_ID,
+        nodeLabel: 'Implementation agent',
+        agentLabel: 'Deterministic test agent',
+        status: 'succeeded',
+        branch: 'forgeboard/implementation',
+        worktreeState: 'cleanup-pending',
         endedAt: '2026-07-16T15:02:00.000Z',
       },
     ]);
@@ -122,14 +139,19 @@ function agents(): AgentDetection[] {
   ];
 }
 
-function runSummary(worktreeAvailable: boolean): RunHistorySummary {
+function runSummary(
+  worktreeAvailable: boolean,
+  worktreeState: RunHistorySummary['worktreeState'] = 'active',
+  id = RUN_ID,
+): RunHistorySummary {
   return {
-    id: RUN_ID,
+    id,
     projectId: PROJECT_ID,
     nodeId: 'agent-node',
     adapterId: 'test-agent',
     status: 'succeeded',
     branch: 'forgeboard/implementation',
+    worktreeState,
     worktreeAvailable,
     startedAt: '2026-07-16T15:01:00.000Z',
     endedAt: '2026-07-16T15:02:00.000Z',

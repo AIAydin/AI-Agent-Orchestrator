@@ -14,6 +14,10 @@ import type { DiffReviewDisplayPreferences, DiffReviewOpenRequest } from '../dif
 import { Workspace } from './Workspace.js';
 
 const collaborationMocks = vi.hoisted(() => ({ graphReadOnly: false }));
+const diffReviewMocks = vi.hoisted(() => ({
+  refreshAgentRuns: vi.fn(),
+  refreshSummary: vi.fn(),
+}));
 
 vi.mock('../canvas/useCanvasPersistence.js', () => ({
   useCanvasPersistence: () => ({
@@ -42,8 +46,8 @@ vi.mock('../diff-review/useDiffReviewNodeController.js', () => ({
     agentRunsError: null,
     authority: { state: 'ready' },
     summary: null,
-    refreshAgentRuns: vi.fn(),
-    refreshSummary: vi.fn(),
+    refreshAgentRuns: diffReviewMocks.refreshAgentRuns,
+    refreshSummary: diffReviewMocks.refreshSummary,
   }),
 }));
 vi.mock('./WorkspaceCommandBar.js', () => ({
@@ -137,10 +141,38 @@ vi.mock('./WorkspaceInspector.js', () => ({
                 viewMode: selectedNode.data.viewMode ?? 'split',
                 showWhitespace: selectedNode.data.showWhitespace ?? false,
               },
+              purpose: 'review',
             });
           }}
         >
           Open selected Diff review
+        </button>
+        <button
+          type="button"
+          disabled={!isDiff || selectedNode?.data.reviewTarget?.kind !== 'agent-run'}
+          onClick={() => {
+            if (
+              !isDiff ||
+              selectedNode === null ||
+              selectedNode.data.reviewTarget?.kind !== 'agent-run'
+            ) {
+              return;
+            }
+            onOpenDiffReview({
+              target: {
+                kind: 'agent-worktree',
+                projectId: project.id,
+                runId: selectedNode.data.reviewTarget.runId,
+              },
+              preferences: {
+                viewMode: selectedNode.data.viewMode ?? 'split',
+                showWhitespace: selectedNode.data.showWhitespace ?? false,
+              },
+              purpose: 'cleanup-recovery',
+            });
+          }}
+        >
+          Open selected cleanup recovery
         </button>
         <button
           type="button"
@@ -206,17 +238,26 @@ vi.mock('../../shell/CommandPalette.js', () => ({
 vi.mock('../../git-review/GitReviewDialog.js', () => ({
   GitReviewDialog: ({
     target,
+    cleanupRecovery,
     displayPreferences,
     onDisplayPreferencesChange,
     onClose,
+    onCleanupSuccess,
+    onCleanupTargetReactivated,
+    onCleanupStateUncertain,
   }: {
     target: GitTargetInput;
+    cleanupRecovery?: boolean;
     displayPreferences?: DiffReviewDisplayPreferences;
     onDisplayPreferencesChange?: (preferences: DiffReviewDisplayPreferences) => void;
     onClose: () => void;
+    onCleanupSuccess?: (message: string) => void;
+    onCleanupTargetReactivated?: (target: GitTargetInput, message: string) => void;
+    onCleanupStateUncertain?: () => void;
   }) => (
     <div role="dialog" aria-label="Git review target">
       <output data-testid="git-target">{JSON.stringify(target)}</output>
+      <output data-testid="git-cleanup-recovery">{String(cleanupRecovery ?? false)}</output>
       <output data-testid="git-display-preferences">
         {JSON.stringify(displayPreferences ?? null)}
       </output>
@@ -235,6 +276,33 @@ vi.mock('../../git-review/GitReviewDialog.js', () => ({
       <button type="button" onClick={onClose}>
         Close Git review
       </button>
+      {target.kind === 'agent-worktree' && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              onCleanupSuccess?.('Cleaned up the exact merged agent worktree.');
+              onClose();
+            }}
+          >
+            Complete worktree cleanup
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onCleanupTargetReactivated?.(
+                target,
+                'Verified the agent worktree is intact and restored its active lifecycle state.',
+              )
+            }
+          >
+            Reactivate intact cleanup target
+          </button>
+          <button type="button" onClick={onCleanupStateUncertain}>
+            Refresh uncertain cleanup state
+          </button>
+        </>
+      )}
     </div>
   ),
 }));
@@ -291,6 +359,8 @@ vi.mock('../workflows/useWorkflowRuns.js', () => ({
 
 beforeEach(() => {
   collaborationMocks.graphReadOnly = false;
+  diffReviewMocks.refreshAgentRuns.mockClear();
+  diffReviewMocks.refreshSummary.mockClear();
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -377,6 +447,91 @@ describe('Workspace Git review targeting', () => {
       showWhitespace: false,
     });
     expect(undo).toHaveProperty('disabled', true);
+  });
+
+  it('refreshes run history and Git authority after cleanup without changing the historical pin', async () => {
+    renderWorkspace();
+    await selectNode('Source Diff', 'diff-source');
+    fireEvent.click(screen.getByRole('button', { name: 'Retarget selected Diff' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open selected Diff review' }));
+    expect(readTarget()).toEqual({
+      kind: 'agent-worktree',
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete worktree cleanup' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Git review target' })).toBeNull(),
+    );
+    expect(diffReviewMocks.refreshAgentRuns).toHaveBeenCalledTimes(1);
+    expect(diffReviewMocks.refreshSummary).toHaveBeenCalled();
+    expect(readNodeState('diff-source').reviewTarget).toEqual({
+      kind: 'agent-run',
+      runId: RUN_ID,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Undo canvas' }));
+    await waitFor(() =>
+      expect(readNodeState('diff-source').reviewTarget).toEqual({ kind: 'primary' }),
+    );
+    expect(screen.getByRole('button', { name: 'Undo canvas' })).toHaveProperty('disabled', true);
+  });
+
+  it('clears only reactivated cleanup intent while preserving the exact pinned Diff run', async () => {
+    renderWorkspace();
+    await selectNode('Source Diff', 'diff-source');
+    fireEvent.click(screen.getByRole('button', { name: 'Retarget selected Diff' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open selected cleanup recovery' }));
+
+    expect(readTarget()).toEqual({
+      kind: 'agent-worktree',
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+    });
+    expect(screen.getByTestId('git-cleanup-recovery').textContent).toBe('true');
+    expect(readNodeState('diff-source').reviewTarget).toEqual({
+      kind: 'agent-run',
+      runId: RUN_ID,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reactivate intact cleanup target' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('git-cleanup-recovery').textContent).toBe('false'),
+    );
+    expect(readTarget()).toEqual({
+      kind: 'agent-worktree',
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+    });
+    expect(readNodeState('diff-source').reviewTarget).toEqual({
+      kind: 'agent-run',
+      runId: RUN_ID,
+    });
+    expect(diffReviewMocks.refreshAgentRuns).toHaveBeenCalledTimes(1);
+    expect(diffReviewMocks.refreshSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes uncertain cleanup state without closing or changing the pinned Diff run', async () => {
+    renderWorkspace();
+    await selectNode('Source Diff', 'diff-source');
+    fireEvent.click(screen.getByRole('button', { name: 'Retarget selected Diff' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open selected Diff review' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh uncertain cleanup state' }));
+
+    expect(screen.getByRole('dialog', { name: 'Git review target' })).toBeTruthy();
+    expect(readTarget()).toEqual({
+      kind: 'agent-worktree',
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+    });
+    expect(readNodeState('diff-source').reviewTarget).toEqual({
+      kind: 'agent-run',
+      runId: RUN_ID,
+    });
+    expect(diffReviewMocks.refreshAgentRuns).toHaveBeenCalledTimes(1);
+    expect(diffReviewMocks.refreshSummary).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a dialog bound to its exact source when selection drifts to another Diff node', async () => {

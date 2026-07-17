@@ -18,6 +18,7 @@ import type {
   GitShippingResultView,
   GitShippingStrategy,
 } from '../../../../shared/git/shipping-contracts.js';
+import type { GitWorktreeCleanupPlanView } from '../../../../shared/git/lifecycle/contracts.js';
 import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
 import { GitCommitDisclosure, GitDiscardDisclosure } from './actions/GitActionDisclosure.js';
 import { GitCommitPanel } from './actions/GitCommitPanel.js';
@@ -31,6 +32,9 @@ import {
   type GitFileSelection,
 } from './git-review-model.js';
 import { GitReviewSummary } from './GitReviewSummary.js';
+import { GitWorktreeCleanupDisclosure } from './lifecycle/GitWorktreeCleanupDisclosure.js';
+import { GitWorktreeCleanupPanel } from './lifecycle/GitWorktreeCleanupPanel.js';
+import { useGitWorktreeCleanup } from './lifecycle/useGitWorktreeCleanup.js';
 import { GitStaleReviewNotes } from './review-notes/GitStaleReviewNotes.js';
 import { useGitReviewNotes } from './review-notes/useGitReviewNotes.js';
 import {
@@ -46,27 +50,40 @@ import { GitShippingPanel } from './shipping/GitShippingPanel.js';
 export interface GitReviewDialogProps {
   target: GitTargetInput;
   projectName: string;
+  cleanupRecovery?: boolean;
   displayPreferences?: GitDiffDisplayPreferences;
   onDisplayPreferencesChange?: (preferences: GitDiffDisplayPreferences) => void;
   onClose: () => void;
   onError?: (message: string) => void;
+  onCleanupSuccess?: (message: string) => void;
+  onCleanupTargetReactivated?: (target: GitTargetInput, message: string) => void;
+  onCleanupStateUncertain?: () => void;
 }
 
 export function GitReviewDialog({
   target,
   projectName,
+  cleanupRecovery = false,
   displayPreferences,
   onDisplayPreferencesChange,
   onClose,
   onError,
+  onCleanupSuccess,
+  onCleanupTargetReactivated,
+  onCleanupStateUncertain,
 }: GitReviewDialogProps) {
   const controller = useGitReview(target, onError);
+  const cleanupController = useGitWorktreeCleanup(
+    target.kind === 'agent-worktree' ? { projectId: target.projectId, runId: target.runId } : null,
+    onError,
+  );
   const reviewNotes = useGitReviewNotes(target, controller.review?.refreshedAt ?? null, onError);
   const [selection, setSelection] = useState<GitFileSelection | null>(null);
   const [discardPlan, setDiscardPlan] = useState<GitDiscardPlanView | null>(null);
   const [commitPlan, setCommitPlan] = useState<GitCommitPlanView | null>(null);
   const [shippingPlan, setShippingPlan] = useState<GitShippingPlanView | null>(null);
   const [shippingResult, setShippingResult] = useState<GitShippingResultView | null>(null);
+  const [cleanupPlan, setCleanupPlan] = useState<GitWorktreeCleanupPlanView | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState<GitReviewMode>(
     target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree',
@@ -85,7 +102,10 @@ export function GitReviewDialog({
   );
   const staleReviewNotes =
     reviewNotes.context?.notes.filter((note) => note.anchorState !== 'current') ?? [];
-  const busy = controller.busyLabel !== null;
+  const busy = controller.busyLabel !== null || cleanupController.busyLabel !== null;
+  const busyLabel = controller.busyLabel ?? cleanupController.busyLabel;
+  const actionError = controller.error ?? cleanupController.error;
+  const cleanupRecoveryOnly = target.kind === 'agent-worktree' && cleanupRecovery;
 
   useEffect(() => {
     const previousFocus =
@@ -175,6 +195,50 @@ export function GitReviewDialog({
     });
   };
 
+  const prepareCleanup = () => {
+    setNotice(null);
+    void cleanupController.prepare(cleanupRecoveryOnly).then((outcome) => {
+      if (outcome === undefined) {
+        onCleanupStateUncertain?.();
+        return;
+      }
+      if (outcome.kind === 'cleanup-reconciled') {
+        onCleanupSuccess?.(
+          'Reconciled the interrupted cleanup and marked the exact agent worktree as cleaned.',
+        );
+        onClose();
+      } else {
+        setCleanupPlan(outcome);
+        if (cleanupRecoveryOnly && !outcome.recovery) {
+          onCleanupTargetReactivated?.(
+            target,
+            'Verified the agent worktree is intact and restored its active lifecycle state.',
+          );
+          void controller.refresh();
+        }
+      }
+    });
+  };
+
+  const confirmCleanup = () => {
+    if (cleanupPlan === null) return;
+    void cleanupController.confirm(cleanupPlan.planId).then((result) => {
+      if (result === null) {
+        setCleanupPlan(null);
+        setNotice('Cleanup cancelled in the system confirmation. The worktree was preserved.');
+      } else if (result === undefined) {
+        setCleanupPlan(null);
+        onCleanupStateUncertain?.();
+      } else {
+        setCleanupPlan(null);
+        onCleanupSuccess?.(
+          'Cleaned up the exact merged agent worktree and deleted its managed branch.',
+        );
+        onClose();
+      }
+    });
+  };
+
   return (
     <div className="modal-backdrop git-review-backdrop" role="presentation">
       <section
@@ -190,11 +254,17 @@ export function GitReviewDialog({
           </span>
           <span>
             <small>
-              {target.kind === 'primary'
-                ? 'Authoritative primary checkout'
-                : 'Authoritative agent worktree'}
+              {cleanupRecoveryOnly
+                ? 'Recovery-only agent target'
+                : target.kind === 'primary'
+                  ? 'Authoritative primary checkout'
+                  : 'Authoritative agent worktree'}
             </small>
-            <h2 id="git-review-title">Review changes in {projectName}</h2>
+            <h2 id="git-review-title">
+              {cleanupRecoveryOnly
+                ? `Recover interrupted cleanup in ${projectName}`
+                : `Review changes in ${projectName}`}
+            </h2>
           </span>
           <button
             className="icon-button"
@@ -220,18 +290,55 @@ export function GitReviewDialog({
           <GitReviewState icon={<LoaderCircle className="spin" />} title="Reading local Git state">
             Forgeboard is loading status and diffs from the selected repository.
           </GitReviewState>
-        ) : controller.review === null ? (
-          <GitReviewState icon={<TriangleAlert />} title="Git review is unavailable">
-            {controller.error ?? 'Forgeboard could not read this repository.'}
-            <button
-              className="button"
-              type="button"
-              disabled={busy}
-              onClick={() => void controller.refresh()}
+        ) : cleanupRecoveryOnly || controller.review === null ? (
+          <>
+            <GitReviewState
+              icon={<TriangleAlert />}
+              title={
+                cleanupRecoveryOnly
+                  ? 'Git review is unavailable during cleanup recovery'
+                  : 'Git review is unavailable'
+              }
             >
-              Try again
-            </button>
-          </GitReviewState>
+              {controller.error ?? 'Forgeboard could not read this repository.'}
+              {!cleanupRecoveryOnly && (
+                <button
+                  className="button"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void controller.refresh()}
+                >
+                  Try again
+                </button>
+              )}
+            </GitReviewState>
+            {target.kind === 'agent-worktree' && (
+              <section className="git-cleanup-recovery" aria-label="Agent cleanup recovery">
+                {(cleanupController.error !== null ||
+                  cleanupController.busyLabel !== null ||
+                  notice !== null) && (
+                  <div
+                    className={`git-review-status ${cleanupController.error ? 'error' : ''}`}
+                    aria-live="polite"
+                  >
+                    {cleanupController.busyLabel !== null ? (
+                      <LoaderCircle className="spin" size={13} />
+                    ) : cleanupController.error !== null ? (
+                      <TriangleAlert size={13} />
+                    ) : (
+                      <CheckCircle2 size={13} />
+                    )}
+                    {cleanupController.busyLabel ?? cleanupController.error ?? notice}
+                  </div>
+                )}
+                <GitWorktreeCleanupPanel
+                  recovery={cleanupRecoveryOnly}
+                  busy={busy}
+                  onPrepare={prepareCleanup}
+                />
+              </section>
+            )}
+          </>
         ) : (
           <>
             {controller.review.target.kind === 'agent-worktree' && (
@@ -256,19 +363,16 @@ export function GitReviewDialog({
                 <TriangleAlert size={14} /> Resolve unmerged files before creating a commit.
               </p>
             )}
-            {(controller.error !== null || notice !== null || busy) && (
-              <div
-                className={`git-review-status ${controller.error ? 'error' : ''}`}
-                aria-live="polite"
-              >
+            {(actionError !== null || notice !== null || busy) && (
+              <div className={`git-review-status ${actionError ? 'error' : ''}`} aria-live="polite">
                 {busy ? (
                   <LoaderCircle className="spin" size={13} />
-                ) : controller.error ? (
+                ) : actionError ? (
                   <TriangleAlert size={13} />
                 ) : (
                   <CheckCircle2 size={13} />
                 )}
-                {controller.busyLabel ?? controller.error ?? notice}
+                {busyLabel ?? actionError ?? notice}
               </div>
             )}
             {reviewNotes.error !== null && (
@@ -305,12 +409,15 @@ export function GitReviewDialog({
                     ? {}
                     : { onDisplayPreferencesChange })}
                   footer={
-                    <GitShippingPanel
-                      review={controller.review}
-                      busy={busy}
-                      result={shippingResult}
-                      onPrepare={prepareShipping}
-                    />
+                    <>
+                      <GitShippingPanel
+                        review={controller.review}
+                        busy={busy}
+                        result={shippingResult}
+                        onPrepare={prepareShipping}
+                      />
+                      <GitWorktreeCleanupPanel busy={busy} onPrepare={prepareCleanup} />
+                    </>
                   }
                 />
               )
@@ -409,6 +516,14 @@ export function GitReviewDialog({
             busy={busy}
             onCancel={() => setShippingPlan(null)}
             onConfirm={confirmShipping}
+          />
+        )}
+        {cleanupPlan && (
+          <GitWorktreeCleanupDisclosure
+            plan={cleanupPlan}
+            busy={busy}
+            onCancel={() => setCleanupPlan(null)}
+            onConfirm={confirmCleanup}
           />
         )}
       </section>

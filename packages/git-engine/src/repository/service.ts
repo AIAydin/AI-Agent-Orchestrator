@@ -193,7 +193,16 @@ export class RepositoryService {
   public async status(repositoryPath: string): Promise<GitStatus> {
     const repositoryRoot = await this.resolveRepositoryRoot(repositoryPath);
     const result = await this.git.runGuarded(
-      ['-C', repositoryRoot, 'status', '--porcelain=v2', '--branch', '--untracked-files=all', '-z'],
+      [
+        '--no-optional-locks',
+        '-C',
+        repositoryRoot,
+        'status',
+        '--porcelain=v2',
+        '--branch',
+        '--untracked-files=all',
+        '-z',
+      ],
       { repositoryPath: repositoryRoot, operation: 'worktree-inspection' },
     );
     return parseGitStatus(result.stdout);

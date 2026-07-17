@@ -634,6 +634,7 @@ const KNOWN_GIT_COMMANDS = new Set([
   'symbolic-ref',
   'tag',
   'update-index',
+  'update-ref',
   'whatchanged',
   'worktree',
   'write-tree',

@@ -246,16 +246,21 @@ function runOptions(
 ): DiffReviewAgentRunOption[] {
   const nodeLabels = new Map(nodes.map((node) => [node.id, node.data.title] as const));
   const agentLabels = new Map(agents.map((agent) => [agent.id, agent.label] as const));
-  return records
-    .filter((record) => record.worktreeAvailable)
-    .map((record) => ({
-      runId: record.id,
-      nodeLabel: nodeLabels.get(record.nodeId) ?? `Run from ${record.nodeId}`,
-      agentLabel: agentLabels.get(record.adapterId) ?? record.adapterId,
-      status: record.status,
-      branch: record.branch,
-      endedAt: record.endedAt,
-    }));
+  return records.flatMap((record) => {
+    if (!record.worktreeAvailable && record.worktreeState !== 'cleanup-pending') return [];
+    const worktreeState = record.worktreeState === 'cleanup-pending' ? 'cleanup-pending' : 'active';
+    return [
+      {
+        runId: record.id,
+        nodeLabel: nodeLabels.get(record.nodeId) ?? `Run from ${record.nodeId}`,
+        agentLabel: agentLabels.get(record.adapterId) ?? record.adapterId,
+        status: record.status,
+        branch: record.branch,
+        worktreeState,
+        endedAt: record.endedAt,
+      },
+    ];
+  });
 }
 
 function gitTargetKey(target: GitTargetInput): string {

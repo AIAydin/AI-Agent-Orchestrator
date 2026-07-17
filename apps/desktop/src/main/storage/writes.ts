@@ -11,6 +11,7 @@ import {
 } from '../../shared/application/contracts.js';
 import {
   CanvasSnapshotSchema,
+  effectiveRunWorktreeState,
   StoredRunRecordSchema,
   TrustedExtensionLedgerRecordSchema,
   type CanvasSnapshot,
@@ -147,6 +148,22 @@ export function writeSnapshot(database: DatabaseSync, snapshot: CanvasSnapshot):
 }
 
 export function writeRun(database: DatabaseSync, record: StoredRunRecord): void {
+  writeRunWithLifecyclePolicy(database, record, false);
+}
+
+/** Persistence capability reserved for the exact run-worktree lifecycle transition operation. */
+export function writeRunForWorktreeTransition(
+  database: DatabaseSync,
+  record: StoredRunRecord,
+): void {
+  writeRunWithLifecyclePolicy(database, record, true);
+}
+
+function writeRunWithLifecyclePolicy(
+  database: DatabaseSync,
+  record: StoredRunRecord,
+  allowWorktreeStateChange: boolean,
+): void {
   const current = database
     .prepare('SELECT value_json FROM agent_runs WHERE id = ?')
     .get(record.id) as JsonRow | undefined;
@@ -166,6 +183,14 @@ export function writeRun(database: DatabaseSync, record: StoredRunRecord): void 
       existing.baseCommit !== record.baseCommit
     ) {
       throw new Error('A run record cannot change its persisted identity.');
+    }
+    if (
+      !allowWorktreeStateChange &&
+      effectiveRunWorktreeState(existing) !== effectiveRunWorktreeState(record)
+    ) {
+      throw new Error(
+        'A run worktree lifecycle can change only through its exact transition operation.',
+      );
     }
   }
   database

@@ -11,6 +11,7 @@ import type {
 
 export interface GitReviewSession {
   readonly target: GitTargetInput;
+  readonly cleanupRecovery: boolean;
   readonly source: {
     readonly nodeId: string;
     readonly configuredTarget: DiffReviewTarget | undefined;
@@ -28,6 +29,7 @@ interface UseDiffReviewSessionOptions {
   };
   readonly recordSnapshot: (nodes: WorkshopNode[], edges: WorkshopEdge[]) => void;
   readonly replaceNodes: (nodes: WorkshopNode[]) => void;
+  readonly refreshAgentRuns: () => void;
   readonly refreshSummary: () => void;
 }
 
@@ -41,6 +43,8 @@ export interface DiffReviewSessionController {
     request: DiffReviewOpenRequest,
   ) => void;
   readonly persistPreferences: (preferences: DiffReviewDisplayPreferences) => void;
+  readonly reactivateCleanupTarget: (target: GitTargetInput) => void;
+  readonly refreshCleanupState: () => void;
   readonly close: () => void;
 }
 
@@ -52,6 +56,7 @@ export function useDiffReviewSession({
   readGraph,
   recordSnapshot,
   replaceNodes,
+  refreshAgentRuns,
   refreshSummary,
 }: UseDiffReviewSessionOptions): DiffReviewSessionController {
   const [session, setSession] = useState<GitReviewSession | null>(null);
@@ -59,7 +64,7 @@ export function useDiffReviewSession({
 
   const openTarget = useCallback((target: GitTargetInput) => {
     undoRecorded.current = false;
-    setSession({ target, source: null });
+    setSession({ target, cleanupRecovery: false, source: null });
   }, []);
   const openNodeReview = useCallback(
     (
@@ -70,6 +75,7 @@ export function useDiffReviewSession({
       undoRecorded.current = false;
       setSession({
         target: request.target,
+        cleanupRecovery: request.purpose === 'cleanup-recovery',
         source: { nodeId, configuredTarget, preferences: request.preferences },
       });
     },
@@ -150,6 +156,24 @@ export function useDiffReviewSession({
     sameDiffReviewTarget(sourceNode.data.reviewTarget, source.configuredTarget) &&
     gitTargetMatchesDiffReviewTarget(session.target, source.configuredTarget, projectId);
 
+  const refreshCleanupState = useCallback(() => {
+    refreshAgentRuns();
+    refreshSummary();
+  }, [refreshAgentRuns, refreshSummary]);
+
+  const reactivateCleanupTarget = useCallback(
+    (target: GitTargetInput) => {
+      setSession((current) =>
+        current !== null && current.cleanupRecovery && sameGitTarget(current.target, target)
+          ? { ...current, cleanupRecovery: false }
+          : current,
+      );
+      refreshAgentRuns();
+      refreshSummary();
+    },
+    [refreshAgentRuns, refreshSummary],
+  );
+
   const close = useCallback(() => {
     setSession(null);
     refreshSummary();
@@ -161,8 +185,18 @@ export function useDiffReviewSession({
     openTarget,
     openNodeReview,
     persistPreferences,
+    reactivateCleanupTarget,
+    refreshCleanupState,
     close,
   };
+}
+
+function sameGitTarget(left: GitTargetInput, right: GitTargetInput): boolean {
+  return (
+    left.kind === right.kind &&
+    left.projectId === right.projectId &&
+    (left.kind === 'primary' || (right.kind === 'agent-worktree' && left.runId === right.runId))
+  );
 }
 
 function sameDiffReviewTarget(

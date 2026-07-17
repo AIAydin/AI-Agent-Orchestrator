@@ -233,6 +233,24 @@ function run(
   };
 }
 
+function managedRun(
+  id: string,
+  worktreeState: NonNullable<StoredRunRecord['worktreeState']>,
+  updatedAt: string,
+): StoredRunRecord {
+  return {
+    ...run(id, 'succeeded', updatedAt),
+    cwd: `/tmp/forgeboard-managed/${id}`,
+    branch: `forgeboard/retention/${id}`,
+    worktreeId: id,
+    worktreeState,
+    repositoryRoot: '/tmp/forgeboard-repository',
+    managedRoot: '/tmp/forgeboard-managed',
+    baseRef: 'main',
+    baseCommit: 'a'.repeat(40),
+  };
+}
+
 function trustedExtension(): TrustedExtensionLedgerRecord {
   return {
     schemaVersion: 1,
@@ -491,6 +509,47 @@ describe('LocalStore persistence and recovery', () => {
     expect(store.getCheckExecution(oldCheck)).toBeUndefined();
     expect(store.listAuditEvents(10).map((event) => event.category)).toEqual(['new']);
     expect(store.listCanvasSnapshots(PROJECT_ID)).toHaveLength(2);
+  });
+
+  it('retains exact active and pending worktree bindings until cleanup is durably complete', () => {
+    const databasePath = join(temporaryRoot(), 'data', 'forgeboard.sqlite3');
+    let store = openStore(databasePath);
+    store.saveProject(project());
+    const oldUpdatedAt = '2025-01-01T00:00:00.000Z';
+    const ordinaryRunId = '22000000-0000-4000-8000-000000000001';
+    const activeRunId = '22000000-0000-4000-8000-000000000002';
+    const pendingRunId = '22000000-0000-4000-8000-000000000003';
+    const cleanedRunId = '22000000-0000-4000-8000-000000000004';
+    const legacyRunId = '22000000-0000-4000-8000-000000000005';
+    store.saveRun(run(ordinaryRunId, 'succeeded', oldUpdatedAt));
+    store.saveRun(managedRun(activeRunId, 'active', oldUpdatedAt));
+    store.saveRun(managedRun(pendingRunId, 'cleanup-pending', oldUpdatedAt));
+    store.saveRun(managedRun(cleanedRunId, 'cleaned', oldUpdatedAt));
+    store.saveRun(managedRun(legacyRunId, 'active', oldUpdatedAt));
+    closeStore(store);
+
+    const connection = new DatabaseSync(databasePath);
+    const legacyRow = connection
+      .prepare('SELECT value_json FROM agent_runs WHERE id = ?')
+      .get(legacyRunId) as { value_json: string };
+    const legacyValue = JSON.parse(legacyRow.value_json) as Record<string, unknown>;
+    delete legacyValue.worktreeState;
+    connection
+      .prepare('UPDATE agent_runs SET value_json = ? WHERE id = ?')
+      .run(JSON.stringify(legacyValue), legacyRunId);
+    connection.close();
+
+    store = openStore(databasePath);
+    const result = store.applyRetention(settings({ transcriptRetentionDays: 30 }), NOW);
+
+    expect(result.deletedRuns).toBe(2);
+    expect(
+      store
+        .exportData()
+        .runs.map((record) => record.id)
+        .sort(),
+    ).toEqual([activeRunId, legacyRunId, pendingRunId].sort());
+    expect(store.getRun(legacyRunId)?.worktreeState).toBe('active');
   });
 
   it('retains the most recently inserted snapshots when the wall clock moves backwards', () => {

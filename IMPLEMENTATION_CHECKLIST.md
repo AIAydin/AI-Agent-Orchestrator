@@ -764,3 +764,24 @@ unchecked when only a subset of their required behavior has proof.
   repository-wide Prettier and zero-warning ESLint, all eight workspace strict typechecks, 1,278 unit
   tests across 213 files, 181 integration tests across 25 files, all 11 Electron Playwright journeys,
   every workspace production build, and `git diff --check`.
+- 2026-07-16: terminal managed agent worktrees gained a zero-code, path-free safe-cleanup flow. Main
+  binds each one-shot plan to the originating window and persisted project/run, revalidates expiry
+  and exact ownership before and after the cancel-default native confirmation and again while
+  workflow, run, preview, and check admission is paused, and permits cleanup only for a clean
+  worktree whose managed branch is merged into its recorded base. The Git engine proves exact
+  worktree-registration removal, rechecks primary HEAD and base, compare-and-deletes only the
+  approved branch OID, retains metadata on drift, and exposes no renderer force, dirty, or unmerged
+  override. Durable `active`, `cleanup-pending`, and `cleaned` run states support bounded no-follow
+  crash recovery: an intact pre-mutation target is reactivated, an exact partial cleanup requires
+  fresh consent, a twice-proven completed cleanup is reconciled, and ambiguous residue stays hidden
+  and unchanged. Retention preserves active, pending, and legacy owned-worktree bindings; cleanup
+  refreshes run and Git state without retargeting the pinned Diff node or claiming success for
+  uncertain outcomes. The broad combined Git-management checklist item remains open because rename,
+  archive, external-editor, and its other unfinished requirements are outside this cleanup slice.
+  This checkpoint passed the 766-file structure gate, repository-wide Prettier and zero-warning
+  ESLint, all eight workspace strict typechecks, 1,348 unit tests across 219 files, 202 integration
+  tests across 27 files, all 11 Electron Playwright journeys, every workspace production build,
+  `git diff --check`, and the production dependency audit with no known vulnerabilities. The macOS
+  arm64 application, ZIP, DMG, and blockmaps packaged successfully; both packaged-app and native
+  installer-artifact smoke tests passed, with the latter returning `FORGEBOARD_SMOKE_OK`. Signing
+  remains inactive because this machine has no Developer ID identity.

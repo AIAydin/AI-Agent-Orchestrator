@@ -1,4 +1,4 @@
-import type { StoredRunRecord } from '../../storage-schemas.js';
+import { effectiveRunWorktreeState, type StoredRunRecord } from '../../storage-schemas.js';
 import {
   RunHistorySummarySchema,
   TerminalRunHistoryStatusSchema,
@@ -7,8 +7,9 @@ import {
 
 /**
  * Reduces durable main-process run records to the deliberately path-free renderer contract.
- * Worktree availability means the persisted ownership binding is complete enough to ask the
- * authoritative Git target resolver; the resolver still revalidates ownership and disk state.
+ * Worktree availability means the persisted ownership binding is active and complete enough to
+ * ask the authoritative Git target resolver. The separate path-free lifecycle state lets the UI
+ * offer interrupted cleanup recovery without treating it as Git-review authority.
  */
 export function summarizePersistedRunHistory(
   records: readonly StoredRunRecord[],
@@ -17,6 +18,7 @@ export function summarizePersistedRunHistory(
   for (const record of records) {
     const status = TerminalRunHistoryStatusSchema.safeParse(record.status);
     if (!status.success || record.endedAt === null || record.worktreeId === null) continue;
+    const worktreeState = effectiveRunWorktreeState(record);
     const summary = RunHistorySummarySchema.safeParse({
       id: record.id,
       projectId: record.projectId,
@@ -24,7 +26,8 @@ export function summarizePersistedRunHistory(
       adapterId: record.adapterId,
       status: status.data,
       branch: record.branch,
-      worktreeAvailable: hasCompleteWorktreeBinding(record),
+      worktreeState,
+      worktreeAvailable: worktreeState === 'active' && hasCompleteWorktreeBinding(record),
       startedAt: record.startedAt,
       endedAt: record.endedAt,
       createdAt: record.createdAt,

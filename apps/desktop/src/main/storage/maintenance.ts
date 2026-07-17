@@ -81,7 +81,12 @@ export function applyRetention(
       database
         .prepare(
           `DELETE FROM agent_runs
-           WHERE updated_at < ? AND status NOT IN ('prepared', 'running')`,
+           WHERE updated_at < ?
+             AND status NOT IN ('prepared', 'running')
+             AND (
+               json_extract(value_json, '$.worktreeId') IS NULL
+               OR json_extract(value_json, '$.worktreeState') = 'cleaned'
+             )`,
         )
         .run(runCutoff).changes,
     );

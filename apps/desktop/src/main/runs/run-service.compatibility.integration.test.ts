@@ -259,6 +259,7 @@ describe('RunService Electron compatibility', () => {
           adapterId: 'test-agent',
           status: 'succeeded',
           branch: 'forgeboard/agent-node',
+          worktreeState: 'active',
           worktreeAvailable: true,
           startedAt: '2026-07-15T12:00:00.000Z',
           endedAt: '2026-07-15T12:01:00.000Z',

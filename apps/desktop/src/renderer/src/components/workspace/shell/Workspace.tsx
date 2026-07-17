@@ -902,6 +902,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     readGraph: readCurrentGraph,
     recordSnapshot,
     replaceNodes: replaceCurrentNodes,
+    refreshAgentRuns: diffReview.refreshAgentRuns,
     refreshSummary: diffReview.refreshSummary,
   });
   const openProjectGitReview = useCallback(
@@ -1560,6 +1561,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         <GitReviewDialog
           target={gitReview.session.target}
           projectName={project.name}
+          cleanupRecovery={gitReview.session.cleanupRecovery}
           {...(gitReview.session.source === null
             ? {}
             : { displayPreferences: gitReview.session.source.preferences })}
@@ -1568,6 +1570,15 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             : {})}
           onClose={gitReview.close}
           onError={onError}
+          onCleanupSuccess={(message) => {
+            gitReview.refreshCleanupState();
+            setEvents((items) => [message, ...items].slice(0, 80));
+          }}
+          onCleanupTargetReactivated={(reactivatedTarget, message) => {
+            gitReview.reactivateCleanupTarget(reactivatedTarget);
+            setEvents((items) => [message, ...items].slice(0, 80));
+          }}
+          onCleanupStateUncertain={gitReview.refreshCleanupState}
         />
       )}
       {workflowDecision !== null && (

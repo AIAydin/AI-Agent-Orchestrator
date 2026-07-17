@@ -1,0 +1,101 @@
+.git-worktree-cleanup-panel {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 18px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 92%, var(--green));
+}
+
+.git-cleanup-recovery {
+  flex: 0 0 auto;
+}
+
+.git-cleanup-recovery .git-worktree-cleanup-panel {
+  border-top-color: color-mix(in srgb, var(--yellow) 35%, var(--line));
+}
+
+.git-worktree-cleanup-panel > svg {
+  color: var(--green);
+}
+
+.git-worktree-cleanup-panel > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.git-worktree-cleanup-panel strong {
+  font-size: 10px;
+}
+
+.git-worktree-cleanup-panel small {
+  max-width: 760px;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.git-cleanup-policy {
+  margin: 0 0 12px;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.git-cleanup-dirty-paths {
+  margin: 10px 0;
+}
+
+.git-cleanup-dirty-paths h4 {
+  margin: 0 0 5px;
+  color: var(--text-soft);
+  font-size: 9px;
+}
+
+.git-cleanup-dirty-paths > div {
+  max-height: 110px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: auto;
+}
+
+.git-cleanup-dirty-paths code {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 9px;
+}
+
+.git-cleanup-dirty-paths small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-faint);
+  font-size: 8px;
+}
+
+.git-cleanup-ineligible {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 8px;
+  border-radius: 6px;
+  color: var(--red);
+  background: var(--red-soft);
+  font-size: 9px;
+}
+
+@media (max-width: 780px) {
+  .git-worktree-cleanup-panel {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .git-worktree-cleanup-panel .button {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}

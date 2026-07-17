@@ -1,14 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import {
-  lstat,
-  mkdir,
-  readFile,
-  readdir,
-  realpath,
-  rename,
-  unlink,
-  writeFile,
-} from 'node:fs/promises';
+import { lstat, mkdir, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { ChangeService } from '../diff/changes.js';
@@ -16,6 +7,15 @@ import { assertExplicitApproval, assertSameStrings } from '../model/approval.js'
 import { GitEngineError } from '../model/errors.js';
 import { isPathInside, prepareManagedRoot, safeSlug } from './path-safety.js';
 import { RepositoryService } from './service.js';
+import type {
+  WorktreeCleanupRecoveryBinding,
+  WorktreeCleanupRecoveryInspection,
+} from './worktree-recovery/contracts.js';
+import {
+  inspectManagedWorktreeRegistration,
+  inspectWorktreeCleanupRecovery,
+  readBoundedOwnershipMetadata,
+} from './worktree-recovery/inspection.js';
 import type {
   ArchiveImpact,
   ArchiveWorktreeApproval,
@@ -90,8 +90,14 @@ async function pathExists(candidate: string): Promise<boolean> {
   try {
     await lstat(candidate);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (isObject(error) && error.code === 'ENOENT') return false;
+    throw new GitEngineError(
+      'OWNERSHIP_MISMATCH',
+      'The managed worktree path could not be inspected safely.',
+      { worktreePath: candidate },
+      { cause: error },
+    );
   }
 }
 
@@ -269,8 +275,28 @@ export class WorktreeService {
     const canonicalRoot = await realpath(managedRoot);
     const directory = await ownershipDirectory(managedRoot);
     const file = metadataPath(directory, id);
-    const value: unknown = JSON.parse(await readFile(file, 'utf8'));
-    const ownership = parseOwnership(value);
+    const metadata = await readBoundedOwnershipMetadata(file);
+    if (metadata.kind !== 'present') {
+      throw new GitEngineError(
+        'OWNERSHIP_MISMATCH',
+        metadata.kind === 'missing'
+          ? 'Worktree ownership metadata is missing.'
+          : 'Worktree ownership metadata is not a safe bounded regular file.',
+      );
+    }
+    let ownership: WorktreeOwnership;
+    try {
+      ownership = parseOwnership(JSON.parse(metadata.serialized));
+    } catch (error) {
+      throw new GitEngineError(
+        'OWNERSHIP_MISMATCH',
+        'Invalid worktree ownership metadata.',
+        {},
+        {
+          cause: error,
+        },
+      );
+    }
     if (ownership.managedRoot !== canonicalRoot) {
       throw new GitEngineError(
         'OWNERSHIP_MISMATCH',
@@ -293,6 +319,19 @@ export class WorktreeService {
     return ownership.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
+  /**
+   * Classifies an interrupted cleanup without mutating Git, ownership metadata, or the filesystem.
+   * Missing metadata is accepted as completed only when every exact owned residue is also absent.
+   */
+  public async inspectCleanupRecovery(
+    binding: WorktreeCleanupRecoveryBinding,
+  ): Promise<WorktreeCleanupRecoveryInspection> {
+    return await inspectWorktreeCleanupRecovery(this.repositories, binding, {
+      parseOwnership,
+      inspectImpact: async (ownership) => await this.#cleanupImpactForAuthoritative(ownership),
+    });
+  }
+
   public async inspect(ownership: WorktreeOwnership): Promise<ManagedWorktreeState> {
     const authoritative = await this.readOwnership(ownership.managedRoot, ownership.id);
     if (
@@ -305,50 +344,13 @@ export class WorktreeService {
         'Caller ownership does not match stored metadata.',
       );
     }
-    const missing = !(await pathExists(authoritative.worktreePath));
-    if (!missing) {
-      const actualPath = await realpath(authoritative.worktreePath);
-      if (
-        !isPathInside(authoritative.managedRoot, actualPath) ||
-        actualPath === authoritative.managedRoot
-      ) {
-        throw new GitEngineError('OWNERSHIP_MISMATCH', 'Owned worktree escaped its managed root.');
-      }
-    }
-    const branchExists = await this.repositories.branchExists(
-      authoritative.repositoryRoot,
-      authoritative.branch,
-    );
-    const branchOid = branchExists
-      ? await this.repositories.resolveRef(authoritative.repositoryRoot, authoritative.branch)
-      : null;
-    const status = missing ? null : await this.repositories.status(authoritative.worktreePath);
-    const mergedIntoBase = branchExists
-      ? await this.repositories.isAncestor(
-          authoritative.repositoryRoot,
-          authoritative.branch,
-          authoritative.baseRef,
-        )
-      : true;
-    return {
-      ownership: authoritative,
-      status,
-      branchExists,
-      branchOid,
-      mergedIntoBase,
-      missing,
-    };
+    return await this.#inspectAuthoritative(authoritative);
   }
 
   /** Returns the exact cleanup impact a confirmation UI should present and approve. */
   public async cleanupImpact(ownership: WorktreeOwnership): Promise<CleanupImpact> {
     const state = await this.inspect(ownership);
-    const expectedHead = await this.repositories.resolveRef(state.ownership.repositoryRoot, 'HEAD');
-    const dirtyPaths = (state.status?.entries ?? [])
-      .filter((entry) => entry.kind !== 'ignored')
-      .map((entry) => entry.path)
-      .sort();
-    return { ...state, expectedHead, dirtyPaths };
+    return await this.#cleanupImpactFromState(state);
   }
 
   public async summary(ownership: WorktreeOwnership): Promise<ManagedWorktreeSummary> {
@@ -500,6 +502,56 @@ export class WorktreeService {
       );
     }
 
+    let branchDeletion: { readonly ref: string; readonly expectedOid: string } | null = null;
+    if (approval.deleteBranch && state.branchExists) {
+      if (state.branchOid === null) {
+        throw new GitEngineError(
+          'STALE_APPROVAL',
+          'The managed branch no longer has the approved object ID.',
+        );
+      }
+      const branchRef = `refs/heads/${authoritative.branch}`;
+      const branchRefCheck = await this.repositories.git.run(['check-ref-format', branchRef], {
+        allowNonZeroExit: true,
+      });
+      if (branchRefCheck.exitCode !== 0) {
+        throw new GitEngineError(
+          'OWNERSHIP_MISMATCH',
+          'The managed branch does not form a valid local branch reference.',
+        );
+      }
+      branchDeletion = { ref: branchRef, expectedOid: state.branchOid };
+    }
+
+    const registrationBeforeRemoval = await inspectManagedWorktreeRegistration(
+      this.repositories,
+      authoritative.repositoryRoot,
+      authoritative.worktreePath,
+      authoritative.branch,
+    );
+    const exactRegistrationMatchesOwnedBranch =
+      registrationBeforeRemoval.exactPathRegistered &&
+      registrationBeforeRemoval.exactPathMatchesBranch &&
+      state.branchOid !== null &&
+      registrationBeforeRemoval.exactPathHeadOid === state.branchOid;
+    const presentWorktreeMatchesOwnedBranch =
+      state.status !== null &&
+      state.status.branch === authoritative.branch &&
+      state.status.headOid === state.branchOid;
+    if (
+      registrationBeforeRemoval.ambiguous ||
+      registrationBeforeRemoval.branchRegisteredElsewhere ||
+      (state.missing
+        ? registrationBeforeRemoval.exactPathRegistered && !exactRegistrationMatchesOwnedBranch
+        : !exactRegistrationMatchesOwnedBranch || !presentWorktreeMatchesOwnedBranch)
+    ) {
+      throw new GitEngineError(
+        'OWNERSHIP_MISMATCH',
+        'The managed worktree path is not registered to the exact owned branch and commit.',
+      );
+    }
+    const missingPathRegistration = state.missing && registrationBeforeRemoval.exactPathRegistered;
+
     await persistOwnership({
       ...authoritative,
       status: 'cleanup-pending',
@@ -508,8 +560,8 @@ export class WorktreeService {
 
     let worktreeRemoved = false;
     if (state.missing) {
-      await this.repositories.git.run(
-        [
+      if (missingPathRegistration) {
+        await this.repositories.git.run([
           '-C',
           authoritative.repositoryRoot,
           'worktree',
@@ -517,32 +569,154 @@ export class WorktreeService {
           '--force',
           '--',
           authoritative.worktreePath,
-        ],
-        { allowNonZeroExit: true },
-      );
-      worktreeRemoved = true;
+        ]);
+      }
     } else {
       const args = ['-C', authoritative.repositoryRoot, 'worktree', 'remove'];
       if (dirty) args.push('--force');
       args.push('--', authoritative.worktreePath);
       await this.repositories.git.run(args);
-      worktreeRemoved = true;
     }
+
+    const [worktreeStillPresent, registrationAfterRemoval] = await Promise.all([
+      pathExists(authoritative.worktreePath),
+      inspectManagedWorktreeRegistration(
+        this.repositories,
+        authoritative.repositoryRoot,
+        authoritative.worktreePath,
+        authoritative.branch,
+      ),
+    ]);
+    if (
+      worktreeStillPresent ||
+      registrationAfterRemoval.ambiguous ||
+      registrationAfterRemoval.exactPathRegistered ||
+      registrationAfterRemoval.branchRegisteredElsewhere
+    ) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'The managed worktree or branch remains registered; branch deletion was refused.',
+      );
+    }
+    worktreeRemoved = true;
+
     let branchDeleted = !state.branchExists;
-    if (approval.deleteBranch && state.branchExists) {
+    if (branchDeletion !== null) {
+      const [headBeforeDeletion, baseOidBeforeDeletion] = await Promise.all([
+        this.repositories.resolveRef(authoritative.repositoryRoot, 'HEAD'),
+        this.repositories.resolveRef(authoritative.repositoryRoot, authoritative.baseRef),
+      ]);
+      const mergedBeforeDeletion = await this.repositories.isAncestor(
+        authoritative.repositoryRoot,
+        branchDeletion.expectedOid,
+        baseOidBeforeDeletion,
+      );
+      const [headAfterMergeCheck, baseOidAfterMergeCheck] = await Promise.all([
+        this.repositories.resolveRef(authoritative.repositoryRoot, 'HEAD'),
+        this.repositories.resolveRef(authoritative.repositoryRoot, authoritative.baseRef),
+      ]);
+      if (
+        headBeforeDeletion !== approval.expectedHead ||
+        headAfterMergeCheck !== approval.expectedHead ||
+        baseOidAfterMergeCheck !== baseOidBeforeDeletion
+      ) {
+        throw new GitEngineError(
+          'STALE_APPROVAL',
+          'The primary HEAD or cleanup base changed before branch deletion.',
+        );
+      }
+      if (!mergedBeforeDeletion && !approval.allowUnmergedBranch) {
+        throw new GitEngineError(
+          'NOT_MERGED',
+          'The approved managed branch commit is no longer merged into its cleanup base.',
+          { branch: authoritative.branch, baseRef: authoritative.baseRef },
+        );
+      }
       await this.repositories.git.run([
         '-C',
         authoritative.repositoryRoot,
-        'branch',
-        '-D',
-        '--',
-        authoritative.branch,
+        'update-ref',
+        '-d',
+        branchDeletion.ref,
+        branchDeletion.expectedOid,
       ]);
       branchDeleted = true;
+    }
+    const [worktreeReappeared, registrationBeforeMetadataRemoval, branchExistsAfterDeletion] =
+      await Promise.all([
+        pathExists(authoritative.worktreePath),
+        inspectManagedWorktreeRegistration(
+          this.repositories,
+          authoritative.repositoryRoot,
+          authoritative.worktreePath,
+          authoritative.branch,
+        ),
+        this.repositories.branchExists(authoritative.repositoryRoot, authoritative.branch),
+      ]);
+    if (
+      worktreeReappeared ||
+      registrationBeforeMetadataRemoval.ambiguous ||
+      registrationBeforeMetadataRemoval.exactPathRegistered ||
+      registrationBeforeMetadataRemoval.branchRegisteredElsewhere ||
+      (approval.deleteBranch && branchExistsAfterDeletion)
+    ) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'Managed worktree residue changed while cleanup was running; metadata was retained.',
+      );
     }
     const directory = await ownershipDirectory(authoritative.managedRoot);
     await unlink(metadataPath(directory, authoritative.id));
     return { worktreeRemoved, branchDeleted, metadataRemoved: true };
+  }
+
+  async #inspectAuthoritative(authoritative: WorktreeOwnership): Promise<ManagedWorktreeState> {
+    const missing = !(await pathExists(authoritative.worktreePath));
+    if (!missing) {
+      const actualPath = await realpath(authoritative.worktreePath);
+      if (
+        !isPathInside(authoritative.managedRoot, actualPath) ||
+        actualPath === authoritative.managedRoot
+      ) {
+        throw new GitEngineError('OWNERSHIP_MISMATCH', 'Owned worktree escaped its managed root.');
+      }
+    }
+    const branchExists = await this.repositories.branchExists(
+      authoritative.repositoryRoot,
+      authoritative.branch,
+    );
+    const branchOid = branchExists
+      ? await this.repositories.resolveRef(authoritative.repositoryRoot, authoritative.branch)
+      : null;
+    const status = missing ? null : await this.repositories.status(authoritative.worktreePath);
+    const mergedIntoBase = branchExists
+      ? await this.repositories.isAncestor(
+          authoritative.repositoryRoot,
+          authoritative.branch,
+          authoritative.baseRef,
+        )
+      : true;
+    return {
+      ownership: authoritative,
+      status,
+      branchExists,
+      branchOid,
+      mergedIntoBase,
+      missing,
+    };
+  }
+
+  async #cleanupImpactForAuthoritative(authoritative: WorktreeOwnership): Promise<CleanupImpact> {
+    return await this.#cleanupImpactFromState(await this.#inspectAuthoritative(authoritative));
+  }
+
+  async #cleanupImpactFromState(state: ManagedWorktreeState): Promise<CleanupImpact> {
+    const expectedHead = await this.repositories.resolveRef(state.ownership.repositoryRoot, 'HEAD');
+    const dirtyPaths = (state.status?.entries ?? [])
+      .filter((entry) => entry.kind !== 'ignored')
+      .map((entry) => entry.path)
+      .sort();
+    return { ...state, expectedHead, dirtyPaths };
   }
 
   private assertManagedApprovalIdentity(

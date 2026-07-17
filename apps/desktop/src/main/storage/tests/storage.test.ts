@@ -203,6 +203,7 @@ function storedRun(overrides: Partial<StoredRunRecord> = {}): StoredRunRecord {
     cwd: '/tmp/forgeboard-worktrees/run-1',
     branch: 'forgeboard/agent-1',
     worktreeId: uuidFor(501),
+    worktreeState: 'active',
     repositoryRoot: '/tmp/forgeboard-project',
     managedRoot: '/tmp/forgeboard-worktrees',
     baseRef: 'HEAD',
@@ -537,13 +538,109 @@ describe('LocalStore', () => {
     expect(store.getRun(record.id)).toEqual(completed);
   });
 
+  it('uses exact dedicated worktree lifecycle transitions without clearing immutable bindings', () => {
+    const store = openStore();
+    const record = storedRun();
+    store.saveRun(record);
+    expect(() => store.saveRun({ ...record, worktreeState: 'cleaned' })).toThrow(
+      'only through its exact transition operation',
+    );
+    expect(() =>
+      store.transitionRunWorktreeState({
+        runId: record.id,
+        expectedWorktreeId: uuidFor(999),
+        expectedState: 'active',
+        nextState: 'cleanup-pending',
+      }),
+    ).toThrow('lifecycle changed');
+    expect(() =>
+      store.transitionRunWorktreeState({
+        runId: record.id,
+        expectedWorktreeId: record.worktreeId!,
+        expectedState: 'active',
+        nextState: 'cleaned',
+      }),
+    ).toThrow('Invalid run worktree lifecycle transition');
+
+    const pending = store.transitionRunWorktreeState(
+      {
+        runId: record.id,
+        expectedWorktreeId: record.worktreeId!,
+        expectedState: 'active',
+        nextState: 'cleanup-pending',
+      },
+      new Date('2026-07-14T18:00:00.000Z'),
+    );
+    expect(pending).toMatchObject({
+      worktreeState: 'cleanup-pending',
+      worktreeId: record.worktreeId,
+      cwd: record.cwd,
+      branch: record.branch,
+      repositoryRoot: record.repositoryRoot,
+      managedRoot: record.managedRoot,
+      baseRef: record.baseRef,
+      baseCommit: record.baseCommit,
+      updatedAt: '2026-07-14T18:00:00.000Z',
+    });
+    expect(() =>
+      store.transitionRunWorktreeState({
+        runId: record.id,
+        expectedWorktreeId: record.worktreeId!,
+        expectedState: 'active',
+        nextState: 'cleanup-pending',
+      }),
+    ).toThrow('lifecycle changed');
+    const activeAgain = store.transitionRunWorktreeState(
+      {
+        runId: record.id,
+        expectedWorktreeId: record.worktreeId!,
+        expectedState: 'cleanup-pending',
+        nextState: 'active',
+      },
+      new Date('2026-07-14T17:00:00.000Z'),
+    );
+    expect(activeAgain.updatedAt).toBe('2026-07-14T18:00:00.000Z');
+    store.transitionRunWorktreeState({
+      runId: record.id,
+      expectedWorktreeId: record.worktreeId!,
+      expectedState: 'active',
+      nextState: 'cleanup-pending',
+    });
+    const cleaned = store.transitionRunWorktreeState({
+      runId: record.id,
+      expectedWorktreeId: record.worktreeId!,
+      expectedState: 'cleanup-pending',
+      nextState: 'cleaned',
+    });
+    expect(cleaned).toMatchObject({
+      worktreeState: 'cleaned',
+      worktreeId: record.worktreeId,
+      cwd: record.cwd,
+      branch: record.branch,
+    });
+    expect(() =>
+      store.transitionRunWorktreeState({
+        runId: record.id,
+        expectedWorktreeId: record.worktreeId!,
+        expectedState: 'cleaned',
+        nextState: 'active',
+      }),
+    ).toThrow('Invalid run worktree lifecycle transition');
+  });
+
   it('reads legacy run JSON with null durable-worktree fields', () => {
     const databasePath = createDatabasePath();
     const store = openStore(databasePath);
     closeStore(store);
     const legacy = storedRun();
     const legacyJson: Record<string, unknown> = { ...legacy };
-    for (const field of ['repositoryRoot', 'managedRoot', 'baseRef', 'baseCommit']) {
+    for (const field of [
+      'repositoryRoot',
+      'managedRoot',
+      'baseRef',
+      'baseCommit',
+      'worktreeState',
+    ]) {
       Reflect.deleteProperty(legacyJson, field);
     }
     const database = new DatabaseSync(databasePath);
@@ -570,6 +667,7 @@ describe('LocalStore', () => {
 
     const reopened = openStore(databasePath);
     expect(reopened.getRun(legacy.id)).toMatchObject({
+      worktreeState: 'active',
       repositoryRoot: null,
       managedRoot: null,
       baseRef: null,
@@ -633,6 +731,7 @@ describe('LocalStore', () => {
       cwd: '/tmp/forgeboard-worktrees/run-1',
       branch: 'forgeboard/agent-1',
       worktreeId: uuidFor(501),
+      worktreeState: 'active',
       repositoryRoot: '/tmp/forgeboard-project',
       managedRoot: '/tmp/forgeboard-worktrees',
       baseRef: 'HEAD',

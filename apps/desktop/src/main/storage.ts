@@ -102,6 +102,8 @@ import {
   listProjectRuns as listDatabaseProjectRuns,
   recoverInterruptedRuns as recoverDatabaseInterruptedRuns,
   saveRun as saveDatabaseRun,
+  transitionRunWorktreeState as transitionDatabaseRunWorktreeState,
+  type RunWorktreeStateTransition,
 } from './storage/runs-audit.js';
 import {
   createReviewNote as createDatabaseReviewNote,
@@ -163,6 +165,7 @@ export type {
   InterruptedCheckRecoveryReport,
   StoredCheckExecutionRecord,
   StoredRunRecord,
+  StoredRunWorktreeState,
   TrustedExtensionLedgerRecord,
   TrustedExtensionState,
 } from './storage-schemas.js';
@@ -523,6 +526,18 @@ export class LocalStore {
     const saved = saveDatabaseRun(this.database, record);
     this.notifyDurableChange();
     return saved;
+  }
+
+  transitionRunWorktreeState(
+    input: Omit<RunWorktreeStateTransition, 'transitionedAt'>,
+    now = new Date(),
+  ): StoredRunRecord {
+    const transitioned = transitionDatabaseRunWorktreeState(this.database, {
+      ...input,
+      transitionedAt: now.toISOString(),
+    });
+    this.notifyDurableChange();
+    return transitioned;
   }
 
   getRun(runId: string): StoredRunRecord | undefined {

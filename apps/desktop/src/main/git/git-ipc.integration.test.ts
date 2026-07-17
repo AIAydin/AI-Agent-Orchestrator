@@ -526,6 +526,9 @@ function createHarness(
       project = nextProject;
       return project;
     },
+    transitionRunWorktreeState: () => {
+      throw new Error('This primary-checkout fixture has no managed worktree lifecycle.');
+    },
   };
   const window = { isDestroyed: () => false } as BrowserWindow;
   const settings = {

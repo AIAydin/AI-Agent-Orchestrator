@@ -42,6 +42,7 @@ import { createNativeGitDelegateAuthorizer } from './git/delegates/native-confir
 import { createBundledGitRepositoryService } from './git/git-runtime.js';
 import { IntegrityService } from './integrity/service.js';
 import { DataOperationGate } from './lifecycle/data-operation-gate.js';
+import { createProcessQuiescenceAdmission } from './lifecycle/process-quiescence.js';
 import { performPrivacyDeletion } from './lifecycle/privacy-deletion.js';
 import { OutboundActionGate } from './outbound/outbound-action-gate.js';
 import { PreviewIpcService } from './previews/preview-ipc.js';
@@ -275,9 +276,6 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const previews = new PreviewIpcService(dialog, store, () =>
     store.getSettings(createDefaultSettings()),
   );
-  const git = new GitIpcService(dialog, store, repositories, () =>
-    store.getSettings(createDefaultSettings()),
-  );
   const checks = new CheckIpcService(
     dialog,
     store,
@@ -296,6 +294,21 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     withGitDelegateAuthorization: async (authorize, operation) =>
       await repositories.git.withDelegateAuthorization(authorize, operation),
   });
+  const git = new GitIpcService(
+    dialog,
+    store,
+    repositories,
+    () => store.getSettings(createDefaultSettings()),
+    undefined,
+    {
+      withCleanupAdmission: createProcessQuiescenceAdmission(dataOperations, [
+        workflows,
+        runs,
+        previews,
+        checks,
+      ]),
+    },
+  );
   const resumeDataServices = (): void => {
     recovery.resumeAfterExternalDataMutation();
     readiness.resume();

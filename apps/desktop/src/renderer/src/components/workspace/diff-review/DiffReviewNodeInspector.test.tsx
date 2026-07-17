@@ -27,6 +27,7 @@ const runs: readonly DiffReviewAgentRunOption[] = [
     agentLabel: 'Codex CLI',
     status: 'succeeded',
     branch: 'forgeboard/auth',
+    worktreeState: 'active',
     endedAt: '2026-07-16T15:00:00.000Z',
   },
   {
@@ -35,6 +36,7 @@ const runs: readonly DiffReviewAgentRunOption[] = [
     agentLabel: 'Claude Code',
     status: 'failed',
     branch: null,
+    worktreeState: 'active',
     endedAt: '2026-07-16T15:05:00.000Z',
   },
 ];
@@ -63,6 +65,7 @@ describe('DiffReviewNodeInspector', () => {
     expect(onOpenReview).toHaveBeenCalledWith({
       target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID },
       preferences: { viewMode: 'split', showWhitespace: true },
+      purpose: 'review',
     });
     expect(JSON.stringify(onOpenReview.mock.calls)).not.toMatch(/worktreeRoot|repositoryPath|cwd/u);
     expect(screen.getByText(/never hides or discards Git changes/u)).toBeTruthy();
@@ -93,20 +96,61 @@ describe('DiffReviewNodeInspector', () => {
       [...target.options].find((option) => option.value === `agent:${missingRunId}`),
     ).toHaveProperty('disabled', false);
     expect(screen.getByRole('option', { name: /outside recent picker/u })).toBeTruthy();
-    expect(screen.queryByText(/No recent writable agent runs/u)).toBeNull();
+    expect(screen.queryByText(/No recent active or interrupted-cleanup agent runs/u)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Open authoritative review' }));
     expect(onOpenReview).toHaveBeenCalledWith({
       target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: missingRunId },
       preferences: { viewMode: 'unified', showWhitespace: false },
+      purpose: 'review',
     });
 
     fireEvent.change(target, { target: { value: 'primary' } });
     expect(onTargetChange).toHaveBeenCalledWith({ kind: 'primary' });
   });
 
+  it('opens an interrupted cleanup only as recovery despite unavailable Git authority', () => {
+    const onOpenReview = vi.fn();
+    const cleanupPendingRun: DiffReviewAgentRunOption = {
+      ...runs[0]!,
+      worktreeState: 'cleanup-pending',
+    };
+    render(
+      <DiffReviewNodeInspector
+        {...baseProps()}
+        selectedTarget={{ kind: 'agent-run', runId: RUN_ID }}
+        agentRuns={[cleanupPendingRun]}
+        authority={{
+          state: 'unavailable',
+          reason: 'This agent worktree cleanup is incomplete and cannot be used safely.',
+        }}
+        onOpenReview={onOpenReview}
+      />,
+    );
+
+    expect(
+      screen.getByRole('option', {
+        name: /cleanup interrupted · recovery only/u,
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText('Cleanup recovery')).toBeTruthy();
+    expect(screen.getByText('Agent cleanup recovery')).toBeTruthy();
+    expect(screen.getByText(/Cleanup was interrupted for this exact agent run/u)).toBeTruthy();
+    const open = screen.getByRole('button', { name: 'Open cleanup recovery' });
+    expect(open).toHaveProperty('disabled', false);
+    expect(screen.queryByRole('button', { name: 'Open authoritative review' })).toBeNull();
+
+    fireEvent.click(open);
+    expect(onOpenReview).toHaveBeenCalledWith({
+      target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID },
+      preferences: { viewMode: 'unified', showWhitespace: false },
+      purpose: 'cleanup-recovery',
+    });
+  });
+
   it('shows bounded-history loading separately from exact main-process verification', () => {
     const missingRunId = '20000000-0000-4000-8000-000000000099';
+    const onOpenReview = vi.fn();
     const view = render(
       <DiffReviewNodeInspector
         {...baseProps()}
@@ -114,6 +158,7 @@ describe('DiffReviewNodeInspector', () => {
         agentRuns={[]}
         agentRunsLoaded={false}
         authority={{ state: 'loading', message: 'Verifying the exact persisted run…' }}
+        onOpenReview={onOpenReview}
       />,
     );
 
@@ -143,6 +188,7 @@ describe('DiffReviewNodeInspector', () => {
         agentRuns={[]}
         agentRunsLoaded
         authority={{ state: 'loading', message: 'Verifying the exact persisted run…' }}
+        onOpenReview={onOpenReview}
       />,
     );
     expect(screen.getByRole('option', { name: /outside recent picker/u })).toBeTruthy();
@@ -154,6 +200,7 @@ describe('DiffReviewNodeInspector', () => {
         agentRuns={[]}
         agentRunsLoaded
         authority={{ state: 'unavailable', reason: 'The exact run no longer owns a worktree.' }}
+        onOpenReview={onOpenReview}
       />,
     );
     expect(screen.getByRole('alert').textContent).toContain(
@@ -163,6 +210,19 @@ describe('DiffReviewNodeInspector', () => {
       'disabled',
       false,
     );
+    expect(screen.getByRole('button', { name: 'Check exact pinned run' })).toHaveProperty(
+      'disabled',
+      false,
+    );
+    expect(screen.queryByText('Agent cleanup recovery')).toBeNull();
+    expect(screen.queryByText(/Cleanup was interrupted/u)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check exact pinned run' }));
+    expect(onOpenReview).toHaveBeenCalledWith({
+      target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: missingRunId },
+      preferences: { viewMode: 'unified', showWhitespace: false },
+      purpose: 'review',
+    });
   });
 
   it('identifies and lets the UI bind an unpersisted legacy primary default', () => {
@@ -235,6 +295,7 @@ describe('DiffReviewNodeInspector', () => {
     expect(onOpenReview).toHaveBeenCalledWith({
       target: { kind: 'primary', projectId: PROJECT_ID },
       preferences: { viewMode: 'unified', showWhitespace: false },
+      purpose: 'review',
     });
     expect(onTargetChange).not.toHaveBeenCalled();
     expect(onPreferencesChange).not.toHaveBeenCalled();
@@ -266,7 +327,7 @@ describe('DiffReviewNodeInspector', () => {
         .map((alert) => alert.textContent)
         .join(' '),
     ).toContain('History storage is temporarily unavailable.');
-    expect(screen.queryByText(/No recent writable agent runs/u)).toBeNull();
+    expect(screen.queryByText(/No recent active or interrupted-cleanup agent runs/u)).toBeNull();
     expect(screen.getByRole('button', { name: 'Refresh persisted runs' })).toHaveProperty(
       'disabled',
       false,

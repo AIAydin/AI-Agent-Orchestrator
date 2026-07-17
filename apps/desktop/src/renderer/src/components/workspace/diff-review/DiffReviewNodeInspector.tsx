@@ -27,6 +27,7 @@ export interface DiffReviewAgentRunOption {
   readonly agentLabel: string;
   readonly status: DiffReviewTerminalRunStatus;
   readonly branch: string | null;
+  readonly worktreeState: 'active' | 'cleanup-pending';
   readonly endedAt: string;
 }
 
@@ -61,6 +62,7 @@ export interface DiffReviewGitSummary {
 export interface DiffReviewOpenRequest {
   readonly target: GitTargetInput;
   readonly preferences: DiffReviewDisplayPreferences;
+  readonly purpose: 'review' | 'cleanup-recovery';
 }
 
 export interface DiffReviewNodeInspectorProps {
@@ -97,6 +99,7 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
     selectedTarget.kind === 'primary'
       ? null
       : (runs.find((run) => run.runId === selectedTarget.runId) ?? null);
+  const cleanupRecovery = selectedRun?.worktreeState === 'cleanup-pending';
   const targetIsUnlisted = selectedTarget.kind === 'agent-run' && selectedRun === null;
   const parsedTarget = parseTarget(
     props.projectId,
@@ -108,7 +111,11 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
   const target = parsedTarget;
   const summaryMatches = target !== null && targetMatches(props.summary?.target, target);
   const configurationDisabled = props.locked || props.configurationReadOnly;
-  const canOpen = target !== null && props.authority.state === 'ready';
+  const canOpenUnlistedUnavailable =
+    targetIsUnlisted && props.agentRunsLoaded && props.authority.state === 'unavailable';
+  const canOpen =
+    target !== null &&
+    (props.authority.state === 'ready' || cleanupRecovery || canOpenUnlistedUnavailable);
   const targetValue =
     selectedTarget.kind === 'primary'
       ? PRIMARY_TARGET_VALUE
@@ -131,10 +138,12 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
       <header>
         <span>
           <GitCompareArrows size={15} aria-hidden="true" />
-          <strong>Authoritative Git review</strong>
+          <strong>{cleanupRecovery ? 'Agent cleanup recovery' : 'Authoritative Git review'}</strong>
         </span>
-        <span className={`status-chip ${canOpen && !targetIsLegacyDefault ? 'ok' : 'warning'}`}>
-          {authorityLabel(props.authority, targetIsInvalid, targetIsLegacyDefault)}
+        <span
+          className={`status-chip ${props.authority.state === 'ready' && !targetIsLegacyDefault ? 'ok' : 'warning'}`}
+        >
+          {authorityLabel(props.authority, targetIsInvalid, targetIsLegacyDefault, cleanupRecovery)}
         </span>
       </header>
 
@@ -203,8 +212,9 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
             ))}
           </select>
           <small id={`node-${props.nodeId}-diff-review-target-description`}>
-            Agent choices are finished persisted runs. Forgeboard resolves the selected run to its
-            owned worktree in the main process when the review opens.
+            Agent choices are finished persisted runs with either an active worktree or an
+            interrupted cleanup. Forgeboard resolves the opaque run in the main process; cleanup
+            recovery is never presented as Git-review authority.
           </small>
         </label>
 
@@ -260,6 +270,14 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
 
       <DiffReviewState authority={props.authority} targetIsInvalid={targetIsInvalid} />
 
+      {cleanupRecovery && (
+        <p className="diff-review-state warning" role="status">
+          <TriangleAlert size={14} aria-hidden="true" /> Cleanup was interrupted for this exact
+          agent run. Git review stays unavailable, but you can open cleanup recovery to prepare a
+          fresh safe plan.
+        </p>
+      )}
+
       {props.agentRunsError !== null && (
         <p className="diff-review-state warning" role="alert">
           <TriangleAlert size={14} aria-hidden="true" />
@@ -287,8 +305,9 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         runs.length === 0 &&
         !targetIsUnlisted && (
           <p className="diff-review-empty-state">
-            No recent writable agent runs are available in the picker. The primary checkout remains
-            available, and older pinned runs are always verified by exact run ID.
+            No recent active or interrupted-cleanup agent runs are available in the picker. The
+            primary checkout remains available, and older pinned runs are always verified by exact
+            run ID.
           </p>
         )}
 
@@ -298,10 +317,19 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         disabled={!canOpen}
         onClick={() => {
           if (target === null) return;
-          props.onOpenReview({ target, preferences: props.preferences });
+          props.onOpenReview({
+            target,
+            preferences: props.preferences,
+            purpose: cleanupRecovery ? 'cleanup-recovery' : 'review',
+          });
         }}
       >
-        <FileDiff size={14} aria-hidden="true" /> Open authoritative review
+        <FileDiff size={14} aria-hidden="true" />{' '}
+        {cleanupRecovery
+          ? 'Open cleanup recovery'
+          : canOpenUnlistedUnavailable
+            ? 'Check exact pinned run'
+            : 'Open authoritative review'}
       </button>
       <button
         className="button ghost diff-review-refresh-summary"
@@ -461,15 +489,19 @@ function uniqueRuns(runs: readonly DiffReviewAgentRunOption[]): DiffReviewAgentR
 
 function runOptionLabel(run: DiffReviewAgentRunOption): string {
   const branch = run.branch === null ? 'detached branch' : run.branch;
-  return `${run.nodeLabel} · ${run.agentLabel} · ${run.status} · ${branch}`;
+  const state =
+    run.worktreeState === 'cleanup-pending' ? 'cleanup interrupted · recovery only' : run.status;
+  return `${run.nodeLabel} · ${run.agentLabel} · ${state} · ${branch}`;
 }
 
 function authorityLabel(
   authority: DiffReviewAuthorityAvailability,
   targetIsInvalid: boolean,
   targetIsLegacyDefault: boolean,
+  cleanupRecovery: boolean,
 ): string {
   if (targetIsInvalid) return 'Invalid target';
+  if (cleanupRecovery) return 'Cleanup recovery';
   if (authority.state === 'unavailable') return 'Unavailable';
   if (authority.state === 'loading') return 'Checking';
   return targetIsLegacyDefault ? 'Default target' : 'Ready';

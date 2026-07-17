@@ -11,6 +11,11 @@ import type {
   GitTargetInput,
 } from '../../../../shared/git/contracts.js';
 import type {
+  GitWorktreeCleanupPlanView,
+  GitWorktreeCleanupPrepareOutcome,
+  GitWorktreeCleanupResultView,
+} from '../../../../shared/git/lifecycle/contracts.js';
+import type {
   GitShippingPlanView,
   GitShippingResultView,
 } from '../../../../shared/git/shipping-contracts.js';
@@ -23,6 +28,7 @@ const worktreeId = '55555555-5555-4555-8555-555555555555';
 const commitPlanId = '22222222-2222-4222-8222-222222222222';
 const discardPlanId = '33333333-3333-4333-8333-333333333333';
 const shippingPlanId = '66666666-6666-4666-8666-666666666666';
+const cleanupPlanId = '88888888-8888-4888-8888-888888888888';
 const stagedHunkId = 'b'.repeat(20);
 const unstagedHunkId = 'a'.repeat(20);
 const headOid = 'c'.repeat(40);
@@ -160,6 +166,30 @@ const shippingResult: GitShippingResultView = {
   review,
 };
 
+const cleanupPlan: GitWorktreeCleanupPlanView = {
+  kind: 'cleanup-worktree',
+  recovery: false,
+  planId: cleanupPlanId,
+  expiresAt: '2026-07-14T18:05:00.000Z',
+  branch: 'forgeboard/agent-node-1',
+  baseRef: 'refs/heads/main',
+  clean: true,
+  mergedIntoBase: true,
+  dirtyPaths: [],
+  dirtyPathCount: 0,
+  dirtyPathsTruncated: false,
+  force: false,
+  deleteBranch: true,
+  allowDirty: false,
+  allowUnmergedBranch: false,
+};
+
+const cleanupResult: GitWorktreeCleanupResultView = {
+  worktreeRemoved: true,
+  branchDeleted: true,
+  metadataRemoved: true,
+};
+
 const reviewMock = vi.fn<(target: GitTargetInput) => Promise<IpcResult<GitReviewView>>>(() =>
   Promise.resolve(success(review)),
 );
@@ -181,6 +211,12 @@ const confirmCommitMock = vi.fn(() =>
 );
 const prepareShippingMock = vi.fn(() => Promise.resolve(success(shippingPlan)));
 const confirmShippingMock = vi.fn(() => Promise.resolve(success(shippingResult)));
+const prepareCleanupMock = vi.fn<() => Promise<IpcResult<GitWorktreeCleanupPrepareOutcome>>>(() =>
+  Promise.resolve(success(cleanupPlan)),
+);
+const confirmCleanupMock = vi.fn(() =>
+  Promise.resolve(success<GitWorktreeCleanupResultView | null>(null)),
+);
 const reviewNotesListMock = vi.fn((input: { readonly target: GitTargetInput }) =>
   Promise.resolve(success(reviewNotesFor(input.target))),
 );
@@ -207,6 +243,8 @@ beforeEach(() => {
     confirmCommitMock,
     prepareShippingMock,
     confirmShippingMock,
+    prepareCleanupMock,
+    confirmCleanupMock,
     reviewNotesListMock,
     reviewNoteCreateMock,
     reviewNoteUpdateMock,
@@ -229,6 +267,10 @@ beforeEach(() => {
         confirmCommit: confirmCommitMock,
         prepareShipping: prepareShippingMock,
         confirmShipping: confirmShippingMock,
+        lifecycle: {
+          prepareCleanup: prepareCleanupMock,
+          confirmCleanup: confirmCleanupMock,
+        },
         reviewNotes: {
           list: reviewNotesListMock,
           create: reviewNoteCreateMock,
@@ -431,6 +473,7 @@ describe('GitReviewDialog', () => {
       true,
     );
     expect(screen.queryByRole('button', { name: 'Stage hunk' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Prepare safe cleanup/u })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Staged & unstaged' }));
     fireEvent.click(screen.getByRole('button', { name: /src\/app\.ts Modified/ }));
@@ -440,6 +483,186 @@ describe('GitReviewDialog', () => {
       target: worktreeTarget,
       paths: ['src/app.ts'],
     });
+  });
+
+  it('discloses the exact safe cleanup policy before native confirmation and preserves on cancel', async () => {
+    reviewMock.mockResolvedValueOnce(
+      success({
+        ...agentReview,
+        dirty: false,
+        entries: [],
+        staged: { files: [], additions: 0, deletions: 0 },
+        unstaged: { files: [], additions: 0, deletions: 0 },
+      }),
+    );
+    const onClose = vi.fn();
+    const onCleanupSuccess = vi.fn();
+
+    render(
+      <GitReviewDialog
+        target={worktreeTarget}
+        projectName="Workshop"
+        onClose={onClose}
+        onCleanupSuccess={onCleanupSuccess}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Prepare safe cleanup/u }));
+    const disclosure = await screen.findByRole('alertdialog', {
+      name: 'Review safe agent-worktree cleanup',
+    });
+    expect(prepareCleanupMock).toHaveBeenCalledWith({ projectId, runId });
+    expect(confirmCleanupMock).not.toHaveBeenCalled();
+    expect(disclosure.textContent).toContain('forgeboard/agent-node-1');
+    expect(disclosure.textContent).toContain('refs/heads/main');
+    expect(disclosure.textContent).toContain('Clean — verified');
+    expect(disclosure.textContent).toContain('Yes — verified');
+    expect(disclosure.textContent).toContain('Relative dirty paths0');
+    expect(disclosure.textContent).toContain('Managed branch deletionRequired');
+    expect(disclosure.textContent).toContain('no force option exists');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' }));
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Continue to .*Clean up.* system confirmation/u,
+      }),
+    );
+    await waitFor(() =>
+      expect(confirmCleanupMock).toHaveBeenCalledWith({
+        planId: cleanupPlanId,
+      }),
+    );
+    expect(await screen.findByText(/Cleanup cancelled in the system confirmation/u)).toBeTruthy();
+    expect(onCleanupSuccess).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('shows bounded relative dirty evidence and blocks an ineligible cleanup plan', async () => {
+    prepareCleanupMock.mockResolvedValueOnce(
+      success({
+        ...cleanupPlan,
+        clean: false,
+        mergedIntoBase: false,
+        dirtyPaths: ['src/private-change.ts'],
+        dirtyPathCount: 4,
+        dirtyPathsTruncated: true,
+      }),
+    );
+    reviewMock.mockResolvedValueOnce(success(agentReview));
+
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Prepare safe cleanup/u }));
+    const disclosure = await screen.findByRole('alertdialog', {
+      name: 'Review safe agent-worktree cleanup',
+    });
+    expect(disclosure.textContent).toContain('src/private-change.ts');
+    expect(disclosure.textContent).toContain('Relative dirty paths (4)');
+    expect(disclosure.textContent).toContain('3 additional relative dirty paths are not shown');
+    expect(disclosure.textContent).toContain('This plan is not eligible for safe cleanup');
+    expect(
+      screen.getByRole('button', {
+        name: /Continue to .*Clean up.* system confirmation/u,
+      }),
+    ).toHaveProperty('disabled', true);
+    expect(confirmCleanupMock).not.toHaveBeenCalled();
+  });
+
+  it('closes and emits a path-free refresh notice only after complete cleanup', async () => {
+    confirmCleanupMock.mockResolvedValueOnce(success(cleanupResult));
+    reviewMock.mockResolvedValueOnce(success(agentReview));
+    const onClose = vi.fn();
+    const onCleanupSuccess = vi.fn();
+
+    render(
+      <GitReviewDialog
+        target={worktreeTarget}
+        projectName="Workshop"
+        onClose={onClose}
+        onCleanupSuccess={onCleanupSuccess}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Prepare safe cleanup/u }));
+    await screen.findByRole('alertdialog', {
+      name: 'Review safe agent-worktree cleanup',
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Continue to .*Clean up.* system confirmation/u,
+      }),
+    );
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onCleanupSuccess).toHaveBeenCalledWith(
+      'Cleaned up the exact merged agent worktree and deleted its managed branch.',
+    );
+  });
+
+  it('refreshes uncertain cleanup state and keeps the review open without claiming success', async () => {
+    confirmCleanupMock.mockResolvedValueOnce(success({ ...cleanupResult, branchDeleted: false }));
+    reviewMock.mockResolvedValueOnce(success(agentReview));
+    const onClose = vi.fn();
+    const onCleanupSuccess = vi.fn();
+    const onCleanupStateUncertain = vi.fn();
+    const onError = vi.fn();
+
+    render(
+      <GitReviewDialog
+        target={worktreeTarget}
+        projectName="Workshop"
+        onClose={onClose}
+        onCleanupSuccess={onCleanupSuccess}
+        onCleanupStateUncertain={onCleanupStateUncertain}
+        onError={onError}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Prepare safe cleanup/u }));
+    await screen.findByRole('alertdialog', { name: 'Review safe agent-worktree cleanup' });
+    fireEvent.click(
+      screen.getByRole('button', { name: /Continue to .*Clean up.* system confirmation/u }),
+    );
+
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        'Cleanup did not report complete worktree, branch, and metadata removal. Refresh run history before continuing.',
+      ),
+    );
+    await waitFor(() => expect(onCleanupStateUncertain).toHaveBeenCalledTimes(1));
+    expect(onCleanupSuccess).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('keeps the review open and reports lifecycle preparation errors', async () => {
+    prepareCleanupMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'CONFLICT',
+        message: 'The managed branch is not merged into its base.',
+      },
+    });
+    reviewMock.mockResolvedValueOnce(success(agentReview));
+    const onClose = vi.fn();
+    const onCleanupStateUncertain = vi.fn();
+    const onError = vi.fn();
+
+    render(
+      <GitReviewDialog
+        target={worktreeTarget}
+        projectName="Workshop"
+        onClose={onClose}
+        onCleanupStateUncertain={onCleanupStateUncertain}
+        onError={onError}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Prepare safe cleanup/u }));
+    expect(await screen.findByText('The managed branch is not merged into its base.')).toBeTruthy();
+    expect(onError).toHaveBeenCalledWith('The managed branch is not merged into its base.');
+    await waitFor(() => expect(onCleanupStateUncertain).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('reviews an exact opaque agent delivery before invoking native confirmation', async () => {
@@ -511,7 +734,7 @@ describe('GitReviewDialog', () => {
     expect(screen.getByRole('button', { name: /src\/app\.ts Modified/ })).toBeTruthy();
   });
 
-  it('surfaces authoritative comparison errors without inventing renderer-side refs', async () => {
+  it('surfaces authoritative comparison errors while allowing exact cleanup recovery', async () => {
     const onError = vi.fn();
     reviewMock.mockResolvedValueOnce({
       ok: false,
@@ -520,21 +743,202 @@ describe('GitReviewDialog', () => {
         message: 'Owned worktree comparison failed safely.',
       },
     });
+    prepareCleanupMock.mockResolvedValueOnce(success({ ...cleanupPlan, recovery: true }));
 
     render(
       <GitReviewDialog
         target={worktreeTarget}
         projectName="Workshop"
+        cleanupRecovery
         onClose={vi.fn()}
         onError={onError}
       />,
     );
 
-    expect(await screen.findByText('Git review is unavailable')).toBeTruthy();
+    expect(
+      await screen.findByText('Git review is unavailable during cleanup recovery'),
+    ).toBeTruthy();
+    expect(screen.getByText('Recovery-only agent target')).toBeTruthy();
+    expect(screen.getByText('Recover interrupted cleanup in Workshop')).toBeTruthy();
     expect(screen.getByText('Owned worktree comparison failed safely.')).toBeTruthy();
     expect(screen.queryByRole('tab', { name: 'Changes vs base' })).toBeNull();
     expect(reviewMock).toHaveBeenCalledWith(worktreeTarget);
     expect(onError).toHaveBeenCalledWith('Owned worktree comparison failed safely.');
+
+    fireEvent.click(screen.getByRole('button', { name: /Prepare cleanup recovery/u }));
+    const disclosure = await screen.findByRole('alertdialog', {
+      name: 'Review interrupted cleanup recovery',
+    });
+    expect(disclosure.textContent).toContain('Interrupted cleanup recovery');
+    expect(prepareCleanupMock).toHaveBeenCalledWith({ projectId, runId });
+  });
+
+  it('refreshes and closes when interrupted cleanup is already reconciled', async () => {
+    reviewMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'OPERATION_FAILED',
+        message: 'This cleanup-pending run has no Git review authority.',
+      },
+    });
+    prepareCleanupMock.mockResolvedValueOnce(
+      success({
+        kind: 'cleanup-reconciled',
+        worktreeRemoved: true,
+        branchDeleted: true,
+        metadataRemoved: true,
+      }),
+    );
+    const onCleanupSuccess = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <GitReviewDialog
+        target={worktreeTarget}
+        projectName="Workshop"
+        cleanupRecovery
+        onClose={onClose}
+        onCleanupSuccess={onCleanupSuccess}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Prepare cleanup recovery/u }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onCleanupSuccess).toHaveBeenCalledWith(
+      'Reconciled the interrupted cleanup and marked the exact agent worktree as cleaned.',
+    );
+    expect(confirmCleanupMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('reports an exact active-intact reactivation only from an explicit recovery session', async () => {
+    reviewMock
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: 'OPERATION_FAILED',
+          message: 'This cleanup-pending run has no Git review authority.',
+        },
+      })
+      .mockResolvedValueOnce(success(agentReview));
+    prepareCleanupMock.mockResolvedValueOnce(success(cleanupPlan));
+    const onCleanupTargetReactivated = vi.fn();
+
+    render(
+      <GitReviewDialog
+        target={worktreeTarget}
+        projectName="Workshop"
+        cleanupRecovery
+        onClose={vi.fn()}
+        onCleanupTargetReactivated={onCleanupTargetReactivated}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Prepare cleanup recovery/u }));
+    expect(
+      await screen.findByRole('alertdialog', { name: 'Review safe agent-worktree cleanup' }),
+    ).toBeTruthy();
+    expect(onCleanupTargetReactivated).toHaveBeenCalledWith(
+      worktreeTarget,
+      'Verified the agent worktree is intact and restored its active lifecycle state.',
+    );
+    await waitFor(() => expect(reviewMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows cleanup recovery progress and preparation errors in the unavailable review', async () => {
+    reviewMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'OPERATION_FAILED',
+        message: 'This cleanup-pending run has no Git review authority.',
+      },
+    });
+    let resolvePrepare!: (result: IpcResult<GitWorktreeCleanupPrepareOutcome>) => void;
+    prepareCleanupMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePrepare = resolve;
+      }),
+    );
+
+    render(
+      <GitReviewDialog
+        target={worktreeTarget}
+        projectName="Workshop"
+        cleanupRecovery
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Prepare cleanup recovery/u }));
+    expect(await screen.findByText('Preparing cleanup recovery')).toBeTruthy();
+    resolvePrepare({
+      ok: false,
+      error: {
+        code: 'OPERATION_FAILED',
+        message: 'Cleanup recovery could not revalidate the exact managed worktree.',
+      },
+    });
+    expect(
+      await screen.findByText('Cleanup recovery could not revalidate the exact managed worktree.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('keeps an ordinary unavailable agent review neutral without explicit recovery intent', async () => {
+    reviewMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'OPERATION_FAILED',
+        message: 'Owned worktree comparison failed safely.',
+      },
+    });
+
+    const onCleanupTargetReactivated = vi.fn();
+    render(
+      <GitReviewDialog
+        target={worktreeTarget}
+        projectName="Workshop"
+        onClose={vi.fn()}
+        onCleanupTargetReactivated={onCleanupTargetReactivated}
+      />,
+    );
+
+    expect(await screen.findByText('Git review is unavailable')).toBeTruthy();
+    expect(screen.getByText('Authoritative agent worktree')).toBeTruthy();
+    expect(screen.getByText('Review changes in Workshop')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Prepare safe cleanup/u })).toBeTruthy();
+    expect(screen.queryByText('Recovery-only agent target')).toBeNull();
+    expect(screen.queryByText(/interrupted cleanup/iu)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Prepare safe cleanup/u }));
+    expect(
+      await screen.findByRole('alertdialog', { name: 'Review safe agent-worktree cleanup' }),
+    ).toBeTruthy();
+    expect(onCleanupTargetReactivated).not.toHaveBeenCalled();
+  });
+
+  it('reveals recovery for a neutral unavailable target only after main returns a recovery plan', async () => {
+    reviewMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'OPERATION_FAILED',
+        message: 'The exact pinned run is outside recent history and unavailable for Git review.',
+      },
+    });
+    prepareCleanupMock.mockResolvedValueOnce(success({ ...cleanupPlan, recovery: true }));
+
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    expect(await screen.findByText('Authoritative agent worktree')).toBeTruthy();
+    expect(screen.queryByText('Recovery-only agent target')).toBeNull();
+    expect(screen.queryByText(/interrupted cleanup/iu)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Prepare safe cleanup/u }));
+    const disclosure = await screen.findByRole('alertdialog', {
+      name: 'Review interrupted cleanup recovery',
+    });
+    expect(disclosure.textContent).toContain('Interrupted cleanup recovery');
+    expect(prepareCleanupMock).toHaveBeenCalledWith({ projectId, runId });
   });
 });
 

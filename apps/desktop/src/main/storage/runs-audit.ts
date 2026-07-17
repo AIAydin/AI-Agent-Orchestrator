@@ -3,12 +3,14 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AuditEventSchema, type AuditEvent } from '../../shared/application/contracts.js';
 import {
   StoredRunRecordSchema,
+  StoredRunWorktreeStateSchema,
   type InterruptedRunRecoveryReport,
   type StoredRunRecord,
+  type StoredRunWorktreeState,
 } from '../storage-schemas.js';
 import { transaction } from './database.js';
 import { type AuditRow, type JsonRow } from './values.js';
-import { writeAudit, writeRun } from './writes.js';
+import { writeAudit, writeRun, writeRunForWorktreeTransition } from './writes.js';
 
 export function appendAudit(
   database: DatabaseSync,
@@ -43,6 +45,48 @@ export function saveRun(database: DatabaseSync, record: StoredRunRecord): Stored
   const parsed = StoredRunRecordSchema.parse(record);
   writeRun(database, parsed);
   return parsed;
+}
+
+export interface RunWorktreeStateTransition {
+  readonly runId: string;
+  readonly expectedWorktreeId: string;
+  readonly expectedState: StoredRunWorktreeState;
+  readonly nextState: StoredRunWorktreeState;
+  readonly transitionedAt: string;
+}
+
+export function transitionRunWorktreeState(
+  database: DatabaseSync,
+  input: RunWorktreeStateTransition,
+): StoredRunRecord {
+  const runId = StoredRunRecordSchema.shape.id.parse(input.runId);
+  const expectedWorktreeId = parseUuid(input.expectedWorktreeId);
+  const expectedState = StoredRunWorktreeStateSchema.parse(input.expectedState);
+  const nextState = StoredRunWorktreeStateSchema.parse(input.nextState);
+  const transitionedAt = StoredRunRecordSchema.shape.updatedAt.parse(input.transitionedAt);
+  if (!isAllowedWorktreeStateTransition(expectedState, nextState)) {
+    throw new Error(`Invalid run worktree lifecycle transition: ${expectedState} -> ${nextState}.`);
+  }
+  return transaction(database, () => {
+    const row = database.prepare('SELECT value_json FROM agent_runs WHERE id = ?').get(runId) as
+      | JsonRow
+      | undefined;
+    if (row === undefined) throw new Error('The selected agent run no longer exists.');
+    const current = StoredRunRecordSchema.parse(JSON.parse(row.value_json));
+    if (current.worktreeId !== expectedWorktreeId || current.worktreeState !== expectedState) {
+      throw new Error('The agent run worktree lifecycle changed before the exact transition.');
+    }
+    const next = StoredRunRecordSchema.parse({
+      ...current,
+      worktreeState: nextState,
+      updatedAt:
+        Date.parse(transitionedAt) > Date.parse(current.updatedAt)
+          ? transitionedAt
+          : current.updatedAt,
+    });
+    writeRunForWorktreeTransition(database, next);
+    return next;
+  });
 }
 
 export function getRun(database: DatabaseSync, runId: string): StoredRunRecord | undefined {
@@ -96,4 +140,18 @@ export function recoverInterruptedRuns(
     });
   }
   return { lostRunIds, recoveredAt };
+}
+
+function isAllowedWorktreeStateTransition(
+  current: StoredRunWorktreeState,
+  next: StoredRunWorktreeState,
+): boolean {
+  return (
+    (current === 'active' && next === 'cleanup-pending') ||
+    (current === 'cleanup-pending' && (next === 'active' || next === 'cleaned'))
+  );
+}
+
+function parseUuid(value: string): string {
+  return StoredRunRecordSchema.shape.id.parse(value);
 }

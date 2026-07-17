@@ -42,6 +42,7 @@ describe('run-history contracts', () => {
         'status',
         'updatedAt',
         'worktreeAvailable',
+        'worktreeState',
       ].sort(),
     );
 
@@ -51,6 +52,13 @@ describe('run-history contracts', () => {
       ).toThrow();
     }
     expect(() => RunHistorySummarySchema.parse({ ...summary, status: 'running' })).toThrow();
+    expect(() =>
+      RunHistorySummarySchema.parse({
+        ...summary,
+        worktreeState: 'cleanup-pending',
+        worktreeAvailable: true,
+      }),
+    ).toThrow();
   });
 });
 
@@ -62,6 +70,7 @@ function persistedSummary() {
     adapterId: 'test-agent',
     status: 'succeeded' as const,
     branch: 'forgeboard/agent-node',
+    worktreeState: 'active' as const,
     worktreeAvailable: true,
     startedAt: '2026-07-16T12:00:00.000Z',
     endedAt: '2026-07-16T12:01:00.000Z',

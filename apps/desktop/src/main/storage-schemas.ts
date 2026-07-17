@@ -12,6 +12,10 @@ import {
   ProjectSchema,
 } from '../shared/application/contracts.js';
 import { CheckExecutionViewSchema, type CheckExecutionView } from '../shared/checks/contracts.js';
+import {
+  RunHistoryWorktreeStateSchema,
+  type RunHistoryWorktreeState,
+} from '../shared/runs/contracts.js';
 
 export const StoredCheckExecutionRecordSchema = CheckExecutionViewSchema;
 export type StoredCheckExecutionRecord = CheckExecutionView;
@@ -26,6 +30,9 @@ export const StoredRunStatusSchema = z.enum([
   'lost',
 ]);
 
+export const StoredRunWorktreeStateSchema = RunHistoryWorktreeStateSchema;
+export type StoredRunWorktreeState = RunHistoryWorktreeState;
+
 export const StoredRunRecordSchema = z
   .object({
     id: z.string().uuid(),
@@ -36,6 +43,7 @@ export const StoredRunRecordSchema = z
     cwd: z.string().min(1),
     branch: z.string().nullable(),
     worktreeId: z.string().uuid().nullable(),
+    worktreeState: StoredRunWorktreeStateSchema.default('active'),
     repositoryRoot: z.string().min(1).nullable().default(null),
     managedRoot: z.string().min(1).nullable().default(null),
     baseRef: z.string().min(1).nullable().default(null),
@@ -51,7 +59,16 @@ export const StoredRunRecordSchema = z
     updatedAt: z.string().datetime(),
   })
   .strict();
-export type StoredRunRecord = z.infer<typeof StoredRunRecordSchema>;
+type ParsedStoredRunRecord = z.infer<typeof StoredRunRecordSchema>;
+export type StoredRunRecord = Omit<ParsedStoredRunRecord, 'worktreeState'> & {
+  readonly worktreeState?: StoredRunWorktreeState;
+};
+
+export function effectiveRunWorktreeState(
+  record: Pick<StoredRunRecord, 'worktreeState'>,
+): StoredRunWorktreeState {
+  return record.worktreeState ?? 'active';
+}
 
 export const TrustedExtensionStateSchema = z.enum(['pending', 'active', 'revoked']);
 export type TrustedExtensionState = z.infer<typeof TrustedExtensionStateSchema>;

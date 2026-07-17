@@ -85,6 +85,7 @@ import {
   WorkflowStartInputSchema,
 } from '../shared/workflow/contracts.js';
 import { createFileApi } from './files.js';
+import { createGitLifecycleApi } from './git/lifecycle/cleanup.js';
 import { createGitReviewNotesApi } from './git-review-notes.js';
 import { createRunHistoryApi } from './runs/history.js';
 import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
@@ -421,6 +422,7 @@ const api: ForgeboardApi = {
         GitShippingResultViewSchema.nullable(),
         input,
       ),
+    lifecycle: createGitLifecycleApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     reviewNotes: createGitReviewNotesApi(async (channel, ...args) => {
       const result: unknown = await ipcRenderer.invoke(channel, ...args);
       return result;

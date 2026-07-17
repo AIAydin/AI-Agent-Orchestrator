@@ -48,6 +48,7 @@ export {
   parseSubmodules,
 } from './repository/status-parser.js';
 export type * from './model/types.js';
+export type * from './repository/worktree-recovery/contracts.js';
 export { WorktreeService } from './repository/worktrees.js';
 
 export const GIT_ENGINE_PACKAGE_VERSION = '0.1.0';

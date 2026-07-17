@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import type { AppSettings, Project } from '../../shared/application/contracts.js';
 import type { LocalStore, StoredRunRecord } from '../storage.js';
+import { effectiveRunWorktreeState } from '../storage-schemas.js';
 
 const ResolveInputSchema = z.object({
   projectId: z.string().uuid(),
@@ -32,6 +33,7 @@ export type GitTargetResolutionErrorCode =
   | 'RUN_NOT_FOUND'
   | 'RUN_PROJECT_MISMATCH'
   | 'RUN_NOT_TERMINAL'
+  | 'WORKTREE_LIFECYCLE_INACTIVE'
   | 'RUN_HAS_NO_WORKTREE'
   | 'LEGACY_RUN_BINDING'
   | 'OWNERSHIP_UNAVAILABLE'
@@ -138,6 +140,15 @@ export class GitTargetResolver {
       throw new GitTargetResolutionError(
         'RUN_NOT_TERMINAL',
         'Wait for the agent run to finish before reviewing its worktree.',
+      );
+    }
+    const worktreeState = effectiveRunWorktreeState(run);
+    if (worktreeState !== 'active') {
+      throw new GitTargetResolutionError(
+        'WORKTREE_LIFECYCLE_INACTIVE',
+        worktreeState === 'cleaned'
+          ? 'This agent worktree has already been cleaned up.'
+          : 'This agent worktree cleanup is incomplete and cannot be used safely.',
       );
     }
 

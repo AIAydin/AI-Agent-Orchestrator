@@ -109,6 +109,7 @@ function runRecord(
     cwd: ownership.worktreePath,
     branch: ownership.branch,
     worktreeId: ownership.id,
+    worktreeState: 'active',
     repositoryRoot: ownership.repositoryRoot,
     managedRoot: ownership.managedRoot,
     baseRef: ownership.baseRef,
@@ -257,4 +258,16 @@ describe('GitTargetResolver', () => {
       'RUN_NOT_TERMINAL',
     );
   });
+
+  it.each(['cleanup-pending', 'cleaned'] as const)(
+    'rejects a terminal run whose worktree lifecycle is %s',
+    async (worktreeState) => {
+      const fixture = await createFixture({ worktreeState });
+
+      await expectResolutionCode(
+        resolver(fixture).resolve({ projectId: PROJECT_ID, runId: RUN_ID }),
+        'WORKTREE_LIFECYCLE_INACTIVE',
+      );
+    },
+  );
 });
