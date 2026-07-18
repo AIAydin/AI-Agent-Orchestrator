@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { GitAgentBaseComparisonView } from '../../../../shared/git/contracts.js';
 import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
 import {
+  GIT_AGENT_COMPARISON_PANEL_ID,
   GIT_BASE_PANEL_ID,
   GIT_WORKING_TREE_PANEL_ID,
   GitReviewModeTabs,
@@ -97,6 +98,7 @@ describe('GitReviewModeTabs', () => {
   it('links panels and supports click, Arrow, Home, and End selection', () => {
     render(<TabHarness />);
     const baseTab = screen.getByRole('tab', { name: 'Committed changes' });
+    const agentTab = screen.getByRole('tab', { name: 'Compare agents' });
     const workingTreeTab = screen.getByRole('tab', { name: 'Uncommitted changes' });
 
     expect(baseTab.getAttribute('aria-controls')).toBe(GIT_BASE_PANEL_ID);
@@ -105,6 +107,11 @@ describe('GitReviewModeTabs', () => {
 
     baseTab.focus();
     fireEvent.keyDown(baseTab, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(agentTab);
+    expect(agentTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel').id).toBe(GIT_AGENT_COMPARISON_PANEL_ID);
+
+    fireEvent.keyDown(agentTab, { key: 'ArrowRight' });
     expect(document.activeElement).toBe(workingTreeTab);
     expect(workingTreeTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tabpanel').id).toBe(GIT_WORKING_TREE_PANEL_ID);
@@ -122,7 +129,12 @@ describe('GitReviewModeTabs', () => {
 
 function TabHarness() {
   const [mode, setMode] = useState<GitReviewMode>('base-comparison');
-  const panelId = mode === 'base-comparison' ? GIT_BASE_PANEL_ID : GIT_WORKING_TREE_PANEL_ID;
+  const panelId =
+    mode === 'base-comparison'
+      ? GIT_BASE_PANEL_ID
+      : mode === 'agent-comparison'
+        ? GIT_AGENT_COMPARISON_PANEL_ID
+        : GIT_WORKING_TREE_PANEL_ID;
   return (
     <>
       <GitReviewModeTabs mode={mode} onChange={setMode} />

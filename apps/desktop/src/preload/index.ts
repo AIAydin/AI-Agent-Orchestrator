@@ -74,6 +74,7 @@ import { createFileApi } from './files.js';
 import { createCollaborationApi } from './collaboration/index.js';
 import { createGitConnectionsApi } from './git/connections/index.js';
 import { createGitLifecycleApi } from './git/lifecycle/cleanup.js';
+import { createGitAgentComparisonApi } from './git/comparison/bridge.js';
 import { createGitDeliveryReadinessApi } from './git/readiness/bridge.js';
 import { createGitIdentityApi } from './git/identity/bridge.js';
 import { createGitRemoteDeliveryApi } from './git/remote/index.js';
@@ -404,6 +405,9 @@ const api: ForgeboardApi = {
         GitShippingResultViewSchema.nullable(),
         input,
       ),
+    comparison: createGitAgentComparisonApi((channel, ...args) =>
+      ipcRenderer.invoke(channel, ...args),
+    ),
     readiness: createGitDeliveryReadinessApi((channel, ...args) =>
       ipcRenderer.invoke(channel, ...args),
     ),

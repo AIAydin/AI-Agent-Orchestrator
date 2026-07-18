@@ -61,8 +61,22 @@ describe('ExtensionManager', () => {
     const updated = await manager.approve(updatePlan.planId, 7);
     expect(updated.installed[0]?.manifest.version).toBe('1.1.0');
 
-    await expect(manager.remove('example.notes', 'wrong')).rejects.toThrow('Type example.notes');
-    const removed = await manager.remove('example.notes', 'example.notes');
+    await expect(manager.planRemoval('example.notes', 'wrong', 7)).rejects.toThrow(
+      'Type example.notes',
+    );
+    const abandonedRemoval = await manager.planRemoval('example.notes', 'example.notes', 12);
+    manager.discardOwner(12);
+    await expect(manager.confirmRemoval(abandonedRemoval.planId, 12)).rejects.toThrow('expired');
+    const removalPlan = await manager.planRemoval('example.notes', 'example.notes', 7);
+    expect(removalPlan).toMatchObject({
+      extensionId: 'example.notes',
+      extensionName: 'Example notes',
+      version: '1.1.0',
+      manifestDigest: updated.installed[0]?.record.manifestDigest,
+      snapshotDigest: updated.installed[0]?.record.snapshotDigest,
+    });
+    await expect(manager.confirmRemoval(removalPlan.planId, 8)).rejects.toThrow('belongs');
+    const removed = await manager.confirmRemoval(removalPlan.planId, 7);
     expect(removed.installed).toEqual([]);
     expect(removed.quarantined[0]).toMatchObject({
       extensionId: 'example.notes',
@@ -77,8 +91,12 @@ describe('ExtensionManager', () => {
         { action: 'plan-update', outcome: 'allowed' },
         { action: 'update', outcome: 'allowed' },
         { action: 'remove', outcome: 'denied' },
+        { action: 'plan-remove', outcome: 'allowed' },
         { action: 'remove', outcome: 'allowed' },
       ]),
+    );
+    expect(trustStore.eventOrder.indexOf('audit:remove:allowed')).toBeLessThan(
+      trustStore.eventOrder.indexOf('revoke:example.notes'),
     );
   });
 
@@ -99,6 +117,66 @@ describe('ExtensionManager', () => {
     expect((await manager.list()).installed).toEqual([]);
   });
 
+  it('audits missing, expired, and changed removal authority without mutating trust', async () => {
+    const root = await temporaryRoot();
+    const source = join(root, 'downloaded-extension');
+    const registry = join(root, 'user-data', 'extensions');
+    const service = new LocalExtensionService(registry);
+    const audits: { action: string; outcome: string }[] = [];
+    const trustStore = new FakeExtensionTrustStore(audits);
+    let now = new Date();
+    const manager = new ExtensionManager(service, trustStore, () => now);
+
+    await expect(manager.planRemoval('example.notes', 'example.notes', 9)).rejects.toThrow(
+      'not installed',
+    );
+    await writeExtension(source, '1.0.0');
+    const installPlan = await manager.plan(source, 9);
+    await manager.approve(installPlan.planId, 9);
+    const expired = await manager.planRemoval('example.notes', 'example.notes', 9);
+    now = new Date(now.getTime() + 16 * 60 * 1_000);
+    await expect(manager.confirmRemoval(expired.planId, 9)).rejects.toThrow('expired');
+    expect((await service.discover()).installed).toHaveLength(1);
+
+    const changed = await manager.planRemoval('example.notes', 'example.notes', 9);
+    await writeExtension(source, '1.1.0');
+    const replacement = await service.planFromSelectedPath(source);
+    await service.update(
+      'example.notes',
+      replacement,
+      createExtensionApproval(
+        replacement,
+        { confirmed: true, permissions: replacement.requestedPermissions },
+        new Date(),
+      ),
+    );
+    await expect(manager.confirmRemoval(changed.planId, 9)).rejects.toThrow('changed');
+    expect(trustStore.getTrustedExtension('example.notes')?.state).toBe('active');
+    expect(
+      audits.filter((event) => event.action === 'remove' && event.outcome === 'denied'),
+    ).toHaveLength(3);
+  });
+
+  it('fails closed before revoke or deletion when the allowed removal audit cannot persist', async () => {
+    const root = await temporaryRoot();
+    const source = join(root, 'downloaded-extension');
+    const service = new LocalExtensionService(join(root, 'user-data', 'extensions'));
+    const trustStore = new FakeExtensionTrustStore();
+    const manager = new ExtensionManager(service, trustStore);
+    await writeExtension(source, '1.0.0');
+    const installPlan = await manager.plan(source, 4);
+    await manager.approve(installPlan.planId, 4);
+    const removal = await manager.planRemoval('example.notes', 'example.notes', 4);
+    trustStore.failAllowedRemovalAudit = true;
+
+    await expect(manager.confirmRemoval(removal.planId, 4)).rejects.toThrow(
+      'removal audit unavailable',
+    );
+    expect(trustStore.getTrustedExtension('example.notes')?.state).toBe('active');
+    expect((await service.discover()).installed).toHaveLength(1);
+    expect(trustStore.operations).not.toContain('revoke:example.notes');
+  });
+
   it('rejects same-version and downgrade plans before replacing active trust', async () => {
     const root = await temporaryRoot();
     const source = join(root, 'downloaded-extension');
@@ -112,9 +190,13 @@ describe('ExtensionManager', () => {
     await manager.approve(installPlan.planId, 7);
     const activeBefore = trustStore.getTrustedExtension('example.notes');
 
-    await expect(manager.plan(source, 7)).rejects.toMatchObject({ code: 'DOWNGRADE_DENIED' });
+    await expect(manager.plan(source, 7)).rejects.toMatchObject({
+      code: 'DOWNGRADE_DENIED',
+    });
     await writeExtension(source, '0.9.0');
-    await expect(manager.plan(source, 7)).rejects.toMatchObject({ code: 'DOWNGRADE_DENIED' });
+    await expect(manager.plan(source, 7)).rejects.toMatchObject({
+      code: 'DOWNGRADE_DENIED',
+    });
 
     expect(trustStore.getTrustedExtension('example.notes')).toEqual(activeBefore);
     expect(trustStore.operations.filter((operation) => operation.startsWith('stage:'))).toEqual([
@@ -269,6 +351,8 @@ describe('ExtensionManager', () => {
 class FakeExtensionTrustStore implements ExtensionTrustStore {
   readonly records = new Map<string, TrustedExtensionLedgerRecord>();
   readonly operations: string[] = [];
+  readonly eventOrder: string[] = [];
+  failAllowedRemovalAudit = false;
 
   public constructor(private readonly audits: { action: string; outcome: string }[] = []) {}
 
@@ -277,7 +361,11 @@ class FakeExtensionTrustStore implements ExtensionTrustStore {
     action: string,
     outcome: 'allowed' | 'denied' | 'failed',
   ): void {
+    if (this.failAllowedRemovalAudit && action === 'remove' && outcome === 'allowed') {
+      throw new Error('removal audit unavailable');
+    }
     this.audits.push({ action, outcome });
+    this.eventOrder.push(`audit:${action}:${outcome}`);
   }
 
   public stageTrustedExtension(record: TrustedExtensionLedgerRecord): TrustedExtensionLedgerRecord {
@@ -293,7 +381,11 @@ class FakeExtensionTrustStore implements ExtensionTrustStore {
   ): TrustedExtensionLedgerRecord {
     const current = this.required(extensionId);
     if (current.operationId !== operationId) throw new Error('operation mismatch');
-    const active = { ...current, state: 'active' as const, updatedAt: activatedAt.toISOString() };
+    const active = {
+      ...current,
+      state: 'active' as const,
+      updatedAt: activatedAt.toISOString(),
+    };
     this.operations.push(`activate:${extensionId}`);
     this.records.set(extensionId, active);
     return active;
@@ -337,6 +429,7 @@ class FakeExtensionTrustStore implements ExtensionTrustStore {
       updatedAt: revokedAt.toISOString(),
     };
     this.operations.push(`revoke:${extensionId}`);
+    this.eventOrder.push(`revoke:${extensionId}`);
     this.records.set(extensionId, revoked);
     return revoked;
   }

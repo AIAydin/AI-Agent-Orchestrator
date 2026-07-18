@@ -178,10 +178,13 @@ export function WorkspaceCommandBar({
         <Command size={14} /> Commands <kbd>{commandPaletteShortcut}</kbd>
       </button>
       <button
+        id="workspace-notifications-trigger"
         className="icon-button"
         type="button"
         aria-label="Notifications"
         aria-expanded={notificationsOpen}
+        aria-haspopup="dialog"
+        aria-controls={notificationsOpen ? 'workspace-notifications' : undefined}
         title="Local notifications"
         onClick={onToggleNotifications}
       >

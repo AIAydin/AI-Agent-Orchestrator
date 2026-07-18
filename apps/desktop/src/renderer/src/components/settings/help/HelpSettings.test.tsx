@@ -90,6 +90,27 @@ describe('HelpSettings', () => {
     expect(screen.getByText(/rejected without force/u)).toBeTruthy();
   });
 
+  it('covers preview collisions, honest Git conflicts, offline sharing, and database recovery', () => {
+    render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
+    const search = screen.getByRole('searchbox', { name: 'Search local help' });
+
+    fireEvent.change(search, { target: { value: 'preview collision occupied' } });
+    expect(screen.getByText('A preview port is already in use')).toBeTruthy();
+    expect(screen.getByText(/Do not kill an unrelated process/u)).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: 'git cherry-pick conflict' } });
+    expect(screen.getByText('Git delivery stopped on a conflict')).toBeTruthy();
+    expect(screen.getByText(/does not choose a side/u)).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: 'collaboration offline websocket' } });
+    expect(screen.getByText('The collaboration server is offline')).toBeTruthy();
+    expect(screen.getByText(/Solo persistence does not depend/u)).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: 'malformed database quarantine' } });
+    expect(screen.getByText('An import or database recovery was rejected')).toBeTruthy();
+    expect(screen.getByText(/never edits the backup in place/u)).toBeTruthy();
+  });
+
   it('finds the OAuth-first Codex and Claude connection guide without claiming other providers', () => {
     render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
 

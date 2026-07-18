@@ -1,0 +1,44 @@
+.git-agent-comparison {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.git-agent-comparison-controls {
+  align-items: end;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(14rem, 1fr) minmax(16rem, 1fr) auto auto;
+}
+
+.git-agent-comparison-controls > span,
+.git-agent-comparison-controls label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.git-agent-comparison-controls small {
+  color: var(--text-muted);
+}
+
+.git-agent-comparison-controls select {
+  min-width: 0;
+}
+
+.git-agent-comparison-empty,
+.git-agent-comparison-error {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.git-agent-comparison-error {
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .git-agent-comparison-controls {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+}

@@ -190,8 +190,8 @@ not be reclassified as future work.
 
 ## Final documentation and audit
 
-- [ ] Complete README commands and user documentation.
-- [ ] Complete architecture, security/threat model, privacy, adapter/extension, collaboration,
+- [x] Complete README commands and user documentation.
+- [x] Complete architecture, security/threat model, privacy, adapter/extension, collaboration,
       signing, and troubleshooting documentation.
 - [ ] Audit every definition-of-done item against authoritative current-state evidence.
 - [ ] Prepare final handoff with feature summary, directory map, exact commands, test counts,
@@ -1559,3 +1559,36 @@ unchecked when only a subset of their required behavior has proof.
   all production builds. A fresh unsigned macOS arm64 unpacked app rebuilt against Electron 36.5.0,
   and the packaged first-run/safe-default/demo/real-agent smoke passed after the zero-configuration
   first-run heading was restored. The production dependency audit reported no known vulnerabilities.
+- 2026-07-18: extension removal now treats the renderer request only as intent, creates an exact
+  owner-bound 15-minute plan, presents a path-free cancel-default native review, and revalidates the
+  live owner, extension manifest, installed snapshot, and permissions before a required redacted
+  allowed audit is persisted ahead of revocation and deletion. Missing, inactive, mismatched,
+  cross-owner, expired, cancelled, replaced-window, privacy-reset, snapshot-drift, native-dialog,
+  and audit failures all deny the mutation. External-browser update/preview handoffs and
+  diagram/whiteboard SVG export also persist their required allowed audit before the effect, while
+  privacy export and manual backup use a shared authority-revalidating audit-before-effect helper.
+  Checklist items 43 and 44 remain open for the remaining launch, collaboration, and review-note
+  consumers.
+- 2026-07-18: Git review gained an agent-to-agent comparison tab with a bounded opaque-target picker.
+  Main independently resolves two distinct active run/worktree bindings, proves common-project and
+  common-repository ownership, compares immutable heads, and re-resolves the bindings to reject
+  stale approvals; neither renderer requests nor responses expose filesystem paths or caller-chosen
+  refs. The UI has explicit unavailable, empty, error, and stale-target states. Checklist item 72
+  remains open for rename, archive, and user-selected external-editor behavior, while item 73 remains
+  open for the remaining merge strategies and visual conflict workflow.
+- 2026-07-18: the notification trigger and bounded notification panel now have explicit managed-
+  dialog semantics, initial focus, Escape and outside-click dismissal, list semantics, and focus
+  restoration. The command palette exposes an announced empty-result state. Checklist item 88
+  remains open pending reusable non-title tooltips and exhaustive empty/error/loading coverage across
+  the remaining routes.
+- 2026-07-18: the README now links complete zero-code user and troubleshooting guides. Searchable
+  offline Help covers missing CLI, moved repository, preview collision, Git conflicts, offline
+  collaboration, malformed import, and startup database recovery. A documentation consistency suite
+  verifies local Markdown links and every documented root pnpm command against `package.json`, and
+  runs in the normal test suite. Together with the existing architecture, threat model, security,
+  privacy, extension/adapter, collaboration, signing, release, and support documents, this closes
+  checklist items 193 and 194.
+- 2026-07-18: the integrated checkpoint passed the 1,280-file structure gate, repository formatting,
+  zero-warning lint, every workspace strict typecheck, 2,521 unit tests across 384 files, 320
+  integration tests across 37 files, all three documentation consistency tests, and every production
+  build through `corepack pnpm verify`.

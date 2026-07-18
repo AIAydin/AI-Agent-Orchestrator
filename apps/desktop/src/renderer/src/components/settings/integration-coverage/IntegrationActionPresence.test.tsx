@@ -100,7 +100,7 @@ describe('integration action UI presence', () => {
     fireEvent.change(screen.getByRole('textbox', { name: /Type example.notes to confirm/u }), {
       target: { value: 'example.notes' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove extension' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
     await waitFor(() =>
       expect(extensionRemove).toHaveBeenCalledWith({
         extensionId: 'example.notes',

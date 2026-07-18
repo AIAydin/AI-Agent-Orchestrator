@@ -23,7 +23,7 @@ import {
   ipcResultSchema,
   type IpcResult,
 } from '../../shared/application/contracts.js';
-import { ExtensionManager } from './extension-manager.js';
+import { ExtensionManager, type ExtensionRemovalPlan } from './extension-manager.js';
 import type { LocalStore } from '../storage.js';
 import { assertLiveMainFrame } from '../security/ipc-authority.js';
 
@@ -141,13 +141,58 @@ export class ExtensionIpcService {
       IPC_CHANNELS.extensionsRemove,
       z.tuple([ExtensionRemoveInputSchema]),
       ExtensionDiscoveryViewSchema,
-      (event, input) =>
-        this.#withTrustLock(async () => {
-          assertLiveMainFrame(event, 'Extension request');
-          const discovery = await this.#manager.remove(input.extensionId, input.confirmation);
-          assertLiveMainFrame(event, 'Extension request');
+      async (event, input) => {
+        this.#trackOwner(event);
+        const ownerId = event.sender.id;
+        const parentWindow = this.#requireCurrentParent(event);
+        const plan = await this.#withTrustLock(
+          async () =>
+            await this.#manager.planRemoval(input.extensionId, input.confirmation, ownerId),
+        );
+        this.#assertCurrentParent(event, parentWindow);
+        let decision: Awaited<ReturnType<typeof this.dialog.showMessageBox>>;
+        try {
+          decision = await this.dialog.showMessageBox(
+            parentWindow,
+            extensionRemovalConfirmation(plan),
+          );
+        } catch (error) {
+          this.#manager.denyRemoval(plan.planId, ownerId, 'native-confirmation-failed');
+          throw error;
+        }
+        try {
+          this.#assertCurrentParent(event, parentWindow);
+        } catch (error) {
+          if (!event.sender.isDestroyed()) {
+            this.#manager.denyRemoval(plan.planId, ownerId, 'origin-window-changed');
+          }
+          throw error;
+        }
+        if (decision.response !== 1) {
+          this.#manager.denyRemoval(plan.planId, ownerId, 'native-confirmation-cancelled');
+          throw new ExtensionRuntimeError(
+            'APPROVAL_MISMATCH',
+            'The extension removal was cancelled. Nothing changed.',
+          );
+        }
+        if (this.#privacyResetting) {
+          this.#manager.denyRemoval(plan.planId, ownerId, 'privacy-reset-started');
+          throw new Error('Extensions are paused while Forgeboard deletes local data.');
+        }
+        return this.#withTrustLock(async () => {
+          try {
+            this.#assertCurrentParent(event, parentWindow);
+          } catch (error) {
+            if (!event.sender.isDestroyed()) {
+              this.#manager.denyRemoval(plan.planId, ownerId, 'origin-window-changed');
+            }
+            throw error;
+          }
+          const discovery = await this.#manager.confirmRemoval(plan.planId, ownerId);
+          this.#assertCurrentParent(event, parentWindow);
           return discovery;
-        }),
+        });
+      },
     );
   }
 
@@ -417,4 +462,25 @@ function extensionApprovalDetail(plan: z.output<typeof ExtensionInstallPlanViewS
     '',
     'Nothing changes until you confirm here.',
   ].join('\n');
+}
+
+function extensionRemovalConfirmation(plan: ExtensionRemovalPlan): MessageBoxOptions {
+  return {
+    type: 'warning',
+    title: 'Remove extension',
+    message: `Remove ${plan.extensionName} ${plan.version} from Forgeboard?`,
+    detail: [
+      `Extension id: ${plan.extensionId}`,
+      `Manifest fingerprint (SHA-256): ${plan.manifestDigest}`,
+      `Installed snapshot fingerprint (SHA-256): ${plan.snapshotDigest}`,
+      `Granted permissions: ${plan.grantedPermissions.join(', ') || 'none'}`,
+      `Approval expires: ${plan.expiresAt}`,
+      '',
+      'This revokes the saved extension approval and removes Forgeboard’s installed copy. The folder you originally selected is not deleted.',
+    ].join('\n'),
+    buttons: ['Cancel', 'Remove extension'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
 }

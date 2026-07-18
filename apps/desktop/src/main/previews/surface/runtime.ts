@@ -386,8 +386,8 @@ export class PreviewSurfaceRuntime {
       if (record.view.webContents.getURL() !== exactUrl) {
         throw new Error('The preview navigated after approval. Review the current URL again.');
       }
+      this.#auditRequired(record, 'open-external', 'allowed', { urlSha256: sha256(exactUrl) });
       await this.#shell.openExternal(exactUrl, { activate: true });
-      this.#audit(record, 'open-external', 'allowed', { urlSha256: sha256(exactUrl) });
       return true;
     } catch (error) {
       this.#audit(record, 'open-external', 'failed', { reason: 'confirmation-or-open-failed' });
@@ -562,6 +562,20 @@ export class PreviewSurfaceRuntime {
     metadata: Record<string, unknown>,
   ): void {
     this.#auditInput(record, action, outcome, { surfaceId: record.id, ...metadata });
+  }
+
+  #auditRequired(
+    record: SurfaceRecord,
+    action: string,
+    outcome: 'allowed' | 'denied' | 'failed',
+    metadata: Record<string, unknown>,
+  ): void {
+    this.#auditEvent(action, outcome, {
+      projectId: record.projectId,
+      nodeId: record.nodeId,
+      surfaceId: record.id,
+      ...metadata,
+    });
   }
 
   #auditInput(

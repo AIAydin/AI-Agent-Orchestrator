@@ -149,13 +149,19 @@
   background: transparent;
   color: var(--text-faint);
 }
-.notification-popover p {
+.notification-popover p,
+.notification-popover li {
   margin: 0;
   padding: 8px 5px;
   border-bottom: 1px solid var(--line);
   color: var(--text-soft);
   font-size: 8px;
   line-height: 1.45;
+}
+.notification-popover ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 kbd {
   padding: 2px 5px;

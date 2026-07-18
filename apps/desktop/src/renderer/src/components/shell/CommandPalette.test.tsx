@@ -42,4 +42,19 @@ describe('CommandPalette accessibility', () => {
     expect(runs[0]).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('announces an empty filtered result without inventing an active option', () => {
+    render(
+      <CommandPalette
+        actions={[{ id: 'settings', label: 'Open settings', section: 'Application', run: vi.fn() }]}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const query = screen.getByRole('combobox', { name: 'Search actions' });
+    fireEvent.change(query, { target: { value: 'not a real command' } });
+    expect(screen.getByRole('status').textContent).toBe('No actions match your search.');
+    expect(query.hasAttribute('aria-activedescendant')).toBe(false);
+    expect(screen.queryByRole('option')).toBeNull();
+  });
 });

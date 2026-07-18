@@ -487,7 +487,8 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 <h2 id="extension-remove-title">Remove {removeTarget.manifest.name}?</h2>
                 <p>
                   This removes the extension from Forgeboard. The folder you originally downloaded
-                  stays on this device.
+                  stays on this device. Continuing opens a final system confirmation with Cancel
+                  pre-selected.
                 </p>
               </div>
             </header>
@@ -521,7 +522,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 disabled={busy || removePhrase !== removeTarget.manifest.id}
                 onClick={() => void remove()}
               >
-                <Trash2 size={15} /> Remove extension
+                <Trash2 size={15} /> Continue to confirmation
               </button>
             </footer>
           </section>

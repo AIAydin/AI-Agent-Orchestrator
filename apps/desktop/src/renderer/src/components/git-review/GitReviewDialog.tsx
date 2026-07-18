@@ -25,6 +25,7 @@ import type {
 } from '../../../../shared/git/shipping-contracts.js';
 import type { GitWorktreeCleanupPlanView } from '../../../../shared/git/lifecycle/contracts.js';
 import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
+import { GitAgentComparisonPanel } from './comparison/GitAgentComparisonPanel.js';
 import { GitCommitDisclosure, GitDiscardDisclosure } from './actions/GitActionDisclosure.js';
 import { GitCommitPanel } from './actions/GitCommitPanel.js';
 import { GitDiffViewer, type GitDiffDisplayPreferences } from './diff/GitDiffViewer.js';
@@ -593,6 +594,20 @@ export function GitReviewDialog({
                   }
                 />
               )
+            ) : controller.review.target.kind === 'agent-worktree' &&
+              reviewMode === 'agent-comparison' ? (
+              <GitAgentComparisonPanel
+                target={{
+                  kind: 'agent-worktree',
+                  projectId: controller.review.target.projectId,
+                  runId: controller.review.target.runId,
+                }}
+                {...(displayPreferences === undefined ? {} : { displayPreferences })}
+                {...(onDisplayPreferencesChange === undefined
+                  ? {}
+                  : { onDisplayPreferencesChange })}
+                {...(onError === undefined ? {} : { onError })}
+              />
             ) : (
               <section
                 id={

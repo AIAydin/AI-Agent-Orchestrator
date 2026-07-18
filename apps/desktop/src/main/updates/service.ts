@@ -244,8 +244,8 @@ export class UpdateIpcService {
     assertOpenCurrent('origin-window-changed-before-open');
     this.#knownReleases.delete(ownerId);
     try {
-      await this.#operations.openExternal(release.url);
       this.#auditOpen(release.url, 'allowed');
+      await this.#operations.openExternal(release.url);
       return true;
     } catch (error) {
       this.#auditOpen(release.url, 'failed', 'system-browser-open-failed');

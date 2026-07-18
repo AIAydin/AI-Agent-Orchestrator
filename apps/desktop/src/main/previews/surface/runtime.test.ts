@@ -323,6 +323,12 @@ describe('PreviewSurfaceRuntime', () => {
     dialog.showMessageBox.mockResolvedValue({ response: 1, checkboxChecked: false });
     await expect(runtime.openExternal('owner', surface.surfaceId)).resolves.toBe(true);
     expect(shell.openExternal).toHaveBeenCalledWith(URL, { activate: true });
+    const allowedAuditIndex = audit.mock.calls.findIndex(
+      (call) => call[0] === 'open-external' && call[1] === 'allowed',
+    );
+    expect(audit.mock.invocationCallOrder[allowedAuditIndex]).toBeLessThan(
+      shell.openExternal.mock.invocationCallOrder[0]!,
+    );
     expect(dialog.showMessageBox.mock.calls.at(-1)?.[1]).toMatchObject({
       buttons: ['Cancel', 'Open in browser'],
       defaultId: 0,
@@ -333,6 +339,22 @@ describe('PreviewSurfaceRuntime', () => {
     expect(auditText).not.toContain('/tmp/preview.png');
     expect(auditText).not.toContain(URL);
     expect(auditText).toContain('open-external');
+  });
+
+  it('fails closed before an external preview handoff when its allowed audit cannot persist', async () => {
+    const surface = await runtime.create('owner', parent, createInput(), URL);
+    dialog.showMessageBox.mockResolvedValue({ response: 1, checkboxChecked: false });
+    audit.mockImplementation((action, outcome) => {
+      if (action === 'open-external' && outcome === 'allowed') {
+        throw new Error('audit unavailable');
+      }
+    });
+
+    await expect(runtime.openExternal('owner', surface.surfaceId)).rejects.toThrow(
+      'audit unavailable',
+    );
+    expect(shell.openExternal).not.toHaveBeenCalled();
+    expect(audit.mock.calls.at(-1)?.slice(0, 2)).toEqual(['open-external', 'failed']);
   });
 
   it.runIf(process.platform !== 'win32')(

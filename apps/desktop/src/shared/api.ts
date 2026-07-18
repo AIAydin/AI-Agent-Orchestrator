@@ -173,6 +173,10 @@ import type {
   GitWorktreeCleanupTargetInput,
 } from './git/lifecycle/contracts.js';
 import type {
+  GitAgentComparisonInput,
+  GitAgentComparisonView,
+} from './git/comparison/contracts.js';
+import type {
   GitReviewNoteCreateInput,
   GitReviewNoteDeleteInput,
   GitReviewNotesListInput,
@@ -485,6 +489,9 @@ export interface ForgeboardApi {
     confirmShipping(
       input: GitPlanConfirmationInput,
     ): Promise<IpcResult<GitShippingResultView | null>>;
+    comparison: {
+      compareAgents(input: GitAgentComparisonInput): Promise<IpcResult<GitAgentComparisonView>>;
+    };
     readiness: {
       get(input: GitDeliveryReadinessGetInput): Promise<IpcResult<GitDeliveryReadinessGetView>>;
       prepare(

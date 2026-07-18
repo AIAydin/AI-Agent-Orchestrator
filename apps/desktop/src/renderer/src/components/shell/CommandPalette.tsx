@@ -120,7 +120,11 @@ export function CommandPalette({
               <CornerDownLeft className="enter-icon" size={13} />
             </button>
           ))}
-          {filtered.length === 0 && <p>No actions match your search.</p>}
+          {filtered.length === 0 && (
+            <p role="status" aria-live="polite">
+              No actions match your search.
+            </p>
+          )}
         </div>
         <footer>
           <span>

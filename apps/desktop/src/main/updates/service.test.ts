@@ -136,6 +136,30 @@ describe('UpdateIpcService', () => {
       'allowed',
     ]);
     expect(auditCall?.[3]?.urlSha256).toMatch(/^[a-f0-9]{64}$/u);
+    expect(fixture.appendAudit.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      fixture.operations.openExternal.mock.invocationCallOrder[0]!,
+    );
+    fixture.service.dispose();
+  });
+
+  it('fails closed before opening a release when the required allowed audit cannot persist', async () => {
+    const fixture = createFixture();
+    const event = liveEvent();
+    fixture.appendAudit.mockImplementation((_category, action, outcome) => {
+      if (action === 'open-update-release' && outcome === 'allowed') {
+        throw new Error('audit unavailable');
+      }
+    });
+    await handler(UPDATE_IPC_CHANNELS.check)(event, { channel: 'stable' });
+    await expect(
+      handler(UPDATE_IPC_CHANNELS.openRelease)(event, { releaseId: 10 }),
+    ).resolves.toMatchObject({ ok: false, error: { message: 'audit unavailable' } });
+    expect(fixture.operations.openExternal).not.toHaveBeenCalled();
+    expect(fixture.appendAudit.mock.calls.at(-1)?.slice(0, 3)).toEqual([
+      'external-navigation',
+      'open-update-release',
+      'failed',
+    ]);
     fixture.service.dispose();
   });
 

@@ -5,10 +5,12 @@ import {
   Eye,
   FolderSearch,
   GitBranch,
+  GitMerge,
   HardDrive,
   Keyboard,
   Play,
   ShieldCheck,
+  Unplug,
   Wrench,
 } from 'lucide-react';
 
@@ -160,6 +162,56 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     ],
   },
   {
+    id: 'preview-port-collision',
+    title: 'A preview port is already in use',
+    summary:
+      'Release a stale Forgeboard preview or choose a safe loopback range without stopping an unknown process.',
+    keywords: ['preview', 'port', 'collision', 'occupied', 'address in use', 'loopback', 'retry'],
+    icon: Eye,
+    steps: [
+      'Stop stale Preview nodes from the app. Do not kill an unrelated process unless you recognize it.',
+      'Open Settings → Git & previews and expand or move the preview port range if another local tool owns it.',
+      'Check that the preview command uses the displayed host and port arguments instead of a different hard-coded port.',
+      'Request a fresh reviewed start. Forgeboard does not reuse a failed reservation as a live preview session.',
+    ],
+  },
+  {
+    id: 'git-delivery-conflict',
+    title: 'Git delivery stopped on a conflict',
+    summary:
+      'Inspect the real conflicted files; Forgeboard does not choose a side or report a completed merge.',
+    keywords: ['git', 'merge', 'cherry-pick', 'conflict', 'diverged', 'delivery', 'resolution'],
+    icon: GitMerge,
+    steps: [
+      'Open Changes and inspect every path Forgeboard reports as conflicted. The primary checkout remains in Git’s real conflict state.',
+      'Resolve the files deliberately in the project editor or an explicitly opened external application, then stage and commit the resolution through reviewed Git actions.',
+      'Run the required delivery checks and record human quality approval again because changed source invalidates the earlier evidence.',
+      'Forgeboard currently has no visual conflict-resolution or abort wizard, and squash and rebase delivery are not implemented.',
+    ],
+  },
+  {
+    id: 'collaboration-offline',
+    title: 'The collaboration server is offline',
+    summary:
+      'Keep working locally, check the approved endpoint, and reconnect without losing intent.',
+    keywords: [
+      'collaboration',
+      'server',
+      'offline',
+      'reconnecting',
+      'websocket',
+      'tls',
+      'local save',
+    ],
+    icon: Unplug,
+    steps: [
+      'Continue local work and confirm the top bar returns to Saved locally. Solo persistence does not depend on the collaboration server.',
+      'Check the WebSocket and management URLs under Settings → Connectivity and, if you operate the server, verify its health and TLS proxy.',
+      'Wait for automatic reconnect or explicitly leave and rejoin after correcting configuration.',
+      'A same-field conflict can pause for review; Forgeboard does not silently declare the local or remote version the winner.',
+    ],
+  },
+  {
     id: 'restore-data',
     title: 'Restore local data safely',
     summary:
@@ -171,6 +223,29 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
       'Use Canvas recovery to see what a snapshot contains — how many nodes and connections it has, when it was taken, and a fingerprint that proves it belongs to this project — before you restore it.',
       'When you import a file from another computer, choose whether to merge it with or replace your current data, then review what will change — item counts, size, and how conflicts are handled — before confirming.',
       'Keep automatic backups turned on. Their folder, how often they run, what happens when you quit, and how long they are kept are all chosen in Settings.',
+    ],
+  },
+  {
+    id: 'import-database-recovery',
+    title: 'An import or database recovery was rejected',
+    summary:
+      'Preserve current files and use only an exact, validated Forgeboard export or SQLite backup.',
+    keywords: [
+      'malformed',
+      'import',
+      'database',
+      'corrupt',
+      'startup',
+      'backup',
+      'recovery',
+      'quarantine',
+    ],
+    icon: HardDrive,
+    steps: [
+      'A malformed, oversized, structurally invalid, or newer-version portable export is rejected before confirmation and does not partially replace local data.',
+      'If startup cannot open the database, do not edit it. Choose a known Forgeboard SQLite backup from the native recovery dialog.',
+      'Review the backup identity, schema compatibility, size, and digest. Forgeboard copies and verifies the source; it never edits the backup in place.',
+      'If no verified backup is available, cancel and preserve the files for diagnosis. Forgeboard will not silently create an empty replacement database.',
     ],
   },
   {

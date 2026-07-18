@@ -66,6 +66,7 @@ import { DataOperationGate } from './lifecycle/data-operation-gate.js';
 import { createProcessQuiescenceAdmission } from './lifecycle/process-quiescence.js';
 import { confirmPrivacyDeletion } from './lifecycle/privacy-deletion-confirmation.js';
 import { performPrivacyDeletion } from './lifecycle/privacy-deletion.js';
+import { performAuditedLocalEffect } from './lifecycle/audit/local-effect.js';
 import { OutboundActionGate } from './outbound/outbound-action-gate.js';
 import { createGitHubCliCommandRunner } from './outbound/git/executors.js';
 import { PreviewIpcService } from './previews/preview-ipc.js';
@@ -259,8 +260,18 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const projectImages = new ProjectImageService(store, dialog);
   const files = new FileIpcService(projectFiles, shell, runDataOperation, projectImages);
   const outbound = new OutboundActionGate(store);
-  const diagramExports = new DiagramExportService(dialog);
-  const whiteboardExports = new WhiteboardExportService(dialog);
+  const diagramExports = new DiagramExportService(
+    dialog,
+    undefined,
+    undefined,
+    (action, outcome, metadata) => store.appendAudit('export', action, outcome, metadata),
+  );
+  const whiteboardExports = new WhiteboardExportService(
+    dialog,
+    undefined,
+    undefined,
+    (action, outcome, metadata) => store.appendAudit('export', action, outcome, metadata),
+  );
   const updates = new UpdateIpcService(dialog, shell, store, () => app.getVersion(), outbound);
   const collaboration = new CollaborationIpcService(dialog, outbound, {
     store,
@@ -842,15 +853,31 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           filters: [{ name: 'JSON', extensions: ['json'] }],
         });
         authority.assertCurrent();
-        if (selection.canceled || !selection.filePath) return null;
-        await writeFile(selection.filePath, `${JSON.stringify(store.exportData(), null, 2)}\n`, {
-          mode: 0o600,
+        if (selection.canceled || !selection.filePath) {
+          store.appendAudit('export', 'local-data', 'denied', {
+            reason: 'native-save-cancelled',
+          });
+          return null;
+        }
+        const filePath = selection.filePath;
+        const payload = `${JSON.stringify(store.exportData(), null, 2)}\n`;
+        await performAuditedLocalEffect({
+          assertCurrent: () => authority.assertCurrent(),
+          auditAllowed: () =>
+            store.appendAudit('export', 'local-data', 'allowed', {
+              format: 'json',
+              byteLength: Buffer.byteLength(payload, 'utf8'),
+            }),
+          effect: async () =>
+            await writeFile(filePath, payload, {
+              mode: 0o600,
+            }),
+          auditFailed: () =>
+            store.appendAudit('export', 'local-data', 'failed', {
+              reason: 'private-file-write-or-authority-failed',
+            }),
         });
-        authority.assertCurrent();
-        store.appendAudit('export', 'local-data', 'allowed', {
-          fileName: 'forgeboard-local-data.json',
-        });
-        return selection.filePath;
+        return filePath;
       }),
   );
   handleWithEvent(
@@ -867,24 +894,25 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         if (destination === '') {
           throw new Error('Choose a backup folder in Settings first.');
         }
-        backups.markDataChanged();
-        const outcome = await backups.flush();
-        authority.assertCurrent();
-        if (outcome.status !== 'created') {
-          throw new Error('Forgeboard could not create the requested backup.');
-        }
-        const backup = outcome.backup;
-        try {
-          store.appendAudit('backup', 'create', 'allowed', {
-            sizeBytes: backup.sizeBytes,
-            sha256Prefix: backup.sha256.slice(0, 12),
-          });
-        } catch (error) {
-          process.stderr.write(
-            `Forgeboard created a backup but could not record its audit event: ${error instanceof Error ? error.message : 'unknown error'}\n`,
-          );
-        }
-        return backup;
+        return await performAuditedLocalEffect({
+          assertCurrent: () => authority.assertCurrent(),
+          auditAllowed: () =>
+            store.appendAudit('backup', 'create', 'allowed', {
+              destinationKind: 'configured-local-backup-directory',
+            }),
+          effect: async () => {
+            backups.markDataChanged();
+            const outcome = await backups.flush();
+            if (outcome.status !== 'created') {
+              throw new Error('Forgeboard could not create the requested backup.');
+            }
+            return outcome.backup;
+          },
+          auditFailed: () =>
+            store.appendAudit('backup', 'create', 'failed', {
+              reason: 'backup-write-or-authority-failed',
+            }),
+        });
       }),
   );
   handle(IPC_CHANNELS.storageBackupHealth, z.tuple([]), async () =>

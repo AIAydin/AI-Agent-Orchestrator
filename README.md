@@ -25,6 +25,12 @@ unchecked surfaces in the implementation ledger are still under construction.
 > Forgeboard is under active construction. `IMPLEMENTATION_CHECKLIST.md` is the authoritative
 > status ledger; unchecked items are not claimed as complete.
 
+New users can follow the consolidated [Forgeboard user guide](docs/user/USER_GUIDE.md). For
+problem-first recovery steps covering missing tools, moved projects, preview collisions, Git
+conflicts, offline collaboration, malformed imports, and database recovery, see
+[Troubleshooting](docs/support/TROUBLESHOOTING.md). The same common workflows and failures are
+searchable offline inside **Settings → Help & shortcuts**.
+
 The release target is download-first: finished GitHub Releases will provide native installers for
 macOS, Windows, and Linux so a user can install Forgeboard and use its deterministic demo without
 developer tools. That full installer publication has not yet been verified. The implemented solo
@@ -354,8 +360,9 @@ in [Optional self-hosted collaboration](docs/COLLABORATION.md).
 See [Architecture](docs/design/ARCHITECTURE.md), [Security](.github/SECURITY.md),
 [Privacy](docs/policies/PRIVACY.md),
 [Permission profiles](docs/PERMISSIONS.md), [Releases and signing](docs/RELEASES.md),
-[Local extensions](docs/EXTENSIONS.md), and [Contributing](.github/CONTRIBUTING.md) for design and
-policy details. Installer third-party licenses and corresponding-source details are in
+[Local extensions](docs/EXTENSIONS.md), [Troubleshooting](docs/support/TROUBLESHOOTING.md), and
+[Contributing](.github/CONTRIBUTING.md) for design and policy details. Installer third-party licenses
+and corresponding-source details are in
 [Third-party notices](docs/legal/THIRD_PARTY_NOTICES.md).
 
 ## License

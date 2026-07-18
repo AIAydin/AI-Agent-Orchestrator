@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 
@@ -20,12 +21,18 @@ import { assertLiveMainFrame } from '../security/ipc-authority.js';
 import { assertSafeDiagramSvg } from './svg-policy.js';
 
 type DiagramWriter = (path: string, data: string, options: { mode: number }) => Promise<void>;
+type DiagramExportAudit = (
+  action: 'diagram-svg',
+  outcome: 'allowed' | 'denied' | 'failed',
+  metadata: Record<string, unknown>,
+) => void;
 
 export class DiagramExportService {
   public constructor(
     private readonly dialog: Pick<Dialog, 'showSaveDialog'>,
     private readonly ipc: Pick<IpcMain, 'handle' | 'removeHandler'> = ipcMain,
     private readonly writer: DiagramWriter = writeFile,
+    private readonly audit: DiagramExportAudit = () => undefined,
   ) {}
 
   public registerIpcHandler(): void {
@@ -42,10 +49,14 @@ export class DiagramExportService {
             filters: [{ name: 'SVG image', extensions: ['svg'] }],
           });
           assertCurrent(event, parent);
-          if (selection.canceled || !selection.filePath) return { ok: true, value: null };
+          if (selection.canceled || !selection.filePath) {
+            this.audit('diagram-svg', 'denied', { reason: 'native-save-cancelled' });
+            return { ok: true, value: null };
+          }
           const result = DiagramSvgExportResultSchema.parse({
             fileName: basename(selection.filePath),
           });
+          this.audit('diagram-svg', 'allowed', exportEvidence(input.svg));
           await this.writer(selection.filePath, `${input.svg}\n`, {
             mode: 0o600,
           });
@@ -55,6 +66,13 @@ export class DiagramExportService {
             value: result,
           };
         } catch (error) {
+          try {
+            this.audit('diagram-svg', 'failed', {
+              reason: 'validation-confirmation-audit-or-write-failed',
+            });
+          } catch {
+            // The required allowed audit already failed closed before any file write.
+          }
           return {
             ok: false,
             error: {
@@ -71,6 +89,14 @@ export class DiagramExportService {
   public dispose(): void {
     this.ipc.removeHandler(DIAGRAM_IPC_CHANNELS.exportSvg);
   }
+}
+
+function exportEvidence(svg: string): Record<string, unknown> {
+  return {
+    format: 'svg',
+    byteLength: Buffer.byteLength(svg, 'utf8'),
+    contentSha256: createHash('sha256').update(svg).digest('hex'),
+  };
 }
 
 function requireParent(event: IpcMainInvokeEvent): BrowserWindow {

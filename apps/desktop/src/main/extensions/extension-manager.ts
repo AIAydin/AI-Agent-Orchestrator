@@ -74,8 +74,31 @@ interface PendingPlan {
   readonly expiresAtMs: number;
 }
 
+export interface ExtensionRemovalPlan {
+  readonly planId: string;
+  readonly extensionId: string;
+  readonly extensionName: string;
+  readonly version: string;
+  readonly manifestDigest: string;
+  readonly snapshotDigest: string;
+  readonly grantedPermissions: readonly string[];
+  readonly expiresAt: string;
+}
+
+interface PendingRemovalPlan {
+  readonly ownerId: number;
+  readonly extensionId: string;
+  readonly extensionName: string;
+  readonly version: string;
+  readonly manifestDigest: string;
+  readonly snapshotDigest: string;
+  readonly grantedPermissions: readonly string[];
+  readonly expiresAtMs: number;
+}
+
 export class ExtensionManager {
   readonly #plans = new Map<string, PendingPlan>();
+  readonly #removalPlans = new Map<string, PendingRemovalPlan>();
   #mutationTail: Promise<void> = Promise.resolve();
 
   public constructor(
@@ -283,47 +306,110 @@ export class ExtensionManager {
     }
   }
 
-  public async remove(extensionId: string, confirmation: string): Promise<ExtensionDiscoveryView> {
-    return this.#exclusiveMutation(() => this.#remove(extensionId, confirmation));
-  }
-
-  async #remove(extensionId: string, confirmation: string): Promise<ExtensionDiscoveryView> {
+  public async planRemoval(
+    extensionId: string,
+    confirmation: string,
+    ownerId: number,
+  ): Promise<ExtensionRemovalPlan> {
+    this.#discardExpiredPlans();
     if (confirmation !== extensionId) {
       this.trustStore.appendAudit('extension', 'remove', 'denied', {
         extensionId,
-        reason: 'The typed confirmation did not match the extension id.',
+        reason: 'typed-confirmation-mismatch',
       });
       throw new ExtensionRuntimeError(
         'APPROVAL_MISMATCH',
         `Type ${extensionId} exactly to remove this extension.`,
       );
     }
-    const ledger = this.trustStore.getTrustedExtension(extensionId);
-    if (ledger?.state !== 'active') {
+    const discovery = await this.#discoverTrusted();
+    const installed = discovery.active.find(
+      ({ extension }) => extension.manifest.id === extensionId,
+    );
+    if (installed === undefined) {
+      this.trustStore.appendAudit('extension', 'remove', 'denied', {
+        extensionId,
+        reason: 'active-extension-missing',
+      });
       throw new ExtensionRuntimeError(
         'APPROVAL_MISMATCH',
-        `Extension ${extensionId} has no active approval, so it cannot be removed.`,
+        `Extension ${extensionId} is not installed with an active approval.`,
+      );
+    }
+    const planId = randomUUID();
+    const expiresAtMs = this.now().getTime() + PLAN_LIFETIME_MS;
+    const pending: PendingRemovalPlan = {
+      ownerId,
+      extensionId,
+      extensionName: installed.extension.manifest.name,
+      version: installed.extension.manifest.version,
+      manifestDigest: installed.extension.record.manifestDigest,
+      snapshotDigest: installed.extension.record.snapshotDigest,
+      grantedPermissions: [...installed.extension.record.grantedPermissions].sort(),
+      expiresAtMs,
+    };
+    this.#removalPlans.set(planId, pending);
+    this.#boundRemovalPlans(ownerId);
+    this.trustStore.appendAudit('extension', 'plan-remove', 'allowed', removalAudit(pending));
+    return removalPlanView(planId, pending);
+  }
+
+  public inspectRemovalPlan(planId: string, ownerId: number): ExtensionRemovalPlan {
+    this.#discardExpiredPlans();
+    return removalPlanView(planId, this.#ownedRemovalPlan(planId, ownerId));
+  }
+
+  public denyRemoval(planId: string, ownerId: number, reason: string): void {
+    this.#discardExpiredPlans();
+    const pending = this.#ownedRemovalPlan(planId, ownerId);
+    this.#removalPlans.delete(planId);
+    this.trustStore.appendAudit('extension', 'remove', 'denied', {
+      extensionId: pending.extensionId,
+      reason,
+    });
+  }
+
+  public async confirmRemoval(planId: string, ownerId: number): Promise<ExtensionDiscoveryView> {
+    return this.#exclusiveMutation(() => this.#confirmRemoval(planId, ownerId));
+  }
+
+  async #confirmRemoval(planId: string, ownerId: number): Promise<ExtensionDiscoveryView> {
+    this.#discardExpiredPlans();
+    const pending = this.#ownedRemovalPlan(planId, ownerId);
+    this.#removalPlans.delete(planId);
+    const discovery = await this.#discoverTrusted();
+    const installed = discovery.active.find(
+      ({ extension }) => extension.manifest.id === pending.extensionId,
+    );
+    if (installed === undefined || !removalSnapshotMatches(installed.extension, pending)) {
+      this.trustStore.appendAudit('extension', 'remove', 'denied', {
+        extensionId: pending.extensionId,
+        reason: 'extension-snapshot-changed-after-confirmation',
+      });
+      throw new ExtensionRuntimeError(
+        'APPROVAL_MISMATCH',
+        `Extension ${pending.extensionId} changed after removal was reviewed. Review it again.`,
       );
     }
     const removalOperationId = randomUUID();
+    this.trustStore.appendAudit('extension', 'remove', 'allowed', {
+      ...removalAudit(pending),
+      operationId: removalOperationId,
+    });
     try {
-      this.trustStore.revokeTrustedExtension(extensionId, removalOperationId, this.now());
-      const removed = await this.service.remove(extensionId);
+      this.trustStore.revokeTrustedExtension(pending.extensionId, removalOperationId, this.now());
+      const removed = await this.service.remove(pending.extensionId);
       if (!removed) {
         throw new ExtensionRuntimeError(
           'NOT_INSTALLED',
-          `Extension ${extensionId} is no longer installed. Refresh the list and try again.`,
+          `Extension ${pending.extensionId} is no longer installed. Refresh the list and try again.`,
         );
       }
-      this.#discardPlansForExtension(extensionId);
-      this.trustStore.appendAudit('extension', 'remove', 'allowed', {
-        extensionId,
-        operationId: removalOperationId,
-      });
+      this.#discardPlansForExtension(pending.extensionId);
       return await this.list();
     } catch (error) {
       this.trustStore.appendAudit('extension', 'remove', 'failed', {
-        extensionId,
+        extensionId: pending.extensionId,
         operationId: removalOperationId,
         ...errorMetadata(error),
       });
@@ -337,6 +423,7 @@ export class ExtensionManager {
 
   async #purgeAll(): Promise<void> {
     this.#plans.clear();
+    this.#removalPlans.clear();
     const ledgers = this.trustStore.listTrustedExtensions();
     const revocations = ledgers.map((ledger) => {
       if (ledger.state === 'revoked') return ledger;
@@ -355,10 +442,19 @@ export class ExtensionManager {
     for (const [planId, pending] of this.#plans) {
       if (pending.ownerId === ownerId) this.#plans.delete(planId);
     }
+    for (const [planId, pending] of this.#removalPlans) {
+      if (pending.ownerId !== ownerId) continue;
+      this.#removalPlans.delete(planId);
+      this.trustStore.appendAudit('extension', 'remove', 'denied', {
+        extensionId: pending.extensionId,
+        reason: 'owner-disconnected',
+      });
+    }
   }
 
   public async quiesce(): Promise<void> {
     this.#plans.clear();
+    this.#removalPlans.clear();
     await this.#mutationTail;
   }
 
@@ -368,12 +464,16 @@ export class ExtensionManager {
 
   public dispose(): void {
     this.#plans.clear();
+    this.#removalPlans.clear();
   }
 
   #discardExpiredPlans(): void {
     const nowMs = this.now().getTime();
     for (const [planId, pending] of this.#plans) {
       if (pending.expiresAtMs <= nowMs) this.#plans.delete(planId);
+    }
+    for (const [planId, pending] of this.#removalPlans) {
+      if (pending.expiresAtMs <= nowMs) this.#removalPlans.delete(planId);
     }
   }
 
@@ -389,6 +489,29 @@ export class ExtensionManager {
       );
     }
     return pending;
+  }
+
+  #ownedRemovalPlan(planId: string, ownerId: number): PendingRemovalPlan {
+    const pending = this.#removalPlans.get(planId);
+    if (pending === undefined || pending.ownerId !== ownerId) {
+      this.trustStore.appendAudit('extension', 'remove', 'denied', {
+        ...(pending === undefined ? {} : { extensionId: pending.extensionId }),
+        reason: 'removal-plan-missing-expired-or-cross-owner',
+      });
+      throw new ExtensionRuntimeError(
+        'APPROVAL_MISMATCH',
+        'This extension removal review expired or belongs to another window. Start again.',
+      );
+    }
+    return pending;
+  }
+
+  #boundRemovalPlans(ownerId: number): void {
+    const owned = [...this.#removalPlans].filter(([, pending]) => pending.ownerId === ownerId);
+    while (owned.length > MAX_PENDING_PLANS_PER_OWNER) {
+      const oldest = owned.shift();
+      if (oldest !== undefined) this.#removalPlans.delete(oldest[0]);
+    }
   }
 
   async #discoverTrusted(): Promise<TrustedDiscovery> {
@@ -472,6 +595,9 @@ export class ExtensionManager {
   #discardPlansForExtension(extensionId: string): void {
     for (const [planId, pending] of this.#plans) {
       if (pending.plan.manifest.id === extensionId) this.#plans.delete(planId);
+    }
+    for (const [planId, pending] of this.#removalPlans) {
+      if (pending.extensionId === extensionId) this.#removalPlans.delete(planId);
     }
   }
 
@@ -620,6 +746,44 @@ function pendingPlanView(planId: string, pending: PendingPlan): ExtensionInstall
     ...(plan.documentationText === undefined ? {} : { documentationText: plan.documentationText }),
     expiresAt: new Date(pending.expiresAtMs).toISOString(),
   });
+}
+
+function removalPlanView(planId: string, pending: PendingRemovalPlan): ExtensionRemovalPlan {
+  return {
+    planId,
+    extensionId: pending.extensionId,
+    extensionName: pending.extensionName,
+    version: pending.version,
+    manifestDigest: pending.manifestDigest,
+    snapshotDigest: pending.snapshotDigest,
+    grantedPermissions: [...pending.grantedPermissions],
+    expiresAt: new Date(pending.expiresAtMs).toISOString(),
+  };
+}
+
+function removalAudit(pending: PendingRemovalPlan): Record<string, unknown> {
+  return {
+    extensionId: pending.extensionId,
+    version: pending.version,
+    manifestDigest: pending.manifestDigest,
+    snapshotDigest: pending.snapshotDigest,
+    grantedPermissions: [...pending.grantedPermissions],
+  };
+}
+
+function removalSnapshotMatches(
+  extension: InstalledExtension,
+  pending: PendingRemovalPlan,
+): boolean {
+  return (
+    extension.manifest.id === pending.extensionId &&
+    extension.manifest.name === pending.extensionName &&
+    extension.manifest.version === pending.version &&
+    extension.record.manifestDigest === pending.manifestDigest &&
+    extension.record.snapshotDigest === pending.snapshotDigest &&
+    JSON.stringify([...extension.record.grantedPermissions].sort()) ===
+      JSON.stringify(pending.grantedPermissions)
+  );
 }
 
 function manifestView(manifest: ExtensionManifest): ExtensionManifestView {

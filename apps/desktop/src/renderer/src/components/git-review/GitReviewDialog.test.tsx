@@ -272,6 +272,8 @@ const openExternalMock = vi.fn(() =>
     success({ opened: true, targetKind: 'primary' as const, branch: 'feature/review' }),
   ),
 );
+const compareAgentsMock = vi.fn();
+const listRunsMock = vi.fn(() => Promise.resolve(success([])));
 const reviewNotesListMock = vi.fn((input: { readonly target: GitTargetInput }) =>
   Promise.resolve(success(reviewNotesFor(input.target))),
 );
@@ -305,6 +307,8 @@ beforeEach(() => {
     prepareCleanupMock,
     confirmCleanupMock,
     openExternalMock,
+    compareAgentsMock,
+    listRunsMock,
     reviewNotesListMock,
     reviewNoteCreateMock,
     reviewNoteUpdateMock,
@@ -327,6 +331,7 @@ beforeEach(() => {
         confirmCommit: confirmCommitMock,
         prepareShipping: prepareShippingMock,
         confirmShipping: confirmShippingMock,
+        comparison: { compareAgents: compareAgentsMock },
         readiness: {
           get: readinessGetMock,
           prepare: readinessPrepareMock,
@@ -345,6 +350,7 @@ beforeEach(() => {
           delete: reviewNoteDeleteMock,
         },
       },
+      runs: { list: listRunsMock },
     },
   });
 });

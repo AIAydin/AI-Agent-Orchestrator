@@ -53,6 +53,13 @@ import {
   type GitShippingResultView,
 } from '../../shared/git/shipping-contracts.js';
 import {
+  GIT_AGENT_COMPARISON_IPC_CHANNELS,
+  GitAgentComparisonInputSchema,
+  GitAgentComparisonViewSchema,
+  type GitAgentComparisonInput,
+  type GitAgentComparisonView,
+} from '../../shared/git/comparison/contracts.js';
+import {
   GIT_LIFECYCLE_IPC_CHANNELS,
   GitWorkspaceExternalOpenResultSchema,
   GitWorktreeCleanupConfirmationInputSchema,
@@ -94,6 +101,7 @@ import {
 import { shippingConfirmation } from './shipping/native-confirmation.js';
 import { GitReviewNotesService } from './reviews/review-notes-service.js';
 import { normalizeGitIdentityValue, repositoryGitIdentity } from './identity/values.js';
+import { GitAgentComparisonService } from './comparison/service.js';
 
 const PLAN_TTL_MS = 5 * 60_000;
 const MAX_PENDING_PLANS_PER_OWNER = 32;
@@ -174,6 +182,7 @@ export class GitIpcService {
   readonly #shipping: GitShippingService;
   readonly #reviewNotes: GitReviewNotesService;
   readonly #cleanup: WorktreeCleanupService;
+  readonly #comparison: GitAgentComparisonService;
   readonly #openExternalPath: (path: string) => Promise<string>;
   #disposed = false;
   #disposePromise: Promise<void> | null = null;
@@ -215,6 +224,7 @@ export class GitIpcService {
         ? {}
         : { withCleanupAdmission: options.withCleanupAdmission }),
     });
+    this.#comparison = new GitAgentComparisonService(this.#targets, repositories);
     this.#openExternalPath = options.openExternalPath ?? unavailableExternalOpen;
   }
 
@@ -226,6 +236,15 @@ export class GitIpcService {
       (event, input) => {
         this.#trackOwner(event);
         return this.review(input);
+      },
+    );
+    this.#handle(
+      GIT_AGENT_COMPARISON_IPC_CHANNELS.compare,
+      z.tuple([GitAgentComparisonInputSchema]),
+      GitAgentComparisonViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.compareAgents(input);
       },
     );
     this.#handle(
@@ -596,6 +615,30 @@ export class GitIpcService {
     input: GitWorktreeCleanupTargetInput,
   ): Promise<GitWorktreeCleanupPrepareOutcome> {
     return this.#withOperation(async () => await this.#cleanup.prepare(ownerId, input));
+  }
+
+  public compareAgents(input: GitAgentComparisonInput): Promise<GitAgentComparisonView> {
+    return this.#withOperation(async () => {
+      try {
+        const view = await this.#comparison.compare(input);
+        this.store.appendAudit('git', 'compare-agent-worktrees', 'allowed', {
+          projectId: input.left.projectId,
+          leftRunId: input.left.runId,
+          rightRunId: input.right.runId,
+          changedFileCount: view.comparison.diff.files.length,
+          commitCount: view.comparison.commitCount,
+        });
+        return view;
+      } catch (error) {
+        this.store.appendAudit('git', 'compare-agent-worktrees', 'failed', {
+          projectId: input.left.projectId,
+          leftRunId: input.left.runId,
+          rightRunId: input.right.runId,
+          reason: 'comparison-unavailable',
+        });
+        throw error;
+      }
+    });
   }
 
   public openExternal(
