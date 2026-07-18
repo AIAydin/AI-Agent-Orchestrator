@@ -30,7 +30,9 @@ for normal end-user installation.
 
 1. Confirm `pnpm verify`, Electron E2E, `pnpm package`, and `pnpm smoke:packaged` are green.
 2. Update the identical versions in the root and desktop package manifests and update release notes.
-3. Create and push a signed `v*` tag whose value is exactly `v` plus that package version.
+3. Create and push a `v*` tag whose value is exactly `v` plus that package version. The workflow
+   enforces the tag/version binding; cryptographic Git tag signing is an optional maintainer policy,
+   not a release-workflow guarantee.
 4. Verify each GitHub Actions artifact, `RELEASE-INFO` file, checksum, and native smoke result before
    publishing or announcing the release.
 
@@ -47,9 +49,11 @@ GitHub Actions secrets to enable platform signing:
   `APPLE_TEAM_ID`.
 - Windows: `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`.
 
-Development builds can be produced without those secrets, but must be described as unsigned. Public
-production releases should be signed and notarized. Linux packages publish checksums and should add
-distribution-specific signing when an official package repository is introduced.
+Development builds can be produced without those secrets, but must be described as unsigned. The
+workflow derives release metadata from post-package Developer ID, stapled notarization-ticket, and
+Authenticode verification; configured credentials that do not produce the expected proof fail the
+build. Public production releases should be signed and notarized. Linux packages publish checksums
+and should add distribution-specific signing when an official package repository is introduced.
 
 The release workflow uses read-only repository permissions while building. Only the tag-gated
 publish job receives `contents: write`. A manual workflow dispatch builds and uploads CI artifacts

@@ -7,10 +7,10 @@ import test from 'node:test';
 import {
   createPlatformReleaseInfo,
   platformReleasePlan,
-  signingSummary,
   verifyCompleteReleaseSet,
   writePlatformReleaseInfo,
 } from './artifacts.mjs';
+import { unsignedSigningSummary } from './signing.mjs';
 
 const VERSION = '0.1.0';
 
@@ -33,32 +33,19 @@ test('release plans use deterministic platform and architecture names', () => {
   assert.throws(() => platformReleasePlan(VERSION, 'linux', 'arm64'), /Unsupported release/u);
 });
 
-test('signing summaries distinguish unsigned, signed, notarized, and Linux builds', () => {
-  assert.equal(signingSummary('darwin', {}).status, 'unsigned-development');
+test('release information defaults only to explicit unsigned or non-applicable status', () => {
+  assert.equal(unsignedSigningSummary('darwin').status, 'unsigned-development');
+  assert.equal(unsignedSigningSummary('win32').status, 'unsigned-development');
+  assert.equal(unsignedSigningSummary('linux').status, 'not-applicable');
   assert.equal(
-    signingSummary('darwin', { CSC_LINK: 'certificate' }).status,
-    'signed-not-notarized',
+    createPlatformReleaseInfo({
+      version: VERSION,
+      platform: 'darwin',
+      architecture: 'arm64',
+      environment: { CSC_LINK: 'configured-but-unverified' },
+    }).signing.status,
+    'unsigned-development',
   );
-  assert.equal(
-    signingSummary('darwin', {
-      CSC_LINK: 'certificate',
-      APPLE_ID: 'maintainer@example.invalid',
-      APPLE_APP_SPECIFIC_PASSWORD: 'secret',
-      APPLE_TEAM_ID: 'TEAM',
-    }).status,
-    'signed-and-notarized',
-  );
-  assert.equal(
-    signingSummary('darwin', {
-      CSC_LINK: 'certificate',
-      APPLE_API_KEY: 'key',
-      APPLE_API_KEY_ID: 'key-id',
-      APPLE_API_ISSUER: 'issuer',
-    }).status,
-    'signed-not-notarized',
-  );
-  assert.equal(signingSummary('win32', { WIN_CSC_LINK: 'certificate' }).status, 'signed');
-  assert.equal(signingSummary('linux', {}).status, 'not-applicable');
 });
 
 test('platform metadata requires only the exact installer set', async () => {
@@ -72,6 +59,7 @@ test('platform metadata requires only the exact installer set', async () => {
       platform: 'darwin',
       architecture: 'arm64',
       environment: { GITHUB_SHA: 'a'.repeat(40) },
+      signingVerifier: async () => unsignedSigningSummary('darwin'),
     });
     const saved = JSON.parse(await readFile(result.destination, 'utf8'));
     assert.equal(saved.sourceCommit, 'a'.repeat(40));
@@ -137,7 +125,11 @@ test('aggregate verification rejects local manifests without a source commit', a
     ]) {
       const plan = platformReleasePlan(VERSION, platform, architecture);
       for (const artifact of plan.artifacts) await writeFile(join(root, artifact), artifact);
-      const info = createPlatformReleaseInfo({ version: VERSION, platform, architecture });
+      const info = createPlatformReleaseInfo({
+        version: VERSION,
+        platform,
+        architecture,
+      });
       await writeFile(join(root, plan.infoName), `${JSON.stringify(info)}\n`);
     }
     await assert.rejects(verifyCompleteReleaseSet(root, VERSION), /identify its source commit/u);
@@ -158,6 +150,7 @@ test('release workflow keeps build permissions read-only and tag-gates publicati
   );
   assert.match(workflow, /node scripts\/release\/artifacts\.mjs artifacts --all/u);
   assert.match(workflow, /apps\/desktop\/release\/RELEASE-INFO-\*\.json/u);
+  assert.match(workflow, /scripts\/release\/signing\.test\.mjs/u);
 });
 
 async function expectComplete(root, artifactCount, sourceCommit) {

@@ -4,6 +4,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { repositoryRoot } from './metadata.mjs';
+import { unsignedSigningSummary, verifyPlatformSigning } from './signing.mjs';
 
 const INFO_SCHEMA_VERSION = 1;
 const PRIMARY_ARTIFACT_PATTERN = /\.(?:dmg|zip|exe|AppImage|deb)$/u;
@@ -38,50 +39,12 @@ export function platformReleasePlan(version, platform, architecture) {
   };
 }
 
-export function signingSummary(platform, environment = process.env) {
-  if (platform === 'linux') {
-    return {
-      status: 'not-applicable',
-      message: 'Linux installers are checksum-verified and are not platform-code-signed.',
-    };
-  }
-  const certificate =
-    platform === 'win32'
-      ? present(environment.WIN_CSC_LINK) || present(environment.CSC_LINK)
-      : present(environment.CSC_LINK);
-  if (!certificate) {
-    return {
-      status: 'unsigned-development',
-      message: 'No platform signing certificate was configured for this development artifact.',
-    };
-  }
-  if (platform === 'win32') {
-    return {
-      status: 'signed',
-      message: 'The Windows signing certificate was configured for this build.',
-    };
-  }
-  const notarization = allPresent(environment, [
-    'APPLE_ID',
-    'APPLE_APP_SPECIFIC_PASSWORD',
-    'APPLE_TEAM_ID',
-  ]);
-  return notarization
-    ? {
-        status: 'signed-and-notarized',
-        message: 'The macOS signing and notarization credentials were configured for this build.',
-      }
-    : {
-        status: 'signed-not-notarized',
-        message: 'The macOS signing certificate was configured without notarization credentials.',
-      };
-}
-
 export function createPlatformReleaseInfo({
   version,
   platform,
   architecture,
   environment = process.env,
+  signing = unsignedSigningSummary(platform),
 }) {
   const plan = platformReleasePlan(version, platform, architecture);
   const sourceCommit = /^[a-f0-9]{40}$/u.test(environment.GITHUB_SHA ?? '')
@@ -95,19 +58,38 @@ export function createPlatformReleaseInfo({
     architecture,
     sourceCommit,
     artifacts: plan.artifacts,
-    signing: signingSummary(platform, environment),
+    signing,
   };
 }
 
 export async function writePlatformReleaseInfo(
   releaseRoot,
-  { version, platform = process.platform, architecture = process.arch, environment = process.env },
+  {
+    version,
+    platform = process.platform,
+    architecture = process.arch,
+    environment = process.env,
+    signingVerifier = verifyPlatformSigning,
+  },
 ) {
   const root = resolve(releaseRoot);
   const plan = platformReleasePlan(version, platform, architecture);
   const files = await topLevelFiles(root);
   assertExactPrimaryArtifacts(files, plan.artifacts, `${platform}-${architecture}`);
-  const info = createPlatformReleaseInfo({ version, platform, architecture, environment });
+  const signing = await signingVerifier({
+    releaseRoot: root,
+    plan,
+    platform,
+    architecture,
+    environment,
+  });
+  const info = createPlatformReleaseInfo({
+    version,
+    platform,
+    architecture,
+    environment,
+    signing,
+  });
   const destination = join(root, plan.infoName);
   await writeFile(destination, `${JSON.stringify(info, null, 2)}\n`);
   return { destination, info };
@@ -138,7 +120,10 @@ export async function verifyCompleteReleaseSet(releaseRoot, version) {
   if (uniqueCommits.size > 1) {
     throw new Error('Release artifacts were built from different commits.');
   }
-  return { artifactCount: expectedArtifacts.length, sourceCommit: sourceCommits[0] };
+  return {
+    artifactCount: expectedArtifacts.length,
+    sourceCommit: sourceCommits[0],
+  };
 }
 
 function assertReleaseInfo(info, plan, version) {
@@ -183,14 +168,6 @@ function assertExactPrimaryArtifacts(files, expected, label) {
 async function topLevelFiles(root) {
   const entries = await readdir(root, { withFileTypes: true });
   return new Set(entries.filter((entry) => entry.isFile()).map((entry) => entry.name));
-}
-
-function allPresent(environment, names) {
-  return names.every((name) => present(environment[name]));
-}
-
-function present(value) {
-  return typeof value === 'string' && value.trim() !== '';
 }
 
 function assertVersion(version) {
