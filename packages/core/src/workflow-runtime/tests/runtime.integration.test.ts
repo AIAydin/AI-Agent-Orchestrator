@@ -1108,6 +1108,44 @@ describe('gate execution, bounded revisions, resources, cancellation, and recove
     });
   });
 
+  it('binds an agent review to the completion artifact instead of a different output-edge digest', () => {
+    let runtime = runtimeFor(reviewGraph());
+    runtime = startWorkflowNode(runtime, 'agent-1', process(401), T1);
+    runtime = completeWorkflowNode(runtime, 'agent-1', { status: 'succeeded' }, T2);
+    runtime = publish(runtime, 'output-edge', 'diff-publication', FIRST_DIGEST);
+    runtime = {
+      ...runtime,
+      evidence: {
+        ...runtime.evidence,
+        nodeCompletionOutputs: {
+          ...runtime.evidence.nodeCompletionOutputs,
+          'agent-1': {
+            runId: runtime.run.id,
+            nodeId: 'agent-1',
+            nodeAttempt: 1,
+            contentDigest: SECOND_DIGEST,
+            sourceRunId: 'source-agent-run',
+            worktreePath: '/managed/review-source',
+            artifactContent: '{"schemaVersion":1,"files":[]}',
+            verifiedAt: T2,
+            verifierId: 'host-verifier',
+          },
+        },
+      },
+    };
+    runtime = startWorkflowNode(runtime, 'reviewer-agent', process(402), T2);
+    runtime = completeWorkflowNode(runtime, 'reviewer-agent', { status: 'succeeded' }, T3);
+
+    expect(() => recordReview(runtime, 'review-edge', 'approved', FIRST_DIGEST)).toThrow(
+      'does not match the current reviewed completion output',
+    );
+    expect(
+      recordReview(runtime, 'review-edge', 'approved', SECOND_DIGEST).evidence.reviewerAssessments[
+        'review-edge'
+      ],
+    ).toMatchObject({ reviewedOutputDigest: SECOND_DIGEST, verdict: 'approved' });
+  });
+
   it('requeues a missing required-check producer and rejects its prior-attempt evidence', () => {
     const secondTestNode = {
       ...baseNode,

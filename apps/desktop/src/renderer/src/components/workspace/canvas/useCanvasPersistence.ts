@@ -23,6 +23,7 @@ interface PendingCanvasRevision {
 
 interface CanvasPersistenceController {
   saveState: CanvasSaveState;
+  persistedUpdatedAt: string | null;
   flushCanvas: () => Promise<boolean>;
 }
 
@@ -38,6 +39,7 @@ export function useCanvasPersistence({
   persistCanvas = persistThroughForgeboard,
 }: UseCanvasPersistenceOptions): CanvasPersistenceController {
   const [saveState, setSaveState] = useState<CanvasSaveState>('saved');
+  const [persistedUpdatedAt, setPersistedUpdatedAt] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const timerRef = useRef<number | null>(null);
   const scopeRef = useRef(projectId);
@@ -80,6 +82,7 @@ export function useCanvasPersistence({
         revision: revisionRef.current,
         document: null,
       };
+      setPersistedUpdatedAt(null);
       setSaveState('saved');
     }
 
@@ -98,6 +101,7 @@ export function useCanvasPersistence({
     if (!initializedScopeRef.current) {
       initializedScopeRef.current = true;
       savedRevisionRef.current = revisionRef.current;
+      setPersistedUpdatedAt(document.updatedAt);
       setSaveState('saved');
       return;
     }
@@ -145,6 +149,7 @@ export function useCanvasPersistence({
         if (saving.projectId !== scopeRef.current) continue;
 
         savedRevisionRef.current = Math.max(savedRevisionRef.current, saving.revision);
+        if (mountedRef.current) setPersistedUpdatedAt(saving.document.updatedAt);
         const current = latestRef.current;
         if (
           mountedRef.current &&
@@ -195,5 +200,5 @@ export function useCanvasPersistence({
     };
   }, [clearAutosave]);
 
-  return { saveState, flushCanvas };
+  return { saveState, persistedUpdatedAt, flushCanvas };
 }

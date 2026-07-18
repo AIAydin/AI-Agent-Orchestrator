@@ -428,11 +428,22 @@ export function recordWorkflowReview(
   ) {
     throw new Error('Review assessment is not bound to the current reviewed source attempt');
   }
-  const currentDigests = currentOutputPublicationsForNode(runtime, edge.sourceNodeId).map(
-    (publication) => publication.contentDigest,
-  );
-  if (currentDigests.length > 0 && !currentDigests.includes(assessment.reviewedOutputDigest)) {
-    throw new Error('Review assessment does not match a current reviewed output digest');
+  const completionOutput = runtime.evidence.nodeCompletionOutputs[edge.sourceNodeId];
+  if (completionOutput !== undefined) {
+    if (
+      completionOutput.runId !== runtime.run.id ||
+      completionOutput.nodeAttempt !== sourceRun.attempt ||
+      completionOutput.contentDigest !== assessment.reviewedOutputDigest
+    ) {
+      throw new Error('Review assessment does not match the current reviewed completion output');
+    }
+  } else {
+    const currentDigests = currentOutputPublicationsForNode(runtime, edge.sourceNodeId).map(
+      (publication) => publication.contentDigest,
+    );
+    if (currentDigests.length > 0 && !currentDigests.includes(assessment.reviewedOutputDigest)) {
+      throw new Error('Review assessment does not match a current reviewed output digest');
+    }
   }
   if (
     edge.config.structuredFindings &&

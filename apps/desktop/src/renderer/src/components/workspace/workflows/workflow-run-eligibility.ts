@@ -1,5 +1,6 @@
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import type { WorkflowStartInput } from '../../../../../shared/workflow/contracts.js';
+import type { WorkflowExecutionView } from '../../../../../shared/workflow/contracts.js';
 import type { WorkshopEdge } from '../model/types.js';
 
 export interface WorkflowNodeEligibility {
@@ -9,6 +10,19 @@ export interface WorkflowNodeEligibility {
 
 export interface WorkflowSelectionEligibility extends WorkflowNodeEligibility {
   readonly scope?: WorkflowStartInput['scope'];
+}
+
+export function workflowExecutionMatchesCurrentCanvas(
+  execution: Pick<WorkflowExecutionView, 'canvasUpdatedAt'> | null,
+  persistedCanvasUpdatedAt: string | null,
+  hasUnsavedLocalMutation: boolean,
+): boolean {
+  return (
+    execution !== null &&
+    persistedCanvasUpdatedAt !== null &&
+    !hasUnsavedLocalMutation &&
+    execution.canvasUpdatedAt === persistedCanvasUpdatedAt
+  );
 }
 
 export function workflowNodeEligibility(

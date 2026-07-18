@@ -1101,6 +1101,24 @@ describe('ReviewerFinalRecordCapture', () => {
     expect(capture.finalRecord()).toBeUndefined();
   });
 
+  it('rejects any stderr emitted alongside an otherwise valid reviewer result', () => {
+    const capture = new ReviewerFinalRecordCapture();
+    capture.observe(codexReviewerMessage(reviewerFinalRecord()));
+    capture.observe(
+      reviewerEnvelope({
+        type: 'message',
+        channel: 'stderr',
+        payload: { type: 'diagnostic', message: 'provider warning' },
+      }),
+    );
+    capture.observe(
+      reviewerEnvelope({ type: 'message', channel: 'stdout', payload: { type: 'turn.completed' } }),
+    );
+    capture.observe(reviewerResultEvent('succeeded'));
+
+    expect(capture.finalRecord()).toBeUndefined();
+  });
+
   it('accepts the deterministic fixture metadata protocol without hand-authored prompt IDs', () => {
     const capture = new ReviewerFinalRecordCapture();
     const record = reviewerFinalRecord();

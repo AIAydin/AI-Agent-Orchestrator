@@ -13,10 +13,17 @@ import {
 } from '../../../shared/workflow/contracts.js';
 import type { WorkflowHostState } from './service.js';
 import type { CheckExecutionView } from '../../../shared/checks/contracts.js';
+import type { StoredRunRecord } from '../../storage.js';
+import { effectiveRunWorktreeAuthority, effectiveRunWorktreeState } from '../../storage-schemas.js';
+
+export interface WorkflowViewAgentRunResolver {
+  getRun(runId: string): StoredRunRecord | undefined;
+}
 
 export function workflowHostStateToView(
   state: WorkflowHostState,
   checks: readonly CheckExecutionView[] = [],
+  agentRuns?: WorkflowViewAgentRunResolver,
 ): WorkflowExecutionView {
   const delegateApprovals = new Map(
     state.delegateApprovals.map((approval) => [approval.nodeId, approval]),
@@ -46,7 +53,13 @@ export function workflowHostStateToView(
     nodeRuns: state.runtime.plan.nodeIds.map((nodeId) => {
       const run = state.runtime.run.nodeRuns[nodeId];
       if (run === undefined) throw new Error(`Workflow view is missing planned node ${nodeId}.`);
-      return nodeRunView(run, approvalNodeIds.has(nodeId), delegateApprovals.get(nodeId)?.reason);
+      return nodeRunView(
+        state,
+        run,
+        approvalNodeIds.has(nodeId),
+        delegateApprovals.get(nodeId)?.reason,
+        agentRuns,
+      );
     }),
     edges: state.runtime.canvas.edges.map((edge) => {
       if (!plannedEdges.has(edge.id)) {
@@ -126,6 +139,7 @@ export function workflowHostStateToView(
       activeNodeIds: state.scheduling.activeNodeIds,
     },
     cancellationRequested: state.runtime.cancellationRequested,
+    canvasUpdatedAt: state.runtime.canvas.updatedAt,
     testResults: checks.flatMap((check) => {
       const binding = check.workflowBinding;
       if (binding === undefined || binding.executionId !== state.execution.id) return [];
@@ -225,10 +239,13 @@ function boundEvidence(fingerprint: string, prefix: string) {
 }
 
 function nodeRunView(
+  state: WorkflowHostState,
   run: WorkflowHostState['runtime']['run']['nodeRuns'][string],
   approvalPending: boolean,
   preparationReason?: string,
+  agentRuns?: WorkflowViewAgentRunResolver,
 ): WorkflowNodeRunView {
+  const reviewableAgentRunId = resolveReviewableAgentRunId(state, run, agentRuns);
   return {
     nodeId: run.nodeId,
     status: approvalPending && run.status === 'queued' ? 'waiting-for-approval' : run.status,
@@ -238,6 +255,7 @@ function nodeRunView(
     ...(run.startedAt === undefined ? {} : { startedAt: run.startedAt }),
     ...(run.endedAt === undefined ? {} : { endedAt: run.endedAt }),
     ...(run.failureCode === undefined ? {} : { failureCode: run.failureCode }),
+    ...(reviewableAgentRunId === undefined ? {} : { reviewableAgentRunId }),
     ...(preparationReason === undefined
       ? run.statusReason === undefined
         ? {}
@@ -249,4 +267,42 @@ function nodeRunView(
         : { execution: { kind: 'internal' as const } }
       : { execution: { kind: 'process' as const, pid: run.process.pid } }),
   };
+}
+
+function resolveReviewableAgentRunId(
+  state: WorkflowHostState,
+  run: WorkflowHostState['runtime']['run']['nodeRuns'][string],
+  agentRuns?: WorkflowViewAgentRunResolver,
+): string | undefined {
+  if (run.status !== 'succeeded' || agentRuns === undefined) return undefined;
+  const node = state.runtime.canvas.nodes.find((candidate) => candidate.id === run.nodeId);
+  if (node?.type !== 'agent') return undefined;
+  const completion = state.runtime.evidence.nodeCompletionOutputs[run.nodeId];
+  if (
+    completion === undefined ||
+    completion.runId !== state.runtime.run.id ||
+    completion.nodeId !== run.nodeId ||
+    completion.nodeAttempt !== run.attempt
+  ) {
+    return undefined;
+  }
+  const persisted = agentRuns.getRun(completion.sourceRunId);
+  if (
+    persisted === undefined ||
+    persisted.id !== completion.sourceRunId ||
+    persisted.projectId !== state.execution.projectId ||
+    persisted.nodeId !== run.nodeId ||
+    persisted.status !== 'succeeded' ||
+    persisted.endedAt === null ||
+    persisted.worktreeId === null ||
+    persisted.cwd !== completion.worktreePath ||
+    persisted.repositoryRoot === null ||
+    persisted.managedRoot === null ||
+    persisted.supersededByRunId != null ||
+    effectiveRunWorktreeAuthority(persisted) !== 'owned' ||
+    effectiveRunWorktreeState(persisted) !== 'active'
+  ) {
+    return undefined;
+  }
+  return persisted.id;
 }

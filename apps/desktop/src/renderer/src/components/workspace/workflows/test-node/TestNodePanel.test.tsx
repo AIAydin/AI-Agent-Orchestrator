@@ -270,6 +270,7 @@ function execution(
     },
     cancellationRequested: false,
     testResults: [],
+    canvasUpdatedAt: '2026-07-17T12:00:00.000Z',
     createdAt: '2026-07-17T12:00:00.000Z',
     updatedAt,
     ...(active ? {} : { endedAt: updatedAt }),

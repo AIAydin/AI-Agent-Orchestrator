@@ -27,6 +27,7 @@ afterEach(() => {
 describe('useCanvasPersistence', () => {
   it('flushes the latest edit immediately without waiting for autosave', async () => {
     const hook = renderPersistence(canvas('loaded'));
+    expect(hook.result.current.persistedUpdatedAt).toBe('2026-07-15T12:00:00.000Z');
     hook.rerender({ projectId: PROJECT_A, document: canvas('edited') });
 
     let saved = false;
@@ -38,6 +39,7 @@ describe('useCanvasPersistence', () => {
     expect(persistCanvas).toHaveBeenCalledTimes(1);
     expect(persistCanvas.mock.calls[0]?.[0].name).toBe('edited');
     expect(hook.result.current.saveState).toBe('saved');
+    expect(hook.result.current.persistedUpdatedAt).toBe(persistCanvas.mock.calls[0]?.[0].updatedAt);
 
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(persistCanvas).toHaveBeenCalledTimes(1);

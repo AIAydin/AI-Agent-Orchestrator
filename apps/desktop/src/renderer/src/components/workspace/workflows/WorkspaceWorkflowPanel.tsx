@@ -35,6 +35,7 @@ interface WorkspaceWorkflowPanelProps {
   onRefresh: () => void;
   onCancel: (executionId: string) => void;
   onReviewDecision: (target: WorkflowDecisionTarget) => void;
+  onOpenAgentWorktree: (runId: string) => void;
   onSendInput: (input: WorkflowNodeInput) => Promise<boolean>;
   onInterrupt: (input: WorkflowNodeInterrupt) => Promise<boolean>;
 }
@@ -52,6 +53,7 @@ export function WorkspaceWorkflowPanel({
   onRefresh,
   onCancel,
   onReviewDecision,
+  onOpenAgentWorktree,
   onSendInput,
   onInterrupt,
 }: WorkspaceWorkflowPanelProps) {
@@ -125,6 +127,7 @@ export function WorkspaceWorkflowPanel({
           busyAction={busyAction}
           mutationsAuthorized={mutationsAuthorized}
           onReviewDecision={onReviewDecision}
+          onOpenAgentWorktree={onOpenAgentWorktree}
           onSendInput={onSendInput}
           onInterrupt={onInterrupt}
         />
@@ -141,6 +144,7 @@ function WorkflowExecutionDetails({
   busyAction,
   mutationsAuthorized,
   onReviewDecision,
+  onOpenAgentWorktree,
   onSendInput,
   onInterrupt,
 }: {
@@ -151,6 +155,7 @@ function WorkflowExecutionDetails({
   busyAction: string | null;
   mutationsAuthorized: boolean;
   onReviewDecision: (target: WorkflowDecisionTarget) => void;
+  onOpenAgentWorktree: (runId: string) => void;
   onSendInput: (input: WorkflowNodeInput) => Promise<boolean>;
   onInterrupt: (input: WorkflowNodeInterrupt) => Promise<boolean>;
 }) {
@@ -240,6 +245,14 @@ function WorkflowExecutionDetails({
                 Attempt {run.attempt} · {run.status}
               </small>
               {run.statusReason && <p>{run.statusReason}</p>}
+              {run.reviewableAgentRunId !== undefined && (
+                <button
+                  type="button"
+                  onClick={() => onOpenAgentWorktree(run.reviewableAgentRunId!)}
+                >
+                  Review this agent worktree
+                </button>
+              )}
             </div>
             {run.status === 'running' && interactiveNodeIds.has(run.nodeId) && (
               <WorkflowNodeTerminal

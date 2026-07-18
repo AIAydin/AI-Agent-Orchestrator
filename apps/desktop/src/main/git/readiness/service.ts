@@ -164,7 +164,11 @@ export class DeliveryReadinessService {
     this.#ownsExactExecutor = options.ownsExactExecutor ?? false;
     this.#workflowGateAuthority =
       options.workflowGateAuthority ??
-      new DeliveryWorkflowGateAuthority(store as DeliveryReadinessStore & WorkflowExecutionReader);
+      new DeliveryWorkflowGateAuthority(
+        store as DeliveryReadinessStore & WorkflowExecutionReader,
+        targets,
+        repositories,
+      );
   }
 
   public async get(inputValue: GitDeliveryReadinessGetInput): Promise<GitDeliveryReadinessGetView> {
@@ -239,6 +243,11 @@ export class DeliveryReadinessService {
       input.target,
       input.workflowExecutionId,
     );
+    await this.#workflowGateAuthority.assertReviewedGitIdentity(
+      input.target,
+      workflowAuthority.binding,
+      sourceBefore,
+    );
     const discovery = await this.#discover(input.target, settings);
     const requiredCheckIds = uniqueCheckIds([
       ...workflowAuthority.mandatoryCheckIds,
@@ -266,6 +275,11 @@ export class DeliveryReadinessService {
     );
     const sourceAfter = await this.#captureSource(input.target);
     this.#workflowGateAuthority.assertCurrent(input.target, workflowAuthority.binding);
+    await this.#workflowGateAuthority.assertReviewedGitIdentity(
+      input.target,
+      workflowAuthority.binding,
+      sourceAfter,
+    );
     this.#assertLifecycle(lifecycleEpoch);
     assertSourceIdentity(sourceBefore, sourceAfter);
     for (const check of required) assertResolutionSource(check.resolution!, sourceAfter);
@@ -636,6 +650,12 @@ export class DeliveryReadinessService {
       knownSource === undefined ? this.#captureSource(record.target) : knownSource,
       knownDiscovery === undefined ? this.#discover(record.target, settings) : knownDiscovery,
     ]);
+    await this.#workflowGateAuthority.assertReviewedGitIdentity(
+      record.target,
+      record.workflowBinding,
+      source,
+      record.baseCommit,
+    );
     if (
       source.sourceHead !== record.sourceFingerprint.sourceHead ||
       source.sourceTree !== record.sourceFingerprint.sourceTree ||
@@ -669,6 +689,12 @@ export class DeliveryReadinessService {
       throw new Error('The delivery source or required check configuration changed.');
     }
     this.#workflowGateAuthority.assertCurrent(record.target, record.workflowBinding);
+    await this.#workflowGateAuthority.assertReviewedGitIdentity(
+      record.target,
+      record.workflowBinding,
+      source,
+      record.baseCommit,
+    );
     this.#assertActiveRecord(record);
     return { source, availableChecks: discovery.map((check) => check.available), required };
   }

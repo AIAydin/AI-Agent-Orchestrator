@@ -183,7 +183,7 @@ describe('WorkflowNodeInspector', () => {
     expect(screen.getByText('test-1', { selector: 'code' })).toBeTruthy();
   });
 
-  it('binds deterministic producers and human approval without exposing a dead reviewer control', () => {
+  it('binds deterministic producers, human approval, and a configured reviewer Agent', () => {
     const onUpdate = vi.fn();
     const test = node('test-1', 'test', { checkKind: 'test', runIds: ['test'] });
     const lint = node('lint-1', 'test', { checkKind: 'lint', runIds: ['lint'] });
@@ -195,10 +195,14 @@ describe('WorkflowNodeInspector', () => {
       retryPolicy: { maximumIterations: 3, backoffMs: 0 },
       gateState: 'pending',
     });
+    const reviewer = node('reviewer-1', 'agent', {
+      adapterId: 'test-agent',
+      permissionProfile: 'docker-isolated',
+    });
     render(
       <WorkflowNodeInspector
         node={gate}
-        nodes={[test, lint, gate]}
+        nodes={[test, lint, reviewer, gate]}
         settings={settings}
         onRecord={vi.fn()}
         onUpdate={onUpdate}
@@ -216,8 +220,10 @@ describe('WorkflowNodeInspector', () => {
     expect(onUpdate).toHaveBeenCalledWith({
       humanApprovalRequired: false,
     });
-    expect(screen.queryByRole('combobox', { name: /Reviewer agent/u })).toBeNull();
-    expect(screen.getByText(/Reviewer-agent gates are not available/u)).toBeTruthy();
+    const reviewerSelect = screen.getAllByRole('combobox', { name: /Reviewer agent/u }).at(-1)!;
+    expect(reviewerSelect.textContent).toContain('reviewer-1 · Test agent (deterministic fixture)');
+    fireEvent.change(reviewerSelect, { target: { value: reviewer.id } });
+    expect(onUpdate).toHaveBeenCalledWith({ reviewerAgentId: reviewer.id });
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Maximum iterations' }), {
       target: { value: '9' },
     });
@@ -283,6 +289,29 @@ describe('WorkflowNodeInspector', () => {
     );
     expect(screen.getByLabelText('Reviewer assessment').textContent).toContain(
       'Cover the failure path. · blocking',
+    );
+  });
+
+  it('offers only reviewer-protocol adapters and includes Agents using the supported default', () => {
+    const gate = node('gate-1', 'review-gate');
+    const defaulted = node('defaulted', 'agent');
+    const unsupported = node('unsupported', 'agent', { adapterId: 'custom' });
+    render(
+      <WorkflowNodeInspector
+        node={gate}
+        nodes={[gate, defaulted, unsupported]}
+        settings={settings}
+        onRecord={vi.fn()}
+        onUpdate={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    const reviewerSelect = screen.getAllByRole('combobox', { name: /Reviewer agent/u }).at(-1)!;
+    expect(reviewerSelect.textContent).toContain('defaulted · Test agent (deterministic fixture)');
+    expect(reviewerSelect.textContent).not.toContain('unsupported');
+    expect(screen.getByText(/Reconfigure or add a supported Agent/u).textContent).toContain(
+      'unsupported',
     );
   });
 

@@ -122,6 +122,7 @@ import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { linkProjectFileToAgent, removeProjectFileFromAgent } from '../context-dnd/linking.js';
 import {
   runnableWorkflowNodeCount,
+  workflowExecutionMatchesCurrentCanvas,
   workflowSelectionEligibility,
 } from '../workflows/workflow-run-eligibility.js';
 import {
@@ -442,7 +443,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         : ['This collaboration role cannot edit the shared graph.', ...items].slice(0, 80),
     );
   }, []);
-  const { saveState, flushCanvas } = useCanvasPersistence({
+  const { saveState, persistedUpdatedAt, flushCanvas } = useCanvasPersistence({
     projectId: project.id,
     document: pendingCanvas,
     autosaveIntervalMs: settings.autosaveIntervalMs,
@@ -1038,6 +1039,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     () => new Map(nodes.map((node) => [node.id, node.data.title] as const)),
     [nodes],
   );
+  const workflowEvidenceExecution = workflowExecutionMatchesCurrentCanvas(
+    workflows.currentExecution,
+    persistedUpdatedAt,
+    saveState !== 'saved',
+  )
+    ? workflows.currentExecution
+    : null;
   const workflowInteractiveNodeIds = useMemo(
     () =>
       new Set(
@@ -1050,18 +1058,18 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const workflowNodeStatuses = useMemo(
     () =>
       new Map(
-        (workflows.currentExecution?.nodeRuns ?? []).map(
+        (workflowEvidenceExecution?.nodeRuns ?? []).map(
           (run) => [run.nodeId, workflowCanvasNodeStatus(run.status)] as const,
         ),
       ),
-    [workflows.currentExecution],
+    [workflowEvidenceExecution],
   );
   const workflowReviewGates = useMemo(
     () =>
       new Map(
-        (workflows.currentExecution?.reviewGates ?? []).map((gate) => [gate.nodeId, gate] as const),
+        (workflowEvidenceExecution?.reviewGates ?? []).map((gate) => [gate.nodeId, gate] as const),
       ),
-    [workflows.currentExecution],
+    [workflowEvidenceExecution],
   );
   const protectedNodeIds = useMemo(() => lockedCanvasNodeIds(nodes), [nodes]);
   const removalProtectedNodeIds = useMemo(
@@ -1107,8 +1115,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     [nodes, protectedNodeIds, workflowNodeStatuses, workflowReviewGates],
   );
   const workflowEdgeStates = useMemo(
-    () => new Map((workflows.currentExecution?.edges ?? []).map((edge) => [edge.edgeId, edge])),
-    [workflows.currentExecution],
+    () => new Map((workflowEvidenceExecution?.edges ?? []).map((edge) => [edge.edgeId, edge])),
+    [workflowEvidenceExecution],
   );
   const runtimeDisplayedEdges = useMemo(
     () =>
@@ -1705,7 +1713,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           project={project}
           settings={settings}
           canvas={canvas}
-          workflowExecution={workflows.currentExecution}
+          workflowExecution={workflowEvidenceExecution}
           nodes={nodes}
           selectedNode={inspectorSelectedNode}
           selectedNodeLockedByGroup={selectedNodeLockedByGroup}

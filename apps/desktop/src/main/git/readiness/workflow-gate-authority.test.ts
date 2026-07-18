@@ -13,6 +13,7 @@ const TARGET_RUN_ID = '20000000-0000-4000-8000-000000000001';
 const EXECUTION_ID = 'workflow-execution-1';
 const NOW = '2026-07-17T20:00:00.000Z';
 const DIGEST = 'a'.repeat(64);
+const PUBLICATION_DIGEST = 'b'.repeat(64);
 const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: TARGET_RUN_ID } as const;
 
 describe('DeliveryWorkflowGateAuthority', () => {
@@ -50,6 +51,16 @@ describe('DeliveryWorkflowGateAuthority', () => {
     expect(() => authority.bind(target, EXECUTION_ID)).toThrow('ambiguous reviewed sources');
   });
 
+  it('rejects a relevant gate configured with the deterministic test-agent reviewer', () => {
+    const authority = new DeliveryWorkflowGateAuthority(
+      reader(execution(runtimeWithGates(['succeeded'], false, true))),
+    );
+
+    expect(() => authority.bind(target, EXECUTION_ID)).toThrow(
+      'deterministic test agent, which cannot authorize Git delivery',
+    );
+  });
+
   it('rejects a succeeded record whose runtime identity or status disagrees', () => {
     const runtime = runtimeWithGates(['succeeded']);
     const mismatched = execution({
@@ -61,6 +72,12 @@ describe('DeliveryWorkflowGateAuthority', () => {
           Object.entries(runtime.evidence.outputPublications).map(([id, publication]) => [
             id,
             { ...publication, runId: 'different-run' },
+          ]),
+        ),
+        nodeCompletionOutputs: Object.fromEntries(
+          Object.entries(runtime.evidence.nodeCompletionOutputs).map(([id, output]) => [
+            id,
+            { ...output, runId: 'different-run' },
           ]),
         ),
       },
@@ -76,8 +93,9 @@ describe('DeliveryWorkflowGateAuthority', () => {
 function runtimeWithGates(
   gateStatuses: readonly ('succeeded' | 'failed')[],
   ambiguous = false,
+  fixtureReviewer = false,
 ): WorkflowExecutionRuntime {
-  const canvas = workflowCanvas(gateStatuses.length, ambiguous);
+  const canvas = workflowCanvas(gateStatuses.length, ambiguous, fixtureReviewer);
   const initial = createWorkflowExecutionRuntime(canvas, {
     planId: 'plan-1',
     runId: EXECUTION_ID,
@@ -104,7 +122,20 @@ function runtimeWithGates(
           producerAttempt: 1,
           outputKind: 'diff',
           referenceIds: [`agent-run:${TARGET_RUN_ID}`],
+          contentDigest: `sha256:${PUBLICATION_DIGEST}`,
+          verifiedAt: NOW,
+          verifierId: 'host-verifier',
+        },
+      },
+      nodeCompletionOutputs: {
+        'agent-1': {
+          runId: EXECUTION_ID,
+          nodeId: 'agent-1',
+          nodeAttempt: 1,
           contentDigest: `sha256:${DIGEST}`,
+          sourceRunId: TARGET_RUN_ID,
+          worktreePath: '/managed/agent-1',
+          artifactContent: '{"schemaVersion":1,"files":[]}',
           verifiedAt: NOW,
           verifierId: 'host-verifier',
         },
@@ -113,7 +144,7 @@ function runtimeWithGates(
   };
 }
 
-function workflowCanvas(gateCount: number, ambiguous: boolean): Canvas {
+function workflowCanvas(gateCount: number, ambiguous: boolean, fixtureReviewer = false): Canvas {
   const base = {
     title: 'Node',
     color: '#445566',
@@ -137,6 +168,7 @@ function workflowCanvas(gateCount: number, ambiguous: boolean): Canvas {
       humanApprovalRequired: false,
       requiredCheckIds: [],
       retryPolicy: { maximumIterations: 1, backoffMs: 0 },
+      ...(fixtureReviewer ? { reviewerAgentId: 'fixture-reviewer' } : {}),
     },
   }));
   return CanvasSchema.parse({
@@ -147,6 +179,7 @@ function workflowCanvas(gateCount: number, ambiguous: boolean): Canvas {
     nodes: [
       agent('agent-1'),
       ...(ambiguous ? [agent('agent-2')] : []),
+      ...(fixtureReviewer ? [agent('fixture-reviewer')] : []),
       { ...base, id: 'sink-1', type: 'task', data: {} },
       ...gates,
     ],

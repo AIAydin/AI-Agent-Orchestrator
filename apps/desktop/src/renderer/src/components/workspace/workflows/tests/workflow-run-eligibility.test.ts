@@ -5,11 +5,25 @@ import { createEdgeData } from '../../model/edge-config.js';
 import type { WorkshopEdge } from '../../model/types.js';
 import {
   runnableWorkflowNodeCount,
+  workflowExecutionMatchesCurrentCanvas,
   workflowNodeEligibility,
   workflowSelectionEligibility,
 } from '../workflow-run-eligibility.js';
 
 describe('workflow run eligibility', () => {
+  it('does not present historical execution evidence after the canvas changes', () => {
+    const execution = { canvasUpdatedAt: '2026-07-17T20:00:10.000Z' };
+    expect(
+      workflowExecutionMatchesCurrentCanvas(execution, '2026-07-17T20:00:10.000Z', false),
+    ).toBe(true);
+    expect(workflowExecutionMatchesCurrentCanvas(execution, '2026-07-17T20:00:10.000Z', true)).toBe(
+      false,
+    );
+    expect(
+      workflowExecutionMatchesCurrentCanvas(execution, '2026-07-17T20:00:12.000Z', false),
+    ).toBe(false);
+  });
+
   it('runs production executors and keeps ordinary canvas context passive', () => {
     const nodes = [node('agent', 'agent-1'), node('brief', 'brief-1'), node('task', 'task-1')];
     expect(runnableWorkflowNodeCount(nodes, [])).toBe(1);

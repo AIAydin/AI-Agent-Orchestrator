@@ -155,6 +155,7 @@ export function WorkspaceActivityDrawer({
           onRefresh={onRefreshWorkflows}
           onCancel={onCancelWorkflow}
           onReviewDecision={onReviewWorkflowDecision}
+          onOpenAgentWorktree={onOpenGitReview}
           onSendInput={onSendWorkflowInput}
           onInterrupt={onInterruptWorkflowNode}
         />

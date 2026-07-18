@@ -114,6 +114,7 @@ export class WorkflowIpcService {
       | 'listRecoverableWorkflowExecutions'
       | 'appendAudit'
       | 'listWorkflowCheckExecutions'
+      | 'getRun'
     >,
     createHost: WorkflowHostFactory,
     options: WorkflowIpcServiceOptions = {},
@@ -733,6 +734,7 @@ export class WorkflowIpcService {
     return workflowHostStateToView(
       state,
       this.store.listWorkflowCheckExecutions(state.execution.projectId, state.execution.id),
+      this.store,
     );
   }
 

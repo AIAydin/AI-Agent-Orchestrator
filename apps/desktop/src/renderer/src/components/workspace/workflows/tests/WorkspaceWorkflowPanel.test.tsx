@@ -26,6 +26,7 @@ describe('WorkspaceWorkflowPanel', () => {
         onRefresh={vi.fn()}
         onCancel={vi.fn()}
         onReviewDecision={onReviewDecision}
+        onOpenAgentWorktree={vi.fn()}
         onSendInput={vi.fn()}
         onInterrupt={vi.fn()}
       />,
@@ -58,6 +59,7 @@ describe('WorkspaceWorkflowPanel', () => {
         onRefresh={vi.fn()}
         onCancel={onCancel}
         onReviewDecision={vi.fn()}
+        onOpenAgentWorktree={vi.fn()}
         onSendInput={vi.fn()}
         onInterrupt={vi.fn()}
       />,
@@ -79,6 +81,7 @@ describe('WorkspaceWorkflowPanel', () => {
         onRefresh={vi.fn()}
         onCancel={onCancel}
         onReviewDecision={vi.fn()}
+        onOpenAgentWorktree={vi.fn()}
         onSendInput={vi.fn()}
         onInterrupt={vi.fn()}
       />,
@@ -102,6 +105,7 @@ describe('WorkspaceWorkflowPanel', () => {
         onRefresh={vi.fn()}
         onCancel={vi.fn()}
         onReviewDecision={vi.fn()}
+        onOpenAgentWorktree={vi.fn()}
         onSendInput={vi.fn()}
         onInterrupt={vi.fn()}
       />,
@@ -114,6 +118,49 @@ describe('WorkspaceWorkflowPanel', () => {
       true,
     );
     expect(screen.getByRole('button', { name: 'Review launch' })).toHaveProperty('disabled', true);
+  });
+
+  it('opens the exact main-authorized current agent worktree', () => {
+    const onOpenAgentWorktree = vi.fn();
+    const runId = 'b95fe115-adc7-43cb-952e-d027aca07cb2';
+    const current = {
+      ...execution(),
+      status: 'succeeded' as const,
+      nodeRuns: [
+        {
+          nodeId: 'agent-node',
+          status: 'succeeded' as const,
+          attempt: 2,
+          queuedAt: '2026-07-15T12:00:00.000Z',
+          endedAt: '2026-07-15T12:01:00.000Z',
+          resumable: false,
+          reviewableAgentRunId: runId,
+        },
+      ],
+      approvals: [],
+    };
+    render(
+      <WorkspaceWorkflowPanel
+        executions={[current]}
+        current={current}
+        nodeTitles={new Map([['agent-node', 'Implementation agent']])}
+        interactiveNodeIds={new Set()}
+        interactionEvents={[]}
+        loading={false}
+        busyAction={null}
+        mutationsAuthorized
+        onSelect={vi.fn()}
+        onRefresh={vi.fn()}
+        onCancel={vi.fn()}
+        onReviewDecision={vi.fn()}
+        onOpenAgentWorktree={onOpenAgentWorktree}
+        onSendInput={vi.fn()}
+        onInterrupt={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review this agent worktree' }));
+    expect(onOpenAgentWorktree).toHaveBeenCalledWith(runId);
   });
 
   it('shows bounded live output and sends input or interruption to the exact attempt', async () => {
@@ -160,6 +207,7 @@ describe('WorkspaceWorkflowPanel', () => {
         onRefresh={vi.fn()}
         onCancel={vi.fn()}
         onReviewDecision={vi.fn()}
+        onOpenAgentWorktree={vi.fn()}
         onSendInput={onSendInput}
         onInterrupt={onInterrupt}
       />,
@@ -242,6 +290,7 @@ function execution(): WorkflowExecutionView {
     },
     cancellationRequested: false,
     testResults: [],
+    canvasUpdatedAt: '2026-07-15T12:00:00.000Z',
     createdAt: '2026-07-15T12:00:00.000Z',
     updatedAt: '2026-07-15T12:01:00.000Z',
   };

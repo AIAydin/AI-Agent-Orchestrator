@@ -206,6 +206,7 @@ export const WorkflowNodeRunViewSchema = z
     resumable: z.boolean(),
     failureCode: z.string().min(1).max(300).optional(),
     statusReason: z.string().min(1).max(20_000).optional(),
+    reviewableAgentRunId: z.string().uuid().optional(),
     execution: z
       .discriminatedUnion('kind', [
         z.object({ kind: z.literal('process'), pid: z.number().int().positive() }).strict(),
@@ -306,6 +307,7 @@ export const WorkflowExecutionViewSchema = z
     scheduling: WorkflowSchedulingViewSchema,
     cancellationRequested: z.boolean(),
     testResults: z.array(WorkflowTestResultSchema).max(2_000).default([]),
+    canvasUpdatedAt: WorkflowTimestampSchema,
     createdAt: WorkflowTimestampSchema,
     updatedAt: WorkflowTimestampSchema,
     endedAt: WorkflowTimestampSchema.optional(),

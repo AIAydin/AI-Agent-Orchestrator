@@ -104,7 +104,7 @@ not be reclassified as future work.
 - [x] Isolated web preview node with logs/console/errors/navigation/viewports/screenshots.
 - [x] Mobile preview node with device frames, rotation, touch, and side-by-side screens.
 - [x] Test node with cancel, streaming, parsed summary, history, and artifacts.
-- [ ] Review gate node with human/deterministic/agent checks and bounded retries.
+- [x] Review gate node with human/deterministic/agent checks and bounded retries.
 - [x] Git/PR node with commits, divergence, remote, readiness, CI, and approved actions.
 - [ ] Mermaid diagram node with synchronized source/render/export.
 - [ ] Excalidraw-compatible whiteboard/mockup node with annotations/export/context.
@@ -114,7 +114,7 @@ not be reclassified as future work.
 
 ## Typed workflows
 
-- [ ] Context, Execute, Output, Review, Revision, and Dependency edges have tested semantics.
+- [x] Context, Execute, Output, Review, Revision, and Dependency edges have tested semantics.
 - [x] Cycle validation and explicit bounded loop configuration with escape hatch.
 - [ ] Run node/selection/group/workflow controls and all lifecycle states on nodes and edges.
 - [x] Persistent run recovery never presents dead child processes as alive.
@@ -1112,3 +1112,28 @@ unchecked when only a subset of their required behavior has proof.
   integration tests across 32 files, every workspace production build, and `git diff --check`. The
   broad Review Gate node and typed-workflow entries remain open pending the dedicated
   reviewer/revision Electron journey and the remaining lifecycle controls.
+- 2026-07-17: the dedicated reviewer/revision journey now closes the Review Gate node and typed-edge
+  semantics milestones without weakening delivery authority. Review Gates expose UI selection for
+  supported reviewer Agent nodes, label the deterministic test agent as a non-delivery fixture, and
+  use an exact main-composed Codex/Claude final-record protocol. Completion-artifact SHA-256 is the
+  single reviewer and delivery identity even when Output edges publish a different process digest;
+  stderr, stale canvas snapshots, ambiguous sources, test-agent reviewers, mismatched worktrees,
+  changed bytes, extra/missing paths, binary content, symlinks, submodules, and executable-mode drift
+  fail closed. Workflow history exposes Git review only for the exact current succeeded Agent attempt
+  that still owns its active managed worktree. The offline Electron journey passed in 29.4 seconds
+  and proves first-attempt actionable review feedback, bounded attempt-two revision, current Test and
+  reviewer evidence, a passed gate, one exact final reviewed file, UI-only stage/commit, one compatible
+  workflow binding, a locked mandatory Tests check, fresh check execution, final quality approval, and
+  zero external renderer requests. Full repository verification passed the 1,067-file structure gate,
+  formatting, zero-warning lint, all eight strict typechecks, 2,020 unit tests across 309 files, 285
+  real-process integration tests across 32 files, and every workspace production build. The broader
+  lifecycle-controls item remains open because complete node/edge lifecycle coverage and real Agent
+  pause/continue are still unavailable.
+- 2026-07-17: release metadata now derives signing status from post-package platform verification
+  instead of credential presence. macOS requires a valid Developer ID signature, strict/deep
+  verification, exact configured Apple team identity, and a stapled DMG ticket before claiming
+  notarization; Windows requires a valid Authenticode signature and signer certificate. Configured
+  signing that lacks the expected proof fails closed, while unsigned development output remains
+  labeled honestly. Twenty-six release/startup tests, the structure gate, lint, formatting, and diff
+  validation passed. Public GitHub Release publication, repository visibility, account billing,
+  production signing secrets, and fresh hosted cross-platform artifacts remain external/open work.

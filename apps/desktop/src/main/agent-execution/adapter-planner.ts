@@ -577,6 +577,9 @@ function testAgentActions(
   cwd: string,
   custom?: ResolvedCustomPermission,
 ): TestAgentAction[] {
+  const reviewerFinalRecord = input.reviewerProtocol
+    ? testReviewerFinalRecord(input.prompt)
+    : undefined;
   const actions: TestAgentAction[] = [
     { type: 'emit', stream: 'stdout', data: 'Forgeboard deterministic agent started.\n' },
   ];
@@ -614,7 +617,122 @@ function testAgentActions(
   }
   actions.push({
     type: 'complete',
-    metadata: { permissionProfile: input.permissionProfile, runId },
+    metadata: {
+      permissionProfile: input.permissionProfile,
+      runId,
+      ...(reviewerFinalRecord === undefined ? {} : { reviewerFinalRecord }),
+    },
   });
   return actions;
+}
+
+const REVIEWER_RECORD_MARKER =
+  'Your final response must be one dedicated structured message payload matching this exact record shape and bound values:';
+
+function testReviewerFinalRecord(prompt: string): Record<string, unknown> {
+  const markerIndex = prompt.indexOf(REVIEWER_RECORD_MARKER);
+  if (markerIndex < 0 || markerIndex !== prompt.lastIndexOf(REVIEWER_RECORD_MARKER)) {
+    throw new Error('The deterministic reviewer protocol record is missing or ambiguous.');
+  }
+  const jsonStart = prompt.indexOf('{', markerIndex + REVIEWER_RECORD_MARKER.length);
+  if (jsonStart < 0) throw new Error('The deterministic reviewer protocol record is missing.');
+  const jsonEnd = balancedJsonObjectEnd(prompt, jsonStart);
+  const candidate = JSON.parse(prompt.slice(jsonStart, jsonEnd)) as unknown;
+  if (!isReviewerRecordTemplate(candidate)) {
+    throw new Error('The deterministic reviewer protocol record is not exactly bound.');
+  }
+  return {
+    ...candidate,
+    assessments: candidate.assessments.map((assessment) => ({
+      ...assessment,
+      verdict: 'approved',
+      findings: [],
+      summary: 'Deterministic offline reviewer approved the exact bound output.',
+    })),
+  };
+}
+
+function balancedJsonObjectEnd(value: string, start: number): number {
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') quoted = true;
+    else if (character === '{') depth += 1;
+    else if (character === '}' && --depth === 0) return index + 1;
+  }
+  throw new Error('The deterministic reviewer protocol record is incomplete.');
+}
+
+interface TestReviewerAssessmentTemplate extends Record<string, unknown> {
+  readonly reviewEdgeId: string;
+  readonly reviewedNodeId: string;
+  readonly reviewedNodeAttempt: number;
+  readonly reviewedOutputDigest: string;
+  readonly verdict: 'approved | changes-requested';
+  readonly findings: readonly [];
+  readonly summary: null;
+}
+
+interface TestReviewerRecordTemplate extends Record<string, unknown> {
+  readonly type: 'forgeboard.reviewer-assessment.final';
+  readonly schemaVersion: 1;
+  readonly executionId: string;
+  readonly reviewerNodeId: string;
+  readonly reviewerAttempt: number;
+  readonly assessments: readonly TestReviewerAssessmentTemplate[];
+}
+
+function isReviewerRecordTemplate(value: unknown): value is TestReviewerRecordTemplate {
+  if (!isRecord(value)) return false;
+  if (
+    value['type'] !== 'forgeboard.reviewer-assessment.final' ||
+    value['schemaVersion'] !== 1 ||
+    !nonemptyString(value['executionId']) ||
+    !nonemptyString(value['reviewerNodeId']) ||
+    !positiveInteger(value['reviewerAttempt']) ||
+    !Array.isArray(value['assessments']) ||
+    value['assessments'].length === 0
+  ) {
+    return false;
+  }
+  const edgeIds = new Set<string>();
+  for (const assessment of value['assessments']) {
+    if (
+      !isRecord(assessment) ||
+      !nonemptyString(assessment['reviewEdgeId']) ||
+      edgeIds.has(assessment['reviewEdgeId']) ||
+      !nonemptyString(assessment['reviewedNodeId']) ||
+      !positiveInteger(assessment['reviewedNodeAttempt']) ||
+      typeof assessment['reviewedOutputDigest'] !== 'string' ||
+      !/^sha256:[0-9a-f]{64}$/u.test(assessment['reviewedOutputDigest']) ||
+      assessment['verdict'] !== 'approved | changes-requested' ||
+      !Array.isArray(assessment['findings']) ||
+      assessment['findings'].length !== 0 ||
+      assessment['summary'] !== null
+    ) {
+      return false;
+    }
+    edgeIds.add(assessment['reviewEdgeId']);
+  }
+  return true;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function nonemptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function positiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }

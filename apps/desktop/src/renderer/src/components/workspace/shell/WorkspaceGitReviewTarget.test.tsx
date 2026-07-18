@@ -22,6 +22,7 @@ const diffReviewMocks = vi.hoisted(() => ({
 vi.mock('../canvas/useCanvasPersistence.js', () => ({
   useCanvasPersistence: () => ({
     saveState: 'saved',
+    persistedUpdatedAt: '2026-07-17T12:00:00.000Z',
     flushCanvas: vi.fn(() => Promise.resolve(true)),
   }),
 }));

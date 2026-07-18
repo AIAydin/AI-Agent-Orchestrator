@@ -955,6 +955,10 @@ export class ReviewerFinalRecordCapture {
       this.#terminalSucceeded = event.result.status === 'succeeded';
       return;
     }
+    if ((event.type === 'message' || event.type === 'stream') && event.channel === 'stderr') {
+      this.#invalid = true;
+      return;
+    }
     if (event.type === 'message' && event.channel === 'stdout') {
       if (isRecord(event.payload)) {
         const payloadType = event.payload['type'];

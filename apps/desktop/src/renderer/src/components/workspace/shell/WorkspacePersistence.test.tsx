@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../canvas/useCanvasPersistence.js', () => ({
   useCanvasPersistence: () => ({
     saveState: 'saving',
+    persistedUpdatedAt: '2026-07-17T12:00:00.000Z',
     flushCanvas: mocks.flushCanvas,
   }),
 }));

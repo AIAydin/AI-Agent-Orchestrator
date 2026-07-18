@@ -5,6 +5,7 @@ import {
   type WorkflowExecutionRuntime,
 } from '@forgeboard/core';
 import type { CanvasNode } from '@forgeboard/core/domain';
+import type { RepositoryService } from '@forgeboard/git-engine';
 
 import { CheckIdSchema, type CheckId } from '../../../shared/checks/contracts.js';
 import {
@@ -12,9 +13,12 @@ import {
   type GitDeliveryReadinessTarget,
   type GitDeliveryCompatibleWorkflowExecution,
   type GitDeliveryWorkflowBinding,
+  type GitDeliverySourceIdentity,
 } from '../../../shared/git/readiness/index.js';
 import type { WorkflowExecutionRecord } from '../../storage/workflow/contracts.js';
+import type { GitTargetResolver } from '../git-target-resolver.js';
 import { stableSha256 } from './fingerprints.js';
+import { assertReviewedGitIdentity } from './reviewed-git-identity.js';
 
 export interface WorkflowExecutionReader {
   getWorkflowExecution(executionId: string): WorkflowExecutionRecord | undefined;
@@ -35,12 +39,22 @@ export interface DeliveryWorkflowGateOperations {
     target: GitDeliveryReadinessTarget,
     expected: GitDeliveryWorkflowBinding,
   ): BoundWorkflowGateAuthority;
+  assertReviewedGitIdentity(
+    target: GitDeliveryReadinessTarget,
+    expected: GitDeliveryWorkflowBinding,
+    expectedSource: GitDeliverySourceIdentity,
+    expectedBaseCommit?: string,
+  ): Promise<void>;
   listCompatible(target: GitDeliveryReadinessTarget): GitDeliveryCompatibleWorkflowExecution[];
 }
 
 /** Main-owned authority for turning one exact successful workflow result into delivery evidence. */
 export class DeliveryWorkflowGateAuthority {
-  public constructor(private readonly executions: WorkflowExecutionReader) {}
+  public constructor(
+    private readonly executions: WorkflowExecutionReader,
+    private readonly targets?: GitTargetResolver,
+    private readonly repositories?: RepositoryService,
+  ) {}
 
   public bind(target: GitDeliveryReadinessTarget, executionId: string): BoundWorkflowGateAuthority {
     const execution = this.executions.getWorkflowExecution(executionId);
@@ -137,6 +151,50 @@ export class DeliveryWorkflowGateAuthority {
     }
     return current;
   }
+
+  public async assertReviewedGitIdentity(
+    target: GitDeliveryReadinessTarget,
+    expected: GitDeliveryWorkflowBinding,
+    expectedSource: GitDeliverySourceIdentity,
+    expectedBaseCommit?: string,
+  ): Promise<void> {
+    if (this.targets === undefined || this.repositories === undefined) {
+      throw new Error('Reviewed Git identity verification is unavailable.');
+    }
+    this.assertCurrent(target, expected);
+    const execution = this.executions.getWorkflowExecution(expected.executionId);
+    if (execution === undefined) throw new Error('The selected workflow execution does not exist.');
+    const runtime = parseWorkflowExecutionRuntime(execution.runtime.payload);
+    const output = runtime.evidence.nodeCompletionOutputs[expected.sourceNodeId];
+    if (
+      output === undefined ||
+      output.runId !== expected.executionId ||
+      output.nodeId !== expected.sourceNodeId ||
+      output.nodeAttempt !== expected.sourceAttempt ||
+      output.sourceRunId !== target.runId ||
+      output.contentDigest !== `sha256:${expected.sourceOutputDigest}`
+    ) {
+      throw new Error('The workflow binding has no exact private reviewed output artifact.');
+    }
+    const resolved = await this.targets.resolve(target);
+    if (
+      resolved.ownership.id !== expectedSource.worktreeId ||
+      resolved.state.branchOid !== expectedSource.sourceHead ||
+      (expectedBaseCommit !== undefined && resolved.ownership.baseCommit !== expectedBaseCommit)
+    ) {
+      throw new Error('The managed Git authority changed during reviewed-output verification.');
+    }
+    await assertReviewedGitIdentity(this.repositories, {
+      sourceRunId: target.runId,
+      artifactWorktreePath: output.worktreePath,
+      artifactContent: output.artifactContent,
+      artifactDigest: expected.sourceOutputDigest,
+      worktreePath: resolved.worktreeRepositoryPath,
+      baseCommit: expectedBaseCommit ?? resolved.ownership.baseCommit,
+      sourceHead: expectedSource.sourceHead,
+      expectedSourceTree: expectedSource.sourceTree,
+    });
+  }
 }
 
 interface MatchingGate {
@@ -167,6 +225,7 @@ function matchingPassedGates(
     if (sourceNodeIds.length !== 1 || relevantSourceNodeIds.length !== 1) {
       throw new Error(`Review Gate ${gate.id} has ambiguous reviewed sources for this agent run.`);
     }
+    assertProductionReviewer(runtime, gate);
     const sourceNodeId = sourceNodeIds[0]!;
     const sourceRun = runtime.run.nodeRuns[sourceNodeId];
     const gateRun = runtime.run.nodeRuns[gate.id];
@@ -180,18 +239,22 @@ function matchingPassedGates(
       publication.referenceIds.includes(referenceId),
     );
     if (publications.length === 0) continue;
-    const publicationDigests = new Set(
-      publications.map((publication) => publication.contentDigest),
-    );
-    if (publicationDigests.size !== 1) {
-      throw new Error(`Review Gate ${gate.id} references ambiguous source output digests.`);
+    const completionOutput = runtime.evidence.nodeCompletionOutputs[sourceNodeId];
+    if (
+      completionOutput === undefined ||
+      completionOutput.runId !== runtime.run.id ||
+      completionOutput.nodeId !== sourceNodeId ||
+      completionOutput.nodeAttempt !== sourceRun.attempt ||
+      completionOutput.sourceRunId !== targetRunId
+    ) {
+      throw new Error(`Review Gate ${gate.id} has no exact current reviewed completion output.`);
     }
     const evidence = currentReviewGateEvidence(runtime, gate.id);
     if (evidence.evaluation.status !== 'passed') {
       throw new Error(`Review Gate ${gate.id} is not currently passing.`);
     }
     const derivedCheckIds = gateCheckIds(gate);
-    const sourceOutputDigest = parseOutputDigest(publications[0]!.contentDigest);
+    const sourceOutputDigest = parseOutputDigest(completionOutput.contentDigest);
     result.push({
       gate,
       gateAttempt: gateRun.attempt,
@@ -206,6 +269,7 @@ function matchingPassedGates(
         gateRun,
         sourceNodeId,
         sourceRun,
+        completionOutput,
         publications,
         checks: evidence.checks,
         reviewerAssessment: evidence.reviewerAssessment ?? null,
@@ -215,6 +279,23 @@ function matchingPassedGates(
     });
   }
   return result;
+}
+
+function assertProductionReviewer(
+  runtime: WorkflowExecutionRuntime,
+  gate: Extract<CanvasNode, { type: 'review-gate' }>,
+): void {
+  const reviewerId = gate.data.reviewerAgentId;
+  if (reviewerId === undefined) return;
+  const reviewer = runtime.canvas.nodes.find((node) => node.id === reviewerId);
+  if (reviewer?.type !== 'agent') {
+    throw new Error(`Review Gate ${gate.id} has no valid configured reviewer agent.`);
+  }
+  if (reviewer.data.adapterId === 'test-agent') {
+    throw new Error(
+      `Review Gate ${gate.id} uses the deterministic test agent, which cannot authorize Git delivery.`,
+    );
+  }
 }
 
 function reviewedSourceIds(runtime: WorkflowExecutionRuntime, gateNodeId: string): string[] {

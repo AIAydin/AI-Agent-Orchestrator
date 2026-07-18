@@ -1,4 +1,5 @@
 import {
+  completeWorkflowNode,
   createWorkflowExecutionRuntime,
   getSchedulingSnapshot,
   startWorkflowNode,
@@ -18,6 +19,7 @@ const PROJECT_ID = '4dcf7f9c-6288-4fe7-8bf9-21a320ce42d7';
 const CANVAS_ID = 'cc40cabc-b741-4598-81a8-19227e02ed31';
 const NODE_ID = '43c6b3a8-f744-4529-b524-c79698643b23';
 const RUN_ID = 'b95fe115-adc7-43cb-952e-d027aca07cb1';
+const AGENT_RUN_ID = 'b95fe115-adc7-43cb-952e-d027aca07cb2';
 const PLAN_ID = '5b7116f3-cb9d-4e90-8fee-bcc56af2a837';
 const T0 = '2026-07-15T19:00:00.000Z';
 const T1 = '2026-07-15T19:01:00.000Z';
@@ -45,6 +47,7 @@ describe('renderer-safe workflow view', () => {
       { nodeId: NODE_ID, status: 'waiting-for-approval', attempt: 1 },
     ]);
     expect(view.approvals).toHaveLength(1);
+    expect(view.canvasUpdatedAt).toBe(runtime.canvas.updatedAt);
     expect(view).not.toHaveProperty('runtime');
     expect(view).not.toHaveProperty('snapshot');
     expect(WorkflowExecutionViewSchema.parse(view)).toEqual(view);
@@ -88,6 +91,44 @@ describe('renderer-safe workflow view', () => {
     const view = workflowHostStateToView(state(runtime));
     expect(view.nodeRuns[0]?.execution).toEqual({ kind: 'process', pid: 4242 });
     expect(JSON.stringify(view)).not.toContain('private-process-identity-token');
+  });
+
+  it('exposes only the exact current succeeded agent attempt with an active managed worktree', () => {
+    const runtime = completedAgentRuntime();
+    const record = persistedAgentRun();
+    const view = workflowHostStateToView(state(runtime), [], {
+      getRun: (runId) => (runId === AGENT_RUN_ID ? record : undefined),
+    });
+
+    expect(view.nodeRuns[0]?.reviewableAgentRunId).toBe(AGENT_RUN_ID);
+
+    const staleAttempt = {
+      ...runtime,
+      evidence: {
+        ...runtime.evidence,
+        nodeCompletionOutputs: {
+          ...runtime.evidence.nodeCompletionOutputs,
+          [NODE_ID]: {
+            ...runtime.evidence.nodeCompletionOutputs[NODE_ID]!,
+            nodeAttempt: 2,
+          },
+        },
+      },
+    };
+    expect(
+      workflowHostStateToView(state(staleAttempt), [], { getRun: () => record }).nodeRuns[0]
+        ?.reviewableAgentRunId,
+    ).toBeUndefined();
+    expect(
+      workflowHostStateToView(state(runtime), [], {
+        getRun: () => ({ ...record, supersededByRunId: RUN_ID }),
+      }).nodeRuns[0]?.reviewableAgentRunId,
+    ).toBeUndefined();
+    expect(
+      workflowHostStateToView(state(runtime), [], {
+        getRun: () => ({ ...record, cwd: '/managed/swapped-run' }),
+      }).nodeRuns[0]?.reviewableAgentRunId,
+    ).toBeUndefined();
   });
 
   it('projects authoritative persisted review-gate evaluation with a passed reason', () => {
@@ -208,6 +249,59 @@ function reviewGateRuntime(): WorkflowExecutionRuntime {
     scope: { kind: 'workflow' },
     occurredAt: T0,
   });
+}
+
+function completedAgentRuntime(): WorkflowExecutionRuntime {
+  let runtime = startWorkflowNode(
+    queuedRuntime(),
+    NODE_ID,
+    { pid: 4242, startedAt: T1, identityToken: 'agent-process' },
+    T1,
+  );
+  runtime = completeWorkflowNode(runtime, NODE_ID, { status: 'succeeded' }, T2);
+  return {
+    ...runtime,
+    evidence: {
+      ...runtime.evidence,
+      nodeCompletionOutputs: {
+        [NODE_ID]: {
+          runId: RUN_ID,
+          nodeId: NODE_ID,
+          nodeAttempt: 1,
+          contentDigest: `sha256:${'a'.repeat(64)}`,
+          sourceRunId: AGENT_RUN_ID,
+          worktreePath: '/managed/agent-run',
+          artifactContent: '{"schemaVersion":1,"files":[]}',
+          verifiedAt: T2,
+          verifierId: 'workflow-host',
+        },
+      },
+    },
+  };
+}
+
+function persistedAgentRun() {
+  return {
+    id: AGENT_RUN_ID,
+    projectId: PROJECT_ID,
+    nodeId: NODE_ID,
+    adapterId: 'test-agent',
+    status: 'succeeded' as const,
+    cwd: '/managed/agent-run',
+    branch: 'forgeboard/agent-run',
+    worktreeId: 'b95fe115-adc7-43cb-952e-d027aca07cb3',
+    worktreeState: 'active' as const,
+    worktreeAuthority: 'owned' as const,
+    repositoryRoot: '/repo',
+    managedRoot: '/managed',
+    baseRef: 'main',
+    baseCommit: 'a'.repeat(40),
+    startedAt: T1,
+    endedAt: T2,
+    exitCode: 0,
+    createdAt: T1,
+    updatedAt: T2,
+  };
 }
 
 function state(

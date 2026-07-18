@@ -170,11 +170,22 @@ function TaskNodeInspector({
 function ReviewGateInspector({
   node,
   nodes,
+  settings,
   reviewGate,
   onRecord,
   onUpdate,
 }: WorkflowNodeInspectorProps) {
   const testNodes = nodes.filter((candidate) => candidate.data.kind === 'test');
+  const agentNodes = nodes.filter((candidate) => candidate.data.kind === 'agent');
+  const reviewerAgentNodes = agentNodes.filter((candidate) =>
+    reviewerAdapterSupported(candidate.data.adapterId ?? settings.defaultAgent),
+  );
+  const unsupportedAgentNodes = agentNodes.filter(
+    (candidate) => !reviewerAdapterSupported(candidate.data.adapterId ?? settings.defaultAgent),
+  );
+  const selectedReviewer = reviewerAgentNodes.find(
+    (candidate) => candidate.id === node.data.reviewerAgentId,
+  );
   const required = new Set(node.data.requiredCheckIds ?? []);
   const retryPolicy = node.data.retryPolicy ?? { maximumIterations: 3, backoffMs: 0 };
   const selectedTests = testNodes.filter((candidate) => required.has(checkProducerId(candidate)));
@@ -275,28 +286,67 @@ function ReviewGateInspector({
               : 'Select a producer whose check kind is Lint before this gate can run.'}
         </p>
       )}
-      <p className="workflow-config-warning">
-        Reviewer-agent gates are not available in this build. Deterministic checks and explicit
-        human review remain enforceable.
-      </p>
-      {typeof node.data.reviewerAgentId === 'string' && node.data.reviewerAgentId.length > 0 && (
-        <div className="workflow-config-warning" role="alert">
-          <p>
-            This imported gate references unavailable reviewer agent{' '}
-            <code>{node.data.reviewerAgentId}</code> and cannot advance until it is removed.
+      <label>
+        Reviewer agent (optional)
+        <select
+          name={`node-${node.id}-reviewer-agent`}
+          value={selectedReviewer?.id ?? ''}
+          onFocus={onRecord}
+          onChange={(event) => updateGate({ reviewerAgentId: event.target.value })}
+        >
+          <option value="">No AI reviewer</option>
+          {reviewerAgentNodes.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {reviewerOptionLabel(
+                candidate.data.title,
+                candidate.data.adapterId ?? settings.defaultAgent,
+              )}
+            </option>
+          ))}
+        </select>
+        <small>
+          Choose a configured Agent node. Forgeboard supplies the exact reviewed output and
+          authoritative structured-review protocol when the workflow runs.
+        </small>
+      </label>
+      {selectedReviewer !== undefined &&
+        (selectedReviewer.data.adapterId ?? settings.defaultAgent) === 'test-agent' && (
+          <p className="workflow-config-warning" role="status">
+            Test agent is a deterministic demo fixture, not a real AI review, and cannot authorize
+            Git delivery. Choose Codex or Claude Code for delivery evidence.
           </p>
-          <button
-            type="button"
-            onClick={() => {
-              onRecord();
-              // Empty optional strings are compacted out by the canonical canvas adapter.
-              updateGate({ reviewerAgentId: '' });
-            }}
-          >
-            Remove unavailable reviewer
-          </button>
-        </div>
+        )}
+      {agentNodes.length === 0 && (
+        <p className="workflow-config-warning">
+          Add and configure an Agent node before enabling an AI reviewer.
+        </p>
       )}
+      {unsupportedAgentNodes.length > 0 && (
+        <p className="workflow-config-warning">
+          Reviewer mode currently supports Test agent, Codex, and Claude Code. Reconfigure or add a
+          supported Agent for {unsupportedAgentNodes.map(({ data }) => data.title).join(', ')}.
+        </p>
+      )}
+      {typeof node.data.reviewerAgentId === 'string' &&
+        node.data.reviewerAgentId.length > 0 &&
+        selectedReviewer === undefined && (
+          <div className="workflow-config-warning" role="alert">
+            <p>
+              This gate references unavailable or unsupported reviewer agent{' '}
+              <code>{node.data.reviewerAgentId}</code> and cannot advance until it is removed.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                onRecord();
+                // Empty optional strings are compacted out by the canonical canvas adapter.
+                updateGate({ reviewerAgentId: '' });
+              }}
+            >
+              Remove reviewer requirement
+            </button>
+          </div>
+        )}
       <div className="workflow-retry-grid">
         <label>
           Maximum iterations
@@ -437,4 +487,14 @@ function gateLabel(state: WorkshopNode['data']['gateState']): string {
 
 function gateLabelFromView(state: WorkflowReviewGateView['status']): string {
   return gateLabel(state === 'waiting-human' ? 'waiting-for-human' : state);
+}
+
+function reviewerAdapterSupported(adapterId: string): boolean {
+  return adapterId === 'test-agent' || adapterId === 'codex' || adapterId === 'claude';
+}
+
+function reviewerOptionLabel(title: string, adapterId: string): string {
+  return adapterId === 'test-agent'
+    ? `${title} · Test agent (deterministic fixture)`
+    : `${title} · ${adapterId}`;
 }

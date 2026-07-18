@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
-import { access, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { access, chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { RepositoryService, WorktreeService, type WorktreeOwnership } from '@forgeboard/git-engine';
+import { CanvasSchema, createWorkflowExecutionRuntime, type Canvas } from '@forgeboard/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -12,6 +14,7 @@ import {
   type AppSettings,
   type Project,
 } from '../../../shared/application/contracts.js';
+import { legacySurfaceFromCanonical } from '../../../shared/canvas/adapter.js';
 import { GitTargetResolver } from '../git-target-resolver.js';
 import { LocalStore, type StoredRunRecord } from '../../storage.js';
 import { ExactCheckExecutor } from '../../workflow/exact-check/executor.js';
@@ -49,6 +52,48 @@ afterEach(async () => {
 });
 
 describe('main-owned delivery readiness authority', () => {
+  it('prepares only while the committed Git delta exactly matches the reviewed output artifact', async () => {
+    const fixture = await createFixture(
+      "process.stdout.write('reviewed-git-identity\\n')",
+      [],
+      {},
+      true,
+    );
+    installReviewedWorkflow(fixture);
+    const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
+
+    await expect(prepare(fixture, target)).resolves.toMatchObject({
+      workflowBinding: { executionId: WORKFLOW_EXECUTION_ID },
+    });
+
+    await writeFile(path.join(fixture.ownership.worktreePath, 'agent.txt'), 'different output\n');
+    await git(fixture.ownership.worktreePath, ['add', '--', 'agent.txt']);
+    await git(fixture.ownership.worktreePath, ['commit', '-m', 'Unreviewed replacement']);
+
+    await expect(prepare(fixture, target)).rejects.toThrow(
+      'current Git delta bytes do not match the reviewed output',
+    );
+  });
+
+  it('rejects an executable-bit change on an added reviewed output file', async () => {
+    const fixture = await createFixture(
+      "process.stdout.write('reviewed-git-mode\\n')",
+      [],
+      {},
+      true,
+    );
+    installReviewedWorkflow(fixture);
+    const target = { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID } as const;
+
+    await chmod(path.join(fixture.ownership.worktreePath, 'agent.txt'), 0o755);
+    await git(fixture.ownership.worktreePath, ['add', '--', 'agent.txt']);
+    await git(fixture.ownership.worktreePath, ['commit', '-m', 'Unreviewed executable mode']);
+
+    await expect(prepare(fixture, target)).rejects.toThrow(
+      'Mode-changed, symlink, submodule, or non-file output cannot be delivered',
+    );
+  });
+
   it('persists nothing when workflow evidence changes during preparation', async () => {
     const authority = workflowAuthority();
     const fixture = await createFixture("process.stdout.write('race\\n')", [], {
@@ -581,6 +626,7 @@ async function createFixture(
   script: string,
   envAllowlist: string[] = [],
   serviceOptions: DeliveryReadinessServiceOptions = {},
+  useRealWorkflowAuthority = false,
 ): Promise<Fixture> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'forgeboard-delivery-readiness-'));
   roots.push(root);
@@ -649,7 +695,7 @@ async function createFixture(
     exactResolver,
     exactExecutor,
     {
-      workflowGateAuthority: workflowAuthority(),
+      ...(useRealWorkflowAuthority ? {} : { workflowGateAuthority: workflowAuthority() }),
       ...serviceOptions,
       humanActorId: 'local-human',
       humanActorLabel: 'Local human',
@@ -668,6 +714,137 @@ async function createFixture(
   };
   fixtures.push(fixture);
   return fixture;
+}
+
+function installReviewedWorkflow(fixture: Fixture): void {
+  const now = '2026-07-17T20:00:00.000Z';
+  const base = {
+    title: 'Node',
+    color: '#445566',
+    icon: 'node',
+    position: { x: 0, y: 0 },
+    size: { width: 300, height: 200 },
+    createdAt: now,
+    updatedAt: now,
+  };
+  const canvas = CanvasSchema.parse({
+    schemaVersion: 1,
+    id: '93000000-0000-4000-8000-000000000001',
+    projectId: PROJECT_ID,
+    name: 'Reviewed Git identity',
+    nodes: [
+      {
+        ...base,
+        id: 'agent-1',
+        type: 'agent',
+        data: { adapterId: 'codex-cli', permissionProfileId: 'worktree' },
+      },
+      {
+        ...base,
+        id: 'gate-1',
+        type: 'review-gate',
+        data: {
+          humanApprovalRequired: false,
+          requiredCheckIds: [],
+          retryPolicy: { maximumIterations: 1, backoffMs: 0 },
+        },
+      },
+    ],
+    edges: [
+      {
+        id: 'review-edge',
+        sourceNodeId: 'agent-1',
+        targetNodeId: 'gate-1',
+        type: 'review',
+        config: { reviewer: 'gate' },
+        createdAt: now,
+      },
+    ],
+    groups: [],
+    revisionLoops: [],
+    viewState: { viewport: { x: 0, y: 0, zoom: 1 } },
+    createdAt: now,
+    updatedAt: now,
+  });
+  const initial = createWorkflowExecutionRuntime(canvas, {
+    planId: 'plan-1',
+    runId: WORKFLOW_EXECUTION_ID,
+    scope: { kind: 'workflow' },
+    occurredAt: now,
+  });
+  const artifactContent = JSON.stringify({
+    schemaVersion: 1,
+    sourceRunId: RUN_ID,
+    files: [{ path: 'agent.txt', status: 'present', content: 'committed agent output\n' }],
+  });
+  const digest = createHash('sha256').update(artifactContent, 'utf8').digest('hex');
+  const runtime = {
+    ...initial,
+    run: {
+      ...initial.run,
+      status: 'succeeded' as const,
+      nodeRuns: Object.fromEntries(
+        Object.entries(initial.run.nodeRuns).map(([nodeId, run]) => [
+          nodeId,
+          { ...run, status: 'succeeded' as const, endedAt: now },
+        ]),
+      ),
+      updatedAt: now,
+      endedAt: now,
+    },
+    evidence: {
+      ...initial.evidence,
+      nodeCompletionOutputs: {
+        'agent-1': {
+          runId: WORKFLOW_EXECUTION_ID,
+          nodeId: 'agent-1',
+          nodeAttempt: 1,
+          contentDigest: `sha256:${digest}`,
+          sourceRunId: RUN_ID,
+          worktreePath: fixture.ownership.worktreePath,
+          artifactContent,
+          verifiedAt: now,
+          verifierId: 'main-agent-evidence-v1',
+        },
+      },
+      outputPublications: {
+        'review-edge': {
+          edgeId: 'review-edge',
+          runId: WORKFLOW_EXECUTION_ID,
+          producerNodeId: 'agent-1',
+          producerAttempt: 1,
+          outputKind: 'diff',
+          referenceIds: [`agent-run:${RUN_ID}`],
+          contentDigest: `sha256:${digest}`,
+          verifiedAt: now,
+          verifierId: 'main-agent-evidence-v1',
+        },
+      },
+    },
+  };
+  saveCanvas(fixture.localStore, canvas);
+  fixture.localStore.createWorkflowExecution({
+    schemaVersion: 1,
+    id: WORKFLOW_EXECUTION_ID,
+    projectId: PROJECT_ID,
+    canvasId: canvas.id,
+    status: 'succeeded',
+    revision: 0,
+    runtime: { schemaVersion: 1, payload: runtime as never },
+    snapshot: { schemaVersion: 1, payload: canvas as never },
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+function saveCanvas(store: LocalStore, canvas: Canvas): void {
+  const surface = legacySurfaceFromCanonical(canvas);
+  store.saveCanvas({
+    ...surface,
+    nodes: [...surface.nodes],
+    edges: [...surface.edges],
+    canonical: canvas,
+  });
 }
 
 function workflowAuthority(): DeliveryWorkflowGateOperations {
@@ -695,6 +872,7 @@ function workflowAuthority(): DeliveryWorkflowGateOperations {
       return result;
     },
     assertCurrent: () => result,
+    assertReviewedGitIdentity: () => Promise.resolve(),
     listCompatible: () => [
       {
         executionId: WORKFLOW_EXECUTION_ID,
