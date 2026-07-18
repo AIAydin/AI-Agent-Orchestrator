@@ -146,18 +146,21 @@ export const INTEGRATION_UI_MANIFEST = {
   },
   gitCommitIdentity: {
     route: 'Settings > Git & previews',
-    controls: [field('textbox', 'Git identity name'), field('textbox', 'Git identity email')],
+    controls: [
+      field('textbox', 'Git identity name'),
+      field('textbox', 'Git identity email'),
+      button('Check Git identity'),
+    ],
     readiness: 'git-config',
     stateScope: 'portable-setting',
     exportPolicy: 'portable',
     evidence: {
-      source: 'apps/desktop/src/renderer/src/components/settings/GitPreviewSettings.tsx',
-      test: SETTINGS_PANEL_TEST,
-      testTitle:
-        'renders the exhaustive persisted-settings manifest through real accessible controls',
+      source: 'apps/desktop/src/renderer/src/components/settings/git-identity/GitIdentityCheck.tsx',
+      test: 'apps/desktop/src/renderer/src/components/settings/git-identity/GitIdentityCheck.test.tsx',
+      testTitle: 'checks the exact normalized unsaved Settings identity without a project',
     },
     limitation:
-      'The configured identity is portable and schema-validated on Save; there is no separate Test identity action, and repository-local overrides remain project state.',
+      'The configured identity is portable; repository fallback is project-bound and transient check evidence remains renderer-session state. Neither is exported.',
   },
   gitProjectRemotes: {
     route: 'Settings > Git & previews',

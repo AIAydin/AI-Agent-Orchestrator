@@ -75,6 +75,7 @@ import { createCollaborationApi } from './collaboration/index.js';
 import { createGitConnectionsApi } from './git/connections/index.js';
 import { createGitLifecycleApi } from './git/lifecycle/cleanup.js';
 import { createGitDeliveryReadinessApi } from './git/readiness/bridge.js';
+import { createGitIdentityApi } from './git/identity/bridge.js';
 import { createGitRemoteDeliveryApi } from './git/remote/index.js';
 import { createGitReviewNotesApi } from './git-review-notes.js';
 import { createRunHistoryApi } from './runs/history.js';
@@ -374,6 +375,7 @@ const api: ForgeboardApi = {
       invokeValidated(IPC_CHANNELS.extensionsRemove, ExtensionDiscoveryViewSchema, input),
   },
   git: {
+    identity: createGitIdentityApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     review: (input) => invokeValidated(IPC_CHANNELS.gitReview, GitReviewViewSchema, input),
     stagePaths: (input) => invokeValidated(IPC_CHANNELS.gitStagePaths, GitReviewViewSchema, input),
     stageHunks: (input) => invokeValidated(IPC_CHANNELS.gitStageHunks, GitReviewViewSchema, input),

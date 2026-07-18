@@ -91,6 +91,7 @@ import {
 } from './shipping/git-shipping-service.js';
 import { shippingConfirmation } from './shipping/native-confirmation.js';
 import { GitReviewNotesService } from './reviews/review-notes-service.js';
+import { normalizeGitIdentityValue, repositoryGitIdentity } from './identity/values.js';
 
 const PLAN_TTL_MS = 5 * 60_000;
 const MAX_PENDING_PLANS_PER_OWNER = 32;
@@ -878,8 +879,8 @@ export class GitIpcService {
 
   async #resolveIdentity(repositoryRoot: string): Promise<GitIdentityView> {
     const settings = this.getSettings();
-    const configuredName = validIdentityValue(settings.gitIdentityName);
-    const configuredEmail = validIdentityValue(settings.gitIdentityEmail);
+    const configuredName = normalizeGitIdentityValue(settings.gitIdentityName);
+    const configuredEmail = normalizeGitIdentityValue(settings.gitIdentityEmail);
     if (configuredName !== '' || configuredEmail !== '') {
       return GitIdentityViewSchema.parse({
         name: configuredName,
@@ -893,15 +894,7 @@ export class GitIpcService {
       this.#readGitConfig(repositoryRoot, 'user.name'),
       this.#readGitConfig(repositoryRoot, 'user.email'),
     ]);
-    const name = validIdentityValue(gitName);
-    const email = validIdentityValue(gitEmail);
-    return GitIdentityViewSchema.parse({
-      name,
-      email,
-      nameSource: name ? 'git-config' : 'missing',
-      emailSource: email ? 'git-config' : 'missing',
-      ready: name !== '' && email !== '',
-    });
+    return repositoryGitIdentity(gitName, gitEmail);
   }
 
   async #readGitConfig(repositoryRoot: string, key: string): Promise<string> {
@@ -1159,18 +1152,6 @@ export class GitIpcService {
       }
     });
   }
-}
-
-function validIdentityValue(value: string): string {
-  const trimmed = value.trim();
-  return trimmed.length <= 512 && !containsControlCharacter(trimmed) ? trimmed : '';
-}
-
-function containsControlCharacter(value: string): boolean {
-  return [...value].some((character) => {
-    const code = character.codePointAt(0) ?? 0;
-    return code <= 31 || code === 127;
-  });
 }
 
 function diffView(diff: ParsedDiff): GitDiffView {

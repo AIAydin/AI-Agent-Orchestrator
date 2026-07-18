@@ -46,6 +46,12 @@ import { GitConnectionsIpcService, GitConnectionsService } from './git/connectio
 import { GitConnectionsMutationCoordinator } from './git/connections/mutation-coordinator.js';
 import { GitHubCliRuntimeService } from './git/github-cli/runtime.js';
 import { GitTargetResolver } from './git/git-target-resolver.js';
+import { GitIdentityService } from './git/identity/service.js';
+import {
+  GIT_IDENTITY_IPC_CHANNEL,
+  GitIdentityCheckInputSchema,
+  GitIdentityCheckResultSchema,
+} from '../shared/git/identity/contracts.js';
 import { GitDeliveryReadinessIpcService } from './git/readiness/ipc.js';
 import { DeliveryReadinessService } from './git/readiness/service.js';
 import { DeliveryReadinessShippingAuthority } from './git/readiness/shipping-authority.js';
@@ -225,6 +231,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     if (failure !== undefined) throw failure.reason;
   };
   const repositories = createBundledGitRepositoryService();
+  const gitIdentity = new GitIdentityService(store, repositories);
   const withProjectGitAuthorization = async <Output>(
     event: IpcMainInvokeEvent,
     operation: (authority: {
@@ -576,6 +583,14 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         if (result.ready) commandReadiness.recordVerifiedSettingsReadiness(result);
         return result;
       }),
+  );
+  handleWithEvent(
+    GIT_IDENTITY_IPC_CHANNEL,
+    z.tuple([GitIdentityCheckInputSchema]),
+    async (_event, input) =>
+      await runDataOperation(async () =>
+        GitIdentityCheckResultSchema.parse(await gitIdentity.check(input)),
+      ),
   );
   handle(
     IPC_CHANNELS.approvalsList,

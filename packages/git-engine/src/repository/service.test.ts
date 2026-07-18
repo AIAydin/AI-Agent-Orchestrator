@@ -74,6 +74,23 @@ describe('RepositoryService and GitExecutor', () => {
     await expect(access(sentinel)).rejects.toThrow();
   });
 
+  it('allows only the bounded effective-author Git var query', async () => {
+    const executor = new GitExecutor();
+    const result = await executor.run([
+      '-c',
+      'user.name=Forgeboard Author',
+      '-c',
+      'user.email=author@example.invalid',
+      'var',
+      'GIT_AUTHOR_IDENT',
+    ]);
+
+    expect(result.stdout).toMatch(/^Forgeboard Author <author@example\.invalid> /u);
+    await expect(executor.run(['var', '-l'])).rejects.toMatchObject({
+      code: 'EXTERNAL_DRIVER_BLOCKED',
+    });
+  });
+
   it('keeps executable search-path wiring behind the trusted runtime boundary', async () => {
     expect(
       () => new GitExecutor({ environment: { GIT_EXEC_PATH: '/untrusted/git-core' } }),

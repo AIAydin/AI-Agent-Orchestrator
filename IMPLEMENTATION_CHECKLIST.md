@@ -1322,9 +1322,8 @@ unchecked when only a subset of their required behavior has proof.
   heading-bound accessible names and a two-provider lifecycle regression; renderer coverage now
   exercises extension install/update/remove review and update-check cancellation. Fifteen focused
   UI/manifest tests, desktop strict typecheck, zero-warning lint, formatting, and the 1,189-file
-  structure gate passed. The broad lifecycle checkbox remains open: Git identity has no separate
-  test action, and collaboration invite history is current-session rather than durable server-wide
-  state.
+  structure gate passed. The broad lifecycle checkbox remains open because collaboration invite
+  history is current-session rather than durable server-wide state.
 - 2026-07-18: tag publication now fails closed on the complete four-platform `RELEASE-INFO` set and
   derives the visible GitHub Release title, leading warning, and per-platform signing summary from
   post-package Developer ID/notarization and Authenticode evidence. Prepared notes no longer make a
@@ -1352,5 +1351,18 @@ unchecked when only a subset of their required behavior has proof.
   shared-contract,
   onboarding, Settings, and renderer tests passed, including executable drift and stale-result
   regressions. The complete 2,352-test unit suite and production build also passed. The broad
-  integration-lifecycle checkbox remains open for the separate Git identity action and durable
-  collaboration-invite history gaps recorded above.
+  integration-lifecycle checkbox remains open for the durable collaboration-invite history gap
+  recorded above.
+- 2026-07-18: Settings now provides a dedicated `Check Git identity` action for the exact unsaved
+  name/email draft, with an explicit selected-project Git-config fallback only when both fields are
+  blank. The path-free preload contract accepts either exact normalized values or an opaque project
+  ID; main-process authority resolves canonical stored project paths and round-trips temporary
+  `git -c` overrides through the hardened Git runner without writing configuration or contacting a
+  remote. Renderer evidence is session-only, request-bound, and discarded after field or project
+  changes and in-flight races. Sixteen focused contract, service, preload, UI, and integration-action
+  unit tests passed, and a real-Git integration test proved both draft and repository checks leave
+  `.git/config` byte-for-byte unchanged while effective-identity rewriting is rejected. The complete
+  2,366-test unit suite, all workspace typechecks, production build, zero-warning lint,
+  `git diff --check`, and the 1,202-file structure gate passed. This closes the Git-identity
+  integration-action gap; the broad lifecycle checkbox remains open only for durable server-wide
+  collaboration invite history.

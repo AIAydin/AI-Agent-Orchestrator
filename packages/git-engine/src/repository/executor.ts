@@ -591,6 +591,15 @@ function assertUnguardedCommandIsSafe(args: readonly string[]): void {
     throw guardRequired('worktree checkout');
   }
   if (command === 'checkout' || command === 'switch') throw guardRequired(command);
+  if (
+    command === 'var' &&
+    (args.length !== gitCommandIndex(args) + 2 || args.at(-1) !== 'GIT_AUTHOR_IDENT')
+  ) {
+    throw new GitEngineError(
+      'EXTERNAL_DRIVER_BLOCKED',
+      'Forgeboard only allows Git var to resolve the effective author identity.',
+    );
+  }
   if (CHECKOUT_CAPABLE_COMMANDS.has(command)) throw guardRequired(command);
   if (command === 'checkout-index') throw guardRequired(command);
   if (command === 'read-tree' && args.includes('-u')) throw guardRequired('read-tree checkout');
@@ -758,6 +767,7 @@ const KNOWN_GIT_COMMANDS = new Set([
   'tag',
   'update-index',
   'update-ref',
+  'var',
   'whatchanged',
   'worktree',
   'write-tree',

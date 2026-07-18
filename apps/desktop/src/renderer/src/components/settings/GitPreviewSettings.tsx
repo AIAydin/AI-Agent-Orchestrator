@@ -6,6 +6,7 @@ import { GitConnectionsSettings } from './git-connections/index.js';
 import { FolderReadinessEvidence } from './readiness/FolderReadinessEvidence.js';
 import type { FolderReadinessStatus } from './readiness/useSettingsFolderReadiness.js';
 import { CommandEditor, SettingsSection, type AsyncSettingsProps } from './shared.js';
+import { GitIdentityCheck } from './git-identity/GitIdentityCheck.js';
 
 interface GitPreviewSettingsProps extends AsyncSettingsProps {
   readonly projects: readonly Project[];
@@ -155,6 +156,13 @@ export function GitPreviewSettings({
           Fill in both fields or leave both empty. Forgeboard shows the exact name and email again
           for you to confirm before every commit.
         </small>
+        <GitIdentityCheck
+          name={draft.gitIdentityName}
+          email={draft.gitIdentityEmail}
+          activeProject={activeProject}
+          busy={busy}
+          perform={perform}
+        />
       </SettingsSection>
       <SettingsSection
         title="Git remote"

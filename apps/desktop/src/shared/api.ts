@@ -114,6 +114,7 @@ import type {
   GitShippingPlanView,
   GitShippingResultView,
 } from './git/shipping-contracts.js';
+import type { GitIdentityCheckInput, GitIdentityCheckResult } from './git/identity/contracts.js';
 import type {
   GitDeliveryReadinessApproveInput,
   GitDeliveryReadinessApproveView,
@@ -446,6 +447,9 @@ export interface ForgeboardApi {
     remove(input: ExtensionRemoveInput): Promise<IpcResult<ExtensionDiscoveryView>>;
   };
   git: {
+    identity: {
+      check(input: GitIdentityCheckInput): Promise<IpcResult<GitIdentityCheckResult>>;
+    };
     review(input: GitTargetInput): Promise<IpcResult<GitReviewView>>;
     stagePaths(input: GitPathSelectionInput): Promise<IpcResult<GitReviewView>>;
     stageHunks(input: GitHunkSelectionInput): Promise<IpcResult<GitReviewView>>;
