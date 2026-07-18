@@ -289,6 +289,113 @@ describe('optional collaboration service', () => {
     editorDocument.destroy();
   });
 
+  it('keeps three clients connected while providers echo rapidly advancing awareness', async () => {
+    const { address, adminToken, service } = await startService();
+    const ownerToken = await createRoom(address, adminToken);
+    const editorToken = await inviteAndRedeem(address, ownerToken, 'editor', 'editor-1');
+    const viewerToken = await inviteAndRedeem(address, ownerToken, 'viewer', 'viewer-1');
+    const ownerDocument = initializeOwnerDocument();
+    const editorDocument = new Y.Doc();
+    const viewerDocument = new Y.Doc();
+    const ownerAwareness = new Awareness(ownerDocument);
+    const editorAwareness = new Awareness(editorDocument);
+    const viewerAwareness = new Awareness(viewerDocument);
+    ownerAwareness.setLocalState({
+      user: {
+        id: 'owner-1',
+        displayName: 'Owner',
+        color: '#6d5efc',
+        role: 'owner',
+      },
+    });
+    editorAwareness.setLocalState({
+      user: {
+        id: 'editor-1',
+        displayName: 'Editor',
+        color: '#21a179',
+        role: 'editor',
+      },
+    });
+    viewerAwareness.setLocalState({
+      user: {
+        id: 'viewer-1',
+        displayName: 'Viewer',
+        color: '#f5a623',
+        role: 'viewer',
+      },
+    });
+    let disconnects = 0;
+    await connectClient(
+      address,
+      ownerToken,
+      ownerDocument,
+      () => (disconnects += 1),
+      undefined,
+      undefined,
+      ownerAwareness,
+    );
+    await connectClient(
+      address,
+      editorToken,
+      editorDocument,
+      () => (disconnects += 1),
+      undefined,
+      undefined,
+      editorAwareness,
+    );
+    await connectClient(
+      address,
+      viewerToken,
+      viewerDocument,
+      () => (disconnects += 1),
+      undefined,
+      undefined,
+      viewerAwareness,
+    );
+    await waitFor(() =>
+      [ownerAwareness, editorAwareness, viewerAwareness].every(
+        (awareness) => awareness.getStates().size === 3,
+      ),
+    );
+
+    for (let sequence = 0; sequence < 20; sequence += 1) {
+      editorAwareness.setLocalStateField('cursor', {
+        x: sequence,
+        y: sequence,
+      });
+    }
+    await waitFor(() =>
+      [ownerAwareness, viewerAwareness].every(
+        (awareness) =>
+          (
+            awareness.getStates().get(editorDocument.clientID) as {
+              cursor?: { x: number };
+            }
+          )?.cursor?.x === 19,
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(disconnects).toBe(0);
+    expect(
+      service.store
+        .listAudit('launch-room', 0, 500)
+        .some(
+          (event) =>
+            event.action === 'metadata.rejected' &&
+            event.outcome === 'denied' &&
+            event.details.reason === 'privacy-allowlist',
+        ),
+    ).toBe(false);
+
+    ownerAwareness.destroy();
+    editorAwareness.destroy();
+    viewerAwareness.destroy();
+    ownerDocument.destroy();
+    editorDocument.destroy();
+    viewerDocument.destroy();
+  });
+
   it('revokes invites and rejects forbidden document roots before they reach another client', async () => {
     const { address, adminToken, service } = await startService();
     const ownerToken = await createRoom(address, adminToken);

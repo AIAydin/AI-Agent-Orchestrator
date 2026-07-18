@@ -292,7 +292,8 @@ export function validateAwarenessPayload(
       const currentClock = options.currentClocks?.get(entry.clientId);
       const exactEcho =
         currentClock === entry.clock && isDeepStrictEqual(entry.state, currentState);
-      if (entry.clientId !== claimedClientId && exactEcho) continue;
+      const staleEcho = currentClock !== undefined && entry.clock < currentClock;
+      if (entry.clientId !== claimedClientId && (exactEcho || staleEcho)) continue;
       if (claimedClientId !== undefined && entry.clientId !== claimedClientId) {
         throw new CollaborationPrivacyError(
           'Presence updates cannot change another connection identity.',

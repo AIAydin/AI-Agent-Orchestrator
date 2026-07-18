@@ -46,7 +46,7 @@ not be reclassified as future work.
 - [ ] Sandboxed preview surface and sanitized Markdown, Mermaid, SVG, and imports.
 - [x] Data & Privacy screen with locations, integrations, retention, backup configuration/health,
       portable export/import, canvas recovery, and deletion.
-- [ ] No telemetry or Forgeboard-owned outbound requests in default solo mode, proven by tests.
+- [x] No telemetry or Forgeboard-owned outbound requests in default solo mode, proven by tests.
 
 ## Agent adapters and execution
 
@@ -1251,3 +1251,28 @@ unchecked when only a subset of their required behavior has proof.
   passed. Formatting, zero-warning lint, all workspace typechecks, every production build including
   the built collaboration-server startup smoke, `git diff --check`, and the 1,168-file structure gate
   also passed. Broad Settings coverage and durable server-wide invite listing remain unchecked.
+- 2026-07-18: ordinary configuration is now exhaustively inventoried: every one of the 57 persisted
+  application settings is compile-time classified as UI-controlled, first-run-controlled, or a
+  visible clear-only legacy preference, so adding an unplaced setting fails a test. A fresh-profile
+  Electron journey configures every Settings category without editing source, env, or config files;
+  proves validation; saves and survives restart; exports through a native chooser; persists restored
+  defaults; rejects an imported machine path until it is valid; and imports the prior configuration
+  back through the UI. This establishes a regression baseline for the broad zero-code and Settings
+  requirements while keeping their exhaustive integration-action checkboxes open pending direct
+  control/action mapping evidence. Provider CLI, `gh`, Docker-engine, hosted-collaboration, and
+  signing installation remain honest optional external prerequisites. The Settings inventory unit
+  test and focused Electron journey passed.
+- 2026-07-18: default solo networking now has both static capability inventory and a pre-main
+  Electron tripwire. Before the production main entry imports, the fixture guards main-process
+  `fetch`, HTTP(S), sockets, WebSockets, and Electron session requests, then proves first launch,
+  safe defaults, safe demo, idle time, shutdown, and relaunch attempt none of those network paths,
+  including loopback destinations. The
+  architecture gate also enumerates indirect collaboration fetch injection and Hocuspocus transport
+  construction behind reviewed outbound authority. Its four focused architecture tests, desktop
+  typecheck, and the first-launch/relaunch Electron journey passed.
+- 2026-07-18: collaboration awareness now accepts harmless strictly stale foreign echoes while
+  rejecting equal-clock identity spoofing and removal. A real three-provider server integration
+  regression exercises rapid awareness updates, verifies convergence for every participant, and
+  proves cleanup after disconnect; it passed in the full ten-test collaboration-server integration
+  suite and five additional isolated repetitions. The broad multiplayer E2E requirement remains
+  open pending a combined user-interface journey.

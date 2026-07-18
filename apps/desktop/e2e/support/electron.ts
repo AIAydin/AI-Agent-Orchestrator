@@ -16,23 +16,33 @@ export interface ElectronSession {
   page: Page;
 }
 
+export interface LaunchDesktopOptions {
+  readonly entry?: string;
+  readonly environment?: Readonly<Record<string, string>>;
+}
+
 const desktopRoot = resolve(import.meta.dirname, '../..');
 const mainEntry = join(desktopRoot, 'dist', 'main', 'index.js');
 const require = createRequire(import.meta.url);
 
-export async function launchDesktop(userDataDirectory: string): Promise<ElectronSession> {
-  await access(mainEntry);
+export async function launchDesktop(
+  userDataDirectory: string,
+  options: LaunchDesktopOptions = {},
+): Promise<ElectronSession> {
+  const entry = options.entry ?? mainEntry;
+  await access(entry);
 
   const environment = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => Boolean(entry[1])),
   );
   delete environment.ELECTRON_RENDERER_URL;
   delete environment.ELECTRON_RUN_AS_NODE;
+  Object.assign(environment, options.environment);
 
   const app = await electron.launch({
     executablePath: require('electron') as string,
     cwd: desktopRoot,
-    args: [mainEntry, `--user-data-dir=${userDataDirectory}`],
+    args: [entry, `--user-data-dir=${userDataDirectory}`],
     env: environment,
     timeout: 30_000,
   });
@@ -205,15 +215,43 @@ export async function approveNextNativeAgentLaunch(
 }
 
 export function watchExternalRequests(page: Page, externalRequests: string[]): void {
-  page.on('request', (request) => {
-    const url = new URL(request.url());
-    if (
-      (url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'wss:') &&
-      url.hostname !== '127.0.0.1' &&
-      url.hostname !== 'localhost' &&
-      url.hostname !== '::1'
-    ) {
-      externalRequests.push(request.url());
+  const capture = (rawUrl: string): void => {
+    const url = new URL(rawUrl);
+    if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) && !isLoopbackUrl(url)) {
+      externalRequests.push(rawUrl);
     }
+  };
+  page.on('request', (request) => {
+    capture(request.url());
   });
+  page.on('websocket', (webSocket) => capture(webSocket.url()));
+}
+
+export function watchNetworkRequests(page: Page, networkRequests: string[]): void {
+  const capture = (rawUrl: string): void => {
+    const url = new URL(rawUrl);
+    if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) {
+      networkRequests.push(rawUrl);
+    }
+  };
+  page.on('request', (request) => {
+    capture(request.url());
+  });
+  page.on('websocket', (webSocket) => capture(webSocket.url()));
+}
+
+function isLoopbackUrl(url: URL): boolean {
+  const hostname = url.hostname
+    .replace(/^\[|\]$/gu, '')
+    .replace(/\.$/u, '')
+    .toLowerCase();
+  if (hostname === 'localhost' || hostname === '::1' || hostname === '0:0:0:0:0:0:0:1') {
+    return true;
+  }
+  const octets = hostname.split('.').map(Number);
+  return (
+    octets.length === 4 &&
+    octets[0] === 127 &&
+    octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
+  );
 }

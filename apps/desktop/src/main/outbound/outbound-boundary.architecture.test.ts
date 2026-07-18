@@ -25,6 +25,10 @@ describe('Forgeboard-owned outbound architecture', () => {
       'outbound/outbound-executors.ts',
       'previews/preview-service.ts',
     ]);
+    expect(moduleImportSites(sources, 'node:net')).toEqual([
+      'previews/preview-service.ts',
+      'previews/surface/url-policy.ts',
+    ]);
     expect(executor.match(/\bhttpsRequest\s*\(/gu)).toHaveLength(1);
     expect(executor).toContain(
       "'https://api.github.com/repos/AIAydin/AI-Agent-Orchestrator/releases?per_page=20'",
@@ -37,6 +41,23 @@ describe('Forgeboard-owned outbound architecture', () => {
     );
     const gitRemoteExecutor = requiredSource(sources, 'outbound/git/executors.ts');
     expect(gitRemoteExecutor.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(4);
+  });
+
+  it('enumerates indirect fetch and third-party transport constructors', async () => {
+    const sources = await mainSources();
+    expect(callSites(sources, /\?\?\s*fetch\b/gu)).toEqual([
+      'collaboration/invites/http-client.ts',
+      'collaboration/management/http-client.ts',
+    ]);
+    expect(callSites(sources, /\bHocuspocusProvider\b/gu)).toEqual(['collaboration/provider.ts']);
+
+    const inviteClient = requiredSource(sources, 'collaboration/invites/http-client.ts');
+    expect(inviteClient.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(3);
+    const managementClient = requiredSource(sources, 'collaboration/management/http-client.ts');
+    expect(managementClient.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(7);
+    expect(requiredSource(sources, 'collaboration/ipc.ts')).toMatch(
+      /this\.outbound\.confirmAndExecute\(\{[\s\S]*?execute: async \(\) => \{[\s\S]*?this\.#client\.join\(input\)/u,
+    );
   });
 
   it('has no unenumerated direct external network API in desktop main', async () => {

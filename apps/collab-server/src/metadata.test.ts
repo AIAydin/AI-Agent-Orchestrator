@@ -220,8 +220,34 @@ describe('collaboration metadata privacy allowlist', () => {
         currentClocks: new Map([[document.clientID, clock]]),
       }),
     ).toBeUndefined();
+    expect(
+      validateAwarenessPayload(update, context, {
+        boundClientId: document.clientID + 1,
+        currentStates: new Map([[document.clientID, state]]),
+        currentClocks: new Map([[document.clientID, clock + 1]]),
+      }),
+    ).toBe(document.clientID + 1);
     expect(() =>
       validateAwarenessPayload(update, context, { boundClientId: document.clientID + 1 }),
+    ).toThrow('Presence updates cannot change another connection identity.');
+    expect(() =>
+      validateAwarenessPayload(update, context, {
+        boundClientId: document.clientID + 1,
+        currentStates: new Map([[document.clientID, { ...state, cursor: { x: 1, y: 1 } }]]),
+        currentClocks: new Map([[document.clientID, clock]]),
+      }),
+    ).toThrow('Presence updates cannot change another connection identity.');
+
+    awareness.setLocalState(null);
+    const equalClockRemoval = encodeAwarenessUpdate(awareness, [document.clientID]);
+    const removalClock = awareness.meta.get(document.clientID)?.clock;
+    if (removalClock === undefined) throw new Error('Missing removal awareness clock.');
+    expect(() =>
+      validateAwarenessPayload(equalClockRemoval, context, {
+        boundClientId: document.clientID + 1,
+        currentStates: new Map([[document.clientID, state]]),
+        currentClocks: new Map([[document.clientID, removalClock]]),
+      }),
     ).toThrow('Presence updates cannot change another connection identity.');
 
     awareness.destroy();
