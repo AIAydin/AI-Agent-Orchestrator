@@ -1315,3 +1315,30 @@ unchecked when only a subset of their required behavior has proof.
   checkbox remains open because OAuth sessions, collaboration tokens, extension authority, Git
   remotes, and similar device/project bindings intentionally require separate portability rules and
   direct action evidence rather than being copied into the settings document.
+- 2026-07-18: an exported 18-surface integration-action manifest now maps provider OAuth, local CLI
+  readiness, Git remotes and GitHub CLI discovery, Docker, collaboration, extensions, updates,
+  backups, recovery, integrity, and approvals to their real UI routes, accessible controls,
+  executable tests, authority scope, and export policy. Codex and Claude cards have distinct
+  heading-bound accessible names and a two-provider lifecycle regression; renderer coverage now
+  exercises extension install/update/remove review and update-check cancellation. Fifteen focused
+  UI/manifest tests, desktop strict typecheck, zero-warning lint, formatting, and the 1,189-file
+  structure gate passed. The broad lifecycle checkbox remains open: Docker readiness is advisory in
+  ordinary Settings, Git identity has no separate test action, and collaboration invite history is
+  current-session rather than durable server-wide state.
+- 2026-07-18: tag publication now fails closed on the complete four-platform `RELEASE-INFO` set and
+  derives the visible GitHub Release title, leading warning, and per-platform signing summary from
+  post-package Developer ID/notarization and Authenticode evidence. Prepared notes no longer make a
+  static unsigned claim that could contradict signed artifacts, and maintainer documentation now
+  accurately states that a pushed tag publishes automatically only after all build jobs pass. The
+  29 focused release tests, formatting, zero-warning lint, and structure gate passed. Installer and
+  GitHub Release checklist items remain open pending hosted Windows/Linux/macOS evidence and actual
+  publication after the repository billing/visibility and signing prerequisites are resolved.
+- 2026-07-18: full-suite verification exposed and fixed two append-only migration assumptions from
+  the persistent-history checkpoint. Startup extension sanitation and transcript retention now
+  rewrite only history rows that actually exist, so they never synthesize a child row for a legacy
+  canvas without a parent project; readiness migration fixtures locate their intended migration
+  instead of assuming it remains last. The complete 2,341-test unit suite passed. The integration
+  run passed 308 tests and its three fresh-worktree bootstrap failures passed immediately after the
+  bundled test agent was built and the installed Electron ABI dependency was exposed, covering all
+  311 integration cases. Repository-wide formatting, zero-warning lint, all workspace typechecks,
+  the production build, `git diff --check`, and the 1,189-file structure gate passed.

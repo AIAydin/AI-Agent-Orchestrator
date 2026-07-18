@@ -130,7 +130,8 @@ for (const densityRoot of DENSITY_ROOTS) {
 denseDirectories.sort((left, right) => left.directory.localeCompare(right.directory));
 
 const looseRootFiles = (await readdir(repositoryRoot, { withFileTypes: true }))
-  .filter((entry) => entry.isFile() && !ROOT_ALLOWED_FILES.has(entry.name))
+  // Git worktrees use a `.git` pointer file instead of the excluded metadata directory.
+  .filter((entry) => entry.isFile() && entry.name !== '.git' && !ROOT_ALLOWED_FILES.has(entry.name))
   .map((entry) => entry.name)
   .sort();
 

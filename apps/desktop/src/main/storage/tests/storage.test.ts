@@ -18,6 +18,14 @@ const NOW = '2026-07-14T16:00:00.000Z';
 const PROJECT_ID = '00000000-0000-4000-8000-000000000001';
 const CANVAS_ID = '00000000-0000-4000-8000-000000000002';
 
+function legacyReadinessMigrationIndex(): number {
+  const index = MIGRATIONS.findIndex((migration) =>
+    migration.includes('DELETE FROM delivery_readiness_approvals'),
+  );
+  if (index < 0) throw new Error('Legacy readiness migration is missing.');
+  return index;
+}
+
 const openStores = new Set<LocalStore>();
 const temporaryDirectories: string[] = [];
 
@@ -244,7 +252,7 @@ describe('LocalStore', () => {
         .prepare('INSERT INTO delivery_readiness_approvals(id, readiness_id) VALUES(?, ?)')
         .run('approval', 'legacy');
 
-      const migration = MIGRATIONS.at(-1)!;
+      const migration = MIGRATIONS[legacyReadinessMigrationIndex()]!;
       database.exec(migration);
       database.exec(migration);
 
@@ -263,7 +271,10 @@ describe('LocalStore', () => {
   it('upgrades legacy readiness without blocking startup or deleting its project and run', () => {
     const databasePath = createDatabasePath();
     const legacy = openDatabase(databasePath);
-    for (const [index, migration] of MIGRATIONS.slice(0, -1).entries()) {
+    for (const [index, migration] of MIGRATIONS.slice(
+      0,
+      legacyReadinessMigrationIndex(),
+    ).entries()) {
       legacy.exec(migration);
       legacy
         .prepare('INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)')

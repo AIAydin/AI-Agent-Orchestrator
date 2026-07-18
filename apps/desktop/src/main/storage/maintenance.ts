@@ -51,13 +51,20 @@ export function sanitizeStoredExtensionData(database: DatabaseSync): void {
     for (const row of canvases) {
       const parsed = CanvasDocumentSchema.parse(parseJson(row.value_json));
       const sanitized = sanitizeCanvasDocument(parsed);
-      const history = loadCanvasHistory(database, parsed.projectId);
-      if (!isDeepStrictEqual(parsed, sanitized)) {
+      const documentChanged = !isDeepStrictEqual(parsed, sanitized);
+      const hasStoredHistory = hasCanvasHistory(database, parsed.projectId);
+      const history = hasStoredHistory ? loadCanvasHistory(database, parsed.projectId) : undefined;
+      if (documentChanged) {
         database
           .prepare('UPDATE canvas_documents SET value_json = ? WHERE project_id = ?')
           .run(JSON.stringify(sanitized), row.project_id);
       }
-      if (history) writeHistory(database, sanitized, sanitizeHistory(sanitized, history));
+      if (history) {
+        const sanitizedHistory = sanitizeHistory(sanitized, history);
+        if (documentChanged || !isDeepStrictEqual(history, sanitizedHistory)) {
+          writeHistory(database, sanitized, sanitizedHistory);
+        }
+      }
     }
 
     const snapshots = database
@@ -144,7 +151,9 @@ function scrubExpiredTranscripts(
     .all() as unknown as JsonRow[];
   for (const row of canvases) {
     const document = sanitizeCanvasDocument(CanvasDocumentSchema.parse(parseJson(row.value_json)));
-    const history = loadCanvasHistory(database, document.projectId);
+    const history = hasCanvasHistory(database, document.projectId)
+      ? loadCanvasHistory(database, document.projectId)
+      : undefined;
     const scrubbed = scrubCanvasTranscripts(document, cutoff);
     let scrubbedHistory = history;
     let historyChanged = false;
@@ -191,4 +200,10 @@ function scrubExpiredTranscripts(
     scrubbedSnapshotTranscripts,
     scrubbedHistoryTranscripts,
   };
+}
+
+function hasCanvasHistory(database: DatabaseSync, projectId: string): boolean {
+  return Boolean(
+    database.prepare('SELECT 1 FROM canvas_history WHERE project_id = ?').get(projectId),
+  );
 }
