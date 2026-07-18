@@ -32,7 +32,7 @@ not be reclassified as future work.
 - [x] UI-configured manual, scheduled, and changed-data-on-quit SQLite backups with per-folder
       retention targets and persisted health; owner-bound canvas snapshot recovery; and reviewed,
       transactional portable JSON merge/replace import.
-- [ ] Persistent undo/redo checkpoints, autosave, recoverable snapshots, and moved-project recovery.
+- [x] Persistent undo/redo checkpoints, autosave, recoverable snapshots, and moved-project recovery.
 
 ## Security, permissions, and privacy
 
@@ -1288,3 +1288,13 @@ unchecked when only a subset of their required behavior has proof.
   production Electron journey also proved Undo after one full restart, Redo after another, and zero
   external requests. The aggregate checklist item remains open pending dedicated moved-project
   recovery journey evidence.
+- 2026-07-18: a direct moved-project Electron journey now completes the aggregate persistence
+  requirement. It opens a real temporary project through the UI, creates and deletes a node to leave
+  a durable undo checkpoint, fully closes Forgeboard, moves the folder on disk, and relaunches with
+  the same local profile. The welcome screen detects the missing folder; the native Locate chooser
+  discloses its exact directory-only options; the in-app review shows canonical old/new paths and
+  preservation scope; Cancel leaves the saved location unchanged; and explicit reconfirmation opens
+  the relocated project with its current empty canvas and Undo history intact. Undo restores the
+  deleted node, proving identity-bound canvas and history preservation through relocation, while the
+  journey records zero external requests. The focused Electron journey passed alongside
+  `git diff --check` and the 1,182-file structure gate.
