@@ -140,13 +140,13 @@ function fallbackConfirmation(
 ): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Unsaved Forgeboard work',
+    title: 'Unsaved work in Forgeboard',
     message: 'Forgeboard could not confirm that your latest work was saved.',
     detail:
       outcome === 'timed-out'
-        ? 'The save request timed out. Keep Forgeboard open and try again, or explicitly close without saving.'
-        : 'The renderer reported that saving failed. Keep Forgeboard open and try again, or explicitly close without saving.',
-    buttons: ['Keep Forgeboard Open', 'Close Without Saving'],
+        ? 'Saving did not finish in time. Keep Forgeboard open and try again, or close without saving your latest changes.'
+        : 'Saving your latest changes failed. Keep Forgeboard open and try again, or close without saving them.',
+    buttons: ['Keep Forgeboard open', 'Close without saving'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,

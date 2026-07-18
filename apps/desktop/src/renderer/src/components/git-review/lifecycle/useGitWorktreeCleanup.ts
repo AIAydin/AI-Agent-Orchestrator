@@ -18,7 +18,7 @@ interface GitWorktreeCleanupController {
 function cleanupErrorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
-    : 'Forgeboard could not complete the managed-worktree cleanup.';
+    : "Forgeboard couldn't finish cleaning up the agent's workspace. Try again.";
 }
 
 function cleanupCompleted(result: GitWorktreeCleanupResultView): boolean {
@@ -79,13 +79,13 @@ export function useGitWorktreeCleanup(
 
   const confirm = useCallback(
     async (planId: string) => {
-      const result = await perform('Waiting for system cleanup confirmation', () =>
+      const result = await perform('Waiting for you to confirm the cleanup', () =>
         window.forgeboard.git.lifecycle.confirmCleanup({ planId }),
       );
       if (result !== null && result !== undefined && !cleanupCompleted(result)) {
         reportError(
           new Error(
-            'Cleanup did not report complete worktree, branch, and metadata removal. Refresh run history before continuing.',
+            "Forgeboard couldn't confirm that the workspace, branch, and run details were all removed. Refresh the run history before continuing.",
           ),
         );
         return undefined;

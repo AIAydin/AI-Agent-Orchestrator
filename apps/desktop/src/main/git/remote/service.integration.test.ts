@@ -355,7 +355,7 @@ describe('main-owned Git remote delivery', () => {
     const harness = createHarness(fixture);
 
     await expect(harness.service.inspect({ target: deliveryTarget() })).rejects.toThrow(
-      /legacy graft configuration/iu,
+      /legacy grafts file/iu,
     );
   });
 
@@ -421,7 +421,7 @@ describe('main-owned Git remote delivery', () => {
     const configuredHookHarness = createHarness(configuredHookFixture);
     await expect(
       prepareFixturePush(configuredHookHarness.service, 'window-configured-hook'),
-    ).rejects.toThrow(/configured source hook paths/iu);
+    ).rejects.toThrow(/points hook scripts to a custom folder/iu);
 
     if (process.platform !== 'win32') {
       const symlinkHookFixture = await createFixture();
@@ -515,7 +515,7 @@ describe('main-owned Git remote delivery', () => {
         remote: 'origin',
         destinationBranch: 'published/lfs',
       }),
-    ).rejects.toThrow(/Git LFS-backed history/iu);
+    ).rejects.toThrow(/history uses Git LFS/iu);
 
     const legacyFixture = await createFixture();
     await writeFile(
@@ -532,7 +532,7 @@ describe('main-owned Git remote delivery', () => {
         remote: 'origin',
         destinationBranch: 'published/legacy-lfs',
       }),
-    ).rejects.toThrow(/Git LFS-backed history/iu);
+    ).rejects.toThrow(/history uses Git LFS/iu);
   });
 
   it('does not treat a documentation mention of the Git LFS header as an LFS pointer', async () => {
@@ -663,7 +663,7 @@ describe('main-owned Git remote delivery', () => {
         body: 'body',
         draft: false,
       }),
-    ).rejects.toThrow(/push the exact reviewed source/iu);
+    ).rejects.toThrow(/Push the reviewed commits to this remote branch/iu);
 
     runner.branches.set('remote-topic', fixture.sourceHead);
     const currentStatus = await harness.service.prepareGitHubStatus('window-github', {
@@ -713,7 +713,7 @@ describe('main-owned Git remote delivery', () => {
     });
     expect(created?.url).toBe('https://github.com/owner/repository/pull/42');
     expect(nativePlan?.disclosure.details).toContainEqual({
-      label: 'Exact pull request body',
+      label: 'Pull request body',
       value: body,
     });
     const prCall = runner.calls.find((call) => call.args[0] === 'pr');
@@ -783,10 +783,10 @@ describe('main-owned Git remote delivery', () => {
     });
     expect(nativePlan?.disclosure.details).toEqual(
       expect.arrayContaining([
-        { label: 'GitHub CLI source', value: 'Custom selection' },
+        { label: 'How GitHub CLI was found', value: 'Selected in Settings' },
         { label: 'GitHub CLI file', value: 'fake-gh' },
-        { label: 'GitHub CLI SHA-256', value: 'd'.repeat(64) },
-        { label: 'Exact GitHub CLI path', value: runner.executable },
+        { label: 'GitHub CLI fingerprint (SHA-256)', value: 'd'.repeat(64) },
+        { label: 'GitHub CLI location', value: runner.executable },
       ]),
     );
     expect(harness.githubRuntime.resolveCalls - resolvesBeforeConfirm).toBeGreaterThanOrEqual(

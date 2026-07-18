@@ -44,7 +44,7 @@ describe('Custom permission resolution', () => {
     });
     expect(permission.prompt).toContain('relative to the assigned worktree: .');
     expect(permission.prompt).not.toContain(cwd);
-    expect(permission.profile.disclosure).toContain('not an operating-system filesystem sandbox');
+    expect(permission.profile.disclosure).toContain('not limits your computer enforces');
   });
 
   it('canonicalizes explicit folder roots and rejects context outside readable roots', async () => {

@@ -31,8 +31,8 @@ export function TestNodePanel(props: TestNodePanelProps) {
 
       <TestNodeConfiguration {...props} />
       <p className="test-node-safety">
-        Forgeboard runs this exact executable and literal arguments without a shell. Launch still
-        requires native review of the resolved checkout and environment names.
+        Forgeboard runs this exact program and arguments directly, with no shell in between. You
+        review the checkout and environment before anything starts.
       </p>
       <div className="test-node-actions">
         {current?.active ? (
@@ -61,30 +61,30 @@ export function TestNodePanel(props: TestNodePanelProps) {
             ) : (
               <RefreshCw size={12} aria-hidden="true" />
             )}
-            {current === null ? 'Review & run' : 'Run again'}
+            {current === null ? 'Review and run' : 'Run again'}
           </button>
         )}
       </div>
 
       {!commandConfigured && (
         <p className="test-node-recovery" role="alert">
-          Configure an executable in this panel before running the Test node.
+          Set up a command above before running this test.
         </p>
       )}
       {!props.mutationsAuthorized && (
         <p className="test-node-recovery" role="status">
-          This collaboration role can inspect Test history but cannot run or cancel checks.
+          Your role lets you view test history, but not run or cancel tests.
         </p>
       )}
       {current?.approvalRequired && (
         <p className="test-node-recovery" role="status">
-          Launch review is waiting in the Workflows activity panel. No process has started.
+          This test is waiting for your approval in the Workflows panel. Nothing has started yet.
         </p>
       )}
       {current?.status === 'lost' && (
         <p className="test-node-recovery" role="alert">
-          Forgeboard lost the previous process during recovery. Review the retained attempt, then
-          run again when ready.
+          Forgeboard lost track of the previous run while restarting. Check the saved attempt, then
+          run again when you are ready.
         </p>
       )}
       {current?.statusReason && <p className="test-node-recovery">{current.statusReason}</p>}
@@ -116,13 +116,13 @@ function AttemptResult({
   readonly title: string;
 }) {
   return (
-    <section className="test-node-result" aria-label="Latest test attempt">
+    <section className="test-node-result" aria-label="Test attempt result">
       <header>
         <strong>{title}</strong>
         <small>Attempt {attempt.attempt}</small>
       </header>
       {attempt.summary && (
-        <dl className="test-node-summary" aria-label="Parsed test summary">
+        <dl className="test-node-summary" aria-label="Test result summary">
           <div>
             <dt>Passed</dt>
             <dd>{attempt.summary.passed}</dd>
@@ -143,17 +143,15 @@ function AttemptResult({
       )}
       {attempt.output === '' ? (
         <p className="test-node-empty">
-          {attempt.active
-            ? 'Waiting for process output…'
-            : 'Raw output is unavailable in this session.'}
+          {attempt.active ? 'Waiting for output…' : "Output isn't available in this session."}
         </p>
       ) : (
-        <pre tabIndex={0} aria-label="Test node raw output">
+        <pre tabIndex={0} aria-label="Test output">
           {attempt.output}
         </pre>
       )}
       {attempt.outputTruncated && (
-        <small>Output was truncated at the trusted runtime boundary.</small>
+        <small>Output was cut off because it reached the size limit.</small>
       )}
     </section>
   );
@@ -243,7 +241,7 @@ function AttemptHistory({
                     {new Date(attempt.updatedAt).toLocaleString()}
                   </time>
                 </summary>
-                <AttemptResult attempt={attempt} title="Retained result" />
+                <AttemptResult attempt={attempt} title="Saved result" />
                 <ArtifactList
                   artifacts={artifacts}
                   checkExecutionId={attempt.checkExecutionId}

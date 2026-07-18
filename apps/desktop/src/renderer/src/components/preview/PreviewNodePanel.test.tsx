@@ -228,7 +228,7 @@ describe('PreviewNodePanel', () => {
 
     expect(
       screen.getByRole<HTMLSelectElement>('combobox', {
-        name: 'Preview command',
+        name: 'Script to run',
       }).value,
     ).toBe('dev');
     await waitFor(() => expect(onUpdate).toHaveBeenCalledWith({ previewPackageScript: 'dev' }));
@@ -262,19 +262,19 @@ describe('PreviewNodePanel', () => {
     await waitFor(() =>
       expect(screen.getByRole('option', { name: /Agent run aaaaaaaa/u })).toBeTruthy(),
     );
-    fireEvent.change(screen.getByRole('combobox', { name: 'Preview target' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Run the preview in' }), {
       target: { value: `agent-run:${RUN_ID}` },
     });
-    fireEvent.change(screen.getByLabelText('Preview arguments'), {
+    fireEvent.change(screen.getByLabelText('Arguments, one per line'), {
       target: { value: 'run\ndev\n--host' },
     });
     fireEvent.change(screen.getByLabelText('Project folder'), {
       target: { value: 'apps/web' },
     });
-    fireEvent.change(screen.getByLabelText('Readiness path'), {
+    fireEvent.change(screen.getByLabelText('Health check path'), {
       target: { value: '/health' },
     });
-    fireEvent.change(screen.getByLabelText('Initial URL path'), {
+    fireEvent.change(screen.getByLabelText('First page to open'), {
       target: { value: '/dashboard' },
     });
 
@@ -338,11 +338,11 @@ describe('PreviewNodePanel', () => {
       operations: surfaceOperations(),
     });
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Primary device viewport' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Main device' }), {
       target: { value: 'tablet' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Rotate to landscape' }));
-    fireEvent.change(screen.getByRole('combobox', { name: 'Secondary device viewport' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Second device' }), {
       target: { value: 'iphone' },
     });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Compare side by side' }));
@@ -351,9 +351,7 @@ describe('PreviewNodePanel', () => {
     expect(onUpdate).toHaveBeenCalledWith({ previewOrientation: 'landscape' });
     expect(onUpdate).toHaveBeenCalledWith({ previewSecondaryPreset: 'iphone' });
     expect(onUpdate).toHaveBeenCalledWith({ previewSideBySide: false });
-    expect(screen.getByRole('note').textContent).toContain(
-      'automatically enables Chromium touch emulation',
-    );
+    expect(screen.getByRole('note').textContent).toContain('automatically act like a touchscreen');
     expect(screen.queryByRole('checkbox', { name: /touch/u })).toBeNull();
   });
 
@@ -367,15 +365,15 @@ describe('PreviewNodePanel', () => {
       operations: surfaceOperations(),
     });
 
-    expect(screen.getByRole('combobox', { name: 'Preview target' })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: 'Run the preview in' })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.getByRole('combobox', { name: 'Preview command source' })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: 'Run the preview with' })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.getByLabelText('Readiness path')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Health check path')).toHaveProperty('disabled', true);
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     await waitFor(() =>
       expect(stop).toHaveBeenCalledWith({
@@ -399,11 +397,11 @@ describe('PreviewNodePanel', () => {
     await waitFor(() =>
       expect(screen.getByRole('option', { name: /Agent run aaaaaaaa/u })).toBeTruthy(),
     );
-    expect(screen.getByRole('combobox', { name: 'Preview target' })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: 'Run the preview in' })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.getByRole('combobox', { name: 'Preview command source' })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: 'Run the preview with' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -462,7 +460,7 @@ describe('PreviewNodePanel', () => {
       operations,
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open preview surface' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open preview' }));
     await waitFor(() => expect(operations.createSurface).toHaveBeenCalledTimes(2));
     const firstCreate = vi.mocked(operations.createSurface).mock.calls[0]?.[0];
     expect(firstCreate?.projectId).toBe(PROJECT_ID);
@@ -473,18 +471,10 @@ describe('PreviewNodePanel', () => {
     expect(firstCreate?.touchEmulation).toBe(true);
     const secondCreate = vi.mocked(operations.createSurface).mock.calls[1]?.[0];
     expect(secondCreate?.touchEmulation).toBe(true);
-    expect(screen.getByLabelText<HTMLElement>('iPhone secure preview surface').style.width).toBe(
-      '390px',
-    );
-    expect(screen.getByLabelText<HTMLElement>('iPhone secure preview surface').style.height).toBe(
-      '844px',
-    );
-    expect(screen.getByLabelText<HTMLElement>('Tablet secure preview surface').style.width).toBe(
-      '820px',
-    );
-    expect(screen.getByLabelText<HTMLElement>('Tablet secure preview surface').style.height).toBe(
-      '1180px',
-    );
+    expect(screen.getByLabelText<HTMLElement>('iPhone preview').style.width).toBe('390px');
+    expect(screen.getByLabelText<HTMLElement>('iPhone preview').style.height).toBe('844px');
+    expect(screen.getByLabelText<HTMLElement>('Tablet preview').style.width).toBe('820px');
+    expect(screen.getByLabelText<HTMLElement>('Tablet preview').style.height).toBe('1180px');
 
     await waitFor(() =>
       expect(
@@ -493,15 +483,15 @@ describe('PreviewNodePanel', () => {
         }).disabled,
       ).toBe(false),
     );
-    expect(screen.getAllByText('Touch emulation active')).toHaveLength(2);
+    expect(screen.getAllByText('Touchscreen mode on')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Save screenshot' }));
     await screen.findByText('Screenshot saved.');
-    fireEvent.click(screen.getByRole('button', { name: 'Open in system browser' }));
-    await screen.findByText('Opened in the system browser.');
+    fireEvent.click(screen.getByRole('button', { name: 'Open in browser' }));
+    await screen.findByText('Opened in your browser.');
     expect(operations.saveSurfaceScreenshot).toHaveBeenCalledTimes(1);
     expect(operations.openSurfaceExternally).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close preview surface' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
     await waitFor(() => expect(operations.closeSurface).toHaveBeenCalledTimes(2));
   });
 
@@ -515,11 +505,11 @@ describe('PreviewNodePanel', () => {
       operations,
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open preview surface' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open preview' }));
     await waitFor(() => expect(operations.createSurface).toHaveBeenCalledTimes(1));
     const input = vi.mocked(operations.createSurface).mock.calls[0]?.[0];
     expect(input?.touchEmulation).toBe(false);
-    expect(screen.queryByText('Touch emulation active')).toBeNull();
+    expect(screen.queryByText('Touchscreen mode on')).toBeNull();
   });
 });
 

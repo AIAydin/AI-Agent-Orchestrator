@@ -44,7 +44,8 @@ const execFileAsync = promisify(execFile);
 const MAX_OUTPUT = 2 * 1024 * 1024;
 
 const PROVIDER_DISCLOSURES = {
-  'test-agent': 'Deterministic local test process. It does not contact a model provider.',
+  'test-agent':
+    'A built-in test agent that always replies the same way and never contacts a model provider.',
   codex: 'Codex CLI may send explicitly selected context to OpenAI under your CLI account terms.',
   claude:
     'Claude Code may send explicitly selected context to Anthropic under your CLI account terms.',
@@ -88,9 +89,9 @@ export class ProjectService {
 
   async pickRepository(authority?: ProjectRequestAuthority): Promise<Project | null> {
     const selection = await this.#showOpenDialog(authority, {
-      title: 'Open a repository',
+      title: 'Open a project folder',
       properties: ['openDirectory', 'createDirectory'],
-      buttonLabel: 'Open repository',
+      buttonLabel: 'Open project',
     });
     authority?.assertCurrent();
     const path = selection.filePaths[0];
@@ -122,13 +123,13 @@ export class ProjectService {
     const project = this.store.getProject(projectId);
     if (!project || !project.missing) {
       throw new Error(
-        'Only a missing recent project can be located. Refresh recent projects first.',
+        'Only a project marked as missing can be located. Refresh the list, then try again.',
       );
     }
     const selection = await this.#showOpenDialog(authority, {
       title: 'Locate moved repository',
       properties: ['openDirectory'],
-      buttonLabel: 'Inspect repository',
+      buttonLabel: 'Check this folder',
     });
     authority?.assertCurrent();
     const path = selection.filePaths[0];
@@ -165,13 +166,13 @@ export class ProjectService {
     candidatePath: string,
   ): Promise<RecoveryInspection> {
     const existing = this.store.getProject(projectId);
-    if (!existing) throw new Error('The missing project is no longer in recent projects.');
+    if (!existing) throw new Error('This project is no longer in your recent projects.');
     if (!existing.missing) {
-      throw new Error('Only a missing recent project can be rebound to a new location.');
+      throw new Error('Only a project marked as missing can be pointed to a new location.');
     }
     const canonicalPath = await realpath(resolve(candidatePath));
     if (!(await stat(canonicalPath)).isDirectory()) {
-      throw new Error('The selected recovery path is not a directory.');
+      throw new Error('The selected path is not a folder.');
     }
     const conflict = this.store
       .listProjects(10_000)
@@ -182,13 +183,17 @@ export class ProjectService {
     const candidateRemotes = new Set(health.remotes.map((remote) => remote.url));
     const warnings: string[] = [];
     if (existing.health.isGitRepository && !health.isGitRepository) {
-      warnings.push('The previous location was a Git repository but this candidate is not.');
+      warnings.push(
+        'The previous location was a Git repository, but the folder you picked is not.',
+      );
     }
     if (
       expectedRemotes.size > 0 &&
       ![...expectedRemotes].some((remote) => candidateRemotes.has(remote))
     ) {
-      warnings.push('The candidate does not share a known remote with the previous location.');
+      warnings.push(
+        'The folder you picked does not share an online copy (remote) with the previous location.',
+      );
     }
     return {
       projectId,
@@ -214,12 +219,10 @@ export class ProjectService {
     const pending = this.#pendingRecoveries.get(input.confirmationId);
     this.#pendingRecoveries.delete(input.confirmationId);
     if (!pending || pending.projectId !== input.projectId) {
-      throw new Error(
-        'The recovery confirmation is missing, expired, or belongs to another project.',
-      );
+      throw new Error('This confirmation is no longer valid. Locate the project again.');
     }
     if (Date.now() > pending.expiresAtMs) {
-      throw new Error('The recovery confirmation expired. Locate the repository again.');
+      throw new Error('This confirmation expired. Locate the project folder again.');
     }
 
     await this.refreshRecentProjects(authority);
@@ -232,12 +235,12 @@ export class ProjectService {
       recoveryFingerprint(assessment) !== pending.fingerprint
     ) {
       throw new Error(
-        'The selected repository changed after review. Locate it again before confirming.',
+        'The selected folder changed after review. Locate it again before confirming.',
       );
     }
 
     const project = this.store.getProject(input.projectId);
-    if (!project) throw new Error('The missing project is no longer in recent projects.');
+    if (!project) throw new Error('This project is no longer in your recent projects.');
     const recovered: Project = {
       ...project,
       name: assessment.candidate.name,
@@ -301,7 +304,7 @@ export class ProjectService {
     authority?.assertCurrent();
     if (selection.canceled) return [];
     if (selection.filePaths.length > (input.multiple ? 256 : 1)) {
-      throw new Error('The local reference selection exceeds the supported item limit.');
+      throw new Error('Too many items were selected. Choose fewer items and try again.');
     }
     const selected: string[] = [];
     for (const candidate of selection.filePaths) {
@@ -310,10 +313,10 @@ export class ProjectService {
       authority?.assertCurrent();
       const expectedType = input.kind === 'file' ? details.isFile() : details.isDirectory();
       if (!expectedType) {
-        throw new Error(`The selected path is not a ${input.kind}.`);
+        throw new Error(`The selected path is not a ${input.kind === 'file' ? 'file' : 'folder'}.`);
       }
       if (canonicalPath.includes('\0') || canonicalPath.length > 32_768) {
-        throw new Error('The selected local reference is not a supported path.');
+        throw new Error('Forgeboard cannot use the selected path.');
       }
       if (!selected.includes(canonicalPath)) selected.push(canonicalPath);
     }
@@ -323,7 +326,7 @@ export class ProjectService {
   async open(candidatePath: string, authority?: ProjectRequestAuthority): Promise<Project> {
     const canonicalPath = await realpath(resolve(candidatePath));
     const info = await stat(canonicalPath);
-    if (!info.isDirectory()) throw new Error('The selected path is not a directory.');
+    if (!info.isDirectory()) throw new Error('The selected path is not a folder.');
     const health = await scanRepository(canonicalPath, this.repositories);
     authority?.assertCurrent();
     const existing = this.store.getProjectByPath(canonicalPath);
@@ -360,7 +363,7 @@ export class ProjectService {
       relativeTarget.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
       isAbsolute(relativeTarget)
     ) {
-      throw new Error('Project path escapes the selected parent.');
+      throw new Error('The project folder must stay inside the location you chose.');
     }
     authority?.assertCurrent();
     await mkdir(target, { recursive: false, mode: 0o755 });
@@ -418,7 +421,7 @@ export class ProjectService {
             authorization.assertCurrent();
             const current = await prepareCloneDestination(destinationPath);
             if (current.parentIdentity !== prepared.parentIdentity) {
-              throw new Error('The selected clone destination changed after approval.');
+              throw new Error('The clone destination changed after approval. Choose it again.');
             }
             return gitCloneDisclosure(remoteUrl, current.destinationPath);
           },
@@ -497,16 +500,16 @@ export class ProjectService {
     const project = await this.initializableProject(projectId, authority);
     const decision = await this.#showMessageBox(authority, {
       type: 'question',
-      buttons: ['Cancel', 'Initialize Git'],
+      buttons: ['Cancel', 'Set up Git'],
       defaultId: 0,
       cancelId: 0,
       noLink: true,
-      title: 'Initialize Git repository?',
-      message: `Initialize Git in ${project.name}?`,
+      title: 'Set up Git?',
+      message: `Set up Git in ${project.name}?`,
       detail: [
         project.path,
         '',
-        'Forgeboard will create Git metadata with main as the initial branch. Existing files are not changed, staged, or committed; Git will report them as untracked until you review them.',
+        'Forgeboard will set up Git version tracking with a main branch, so agents can work in their own copies and you can review their changes. Your existing files stay exactly as they are — nothing is saved into Git history yet.',
       ].join('\n'),
     });
     authority?.assertCurrent();
@@ -529,7 +532,9 @@ export class ProjectService {
       authority?.assertCurrent();
       const health = await scanRepository(current.path, this.repositories);
       if (!health.isGitRepository) {
-        throw new Error('Git initialization finished without creating a readable repository.');
+        throw new Error(
+          'Git setup finished, but Forgeboard could not read the new repository. Try setting up Git again.',
+        );
       }
       const updated = this.store.saveProject({ ...current, health });
       this.store.appendAudit('git', 'initialize', 'allowed', {
@@ -567,7 +572,7 @@ export class ProjectService {
     authority?.assertCurrent();
     if (health.isGitRepository) {
       this.store.saveProject({ ...project, health });
-      throw new Error('This project is already a Git repository.');
+      throw new Error('Git is already set up for this project.');
     }
     return { ...project, health };
   }
@@ -648,11 +653,11 @@ export async function detectAgents(
   const customDetection: AgentDetection = await (async () => {
     const disclosure =
       customAgent?.providerDisclosure ??
-      'A custom CLI is disabled until its executable and provider disclosure are configured in Settings.';
+      'Your custom agent stays off until you choose its program and add a privacy note in Settings.';
     if (!customAgent?.enabled) {
       return {
         id: 'custom',
-        label: customAgent?.name ?? 'Custom CLI',
+        label: customAgent?.name ?? 'Custom agent',
         installed: false,
         executable: customAgent?.executable || null,
         version: null,
@@ -916,17 +921,17 @@ export interface ProjectCloneAuthorization {
 async function prepareCloneDestination(destinationPath: string): Promise<PreparedCloneDestination> {
   const requested = resolve(destinationPath);
   if (requested.length > 32_768 || requested.includes('\0')) {
-    throw new Error('The clone destination is not a supported path.');
+    throw new Error('Forgeboard cannot use that destination path for the clone.');
   }
   const name = basename(requested);
   if (name === '' || name === '.' || name === '..') {
-    throw new Error('Choose a named child folder for the cloned repository.');
+    throw new Error('Choose a new folder name for the cloned repository.');
   }
   const parent = await realpath(dirname(requested));
   const canonicalDestination = join(parent, name);
   const parentStats = await stat(parent);
   if (!parentStats.isDirectory()) {
-    throw new Error('The clone destination parent changed or is not a canonical directory.');
+    throw new Error('The destination folder changed or is not a normal folder. Choose it again.');
   }
   try {
     await lstat(canonicalDestination);

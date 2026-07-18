@@ -392,7 +392,7 @@ describe('RecoveryIpcService local-data import', () => {
       mode: 'merge',
     });
 
-    expect(ipcErrorMessage(result)).toContain('structurally complex');
+    expect(ipcErrorMessage(result)).toContain('too complex to import safely');
     expect(fixture.preflightImportData).not.toHaveBeenCalled();
     await harness.service.dispose();
   });
@@ -510,7 +510,7 @@ describe('RecoveryIpcService local-data import', () => {
     expect(harness.showMessageBox).toHaveBeenCalledWith(
       harness.parent,
       expect.objectContaining({
-        buttons: ['Cancel', 'Replace local data'],
+        buttons: ['Cancel', 'Replace all current data'],
         defaultId: 0,
         cancelId: 0,
       }),
@@ -613,7 +613,11 @@ describe('RecoveryIpcService lifecycle', () => {
   it('unwinds an import that loses the global mutation race so an external pause can drain', async () => {
     const fixture = createStore();
     const beforeImport = vi.fn(() =>
-      Promise.reject(new Error('Another local-data operation is in progress.')),
+      Promise.reject(
+        new Error(
+          'Another data change is already in progress. Wait for it to finish, then try again.',
+        ),
+      ),
     );
     const afterImport = vi.fn(() => Promise.resolve());
     const harness = createHarness(fixture.store, { hooks: { beforeImport, afterImport } });
@@ -640,7 +644,7 @@ describe('RecoveryIpcService lifecycle', () => {
     const pausing = harness.service.pauseForExternalDataMutation();
     resolveApproval({ response: 1, checkboxChecked: false });
 
-    expect(ipcErrorMessage(await importing)).toContain('Another local-data operation');
+    expect(ipcErrorMessage(await importing)).toContain('Another data change');
     await pausing;
     expect(beforeImport).toHaveBeenCalledTimes(1);
     expect(afterImport).not.toHaveBeenCalled();

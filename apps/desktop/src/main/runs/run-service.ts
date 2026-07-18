@@ -343,11 +343,11 @@ export class RunService {
           currentExecutable !== approval.executable ||
           !allowedCommands.has(JSON.stringify(arguments_))
         ) {
-          throw new Error('The approved Docker preparation probe changed or expired.');
+          throw new Error('The approved Docker check changed or expired. Review what will run.');
         }
         const resolved = await resolveDockerExecutable(currentExecutable);
         if (resolved !== approval.executable) {
-          throw new Error('The approved Docker executable changed. Review a fresh run.');
+          throw new Error('The approved Docker program changed. Review what will run.');
         }
         await assertLaunchExecutableIdentity(approval.executableIdentity);
         this.#assertCurrent(event, parent, ownerId);
@@ -400,7 +400,7 @@ export class RunService {
       assertCurrent();
       if (currentContext.authority.fingerprint !== approval.contextAuthority.fingerprint) {
         throw new Error(
-          'The Agent configuration or selected context changed after review. Review a fresh run.',
+          'The Agent configuration or selected context changed after review. Review what will run.',
         );
       }
     } catch (error) {
@@ -736,27 +736,27 @@ function runLaunchConfirmation(
 ): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Launch agent process',
+    title: 'Launch agent',
     message: `Launch ${disclosure.adapterId} for this node?`,
     detail: [
       `Provider: ${literal(disclosure.provider)}`,
-      `Executable: ${literal(disclosure.executable)}`,
+      `Program: ${literal(disclosure.executable)}`,
       `Arguments: ${JSON.stringify(disclosure.arguments)}`,
-      `Working directory: ${literal(disclosure.cwd)}`,
-      `Runtime: ${disclosure.runtime}`,
-      `Environment variable names: ${JSON.stringify(disclosure.environmentVariableNames)}`,
-      `Context attachments: ${JSON.stringify(disclosure.contextAttachments)}`,
-      `Context manifest ID: ${literal(disclosure.contextManifestId ?? 'none')}`,
-      `Context manifest SHA-256: ${literal(disclosure.contextManifestDigest ?? 'none')}`,
-      `Permission profile: ${JSON.stringify(disclosure.permissionProfile)}`,
+      `Folder it runs in: ${literal(disclosure.cwd)}`,
+      `How it runs: ${disclosure.runtime}`,
+      `Environment variables (names only): ${JSON.stringify(disclosure.environmentVariableNames)}`,
+      `Attached context: ${JSON.stringify(disclosure.contextAttachments)}`,
+      `Context record ID: ${literal(disclosure.contextManifestId ?? 'none')}`,
+      `Context record checksum (SHA-256): ${literal(disclosure.contextManifestDigest ?? 'none')}`,
+      `Permission rules: ${JSON.stringify(disclosure.permissionProfile)}`,
       `Branch: ${literal(disclosure.branch ?? 'none')}`,
-      `Base commit: ${literal(disclosure.baseCommit ?? 'none')}`,
-      `Disclosure SHA-256: ${disclosureFingerprint}`,
+      `Starting commit: ${literal(disclosure.baseCommit ?? 'none')}`,
+      `Security fingerprint (SHA-256): ${disclosureFingerprint}`,
       `Approval expires at: ${expiresAt}`,
       '',
       ...disclosure.warnings,
       '',
-      'Warning: the selected executable will run locally with the disclosed arguments and permissions. It may implement arbitrary effects and may contact the named provider.',
+      'This program runs on your computer with the arguments and permissions shown above. It can change files and may contact the named provider.',
     ].join('\n'),
     buttons: ['Cancel', 'Launch agent'],
     defaultId: 0,
@@ -768,17 +768,17 @@ function runLaunchConfirmation(
 function dockerPreparationConfirmation(approval: DockerPreparationApproval): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Inspect Docker for agent preparation',
-    message: `Run Docker metadata probes for ${approval.image}?`,
+    title: 'Check Docker before this run',
+    message: `Forgeboard needs to check Docker and the ${approval.image} image before this run. Allow this?`,
     detail: [
-      `Docker executable: ${literal(approval.executable)}`,
-      `Executable SHA-256: ${approval.executableIdentity.digest}`,
-      `Daemon command: ${JSON.stringify(['version', '--format', '{{.Server.Version}}'])}`,
-      `Image command: ${JSON.stringify(['image', 'inspect', approval.image])}`,
+      `Docker program: ${literal(approval.executable)}`,
+      `Program checksum (SHA-256): ${approval.executableIdentity.digest}`,
+      `Command that checks Docker: ${JSON.stringify(['version', '--format', '{{.Server.Version}}'])}`,
+      `Command that checks the image: ${JSON.stringify(['image', 'inspect', approval.image])}`,
       '',
-      'Warning: the selected Docker executable will run locally. It can implement arbitrary effects. These probes inspect daemon and local image metadata only; they do not run or pull the image.',
+      'The Docker program runs on your computer. These checks only read Docker and image information; they do not start or download the image.',
     ].join('\n'),
-    buttons: ['Cancel', 'Run Docker probes'],
+    buttons: ['Cancel', 'Check Docker'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,

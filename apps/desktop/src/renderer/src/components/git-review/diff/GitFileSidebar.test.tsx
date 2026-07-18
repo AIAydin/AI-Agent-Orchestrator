@@ -26,7 +26,7 @@ describe('GitFileSidebar', () => {
 
     expect(screen.getByText('1–100 of 205')).toBeTruthy();
     expect(screen.queryByText(staged[100]!.path)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Next staged changes page' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next ready to commit page' }));
     expect(screen.getByText('101–200 of 205')).toBeTruthy();
     fireEvent.click(screen.getByText(staged[100]!.path).closest('button')!);
     expect(onSelect).toHaveBeenCalledWith({ area: 'staged', path: staged[100]!.path });

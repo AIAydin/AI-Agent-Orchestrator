@@ -28,9 +28,7 @@ export function TestNodeConfiguration(props: ConfigurationProps) {
       props.onRecord();
       updateCommand({ ...command, executable: selected });
     } catch (cause) {
-      props.onError(
-        cause instanceof Error ? cause.message : 'The executable could not be selected.',
-      );
+      props.onError(cause instanceof Error ? cause.message : 'The program could not be selected.');
     }
   }
 
@@ -56,7 +54,7 @@ export function TestNodeConfiguration(props: ConfigurationProps) {
             });
           }}
         >
-          <option value="">Choose a configured command…</option>
+          <option value="">Choose a saved command…</option>
           {presets.map((preset) => (
             <option key={preset.id} value={preset.id}>
               {preset.label}
@@ -65,7 +63,7 @@ export function TestNodeConfiguration(props: ConfigurationProps) {
         </select>
       </label>
       <label>
-        Check kind
+        Kind of check
         <select
           name={`node-${props.node.id}-check-kind`}
           value={props.node.data.checkKind ?? 'test'}
@@ -86,7 +84,7 @@ export function TestNodeConfiguration(props: ConfigurationProps) {
         </select>
       </label>
       <div className="test-node-executable">
-        <label htmlFor={`node-${props.node.id}-command-executable`}>Executable</label>
+        <label htmlFor={`node-${props.node.id}-command-executable`}>Program</label>
         <span className="test-node-command-path">
           <input
             id={`node-${props.node.id}-command-executable`}
@@ -115,7 +113,7 @@ export function TestNodeConfiguration(props: ConfigurationProps) {
         />
       </label>
       <label>
-        Working directory · relative to assigned checkout
+        Folder to run in · relative to the project&apos;s working copy
         <input
           name={`node-${props.node.id}-command-cwd`}
           value={command.cwdRelative ?? ''}
@@ -125,7 +123,7 @@ export function TestNodeConfiguration(props: ConfigurationProps) {
         />
       </label>
       <label>
-        Allowed environment names · one per line
+        Environment variables allowed · one per line
         <textarea
           name={`node-${props.node.id}-command-environment`}
           rows={2}
@@ -138,7 +136,7 @@ export function TestNodeConfiguration(props: ConfigurationProps) {
         />
       </label>
       <label>
-        Expected artifacts · checkout-relative paths, one per line
+        Result files to keep · paths relative to the working copy, one per line
         <textarea
           name={`node-${props.node.id}-artifact-paths`}
           rows={3}
@@ -150,12 +148,12 @@ export function TestNodeConfiguration(props: ConfigurationProps) {
           }
         />
         <small>
-          The workflow host validates up to 32 paths inside the assigned checkout after each
-          attempt. Output text is never interpreted as a file path.
+          Forgeboard checks up to 32 paths inside the working copy after each run. Output text is
+          never treated as a file path.
         </small>
       </label>
       <small>
-        Producer ID: <code>{checkProducerId(props.node)}</code>
+        Check ID: <code>{checkProducerId(props.node)}</code>
       </small>
     </fieldset>
   );

@@ -94,10 +94,10 @@ export function gitConnectionRemoteView(
       management === 'managed-simple'
         ? null
         : !mutableName
-          ? 'This existing remote name is not portable enough for safe mutation and is read-only here.'
+          ? "This remote's name contains characters Forgeboard cannot safely edit, so it is read-only here."
           : management === 'effective-only'
-            ? 'This remote comes from inherited or ambiguous Git configuration and is read-only here.'
-            : 'This repository-owned remote uses advanced settings. It can be removed only after exact review.',
+            ? 'This remote comes from inherited or unclear Git settings, so it is read-only here.'
+            : 'This remote uses advanced settings. It can be removed only after you review the exact change.',
   };
 }
 

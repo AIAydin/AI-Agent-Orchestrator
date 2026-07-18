@@ -26,23 +26,19 @@ export function TypedEdgeInspector({
       {readOnly ? (
         <p className="node-lock-notice" role="status">
           <Lock size={13} />
-          This connection touches a locked node. Unlock both endpoints to change it.
+          This connection is linked to a locked node. Unlock both nodes to change it.
         </p>
       ) : null}
-      <fieldset
-        className="node-edit-fields"
-        disabled={readOnly}
-        aria-label="Connection configuration"
-      >
+      <fieldset className="node-edit-fields" disabled={readOnly} aria-label="Connection settings">
         <label>
-          Connection behavior
+          Connection type
           <select
             name={`edge-${edge.id}-connection-behavior`}
             value={data.edgeType}
             onChange={(event) => onUpdateType(event.target.value as EdgeKind)}
           >
             <option value="context">Context</option>
-            <option value="execute">Execute</option>
+            <option value="execute">Run</option>
             <option value="output">Output</option>
             <option value="review">Review</option>
             <option value="revision">Revision</option>
@@ -74,7 +70,7 @@ function EdgeConfiguration({
     const source = nodes.find((node) => node.id === edge.source);
     return (
       <section className="edge-config-section">
-        <h3>Explicit context</h3>
+        <h3>Context attachments</h3>
         <div className="edge-context-source">
           <Link2 size={13} />
           <span>{source?.data.title ?? edge.source}</span>
@@ -92,11 +88,12 @@ function EdgeConfiguration({
               })
             }
           />
-          Block the agent until this exact attachment resolves
+          Don&apos;t let the agent start until this attachment is ready
         </label>
         <small>
-          {data.config.attachmentIds.length} explicit attachment ID
-          {data.config.attachmentIds.length === 1 ? '' : 's'} will be disclosed before launch.
+          {data.config.attachmentIds.length} attachment
+          {data.config.attachmentIds.length === 1 ? '' : 's'} will be shared with the agent before
+          it starts.
         </small>
       </section>
     );
@@ -107,7 +104,7 @@ function EdgeConfiguration({
     return (
       <section className="edge-config-section">
         <label>
-          Trigger
+          When to run
           <select
             name={`edge-${edge.id}-execute-trigger`}
             value={data.config.trigger}
@@ -121,8 +118,8 @@ function EdgeConfiguration({
               })
             }
           >
-            <option value="on-success">Only after success</option>
-            <option value="on-completion">After any completion</option>
+            <option value="on-success">Only if it succeeds</option>
+            <option value="on-completion">After it finishes, even if it fails</option>
           </select>
         </label>
         <label>
@@ -144,7 +141,7 @@ function EdgeConfiguration({
               });
             }}
           >
-            <option value="none">No additional approval</option>
+            <option value="none">No approval</option>
             <option value="human">Human approval</option>
             <option value="review-gate" disabled={gates.length === 0}>
               Review gate
@@ -153,7 +150,7 @@ function EdgeConfiguration({
         </label>
         {data.config.approval === 'review-gate' && (
           <label>
-            Gate node
+            Review gate node
             <select
               name={`edge-${edge.id}-execute-gate`}
               value={data.config.approvalGateNodeId ?? ''}
@@ -180,7 +177,7 @@ function EdgeConfiguration({
     return (
       <section className="edge-config-section">
         <label>
-          Published output
+          Output to share
           <select
             name={`edge-${edge.id}-output-kind`}
             value={data.config.outputKind}
@@ -195,16 +192,16 @@ function EdgeConfiguration({
             }
           >
             <option value="branch">Branch</option>
-            <option value="diff">Diff</option>
+            <option value="diff">Changes (diff)</option>
             <option value="preview">Preview</option>
             <option value="test-result">Test result</option>
-            <option value="artifact">Artifact</option>
+            <option value="artifact">File produced by a run</option>
           </select>
         </label>
         <RequiredToggle
           name={`edge-${edge.id}-output-required`}
           checked={data.config.required}
-          label="Require verified output before downstream execution"
+          label="Require verified output before the next step runs"
           onChange={(required) =>
             onChange({ edgeType: 'output', config: { ...data.config, required } })
           }
@@ -217,7 +214,7 @@ function EdgeConfiguration({
     return (
       <section className="edge-config-section">
         <label>
-          Reviewer authority
+          Who reviews
           <select
             name={`edge-${edge.id}-reviewer`}
             value={data.config.reviewer}
@@ -247,7 +244,7 @@ function EdgeConfiguration({
         <RequiredToggle
           name={`edge-${edge.id}-review-structured-findings`}
           checked={data.config.structuredFindings}
-          label="Require structured findings"
+          label="Require findings in a fixed format"
           onChange={(structuredFindings) =>
             onChange({ edgeType: 'review', config: { ...data.config, structuredFindings } })
           }
@@ -260,11 +257,11 @@ function EdgeConfiguration({
     return (
       <section className="edge-config-section">
         <label>
-          Bounded loop ID
+          Loop ID
           <input
             name={`edge-${edge.id}-revision-loop-id`}
             value={data.config.loopId ?? ''}
-            placeholder="Configure an explicit revision loop"
+            placeholder="Name this revision loop"
             onChange={(event) => {
               const loopId = event.target.value.replace(/[^A-Za-z0-9._:-]/gu, '').slice(0, 128);
               onChange({
@@ -339,7 +336,7 @@ function EdgeConfiguration({
         <RequiredToggle
           name={`edge-${edge.id}-revision-stop-human`}
           checked={data.loop.stopConditions.includes('human-accepted')}
-          label="Allow human acceptance as a stop condition"
+          label="Also stop when a person accepts the work"
           onChange={(checked) =>
             onChange({
               ...data,
@@ -355,7 +352,7 @@ function EdgeConfiguration({
           }
         />
         <label>
-          Human escape instructions
+          How a person can step in
           <textarea
             name={`edge-${edge.id}-revision-human-escape`}
             rows={3}
@@ -371,10 +368,10 @@ function EdgeConfiguration({
         <div className="edge-warning">
           <AlertTriangle size={13} />
           {data.config.loopId === undefined
-            ? 'Enter a loop ID before this revision can execute.'
+            ? 'Enter a loop ID before this revision connection can run.'
             : data.loop.humanEscapeInstructions.trim().length < 10
-              ? 'Human escape instructions must contain at least 10 characters.'
-              : 'Connect implementation → review with a Review edge, then this Revision edge back to the implementation. The human escape hatch is always approval-gated.'}
+              ? 'Explain how a person can step in (at least 10 characters).'
+              : 'Connect the work to its review with a Review connection, then point this Revision connection back to the work. A person must approve before taking over.'}
         </div>
       </section>
     );
@@ -383,7 +380,7 @@ function EdgeConfiguration({
   return (
     <section className="edge-config-section">
       <h3>Dependency</h3>
-      <p>The downstream task remains blocked until the source task succeeds.</p>
+      <p>The next task waits until this one succeeds.</p>
     </section>
   );
 }

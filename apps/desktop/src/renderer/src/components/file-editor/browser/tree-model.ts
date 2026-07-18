@@ -58,7 +58,7 @@ export function policyLabel(entry: FileTreeEntry): string {
   }
   if (entry.policy.status === 'ignored') return 'Ignored';
   if (entry.policy.status === 'sensitive') return 'Sensitive';
-  return 'Symlink blocked';
+  return 'Link blocked';
 }
 
 function compareEntries(left: FileTreeEntry, right: FileTreeEntry): number {

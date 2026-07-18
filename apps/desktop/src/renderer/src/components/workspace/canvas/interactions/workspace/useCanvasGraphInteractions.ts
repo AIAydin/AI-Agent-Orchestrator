@@ -10,7 +10,7 @@ import {
   finalizeDraggedGroupMembership,
 } from '../groups/group-workspace-state.js';
 
-const LOCKED_CONNECTION_ACTIVITY = 'Unlock locked nodes before changing their connections.';
+const LOCKED_CONNECTION_ACTIVITY = 'Unlock locked nodes before changing them.';
 
 export interface UseCanvasGraphInteractionsOptions {
   readonly nodesRef: RefObject<WorkshopNode[]>;
@@ -98,9 +98,7 @@ export function useCanvasGraphInteractions({
       nodesRef.current = result.nodes;
       setNodes(result.nodes);
       if (result.changedFrameIds.length > 0) {
-        setEvents((items) =>
-          ['Updated group placement and automatic frame bounds.', ...items].slice(0, 30),
-        );
+        setEvents((items) => ["Updated the group's placement and size.", ...items].slice(0, 30));
       }
     },
     [nodesRef, readOnlyRef, reportCollaborationReadOnly, setEvents, setNodes],

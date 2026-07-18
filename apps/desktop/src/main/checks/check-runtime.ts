@@ -238,7 +238,9 @@ export class CheckRuntime {
       this.#assertGeneration(pending.generation);
       if (reservation.cancelled) throw new Error('The originating check window was closed.');
       if (!sameResolution(pending.resolved, current)) {
-        throw new Error('The check configuration or project folder changed. Review a new plan.');
+        throw new Error(
+          'The check configuration or project folder changed. Review the check again.',
+        );
       }
       // This callback must remain synchronous and immediately before the no-await launch section.
       // Reusable grants are checked here so an expiry or revocation during revalidation wins.
@@ -358,14 +360,13 @@ export class CheckRuntime {
     const active = this.#active.get(input.executionId);
     if (active === undefined) {
       const stored = this.store.getCheckExecution(input.executionId);
-      if (stored === undefined) throw new Error('The selected check execution does not exist.');
-      if (isTerminal(stored.status))
-        throw new Error('The selected check execution has already ended.');
-      throw new Error('The selected check execution is no longer controlled by this window.');
+      if (stored === undefined) throw new Error('The selected check run no longer exists.');
+      if (isTerminal(stored.status)) throw new Error('The selected check run has already ended.');
+      throw new Error('This window no longer controls the selected check run.');
     }
     this.#assertOwner(ownerId, active.ownerId, 'execution');
     if (active.finalizing || isTerminal(active.view.status)) {
-      throw new Error('The selected check execution has already ended.');
+      throw new Error('The selected check run has already ended.');
     }
     active.finalStatusOverride = 'cancelled';
     try {
@@ -427,7 +428,7 @@ export class CheckRuntime {
       this.#active.size > 0
     ) {
       this.#privacyResetting = false;
-      throw new Error('Stop or cancel every project check before merging local data.');
+      throw new Error('Stop or cancel every project check before changing local data.');
     }
   }
 
@@ -518,7 +519,7 @@ export class CheckRuntime {
       this.#pending.size + this.#prepareReservations.size >= MAX_PENDING_PLANS ||
       ownerPlanCount >= MAX_PENDING_PLANS_PER_OWNER
     ) {
-      throw new Error('Too many project-check approvals are pending. Finish or cancel one first.');
+      throw new Error('Too many project-check approvals are waiting. Finish or cancel one first.');
     }
     const key = prepareReservationKey(ownerId, input);
     if (
@@ -546,7 +547,7 @@ export class CheckRuntime {
   #assertConcurrency(ownerId: number, plan: CheckPlanView): void {
     if (this.#active.size + this.#reservations.size >= this.#maxConcurrent) {
       throw new Error(
-        'The project-check concurrency limit is reached. Wait for a check to finish.',
+        'Too many project checks are running; the concurrency limit is reached. Wait for one to finish.',
       );
     }
     const owned =
@@ -554,7 +555,9 @@ export class CheckRuntime {
       [...this.#reservations.values()].filter((reservation) => reservation.ownerId === ownerId)
         .length;
     if (owned >= this.#maxConcurrentPerOwner) {
-      throw new Error('This window is already running the maximum number of project checks.');
+      throw new Error(
+        'This window is already running as many project checks as it can. Stop one first.',
+      );
     }
     if (
       [...this.#active.values()].some(
@@ -735,7 +738,9 @@ export class CheckRuntime {
   #assertGeneration(expected: number): void {
     this.#assertAvailable();
     if (expected !== this.#generation) {
-      throw new Error('The check plan was invalidated while local data was being reset.');
+      throw new Error(
+        'The check approval became invalid while local data was being reset. Review the check again.',
+      );
     }
   }
 
@@ -768,7 +773,8 @@ function configuredCheck(settings: AppSettings, checkId: CheckId): ConfiguredChe
     return { checkId, label: 'Build', kind: 'build', command: settings.buildCommand };
   }
   const custom = (settings.customChecks ?? []).find((candidate) => candidate.id === checkId);
-  if (custom === undefined) throw new Error('The selected custom check is no longer configured.');
+  if (custom === undefined)
+    throw new Error('The selected custom check is no longer set up in Settings.');
   return { checkId, label: custom.label, kind: 'custom', command: custom.command };
 }
 

@@ -233,7 +233,7 @@ describe('ExtensionIpcService', () => {
     }
     expect(messageBoxCall?.[0]).toBe(parentWindow);
     expect(messageBoxOptions).toMatchObject({ defaultId: 0, cancelId: 0 });
-    expect(messageBoxOptions.detail).toMatch(/Manifest SHA-256: [a-f0-9]{64}/u);
+    expect(messageBoxOptions.detail).toMatch(/Manifest fingerprint \(SHA-256\): [a-f0-9]{64}/u);
     expect(
       (await new LocalExtensionService(join(root, 'extensions')).discover()).installed,
     ).toEqual([]);

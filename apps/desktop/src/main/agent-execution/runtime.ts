@@ -388,7 +388,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     this.#privacyResetting = true;
     if (this.#operations.size > 0 || this.#pending.size > 0 || this.#active.size > 0) {
       this.#privacyResetting = false;
-      throw new Error('Stop or cancel every agent run before merging local data.');
+      throw new Error('Stop or cancel every agent run before adding to current data.');
     }
   }
 
@@ -651,7 +651,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         ownerId,
         reason: 'stale-disclosure-fingerprint',
       });
-      throw new Error('The agent launch disclosure changed. Review a fresh plan.');
+      throw new Error('The agent launch disclosure changed. Review what will run.');
     }
     if (currentFingerprint !== prepared.disclosureFingerprint) {
       this.#safeAudit('agent-run', 'launch', 'denied', {
@@ -660,7 +660,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         ownerId,
         reason: 'prepared-plan-mutated',
       });
-      throw new Error('The prepared agent launch changed. Review a fresh plan.');
+      throw new Error('The prepared agent launch changed. Review what will run.');
     }
     if (Date.parse(prepared.expiresAt) <= this.#now().getTime()) {
       let persistenceFailed = false;
@@ -672,7 +672,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       } finally {
         this.#scheduleNextExpiry(persistenceFailed ? MIN_EXPIRY_RETRY_DELAY_MS : 0);
       }
-      throw new Error('The agent launch approval expired. Review a fresh plan.');
+      throw new Error('The agent launch approval expired. Review what will run.');
     }
 
     this.#pending.delete(planId);
@@ -1072,11 +1072,11 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
   async #revalidateWorkspace(prepared: PreparedRunState): Promise<void> {
     const project = this.#store.getProject(prepared.record.projectId);
     if (project === undefined || project.missing) {
-      throw new Error('The selected project is no longer available. Review a fresh launch.');
+      throw new Error('The selected project is no longer available. Review what will run.');
     }
     const repositoryRoot = await this.#repositories.resolveRepositoryRoot(project.path);
     if (repositoryRoot !== prepared.repositoryPath || project.path !== prepared.repositoryPath) {
-      throw new Error('The project repository changed after disclosure. Review a fresh launch.');
+      throw new Error('The project repository changed after disclosure. Review what will run.');
     }
     if (prepared.worktree !== null) {
       const state = await this.#worktrees.inspect(prepared.worktree);
@@ -1084,7 +1084,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     }
     const current = await this.#captureWorkspace(prepared.record.cwd);
     if (workspaceSnapshotDigest(current) !== workspaceSnapshotDigest(prepared.before)) {
-      throw new Error('The approved workspace changed after disclosure. Review a fresh launch.');
+      throw new Error('The approved workspace changed after disclosure. Review what will run.');
     }
   }
 
@@ -1669,19 +1669,17 @@ export async function revalidateContextAttachments(
       const relativePath = path.relative(canonicalCheckout, canonical).split(path.sep).join('/');
       if (findSensitivePath(relativePath) !== undefined) {
         throw new Error(
-          'An approved context file became sensitive after disclosure. Review a fresh launch.',
+          'An approved context file became sensitive after disclosure. Review what will run.',
         );
       }
       if (ignoreMatcher.evaluate(relativePath).ignored) {
         throw new Error(
-          'An approved context file became ignored after disclosure. Review a fresh launch.',
+          'An approved context file became ignored after disclosure. Review what will run.',
         );
       }
       const digest = await stableFileDigest(canonical);
       if (digest !== attachment.sha256) {
-        throw new Error(
-          'An approved context file changed after disclosure. Review a fresh launch.',
-        );
+        throw new Error('An approved context file changed after disclosure. Review what will run.');
       }
     }),
   );
@@ -1725,9 +1723,7 @@ async function stableFileDigest(filePath: string): Promise<string> {
     before.size !== after.size ||
     before.mtimeMs !== after.mtimeMs
   ) {
-    throw new Error(
-      'Selected context changed while Forgeboard verified it. Review a fresh launch.',
-    );
+    throw new Error('Selected context changed while Forgeboard verified it. Review what will run.');
   }
   return digest;
 }

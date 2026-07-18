@@ -46,42 +46,42 @@ const CHECK_PRESENTATION: Readonly<
 > = {
   missing: {
     label: 'Not run',
-    description: 'This required check has no execution for the current source binding.',
+    description: "This check hasn't run for the current changes yet.",
     icon: <CircleDashed size={13} aria-hidden="true" />,
   },
   queued: {
     label: 'Queued',
-    description: 'This required check is waiting to start.',
+    description: 'This check is waiting to start.',
     icon: <Clock3 size={13} aria-hidden="true" />,
   },
   running: {
     label: 'Running',
-    description: 'This required check is running for the current source binding.',
+    description: 'This check is running for the current changes.',
     icon: <LoaderCircle className="spin" size={13} aria-hidden="true" />,
   },
   passed: {
     label: 'Passed',
-    description: 'This required check passed for the current source binding.',
+    description: 'This check passed for the current changes.',
     icon: <BadgeCheck size={13} aria-hidden="true" />,
   },
   failed: {
     label: 'Failed',
-    description: 'This required check failed and continues to block delivery.',
+    description: 'This check failed and blocks delivery.',
     icon: <CircleX size={13} aria-hidden="true" />,
   },
   cancelled: {
     label: 'Cancelled',
-    description: 'This required check was cancelled before it produced passing evidence.',
+    description: 'This check was cancelled before it could pass.',
     icon: <Ban size={13} aria-hidden="true" />,
   },
   lost: {
-    label: 'Process lost',
-    description: 'Forgeboard can no longer verify the process that ran this required check.',
+    label: 'Lost',
+    description: "Forgeboard lost track of this check, so its result can't be verified.",
     icon: <Unplug size={13} aria-hidden="true" />,
   },
   stale: {
-    label: 'Stale',
-    description: 'The source or required-check configuration changed after this check ran.',
+    label: 'Outdated',
+    description: 'The changes or check setup changed after this check ran.',
     icon: <History size={13} aria-hidden="true" />,
   },
 };
@@ -137,9 +137,7 @@ export function GitDeliveryReadinessPanel({
       <header>
         <span>
           <strong id={titleId}>Delivery readiness</strong>
-          <small>
-            Deterministic checks and human quality approval are bound to the exact reviewed source.
-          </small>
+          <small>Checks and approvals apply to exactly the changes you reviewed.</small>
         </span>
         <span
           className={`git-delivery-readiness-summary ${ready ? 'ready' : 'blocked'}`}
@@ -175,7 +173,7 @@ export function GitDeliveryReadinessPanel({
             </p>
           )}
           <p role="status">
-            Select and save at least one configured check before running delivery checks.
+            Choose at least one check and save your choice before running delivery checks.
           </p>
         </div>
       ) : (
@@ -201,8 +199,8 @@ export function GitDeliveryReadinessPanel({
           <span>
             <strong id={qualityTitleId}>Human quality approval</strong>
             <small>
-              Separate from the final native delivery confirmation. It never overrides a required
-              check.
+              This approval is separate from the final confirmation your computer asks for, and it
+              never replaces a required check.
             </small>
           </span>
           <button
@@ -229,15 +227,15 @@ export function GitDeliveryReadinessPanel({
             {approvalBusy
               ? 'Recording approval…'
               : approvalActionState === 'approved'
-                ? 'Approval current'
+                ? 'Approval up to date'
                 : approvalActionState === 'stale'
-                  ? 'Approve current evidence'
-                  : 'Approve reviewed quality'}
+                  ? 'Approve the current results'
+                  : 'Approve quality'}
           </button>
         </header>
 
         <p className="git-delivery-quality-binding">
-          <span>Current binding</span>
+          <span>Current changes</span>
           <code>{shortOid(view.source.sourceHead)}</code>
           {readiness !== null && (
             <>
@@ -324,30 +322,30 @@ function CheckRequirementSelector({
                 <strong>{check.label}</strong>
                 <small>
                   {check.availability === 'configured'
-                    ? `${check.kind} check · configured in Settings`
+                    ? `${check.kind} check · set up in Settings`
                     : check.availability === 'disabled'
-                      ? 'Disabled in Settings.'
-                      : 'Not configured in Settings.'}
+                      ? 'Turned off in Settings.'
+                      : 'Not set up in Settings.'}
                 </small>
               </span>
             </label>
           );
         })}
         {checks.length === 0 && (
-          <p>No project checks are available. Configure one in Settings → Checks.</p>
+          <p>No checks are set up for this project yet. Add one in Settings → Checks.</p>
         )}
       </div>
       <div className="git-delivery-requirement-actions">
         <small id={helpId} role="status">
           {configuredCount === 0
-            ? 'Configure at least one check before creating a delivery gate.'
+            ? 'Set up at least one check before you can require it for delivery.'
             : selectedCheckIds.length === 0
-              ? 'Select at least one configured check. Delivery cannot proceed without it.'
+              ? "Choose at least one check that's set up. Delivery can't continue without one."
               : !valid
-                ? `Choose no more than ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} unique, configured checks and remove unavailable selections.`
+                ? `Choose up to ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} different checks that are set up, and remove any that aren't available.`
                 : prepared
-                  ? 'This exact required-check selection is bound to the reviewed source.'
-                  : 'Save this selection before running checks. Changing it makes earlier evidence and quality approval stale.'}
+                  ? 'These exact checks are locked to the changes you reviewed.'
+                  : 'Save this selection before running checks. Changing it later makes earlier results and approvals out of date.'}
         </small>
         <button
           className="button"
@@ -363,11 +361,7 @@ function CheckRequirementSelector({
           ) : (
             <ShieldCheck size={12} aria-hidden="true" />
           )}
-          {busy
-            ? 'Saving requirements…'
-            : prepared
-              ? 'Requirements current'
-              : 'Save required checks'}
+          {busy ? 'Saving checks…' : prepared ? 'Checks saved' : 'Save required checks'}
         </button>
       </div>
     </fieldset>
@@ -453,8 +447,8 @@ function QualityApprovalMessage({
     return (
       <p id={id} className="git-delivery-quality-message" role="status">
         <CircleDashed size={12} aria-hidden="true" />
-        Save at least one required check to create the exact source binding before approving
-        quality.
+        Save at least one required check before approving quality. This ties the approval to exactly
+        these changes.
       </p>
     );
   }
@@ -462,8 +456,8 @@ function QualityApprovalMessage({
     return (
       <p id={id} className="git-delivery-quality-message stale" role="alert">
         <TriangleAlert size={12} aria-hidden="true" />
-        The required-check selection changed. Save the new binding before running checks or
-        approving quality; earlier evidence is not reused.
+        The required-check selection changed. Save the new selection before running checks or
+        approving quality — earlier results won't be reused.
       </p>
     );
   }
@@ -473,15 +467,15 @@ function QualityApprovalMessage({
       <p id={id} className="git-delivery-quality-message approved" role="status">
         <BadgeCheck size={12} aria-hidden="true" />
         {currentApproval === null
-          ? 'Human approval is current for this exact binding.'
-          : `${currentApproval.actorLabel} approved this exact binding ${formatTimestamp(currentApproval.approvedAt)}.`}
+          ? 'Quality is approved for exactly these changes.'
+          : `${currentApproval.actorLabel} approved these exact changes ${formatTimestamp(currentApproval.approvedAt)}.`}
       </p>
     );
   }
   if (state === 'stale') {
     const checksFirst = allRequiredChecksPassed
       ? ''
-      : ' Every required check must pass before approval can be renewed.';
+      : ' Every required check must pass before quality can be approved again.';
     const sameSourceEvidenceChanged =
       previousApproval !== null &&
       gitDeliverySourceFingerprintsEqual(
@@ -492,13 +486,13 @@ function QualityApprovalMessage({
       <p id={id} className="git-delivery-quality-message stale" role="alert">
         <TriangleAlert size={12} aria-hidden="true" />
         {previousApproval === null
-          ? `A previous human approval is stale. The source binding or required-check evidence changed; review and approve this exact evidence again.${checksFirst}`
+          ? `An earlier approval is out of date because the changes or check results changed. Review and approve again.${checksFirst}`
           : sameSourceEvidenceChanged
-            ? `${previousApproval.actorLabel} approved this source before its required-check evidence changed. Review the latest check results and approve this exact evidence again.${checksFirst}`
+            ? `${previousApproval.actorLabel} approved these changes, but the check results changed afterward. Review the latest results and approve again.${checksFirst}`
             : previousApproval.sourceFingerprint.sourceHead !==
                 readiness.sourceFingerprint.sourceHead
-              ? `${previousApproval.actorLabel} approved ${shortOid(previousApproval.sourceFingerprint.sourceHead)}, but the current source is ${shortOid(readiness.sourceFingerprint.sourceHead)}. Review and approve again.${checksFirst}`
-              : `${previousApproval.actorLabel} approved an earlier source binding, but its tree, worktree, run, or required-check configuration changed. Review and approve again.${checksFirst}`}
+              ? `${previousApproval.actorLabel} approved version ${shortOid(previousApproval.sourceFingerprint.sourceHead)}, but the current version is ${shortOid(readiness.sourceFingerprint.sourceHead)}. Review and approve again.${checksFirst}`
+              : `${previousApproval.actorLabel} approved an earlier version, but the code, workspace, run, or check setup changed since then. Review and approve again.${checksFirst}`}
       </p>
     );
   }
@@ -506,15 +500,14 @@ function QualityApprovalMessage({
     return (
       <p id={id} className="git-delivery-quality-message" role="status">
         <Clock3 size={12} aria-hidden="true" />
-        Every required check must pass for this exact binding before human quality approval can be
-        recorded.
+        Every required check must pass for these exact changes before quality can be approved.
       </p>
     );
   }
   return (
     <p id={id} className="git-delivery-quality-message" role="status">
       <CircleDashed size={12} aria-hidden="true" />
-      No human quality approval is recorded for this exact source and required-check configuration.
+      No one has approved the quality of these exact changes and check setup yet.
     </p>
   );
 }

@@ -301,7 +301,7 @@ describe('GitHubCliRuntimeService automatic selection', () => {
     });
 
     await expect(commandRuntime.runner.run(['auth', 'status'])).rejects.toThrow(
-      /not version-validated/iu,
+      /has not verified it yet/iu,
     );
     expect(normalEvents.filter((event) => event.startsWith('run:'))).toEqual([]);
     expect(validationEvents.filter((event) => event.startsWith('run:'))).toEqual([]);
@@ -370,7 +370,7 @@ describe('GitHubCliRuntimeService automatic selection', () => {
       label: 'nonzero',
       output: 'gh version 2.80.0\n',
       exitCode: 7,
-      error: /complete/iu,
+      error: /finish/iu,
     },
     {
       label: 'malformed',
@@ -398,7 +398,7 @@ describe('GitHubCliRuntimeService automatic selection', () => {
       const github = new GitHubService(undefined, commandRuntime.runner);
       await expect(github.authStatus('github.com')).rejects.toThrow(error);
       await expect(commandRuntime.runner.run(['auth', 'status'])).rejects.toThrow(
-        /not version-validated/iu,
+        /has not verified it yet/iu,
       );
       await expect(service.getPublicStatus()).resolves.toMatchObject({
         state: 'unverified',
@@ -469,7 +469,7 @@ describe('GitHubCliRuntimeService automatic selection', () => {
 
     await expect(
       service.confirmAutomaticSelection('window:1', plan.planId, () => Promise.resolve('approved')),
-    ).rejects.toThrow('discovery changed');
+    ).rejects.toThrow('automatically found GitHub CLI changed');
     expect(store.binding).toEqual(existing);
   });
 
@@ -509,7 +509,7 @@ describe('GitHubCliRuntimeService automatic selection', () => {
     }));
 
     await expect(service.prepareAutomaticSelection('window:1')).rejects.toThrow(
-      'could not prove that the executable is absent',
+      'could not confirm whether the GitHub CLI is installed',
     );
     expect(store.binding).toEqual(existing);
   });
@@ -633,7 +633,7 @@ describe('GitHubCliRuntimeService status and plan lifecycle', () => {
     await service.confirmSelection('window:1', first.planId, () => Promise.resolve('approved'));
     await expect(
       service.confirmSelection('window:2', second.planId, () => Promise.resolve('approved')),
-    ).rejects.toThrow('configuration changed');
+    ).rejects.toThrow('setup changed');
   });
 
   it('clears automatic validation evidence during a privacy reset', async () => {
@@ -664,7 +664,7 @@ describe('GitHubCliRuntimeService status and plan lifecycle', () => {
       status: { state: 'unverified' },
     });
     await expect(afterReset.runner.run(['auth', 'status'])).rejects.toThrow(
-      /not version-validated/iu,
+      /has not verified it yet/iu,
     );
     await expect(afterReset.runner.run(['--version'])).resolves.toMatchObject({
       exitCode: 0,

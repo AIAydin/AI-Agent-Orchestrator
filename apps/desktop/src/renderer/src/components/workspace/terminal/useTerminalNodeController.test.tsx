@@ -205,11 +205,11 @@ describe('useTerminalNodeController', () => {
     const { result } = renderController(fixture.operations, { onError });
     await waitFor(() =>
       expect(result.current.error).toBe(
-        'This terminal session is no longer available in local storage.',
+        'This terminal session is no longer saved on this computer.',
       ),
     );
     expect(onError).toHaveBeenCalledWith(
-      'This terminal session is no longer available in local storage.',
+      'This terminal session is no longer saved on this computer.',
     );
     expect(result.current.session).toBeNull();
     expect(result.current.active).toBe(false);

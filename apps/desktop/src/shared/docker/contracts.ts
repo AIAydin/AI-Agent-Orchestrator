@@ -11,21 +11,27 @@ export const DockerImageReferenceSchema = z
   .max(512)
   .regex(
     /^[A-Za-z0-9][A-Za-z0-9._/@:-]*$/u,
-    'Docker image references cannot contain whitespace or CLI metacharacters.',
+    'Container image names cannot contain spaces or special characters.',
   )
-  .refine((value) => !value.split('/').includes('..'), 'Docker image paths cannot traverse.');
+  .refine(
+    (value) => !value.split('/').includes('..'),
+    'Container image names cannot contain "..".',
+  );
 
 export const DockerContainerExecutableSchema = MachineSpecificValueSchema.pipe(
   z.string().max(4_096),
 )
-  .refine((value) => value.startsWith('/'), 'Container executable must be an absolute path.')
+  .refine(
+    (value) => value.startsWith('/'),
+    'Enter the full path of the agent executable inside the image, starting with /.',
+  )
   .refine((value) => {
     const segments = value.split('/').slice(1);
     return (
       segments.length > 0 &&
       segments.every((segment) => segment !== '' && segment !== '.' && segment !== '..')
     );
-  }, 'Container executable must be normalized.');
+  }, 'Remove any "." or ".." parts from the agent executable path inside the image.');
 
 export const DockerReadinessInputSchema = z
   .object({

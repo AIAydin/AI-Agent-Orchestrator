@@ -11,14 +11,15 @@ export function CollaboratorRoster({ awareness }: CollaboratorRosterProps) {
   if (awareness.length === 0) return null;
   const visible = awareness.slice(0, MAX_VISIBLE_AVATARS);
   return (
-    <div className="collaborator-roster" aria-label="Collaborators in this room">
+    <div className="collaborator-roster" aria-label="People sharing this canvas">
       {visible.map((entry) => {
-        const activity = entry.state.activity?.status ?? 'idle';
+        const status = entry.state.activity?.status ?? 'idle';
+        const activity = status === 'idle' ? 'not active right now' : status;
         const label = `${entry.state.user.displayName}, ${entry.state.user.role}, ${activity}`;
         return (
           <span
             key={entry.state.user.id}
-            className={`collaborator-avatar ${activity}`}
+            className={`collaborator-avatar ${status}`}
             style={{ backgroundColor: entry.state.user.color }}
             aria-label={label}
             title={label}
@@ -30,7 +31,7 @@ export function CollaboratorRoster({ awareness }: CollaboratorRosterProps) {
       {awareness.length > visible.length && (
         <span
           className="collaborator-avatar overflow"
-          aria-label={`${awareness.length - visible.length} more collaborators`}
+          aria-label={`${awareness.length - visible.length} more people`}
         >
           +{awareness.length - visible.length}
         </span>

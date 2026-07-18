@@ -59,7 +59,7 @@ describe('useSettingsFolderReadiness', () => {
     );
     render(<Harness initial={{ ...base, backupsEnabled: false }} check={check} />);
 
-    await waitFor(() => expect(screen.getByTestId('issue').textContent).toMatch(/stale folder/u));
+    await waitFor(() => expect(screen.getByTestId('issue').textContent).toMatch(/older path/u));
     expect(screen.getByTestId('blocking').textContent).toBe('1');
   });
 

@@ -18,38 +18,35 @@ export function cleanupConfirmation(
   }
   const recoveryDetail = plan.recovery
     ? [
-        'Fresh recovery confirmation: a previous cleanup stopped before Forgeboard could record a complete result.',
-        'Only the remaining parts of this exact managed worktree, branch, and ownership metadata will be removed.',
+        'A previous cleanup was interrupted before Forgeboard could finish recording it. This is a fresh review of what remains.',
+        "Only the leftover workspace folder, its branch, and Forgeboard's ownership records for it will be removed.",
         '',
       ]
     : [];
   return {
     type: 'warning',
-    title: plan.recovery ? 'Continue interrupted worktree cleanup' : 'Clean up agent worktree',
+    title: plan.recovery ? 'Continue the interrupted cleanup?' : 'Clean up the agent workspace?',
     message: plan.recovery
-      ? 'Continue removing the remaining exact worktree cleanup target?'
-      : 'Permanently remove this worktree and its managed branch?',
+      ? 'Continue deleting what remains of this agent workspace?'
+      : 'Permanently delete this agent workspace and its branch?',
     detail: [
       ...recoveryDetail,
-      `Branch: ${boundedLiteral(plan.branch, 4_096)}`,
-      `Base: ${boundedLiteral(plan.baseRef, 4_096)}`,
-      `Worktree directory: ${boundedLiteral(impact.ownership.worktreePath, 8_192)}`,
-      `Branch commit: ${abbreviatedOid(impact.branchOid)}`,
+      `Agent branch: ${boundedLiteral(plan.branch, 4_096)}`,
+      `Recorded base branch: ${boundedLiteral(plan.baseRef, 4_096)}`,
+      `Workspace folder: ${boundedLiteral(impact.ownership.worktreePath, 8_192)}`,
+      `Latest branch commit: ${abbreviatedOid(impact.branchOid)}`,
       `Recorded base commit: ${abbreviatedOid(impact.ownership.baseCommit)}`,
-      `Current primary HEAD: ${abbreviatedOid(impact.expectedHead)}`,
-      `Working tree: ${plan.clean ? 'clean' : `${String(plan.dirtyPathCount)} changed path(s)`}`,
-      `Merged into base: ${plan.mergedIntoBase ? 'yes' : 'no'}`,
+      `Current primary commit: ${abbreviatedOid(impact.expectedHead)}`,
+      `Unsaved changes: ${plan.clean ? 'none' : `${String(plan.dirtyPathCount)} file(s)`}`,
+      `Merged into the base branch: ${plan.mergedIntoBase ? 'yes' : 'no'}`,
       ...(paths.length === 0 ? [] : ['', ...paths]),
       '',
       plan.recovery
-        ? 'Forgeboard will continue only this freshly reviewed interrupted cleanup. It may remove the remaining exact worktree, managed branch, and ownership metadata. Cleanup is refused if the target changed or any Forgeboard-managed process could still be using a project directory.'
-        : 'Forgeboard will remove only the exact managed worktree reviewed in this plan and delete its managed branch. Cleanup is refused if the worktree is dirty, the branch is unmerged, the target changed, or any Forgeboard-managed process could still be using a project directory.',
+        ? 'Forgeboard continues only the interrupted cleanup you just reviewed: it removes the leftover workspace folder, its branch, and its ownership records. Cleanup is refused if anything changed or if a Forgeboard-managed process could still be using a project folder.'
+        : 'Forgeboard removes only the exact agent workspace you reviewed and deletes its branch. Cleanup is refused if the workspace has unsaved changes, the branch is not fully merged, anything changed, or a Forgeboard-managed process could still be using a project folder.',
       'This cannot be undone by Forgeboard.',
     ].join('\n'),
-    buttons: [
-      'Cancel',
-      plan.recovery ? 'Continue interrupted cleanup' : 'Clean up worktree and branch',
-    ],
+    buttons: ['Cancel', plan.recovery ? 'Continue cleanup' : 'Delete workspace and branch'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,

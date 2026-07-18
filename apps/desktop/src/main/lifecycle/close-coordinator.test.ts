@@ -59,7 +59,7 @@ describe('CloseCoordinator', () => {
     expect(options).toMatchObject({
       defaultId: 0,
       cancelId: 0,
-      buttons: ['Keep Forgeboard Open', 'Close Without Saving'],
+      buttons: ['Keep Forgeboard open', 'Close without saving'],
     });
   });
 
@@ -81,7 +81,7 @@ describe('CloseCoordinator', () => {
     await expect(fixture.coordinator.requestSave(fixture.window)).resolves.toBe(false);
     expect(fixture.showMessageBox).toHaveBeenCalledTimes(1);
     expect((fixture.showMessageBox.mock.calls[0]?.[1] as MessageBoxOptions).detail).toContain(
-      'timed out',
+      'did not finish in time',
     );
   });
 

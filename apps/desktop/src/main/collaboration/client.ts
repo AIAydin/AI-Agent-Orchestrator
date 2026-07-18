@@ -215,14 +215,14 @@ export class CollaborationClient {
     } catch {
       return joinFailure(
         'invalid-configuration',
-        'The collaboration access token is not a valid access credential.',
+        'The session access token is not valid. Check it and try again.',
         false,
       );
     }
     if (claims.roomId !== input.roomId || claims.sub !== input.subject) {
       return joinFailure(
         'invalid-configuration',
-        'The access token does not match the selected room and subject.',
+        'The access token does not match the selected room and collaborator ID.',
         false,
       );
     }
@@ -266,7 +266,7 @@ export class CollaborationClient {
             generation,
             connectionError(
               'server-unavailable',
-              'The collaboration server did not complete the secure join in time.',
+              'The collaboration server took too long to connect. Try again.',
               true,
             ),
           ),
@@ -324,7 +324,11 @@ export class CollaborationClient {
     this.#suppressedRejectedComments.clear();
     this.#rejectedCommentSuppressionBaseline = null;
     if (previous === null && this.#provider === null && this.#pendingJoin === null) return null;
-    const cancelled = connectionError('cancelled', 'The collaboration join was cancelled.', false);
+    const cancelled = connectionError(
+      'cancelled',
+      'The collaboration connection was cancelled.',
+      false,
+    );
     this.#resolvePending(joinFailure(cancelled.code, cancelled.message, cancelled.retryable));
     this.#discardPendingDeliveries();
     this.#destroyTransport();
@@ -404,7 +408,7 @@ export class CollaborationClient {
     let reservationHeld = true;
     try {
       if (current.nodes[input.nodeId] === undefined) {
-        throw new Error('Shared comments can only target a node in the authenticated room.');
+        throw new Error('Shared comments can only be added to a node in the connected room.');
       }
       const nodeCommentCount = Object.values(current.comments).filter(
         (comment) => comment.nodeId === input.nodeId,
@@ -461,15 +465,15 @@ export class CollaborationClient {
     }
     for (const comment of replayedComments) {
       if (comment.authorId !== this.#identity.subject) {
-        throw new Error('Recovered comments must belong to the authenticated collaborator.');
+        throw new Error('Recovered comments must belong to the signed-in collaborator.');
       }
       if (seen.has(comment.id) || current.comments[comment.id] !== undefined) {
-        throw new Error('Recovered comments must have unique identities absent from the room.');
+        throw new Error('Recovered comments must be new to the room.');
       }
       seen.add(comment.id);
       const nodeId = comment.nodeId;
       if (nodeId === undefined || current.nodes[nodeId] === undefined) {
-        throw new Error('Recovered comments can only target a node in the authenticated room.');
+        throw new Error('Recovered comments can only be added to a node in the connected room.');
       }
       additionsByNode.set(nodeId, (additionsByNode.get(nodeId) ?? 0) + 1);
     }
@@ -683,7 +687,7 @@ export class CollaborationClient {
         generation,
         connectionError(
           'network-failed',
-          'The collaboration server closed the connection before joining.',
+          'The collaboration server closed the connection before you joined the room.',
           true,
         ),
       );
@@ -711,7 +715,7 @@ export class CollaborationClient {
           generation,
           connectionError(
             'privacy-rejected',
-            'The collaboration server sent metadata outside the privacy allowlist.',
+            "The collaboration server sent data that Forgeboard's privacy rules do not allow.",
             false,
           ),
         );
@@ -781,7 +785,7 @@ export class CollaborationClient {
         generation,
         connectionError(
           'privacy-rejected',
-          'The collaboration server sent invalid awareness metadata.',
+          'The collaboration server sent invalid presence data.',
           false,
         ),
       );
@@ -813,7 +817,7 @@ export class CollaborationClient {
         generation,
         connectionError(
           'privacy-rejected',
-          'The collaboration server sent an invalid delivery acknowledgement.',
+          'The collaboration server sent an invalid confirmation for shared changes.',
           false,
         ),
       );
@@ -1052,7 +1056,8 @@ export class CollaborationClient {
 
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The collaboration client has been disposed.');
-    if (this.#paused) throw new Error('Collaboration is paused for a local data operation.');
+    if (this.#paused)
+      throw new Error('Collaboration is paused while Forgeboard changes local data.');
   }
 
   #sharingReady(): boolean {
@@ -1128,6 +1133,6 @@ function documentHasValues(document: Y.Doc): boolean {
 
 function rejectedCommentRejoinRequiredError(): Error {
   return new Error(
-    'Dismissed rejected comments remain in this stale collaboration view. Leave and rejoin the room before authoring more shared changes.',
+    'Dismissed rejected comments remain in this stale collaboration view. Leave and rejoin the room before making more changes.',
   );
 }

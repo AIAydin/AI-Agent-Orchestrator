@@ -163,7 +163,7 @@ export const WorkflowReviewDecisionInputSchema = WorkflowHumanRequestIdentitySch
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['feedback'],
-        message: 'Requested changes require actionable feedback.',
+        message: 'Say what should change before asking for changes.',
       });
     }
   });

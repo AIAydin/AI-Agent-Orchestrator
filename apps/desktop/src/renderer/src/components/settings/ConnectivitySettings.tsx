@@ -34,7 +34,7 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
       })
       .catch(() => {
         if (active && !eventObserved) {
-          setConnectionMessage('Forgeboard could not validate collaboration status.');
+          setConnectionMessage('Forgeboard could not check the collaboration status. Try again.');
         }
       });
     const unsubscribe = collaboration.onEvent((event) => {
@@ -75,7 +75,7 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
   async function join(): Promise<void> {
     const collaboration = window.forgeboard.collaboration;
     if (collaboration === undefined) {
-      setConnectionMessage('Collaboration is unavailable in this desktop build.');
+      setConnectionMessage('Collaboration is not available in this build of Forgeboard.');
       return;
     }
     setConnectionBusy(true);
@@ -97,7 +97,9 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
         setConnectionMessage(result.error.message);
       }
     } catch {
-      setConnectionMessage('Forgeboard could not validate the collaboration response.');
+      setConnectionMessage(
+        'Forgeboard could not understand the collaboration server’s response. Try again.',
+      );
     } finally {
       setAccessToken('');
       setConnectionBusy(false);
@@ -121,7 +123,9 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
         return false;
       }
     } catch {
-      setConnectionMessage('Forgeboard could not validate the collaboration response.');
+      setConnectionMessage(
+        'Forgeboard could not understand the collaboration server’s response. Try again.',
+      );
       return false;
     } finally {
       setConnectionBusy(false);
@@ -140,13 +144,13 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
     <>
       <SettingsSection
         title="Self-hosted collaboration"
-        description="Join an authenticated room explicitly. Identity and connection settings can be saved; access tokens are never persisted."
+        description="Work with others in real time through a server your team runs itself. Join a room only when you choose to; access tokens are never saved."
       >
         <label className="switch-row">
           <span>
             <strong>Enable collaboration</strong>
             <small>
-              A connection starts only when you select Connect and approve the native prompt.
+              A connection starts only when you click Connect and approve the system prompt.
             </small>
           </span>
           <input
@@ -248,15 +252,17 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
             onChange={(event) => setAccessToken(event.target.value)}
           />
           <small>
-            The field clears after every attempt. During an approved session, the token remains only
-            in volatile main-process memory for authentication and reconnect; it is never persisted,
-            emitted, or logged, and is cleared on leave, reset, or quit.
+            This field clears after every attempt. While a session is approved, the token is kept
+            only in memory — never saved, sent elsewhere, or logged — and it is removed when you
+            leave, reset, or quit.
           </small>
         </label>
         <label className="switch-row">
           <span>
             <strong>Reconnect collaboration automatically</strong>
-            <small>Reconnects only this approved room; leaving disables the active session.</small>
+            <small>
+              Reconnects only to this approved room. Leaving the room ends the active session.
+            </small>
           </span>
           <input
             type="checkbox"
@@ -290,15 +296,15 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
           </button>
         </div>
         <p className="recovery-guidance warning" role="status" aria-live="polite">
-          {connectionMessage ?? collaborationStatus(connection)} Forgeboard sends allowlisted canvas
-          fields: structure, titles, positions, task and review status, comments, and presence. It
-          does not inspect or redact secrets you type into shared titles, edge labels, or comments.
-          Prompt, file-content, local-path, environment-variable, credential, and token fields are
-          not selected automatically.
+          {connectionMessage ?? collaborationStatus(connection)} Forgeboard shares only these canvas
+          details: layout, titles, positions, task and review status, comments, and who is present.
+          It does not check shared titles, connection labels, or comments for secrets, so avoid
+          typing passwords or keys into them. Prompts, file contents, local paths, environment
+          variables, credentials, and tokens stay on this computer.
         </p>
         {collaborators.length > 0 && (
-          <div aria-label="Room collaborators">
-            <strong>Room presence</strong>
+          <div aria-label="People in this room">
+            <strong>People in this room</strong>
             <ul>
               {collaborators.map(({ clientId, state }) => (
                 <li key={clientId}>
@@ -311,7 +317,7 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
       </SettingsSection>
       <SettingsSection
         title="Application updates"
-        description="This build does not include an updater runtime. Release discovery, download verification, and installation are not performed in the background."
+        description="This build cannot update itself. It never finds, downloads, or installs updates in the background."
       >
         <label>
           Update channel
@@ -321,15 +327,15 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
             disabled
             aria-describedby="updater-unavailable"
           >
-            <option value="stable">Stable · stored but inactive</option>
-            <option value="prerelease">Prerelease · stored but inactive</option>
+            <option value="stable">Stable · saved but not used</option>
+            <option value="prerelease">Prerelease · saved but not used</option>
             <option value="disabled">Disabled</option>
           </select>
         </label>
         <label className="switch-row">
           <span>
             <strong>Download updates automatically</strong>
-            <small>No automatic updater is bundled in this build.</small>
+            <small>This build does not include an updater.</small>
           </span>
           <input
             type="checkbox"
@@ -342,9 +348,9 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
           Check for updates
         </button>
         <p id="updater-unavailable" className="recovery-guidance" role="status">
-          Manual update checks are unavailable. Install a newer signed release from the project’s
-          GitHub Releases page when one is published. A stored or imported automatic-download
-          preference is not acted on by this build.
+          Update checks are not available in this build. To update, install the latest signed
+          release from the project’s GitHub Releases page. Any saved or imported automatic-download
+          preference is ignored by this build.
         </p>
       </SettingsSection>
     </>
@@ -357,13 +363,15 @@ function collaborationStatus(connection: CollaborationConnection | null): string
     case 'connected':
       return `Connected to room ${connection.roomId}.`;
     case 'connecting':
-      return 'Waiting for authentication and the first secure sync.';
+      return 'Signing in and starting the first secure sync.';
     case 'reconnecting':
-      return 'Reconnecting to the approved collaboration room.';
+      return 'Reconnecting to the approved room.';
     case 'disconnecting':
-      return 'Leaving the collaboration room.';
+      return 'Leaving the room.';
     case 'error':
-      return connection.error?.message ?? 'The collaboration connection failed.';
+      return (
+        connection.error?.message ?? 'The collaboration connection failed. Try connecting again.'
+      );
     case 'offline':
       return 'Collaboration is offline.';
   }

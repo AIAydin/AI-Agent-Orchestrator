@@ -7,8 +7,8 @@ export function RunDisclosureWarnings({ disclosure }: { disclosure: RunDisclosur
     <>
       {disclosure.primaryWasDirty && (
         <div className="run-warning">
-          The primary checkout already has changes. This run uses the disclosed location and does
-          not silently overwrite them.
+          Your main project folder already has changes. This run works in its own copy, so those
+          changes stay untouched.
         </div>
       )}
       {disclosure.warnings.map((warning) => (
@@ -34,27 +34,27 @@ export function RunDisclosureDetails({
         <dd>{disclosure.provider}</dd>
       </div>
       <div>
-        <dt>Runtime</dt>
+        <dt>How it runs</dt>
         <dd>{disclosure.runtime.toUpperCase()}</dd>
       </div>
       <div className="wide">
-        <dt>Executable and arguments</dt>
+        <dt>Command to run</dt>
         <dd>
           <code>{formatCommand(disclosure.executable, disclosure.arguments)}</code>
         </dd>
       </div>
       <div className="wide">
-        <dt>Working directory</dt>
+        <dt>Folder it runs in</dt>
         <dd>
           <code>{disclosure.cwd}</code>
         </dd>
       </div>
       <div>
         <dt>Branch</dt>
-        <dd>{disclosure.branch ?? 'Current checkout'}</dd>
+        <dd>{disclosure.branch ?? 'Your current files'}</dd>
       </div>
       <div>
-        <dt>Base commit</dt>
+        <dt>Starting commit</dt>
         <dd>
           <code>{disclosure.baseCommit?.slice(0, 12) ?? 'Not available'}</code>
         </dd>
@@ -66,21 +66,21 @@ export function RunDisclosureDetails({
         </div>
       )}
       <div className="wide">
-        <dt>Permission enforcement</dt>
+        <dt>Permission rules</dt>
         <dd>
           <EffectivePermissionDisclosure profile={disclosure.permissionProfile} />
         </dd>
       </div>
       <div className="wide">
-        <dt>Environment variable names</dt>
+        <dt>Environment variables (names only)</dt>
         <dd>
           {disclosure.environmentVariableNames.length
             ? disclosure.environmentVariableNames.join(', ')
-            : 'No inherited variables'}
+            : 'None'}
         </dd>
       </div>
       <div className="wide">
-        <dt>Context attachments</dt>
+        <dt>Attached context</dt>
         <dd>
           {disclosure.contextAttachments.length > 0 ? (
             <ul className="context-attachment-disclosure">
@@ -88,7 +88,7 @@ export function RunDisclosureDetails({
                 <li key={`${attachment.kind}:${attachment.path}`}>
                   <strong>{attachment.kind}</strong> <code>{attachment.path}</code>
                   <br />
-                  SHA-256 <code>{attachment.sha256}</code>
+                  Checksum (SHA-256) <code>{attachment.sha256}</code>
                 </li>
               ))}
             </ul>
@@ -98,17 +98,16 @@ export function RunDisclosureDetails({
         </dd>
       </div>
       <div className="wide">
-        <dt>Context manifest evidence</dt>
+        <dt>Context record</dt>
         <dd>
           {disclosure.contextManifestId !== null && disclosure.contextManifestId !== undefined ? (
             <>
               <code>{disclosure.contextManifestId}</code>
               <br />
-              Resolver-supplied SHA-256{' '}
-              <code>{disclosure.contextManifestDigest ?? 'Unavailable'}</code>
+              Checksum (SHA-256) <code>{disclosure.contextManifestDigest ?? 'Unavailable'}</code>
             </>
           ) : (
-            'No context manifest'
+            'No context record'
           )}
         </dd>
       </div>

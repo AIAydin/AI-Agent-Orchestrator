@@ -148,7 +148,7 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
       key: 'ArrowRight',
     });
     expect(onKeyboardMove).not.toHaveBeenCalled();
-    expect(screen.getByText(/cannot edit the shared graph/u)).toBeTruthy();
+    expect(screen.getByText(/cannot edit the shared canvas/u)).toBeTruthy();
   });
 
   it('reports a bounded completed viewport move for autosave but not for read-only roles', () => {
@@ -369,7 +369,7 @@ describe('WorkspaceCanvas Agent context drops', () => {
       },
       dataTransfer: () => contextDataTransfer(),
       target: 'canvas-node-agent',
-      message: /cannot edit the shared graph/u,
+      message: /cannot edit the shared canvas/u,
     },
   ])('rejects a $label', async ({ configure, dataTransfer, target, message }) => {
     const canvasProps = props(vi.fn());

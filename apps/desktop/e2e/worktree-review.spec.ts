@@ -55,15 +55,15 @@ test('onboarding gates exact isolated delivery on deterministic checks and human
     await expect(agentNode).toBeVisible();
     await agentNode.click();
 
-    const runConfiguration = page.getByRole('region', { name: 'Agent run configuration' });
-    await runConfiguration.getByLabel('Installed adapter').selectOption('test-agent');
+    const runConfiguration = page.getByRole('region', { name: 'Agent run settings' });
+    await runConfiguration.getByLabel('Agent to run').selectOption('test-agent');
     await runConfiguration.getByLabel('Permission profile').selectOption('worktree-write');
     await runConfiguration
       .getByLabel('Prompt')
       .fill('Create the deterministic file for isolated worktree review.');
     await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
 
-    const launchDisclosure = page.getByRole('dialog', { name: 'Review the exact agent launch' });
+    const launchDisclosure = page.getByRole('dialog', { name: 'Review this run before it starts' });
     await expect(launchDisclosure).toContainText('Test agent in a dedicated worktree');
     await expect(launchDisclosure).toContainText('Network: provider-controlled');
     await approveNextNativeAgentLaunch(
@@ -71,7 +71,7 @@ test('onboarding gates exact isolated delivery on deterministic checks and human
       launchDisclosure,
       'test-agent',
       async () => {
-        await launchDisclosure.getByRole('button', { name: 'Approve & launch' }).click();
+        await launchDisclosure.getByRole('button', { name: 'Approve and start' }).click();
       },
     );
     await expect(page.locator('.run-history')).toContainText('succeeded · 1 changed file', {
@@ -85,42 +85,44 @@ test('onboarding gates exact isolated delivery on deterministic checks and human
     const agentFileContent = await readFile(join(worktreePath, changedFile), 'utf8');
     expect(agentFileContent).toContain('# Forgeboard deterministic agent output');
 
-    await firstReport.getByRole('button', { name: 'Review this agent worktree' }).click();
+    await firstReport.getByRole('button', { name: 'Review this agent’s changes' }).click();
     let reviewDialog = page.getByRole('dialog', { name: /Review changes in forgeboard-demo/ });
-    await expect(
-      reviewDialog.getByText('Authoritative agent worktree', { exact: true }),
-    ).toBeVisible();
-    const targetRegion = reviewDialog.getByRole('region', { name: 'Agent worktree target' });
-    await expect(targetRegion).toContainText('Stage, discard, and commit actions apply only');
-    await expect(targetRegion).toContainText('primary checkout remains untouched');
+    await expect(reviewDialog.getByText('Agent workspace', { exact: true })).toBeVisible();
+    const targetRegion = reviewDialog.getByRole('region', { name: 'Agent workspace details' });
+    await expect(targetRegion).toContainText(
+      'Adding, discarding, and committing changes happens only in this workspace',
+    );
+    await expect(targetRegion).toContainText('main project files stay untouched');
     const isolatedRunLabel = await targetRegion.locator('strong').innerText();
 
-    const baseComparisonTab = reviewDialog.getByRole('tab', { name: 'Changes vs base' });
+    const baseComparisonTab = reviewDialog.getByRole('tab', { name: 'Committed changes' });
     await expect(baseComparisonTab).toHaveAttribute('aria-selected', 'true');
-    await expect(reviewDialog).toContainText('No committed changes vs base');
-    await reviewDialog.getByRole('tab', { name: 'Staged & unstaged' }).click();
-    await reviewDialog.getByRole('button', { name: `Stage ${changedFile}` }).click();
+    await expect(reviewDialog).toContainText('No committed changes to compare');
+    await reviewDialog.getByRole('tab', { name: 'Uncommitted changes' }).click();
+    await reviewDialog.getByRole('button', { name: `Add ${changedFile} to commit` }).click();
     await expect(
-      reviewDialog.getByRole('button', { name: `Unstage ${changedFile}` }),
+      reviewDialog.getByRole('button', { name: `Remove ${changedFile} from commit` }),
     ).toBeVisible();
     await reviewDialog.getByLabel('Commit message').fill(COMMIT_MESSAGE);
     await reviewDialog.getByRole('button', { name: /Review commit/ }).click();
 
     const commitDisclosure = page.getByRole('alertdialog', {
-      name: 'Review the exact local commit',
+      name: 'Review your commit',
     });
-    await expect(commitDisclosure).toContainText('Isolated agent worktree');
-    await expect(commitDisclosure).toContainText(isolatedRunLabel.replace('Isolated run ', 'run '));
+    await expect(commitDisclosure).toContainText('Agent workspace · run');
+    await expect(commitDisclosure).toContainText(
+      isolatedRunLabel.replace('Agent workspace · ', ''),
+    );
     await expect(commitDisclosure).toContainText(COMMIT_MESSAGE);
     await expect(commitDisclosure).toContainText(COMMIT_IDENTITY.name);
     await expect(commitDisclosure).toContainText(COMMIT_IDENTITY.email);
     await expect(commitDisclosure).toContainText(changedFile);
 
     await approveNativeDialogs(electronApp);
-    await commitDisclosure.getByRole('button', { name: 'Continue to system confirmation' }).click();
-    await expect(reviewDialog).toContainText(/Created local commit [a-f0-9]{12}\./u);
+    await commitDisclosure.getByRole('button', { name: 'Continue' }).click();
+    await expect(reviewDialog).toContainText(/Created commit [a-f0-9]{12}\./u);
     await expect(reviewDialog).toContainText(
-      'Working tree clean. There are no local changes to review.',
+      'No changes to review. Everything here is already committed.',
     );
 
     const worktreeHeadAfter = git(worktreePath, ['rev-parse', 'HEAD']);
@@ -153,24 +155,22 @@ test('onboarding gates exact isolated delivery on deterministic checks and human
 
     const persistedReport = await openOnlyChangeReport(page);
     await expect(persistedReport).toContainText(changedFile);
-    await persistedReport.getByRole('button', { name: 'Review this agent worktree' }).click();
+    await persistedReport.getByRole('button', { name: 'Review this agent’s changes' }).click();
     reviewDialog = page.getByRole('dialog', { name: /Review changes in forgeboard-demo/ });
+    await expect(reviewDialog.getByText('Agent workspace', { exact: true })).toBeVisible();
     await expect(
-      reviewDialog.getByText('Authoritative agent worktree', { exact: true }),
-    ).toBeVisible();
-    await expect(reviewDialog.getByRole('region', { name: 'Agent worktree target' })).toContainText(
-      isolatedRunLabel,
-    );
-    await expect(reviewDialog.getByRole('tab', { name: 'Changes vs base' })).toHaveAttribute(
+      reviewDialog.getByRole('region', { name: 'Agent workspace details' }),
+    ).toContainText(isolatedRunLabel);
+    await expect(reviewDialog.getByRole('tab', { name: 'Committed changes' })).toHaveAttribute(
       'aria-selected',
       'true',
     );
     await expect(reviewDialog).toContainText('Committed changes');
     await expect(reviewDialog).toContainText(changedFile);
-    await expect(reviewDialog).toContainText('Committed comparison');
-    await reviewDialog.getByRole('tab', { name: 'Staged & unstaged' }).click();
+    await expect(reviewDialog).toContainText('Committed (read-only)');
+    await reviewDialog.getByRole('tab', { name: 'Uncommitted changes' }).click();
     await expect(reviewDialog).toContainText(
-      'Working tree clean. There are no local changes to review.',
+      'No changes to review. Everything here is already committed.',
     );
     expect(git(worktreePath, ['rev-parse', 'HEAD'])).toBe(worktreeHeadAfter);
     expect(git(worktreePath, ['status', '--porcelain=v1', '--untracked-files=all'])).toBe('');
@@ -182,16 +182,16 @@ test('onboarding gates exact isolated delivery on deterministic checks and human
       changedFile,
     });
 
-    await reviewDialog.getByRole('tab', { name: 'Changes vs base' }).click();
+    await reviewDialog.getByRole('tab', { name: 'Committed changes' }).click();
     const readiness = reviewDialog.getByRole('region', { name: 'Delivery readiness' });
     const delivery = reviewDialog.getByRole('region', {
-      name: 'Deliver reviewed commits to primary',
+      name: 'Deliver the reviewed changes to the primary branch',
     });
     const reviewDelivery = delivery.getByRole('button', { name: /Review delivery/ });
     await expect(readiness).toContainText('Not ready for delivery');
     await expect(reviewDelivery).toBeDisabled();
     await expect(delivery).toContainText(
-      'Complete the exact required checks and current human quality approval first.',
+      'Run every required check and approve the quality of the current changes first.',
     );
 
     const lintRequirement = readiness.getByRole('checkbox', { name: /^Lint\b/ });
@@ -206,30 +206,30 @@ test('onboarding gates exact isolated delivery on deterministic checks and human
     const dialogsBeforeCheck = await nativeDialogs(electronApp);
     await readiness.getByRole('button', { name: 'Run Lint' }).click();
     await expect(readiness).toContainText('Passed', { timeout: 20_000 });
-    await expect(reviewDialog).toContainText('The exact delivery check passed.');
+    await expect(reviewDialog).toContainText('The check passed. Delivery status was refreshed.');
     const checkDialog = (await nativeDialogs(electronApp)).at(dialogsBeforeCheck.length);
-    expectNativeCancelDefault(checkDialog, 'Run delivery check', ['Cancel', 'Run exact check']);
+    expectNativeCancelDefault(checkDialog, 'Run delivery check?', ['Cancel', 'Run check']);
     expect(nativeDialogText(checkDialog)).toContain('Lint');
     expect(nativeDialogText(checkDialog)).toContain(DELIVERY_CHECK_MARKER);
     await expect(reviewDelivery).toBeDisabled();
 
     const dialogsBeforeApproval = await nativeDialogs(electronApp);
-    await readiness.getByRole('button', { name: 'Approve reviewed quality' }).click();
+    await readiness.getByRole('button', { name: 'Approve quality' }).click();
     await expect(readiness).toContainText('Ready for delivery review');
     await expect(readiness.locator('.git-delivery-quality-binding')).toContainText(
       worktreeHeadAfter.slice(0, 12),
     );
     const approvalDialog = (await nativeDialogs(electronApp)).at(dialogsBeforeApproval.length);
-    expectNativeCancelDefault(approvalDialog, 'Approve delivery readiness', [
+    expectNativeCancelDefault(approvalDialog, 'Approve quality for delivery?', [
       'Cancel',
-      'Approve readiness',
+      'Approve quality',
     ]);
     expect(nativeDialogText(approvalDialog)).toContain(
-      'Approve this exact source and deterministic check evidence for delivery?',
+      'Approve these exact changes and their check results for delivery?',
     );
     await expect(reviewDelivery).toBeEnabled();
     await expect(delivery).toContainText(
-      'Forgeboard will verify the source and primary checkout again before delivery.',
+      "Forgeboard will double-check the agent's work and the primary branch before delivering.",
     );
 
     await writeFile(join(worktreePath, DELIVERY_DRIFT_FILE), 'new exact delivery source\n', 'utf8');
@@ -248,44 +248,47 @@ test('onboarding gates exact isolated delivery on deterministic checks and human
 
     await reviewDialog.getByRole('button', { name: 'Refresh Git changes' }).click();
     await expect(readiness).toContainText('Not ready for delivery');
-    await expect(readiness).toContainText('Existing delivery readiness is stale');
+    await expect(readiness).toContainText('Existing delivery readiness is out of date');
     await expect(reviewDelivery).toBeDisabled();
 
     await readiness.getByRole('button', { name: 'Save required checks' }).click();
     await readiness.getByRole('button', { name: 'Run Lint' }).click();
     await expect(readiness).toContainText('Passed', { timeout: 20_000 });
-    await readiness.getByRole('button', { name: 'Approve reviewed quality' }).click();
+    await readiness.getByRole('button', { name: 'Approve the current results' }).click();
     await expect(readiness).toContainText('Ready for delivery review');
     await expect(readiness.locator('.git-delivery-quality-binding')).toContainText(
       deliveryHead.slice(0, 12),
     );
     await expect(reviewDelivery).toBeEnabled();
 
-    await delivery.getByLabel('Delivery strategy').selectOption('fast-forward-only');
+    await delivery.getByLabel('Delivery method').selectOption('fast-forward-only');
     await reviewDelivery.click();
 
     const deliveryDisclosure = page.getByRole('alertdialog', {
-      name: 'Review exact primary delivery',
+      name: 'Review delivery to the primary branch',
     });
-    await expect(deliveryDisclosure).toContainText('Fast-forward-only merge');
+    await expect(deliveryDisclosure).toContainText('Move the primary branch forward');
     await expect(deliveryDisclosure).toContainText(COMMIT_IDENTITY.name);
     await expect(deliveryDisclosure).toContainText(COMMIT_IDENTITY.email);
     await expect(deliveryDisclosure).toContainText(deliveryHead);
     await expect(deliveryDisclosure).toContainText(changedFile);
     await expect(deliveryDisclosure).toContainText(DELIVERY_DRIFT_FILE);
-    await expect(deliveryDisclosure).toContainText('Content-bound delivery readiness');
-    await expect(deliveryDisclosure).toContainText('approved this exact check evidence');
+    await expect(deliveryDisclosure).toContainText('Required checks for this exact delivery');
+    await expect(deliveryDisclosure).toContainText('approved these exact check results');
     await expect(deliveryDisclosure).toContainText(
-      'revalidated before the system confirmation and again before Git changes primary',
+      'before you confirm and again before it updates the primary branch',
     );
 
     await deliveryDisclosure
-      .getByRole('button', { name: 'Continue to system confirmation' })
+      .getByRole('button', { name: 'Continue to final confirmation' })
       .click();
-    await expect(reviewDialog).toContainText('Delivered reviewed commits to primary', {
-      timeout: 20_000,
-    });
-    await expect(delivery).toContainText('Delivered to primary at');
+    await expect(reviewDialog).toContainText(
+      'Delivered the reviewed commits to your main project at',
+      {
+        timeout: 20_000,
+      },
+    );
+    await expect(delivery).toContainText('Delivered to the primary branch at');
 
     expect(git(primaryPath, ['rev-parse', 'HEAD'])).toBe(deliveryHead);
     expect(git(primaryPath, ['status', '--porcelain=v1', '--untracked-files=all'])).toBe('');

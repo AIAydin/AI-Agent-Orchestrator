@@ -44,7 +44,7 @@ describe('FileEditorPanel', () => {
     expect(screen.getByText('Saved')).toBeTruthy();
 
     act(() => monaco.userEdit('after\n'));
-    expect(screen.getByText('Unsaved')).toBeTruthy();
+    expect(screen.getByText('Unsaved changes')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
@@ -55,7 +55,7 @@ describe('FileEditorPanel', () => {
         expectedSha256: FIRST_HASH,
       }),
     );
-    expect(await screen.findByText('Saved to disk.')).toBeTruthy();
+    expect(await screen.findByText('File saved.')).toBeTruthy();
     expect(screen.getByText('Saved')).toBeTruthy();
   });
 
@@ -63,9 +63,14 @@ describe('FileEditorPanel', () => {
     const monaco = fakeMonaco();
     const operations = operationsFor(textDocument('disk one\n', FIRST_HASH));
     vi.mocked(operations.save).mockRejectedValue(
-      Object.assign(new Error('The file changed on disk. Revert or reopen it before saving.'), {
-        code: 'STALE_CONTENT',
-      }),
+      Object.assign(
+        new Error(
+          'This file changed on disk. Discard your changes or reopen the file before saving.',
+        ),
+        {
+          code: 'STALE_CONTENT',
+        },
+      ),
     );
     vi.mocked(operations.revert).mockResolvedValue(textDocument('disk two\n', SECOND_HASH));
     render(
@@ -81,22 +86,24 @@ describe('FileEditorPanel', () => {
     act(() => monaco.userEdit('my draft\n'));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(
-      await screen.findByText('The file changed on disk. Revert or reopen it before saving.'),
+      await screen.findByText(
+        'This file changed on disk. Discard your changes or reopen the file before saving.',
+      ),
     ).toBeTruthy();
-    expect(screen.getByText('Unsaved')).toBeTruthy();
+    expect(screen.getByText('Unsaved changes')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Revert' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
     await waitFor(() => expect(operations.revert).toHaveBeenCalledOnce());
-    expect(await screen.findByText('Reloaded from disk.')).toBeTruthy();
+    expect(await screen.findByText('Reloaded the saved version.')).toBeTruthy();
     expect(screen.getByText('Saved')).toBeTruthy();
 
     const draftOption = screen.getByRole<HTMLOptionElement>('option', {
-      name: /Unsaved before revert/,
+      name: /Unsaved changes/,
     });
-    fireEvent.change(screen.getByRole('combobox', { name: 'File history' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Past versions of this file' }), {
       target: { value: draftOption.value },
     });
-    expect(screen.getByText('Unsaved')).toBeTruthy();
+    expect(screen.getByText('Unsaved changes')).toBeTruthy();
   });
 
   it('shows binary documents as read-only and executes the native reveal callback', async () => {
@@ -111,7 +118,7 @@ describe('FileEditorPanel', () => {
       />,
     );
 
-    expect(await screen.findByText('Binary file')).toBeTruthy();
+    expect(await screen.findByText('Not a text file')).toBeTruthy();
     expect(monaco.created).not.toHaveBeenCalled();
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save' }).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Show in file manager' }));
@@ -121,7 +128,7 @@ describe('FileEditorPanel', () => {
         relativePath: 'assets/logo.bin',
       }),
     );
-    expect(await screen.findByText('Revealed in the system file manager.')).toBeTruthy();
+    expect(await screen.findByText('The file is shown in your file manager.')).toBeTruthy();
   });
 
   it('reports live Monaco diagnostics and uses only injected native handoff actions', async () => {
@@ -145,22 +152,20 @@ describe('FileEditorPanel', () => {
     );
     expect(await screen.findByText(/Problems 1/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reveal in tree' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show in file list' }));
     expect(onRevealInTree).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: 'Open externally' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open in default app' }));
     await waitFor(() =>
       expect(operations.openExternal).toHaveBeenCalledWith({
         projectId: PROJECT_ID,
         relativePath: PATH,
       }),
     );
-    expect(
-      await screen.findByText('Opened the saved file in its default application.'),
-    ).toBeTruthy();
+    expect(await screen.findByText('Opened the saved file in your default app.')).toBeTruthy();
 
     act(() => monaco.userEdit('unsaved\n'));
     expect(
-      screen.getByRole<HTMLButtonElement>('button', { name: 'Open externally' }).disabled,
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Open in default app' }).disabled,
     ).toBe(true);
   });
 
@@ -182,7 +187,10 @@ describe('FileEditorPanel', () => {
     act(() => monaco.saveShortcut());
 
     expect(screen.getByText('Read-only')).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'File history' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('combobox', { name: 'Past versions of this file' })).toHaveProperty(
+      'disabled',
+      true,
+    );
     expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
     expect(operations.save).not.toHaveBeenCalled();
   });
@@ -229,9 +237,9 @@ describe('FileEditorPanel', () => {
       />,
     );
 
-    expect(await screen.findByText('File missing')).toBeTruthy();
-    expect(screen.getByText('Missing')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('File not found')).toBeTruthy();
+    expect(screen.getByText('Not found')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(operations.read).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(monaco.created).toHaveBeenCalledOnce());
     expect(screen.getByText('Saved')).toBeTruthy();

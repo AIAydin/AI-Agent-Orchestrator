@@ -87,7 +87,11 @@ describe('RecoverySettings', () => {
 
   it('selects a valid recovery project when projects arrive or the prior selection disappears', async () => {
     const view = renderRecovery({ projects: [] });
-    expect(screen.getByText('Open a project once to create recovery history.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Snapshots let you go back to an earlier version of a canvas. Open a project once to start saving them.',
+      ),
+    ).toBeTruthy();
 
     view.rerender(<RecoverySettings {...recoveryProps({ projects: [project()] })} />);
     await waitFor(() =>
@@ -96,7 +100,7 @@ describe('RecoverySettings', () => {
         limit: 100,
       }),
     );
-    expect(screen.getByLabelText<HTMLSelectElement>('Recovery project').value).toBe(PROJECT_ID);
+    expect(screen.getByLabelText<HTMLSelectElement>('Project').value).toBe(PROJECT_ID);
     expect(screen.getByRole('button', { name: 'Create snapshot' }).hasAttribute('disabled')).toBe(
       false,
     );
@@ -111,7 +115,7 @@ describe('RecoverySettings', () => {
         limit: 100,
       }),
     );
-    expect(screen.getByLabelText<HTMLSelectElement>('Recovery project').value).toBe(replacementId);
+    expect(screen.getByLabelText<HTMLSelectElement>('Project').value).toBe(replacementId);
   });
 
   it('browses exact snapshots and restores only after renderer and native approval', async () => {
@@ -120,11 +124,11 @@ describe('RecoverySettings', () => {
 
     await screen.findByText(/1 nodes · 0 connections · autosave/u);
     fireEvent.click(screen.getByRole('button', { name: 'Review restore' }));
-    await screen.findByRole('region', { name: 'Snapshot restore disclosure' });
+    await screen.findByRole('region', { name: 'Confirm snapshot restore' });
     expect(screen.getByText(/Current canvas/u)).toBeTruthy();
     expect(recoveryApi.confirmSnapshotRestore).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to native approval' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
     await waitFor(() =>
       expect(recoveryApi.confirmSnapshotRestore).toHaveBeenCalledWith({ planId: PLAN_ID }),
     );
@@ -140,7 +144,7 @@ describe('RecoverySettings', () => {
       true,
     );
     expect(
-      screen.getByRole('button', { name: 'Choose data export' }).hasAttribute('disabled'),
+      screen.getByRole('button', { name: 'Choose export file' }).hasAttribute('disabled'),
     ).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Create snapshot' }));
 
@@ -152,16 +156,16 @@ describe('RecoverySettings', () => {
     const setNotice = vi.fn();
     renderRecovery({ setNotice });
 
-    fireEvent.change(screen.getByLabelText('Import behavior'), {
+    fireEvent.change(screen.getByLabelText('How to import'), {
       target: { value: 'replace' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Choose data export' }));
-    await screen.findByRole('region', { name: 'Local data import disclosure' });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose export file' }));
+    await screen.findByRole('region', { name: 'Confirm local data import' });
     expect(screen.getByText('2 projects')).toBeTruthy();
-    expect(screen.getByText(/SHA-256 bbbbbbbbbbbbbbbb/u)).toBeTruthy();
+    expect(screen.getByText(/checksum bbbbbbbbbbbbbbbb/u)).toBeTruthy();
     expect(recoveryApi.confirmImport).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to native approval' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
     await waitFor(() =>
       expect(recoveryApi.confirmImport).toHaveBeenCalledWith({ planId: PLAN_ID }),
     );
@@ -186,17 +190,17 @@ describe('RecoverySettings', () => {
 
     await screen.findByText(/1 nodes · 0 connections · autosave/u);
     fireEvent.click(screen.getByRole('button', { name: 'Review restore' }));
-    await screen.findByRole('region', { name: 'Snapshot restore disclosure' });
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to native approval' }));
+    await screen.findByRole('region', { name: 'Confirm snapshot restore' });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
     await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Snapshot restore disclosure' })).toBeNull(),
+      expect(screen.queryByRole('region', { name: 'Confirm snapshot restore' })).toBeNull(),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose data export' }));
-    await screen.findByRole('region', { name: 'Local data import disclosure' });
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to native approval' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose export file' }));
+    await screen.findByRole('region', { name: 'Confirm local data import' });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
     await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Local data import disclosure' })).toBeNull(),
+      expect(screen.queryByRole('region', { name: 'Confirm local data import' })).toBeNull(),
     );
   });
 });

@@ -92,36 +92,36 @@ export function CheckApprovalDialog({
             <ShieldCheck size={19} aria-hidden="true" />
           </span>
           <div>
-            <span className="eyebrow">Exact command authorization</span>
-            <h2 id="check-approval-title">Review the exact {plan.label} command</h2>
+            <span className="eyebrow">Check command approval</span>
+            <h2 id="check-approval-title">Review the {plan.label} command</h2>
             <p id="check-approval-description">
-              No process has started. Continue only if every disclosed value is expected. An active
-              saved grant must match this exact fingerprint; otherwise Forgeboard opens a native
-              confirmation.
+              Nothing has run yet. Continue only if everything below is what you expect. If you
+              saved an approval for this exact command, Forgeboard checks that it matches; otherwise
+              it asks you to confirm.
             </p>
           </div>
         </header>
         <p id="check-approval-warning" className="check-approval-warning">
-          Project checks execute user-approved, potentially untrusted repository code with your user
-          account’s privileges. Package-manager scripts may invoke a shell and lifecycle hooks.
-          Review repository changes before running. Raw output is retained unredacted; do not run a
-          check that prints secrets.
+          Project checks run code from this project on your computer, with your account’s
+          permissions. Package scripts can run other commands during install or build. Review recent
+          project changes before running a check. Output is saved in full, so do not run a check
+          that prints passwords or other secrets.
         </p>
-        <dl className="check-disclosure-grid" tabIndex={0} aria-label="Exact check launch details">
+        <dl className="check-disclosure-grid" tabIndex={0} aria-label="Check command details">
           <div className="wide">
-            <dt>Executable and literal arguments</dt>
+            <dt>Command and its arguments</dt>
             <dd>
               <code>{formatCommand(plan.executable, plan.arguments)}</code>
             </dd>
           </div>
           <div className="wide">
-            <dt>Canonical working directory</dt>
+            <dt>Folder it runs in</dt>
             <dd>
               <code>{plan.cwd}</code>
             </dd>
           </div>
           <div>
-            <dt>Check kind</dt>
+            <dt>Check type</dt>
             <dd>{plan.kind}</dd>
           </div>
           <div>
@@ -131,15 +131,15 @@ export function CheckApprovalDialog({
             </dd>
           </div>
           <div className="wide">
-            <dt>Inherited environment variable names</dt>
+            <dt>Environment variables passed to it</dt>
             <dd>
               {plan.environmentVariableNames.length
                 ? plan.environmentVariableNames.join(', ')
-                : 'No inherited variables'}
+                : 'None'}
             </dd>
           </div>
           <div className="wide">
-            <dt>Exact approval fingerprint</dt>
+            <dt>Approval fingerprint</dt>
             <dd>
               <code>{plan.approvalFingerprint}</code>
             </dd>
@@ -153,7 +153,7 @@ export function CheckApprovalDialog({
             disabled={busy}
             onClick={onCancel}
           >
-            Cancel before launch
+            Cancel
           </button>
           <button
             ref={continueButton}
@@ -162,7 +162,7 @@ export function CheckApprovalDialog({
             disabled={busy}
             onClick={onContinue}
           >
-            <Play size={14} aria-hidden="true" /> {busy ? 'Authorizing…' : 'Authorize exact check'}
+            <Play size={14} aria-hidden="true" /> {busy ? 'Approving…' : 'Approve and run'}
           </button>
         </footer>
       </section>

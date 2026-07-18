@@ -34,21 +34,24 @@ function gitConnectionMessage(review: GitConnectionNativeReview): MessageBoxOpti
     `Project: ${view.projectName}`,
     `Remote: ${plan.name}`,
     `Action: ${action}`,
-    `Current target: ${targetDescription(plan.before?.target ?? null)}`,
-    `New target: ${targetDescription(plan.target)}`,
+    `Current location: ${targetDescription(plan.before?.target ?? null)}`,
+    `New location: ${targetDescription(plan.target)}`,
     configurationImpact(review),
     '',
-    'Network access: None. This action changes only local Git configuration and the disclosed local remote-tracking references. It does not fetch, push, authenticate, or test reachability.',
+    'This change is local only — nothing is fetched, pushed, or sent over the network, and Forgeboard does not check that the location works.',
   ];
   if (plan.removal !== null) {
-    details.push('', `Configuration keys (${String(plan.before?.entries.length ?? 0)}):`);
+    details.push('', `Remote settings to remove (${String(plan.before?.entries.length ?? 0)}):`);
     details.push(
       plan.before?.entries.length === 0
         ? '(none)'
         : (plan.before?.entries.map((entry) => `${entry.scope}: ${entry.key}`).join('\n') ??
             '(none)'),
     );
-    details.push('', `Remote-tracking references (${String(plan.removal.trackingRefs.length)}):`);
+    details.push(
+      '',
+      `Saved branch copies to remove (${String(plan.removal.trackingRefs.length)}):`,
+    );
     details.push(
       plan.removal.trackingRefs.length === 0
         ? '(none)'
@@ -72,20 +75,20 @@ function gitHubCliMessage(review: GitHubCliSelectionReview): MessageBoxOptions {
   const candidate = review.candidate;
   const action = automatic ? 'Use automatic GitHub CLI' : 'Use selected GitHub CLI';
   const details = [
-    `Source: ${automatic ? 'Automatic desktop PATH discovery' : 'Custom executable'}`,
-    `Executable: ${review.executablePath ?? '(none currently detected)'}`,
-    `Filename: ${candidate?.filename ?? '(none)'}`,
+    `Source: ${automatic ? 'found automatically on this computer' : 'file you chose'}`,
+    `Program file: ${review.executablePath ?? '(none found)'}`,
+    `File name: ${candidate?.filename ?? '(none)'}`,
     `Size: ${candidate === null ? '(none)' : `${String(candidate.sizeBytes)} bytes`}`,
-    `SHA-256: ${candidate?.sha256 ?? '(none)'}`,
-    `Validation command: ${
+    `Fingerprint (SHA-256): ${candidate?.sha256 ?? '(none)'}`,
+    `Version check: ${
       review.executablePath === null ? '(none)' : `${review.executablePath} --version`
     }`,
     '',
     candidate === null
-      ? 'No executable is currently detected. Confirming clears the saved custom selection and leaves GitHub CLI features unavailable until gh appears on the desktop PATH.'
-      : 'After approval, Forgeboard starts only the exact executable above with the literal --version argument. It accepts the change only if the file identity still matches and the output identifies GitHub CLI.',
+      ? 'No GitHub CLI program was found on this computer. Confirming removes your saved custom choice, and GitHub features stay unavailable until the gh program is installed.'
+      : 'If you confirm, Forgeboard runs only the exact program file above, with just the --version flag, and applies the change only if the file is unchanged and answers as the GitHub CLI.',
     '',
-    'Network access: None requested by Forgeboard for this validation. The selected executable is trusted local code; Forgeboard does not pass repository data or tokens to the version command.',
+    'This check stays on this computer: Forgeboard sends no repository data or sign-in tokens to the version command. The program you choose is trusted local code and runs with your permissions.',
   ];
   return {
     type: 'warning',
@@ -93,7 +96,7 @@ function gitHubCliMessage(review: GitHubCliSelectionReview): MessageBoxOptions {
     defaultId: 0,
     cancelId: 0,
     noLink: true,
-    title: 'Change GitHub CLI configuration?',
+    title: 'Change GitHub CLI setup?',
     message: `${action}?`,
     detail: details.join('\n'),
   };
@@ -106,7 +109,7 @@ function actionLabel(kind: 'add' | 'replace' | 'remove'): 'Add' | 'Replace' | 'R
 }
 
 function targetDescription(target: GitConnectionNativeReview['exactPlan']['target']): string {
-  if (target === null) return '(none or advanced configuration)';
+  if (target === null) return '(none, or an advanced setup)';
   if (target.kind === 'local-filesystem') return `Local repository at ${target.resource}`;
   return `${target.transport.toUpperCase()} ${target.exactUrl}`;
 }
@@ -114,14 +117,14 @@ function targetDescription(target: GitConnectionNativeReview['exactPlan']['targe
 function configurationImpact(review: GitConnectionNativeReview): string {
   const plan = review.exactPlan;
   if (plan.kind === 'add') {
-    return 'Configuration impact: add one remote URL and its standard fetch refspec.';
+    return 'What changes: adds one remote URL and the standard setting that fetches its branches.';
   }
   if (plan.kind === 'replace') {
-    return `Configuration impact: change one URL value while preserving the other reviewed configuration entries, the reviewed entry count (${String(
+    return `What changes: replaces one URL. The ${String(
       plan.before?.entries.length ?? 0,
-    )}), and every remote-tracking reference.`;
+    )} reviewed settings otherwise stay unchanged, and every saved branch copy is kept.`;
   }
-  return `Configuration impact: remove ${String(
+  return `What changes: removes the ${String(
     plan.removal?.configurationEntryCount ?? 0,
-  )} remote configuration entries identified by scope and key below, plus the exact references listed below. Values are omitted because remote URLs can contain credentials. Local branches, commits, other remotes, and worktree files remain.`;
+  )} remote settings listed below and the saved copies of its branches. Setting values are hidden because remote URLs can contain sign-in details. Your local branches, commits, other remotes, and files stay untouched.`;
 }

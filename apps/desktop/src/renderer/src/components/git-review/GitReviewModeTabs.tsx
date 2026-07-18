@@ -51,7 +51,7 @@ export function GitReviewModeTabs({
         onClick={() => onChange('base-comparison')}
         onKeyDown={(event) => selectFromKeyboard(event, 'base-comparison')}
       >
-        Changes vs base
+        Committed changes
       </button>
       <button
         ref={workingTreeTab}
@@ -64,7 +64,7 @@ export function GitReviewModeTabs({
         onClick={() => onChange('working-tree')}
         onKeyDown={(event) => selectFromKeyboard(event, 'working-tree')}
       >
-        Staged &amp; unstaged
+        Uncommitted changes
       </button>
     </div>
   );

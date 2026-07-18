@@ -44,7 +44,7 @@ export function useProjectChecks({ projectId, setEvents, onError }: UseProjectCh
       .catch((cause: unknown) => {
         if (current) {
           onErrorRef.current(
-            cause instanceof Error ? cause.message : 'Could not load project checks.',
+            cause instanceof Error ? cause.message : 'Could not load the checks for this project.',
           );
         }
       });
@@ -97,12 +97,12 @@ export function useProjectChecks({ projectId, setEvents, onError }: UseProjectCh
       planRef.current = prepared;
       setPlan(prepared);
       setEvents((items) =>
-        [`Prepared ${prepared.label}; no check process has started.`, ...items].slice(0, 80),
+        [`Prepared ${prepared.label}; nothing has run yet.`, ...items].slice(0, 80),
       );
     } catch (cause) {
       if (projectIdRef.current === projectId) {
         onErrorRef.current(
-          cause instanceof Error ? cause.message : 'Could not prepare this project check.',
+          cause instanceof Error ? cause.message : 'Could not prepare this check.',
         );
       }
     } finally {
@@ -129,7 +129,9 @@ export function useProjectChecks({ projectId, setEvents, onError }: UseProjectCh
           [`Started ${execution.label} in ${execution.cwd}.`, ...items].slice(0, 80),
         );
       } else if (!execution && pending.projectId === projectIdRef.current) {
-        setEvents((items) => ['Cancelled the native check approval.', ...items].slice(0, 80));
+        setEvents((items) =>
+          ['Cancelled the check at the system confirmation.', ...items].slice(0, 80),
+        );
       }
     } catch (cause) {
       onErrorRef.current(
@@ -158,9 +160,7 @@ export function useProjectChecks({ projectId, setEvents, onError }: UseProjectCh
       }
     } catch (cause) {
       if (projectIdRef.current === projectId) {
-        onErrorRef.current(
-          cause instanceof Error ? cause.message : 'Could not cancel this project check.',
-        );
+        onErrorRef.current(cause instanceof Error ? cause.message : 'Could not cancel this check.');
       }
     } finally {
       if (operationVersionRef.current === operationVersion) {
@@ -183,13 +183,13 @@ export function useProjectChecks({ projectId, setEvents, onError }: UseProjectCh
       unwrap(await window.forgeboard.checks.confirm({ planId, confirmed: false }));
       if (reportFailure) {
         setEvents((items) =>
-          ['Cancelled the check approval before launch.', ...items].slice(0, 80),
+          ['Cancelled the check approval before anything ran.', ...items].slice(0, 80),
         );
       }
     } catch (cause) {
       if (reportFailure) {
         onErrorRef.current(
-          cause instanceof Error ? cause.message : 'Could not cancel this check approval.',
+          cause instanceof Error ? cause.message : 'Could not cancel the check approval.',
         );
       }
     }

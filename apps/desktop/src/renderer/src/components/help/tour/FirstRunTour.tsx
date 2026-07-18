@@ -17,12 +17,12 @@ const TOUR_STOPS: readonly TourStop[] = [
   {
     id: 'project',
     title: 'Start with a project',
-    summary: 'Choose a local repository, create a folder, or explore the bundled demo.',
+    summary: 'Open a folder from this computer, create a new one, or explore the built-in demo.',
     icon: FolderGit2,
     steps: () => [
-      'Open local inspects a folder you choose; Create empty and Explore the safe demo stay on this device.',
-      'Clone is the one welcome action that contacts the Git remote URL you explicitly enter.',
-      'Recent projects remain local shortcuts, and a moved repository can be located again through the UI.',
+      '“Open local” opens a folder you choose. “Create empty” and the demo stay entirely on this device.',
+      '“Clone” is the only option here that uses the internet, and only with the Git address you type in.',
+      'Recent projects are just shortcuts on this device. If you move a folder, you can point Forgeboard to its new place.',
     ],
   },
   {
@@ -31,31 +31,31 @@ const TOUR_STOPS: readonly TourStop[] = [
     summary: 'Use the rail, canvas, inspector, activity drawer, and command palette together.',
     icon: LayoutDashboard,
     steps: (paletteShortcut) => [
-      'Add nodes from the left rail, connect work on the canvas, and configure the selected item in the right inspector.',
-      'The activity drawer keeps local run and check evidence visible while you work.',
-      `Open the command palette with ${paletteShortcut}, then use Arrow keys and Enter to run a visible action.`,
+      'Add items from the left rail, connect them on the canvas, and change settings for the selected item in the right panel (the inspector).',
+      'The activity drawer shows what your runs and checks did while you work.',
+      `Press ${paletteShortcut} to open the command palette, then use the arrow keys and Enter to run an action.`,
     ],
   },
   {
     id: 'review',
     title: 'Review before anything runs',
-    summary: 'Forgeboard keeps launches, Git changes, and local activity inspectable.',
+    summary: 'Forgeboard lets you inspect every launch, Git change, and bit of activity.',
     icon: BellRing,
     steps: () => [
-      'Review & run shows the exact executable, literal arguments, context, provider, permissions, and worktree before approval.',
-      'Local notifications summarize workspace activity; they do not send notification content to a remote service.',
-      'Open Changes to inspect the authoritative checkout before staging, discarding, or committing local work.',
+      '“Review & run” shows the exact program, arguments, context, provider, and permissions before you approve anything.',
+      'Notifications stay on this device — nothing is sent anywhere.',
+      'Open “Changes” to review your files before you stage, discard, or commit anything.',
     ],
   },
   {
     id: 'help',
     title: 'Get help and control your data',
-    summary: 'Search bundled guidance and inspect privacy, recovery, and troubleshooting controls.',
+    summary: 'Search the built-in guides and find privacy, recovery, and troubleshooting controls.',
     icon: BookOpenText,
     steps: () => [
-      'Open Settings → Help & shortcuts to search the bundled setup, keyboard, Git, Docker, recovery, and troubleshooting guides.',
-      'Open Settings → Data & privacy to inspect local storage, retention, backups, provider disclosures, export, and deletion.',
-      'If a run, preview, CLI, Docker image, or project is unavailable, search Help for the exact recovery path—all ordinary fixes stay in the UI.',
+      'Open Settings → Help & shortcuts to search the built-in guides for setup, keyboard, Git, Docker, recovery, and troubleshooting.',
+      'Open Settings → Data & privacy to see what is stored, manage backups, review what providers can receive, and export or delete your data.',
+      'If something is not available — a run, a preview, a command-line tool, a Docker image, or a project — search Help for the fix. Everyday fixes stay in the app.',
     ],
   },
 ] as const;
@@ -104,11 +104,11 @@ export function FirstRunTour({
   return (
     <section className="first-run-tour" aria-labelledby={titleId}>
       <header>
-        <span>Optional local guide</span>
+        <span>Optional guide</span>
         <Heading id={titleId}>Getting started tour</Heading>
         <p>
-          Four quick stops explain the existing UI. This bundled tour contacts no service and
-          changes no project, permission, command, or privacy setting.
+          Four quick stops show you around. The tour is built in — it contacts nothing and changes
+          none of your projects or settings.
         </p>
       </header>
 

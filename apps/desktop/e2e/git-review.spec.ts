@@ -49,17 +49,19 @@ test('authoritative Git review stages, unstages, and discloses the exact local c
     const dialog = page.getByRole('dialog', { name: /Review changes in forgeboard-demo/ });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('review-e2e.txt', { exact: true }).first()).toBeVisible();
-    await expect(dialog.getByText('Untracked files').locator('..')).toContainText('1');
+    await expect(dialog.getByText('New files').locator('..')).toContainText('1');
 
-    await dialog.getByRole('button', { name: 'Stage review-e2e.txt' }).click();
-    await expect(dialog.getByRole('button', { name: 'Unstage review-e2e.txt' })).toBeVisible();
-    await expect(dialog.getByRole('region', { name: 'Diff for review-e2e.txt' })).toContainText(
+    await dialog.getByRole('button', { name: 'Add review-e2e.txt to commit' }).click();
+    await expect(
+      dialog.getByRole('button', { name: 'Remove review-e2e.txt from commit' }),
+    ).toBeVisible();
+    await expect(dialog.getByRole('region', { name: 'Changes in review-e2e.txt' })).toContainText(
       'authoritative review proof',
     );
 
     await dialog.getByLabel('Commit message').fill('Prove authoritative Git review');
     await dialog.getByRole('button', { name: /Review commit/ }).click();
-    const disclosure = page.getByRole('alertdialog', { name: 'Review the exact local commit' });
+    const disclosure = page.getByRole('alertdialog', { name: 'Review your commit' });
     await expect(disclosure).toContainText('Forgeboard E2E Reviewer');
     await expect(disclosure).toContainText('reviewer@forgeboard.invalid');
     await expect(disclosure).toContainText('Prove authoritative Git review');
@@ -67,8 +69,10 @@ test('authoritative Git review stages, unstages, and discloses the exact local c
     expect(gitHead(projectPath)).toBe(headBefore);
 
     await disclosure.getByRole('button', { name: 'Go back' }).click();
-    await dialog.getByRole('button', { name: 'Unstage review-e2e.txt' }).click();
-    await expect(dialog.getByRole('button', { name: 'Stage review-e2e.txt' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Remove review-e2e.txt from commit' }).click();
+    await expect(
+      dialog.getByRole('button', { name: 'Add review-e2e.txt to commit' }),
+    ).toBeVisible();
     expect(gitHead(projectPath)).toBe(headBefore);
     expect(externalRequests).toEqual([]);
   } finally {

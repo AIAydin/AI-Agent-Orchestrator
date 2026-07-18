@@ -98,7 +98,7 @@ describe('App close persistence', () => {
     ];
     render(<App />);
 
-    expect(await screen.findByText('Settings were repaired for this version')).toBeTruthy();
+    expect(await screen.findByText('Forgeboard fixed some settings for this version')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(await screen.findByText('Settings opened on privacy')).toBeTruthy();
   });

@@ -9,7 +9,7 @@ describe('native Git delegate confirmation', () => {
 
     expect(confirmation).toMatchObject({
       type: 'warning',
-      buttons: ['Cancel', 'Run exact Git filter'],
+      buttons: ['Cancel', 'Run filter commands'],
       defaultId: 0,
       cancelId: 0,
       noLink: true,

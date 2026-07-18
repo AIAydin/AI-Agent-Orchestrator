@@ -35,7 +35,8 @@ export function WorkspaceChecksPanel({
         <div>
           <strong>Project checks</strong>
           <small>
-            Real local processes with explicit command approval and retained raw output.
+            Run real commands on this computer. You approve each command first, and the full output
+            is kept.
           </small>
         </div>
         <button type="button" aria-label="Configure project checks" onClick={onOpenSettings}>
@@ -67,10 +68,11 @@ export function WorkspaceChecksPanel({
                 <code>{formatCommand(command.executable, command.arguments)}</code>
               ) : detectedScript ? (
                 <small>
-                  Project script detected: <code>{detectedScript}</code>. Adopt it in Settings.
+                  This project provides a script: <code>{detectedScript}</code>. Turn it on in
+                  Settings.
                 </small>
               ) : (
-                <small>Configure an executable and literal arguments in Settings.</small>
+                <small>Set up a command in Settings to run this check.</small>
               )}
               <div className="project-check-actions">
                 {active && execution ? (
@@ -100,16 +102,16 @@ export function WorkspaceChecksPanel({
                       ? active
                         ? execution.status === 'queued'
                           ? 'Queued · waiting to start'
-                          : 'Running · exit code pending'
-                        : 'No exit code reported'
-                      : `Exit ${execution.exitCode}`}
-                    {execution.outputTruncated ? ' · output truncated' : ''}
+                          : 'Running · no result yet'
+                        : 'No result code reported'
+                      : `Exit code ${execution.exitCode}`}
+                    {execution.outputTruncated ? ' · output shortened' : ''}
                   </small>
                   {parsedSummary && (
                     <div
                       className="project-check-test-summary"
                       role="group"
-                      aria-label={`${label} parsed test summary`}
+                      aria-label={`${label} test summary`}
                     >
                       <span className="passed">
                         <strong>{parsedSummary.passed}</strong> passed
@@ -126,7 +128,7 @@ export function WorkspaceChecksPanel({
                     </div>
                   )}
                   {execution.output ? (
-                    <pre tabIndex={0} aria-label={`${label} raw output`}>
+                    <pre tabIndex={0} aria-label={`${label} full output`}>
                       {execution.output}
                     </pre>
                   ) : null}

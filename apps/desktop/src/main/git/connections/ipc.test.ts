@@ -232,7 +232,7 @@ describe('GitConnectionsIpcService authority and native routing', () => {
     expect(fixture.showMessageBox).toHaveBeenCalledWith(
       fixture.parent,
       expect.objectContaining({
-        title: 'Change GitHub CLI configuration?',
+        title: 'Change GitHub CLI setup?',
         buttons: ['Cancel', 'Use selected GitHub CLI'],
         defaultId: 0,
         cancelId: 0,

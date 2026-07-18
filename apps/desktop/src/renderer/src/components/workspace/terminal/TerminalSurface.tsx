@@ -175,13 +175,12 @@ export const TerminalSurface = forwardRef<TerminalSurfaceHandle, TerminalSurface
           className="terminal-xterm-host"
           ref={hostRef}
           role="application"
-          aria-label="Interactive terminal"
+          aria-label="Terminal"
           onKeyDown={preventInspectorSubmit}
         />
         {loadError ? (
           <div className="terminal-surface-error" role="alert">
-            The interactive terminal renderer could not load. Process state and safety controls
-            remain available above.
+            The terminal view could not load. The status and controls above still work.
           </div>
         ) : null}
       </>

@@ -54,7 +54,7 @@ export function configuredAgentReadinessEntries(
     const agent = agents.find((candidate) => candidate.id === agentId);
     const label =
       agent?.label ??
-      (agentId === 'custom' ? settings.customAgent.name.trim() || 'Custom CLI' : agentId);
+      (agentId === 'custom' ? settings.customAgent.name.trim() || 'Custom agent' : agentId);
     const draft = readinessDraftForAgent(settings, agentId);
     const result = currentReadinessResult(evidence.results, draft);
     const error = evidence.errors[draft.fingerprint];
@@ -63,18 +63,18 @@ export function configuredAgentReadinessEntries(
       return entry('invalid', `${label}: ${draft.issue}`);
     }
     if (evidence.checking.has(draft.fingerprint)) {
-      return entry('checking', `${label} is still being validated against the current UI draft.`);
+      return entry('checking', `${label} is still being checked against your current settings.`);
     }
     if (error !== undefined) return entry('unavailable', `${label}: ${error}`);
     if (result !== null) {
       if (!agentReadinessResultMatchesRequest(result, draft.request)) {
         return entry(
           'unavailable',
-          `${label}: Forgeboard discarded stale executable evidence. Refresh readiness again.`,
+          `${label}: The last check was for different settings, so Forgeboard ignored it. Refresh readiness again.`,
         );
       }
       if (result.ready) return entry('ready', null, 'current-probe');
-      return entry('blocked', `${label}: ${result.reason ?? 'The executable is not ready.'}`);
+      return entry('blocked', `${label}: ${result.reason ?? 'This program is not ready.'}`);
     }
     if (canUseLaunchDetection(settings, persistedSettings, agentId, agent, draft)) {
       return entry('ready', null, 'launch-detection');
@@ -82,12 +82,12 @@ export function configuredAgentReadinessEntries(
     if (!evidence.checkerAvailable) {
       return entry(
         'unavailable',
-        `${label}: Readiness validation is unavailable. Reopen Forgeboard before saving.`,
+        `${label}: Readiness checks are unavailable right now. Reopen Forgeboard before saving.`,
       );
     }
     return entry(
       'needs-check',
-      `${label}: Refresh readiness for the current executable before saving settings.`,
+      `${label}: Refresh readiness for the current program before saving settings.`,
     );
 
     function entry(

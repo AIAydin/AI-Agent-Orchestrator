@@ -57,7 +57,7 @@ export function CommandPalette({
           <input
             autoFocus
             name="command-palette-query"
-            aria-label="Search commands"
+            aria-label="Search actions"
             role="combobox"
             aria-autocomplete="list"
             aria-expanded="true"
@@ -120,7 +120,7 @@ export function CommandPalette({
               <CornerDownLeft className="enter-icon" size={13} />
             </button>
           ))}
-          {filtered.length === 0 && <p>No matching action.</p>}
+          {filtered.length === 0 && <p>No actions match your search.</p>}
         </div>
         <footer>
           <span>

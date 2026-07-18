@@ -109,7 +109,7 @@ describe('useCanvasGraphInteractions', () => {
     expect(harness.nodesRef.current.some(({ id }) => id === 'first' || id === 'second')).toBe(
       false,
     );
-    expect(harness.state.events[0]).toBe('Unlock locked nodes before changing their connections.');
+    expect(harness.state.events[0]).toBe('Unlock locked nodes before changing them.');
   });
 
   it('finalizes drag coordinates and group membership without creating another undo record', () => {
@@ -123,7 +123,7 @@ describe('useCanvasGraphInteractions', () => {
     expect(at(harness.nodesRef.current, 'member').position).toEqual({ x: 50, y: 50 });
     expect(at(harness.nodesRef.current, 'frame').data.childNodeIds).toEqual(['member']);
     expect(harness.recordSnapshot).not.toHaveBeenCalled();
-    expect(harness.state.events[0]).toBe('Updated group placement and automatic frame bounds.');
+    expect(harness.state.events[0]).toBe("Updated the group's placement and size.");
   });
 });
 

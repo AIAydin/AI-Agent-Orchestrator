@@ -49,10 +49,10 @@ test('the deterministic agent requires approval and reports its real local work'
     await expect(agentNode).toBeVisible();
     await agentNode.click();
     const runConfiguration = page.getByRole('region', {
-      name: 'Agent run configuration',
+      name: 'Agent run settings',
     });
     await expect(runConfiguration.getByText('Approval required')).toBeVisible();
-    await runConfiguration.getByLabel('Installed adapter').selectOption('test-agent');
+    await runConfiguration.getByLabel('Agent to run').selectOption('test-agent');
     await runConfiguration.getByLabel('Permission profile').selectOption('worktree-write');
     const writablePrompt = 'Create the deterministic local proof file after approval.';
     await runConfiguration.getByLabel('Prompt').fill(writablePrompt);
@@ -60,13 +60,11 @@ test('the deterministic agent requires approval and reports its real local work'
     await test.step('preflight reveals the exact launch and cancellation starts no process', async () => {
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
       const dialog = page.getByRole('dialog', {
-        name: 'Review the exact agent launch',
+        name: 'Review this run before it starts',
       });
       await expect(dialog).toBeVisible();
       await expect(
-        dialog.getByText(
-          'Forgeboard has prepared this run, but no approved agent run has started.',
-        ),
+        dialog.getByText("This run is ready. The agent won't start until you approve it."),
       ).toBeVisible();
       await expect(
         dialog.getByText('Local deterministic test process', { exact: true }),
@@ -80,9 +78,9 @@ test('the deterministic agent requires approval and reports its real local work'
       // Windows may expand the runner's 8.3 short temp prefix before displaying it.
       await expect(dialog).toContainText('ui-configured-worktrees');
 
-      await dialog.getByRole('button', { name: 'Cancel before launch' }).click();
+      await dialog.getByRole('button', { name: 'Cancel run' }).click();
       await expect(dialog).toBeHidden();
-      await expect(page.getByText('Cancelled the prepared run before launch.')).toBeVisible();
+      await expect(page.getByText('Cancelled the run before it started.')).toBeVisible();
       await expect(page.locator('.run-history')).not.toContainText(
         'Forgeboard deterministic agent started.',
       );
@@ -91,11 +89,11 @@ test('the deterministic agent requires approval and reports its real local work'
     await test.step('approval streams real output and reports the changed worktree file', async () => {
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
       const dialog = page.getByRole('dialog', {
-        name: 'Review the exact agent launch',
+        name: 'Review this run before it starts',
       });
       await expect(dialog).toBeVisible();
       await approveNextNativeAgentLaunch(session.app, dialog, 'test-agent', async () => {
-        await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+        await dialog.getByRole('button', { name: 'Approve and start' }).click();
       });
       await expect(dialog).toBeHidden();
 
@@ -119,13 +117,13 @@ test('the deterministic agent requires approval and reports its real local work'
         .fill('Produce the deterministic read-only plan without writing files.');
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
       const dialog = page.getByRole('dialog', {
-        name: 'Review the exact agent launch',
+        name: 'Review this run before it starts',
       });
       await expect(dialog).toContainText('Test agent read-only plan');
       await expect(dialog).toContainText('Write: none');
       await expect(dialog).toContainText('Network: provider-controlled');
       await approveNextNativeAgentLaunch(session.app, dialog, 'test-agent', async () => {
-        await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+        await dialog.getByRole('button', { name: 'Approve and start' }).click();
       });
 
       const history = page.locator('.run-history');

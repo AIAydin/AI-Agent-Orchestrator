@@ -35,7 +35,7 @@ export function usePreviewSurface({
       try {
         setConsoleView(await operations.getSurfaceConsole({ surfaceId }));
       } catch (cause) {
-        setFailure(errorMessage(cause, 'Could not read the bounded browser console.'));
+        setFailure(errorMessage(cause, 'Could not load the browser console output.'));
       }
     },
     [operations],
@@ -83,8 +83,7 @@ export function usePreviewSurface({
                 if (active) setSurfaceView(next);
               })
               .catch((cause: unknown) => {
-                if (active)
-                  setFailure(errorMessage(cause, 'Could not resize the preview surface.'));
+                if (active) setFailure(errorMessage(cause, 'Could not resize the preview.'));
               });
           });
         };
@@ -93,7 +92,7 @@ export function usePreviewSurface({
         window.addEventListener('resize', updateBounds);
         window.addEventListener('scroll', updateBounds, true);
       } catch (cause) {
-        if (active) setFailure(errorMessage(cause, 'Could not create the secure preview surface.'));
+        if (active) setFailure(errorMessage(cause, 'Could not open the preview.'));
       }
     }
 

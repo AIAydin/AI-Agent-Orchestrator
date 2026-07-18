@@ -114,18 +114,18 @@ export class GitShippingService {
       ))
     ) {
       throw new Error(
-        'The agent branch no longer descends from its reviewed base. Restore or recommit the work before delivery.',
+        'The agent branch no longer includes its recorded base commit. Restore or recommit the work before delivery.',
       );
     }
     if (await this.repositories.isAncestor(source.primaryRepositoryRoot, sourceHead, targetHead)) {
-      throw new Error('The primary checkout already contains this reviewed agent HEAD.');
+      throw new Error('The primary branch already contains these reviewed agent commits.');
     }
     if (
       options.input.strategy === 'fast-forward-only' &&
       !(await this.repositories.isAncestor(source.primaryRepositoryRoot, targetHead, sourceHead))
     ) {
       throw new Error(
-        'Primary has advanced and cannot fast-forward to the agent HEAD. Review ordered cherry-pick instead.',
+        'The primary branch has new commits the agent work does not, so it cannot move straight forward. Choose "Copy the reviewed changes one by one" and review again.',
       );
     }
 
@@ -232,7 +232,7 @@ export class GitShippingService {
     }
     if (primaryStatus.branch !== plan.targetBranch || primaryStatus.headOid !== plan.targetHead) {
       throw new Error(
-        'The primary branch or HEAD changed after review. Prepare a new delivery plan.',
+        'The primary branch or its latest commit changed after review. Prepare a new delivery plan.',
       );
     }
     const currentReadiness = await this.readiness.revalidate(deliveryReadinessTarget(plan.target), {
@@ -455,6 +455,6 @@ function assertCleanSource(source: ResolvedGitTarget): void {
     status.branch !== source.ownership.branch ||
     status.headOid !== source.state.branchOid
   ) {
-    throw new Error('The managed agent worktree branch or HEAD drifted after the run.');
+    throw new Error('The agent worktree branch or its latest commit changed after the run.');
   }
 }

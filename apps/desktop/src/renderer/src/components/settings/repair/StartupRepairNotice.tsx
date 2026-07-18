@@ -14,11 +14,11 @@ export function StartupRepairNotice({ repair, onReview, onDismiss }: StartupRepa
     <aside className="startup-repair-notice" role="status" aria-live="polite">
       <ShieldAlert size={20} aria-hidden="true" />
       <div>
-        <strong>Settings were repaired for this version</strong>
+        <strong>Forgeboard fixed some settings for this version</strong>
         <span>
-          {repair.repairedFieldPaths.length} unsafe legacy{' '}
-          {repair.repairedFieldPaths.length === 1 ? 'value was' : 'values were'} replaced. The
-          original settings remain available as local recovery evidence.
+          {repair.repairedFieldPaths.length} unsafe old{' '}
+          {repair.repairedFieldPaths.length === 1 ? 'value was' : 'values were'} replaced with safe
+          ones. The original settings are kept on this computer.
         </span>
       </div>
       <button type="button" onClick={onReview}>

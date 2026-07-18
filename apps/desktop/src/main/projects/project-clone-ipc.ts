@@ -88,7 +88,7 @@ export class ProjectCloneIpcService {
           parent.isDestroyed() ||
           BrowserWindow.fromWebContents(event.sender) !== parent
         ) {
-          throw new Error('The originating Forgeboard window changed or closed.');
+          throw new Error('The Forgeboard window changed or closed before the clone could finish.');
         }
       };
       const authorization: ProjectCloneAuthorization = {
@@ -116,10 +116,10 @@ export class ProjectCloneIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid clone request.'
+            ? 'Forgeboard could not understand this clone request.'
             : error instanceof Error
               ? error.message
-              : 'The repository clone failed.',
+              : 'The clone failed. Try again.',
         },
       };
     }
@@ -142,7 +142,7 @@ export class ProjectCloneIpcService {
     this.#assertLiveMainFrame(event);
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error('A live Forgeboard window is required to confirm a repository clone.');
+      throw new Error('Forgeboard needs an open window to confirm the clone.');
     }
     return parent;
   }
@@ -150,17 +150,17 @@ export class ProjectCloneIpcService {
   #assertLiveMainFrame(event: IpcMainInvokeEvent): void {
     this.#assertLiveOwner(event.sender);
     if (event.senderFrame !== event.sender.mainFrame) {
-      throw new Error('Repository cloning is allowed only from the main Forgeboard frame.');
+      throw new Error('Cloning is only allowed from the main Forgeboard window.');
     }
   }
 
   #assertLiveOwner(owner: WebContents): void {
-    if (owner.isDestroyed()) throw new Error('The originating Forgeboard window is closed.');
+    if (owner.isDestroyed()) throw new Error('The Forgeboard window is closed.');
   }
 
   #assertAvailable(): void {
-    if (this.#disposed) throw new Error('The project clone service has been disposed.');
-    if (this.#paused) throw new Error('Repository cloning is paused while Forgeboard shuts down.');
+    if (this.#disposed) throw new Error('Forgeboard is closing, so cloning cannot start.');
+    if (this.#paused) throw new Error('Cloning is paused while Forgeboard is closing.');
   }
 
   async #drain(): Promise<void> {

@@ -26,11 +26,11 @@ describe('RejectedCommentsNotice', () => {
     render(<RejectedCommentsNotice entries={[entry]} onDiscard={onDiscard} />);
 
     expect(screen.getByText('<strong>Exact rejected B</strong>')).toBeTruthy();
-    expect(screen.getByText('Target: removed-node')).toBeTruthy();
+    expect(screen.getByText('Canvas item: removed-node')).toBeTruthy();
     expect(document.querySelector('.rejected-comments-notice strong strong')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Discard local copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete saved copy' }));
     expect(onDiscard).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm discard local copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this copy' }));
     await waitFor(() => expect(onDiscard).toHaveBeenCalledWith(entry));
   });
 });

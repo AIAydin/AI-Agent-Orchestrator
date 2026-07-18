@@ -530,7 +530,7 @@ function expectFailedGateRevision(store: LocalStore, executionId: string): void 
     nodeId: 'review-gate',
     status: 'failed',
     deterministicStatus: 'failed',
-    reasons: ['Deterministic checks failed: test'],
+    reasons: ['Required checks failed: test'],
     revisionLoop: {
       loopId: 'bounded-test-loop',
       disposition: 'revision-required',

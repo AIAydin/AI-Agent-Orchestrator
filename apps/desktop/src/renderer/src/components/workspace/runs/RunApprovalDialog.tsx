@@ -31,9 +31,9 @@ export function RunApprovalDialog({
             <ShieldCheck size={19} />
           </span>
           <div>
-            <span className="eyebrow">Human approval gate</span>
-            <h2 id="run-approval-title">Review the exact agent launch</h2>
-            <p>Forgeboard has prepared this run, but no approved agent run has started.</p>
+            <span className="eyebrow">Approval needed</span>
+            <h2 id="run-approval-title">Review this run before it starts</h2>
+            <p>This run is ready. The agent won&apos;t start until you approve it.</p>
           </div>
         </header>
         <div className="run-disclosure-scroll">
@@ -41,9 +41,9 @@ export function RunApprovalDialog({
           <RunDisclosureDetails disclosure={disclosure} prompt={prompt} />
           <dl className="run-disclosure-grid">
             <div className="wide">
-              <dt>Exact launch disclosure SHA-256</dt>
+              <dt>Security fingerprint (SHA-256)</dt>
               <dd>
-                <code aria-label="Exact launch disclosure SHA-256">
+                <code aria-label="Security fingerprint (SHA-256)">
                   {disclosure.disclosureFingerprint}
                 </code>
               </dd>
@@ -60,10 +60,10 @@ export function RunApprovalDialog({
         </div>
         <footer>
           <button className="button" type="button" disabled={busy} onClick={onCancel}>
-            Cancel before launch
+            Cancel run
           </button>
           <button className="button primary" type="button" disabled={busy} onClick={onApprove}>
-            <Play size={14} /> {busy ? 'Launching…' : 'Approve & launch'}
+            <Play size={14} /> {busy ? 'Starting…' : 'Approve and start'}
           </button>
         </footer>
       </section>

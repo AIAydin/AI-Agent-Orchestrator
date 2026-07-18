@@ -152,7 +152,7 @@ describe('Workspace permission selection', () => {
       expect(screen.getByTestId('selected-permission').textContent).toBe('custom'),
     );
     expect(mocks.controllerInput?.selectedPermission).toBe('custom');
-    expect(mocks.controllerInput?.permissionUnavailableReason).toMatch(/not available in Docker/u);
+    expect(mocks.controllerInput?.permissionUnavailableReason).toMatch(/can't run in Docker/u);
   });
 });
 

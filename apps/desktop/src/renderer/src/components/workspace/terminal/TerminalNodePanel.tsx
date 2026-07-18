@@ -83,13 +83,11 @@ export function TerminalNodePanel({
 
   const findNext = (): void => {
     if (search.trim() === '') {
-      setSearchNotice('Enter text to search the retained terminal display.');
+      setSearchNotice('Type something to search the terminal output.');
       return;
     }
     const found = surfaceRef.current?.findNext(search) ?? false;
-    setSearchNotice(
-      found ? `Selected the next match for “${search}”.` : `No match for “${search}”.`,
-    );
+    setSearchNotice(found ? `Found the next match for “${search}”.` : `No match for “${search}”.`);
   };
 
   const stopInspectorEnter = (event: KeyboardEvent<HTMLElement>): void => {
@@ -99,14 +97,14 @@ export function TerminalNodePanel({
   return (
     <section
       className="terminal-node-panel"
-      aria-label="Interactive terminal node"
+      aria-label="Terminal"
       aria-busy={controller.busy !== null}
       onKeyDown={stopInspectorEnter}
     >
       <header className="terminal-node-header">
         <span>
           <TerminalSquare size={15} aria-hidden="true" />
-          <strong>Local PTY terminal</strong>
+          <strong>Terminal</strong>
         </span>
         <span className={`terminal-status ${status}`} role="status" aria-live="polite">
           {controller.busy === 'loading' ? 'Loading…' : terminalStatusLabel(status)}
@@ -116,16 +114,15 @@ export function TerminalNodePanel({
       {props.configurationReadOnly ? (
         <p className="terminal-state warning" role="status">
           <ShieldAlert size={14} aria-hidden="true" />
-          This collaboration role can inspect local terminal metadata and output but cannot launch,
-          type into, resize, or reconfigure a process. Interrupt and terminate remain available as
-          safety controls for an already-running local process.
+          Your role in this shared project lets you view this terminal and its output, but not
+          start, type in, resize, or change it. Interrupt and Terminate stay available so you can
+          stop a process that is already running.
         </p>
       ) : props.locked ? (
         <p className="terminal-state warning" role="status">
           <ShieldAlert size={14} aria-hidden="true" />
-          Unlock this node to edit configuration, type, or launch. Interrupt and terminate remain
-          available as safety controls until exit is confirmed or bounded stop attempts are
-          exhausted and the session is reported lost.
+          Unlock this node to change its settings, type, or start a process. Interrupt and Terminate
+          stay available until the process has fully exited or the session is reported lost.
         </p>
       ) : null}
 
@@ -133,9 +130,9 @@ export function TerminalNodePanel({
         className="terminal-configuration"
         disabled={effectsReadOnly || controller.active || mutationBusy}
       >
-        <legend>Process configuration</legend>
+        <legend>Command to run</legend>
         <div className="terminal-configuration-field">
-          <label htmlFor={`node-${props.nodeId}-terminal-executable`}>Executable</label>
+          <label htmlFor={`node-${props.nodeId}-terminal-executable`}>Program</label>
           <div className="terminal-executable-field">
             <input
               id={`node-${props.nodeId}-terminal-executable`}
@@ -143,7 +140,7 @@ export function TerminalNodePanel({
               value={props.configuration.executable}
               autoComplete="off"
               spellCheck={false}
-              placeholder="Choose a local executable…"
+              placeholder="Choose a program on this computer…"
               aria-invalid={
                 !TerminalExecutableSchema.safeParse(props.configuration.executable).success
               }
@@ -163,16 +160,14 @@ export function TerminalNodePanel({
             </button>
           </div>
           <small>
-            Choose through the native picker or enter an installed executable path. Forgeboard
-            passes literal arguments and never constructs a shell command.
+            Pick a program with the file browser, or type its full path. Forgeboard runs it exactly
+            as written and never builds a shell command.
           </small>
         </div>
 
         <fieldset className="terminal-arguments">
-          <legend>Literal arguments</legend>
-          {props.configuration.arguments.length === 0 ? (
-            <small>No arguments configured.</small>
-          ) : null}
+          <legend>Arguments</legend>
+          {props.configuration.arguments.length === 0 ? <small>No arguments yet.</small> : null}
           {props.configuration.arguments.map((argument, index) => (
             <div key={index} className="terminal-argument-row">
               <label>
@@ -218,9 +213,7 @@ export function TerminalNodePanel({
         </fieldset>
 
         <div className="terminal-configuration-field">
-          <label htmlFor={`node-${props.nodeId}-terminal-cwd`}>
-            Project-relative working directory
-          </label>
+          <label htmlFor={`node-${props.nodeId}-terminal-cwd`}>Folder to run in</label>
           <input
             id={`node-${props.nodeId}-terminal-cwd`}
             name={`node-${props.nodeId}-terminal-cwd`}
@@ -234,8 +227,8 @@ export function TerminalNodePanel({
             onChange={(event) => updateConfiguration({ cwdRelative: event.target.value })}
           />
           <small>
-            Use <code>.</code> for the repository root or a canonical relative directory such as{' '}
-            <code>apps/desktop</code>. Absolute paths and traversal are rejected.
+            Use <code>.</code> for the project folder, or a folder inside it such as{' '}
+            <code>apps/desktop</code>. Folders outside the project are not allowed.
           </small>
         </div>
 
@@ -270,10 +263,10 @@ export function TerminalNodePanel({
             <RotateCcw size={13} aria-hidden="true" />
           )}
           {controller.busy === 'preparing'
-            ? 'Preparing review…'
+            ? 'Preparing…'
             : controller.session === null
-              ? 'Review & start'
-              : 'Review & restart'}
+              ? 'Review and start'
+              : 'Review and restart'}
         </button>
         {controller.active ? (
           <>
@@ -307,7 +300,7 @@ export function TerminalNodePanel({
 
       <div className="terminal-session-picker">
         <label>
-          <History size={13} aria-hidden="true" /> Session history
+          <History size={13} aria-hidden="true" /> Recent sessions
           <select
             name={`node-${props.nodeId}-terminal-session`}
             value={controller.session?.id ?? ''}
@@ -329,13 +322,13 @@ export function TerminalNodePanel({
       <section className="terminal-runtime" aria-label="Terminal output and input">
         <div className="terminal-search-row">
           <label>
-            <span className="sr-only">Search retained terminal history</span>
+            <span className="sr-only">Search terminal output</span>
             <Search size={13} aria-hidden="true" />
             <input
               name={`node-${props.nodeId}-terminal-search`}
               value={search}
-              placeholder="Search retained history"
-              aria-label="Search retained terminal history"
+              placeholder="Search terminal output"
+              aria-label="Search terminal output"
               onChange={(event) => {
                 setSearch(event.target.value);
                 setSearchNotice(null);
@@ -355,9 +348,7 @@ export function TerminalNodePanel({
             type="button"
             onClick={() => {
               surfaceRef.current?.clearDisplay();
-              setSearchNotice(
-                'Cleared this display only. Retained session output was not deleted.',
-              );
+              setSearchNotice('Cleared what you see. The saved session output is still kept.');
             }}
           >
             <Eraser size={13} aria-hidden="true" /> Clear display
@@ -380,8 +371,8 @@ export function TerminalNodePanel({
           {controller.session === null ? (
             <div className="terminal-empty-state">
               <TerminalSquare size={22} aria-hidden="true" />
-              <strong>No terminal session</strong>
-              <span>Configure an executable, then review both launch confirmations.</span>
+              <strong>No terminal running</strong>
+              <span>Choose a program above, then select Review and start to run it.</span>
             </div>
           ) : null}
         </div>
@@ -395,8 +386,8 @@ export function TerminalNodePanel({
       ) : (
         <p className="terminal-permission-summary">
           <ShieldAlert size={13} aria-hidden="true" />
-          Terminal processes run as the operating-system user. A project-relative cwd is not a
-          filesystem or network sandbox.
+          Programs you run here have the same permissions as your user account. Keeping them in the
+          project folder does not limit what they can access.
         </p>
       )}
 
@@ -431,20 +422,20 @@ function TerminalSessionEvidence({
   readonly replayWindowLimited: boolean;
 }) {
   return (
-    <section className="terminal-session-evidence" aria-label="Terminal session evidence">
+    <section className="terminal-session-evidence" aria-label="Session details">
       <dl>
         <div>
-          <dt>Process status</dt>
+          <dt>Status</dt>
           <dd>{terminalStatusLabel(session.status)}</dd>
         </div>
         <div>
-          <dt>Working directory</dt>
+          <dt>Folder it runs in</dt>
           <dd>
-            <code>{session.cwdRelative}</code> relative to the project
+            <code>{session.cwdRelative}</code> inside the project
           </dd>
         </div>
         <div>
-          <dt>PTY</dt>
+          <dt>Window size</dt>
           <dd>
             {session.columns} × {session.rows}
           </dd>
@@ -471,14 +462,13 @@ function TerminalSessionEvidence({
       {session.status === 'lost' ? (
         <p className="terminal-state error" role="alert">
           <CircleAlert size={14} aria-hidden="true" />
-          Forgeboard restarted or lost process authority. This historical output remains readable,
-          but input and process controls are unavailable. Review a fresh launch to restart.
+          Forgeboard restarted or lost track of this process. You can still read the output, but you
+          can’t type or use the controls. Start a new session to run it again.
         </p>
       ) : null}
       {replayWindowLimited ? (
         <p className="terminal-state warning" role="status">
-          The terminal surface shows a bounded retained window. Earlier process output was trimmed
-          or omitted and cannot be reconstructed.
+          Only the most recent output is shown. Earlier output was trimmed and can’t be recovered.
         </p>
       ) : null}
     </section>
@@ -489,22 +479,20 @@ function terminalConfigurationIssues(configuration: TerminalNodeConfiguration): 
   const issues: string[] = [];
   const executable = TerminalExecutableSchema.safeParse(configuration.executable);
   if (!executable.success)
-    issues.push(executable.error.issues[0]?.message ?? 'Choose an executable.');
+    issues.push(executable.error.issues[0]?.message ?? 'Choose a program to run.');
   const arguments_ = TerminalArgumentsSchema.safeParse(configuration.arguments);
   if (!arguments_.success) {
-    issues.push(arguments_.error.issues[0]?.message ?? 'Review the literal arguments.');
+    issues.push(arguments_.error.issues[0]?.message ?? 'Review the arguments.');
   }
   const cwd = TerminalRelativeCwdSchema.safeParse(configuration.cwdRelative);
   if (!cwd.success) {
-    issues.push(cwd.error.issues[0]?.message ?? 'Choose a project-relative working directory.');
+    issues.push(cwd.error.issues[0]?.message ?? 'Choose a folder inside the project.');
   }
   const environment = TerminalEnvironmentVariableNamesSchema.safeParse(
     configuration.environmentVariableNames,
   );
   if (!environment.success) {
-    issues.push(
-      environment.error.issues[0]?.message ?? 'Review the environment variable name allowlist.',
-    );
+    issues.push(environment.error.issues[0]?.message ?? 'Review the environment variable names.');
   }
   return [...new Set(issues)];
 }
@@ -514,7 +502,7 @@ function terminalStatusLabel(status: TerminalSessionStatus | 'idle'): string {
     idle: 'Idle',
     starting: 'Starting',
     running: 'Running',
-    exited: 'Exited',
+    exited: 'Finished',
     failed: 'Failed',
     interrupted: 'Interrupted',
     terminated: 'Terminated',

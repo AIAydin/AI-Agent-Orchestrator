@@ -304,7 +304,7 @@ describe('SetupWizard', () => {
     );
     fireEvent.change(
       screen.getByLabelText(
-        'Development server arguments, one non-empty literal argument per line; empty lines ignored',
+        'Development server arguments, one argument per line; blank lines are ignored',
       ),
       {
         target: { value: 'run\ndev\n--host' },
@@ -323,7 +323,7 @@ describe('SetupWizard', () => {
     );
     fireEvent.change(
       screen.getByLabelText(
-        'Test command arguments, one non-empty literal argument per line; empty lines ignored',
+        'Test command arguments, one argument per line; blank lines are ignored',
       ),
       { target: { value: '--test\n--test-reporter=spec' } },
     );
@@ -417,7 +417,7 @@ describe('SetupWizard', () => {
     );
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Refresh OpenAI Codex CLI readiness',
+        name: 'Check OpenAI Codex CLI again',
       }),
     );
 
@@ -535,7 +535,7 @@ describe('SetupWizard', () => {
     });
     expect(screen.queryByRole('alert')).toBeNull();
     expect(continueButton.disabled).toBe(false);
-    expect(screen.getByText(/session values are not entered here/u)).toBeTruthy();
+    expect(screen.getByText(/Do not enter passwords, tokens, or other secrets here/u)).toBeTruthy();
   });
 
   it('configures a truthful host Custom profile in the Safety step without file editing', async () => {
@@ -556,8 +556,8 @@ describe('SetupWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     fireEvent.click(screen.getByRole('radio', { name: /Custom/u }));
 
-    expect(screen.getByText('Host policy is disclosure-only')).toBeTruthy();
-    expect(screen.getByText(/cwd and path lists do not restrict/u)).toBeTruthy();
+    expect(screen.getByText('Limits are stated, not enforced')).toBeTruthy();
+    expect(screen.getByText(/folder lists tell the agent your intent/u)).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: /Ask the agent to allow tests/u })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));

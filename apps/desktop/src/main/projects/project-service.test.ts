@@ -211,7 +211,7 @@ describe('ProjectService moved-project recovery', () => {
     );
     expect(showMessageBox).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        buttons: ['Cancel', 'Initialize Git'],
+        buttons: ['Cancel', 'Set up Git'],
         defaultId: 0,
         cancelId: 0,
       }),
@@ -302,7 +302,7 @@ describe('ProjectService moved-project recovery', () => {
       warnings: [],
     });
     expect(showOpenDialog).toHaveBeenCalledWith(
-      expect.objectContaining({ properties: ['openDirectory'], buttonLabel: 'Inspect repository' }),
+      expect.objectContaining({ properties: ['openDirectory'], buttonLabel: 'Check this folder' }),
     );
     expect(store.getProject(PROJECT_ID)).toMatchObject({
       path: canonicalOriginal,
@@ -372,7 +372,7 @@ describe('ProjectService moved-project recovery', () => {
         confirmationId: '50000000-0000-4000-8000-000000000099',
         confirmed: true,
       }),
-    ).rejects.toThrow('missing, expired, or belongs to another project');
+    ).rejects.toThrow('no longer valid');
     expect(store.getProject(PROJECT_ID)).toMatchObject({ path: missingPath, missing: true });
 
     writeFileSync(

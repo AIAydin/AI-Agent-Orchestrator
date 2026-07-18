@@ -141,9 +141,9 @@ async function attemptApplicationQuit(): Promise<boolean> {
     const detail = error instanceof Error ? error.message : 'The configured backup could not run.';
     const options = {
       type: 'warning' as const,
-      title: 'Backup failed before quit',
-      message: 'Forgeboard could not create the configured quit backup.',
-      detail: `${detail}\n\nYour canvas save completed, but no fresh database backup was verified.`,
+      title: 'Backup failed before quitting',
+      message: 'Forgeboard could not create the final backup it makes when quitting.',
+      detail: `${detail}\n\nYour work was saved, but no fresh backup copy was made.`,
       buttons: ['Cancel quit', 'Quit without a fresh backup'],
       defaultId: 0,
       cancelId: 0,

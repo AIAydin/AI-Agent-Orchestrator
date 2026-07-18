@@ -82,8 +82,8 @@ export function PreviewSurface({
           <div className="preview-surface-heading">
             <MonitorPlay size={17} />
             <div>
-              <strong id="preview-surface-title">Secure loopback preview</strong>
-              <small>Main-process isolated surface · no Node bridge</small>
+              <strong id="preview-surface-title">Local preview</strong>
+              <small>Runs only on this computer · pages cannot control Forgeboard</small>
             </div>
           </div>
           <nav aria-label="Preview history">
@@ -121,7 +121,7 @@ export function PreviewSurface({
               void perform(async (value) => {
                 await value.navigate(candidate);
                 setAddress(candidate);
-              }, 'Forgeboard blocked that preview navigation.');
+              }, 'That address is not allowed in the preview.');
             }}
           >
             <ExternalLink size={13} />
@@ -154,15 +154,15 @@ export function PreviewSurface({
                 void perform(async (value) => {
                   const opened = await value.openExternal();
                   setActionStatus(
-                    opened ? 'Opened in the system browser.' : 'External open cancelled.',
+                    opened ? 'Opened in your browser.' : 'Opening in the browser was cancelled.',
                   );
-                }, 'Could not open the approved URL externally.')
+                }, 'Could not open that address in your browser.')
               }
-              aria-label="Open in system browser"
+              aria-label="Open in browser"
             >
               <ExternalLink size={14} />
             </button>
-            <button type="button" onClick={onClose} aria-label="Close preview surface">
+            <button type="button" onClick={onClose} aria-label="Close preview">
               <X size={15} />
             </button>
           </div>

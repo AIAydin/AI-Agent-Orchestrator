@@ -424,16 +424,16 @@ function unavailableReadiness(
 function readinessConfirmation(plan: DockerActionPlan): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Check Docker readiness',
-    message: `Run Docker readiness probes for ${plan.input.image}?`,
+    title: 'Check Docker',
+    message: `Run Docker checks for ${plan.input.image}?`,
     detail: [
       `Docker executable: ${plan.input.dockerExecutable}`,
-      `SHA-256: ${plan.executableIdentity.sha256}`,
-      `Daemon command: ${command(['version', '--format', '{{.Server.Version}}'])}`,
+      `Executable fingerprint (SHA-256): ${plan.executableIdentity.sha256}`,
+      `Docker server command: ${command(['version', '--format', '{{.Server.Version}}'])}`,
       `Image command: ${command(['image', 'inspect', plan.input.image])}`,
       `Container command: ${command(containerProbeArguments(plan, 0))}`,
       '',
-      'Warning: the selected Docker executable and a constrained container probe will run locally. A Docker executable can implement arbitrary effects. No image is pulled by this check.',
+      'Warning: the selected Docker executable and a small restricted container will run on this computer. A Docker executable can do anything your account can do. This check does not pull any image.',
     ].join('\n'),
     buttons: ['Cancel', 'Run Docker checks'],
     defaultId: 0,
@@ -448,14 +448,17 @@ function pullDisclosure(plan: DockerActionPlan): OutboundActionDisclosure {
     ...disclosure,
     details: [
       ...disclosure.details,
-      { label: 'Docker executable SHA-256', value: plan.executableIdentity.sha256 },
-      { label: 'Daemon preflight', value: command(['version', '--format', '{{.Server.Version}}']) },
-      { label: 'Image preflight', value: command(['image', 'inspect', plan.input.image]) },
-      { label: 'Container preflight', value: command(containerProbeArguments(plan, 0)) },
-      { label: 'Registry command', value: command(['pull', plan.input.image]) },
-      { label: 'Post-pull container check', value: command(containerProbeArguments(plan, 1)) },
+      { label: 'Docker executable fingerprint (SHA-256)', value: plan.executableIdentity.sha256 },
+      {
+        label: 'Docker server check',
+        value: command(['version', '--format', '{{.Server.Version}}']),
+      },
+      { label: 'Image check', value: command(['image', 'inspect', plan.input.image]) },
+      { label: 'Container check', value: command(containerProbeArguments(plan, 0)) },
+      { label: 'Pull command', value: command(['pull', plan.input.image]) },
+      { label: 'Container check after pull', value: command(containerProbeArguments(plan, 1)) },
     ],
-    warning: `${disclosure.warning} The approved action first runs local Docker daemon and image probes, then pulls only this image, and finally repeats the constrained readiness probes.`,
+    warning: `${disclosure.warning} The approved action first runs local Docker and image checks, then pulls only this image, and finally repeats the restricted container checks.`,
   };
 }
 

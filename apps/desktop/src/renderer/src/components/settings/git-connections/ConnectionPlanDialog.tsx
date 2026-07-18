@@ -26,8 +26,7 @@ export function ConnectionPlanDialog({
   const busyRef = useRef(busy);
   cancelRef.current = onCancel;
   busyRef.current = busy;
-  const title =
-    plan.kind === 'github-cli-selection' ? 'GitHub CLI configuration' : remotePlanTitle(plan);
+  const title = plan.kind === 'github-cli-selection' ? 'GitHub CLI setup' : remotePlanTitle(plan);
   const titleId = `git-connections-plan-title-${plan.planId}`;
   const descriptionId = `git-connections-plan-description-${plan.planId}`;
 
@@ -72,13 +71,13 @@ export function ConnectionPlanDialog({
         <header>
           <ShieldAlert size={19} aria-hidden="true" />
           <div>
-            <span>Reviewed local configuration plan</span>
+            <span>Review before applying</span>
             <h2 id={titleId}>{title}</h2>
           </div>
         </header>
         <p id={descriptionId}>
-          Nothing has changed. Review this path-free summary before continuing to the cancel-default
-          native system confirmation.
+          Nothing has changed yet. Check the summary below — private file paths are not shown. If
+          you continue, your computer will ask you to confirm, with Cancel pre-selected.
         </p>
         {plan.kind === 'git-remote-mutation' ? (
           <RemotePlanFacts plan={plan} />
@@ -86,15 +85,16 @@ export function ConnectionPlanDialog({
           <GitHubCliPlanFacts plan={plan} />
         )}
         <div className="git-connections-plan-safety">
-          <strong>Network access: none</strong>
+          <strong>No internet access needed</strong>
           <span>
             {plan.kind === 'git-remote-mutation'
-              ? 'This action changes local Git configuration only. It does not fetch, push, authenticate, or test reachability.'
-              : 'This action selects a local executable source only. It does not sign in, contact GitHub, or verify repository access.'}
+              ? 'This only changes Git settings on this computer. It does not download, upload, sign in anywhere, or check that the address works.'
+              : 'This only chooses which GitHub CLI program on this computer Forgeboard uses. It does not sign in, contact GitHub, or check access to any project.'}
           </span>
         </div>
         <small>
-          Plan expires at <time dateTime={plan.expiresAt}>{formatTime(plan.expiresAt)}</time>.
+          This review expires at <time dateTime={plan.expiresAt}>{formatTime(plan.expiresAt)}</time>
+          .
         </small>
         <footer>
           <button
@@ -112,7 +112,7 @@ export function ConnectionPlanDialog({
             disabled={busy}
             onClick={() => void onConfirm()}
           >
-            Continue to system confirmation
+            Continue to confirmation
           </button>
         </footer>
       </section>
@@ -127,19 +127,19 @@ function RemotePlanFacts({ plan }: { readonly plan: GitConnectionMutationPlanVie
         <PlanFact label="Project" value={plan.projectName} />
         <PlanFact label="Action" value={remoteOperationLabel(plan.operation)} />
         <PlanFact label="Remote" value={plan.remoteName} />
-        <PlanFact label="Current target" value={remoteViewLabel(plan.before)} />
+        <PlanFact label="Current address" value={remoteViewLabel(plan.before)} />
         <PlanFact
-          label="Proposed target"
+          label="New address"
           value={plan.after === null ? 'Remove this remote' : remoteTargetLabel(plan.after)}
         />
       </dl>
       {plan.operation === 'remove' ? (
         <section
           className="git-connections-ref-impact"
-          aria-label="Remote-tracking references removed"
+          aria-label="Branch records removed with this remote"
         >
           <strong>
-            Remote-tracking references removed ({String(plan.remoteTrackingRefs.length)})
+            Branch records removed with this remote ({String(plan.remoteTrackingRefs.length)})
           </strong>
           {plan.remoteTrackingRefs.length === 0 ? (
             <span>None</span>
@@ -152,7 +152,9 @@ function RemotePlanFacts({ plan }: { readonly plan: GitConnectionMutationPlanVie
               ))}
             </ul>
           )}
-          <small>Local branches, commits, other remotes, and worktree files remain.</small>
+          <small>
+            Your own branches, commits, other remotes, and project files stay untouched.
+          </small>
         </section>
       ) : null}
     </>
@@ -164,18 +166,19 @@ function GitHubCliPlanFacts({ plan }: { readonly plan: GitHubCliSelectionPlanVie
     <dl>
       <PlanFact
         label="Source"
-        value={plan.source === 'automatic' ? 'Automatic discovery' : 'Custom executable'}
+        value={plan.source === 'automatic' ? 'Found automatically' : 'File you choose'}
       />
-      <PlanFact
-        label="Executable file"
-        value={plan.candidate?.filename ?? 'Not currently discovered'}
-      />
-      <PlanFact label="Version" value="Checked only after native approval" />
+      <PlanFact label="Program file" value={plan.candidate?.filename ?? 'None found yet'} />
+      <PlanFact label="Version" value="Checked after you confirm" />
       <PlanFact
         label="Size"
-        value={plan.candidate === null ? 'Unavailable' : formatBytes(plan.candidate.sizeBytes)}
+        value={plan.candidate === null ? 'Not available' : formatBytes(plan.candidate.sizeBytes)}
       />
-      <PlanFact label="SHA-256" value={plan.candidate?.sha256 ?? 'Unavailable'} code />
+      <PlanFact
+        label="Fingerprint (SHA-256)"
+        value={plan.candidate?.sha256 ?? 'Not available'}
+        code
+      />
     </dl>
   );
 }
@@ -205,17 +208,17 @@ function remotePlanTitle(plan: GitConnectionMutationPlanView): string {
 
 function remoteOperationLabel(operation: GitConnectionMutationPlanView['operation']): string {
   if (operation === 'add') return 'Add remote';
-  if (operation === 'replace') return 'Replace remote target';
-  return 'Remove remote and disclosed tracking references';
+  if (operation === 'replace') return "Change the remote's address";
+  return 'Remove the remote and its saved branch records';
 }
 
 function remoteViewLabel(remote: GitConnectionMutationPlanView['before']): string {
-  if (remote === null) return 'No existing remote';
-  if (remote.fetch === null && remote.push === null) return 'Advanced target not shown';
+  if (remote === null) return 'No remote yet';
+  if (remote.fetch === null && remote.push === null) return 'Address not shown';
   const fetch = remote.fetch === null ? null : remoteTargetLabel(remote.fetch);
   const push = remote.push === null ? null : remoteTargetLabel(remote.push);
-  if (fetch === push) return fetch ?? 'Advanced target not shown';
-  return `Fetch: ${fetch ?? 'not shown'} · Push: ${push ?? 'not shown'}`;
+  if (fetch === push) return fetch ?? 'Address not shown';
+  return `Downloads from: ${fetch ?? 'not shown'} · Uploads to: ${push ?? 'not shown'}`;
 }
 
 function formatTime(value: string): string {

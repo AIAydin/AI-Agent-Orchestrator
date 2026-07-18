@@ -179,12 +179,12 @@ export function WorkspaceCanvas({
       onDrop={(event) => {
         if (hasWorkspaceContextDrag(event.dataTransfer)) {
           if (collaborationGraphReadOnly) {
-            onContextDropError('This collaboration role cannot edit the shared graph.');
+            onContextDropError('Your collaboration role cannot edit the shared canvas.');
             return;
           }
           const payload = readWorkspaceContextDrag(event.dataTransfer);
           if (payload === null) {
-            onContextDropError('That drag did not contain a valid Forgeboard project file.');
+            onContextDropError('That drop did not include a valid Forgeboard project file.');
             return;
           }
           const target = contextDropTarget(event.target, nodes);
@@ -193,7 +193,7 @@ export function WorkspaceCanvas({
             return;
           }
           if (target.data.locked) {
-            onContextDropError('Unlock the Agent node before changing its context.');
+            onContextDropError('Unlock the Agent node before attaching files to it.');
             return;
           }
           event.preventDefault();
@@ -270,7 +270,7 @@ export function WorkspaceCanvas({
                 event.preventDefault();
                 event.stopPropagation();
                 setKeyboardAnnouncement(({ sequence }) => ({
-                  message: 'This collaboration role cannot edit the shared graph.',
+                  message: 'Your collaboration role cannot edit the shared canvas.',
                   sequence: sequence + 1,
                 }));
                 return;
@@ -377,10 +377,10 @@ export function WorkspaceCanvas({
                 <span className="empty-orbit">
                   <Bot size={22} />
                 </span>
-                <h2>Shape the work before it runs</h2>
+                <h2>Plan the work before it runs</h2>
                 <p>
-                  Add a brief, task, and agent from the rail. Connect them to make context and
-                  dependencies explicit.
+                  Add a brief, a task, and an agent from the side panel, then connect them to show
+                  what the agent needs.
                 </p>
                 <div>
                   <button
@@ -405,7 +405,7 @@ export function WorkspaceCanvas({
           </ReactFlow>
         </CanvasNodeInteractionProvider>
       ) : (
-        <div className="canvas-loading">Loading local canvas…</div>
+        <div className="canvas-loading">Loading your canvas…</div>
       )}
     </section>
   );

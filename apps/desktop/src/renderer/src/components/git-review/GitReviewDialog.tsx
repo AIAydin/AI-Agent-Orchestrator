@@ -183,14 +183,9 @@ export function GitReviewDialog({
     void controller.confirmDiscard(discardPlan.planId).then((result) => {
       setDiscardPlan(null);
       if (result === null)
-        setNotice(
-          gitReviewNotice(
-            'Discard cancelled in the system confirmation. No content changed.',
-            'neutral',
-          ),
-        );
+        setNotice(gitReviewNotice('Discard cancelled. Nothing was changed.', 'neutral'));
       else if (result !== undefined) {
-        setNotice(gitReviewNotice('Selected working-tree content was discarded.', 'success'));
+        setNotice(gitReviewNotice('The selected changes were discarded.', 'success'));
         void deliveryReadiness.refresh();
       }
     });
@@ -208,16 +203,9 @@ export function GitReviewDialog({
     void controller.confirmCommit(commitPlan.planId).then((result) => {
       setCommitPlan(null);
       if (result === null)
-        setNotice(
-          gitReviewNotice(
-            'Commit cancelled in the system confirmation. Nothing was committed.',
-            'neutral',
-          ),
-        );
+        setNotice(gitReviewNotice('Commit cancelled. Nothing was committed.', 'neutral'));
       else if (result !== undefined) {
-        setNotice(
-          gitReviewNotice(`Created local commit ${result.headAfter.slice(0, 12)}.`, 'success'),
-        );
+        setNotice(gitReviewNotice(`Created commit ${result.headAfter.slice(0, 12)}.`, 'success'));
         void deliveryReadiness.refresh();
       }
     });
@@ -229,7 +217,7 @@ export function GitReviewDialog({
     if (!deliveryReady) {
       setNotice(
         gitReviewNotice(
-          'Delivery readiness is not current. Complete the exact checks and human quality approval first.',
+          "Delivery isn't ready yet. Finish the required checks and approval first.",
           'warning',
         ),
       );
@@ -244,9 +232,7 @@ export function GitReviewDialog({
     setNotice(null);
     void deliveryReadiness.prepareRequirements(checkIds).then((saved) => {
       if (saved) {
-        setNotice(
-          gitReviewNotice('Saved the required checks for this exact delivery source.', 'success'),
-        );
+        setNotice(gitReviewNotice('Saved the required checks for this delivery.', 'success'));
       }
     });
   };
@@ -277,7 +263,7 @@ export function GitReviewDialog({
       if (result === null) {
         setNotice(
           gitReviewNotice(
-            'Delivery cancelled in the system confirmation. Primary was not changed.',
+            'Delivery cancelled. Your main project files were not changed.',
             'neutral',
           ),
         );
@@ -286,8 +272,8 @@ export function GitReviewDialog({
         setNotice(
           gitReviewNotice(
             result.state === 'completed'
-              ? `Delivered reviewed commits to primary at ${result.headAfter.slice(0, 12)}.`
-              : 'Git stopped at conflicts. Primary was left in a reviewable conflict state.',
+              ? `Delivered the reviewed commits to your main project at ${result.headAfter.slice(0, 12)}.`
+              : 'Git stopped at conflicts. Your main project is left with conflicts you can review and fix.',
             result.state === 'completed' ? 'success' : 'warning',
           ),
         );
@@ -304,7 +290,7 @@ export function GitReviewDialog({
       }
       if (outcome.kind === 'cleanup-reconciled') {
         onCleanupSuccess?.(
-          'Reconciled the interrupted cleanup and marked the exact agent worktree as cleaned.',
+          'Finished the interrupted cleanup and marked the agent workspace as cleaned up.',
         );
         onClose();
       } else {
@@ -312,7 +298,7 @@ export function GitReviewDialog({
         if (cleanupRecoveryOnly && !outcome.recovery) {
           onCleanupTargetReactivated?.(
             target,
-            'Verified the agent worktree is intact and restored its active lifecycle state.',
+            'Verified the agent workspace is intact and made it active again.',
           );
           void controller.refresh();
         }
@@ -325,20 +311,13 @@ export function GitReviewDialog({
     void cleanupController.confirm(cleanupPlan.planId).then((result) => {
       if (result === null) {
         setCleanupPlan(null);
-        setNotice(
-          gitReviewNotice(
-            'Cleanup cancelled in the system confirmation. The worktree was preserved.',
-            'neutral',
-          ),
-        );
+        setNotice(gitReviewNotice('Cleanup cancelled. The agent workspace was kept.', 'neutral'));
       } else if (result === undefined) {
         setCleanupPlan(null);
         onCleanupStateUncertain?.();
       } else {
         setCleanupPlan(null);
-        onCleanupSuccess?.(
-          'Cleaned up the exact merged agent worktree and deleted its managed branch.',
-        );
+        onCleanupSuccess?.('Cleaned up the merged agent workspace and deleted its branch.');
         onClose();
       }
     });
@@ -360,14 +339,14 @@ export function GitReviewDialog({
           <span>
             <small>
               {cleanupRecoveryOnly
-                ? 'Recovery-only agent target'
+                ? 'Cleanup recovery only'
                 : target.kind === 'primary'
-                  ? 'Authoritative primary checkout'
-                  : 'Authoritative agent worktree'}
+                  ? 'Main project files'
+                  : 'Agent workspace'}
             </small>
             <h2 id="git-review-title">
               {cleanupRecoveryOnly
-                ? `Recover interrupted cleanup in ${projectName}`
+                ? `Resume interrupted cleanup in ${projectName}`
                 : `Review changes in ${projectName}`}
             </h2>
           </span>
@@ -392,8 +371,8 @@ export function GitReviewDialog({
         </header>
 
         {controller.loading ? (
-          <GitReviewState icon={<LoaderCircle className="spin" />} title="Reading local Git state">
-            Forgeboard is loading status and diffs from the selected repository.
+          <GitReviewState icon={<LoaderCircle className="spin" />} title="Loading changes">
+            Forgeboard is reading the current state of this project's files.
           </GitReviewState>
         ) : cleanupRecoveryOnly || controller.review === null ? (
           <>
@@ -401,11 +380,11 @@ export function GitReviewDialog({
               icon={<TriangleAlert />}
               title={
                 cleanupRecoveryOnly
-                  ? 'Git review is unavailable during cleanup recovery'
-                  : 'Git review is unavailable'
+                  ? "Can't show changes during cleanup recovery"
+                  : "Can't show changes right now"
               }
             >
-              {controller.error ?? 'Forgeboard could not read this repository.'}
+              {controller.error ?? "Forgeboard couldn't read this project's files."}
               {!cleanupRecoveryOnly && (
                 <button
                   className="button"
@@ -450,15 +429,16 @@ export function GitReviewDialog({
         ) : (
           <>
             {controller.review.target.kind === 'agent-worktree' && (
-              <section className="git-worktree-target" aria-label="Agent worktree target">
-                <strong>Isolated run {controller.review.target.runId.slice(0, 12)}</strong>
+              <section className="git-worktree-target" aria-label="Agent workspace details">
+                <strong>Agent workspace · run {controller.review.target.runId.slice(0, 12)}</strong>
                 <span>
-                  Agent {controller.review.target.agentId} · base {controller.review.target.baseRef}{' '}
-                  @ <code>{controller.review.target.baseCommit.slice(0, 12)}</code>
+                  Agent {controller.review.target.agentId} · started from{' '}
+                  {controller.review.target.baseRef} at{' '}
+                  <code>{controller.review.target.baseCommit.slice(0, 12)}</code>
                 </span>
                 <small>
-                  Stage, discard, and commit actions apply only to this managed worktree. The
-                  primary checkout remains untouched.
+                  Adding, discarding, and committing changes happens only in this workspace. Your
+                  main project files stay untouched.
                 </small>
               </section>
             )}
@@ -468,7 +448,7 @@ export function GitReviewDialog({
             <GitReviewSummary review={controller.review} />
             {controller.review.conflicted && (
               <p className="git-conflict-banner" role="alert">
-                <TriangleAlert size={14} /> Resolve unmerged files before creating a commit.
+                <TriangleAlert size={14} /> Fix the conflicting files before creating a commit.
               </p>
             )}
             {(actionError !== null || notice !== null || busy) && (
@@ -491,13 +471,13 @@ export function GitReviewDialog({
             )}
             {reviewNotes.error !== null && (
               <p className="git-review-note-error" role="alert">
-                Review feedback unavailable: {reviewNotes.error}
+                Couldn't load review comments: {reviewNotes.error}
               </p>
             )}
             {reviewNotes.context?.truncated === true && (
               <p className="git-review-note-error" role="status">
-                This target has more than 500 review notes. Resolve or delete older feedback to see
-                every note here.
+                There are more than 500 review comments here. Resolve or delete older ones to see
+                them all.
               </p>
             )}
             <GitStaleReviewNotes
@@ -511,8 +491,12 @@ export function GitReviewDialog({
             {controller.review.target.kind === 'agent-worktree' &&
             reviewMode === 'base-comparison' ? (
               controller.review.baseComparison === undefined ? (
-                <GitReviewState icon={<TriangleAlert />} title="Base comparison is unavailable">
-                  Refresh this review. Forgeboard will not infer a base or HEAD in the renderer.
+                <GitReviewState
+                  icon={<TriangleAlert />}
+                  title="Can't compare with the starting point"
+                >
+                  Refresh this review. Forgeboard won't guess a starting point or latest commit on
+                  its own.
                 </GitReviewState>
               ) : (
                 <GitBaseComparisonPanel
@@ -529,9 +513,9 @@ export function GitReviewDialog({
                           <strong>Delivery readiness</strong>
                           <p role={deliveryReadiness.error === null ? 'status' : 'alert'}>
                             {deliveryReadiness.loading
-                              ? 'Loading exact delivery checks and approval evidence…'
+                              ? 'Loading the required checks and approval…'
                               : (deliveryReadiness.error ??
-                                'Delivery readiness is unavailable. Refresh before delivery.')}
+                                "Delivery readiness isn't available. Refresh before delivering.")}
                           </p>
                         </section>
                       ) : (
@@ -582,8 +566,8 @@ export function GitReviewDialog({
                 {groups &&
                   groups.staged.length + groups.unstaged.length + groups.untracked.length === 0 && (
                     <p className="git-clean-state">
-                      <CheckCircle2 size={15} /> Working tree clean. There are no local changes to
-                      review.
+                      <CheckCircle2 size={15} /> No changes to review. Everything here is already
+                      committed.
                     </p>
                   )}
                 <div className="git-review-workspace">
@@ -676,76 +660,55 @@ export function GitReviewDialog({
 
 function deliveryReadinessBusyLabel(busy: GitDeliveryReadinessBusy | null): string | null {
   if (busy === null) return null;
-  if (busy.kind === 'prepare-requirements') return 'Saving required delivery checks';
-  if (busy.kind === 'run-check') return 'Waiting for check confirmation and exact completion';
-  return 'Waiting for human quality approval confirmation';
+  if (busy.kind === 'prepare-requirements') return 'Saving the required checks';
+  if (busy.kind === 'run-check') return 'Waiting for the check to finish';
+  return 'Waiting for approval';
 }
 
 function deliveryReadinessNoticeMessage(notice: GitDeliveryReadinessNotice): GitReviewNotice {
   if (notice.kind === 'check-run-result') {
     if (notice.state === 'passed') {
-      return gitReviewNotice(
-        'The exact delivery check passed. Readiness was refreshed.',
-        'success',
-      );
+      return gitReviewNotice('The check passed. Delivery status was refreshed.', 'success');
     }
     if (notice.state === 'failed') {
-      return gitReviewNotice(
-        'The delivery check finished unsuccessfully. Delivery remains blocked.',
-        'warning',
-      );
+      return gitReviewNotice("The check didn't pass. Delivery stays blocked.", 'warning');
     }
     if (notice.state === 'cancelled') {
-      return gitReviewNotice(
-        'The delivery check was cancelled before passing evidence was recorded.',
-        'neutral',
-      );
+      return gitReviewNotice('The check was cancelled before it could pass.', 'neutral');
     }
     if (notice.state === 'lost') {
       return gitReviewNotice(
-        'Forgeboard lost the terminal delivery-check evidence. Delivery remains blocked; run the check again.',
+        "Forgeboard lost the check's final result. Delivery stays blocked — run the check again.",
         'warning',
       );
     }
     if (notice.state === 'stale') {
       return gitReviewNotice(
-        'The delivery-check evidence is stale for the current binding. Run the check again.',
+        'The check result no longer matches the current code. Run the check again.',
         'warning',
       );
     }
     if (notice.state === 'running') {
       return gitReviewNotice(
-        'The delivery check is still running. Refresh to load its latest state.',
+        'The check is still running. Refresh to see its latest state.',
         'neutral',
       );
     }
     if (notice.state === 'queued') {
       return gitReviewNotice(
-        'The delivery check is queued. Refresh to load its latest state.',
+        'The check is waiting to run. Refresh to see its latest state.',
         'neutral',
       );
     }
-    return gitReviewNotice(
-      'No current delivery-check evidence was recorded. Delivery remains blocked.',
-      'warning',
-    );
+    return gitReviewNotice('No check result was recorded. Delivery stays blocked.', 'warning');
   }
   if (notice.kind === 'check-run-cancelled') {
-    return gitReviewNotice(
-      'Check run cancelled in the system confirmation. No check was started.',
-      'neutral',
-    );
+    return gitReviewNotice('Check cancelled. No check was started.', 'neutral');
   }
   if (notice.kind === 'quality-approved') {
-    return gitReviewNotice(
-      'Human quality approval was recorded for the exact current evidence.',
-      'success',
-    );
+    return gitReviewNotice('Approval recorded for the current code.', 'success');
   }
-  return gitReviewNotice(
-    'Quality approval cancelled in the system confirmation. No approval was recorded.',
-    'neutral',
-  );
+  return gitReviewNotice('Approval cancelled. No approval was recorded.', 'neutral');
 }
 
 function gitReviewNotice(message: string, tone: GitReviewNoticeTone): GitReviewNotice {

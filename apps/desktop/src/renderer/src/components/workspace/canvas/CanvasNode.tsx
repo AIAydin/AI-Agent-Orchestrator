@@ -194,97 +194,97 @@ export const NODE_DEFINITIONS: Record<
 > = {
   agent: {
     label: 'Agent',
-    description: 'Run a local coding-agent CLI',
+    description: 'Run an AI coding agent on this computer',
     color: '#d4a85b',
     icon: Bot,
   },
   brief: {
     label: 'Product brief',
-    description: 'Requirements and acceptance criteria',
+    description: 'What to build and how to check it',
     color: '#8d7de8',
     icon: NotebookPen,
   },
   task: {
     label: 'Task',
-    description: 'Assignable executable work',
+    description: 'A piece of work to assign and run',
     color: '#58a6a6',
     icon: ListChecks,
   },
   file: {
     label: 'File',
-    description: 'Live local source reference',
+    description: 'A live link to a file on this computer',
     color: '#6d9ed0',
     icon: FileCode2,
   },
   diff: {
     label: 'Diff / review',
-    description: 'Review and select changes',
+    description: 'Review changes and choose what to keep',
     color: '#e27b68',
     icon: FileDiff,
   },
   terminal: {
     label: 'Terminal',
-    description: 'Interactive local process',
+    description: 'Run commands on this computer',
     color: '#8dbd6f',
     icon: TerminalSquare,
   },
   'web-preview': {
     label: 'Web preview',
-    description: 'Isolated desktop preview',
+    description: 'See your web app in its own window',
     color: '#6099c5',
     icon: MonitorPlay,
   },
   'mobile-preview': {
     label: 'Mobile preview',
-    description: 'Phone and tablet viewports',
+    description: 'See your app at phone and tablet sizes',
     color: '#a27bd3',
     icon: Smartphone,
   },
   test: {
     label: 'Test',
-    description: 'Run deterministic checks',
+    description: 'Run the same checks every time',
     color: '#64a774',
     icon: TestTube2,
   },
   'review-gate': {
     label: 'Review gate',
-    description: 'Human and quality approval',
+    description: 'Pause the workflow until work is approved',
     color: '#d39b55',
     icon: CheckCircle2,
   },
   'git-pr': {
     label: 'Git / PR',
-    description: 'Branches, commits, and approvals',
+    description: 'Track branches, commits, and approvals',
     color: '#d06870',
     icon: GitPullRequest,
   },
   diagram: {
     label: 'Diagram',
-    description: 'Mermaid source and render',
+    description: 'Turn Mermaid text into a diagram',
     color: '#7888d8',
     icon: Network,
   },
   whiteboard: {
     label: 'Whiteboard',
-    description: 'Sketch and annotate a surface',
+    description: 'Sketch and add notes freely',
     color: '#c482aa',
     icon: PanelTop,
   },
   'note-image': {
     label: 'Note / image',
-    description: 'Lightweight local annotation',
+    description: 'A quick note or picture',
     color: '#c5a75f',
     icon: Image,
   },
   'group-frame': {
-    label: 'Group / frame',
-    description: 'Contain a workflow region',
+    label: 'Group',
+    description: 'Collect related nodes in one area',
     color: '#82909b',
     icon: Frame,
   },
   extension: {
     label: 'Extension node',
-    description: 'Trusted declarative extension fields',
+    description: 'Fields from a trusted extension',
     color: '#7f8c98',
     icon: Box,
   },
@@ -339,7 +339,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         .join(' ')}
       style={{ '--node-accent': data.color } as React.CSSProperties}
       role={groupFrame ? 'group' : undefined}
-      aria-roledescription={groupFrame ? 'group frame' : 'canvas node'}
+      aria-roledescription={groupFrame ? 'group' : 'canvas node'}
       aria-label={`${definition.label}: ${data.title}`}
       data-node-kind={data.kind}
     >
@@ -383,9 +383,9 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           disabled={!canChangePresentation}
           title={
             interactions.readOnly
-              ? 'This collaboration role cannot change the shared node.'
+              ? 'Your collaboration role cannot change this node.'
               : data.locked
-                ? 'Unlock this node before changing its presentation.'
+                ? 'Unlock this node before changing how it looks.'
                 : data.collapsed
                   ? 'Expand node'
                   : 'Collapse node'

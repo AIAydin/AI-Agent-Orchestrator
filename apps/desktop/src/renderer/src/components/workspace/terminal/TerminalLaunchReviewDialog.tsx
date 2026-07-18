@@ -69,18 +69,18 @@ export function TerminalLaunchReviewDialog({
             <ShieldAlert size={19} aria-hidden="true" />
           </span>
           <div>
-            <span className="eyebrow">Local process review</span>
-            <h2 id="terminal-launch-review-title">Review the exact terminal launch</h2>
+            <span className="eyebrow">Terminal safety review</span>
+            <h2 id="terminal-launch-review-title">Review this terminal command</h2>
             <p id="terminal-launch-review-description">
-              Nothing has launched. Continue only if this exact command and host access are
-              expected; Forgeboard will then show a separate native confirmation.
+              Nothing has run yet. Continue only if this command and its access are what you expect.
+              Your computer will then ask you to confirm once more.
             </p>
           </div>
           <button
             ref={cancelButtonRef}
             type="button"
             className="icon-button"
-            aria-label="Cancel terminal launch review"
+            aria-label="Cancel review"
             disabled={busy}
             onClick={onCancel}
           >
@@ -93,8 +93,8 @@ export function TerminalLaunchReviewDialog({
             <strong>{plan.permission.label}</strong>
             <p>{plan.permission.detail}</p>
             <small>
-              Filesystem: {plan.permission.filesystem} · Network: {plan.permission.network} · OS
-              sandbox: {plan.permission.sandboxed ? 'yes' : 'no'}
+              Files: {plan.permission.filesystem} · Network: {plan.permission.network} · Sandboxed:{' '}
+              {plan.permission.sandboxed ? 'yes' : 'no'}
             </small>
           </div>
           <dl className="terminal-launch-disclosure">
@@ -103,25 +103,25 @@ export function TerminalLaunchReviewDialog({
               <dd>{plan.projectName}</dd>
             </div>
             <div>
-              <dt>Executable</dt>
+              <dt>Program</dt>
               <dd>
                 <code>{plan.executable}</code>
               </dd>
             </div>
             <div>
-              <dt>Literal argument array</dt>
+              <dt>Arguments</dt>
               <dd>
                 <code>{JSON.stringify(plan.arguments)}</code>
               </dd>
             </div>
             <div>
-              <dt>Project-relative working directory</dt>
+              <dt>Folder to run in</dt>
               <dd>
                 <code>{plan.cwdRelative}</code>
               </dd>
             </div>
             <div>
-              <dt>Environment variable names</dt>
+              <dt>Environment variables</dt>
               <dd>
                 <code>
                   {plan.environmentVariableNames.length === 0
@@ -131,7 +131,7 @@ export function TerminalLaunchReviewDialog({
               </dd>
             </div>
             <div>
-              <dt>PTY dimensions</dt>
+              <dt>Window size</dt>
               <dd>
                 {plan.columns} columns × {plan.rows} rows
               </dd>
@@ -144,19 +144,19 @@ export function TerminalLaunchReviewDialog({
             </div>
           </dl>
           <p className="terminal-launch-boundary">
-            Arguments are passed as an array without shell interpolation. Environment values are
-            resolved by the main process from the named allowlist and are never shown or saved in
-            this node.
+            Arguments are passed exactly as listed, never rewritten by a shell. Environment variable
+            values are filled in by Forgeboard from your saved settings and are never shown or
+            stored here.
           </p>
         </div>
 
         <footer>
           <button type="button" className="button" disabled={busy} onClick={onCancel}>
-            Cancel before launch
+            Cancel
           </button>
           <button type="button" className="button primary" disabled={busy} onClick={onContinue}>
             <Play size={14} aria-hidden="true" />
-            {busy ? 'Waiting for confirmation…' : 'Continue to native confirmation'}
+            {busy ? 'Waiting for confirmation…' : 'Continue'}
           </button>
         </footer>
       </section>

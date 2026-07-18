@@ -146,7 +146,9 @@ export function SettingsPanel(props: SettingsPanelProps) {
     try {
       await operation();
     } catch (cause) {
-      props.onError(cause instanceof Error ? cause.message : 'The settings operation failed.');
+      props.onError(
+        cause instanceof Error ? cause.message : 'The settings change failed. Try again.',
+      );
     } finally {
       setBusy(false);
     }
@@ -190,9 +192,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
             <span className="brand-mark small">F</span>
             <div>
               <h2 id="settings-title">Settings</h2>
-              <p>
-                Configure available features here; unavailable capabilities are clearly labeled.
-              </p>
+              <p>Change how Forgeboard works here. Unavailable features are clearly labeled.</p>
             </div>
           </div>
           <button

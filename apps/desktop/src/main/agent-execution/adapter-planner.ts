@@ -354,7 +354,7 @@ async function prepareDockerAdapter(
         dockerProbeHooks(processAuthorization),
       );
       if (!current.available || current.imageId !== approvedImageId) {
-        throw new Error('The reviewed Docker image changed. Review a fresh launch.');
+        throw new Error('The reviewed Docker image changed. Review what will run.');
       }
       await assertLaunchExecutableIdentity(dockerExecutableIdentity);
     },

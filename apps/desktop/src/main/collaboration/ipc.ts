@@ -158,9 +158,7 @@ export class CollaborationIpcService {
     if (this.#owner !== owner && this.#joiningOwner !== owner) return;
     const role = this.#client.connection?.role;
     if (role === 'owner' || role === 'editor') return;
-    throw new Error(
-      'This collaboration role cannot launch, type into, or reconfigure a local terminal.',
-    );
+    throw new Error('Your collaboration role cannot start, type into, or change a local terminal.');
   }
 
   /** Main-process capability gate for workflow execution mutations owned by this window. */
@@ -168,9 +166,7 @@ export class CollaborationIpcService {
     if (this.#owner !== owner && this.#joiningOwner !== owner) return;
     const role = this.#client.connection?.role;
     if (role === 'owner' || role === 'editor') return;
-    throw new Error(
-      'This collaboration role cannot start, approve, control, or cancel workflow execution.',
-    );
+    throw new Error('Your collaboration role cannot start, approve, control, or cancel workflows.');
   }
 
   public async pauseForShutdown(): Promise<void> {
@@ -246,7 +242,7 @@ export class CollaborationIpcService {
         value: CollaborationMetadataSnapshotSchema.nullable().parse(value),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not read the collaboration snapshot.');
+      return ipcFailure(error, 'Forgeboard could not read the shared canvas.');
     }
   }
 
@@ -261,7 +257,7 @@ export class CollaborationIpcService {
       ) {
         return joinFailure(
           'authorization-failed',
-          'Another Forgeboard window owns the active or pending collaboration session.',
+          'Another Forgeboard window is already connected or connecting to a collaboration room.',
           false,
         );
       }
@@ -314,7 +310,7 @@ export class CollaborationIpcService {
       return joinFailure(
         invalid ? 'invalid-configuration' : 'network-failed',
         invalid
-          ? 'Forgeboard rejected invalid collaboration connection settings.'
+          ? 'The collaboration connection settings are not valid. Check them and try again.'
           : 'Forgeboard could not start the collaboration connection.',
         !invalid,
       );
@@ -344,7 +340,7 @@ export class CollaborationIpcService {
       this.#assertOwner(event, 'Collaboration metadata publish');
       const connection = this.#requiredActiveConnection();
       if (connection.role !== 'owner' && connection.role !== 'editor') {
-        throw new Error('This collaboration role cannot publish shared graph metadata.');
+        throw new Error('Your collaboration role cannot share canvas changes.');
       }
       const scope = this.#storageScope(input, connection);
       const receipt = this.#client.publish(input.snapshot, (plannedReceipt) => {
@@ -352,7 +348,7 @@ export class CollaborationIpcService {
       });
       return { ok: true, value: receipt };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard rejected collaboration metadata.');
+      return ipcFailure(error, 'Forgeboard rejected the shared canvas changes.');
     }
   }
 
@@ -460,7 +456,7 @@ export class CollaborationIpcService {
         value: CollaborationSyncRecoverySchema.nullable().parse(recovery),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not recover collaboration metadata.');
+      return ipcFailure(error, 'Forgeboard could not recover the shared canvas changes.');
     }
   }
 
@@ -476,7 +472,7 @@ export class CollaborationIpcService {
         serializeCollaborationMetadataSnapshot(current) !==
           serializeCollaborationMetadataSnapshot(input.snapshot)
       ) {
-        throw new Error('Only the authenticated room snapshot can advance recovery state.');
+        throw new Error("Only the connected room's current canvas can update recovery.");
       }
       const scope = this.#storageScope(input, connection);
       const store = this.#requiredStore();
@@ -495,10 +491,14 @@ export class CollaborationIpcService {
         recovery.disposition !== 'synchronized' &&
         !acknowledgedInMemory
       ) {
-        throw new Error('Unacknowledged collaboration intent cannot be checkpointed away.');
+        throw new Error(
+          'Changes the collaboration server has not confirmed cannot be marked as recovered yet.',
+        );
       }
       if (activeRejectedCommentCount(recovery) > 0) {
-        throw new Error('Rejected collaboration comments cannot be checkpointed away.');
+        throw new Error(
+          'Comments the collaboration server rejected cannot be marked as recovered.',
+        );
       }
       store.checkpointCollaborationSyncState(scope, input.snapshot);
       if (acknowledgedInMemory && recovery?.deliveryId !== undefined) {
@@ -506,7 +506,7 @@ export class CollaborationIpcService {
       }
       return { ok: true, value: true };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not checkpoint collaboration metadata.');
+      return ipcFailure(error, 'Forgeboard could not update the collaboration recovery state.');
     }
   }
 
@@ -526,7 +526,7 @@ export class CollaborationIpcService {
         store.recoverCollaborationSyncState(scope),
       );
       if (recovered === null) {
-        throw new Error('The rejected collaboration comment is no longer retained locally.');
+        throw new Error('The rejected comment is no longer stored on this computer.');
       }
       let recovery = store.discardRejectedCollaborationComment(
         scope,
@@ -545,7 +545,7 @@ export class CollaborationIpcService {
         value: CollaborationSyncRecoverySchema.parse(recovery),
       };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard could not discard the rejected local comment.');
+      return ipcFailure(error, 'Forgeboard could not discard the rejected comment.');
     }
   }
 
@@ -563,11 +563,11 @@ export class CollaborationIpcService {
         connection.role !== 'editor' &&
         connection.role !== 'reviewer'
       ) {
-        throw new Error('This collaboration role cannot author shared comments.');
+        throw new Error('Your collaboration role cannot write shared comments.');
       }
       const scope = this.#storageScope(input, connection);
       const current = this.#client.snapshot;
-      if (current === null) throw new Error('The authenticated room has no commentable canvas.');
+      if (current === null) throw new Error('The connected room has no canvas to comment on.');
       const store = this.#requiredStore();
       const recovery = store.recoverCollaborationSyncState(scope);
       const result = this.#client.createComment(
@@ -603,7 +603,7 @@ export class CollaborationIpcService {
       this.#assertOwner(event, 'Collaboration awareness update');
       return { ok: true, value: this.#client.updateAwareness(input.awareness) };
     } catch (error) {
-      return ipcFailure(error, 'Forgeboard rejected collaboration awareness metadata.');
+      return ipcFailure(error, 'Forgeboard rejected the collaborator presence update.');
     }
   }
 
@@ -635,7 +635,7 @@ export class CollaborationIpcService {
 
   #assignOwner(owner: WebContents): void {
     if (this.#owner !== null && this.#owner !== owner) {
-      throw new Error('Another Forgeboard window owns the collaboration session.');
+      throw new Error('Another Forgeboard window is already connected to a collaboration room.');
     }
     this.#owner = owner;
   }
@@ -688,7 +688,8 @@ export class CollaborationIpcService {
 
   #assertAvailable(): void {
     if (this.#disposed) throw new Error('The collaboration service has been disposed.');
-    if (this.#paused) throw new Error('Collaboration is paused for a local data operation.');
+    if (this.#paused)
+      throw new Error('Collaboration is paused while Forgeboard changes local data.');
   }
 
   #requiredActiveConnection(): CollaborationConnection {
@@ -698,7 +699,7 @@ export class CollaborationIpcService {
       (connection.status !== 'connected' && connection.status !== 'reconnecting') ||
       connection.role === undefined
     ) {
-      throw new Error('An authenticated collaboration session is required.');
+      throw new Error('Connect to a collaboration room first.');
     }
     return connection;
   }
@@ -709,7 +710,7 @@ export class CollaborationIpcService {
   ) {
     const document = this.#requiredStore().loadCanvas(input.projectId);
     if (document === undefined || document.id !== input.canvasId) {
-      throw new Error('The collaboration recovery scope does not match a saved local canvas.');
+      throw new Error('The collaboration recovery data does not match a saved canvas.');
     }
     return {
       projectId: input.projectId,
@@ -722,7 +723,7 @@ export class CollaborationIpcService {
 
   #requiredStore(): NonNullable<CollaborationIpcServiceOptions['store']> {
     if (this.#store === undefined) {
-      throw new Error('Durable collaboration recovery is unavailable.');
+      throw new Error('Collaboration recovery is not available right now.');
     }
     return this.#store;
   }
@@ -827,9 +828,7 @@ export class CollaborationIpcService {
       ? (store.recoverCollaborationSyncState(scope) ?? recovery)
       : recovery;
     if (this.#hasRetainedRejectedSettlement(scope)) {
-      throw new Error(
-        'Collaboration recovery is paused until the rejected delivery can be persisted.',
-      );
+      throw new Error('Collaboration recovery is paused until the rejected change is saved.');
     }
     return refreshed;
   }
@@ -884,7 +883,7 @@ export class CollaborationIpcService {
         this.#sessionRejectedCommentSuppressions.size >=
           CollaborationIpcService.MAX_SESSION_REJECTED_COMMENT_SUPPRESSIONS
       ) {
-        throw new Error('The session rejected-comment suppression limit was reached.');
+        throw new Error('This session has too many hidden rejected comments.');
       }
       this.#sessionRejectedCommentSuppressions.set(entry.comment.id, entry);
       changed = true;
@@ -1018,21 +1017,21 @@ export function collaborationJoinDisclosure(
       kind: 'collaboration-server',
       endpoint: parsed.serverUrl,
       resource: parsed.roomId,
-      transport: parsed.serverUrl.startsWith('wss:') ? 'WebSocket TLS' : 'WebSocket',
+      transport: parsed.serverUrl.startsWith('wss:') ? 'Secure WebSocket (TLS)' : 'WebSocket',
     },
     details: [
       {
-        label: 'Display identity',
+        label: 'Display name',
         value: `${parsed.displayName} (${parsed.subject})`,
       },
-      { label: 'Reconnect', value: parsed.reconnect ? 'Enabled' : 'Disabled' },
+      { label: 'Reconnect', value: parsed.reconnect ? 'On' : 'Off' },
       {
         label: 'Shared data',
-        value: 'Canvas metadata, comments, workflow status, and collaborator awareness',
+        value: 'Canvas details, comments, workflow status, and who is present',
       },
     ],
     warning:
-      'Forgeboard sends only the allowlisted fields above. It does not inspect or redact secrets typed into shared titles, edge labels, or comments. Prompt, file-content, local-path, environment-variable, credential, and token fields are not selected automatically.',
+      'Forgeboard sends only the fields listed above. It does not check shared titles, connection labels, or comments for secrets, so avoid typing passwords or keys into them. Prompts, file contents, local paths, environment variables, credentials, and tokens stay on this computer.',
   };
 }
 

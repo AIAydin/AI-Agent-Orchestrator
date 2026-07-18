@@ -154,7 +154,7 @@ export function useTerminalNodeController({
             setSessions((current) => current.filter((candidate) => candidate.id !== target.id));
           }
         }
-        throw new Error('This terminal session is no longer available in local storage.');
+        throw new Error('This terminal session is no longer saved on this computer.');
       }
       if (
         !mountedRef.current ||
@@ -213,7 +213,7 @@ export function useTerminalNodeController({
       }
     } catch (cause) {
       if (generation === generationRef.current) {
-        reportError(cause, 'Could not load terminal sessions.');
+        reportError(cause, 'Could not load the terminal sessions.');
       }
     } finally {
       if (generation === generationRef.current) clearBusy('loading');
@@ -287,7 +287,7 @@ export function useTerminalNodeController({
       const selection = unwrap(await operations.chooseExecutable({ projectId, nodeId }));
       return selection?.executable ?? null;
     } catch (cause) {
-      reportError(cause, 'Could not choose a terminal executable.');
+      reportError(cause, 'Could not choose a program.');
       return null;
     } finally {
       clearBusy('choosing-executable');
@@ -296,7 +296,7 @@ export function useTerminalNodeController({
 
   const prepareLaunch = useCallback(async (): Promise<void> => {
     if (sessions.some((candidate) => isActiveStatus(candidate.status))) {
-      reportError(new Error('Terminate the active terminal session before starting another.'), '');
+      reportError(new Error('Stop the running terminal session before starting another.'), '');
       return;
     }
     const generation = ++generationRef.current;
@@ -321,7 +321,7 @@ export function useTerminalNodeController({
       planIdRef.current = plan.planId;
       setPendingPlanState(plan);
     } catch (cause) {
-      reportError(cause, 'Could not prepare the terminal launch.');
+      reportError(cause, 'Could not prepare the terminal.');
     } finally {
       if (generation === generationRef.current) clearBusy('preparing');
     }
@@ -336,11 +336,11 @@ export function useTerminalNodeController({
       unwrap(await operations.cancelLaunch({ planId }));
       if (mountedRef.current) {
         setPendingPlanState(null);
-        setNotice('Cancelled before any terminal process launched.');
+        setNotice('Cancelled. Nothing was started.');
       }
     } catch (cause) {
       setPendingPlanState(null);
-      reportError(cause, 'Could not cancel the prepared terminal launch.');
+      reportError(cause, 'Could not cancel the launch.');
     } finally {
       clearBusy('cancelling-plan');
     }
@@ -357,7 +357,7 @@ export function useTerminalNodeController({
       setPendingPlanState(null);
       if (!mountedRef.current) return;
       if (launched === null) {
-        setNotice('Cancelled in the native confirmation. No terminal process launched.');
+        setNotice('Cancelled at the confirmation step. Nothing was started.');
         await refresh();
         return;
       }
@@ -366,13 +366,13 @@ export function useTerminalNodeController({
       const backlog = eventBacklogRef.current.get(launched.id) ?? [];
       eventBacklogRef.current.delete(launched.id);
       setOutput(backlog);
-      setNotice('Terminal process launched after both review steps.');
+      setNotice('Terminal started after both review steps.');
       await loadReplay(acceptedSession);
     } catch (cause) {
       setPendingPlanState(null);
       reportError(
         cause,
-        'The terminal launch outcome could not be confirmed. Refreshing sessions.',
+        'Could not confirm whether the terminal started. Refreshing the session list.',
       );
       await refresh();
     } finally {
@@ -422,7 +422,7 @@ export function useTerminalNodeController({
           const next = unwrap(await operations.sendInput({ sessionId: target.id, data }));
           mergeSession(next);
         })
-        .catch((cause: unknown) => reportError(cause, 'Could not send terminal input.'));
+        .catch((cause: unknown) => reportError(cause, 'Could not send input to the terminal.'));
     },
     [mergeSession, operations, reportError],
   );
@@ -440,7 +440,7 @@ export function useTerminalNodeController({
         void operations
           .resize({ sessionId: target.id, ...dimensions })
           .then((result) => mergeSession(unwrap(result)))
-          .catch((cause: unknown) => reportError(cause, 'Could not resize the terminal process.'));
+          .catch((cause: unknown) => reportError(cause, 'Could not resize the terminal.'));
       }, 80);
     },
     [mergeSession, operations, reportError],
@@ -453,7 +453,7 @@ export function useTerminalNodeController({
     try {
       mergeSession(unwrap(await operations.interrupt({ sessionId: target.id })));
     } catch (cause) {
-      reportError(cause, 'Could not interrupt the terminal process.');
+      reportError(cause, 'Could not interrupt the process.');
     } finally {
       clearBusy('interrupting');
     }
@@ -466,7 +466,7 @@ export function useTerminalNodeController({
     try {
       mergeSession(unwrap(await operations.terminate({ sessionId: target.id })));
     } catch (cause) {
-      reportError(cause, 'Could not terminate the terminal process.');
+      reportError(cause, 'Could not stop the process.');
     } finally {
       clearBusy('terminating');
     }

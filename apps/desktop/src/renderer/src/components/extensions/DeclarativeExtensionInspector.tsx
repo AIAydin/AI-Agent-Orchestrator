@@ -46,13 +46,13 @@ export function DeclarativeExtensionInspector({
         </span>
       </header>
       <p>
-        <code>{extensionId}</code> · v{extensionVersion} · Forgeboard-owned controls
+        <code>{extensionId}</code> · v{extensionVersion} · Controls provided by Forgeboard
       </p>
       {disabled && (
         <div className="extension-node-unavailable" role="status">
           <AlertTriangle size={14} />
-          This node’s extension is not currently trusted and active. Its saved values remain local,
-          but the contribution is disabled.
+          This node’s extension is not trusted and active right now. Your saved values stay on this
+          device, but the extension is turned off.
         </div>
       )}
       {definition.fields.map((field) => (
@@ -66,7 +66,7 @@ export function DeclarativeExtensionInspector({
           onError={onError}
         />
       ))}
-      {definition.fields.length === 0 && <small>This node declares no editable fields.</small>}
+      {definition.fields.length === 0 && <small>This node has no settings to edit.</small>}
     </section>
   );
 }
@@ -169,7 +169,7 @@ function ExtensionFieldControl({
         );
         if (next.length > 0) onChange(field.multiple ? next : next[0]);
       } catch (cause) {
-        onError(cause instanceof Error ? cause.message : 'Could not choose a local reference.');
+        onError(cause instanceof Error ? cause.message : 'Could not choose a file or folder.');
       }
     };
     return (

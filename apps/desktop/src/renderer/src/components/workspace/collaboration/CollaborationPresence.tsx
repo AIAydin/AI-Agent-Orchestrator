@@ -19,7 +19,7 @@ export function CollaborationPresence({ awareness, nodes }: CollaborationPresenc
 
   return (
     <ViewportPortal>
-      <div className="collaboration-presence-layer" aria-label="Remote collaborators">
+      <div className="collaboration-presence-layer" aria-label="People sharing this canvas">
         {peers.flatMap((entry) =>
           (entry.state.selection?.nodeIds ?? [])
             .slice(0, MAX_SELECTIONS_PER_PEER)

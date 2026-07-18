@@ -435,7 +435,7 @@ export class TerminalService {
         errorKind: error instanceof Error ? error.name.slice(0, 128) : 'unknown-error',
       });
       throw new Error(
-        'The terminal was resized, but Forgeboard could not persist its dimensions. Refresh before another resize.',
+        'The terminal was resized, but Forgeboard could not save its size. Refresh before resizing again.',
         { cause: error },
       );
     }
@@ -500,7 +500,7 @@ export class TerminalService {
     if (this.#plans.size > 0 || this.#prepareOwners.size > 0 || this.#active.size > 0) {
       this.#paused = false;
       throw new Error(
-        'Stop every terminal and cancel every pending terminal launch before merging local data.',
+        'Stop every terminal and cancel every pending terminal launch before changing local data.',
       );
     }
   }
@@ -1007,7 +1007,7 @@ export class TerminalService {
 
   #assertRunning(active: ActiveTerminal): void {
     if (active.handle === null || active.view.status !== 'running' || active.finalizing) {
-      throw new Error('The terminal session is not accepting interactive commands.');
+      throw new Error('This terminal has stopped and no longer accepts input.');
     }
   }
 
@@ -1039,10 +1039,10 @@ export class TerminalService {
       [...this.#plans.values()].filter((pending) => pending.ownerId === ownerId).length +
       [...this.#prepareOwners.values()].filter((candidate) => candidate === ownerId).length;
     if (ownerCount >= MAX_PENDING_PLANS_PER_OWNER) {
-      throw new Error('Too many terminal launches are pending for this window.');
+      throw new Error('Too many terminals are waiting for review in this window.');
     }
     if (this.#plans.size + this.#prepareOwners.size >= MAX_PENDING_PLANS) {
-      throw new Error('Too many terminal launches are pending.');
+      throw new Error('Too many terminals are waiting for review.');
     }
   }
 
@@ -1051,7 +1051,9 @@ export class TerminalService {
     this.#discardExpiredPlans();
     const pending = this.#plans.get(planId);
     if (pending === undefined || pending.ownerId !== ownerId) {
-      throw new Error('The terminal launch is missing, expired, or belongs to another window.');
+      throw new Error(
+        'The terminal launch review is missing, expired, or belongs to another window.',
+      );
     }
     this.#plans.delete(planId);
     return pending;
@@ -1066,7 +1068,7 @@ export class TerminalService {
 
   #assertPlanFresh(plan: TerminalLaunchPlanView): void {
     if (Date.parse(plan.expiresAt) <= this.#now().getTime()) {
-      throw new Error('The terminal launch approval expired. Review a fresh launch.');
+      throw new Error('The terminal approval expired. Review the launch again.');
     }
   }
 
@@ -1075,10 +1077,10 @@ export class TerminalService {
       (session) => session.view.id !== ignoreSessionId && !session.finalizing,
     );
     if (active.length >= this.#maxActive) {
-      throw new Error('The local terminal concurrency limit has been reached.');
+      throw new Error('Too many terminals are running. Close one first.');
     }
     if (active.filter((session) => session.ownerId === ownerId).length >= this.#maxActivePerOwner) {
-      throw new Error('This Forgeboard window has reached its terminal concurrency limit.');
+      throw new Error('This window has too many terminals running. Close one first.');
     }
   }
 
@@ -1087,7 +1089,7 @@ export class TerminalService {
       const candidate = this.#createId();
       if (!map.has(candidate)) return candidate;
     }
-    throw new Error('Forgeboard could not allocate a unique terminal identifier.');
+    throw new Error('Forgeboard could not create a terminal ID. Try again.');
   }
 
   #uniqueSessionId(): string {
@@ -1097,7 +1099,7 @@ export class TerminalService {
         return candidate;
       }
     }
-    throw new Error('Forgeboard could not allocate a unique terminal session.');
+    throw new Error('Forgeboard could not create a terminal session. Try again.');
   }
 
   #auditTarget(active: ActiveTerminal): Record<string, unknown> {
@@ -1132,10 +1134,12 @@ export class TerminalService {
 
   async #assertAvailable(): Promise<void> {
     this.#assertNotDisposed();
-    if (this.#paused) throw new Error('The terminal service is paused for a local data operation.');
+    if (this.#paused)
+      throw new Error('The terminal service is paused while Forgeboard changes local data.');
     await this.#ready;
     this.#assertNotDisposed();
-    if (this.#paused) throw new Error('The terminal service is paused for a local data operation.');
+    if (this.#paused)
+      throw new Error('The terminal service is paused while Forgeboard changes local data.');
   }
 
   #assertNotDisposed(): void {

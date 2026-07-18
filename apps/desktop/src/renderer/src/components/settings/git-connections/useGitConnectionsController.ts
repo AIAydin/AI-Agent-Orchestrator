@@ -72,7 +72,7 @@ export function useGitConnectionsController({
         if (announce) {
           setNotice({
             tone: 'neutral',
-            message: `Refreshed local Git configuration for ${next.projectName}.`,
+            message: `Remotes updated for ${next.projectName}.`,
           });
         }
         return 'applied';
@@ -80,7 +80,7 @@ export function useGitConnectionsController({
         if (connectionRequest.current !== requestId) return 'superseded';
         setConnections(null);
         if (reportFailure) {
-          reportError(cause, 'Git connections could not be read for the selected project.');
+          reportError(cause, "The selected project's remotes could not be loaded.");
         }
         return 'failed';
       } finally {
@@ -104,13 +104,13 @@ export function useGitConnectionsController({
         if (cliRequest.current !== requestId) return 'superseded';
         setCliStatus(next);
         if (announce) {
-          setNotice({ tone: 'neutral', message: 'Refreshed local GitHub CLI status.' });
+          setNotice({ tone: 'neutral', message: 'GitHub CLI status updated.' });
         }
         return 'applied';
       } catch (cause) {
         if (cliRequest.current !== requestId) return 'superseded';
         setCliStatus(null);
-        if (reportFailure) reportError(cause, 'GitHub CLI status could not be read.');
+        if (reportFailure) reportError(cause, 'GitHub CLI status could not be loaded.');
         return 'failed';
       } finally {
         if (cliRequest.current === requestId) setCliLoading(false);
@@ -171,7 +171,7 @@ export function useGitConnectionsController({
         }),
       );
       await acceptPreparedPlan(plan, requestId);
-    }, 'The Git remote change could not be prepared.');
+    }, 'The remote change could not be prepared. Try again.');
   }
 
   async function prepareLocal(operation: 'add' | 'replace', remoteName: string): Promise<void> {
@@ -189,11 +189,11 @@ export function useGitConnectionsController({
       );
       if (plan === null) {
         if (!planRequestIsCurrent(requestId)) return;
-        setNotice({ tone: 'neutral', message: 'Local repository selection cancelled.' });
+        setNotice({ tone: 'neutral', message: 'Folder selection cancelled. Nothing changed.' });
         return;
       }
       await acceptPreparedPlan(plan, requestId);
-    }, 'The local Git repository selection could not be prepared.');
+    }, 'The folder selection could not be prepared. Try again.');
   }
 
   async function prepareRemove(remoteName: string): Promise<void> {
@@ -210,7 +210,7 @@ export function useGitConnectionsController({
         }),
       );
       await acceptPreparedPlan(plan, requestId);
-    }, 'The Git remote removal could not be prepared.');
+    }, 'The remote removal could not be prepared. Try again.');
   }
 
   async function chooseGitHubCli(): Promise<void> {
@@ -219,11 +219,11 @@ export function useGitConnectionsController({
       const plan = unwrap(await window.forgeboard.git.connections.chooseGitHubCli());
       if (plan === null) {
         if (!planRequestIsCurrent(requestId)) return;
-        setNotice({ tone: 'neutral', message: 'GitHub CLI selection cancelled.' });
+        setNotice({ tone: 'neutral', message: 'GitHub CLI selection cancelled. Nothing changed.' });
         return;
       }
       await acceptPreparedPlan(plan, requestId);
-    }, 'The GitHub CLI selection could not be prepared.');
+    }, 'The GitHub CLI selection could not be prepared. Try again.');
   }
 
   async function useAutomaticGitHubCli(): Promise<void> {
@@ -231,7 +231,7 @@ export function useGitConnectionsController({
       const requestId = beginPlanRequest();
       const plan = unwrap(await window.forgeboard.git.connections.useAutomaticGitHubCli());
       await acceptPreparedPlan(plan, requestId);
-    }, 'Automatic GitHub CLI selection could not be prepared.');
+    }, 'Automatic GitHub CLI detection could not be prepared. Try again.');
   }
 
   function beginPlanRequest(): number {
@@ -264,8 +264,8 @@ export function useGitConnectionsController({
     setPendingPlan(null);
     await performMutation(async () => {
       unwrap(await window.forgeboard.git.connections.cancelPlan({ planId: plan.planId }));
-      setNotice({ tone: 'neutral', message: 'Configuration review cancelled. Nothing changed.' });
-    }, 'The pending configuration review could not be cancelled cleanly.');
+      setNotice({ tone: 'neutral', message: 'Review cancelled. Nothing changed.' });
+    }, 'The review could not be cancelled cleanly. Try again.');
   }
 
   async function confirmPendingPlan(): Promise<void> {
@@ -287,7 +287,7 @@ export function useGitConnectionsController({
         if (next === null) {
           setNotice({
             tone: 'neutral',
-            message: 'System confirmation cancelled. Git configuration was not changed.',
+            message: 'Confirmation cancelled. No Git settings were changed.',
           });
           return;
         }
@@ -312,25 +312,22 @@ export function useGitConnectionsController({
       if (next === null) {
         setNotice({
           tone: 'neutral',
-          message: 'System confirmation cancelled. GitHub CLI configuration was not changed.',
+          message: 'Confirmation cancelled. GitHub CLI setup was not changed.',
         });
         return;
       }
       setCliStatus(next);
-      setNotice({ tone: 'success', message: 'GitHub CLI source updated.' });
-    }, 'The reviewed configuration change could not be applied.');
+      setNotice({ tone: 'success', message: 'GitHub CLI selection saved.' });
+    }, 'The reviewed change could not be applied. Try again.');
   }
 
   function reportUncertainRemoteOutcome(cause: unknown, refreshResult: RefreshResult): void {
-    const refreshMessage = recoveryRefreshMessage(
-      refreshResult,
-      "the selected project's current Git configuration",
-    );
+    const refreshMessage = recoveryRefreshMessage(refreshResult, "the selected project's remotes");
     reportError(
       new Error(
-        `The reviewed Git remote change returned an error, so its outcome is uncertain because local configuration may already have changed. ${refreshMessage}${errorDetail(cause)}`,
+        `Something went wrong while changing the remote, so the outcome is uncertain — settings on this computer may already have changed. ${refreshMessage}${errorDetail(cause)}`,
       ),
-      'The reviewed Git remote change returned an error and its outcome is uncertain.',
+      'The remote change failed and its outcome is uncertain.',
     );
   }
 
@@ -348,9 +345,9 @@ export function useGitConnectionsController({
     const refreshMessage = recoveryRefreshMessage(refreshResult, 'the current GitHub CLI status');
     reportError(
       new Error(
-        `The reviewed GitHub CLI change returned an error, so its outcome is uncertain because the device-local selection may already have changed. ${refreshMessage}${errorDetail(cause)}`,
+        `Something went wrong while changing the GitHub CLI selection, so the outcome is uncertain — the selection saved on this computer may already have changed. ${refreshMessage}${errorDetail(cause)}`,
       ),
-      'The reviewed GitHub CLI change returned an error and its outcome is uncertain.',
+      'The GitHub CLI change failed and its outcome is uncertain.',
     );
   }
 
@@ -419,15 +416,15 @@ function remoteOperationPastTense(operation: 'add' | 'replace' | 'remove'): stri
 
 function recoveryRefreshMessage(result: RefreshResult, subject: string): string {
   if (result === 'applied') {
-    return `Forgeboard refreshed ${subject}; review the state shown before making another change.`;
+    return `Forgeboard refreshed ${subject}; review what is shown before making another change.`;
   }
   if (result === 'failed') {
-    return `Forgeboard could not refresh ${subject}; refresh it manually before making another change.`;
+    return `Forgeboard could not refresh ${subject}; refresh it yourself before making another change.`;
   }
-  return `A newer read superseded the recovery refresh of ${subject}; review the current state before making another change.`;
+  return `A newer update replaced the recovery refresh of ${subject}; review the current state before making another change.`;
 }
 
 function errorDetail(cause: unknown): string {
   if (!(cause instanceof Error) || cause.message.trim() === '') return '';
-  return ` Error: ${cause.message}`;
+  return ` Details: ${cause.message}`;
 }

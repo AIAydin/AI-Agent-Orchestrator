@@ -116,7 +116,11 @@ function renderInline(
     if (token.kind === 'strikethrough') return <s key={tokenKey}>{children}</s>;
     if (token.url === null) {
       return (
-        <span key={tokenKey} className="unsafe-markdown-link" title="Unsafe link blocked">
+        <span
+          key={tokenKey}
+          className="unsafe-markdown-link"
+          title="This link was blocked for safety"
+        >
           {children}
         </span>
       );
@@ -126,7 +130,7 @@ function renderInline(
         <span
           key={tokenKey}
           className="safe-markdown-link unavailable"
-          title="External link opening is unavailable in this surface"
+          title="Opening links is not available here"
         >
           {children}
         </span>

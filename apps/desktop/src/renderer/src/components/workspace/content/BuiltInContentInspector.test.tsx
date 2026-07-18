@@ -46,7 +46,7 @@ describe('BuiltInContentInspector', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Add checklist item' }));
     expect(onUpdate.mock.calls.at(-1)?.[0].checklist).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Add acceptance criterion' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add a done condition' }));
     expect(onUpdate.mock.calls.at(-1)?.[0].acceptanceCriteria).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Add prompt variable' }));
     expect(onUpdate).toHaveBeenLastCalledWith({ variables: { variable_1: '' } });

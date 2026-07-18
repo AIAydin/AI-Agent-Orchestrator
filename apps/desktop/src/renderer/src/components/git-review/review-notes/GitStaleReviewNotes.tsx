@@ -15,11 +15,11 @@ export function GitStaleReviewNotes({
     <details className="git-stale-review-notes">
       <summary>
         <History size={12} aria-hidden="true" /> {notes.length} note{notes.length === 1 ? '' : 's'}{' '}
-        from an earlier diff
+        from an earlier version of these changes
       </summary>
       <p>
-        <TriangleAlert size={12} aria-hidden="true" /> These anchors no longer match the current
-        review. Forgeboard preserved them without moving them to different lines.
+        <TriangleAlert size={12} aria-hidden="true" /> These notes no longer match the current
+        changes, so Forgeboard kept them here instead of moving them to different lines.
       </p>
       <div>
         {notes.map((note) => (

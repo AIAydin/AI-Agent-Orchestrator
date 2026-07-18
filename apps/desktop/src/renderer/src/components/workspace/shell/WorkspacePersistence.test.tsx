@@ -635,7 +635,7 @@ describe('Workspace persistence boundary', () => {
     expect(canvasNodes()[0]?.position.x).toBe(10);
     expect(canvasNodes()[1]?.position).toEqual({ x: 130, y: 80 });
     expect(screen.getByTestId('workspace-events').textContent).toContain(
-      'This collaboration role cannot edit the shared graph.',
+      'Your role in this shared session is view-only, so you cannot change the canvas.',
     );
   });
 

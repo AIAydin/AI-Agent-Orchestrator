@@ -47,7 +47,7 @@ describe('file browser tree model', () => {
   it('labels denied entries honestly', () => {
     expect(policyLabel(entry('.env', 'file', 'sensitive'))).toBe('Sensitive');
     expect(policyLabel(entry('coverage', 'directory', 'ignored'))).toBe('Ignored');
-    expect(policyLabel(entry('linked', 'symlink', 'symlink'))).toBe('Symlink blocked');
+    expect(policyLabel(entry('linked', 'symlink', 'symlink'))).toBe('Link blocked');
   });
 });
 

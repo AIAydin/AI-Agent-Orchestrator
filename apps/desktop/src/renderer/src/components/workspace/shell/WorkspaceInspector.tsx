@@ -137,7 +137,7 @@ export function WorkspaceInspector(props: WorkspaceInspectorProps) {
     <aside className="inspector">
       <header>
         <div>
-          <span>Inspector</span>
+          <span>Details</span>
           <small>{inspectorLabel(selectedNode, selectedEdge)}</small>
         </div>
         {(selectedNode || selectedEdge) && (
@@ -180,7 +180,8 @@ function NodeInspector(
       {props.collaborationGraphReadOnly && (
         <p className="node-lock-notice" role="status">
           <Lock size={13} />
-          This collaboration role can inspect the shared node but cannot change it.
+          Your role in this shared session is view-only. You can look at this node, but not change
+          it.
         </p>
       )}
       {selectedNode.data.locked && (
@@ -194,7 +195,7 @@ function NodeInspector(
       <fieldset
         className="node-edit-fields"
         disabled={configurationReadOnly}
-        aria-label="Node configuration"
+        aria-label="Node settings"
       >
         <label>
           Title
@@ -408,9 +409,9 @@ function NodeInspector(
           disabled={props.selectedNodeLockedByGroup || props.collaborationGraphReadOnly}
           title={
             props.collaborationGraphReadOnly
-              ? 'This collaboration role cannot change node locks.'
+              ? 'A view-only role cannot change node locks.'
               : props.selectedNodeLockedByGroup
-                ? 'Unlock the containing group frame before changing this node lock.'
+                ? 'Unlock the group frame that contains this node before changing its lock.'
                 : undefined
           }
           onClick={() => {
@@ -453,7 +454,7 @@ function NodeInspector(
           {selectedNode.data.transcript ? (
             <pre>{selectedNode.data.transcript}</pre>
           ) : (
-            <p>No runs yet. Forgeboard never fabricates agent output.</p>
+            <p>No runs yet. When this agent runs, its real output shows up here.</p>
           )}
           {selectedNode.data.lastRunSummary && <strong>{selectedNode.data.lastRunSummary}</strong>}
         </section>
@@ -611,8 +612,8 @@ function FileNodeEditor({
         </section>
       ) : (
         <p className="file-node-reference-guidance" role="status">
-          Choose an ordinary project file. Ignored, sensitive, and symbolic-link entries remain
-          blocked by the main process.
+          Choose a file from this project. For safety, ignored files, private files, and link files
+          cannot be selected.
         </p>
       )}
 
@@ -640,8 +641,7 @@ function FileNodeEditor({
 
       {reference?.kind === 'directory' ? (
         <p className="recovery-guidance warning" role="status">
-          This File node references a directory. Choose an ordinary project file to edit its
-          contents.
+          This file node points to a folder. Choose a file instead to edit its contents here.
         </p>
       ) : reference !== undefined ? (
         <div className="inspector-file-editor">
@@ -710,7 +710,7 @@ function AgentRunInspector(
   );
   const permissionIssueId = `node-${selectedNode.id}-permission-unavailable`;
   return (
-    <section className="agent-run-config" aria-label="Agent run configuration">
+    <section className="agent-run-config" aria-label="Agent run settings">
       <header>
         <div>
           <Bot size={14} />
@@ -719,7 +719,7 @@ function AgentRunInspector(
         <span>Approval required</span>
       </header>
       <label>
-        Installed adapter
+        Agent to run
         <select
           name={`node-${selectedNode.id}-agent-adapter`}
           value={selectedAdapter}
@@ -765,16 +765,16 @@ function AgentRunInspector(
       />
       {permissionUnavailable !== null && (
         <p id={permissionIssueId} className="recovery-guidance warning" role="alert">
-          {permissionUnavailable} Choose another adapter or permission profile before reviewing this
-          run.
+          {permissionUnavailable} Choose a different agent or permission profile before reviewing
+          this run.
         </p>
       )}
       {selectedAdapter === 'custom' &&
         !permissionProfileNeedsDocker(selectedPermission, settings) && (
           <small>
-            A generic CLI has no provider-specific sandbox flags. Worktree mode protects the primary
-            checkout, but OS-level access remains disclosure-only; choose Docker for a technical
-            boundary.
+            A custom agent runs like any program on this computer: Forgeboard shows you exactly what
+            it will do but cannot wall it off. A separate worktree (its own copy of the project)
+            protects your main folder; choose Docker for a hard technical boundary.
           </small>
         )}
       <label>
@@ -784,7 +784,7 @@ function AgentRunInspector(
           rows={6}
           value={selectedNode.data.prompt ?? selectedNode.data.description}
           disabled={running || selectedNode.data.locked}
-          placeholder="Describe the concrete outcome for this agent…"
+          placeholder="Describe what you want this agent to do…"
           onChange={(event) => onUpdateSelected({ prompt: event.target.value })}
         />
       </label>
@@ -794,8 +794,8 @@ function AgentRunInspector(
             <input
               name={`node-${selectedNode.id}-agent-input`}
               value={props.runInput}
-              placeholder="Send interactive input"
-              aria-label="Agent input"
+              placeholder="Type a message for the running agent"
+              aria-label="Message to the running agent"
               onChange={(event) => props.onRunInputChange(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') props.onSendRunInput();
@@ -828,12 +828,12 @@ function AgentRunInspector(
           onClick={props.onPrepareRun}
         >
           <ShieldCheck size={14} />
-          {props.preparingRun ? 'Preparing exact launch…' : 'Review & run'}
+          {props.preparingRun ? 'Preparing the run…' : 'Review & run'}
         </button>
       )}
       <p>
-        Nothing launches from this button alone. Forgeboard first shows the exact command, folder,
-        context, environment names, and permissions for approval.
+        Nothing starts from this button alone. Forgeboard first shows the exact command, folder,
+        files, and permissions for your approval.
       </p>
     </section>
   );
@@ -850,7 +850,7 @@ function CanvasInspector({
     <div className="inspector-empty">
       <LayoutGrid size={22} />
       <h3>Nothing selected</h3>
-      <p>Select a node or connection to configure its local behavior.</p>
+      <p>Select a node or connection to see its details and change its settings.</p>
       <dl>
         <div>
           <dt>Canvas</dt>
@@ -859,12 +859,14 @@ function CanvasInspector({
         <div>
           <dt>Grid</dt>
           <dd>
-            {settings.canvasSnapToGrid ? `${settings.canvasGridSize} px snap` : 'Free placement'}
+            {settings.canvasSnapToGrid
+              ? `Snap to ${settings.canvasGridSize} px grid`
+              : 'Free placement'}
           </dd>
         </div>
         <div>
           <dt>Storage</dt>
-          <dd>Local SQLite</dd>
+          <dd>On this computer</dd>
         </div>
       </dl>
     </div>

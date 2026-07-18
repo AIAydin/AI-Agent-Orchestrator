@@ -77,17 +77,17 @@ export function FileEditorPanel({
         </div>
         <div className="file-editor-actions">
           <label>
-            <span className="sr-only">File history</span>
+            <span className="sr-only">Past versions of this file</span>
             <select
               name="file-history"
-              aria-label="File history"
+              aria-label="Past versions of this file"
               value=""
               disabled={
                 effectiveReadOnly || editor.history.length === 0 || editor.activity !== null
               }
               onChange={(event) => editor.restoreHistory(event.target.value)}
             >
-              <option value="">History</option>
+              <option value="">Past versions</option>
               {editor.history.map((entry) => (
                 <option key={entry.id} value={entry.id}>
                   {entry.label} · {new Date(entry.capturedAt).toLocaleTimeString()}
@@ -100,7 +100,7 @@ export function FileEditorPanel({
             disabled={editor.status !== 'ready' || editor.activity !== null}
             onClick={() => void editor.revert()}
           >
-            {editor.activity === 'revert' ? 'Reverting…' : 'Revert'}
+            {editor.activity === 'revert' ? 'Discarding…' : 'Discard changes'}
           </button>
           <button
             type="button"
@@ -115,16 +115,20 @@ export function FileEditorPanel({
               disabled={editor.status === 'loading' || editor.activity !== null}
               onClick={onRevealInTree}
             >
-              Reveal in tree
+              Show in file list
             </button>
           ) : null}
           <button
             type="button"
             disabled={editor.status !== 'ready' || editor.activity !== null || editor.dirty}
-            title={editor.dirty ? 'Save or revert this tab before opening its disk version.' : ''}
+            title={
+              editor.dirty
+                ? 'Save or discard your changes before opening this file in another app.'
+                : ''
+            }
             onClick={() => void editor.openExternal()}
           >
-            {editor.activity === 'external' ? 'Opening…' : 'Open externally'}
+            {editor.activity === 'external' ? 'Opening…' : 'Open in default app'}
           </button>
           <button
             type="button"
@@ -159,15 +163,15 @@ export function FileEditorPanel({
         ) : null}
         {editor.status === 'missing' ? (
           <FileEditorFailure
-            title="File missing"
-            detail="The file no longer exists at this project-relative path."
+            title="File not found"
+            detail="This file no longer exists in the project folder. It may have been moved or deleted."
             onRetry={editor.retry}
           />
         ) : null}
         {editor.status === 'error' ? (
           <FileEditorFailure
-            title="File unavailable"
-            detail="Forgeboard could not safely open this project file."
+            title="Couldn't open this file"
+            detail="Something went wrong while opening this file. Try again."
             onRetry={editor.retry}
           />
         ) : null}
@@ -189,7 +193,9 @@ export function FileEditorPanel({
         {editor.status === 'ready' && editor.document?.contentKind !== 'text' ? (
           <div className="file-editor-placeholder file-editor-read-only">
             <strong>
-              {editor.document?.contentKind === 'binary' ? 'Binary file' : 'File too large'}
+              {editor.document?.contentKind === 'binary'
+                ? 'Not a text file'
+                : 'This file is too large to edit'}
             </strong>
             <p>{editor.document?.readOnlyReason}</p>
           </div>
@@ -234,7 +240,7 @@ function FileEditorFailure({
       <strong>{title}</strong>
       <p>{detail}</p>
       <button type="button" onClick={onRetry}>
-        Retry
+        Try again
       </button>
     </div>
   );
@@ -245,15 +251,15 @@ function statusText(
   dirty: boolean,
   readOnly: boolean,
 ): string {
-  if (status === 'loading') return 'Loading';
-  if (status === 'missing') return 'Missing';
-  if (status === 'error') return 'Error';
+  if (status === 'loading') return 'Opening…';
+  if (status === 'missing') return 'Not found';
+  if (status === 'error') return "Couldn't open";
   if (readOnly) return 'Read-only';
-  return dirty ? 'Unsaved' : 'Saved';
+  return dirty ? 'Unsaved changes' : 'Saved';
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${bytes} B`;
 }

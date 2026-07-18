@@ -126,7 +126,7 @@ describe('useWorkflowRuns', () => {
     await act(async () => await hook.result.current.workflows.start({ kind: 'workflow' }));
     expect(start).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledWith(
-      'The workflow was not started because the canvas could not be saved.',
+      "The workflow didn't start because the canvas couldn't be saved.",
     );
 
     await act(
@@ -172,7 +172,7 @@ describe('useWorkflowRuns', () => {
 
     expect(hook.result.current.workflows.executions).toHaveLength(1);
     expect(hook.result.current.workflows.currentExecution?.revision).toBe(2);
-    expect(hook.result.current.events[0]).toBe('Workflow node started for agent-node.');
+    expect(hook.result.current.events[0]).toBe('Node started for agent-node.');
   });
 
   it('never lets an older event or mutation response replace a newer durable revision', async () => {
@@ -270,7 +270,7 @@ describe('useWorkflowRuns', () => {
     expect(sendInput).not.toHaveBeenCalled();
     expect(cancelNode).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledWith(
-      'This collaboration role can inspect workflow history but cannot mutate workflow execution.',
+      'Your role lets you view workflow history, but not change workflow runs.',
     );
   });
 

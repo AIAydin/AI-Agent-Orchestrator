@@ -132,7 +132,7 @@ describe('PersistedAgentRunContextResolver', () => {
     const nonAgent = canvas([], [fileNode('file-1', 'file.ts')]);
     await expect(
       resolverFor(root, nonAgent).resolve(input({ nodeId: 'file-1' }), settings()),
-    ).rejects.toThrow(/exact persisted Agent/iu);
+    ).rejects.toThrow(/require an Agent node/iu);
     await expect(
       resolverFor(root, canvas(['file-1'], [fileNode('file-1', '../../outside.ts')])).resolve(
         input(),

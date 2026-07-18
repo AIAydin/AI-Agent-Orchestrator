@@ -32,7 +32,7 @@ describe('zero-code runtime configuration controls', () => {
 
     fireEvent.change(
       screen.getByLabelText(
-        'Development server arguments, one non-empty literal argument per line; empty lines ignored',
+        'Development server arguments, one argument per line; blank lines are ignored',
       ),
       { target: { value: 'run\ndev\n  --host  ' } },
     );
@@ -63,7 +63,7 @@ describe('zero-code runtime configuration controls', () => {
     expect(onChange).toHaveBeenLastCalledWith(['PATH', 'CI']);
     fireEvent.blur(input);
     expect(input.value).toBe('PATH, CI');
-    expect(screen.getByText(/secrets, and session values are not entered here/u)).toBeTruthy();
+    expect(screen.getByText(/Do not enter passwords, tokens, or other secrets here/u)).toBeTruthy();
     expect(parseEnvironmentNames('PATH\nHOME, PATH')).toEqual(['PATH', 'HOME']);
     expect(environmentAllowlistIssues(['PATH', 'NOT-VALID'])).toEqual([
       expect.stringContaining('not a valid environment variable name'),
@@ -73,7 +73,7 @@ describe('zero-code runtime configuration controls', () => {
   it('gives actionable dependency guidance without guessing a shell command', () => {
     expect(commandDependencyGuidance('npm', 'check')).toMatch(/install Node\.js/u);
     expect(commandDependencyGuidance('/opt/tools/checker', 'check')).toMatch(/use Browse/u);
-    expect(commandDependencyGuidance('', 'preview')).toMatch(/detected package script/u);
+    expect(commandDependencyGuidance('', 'preview')).toMatch(/pick a script from your project/u);
   });
 });
 

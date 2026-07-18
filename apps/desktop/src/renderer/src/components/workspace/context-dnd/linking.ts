@@ -27,9 +27,9 @@ export function linkProjectFileToAgent(input: {
 }): AgentContextLinkResult {
   const target = input.nodes.find((node) => node.id === input.targetNodeId);
   if (target === undefined || target.data.kind !== 'agent') {
-    return failure('Project files can only be attached to an Agent node.');
+    return failure('Files can only be attached to an agent.');
   }
-  if (target.data.locked) return failure('Unlock the Agent node before changing its context.');
+  if (target.data.locked) return failure('Unlock the agent before changing its files.');
   if (input.payload.projectId !== input.projectId || input.document.projectId !== input.projectId) {
     return failure('The dragged file belongs to another project.');
   }
@@ -37,7 +37,7 @@ export function linkProjectFileToAgent(input: {
     input.document.relativePath !== input.payload.relativePath ||
     input.document.projectId !== input.payload.projectId
   ) {
-    return failure('The verified file response does not match the dragged project file.');
+    return failure("The file on disk doesn't match the file you dragged. Try again.");
   }
 
   const attachmentIds = target.data.contextAttachmentIds ?? [];
@@ -74,7 +74,7 @@ export function linkProjectFileToAgent(input: {
   }
   if (attachmentIds.length >= MAX_AGENT_CONTEXT_ATTACHMENTS) {
     return failure(
-      `Agent context supports at most ${String(MAX_AGENT_CONTEXT_ATTACHMENTS)} files.`,
+      `An agent can have at most ${String(MAX_AGENT_CONTEXT_ATTACHMENTS)} attached files.`,
     );
   }
 
@@ -105,9 +105,9 @@ export function removeProjectFileFromAgent(input: {
 }): AgentContextLinkResult {
   const target = input.nodes.find((node) => node.id === input.targetNodeId);
   if (target === undefined || target.data.kind !== 'agent') {
-    return failure('Project files can only be removed from an Agent node.');
+    return failure('Files can only be removed from an agent.');
   }
-  if (target.data.locked) return failure('Unlock the Agent node before changing its context.');
+  if (target.data.locked) return failure('Unlock the agent before changing its files.');
   const current = target.data.contextAttachmentIds ?? [];
   if (!current.includes(input.attachmentNodeId)) {
     return {
@@ -160,7 +160,7 @@ function resolveSourceNode(input: {
       ? undefined
       : input.nodes.find((node) => node.id === input.payload.sourceNodeId);
   if (input.payload.sourceNodeId !== undefined && explicitSource === undefined) {
-    return failure('The dragged File node no longer exists.');
+    return failure('The dragged file is no longer on the canvas.');
   }
   if (explicitSource !== undefined) {
     const invalid = invalidFileSource(explicitSource, input);
@@ -184,7 +184,7 @@ function resolveSourceNode(input: {
   );
   if (reusable !== undefined) {
     if (reusable.data.locked) {
-      return failure('Unlock the existing File node before linking it as context.');
+      return failure('Unlock the existing file before sharing it with an agent.');
     }
     if (reusable.data.file?.kind === 'file') {
       const repaired =
@@ -229,7 +229,7 @@ function resolveSourceNode(input: {
     },
   };
   if (input.nodes.some((candidate) => candidate.id === node.id)) {
-    return failure('Could not allocate a unique File node for this context attachment.');
+    return failure("The file couldn't be added to the canvas. Try again.");
   }
   return { ok: true, nodes: [...input.nodes, node], node, created: true, repaired: false };
 }
@@ -242,20 +242,20 @@ function invalidFileSource(
   },
 ): string | null {
   if (node.data.kind !== 'file' || node.data.file === undefined) {
-    return 'Only a configured File node can be linked as agent context.';
+    return 'Only a file that is set up on the canvas can be shared with an agent.';
   }
-  if (node.data.locked) return 'Unlock the File node before linking it as context.';
+  if (node.data.locked) return 'Unlock the file before sharing it with an agent.';
   if (
     node.data.file.projectId !== input.projectId ||
     node.data.file.projectId !== input.payload.projectId
   ) {
-    return 'The File node belongs to another project.';
+    return 'This file belongs to another project.';
   }
   if (node.data.file.relativePath !== input.payload.relativePath) {
-    return 'The File node no longer matches the dragged editor tab.';
+    return 'This file no longer matches the tab you dragged.';
   }
-  if (node.data.file.missing) return 'Choose a replacement for the missing File node first.';
-  if (node.data.file.kind !== 'file') return 'Only regular File nodes can be agent context.';
+  if (node.data.file.missing) return 'This file is missing. Choose a replacement first.';
+  if (node.data.file.kind !== 'file') return 'Only regular files can be shared with an agent.';
   return null;
 }
 

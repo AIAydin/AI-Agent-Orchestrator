@@ -34,7 +34,9 @@ export function SavedApprovalsSettings({
         ),
       );
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'Saved approvals could not be loaded.');
+      onError(
+        cause instanceof Error ? cause.message : 'Saved approvals could not be loaded. Try again.',
+      );
     } finally {
       setLoading(false);
     }
@@ -55,7 +57,9 @@ export function SavedApprovalsSettings({
       );
       await refresh();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'The saved approval could not be revoked.');
+      onError(
+        cause instanceof Error ? cause.message : 'The approval could not be revoked. Try again.',
+      );
     } finally {
       setRevokingId(null);
     }
@@ -73,14 +77,14 @@ export function SavedApprovalsSettings({
         </button>
       </header>
       <p>
-        Only explicitly remembered, exact project-check commands are eligible today. Agent launches,
-        expanded context, Docker pulls, external sends, and destructive Git actions still require
-        per-use approval.
+        Only exact project check commands you chose to remember appear here. Starting agents,
+        expanding context, pulling Docker images, sending data out, and destructive Git actions
+        still require per-use approval.
       </p>
       <label className="switch-row compact">
         <span>
-          <strong>Show inactive decisions</strong>
-          <small>Include expired, consumed, denied, and revoked records.</small>
+          <strong>Show inactive approvals</strong>
+          <small>Includes expired, used, denied, and revoked approvals.</small>
         </span>
         <input
           type="checkbox"
@@ -95,7 +99,7 @@ export function SavedApprovalsSettings({
       ) : approvals.length === 0 ? (
         <p className="recovery-guidance" role="status">
           No {includeInactive ? '' : 'active '}saved approvals
-          {activeProject === null ? ' exist on this device.' : ' exist for this project.'}
+          {activeProject === null ? ' on this device.' : ' for this project.'}
         </p>
       ) : (
         <ul className="saved-approval-list">
@@ -104,7 +108,7 @@ export function SavedApprovalsSettings({
               <div>
                 <strong>{approvalLabel(approval)}</strong>
                 <small>
-                  Project {approval.record.scope.projectId.slice(0, 8)} · resource{' '}
+                  Project {approval.record.scope.projectId.slice(0, 8)} · item{' '}
                   <code>{approval.record.scope.resourceFingerprint.slice(0, 16)}</code>
                 </small>
                 <small>

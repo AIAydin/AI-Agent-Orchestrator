@@ -105,7 +105,7 @@ export async function assertLaunchFileIdentity(
     current.mode !== expected.mode ||
     current.digest !== expected.digest
   ) {
-    throw new Error('The reviewed launch file changed. Review a fresh launch.');
+    throw new Error('The reviewed launch file changed. Review what will run.');
   }
 }
 

@@ -16,12 +16,12 @@ export function GitCommitPanel({
   const hasStaged = review.entries.some((entry) => entry.index !== '.' && entry.index !== '?');
   const ready = hasStaged && review.identity.ready && !review.conflicted;
   const reason = !hasStaged
-    ? 'Stage at least one change.'
+    ? 'Add at least one change to the commit first.'
     : !review.identity.ready
-      ? 'Set a commit identity in Settings.'
+      ? 'Add your name and email in Settings first.'
       : review.conflicted
-        ? 'Resolve conflicts before committing.'
-        : 'You will review the exact commit before the system confirmation.';
+        ? 'Fix conflicts before committing.'
+        : "You'll review the commit once more before it's created.";
 
   return (
     <form
@@ -38,7 +38,7 @@ export function GitCommitPanel({
         value={message}
         maxLength={16_384}
         rows={3}
-        placeholder="Describe the staged changes"
+        placeholder="Describe the changes"
         disabled={busy}
         onChange={(event) => setMessage(event.target.value)}
       />

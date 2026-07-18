@@ -42,7 +42,9 @@ export async function assertGitHubCliExecutableCurrent(
       maximumBytes: GITHUB_CLI_MAX_EXECUTABLE_BYTES,
     });
   } catch {
-    throw new Error('The selected GitHub CLI executable changed. Choose and validate it again.');
+    throw new Error(
+      'The selected GitHub CLI program changed on disk. Choose it again so Forgeboard can re-check it.',
+    );
   }
 }
 

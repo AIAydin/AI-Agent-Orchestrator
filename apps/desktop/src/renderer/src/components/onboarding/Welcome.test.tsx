@@ -84,14 +84,14 @@ describe('Welcome moved-project recovery', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Confirm moved project' });
     expect(within(dialog).getByText('/old/project')).toBeTruthy();
     expect(within(dialog).getByText('/new/project')).toBeTruthy();
-    expect(within(dialog).getByText('Git')).toBeTruthy();
+    expect(within(dialog).getByText('Git repository')).toBeTruthy();
     expect(within(dialog).getByText('origin: https://github.com/example/project.git')).toBeTruthy();
     expect(within(dialog).getByRole('alert').textContent).toContain(
       'does not share a known remote',
     );
     expect(onConfirmMoved).not.toHaveBeenCalled();
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm and rebind' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm new location' }));
     await waitFor(() =>
       expect(onConfirmMoved).toHaveBeenCalledWith({
         projectId: PROJECT_ID,

@@ -32,10 +32,10 @@ export function ProjectCommandSuggestions({
   if (candidates.length === 0) {
     return (
       <section className="setup-command-suggestions" aria-label="Project command suggestions">
-        <strong>No repository command context yet</strong>
+        <strong>No projects to suggest commands from yet</strong>
         <p>
-          Leave commands blank and open a repository after setup, or use Browse to choose an exact
-          executable now. Forgeboard will offer detected package scripts in the project UI.
+          Leave the commands blank for now, or use Browse below to pick a program yourself. Once you
+          open a project, Forgeboard can suggest commands based on what it finds.
         </p>
       </section>
     );
@@ -44,7 +44,7 @@ export function ProjectCommandSuggestions({
   return (
     <section className="setup-command-suggestions" aria-label="Project command suggestions">
       <label>
-        Validate and suggest commands from
+        Suggest commands using
         <select
           name="setup-command-project"
           aria-label="Project for command suggestions"
@@ -63,7 +63,7 @@ export function ProjectCommandSuggestions({
       {selected ? (
         <>
           <p>
-            Detected scripts: <code>{detectedScripts.join(', ')}</code>
+            Scripts found: <code>{detectedScripts.join(', ')}</code>
             {Object.keys(selected.health.scripts).length > detectedScripts.length ? ' …' : ''}
           </p>
           <div className="setup-command-suggestion-actions">
@@ -77,7 +77,7 @@ export function ProjectCommandSuggestions({
                 <Sparkles size={14} aria-hidden="true" /> Use “{development.script}” for preview
               </button>
             ) : (
-              <span>No likely development script detected.</span>
+              <span>No preview script found in this project.</span>
             )}
             {test ? (
               <button
@@ -89,16 +89,16 @@ export function ProjectCommandSuggestions({
                 <Sparkles size={14} aria-hidden="true" /> Use “{test.script}” for tests
               </button>
             ) : (
-              <span>No likely test script detected.</span>
+              <span>No test script found in this project.</span>
             )}
           </div>
         </>
       ) : (
-        <p>Select a known repository to adopt and validate its detected scripts.</p>
+        <p>Pick a project above to see the scripts Forgeboard found in it.</p>
       )}
       <small>
-        Suggestions come from the repository health scan. Readiness rechecks the current executable
-        and package.json without running repository code.
+        Suggestions come from a quick look at the project’s files. Forgeboard checks that everything
+        exists without running any of the project’s code.
       </small>
     </section>
   );

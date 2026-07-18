@@ -361,8 +361,8 @@ describe('GitReviewDialog', () => {
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close Git review' }));
     await screen.findByText('origin/feature/review');
-    expect(screen.getByText('2 ahead · 1 behind')).toBeTruthy();
-    expect(screen.getByText('3 paths · +2 −1')).toBeTruthy();
+    expect(screen.getByText('2 commits ahead · 1 commit behind')).toBeTruthy();
+    expect(screen.getByText('3 files · +2 −1')).toBeTruthy();
     expect(await screen.findByText('File 1 of 3')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Previous changed file' })).toHaveProperty(
       'disabled',
@@ -372,11 +372,11 @@ describe('GitReviewDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next changed file' }));
     expect(screen.getByText('File 2 of 3')).toBeTruthy();
     expect(await screen.findByText('updated line')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Stage src/app.ts' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add src/app.ts to commit' }));
     await waitFor(() => expect(stagePathsMock).toHaveBeenCalledTimes(1));
     expect(stagePathsMock).toHaveBeenCalledWith({ target: primaryTarget, paths: ['src/app.ts'] });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stage hunk' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to commit' }));
     await waitFor(() => expect(stageHunksMock).toHaveBeenCalledTimes(1));
     expect(stageHunksMock).toHaveBeenCalledWith({
       target: primaryTarget,
@@ -401,12 +401,14 @@ describe('GitReviewDialog', () => {
       />,
     );
 
-    expect(await screen.findByRole('table', { name: 'Split diff for src/staged.ts' })).toBeTruthy();
-    expect(screen.getByRole('checkbox', { name: 'Show whitespace characters' })).toHaveProperty(
+    expect(
+      await screen.findByRole('table', { name: 'Changes in src/staged.ts (side by side)' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Show spaces and tabs' })).toHaveProperty(
       'checked',
       true,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Unified' }));
+    fireEvent.click(screen.getByRole('button', { name: 'One column' }));
     expect(onDisplayPreferencesChange).toHaveBeenCalledWith({
       viewMode: 'unified',
       showWhitespace: true,
@@ -445,7 +447,7 @@ describe('GitReviewDialog', () => {
 
     render(<GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={vi.fn()} />);
 
-    fireEvent.click(await screen.findByText('1 note from an earlier diff'));
+    fireEvent.click(await screen.findByText('1 note from an earlier version of these changes'));
     expect(screen.getByText(/src\/deleted\.ts · old line 1 · review/)).toBeTruthy();
     expect(screen.getByText('Restore the deleted guard.')).toBeTruthy();
   });
@@ -454,10 +456,12 @@ describe('GitReviewDialog', () => {
     render(<GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={vi.fn()} />);
     await screen.findByText('origin/feature/review');
     fireEvent.click(screen.getByRole('button', { name: /src\/app\.ts Modified/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Review discard for hunk in src/app.ts' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Review discard for change in src/app.ts' }),
+    );
 
     let disclosure = await screen.findByRole('alertdialog', {
-      name: 'Review permanent hunk discard',
+      name: 'Discard these changes?',
     });
     expect(prepareDiscardMock).toHaveBeenCalledWith({
       target: primaryTarget,
@@ -469,14 +473,16 @@ describe('GitReviewDialog', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Review changes in Workshop' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review discard for hunk in src/app.ts' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Review discard for change in src/app.ts' }),
+    );
     disclosure = await screen.findByRole('alertdialog', {
-      name: 'Review permanent hunk discard',
+      name: 'Discard these changes?',
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to system confirmation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(confirmDiscardMock).toHaveBeenCalledWith({ planId: discardPlanId }));
     expect(disclosure).toBeTruthy();
-    expect(await screen.findByText(/Discard cancelled in the system confirmation/)).toBeTruthy();
+    expect(await screen.findByText(/Discard cancelled/)).toBeTruthy();
   });
 
   it('reviews the exact message, identity, and staged plan before commit confirmation', async () => {
@@ -488,7 +494,7 @@ describe('GitReviewDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Review commit/ }));
 
     const disclosure = await screen.findByRole('alertdialog', {
-      name: 'Review the exact local commit',
+      name: 'Review your commit',
     });
     expect(prepareCommitMock).toHaveBeenCalledWith({
       target: primaryTarget,
@@ -498,11 +504,9 @@ describe('GitReviewDialog', () => {
     expect(disclosure.textContent).toContain(commitPlan.message);
     expect(confirmCommitMock).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to system confirmation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(confirmCommitMock).toHaveBeenCalledWith({ planId: commitPlanId }));
-    expect(
-      await screen.findByText(`Created local commit ${nextHeadOid.slice(0, 12)}.`),
-    ).toBeTruthy();
+    expect(await screen.findByText(`Created commit ${nextHeadOid.slice(0, 12)}.`)).toBeTruthy();
   });
 
   it('labels an agent run as an isolated authoritative worktree and preserves opaque targeting', async () => {
@@ -510,34 +514,34 @@ describe('GitReviewDialog', () => {
 
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
-    expect(await screen.findByText('Authoritative agent worktree')).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Agent worktree target' }).textContent).toContain(
-      'The primary checkout remains untouched.',
+    expect(await screen.findByText('Agent workspace')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Agent workspace details' }).textContent).toContain(
+      'Your main project files stay untouched.',
     );
     const repositoryStatus = screen.getByRole('region', { name: 'Repository status' });
     expect(repositoryStatus.textContent).toContain('forgeboard/agent-node-1');
-    expect(repositoryStatus.textContent).toContain('0 ahead · 0 behind');
+    expect(repositoryStatus.textContent).toContain('0 commits ahead · 0 commits behind');
     expect(repositoryStatus.textContent).toContain('Changed');
     expect(reviewMock).toHaveBeenCalledWith(worktreeTarget);
-    expect(screen.getByRole('tab', { name: 'Changes vs base' }).getAttribute('aria-selected')).toBe(
-      'true',
-    );
+    expect(
+      screen.getByRole('tab', { name: 'Committed changes' }).getAttribute('aria-selected'),
+    ).toBe('true');
     expect(screen.getAllByText(baseOid.slice(0, 12))).toHaveLength(2);
     expect(screen.getAllByText(agentHeadOid.slice(0, 12))).toHaveLength(2);
-    expect(screen.getByText('1 ahead · 0 behind')).toBeTruthy();
+    expect(screen.getByText('1 commit ahead · 0 commits behind')).toBeTruthy();
     expect(screen.getAllByText('src/committed.ts')).toHaveLength(2);
     expect(screen.getByText('committed line')).toBeTruthy();
-    expect(screen.getByText('Committed comparison')).toBeTruthy();
+    expect(screen.getByText('Committed (read-only)')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Review delivery…' })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.queryByRole('button', { name: 'Stage hunk' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add to commit' })).toBeNull();
     expect(screen.getByRole('button', { name: /Prepare safe cleanup/u })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Staged & unstaged' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Uncommitted changes' }));
     fireEvent.click(screen.getByRole('button', { name: /src\/app\.ts Modified/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Stage src/app.ts' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add src/app.ts to commit' }));
     await waitFor(() => expect(stagePathsMock).toHaveBeenCalledTimes(1));
     expect(stagePathsMock).toHaveBeenCalledWith({
       target: worktreeTarget,
@@ -569,22 +573,22 @@ describe('GitReviewDialog', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Prepare safe cleanup/u }));
     const disclosure = await screen.findByRole('alertdialog', {
-      name: 'Review safe agent-worktree cleanup',
+      name: "Review safe cleanup of the agent's workspace",
     });
     expect(prepareCleanupMock).toHaveBeenCalledWith({ projectId, runId });
     expect(confirmCleanupMock).not.toHaveBeenCalled();
     expect(disclosure.textContent).toContain('forgeboard/agent-node-1');
     expect(disclosure.textContent).toContain('refs/heads/main');
-    expect(disclosure.textContent).toContain('Clean — verified');
+    expect(disclosure.textContent).toContain('No unsaved changes — verified');
     expect(disclosure.textContent).toContain('Yes — verified');
-    expect(disclosure.textContent).toContain('Relative dirty paths0');
-    expect(disclosure.textContent).toContain('Managed branch deletionRequired');
-    expect(disclosure.textContent).toContain('no force option exists');
+    expect(disclosure.textContent).toContain('Files with unsaved changes0');
+    expect(disclosure.textContent).toContain('Branch deletionRequired');
+    expect(disclosure.textContent).toContain('no way to force cleanup');
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' }));
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Continue to .*Clean up.* system confirmation/u,
+        name: /Continue to the .*Clean up.* confirmation/u,
       }),
     );
     await waitFor(() =>
@@ -592,7 +596,7 @@ describe('GitReviewDialog', () => {
         planId: cleanupPlanId,
       }),
     );
-    expect(await screen.findByText(/Cleanup cancelled in the system confirmation/u)).toBeTruthy();
+    expect(await screen.findByText(/Cleanup cancelled/)).toBeTruthy();
     expect(onCleanupSuccess).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -614,15 +618,15 @@ describe('GitReviewDialog', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Prepare safe cleanup/u }));
     const disclosure = await screen.findByRole('alertdialog', {
-      name: 'Review safe agent-worktree cleanup',
+      name: "Review safe cleanup of the agent's workspace",
     });
     expect(disclosure.textContent).toContain('src/private-change.ts');
-    expect(disclosure.textContent).toContain('Relative dirty paths (4)');
-    expect(disclosure.textContent).toContain('3 additional relative dirty paths are not shown');
-    expect(disclosure.textContent).toContain('This plan is not eligible for safe cleanup');
+    expect(disclosure.textContent).toContain('Files with unsaved changes (4)');
+    expect(disclosure.textContent).toContain('3 more files with unsaved changes are not shown');
+    expect(disclosure.textContent).toContain('This plan no longer qualifies for a safe cleanup');
     expect(
       screen.getByRole('button', {
-        name: /Continue to .*Clean up.* system confirmation/u,
+        name: /Continue to the .*Clean up.* confirmation/u,
       }),
     ).toHaveProperty('disabled', true);
     expect(confirmCleanupMock).not.toHaveBeenCalled();
@@ -645,17 +649,17 @@ describe('GitReviewDialog', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Prepare safe cleanup/u }));
     await screen.findByRole('alertdialog', {
-      name: 'Review safe agent-worktree cleanup',
+      name: "Review safe cleanup of the agent's workspace",
     });
     fireEvent.click(
       screen.getByRole('button', {
-        name: /Continue to .*Clean up.* system confirmation/u,
+        name: /Continue to the .*Clean up.* confirmation/u,
       }),
     );
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(onCleanupSuccess).toHaveBeenCalledWith(
-      'Cleaned up the exact merged agent worktree and deleted its managed branch.',
+      'Cleaned up the merged agent workspace and deleted its branch.',
     );
   });
 
@@ -679,14 +683,16 @@ describe('GitReviewDialog', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: /Prepare safe cleanup/u }));
-    await screen.findByRole('alertdialog', { name: 'Review safe agent-worktree cleanup' });
+    await screen.findByRole('alertdialog', {
+      name: "Review safe cleanup of the agent's workspace",
+    });
     fireEvent.click(
-      screen.getByRole('button', { name: /Continue to .*Clean up.* system confirmation/u }),
+      screen.getByRole('button', { name: /Continue to the .*Clean up.* confirmation/u }),
     );
 
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(
-        'Cleanup did not report complete worktree, branch, and metadata removal. Refresh run history before continuing.',
+        "Forgeboard couldn't confirm that the workspace, branch, and run details were all removed. Refresh the run history before continuing.",
       ),
     );
     await waitFor(() => expect(onCleanupStateUncertain).toHaveBeenCalledTimes(1));
@@ -738,12 +744,12 @@ describe('GitReviewDialog', () => {
 
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
-    await screen.findByText('Deliver reviewed commits to primary');
+    await screen.findByText('Deliver the reviewed changes to the primary branch');
     const reviewDelivery = screen.getByRole('button', { name: 'Review delivery…' });
     await waitFor(() => expect(reviewDelivery).toHaveProperty('disabled', false));
     fireEvent.click(reviewDelivery);
     const disclosure = await screen.findByRole('alertdialog', {
-      name: 'Review exact primary delivery',
+      name: 'Review delivery to the primary branch',
     });
     expect(prepareShippingMock).toHaveBeenCalledWith({
       target: worktreeTarget,
@@ -753,21 +759,21 @@ describe('GitReviewDialog', () => {
     expect(disclosure.textContent).toContain(`${baseOid}..${agentHeadOid}`);
     expect(disclosure.textContent).toContain('src/committed.ts');
     expect(disclosure.textContent).toContain('Ada Developer <ada@example.test>');
-    expect(disclosure.textContent).toContain('name from Forgeboard Settings');
+    expect(disclosure.textContent).toContain('name from Forgeboard settings');
     expect(confirmShippingMock).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' }));
     fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(
-      screen.getByRole('button', { name: 'Continue to system confirmation' }),
+      screen.getByRole('button', { name: 'Continue to final confirmation' }),
     );
     fireEvent.keyDown(window, { key: 'Tab' });
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to system confirmation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to final confirmation' }));
     await waitFor(() =>
       expect(confirmShippingMock).toHaveBeenCalledWith({ planId: shippingPlanId }),
     );
-    expect(await screen.findByText(/Delivered reviewed commits to primary/)).toBeTruthy();
+    expect(await screen.findByText(/Delivered the reviewed commits/)).toBeTruthy();
   });
 
   it('keeps delivery fail-closed when earlier readiness evidence became stale', async () => {
@@ -797,7 +803,7 @@ describe('GitReviewDialog', () => {
     expect(reviewDelivery).toHaveProperty('disabled', true);
     fireEvent.click(reviewDelivery);
     expect(prepareShippingMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/Complete the exact required checks/u)).toBeTruthy();
+    expect(screen.getByText(/Choose at least one check and save your choice/u)).toBeTruthy();
   });
 
   it('reports native check cancellation without claiming a delivery check started', async () => {
@@ -817,38 +823,28 @@ describe('GitReviewDialog', () => {
         expectedSourceFingerprint: deliveryReadiness.sourceFingerprint.digest,
       }),
     );
-    const busyNotice = await screen.findByText(
-      'Waiting for check confirmation and exact completion',
-    );
+    const busyNotice = await screen.findByText('Waiting for the check to finish');
     expect(busyNotice.closest('.git-review-status')?.getAttribute('data-tone')).toBe('neutral');
     await act(async () => {
       confirmation.resolve(success(null));
       await confirmation.promise;
     });
-    expect(
-      await screen.findByText(
-        'Check run cancelled in the system confirmation. No check was started.',
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText('Check cancelled. No check was started.')).toBeTruthy();
     expect(screen.queryByText(/approved delivery check started/iu)).toBeNull();
   });
 
   it.each<readonly [GitDeliveryRequiredCheckState, string, 'neutral' | 'success' | 'warning']>([
-    ['passed', 'The exact delivery check passed. Readiness was refreshed.', 'success'],
-    ['failed', 'The delivery check finished unsuccessfully. Delivery remains blocked.', 'warning'],
-    [
-      'cancelled',
-      'The delivery check was cancelled before passing evidence was recorded.',
-      'neutral',
-    ],
+    ['passed', 'The check passed. Delivery status was refreshed.', 'success'],
+    ['failed', "The check didn't pass. Delivery stays blocked.", 'warning'],
+    ['cancelled', 'The check was cancelled before it could pass.', 'neutral'],
     [
       'lost',
-      'Forgeboard lost the terminal delivery-check evidence. Delivery remains blocked; run the check again.',
+      "Forgeboard lost the check's final result. Delivery stays blocked — run the check again.",
       'warning',
     ],
     [
       'stale',
-      'The delivery-check evidence is stale for the current binding. Run the check again.',
+      'The check result no longer matches the current code. Run the check again.',
       'warning',
     ],
   ])('uses an honest %s completion notice and tone', async (state, message, tone) => {
@@ -935,9 +931,9 @@ describe('GitReviewDialog', () => {
 
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
-    expect(await screen.findByText('No committed changes vs base')).toBeTruthy();
-    expect(screen.getByText(/Staged or unstaged edits remain available/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Staged & unstaged' }));
+    expect(await screen.findByText('No committed changes to compare')).toBeTruthy();
+    expect(screen.getByText(/not committed yet is in the other tab/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Uncommitted changes' }));
     expect(screen.getByRole('button', { name: /src\/app\.ts Modified/ })).toBeTruthy();
   });
 
@@ -962,21 +958,19 @@ describe('GitReviewDialog', () => {
       />,
     );
 
-    expect(
-      await screen.findByText('Git review is unavailable during cleanup recovery'),
-    ).toBeTruthy();
-    expect(screen.getByText('Recovery-only agent target')).toBeTruthy();
-    expect(screen.getByText('Recover interrupted cleanup in Workshop')).toBeTruthy();
+    expect(await screen.findByText("Can't show changes during cleanup recovery")).toBeTruthy();
+    expect(screen.getByText('Cleanup recovery only')).toBeTruthy();
+    expect(screen.getByText('Resume interrupted cleanup in Workshop')).toBeTruthy();
     expect(screen.getByText('Owned worktree comparison failed safely.')).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: 'Changes vs base' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Committed changes' })).toBeNull();
     expect(reviewMock).toHaveBeenCalledWith(worktreeTarget);
     expect(onError).toHaveBeenCalledWith('Owned worktree comparison failed safely.');
 
     fireEvent.click(screen.getByRole('button', { name: /Prepare cleanup recovery/u }));
     const disclosure = await screen.findByRole('alertdialog', {
-      name: 'Review interrupted cleanup recovery',
+      name: 'Review the interrupted cleanup recovery',
     });
-    expect(disclosure.textContent).toContain('Interrupted cleanup recovery');
+    expect(disclosure.textContent).toContain('Recovery after an interrupted cleanup');
     expect(prepareCleanupMock).toHaveBeenCalledWith({ projectId, runId });
   });
 
@@ -1012,7 +1006,7 @@ describe('GitReviewDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Prepare cleanup recovery/u }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(onCleanupSuccess).toHaveBeenCalledWith(
-      'Reconciled the interrupted cleanup and marked the exact agent worktree as cleaned.',
+      'Finished the interrupted cleanup and marked the agent workspace as cleaned up.',
     );
     expect(confirmCleanupMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -1043,11 +1037,13 @@ describe('GitReviewDialog', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Prepare cleanup recovery/u }));
     expect(
-      await screen.findByRole('alertdialog', { name: 'Review safe agent-worktree cleanup' }),
+      await screen.findByRole('alertdialog', {
+        name: "Review safe cleanup of the agent's workspace",
+      }),
     ).toBeTruthy();
     expect(onCleanupTargetReactivated).toHaveBeenCalledWith(
       worktreeTarget,
-      'Verified the agent worktree is intact and restored its active lifecycle state.',
+      'Verified the agent workspace is intact and made it active again.',
     );
     await waitFor(() => expect(reviewMock).toHaveBeenCalledTimes(2));
   });
@@ -1110,16 +1106,18 @@ describe('GitReviewDialog', () => {
       />,
     );
 
-    expect(await screen.findByText('Git review is unavailable')).toBeTruthy();
-    expect(screen.getByText('Authoritative agent worktree')).toBeTruthy();
+    expect(await screen.findByText("Can't show changes right now")).toBeTruthy();
+    expect(screen.getByText('Agent workspace')).toBeTruthy();
     expect(screen.getByText('Review changes in Workshop')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Prepare safe cleanup/u })).toBeTruthy();
-    expect(screen.queryByText('Recovery-only agent target')).toBeNull();
+    expect(screen.queryByText('Cleanup recovery only')).toBeNull();
     expect(screen.queryByText(/interrupted cleanup/iu)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Prepare safe cleanup/u }));
     expect(
-      await screen.findByRole('alertdialog', { name: 'Review safe agent-worktree cleanup' }),
+      await screen.findByRole('alertdialog', {
+        name: "Review safe cleanup of the agent's workspace",
+      }),
     ).toBeTruthy();
     expect(onCleanupTargetReactivated).not.toHaveBeenCalled();
   });
@@ -1136,15 +1134,15 @@ describe('GitReviewDialog', () => {
 
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
-    expect(await screen.findByText('Authoritative agent worktree')).toBeTruthy();
-    expect(screen.queryByText('Recovery-only agent target')).toBeNull();
+    expect(await screen.findByText('Agent workspace')).toBeTruthy();
+    expect(screen.queryByText('Cleanup recovery only')).toBeNull();
     expect(screen.queryByText(/interrupted cleanup/iu)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Prepare safe cleanup/u }));
     const disclosure = await screen.findByRole('alertdialog', {
-      name: 'Review interrupted cleanup recovery',
+      name: 'Review the interrupted cleanup recovery',
     });
-    expect(disclosure.textContent).toContain('Interrupted cleanup recovery');
+    expect(disclosure.textContent).toContain('Recovery after an interrupted cleanup');
     expect(prepareCleanupMock).toHaveBeenCalledWith({ projectId, runId });
   });
 });

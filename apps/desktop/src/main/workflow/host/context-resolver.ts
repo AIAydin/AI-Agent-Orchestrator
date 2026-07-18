@@ -152,7 +152,7 @@ export class FileNodeWorkflowContextResolver {
       });
       if (edge.contentDigest !== `sha256:${manifestFilesDigest(files)}`) {
         throw new Error(
-          `Context edge "${edge.edgeId}" changed after its evidence was verified. Review a fresh launch.`,
+          `Context link "${edge.edgeId}" changed after its evidence was verified. Review what will run.`,
         );
       }
     }

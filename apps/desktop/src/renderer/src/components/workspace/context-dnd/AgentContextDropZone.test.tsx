@@ -26,8 +26,8 @@ describe('AgentContextDropZone', () => {
 
     expect(screen.getByText('2/256')).toBeTruthy();
     expect(screen.getByText('src/index.ts')).toBeTruthy();
-    expect(screen.getByText('Unavailable File node')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove stale-file from context' }));
+    expect(screen.getByText('File no longer available')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove stale-file from this agent' }));
     expect(onRemove).toHaveBeenCalledWith('stale-file');
   });
 
@@ -49,7 +49,7 @@ describe('AgentContextDropZone', () => {
       />,
     );
     const zone = screen.getByRole('region', {
-      name: 'Agent context attachments',
+      name: 'Files for this agent',
     });
     const transfer = dataTransfer();
     writeWorkspaceContextDrag(transfer, {
@@ -69,9 +69,9 @@ describe('AgentContextDropZone', () => {
       relativePath: 'src/index.ts',
       sourceNodeId: 'file-1',
     });
-    expect(screen.getByRole('status').textContent).toMatch(/Verifying/u);
+    expect(screen.getByRole('status').textContent).toMatch(/Checking/u);
     finish?.();
-    await waitFor(() => expect(screen.queryByText(/Verifying/u)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/Checking/u)).toBeNull());
   });
 
   it('rejects malformed payloads and disables linking for read-only context', () => {
@@ -86,10 +86,10 @@ describe('AgentContextDropZone', () => {
       />,
     );
     const invalid = dataTransfer('{"absolutePath":"/tmp/secret"}');
-    fireEvent.drop(screen.getByRole('region', { name: 'Agent context attachments' }), {
+    fireEvent.drop(screen.getByRole('region', { name: 'Files for this agent' }), {
       dataTransfer: invalid,
     });
-    expect(screen.getByRole('alert').textContent).toMatch(/valid Forgeboard project file/u);
+    expect(screen.getByRole('alert').textContent).toMatch(/project files list/u);
     expect(onAttach).not.toHaveBeenCalled();
 
     rerender(
@@ -108,7 +108,7 @@ describe('AgentContextDropZone', () => {
       projectId: PROJECT_ID,
       relativePath: 'src/index.ts',
     });
-    fireEvent.drop(screen.getByRole('region', { name: 'Agent context attachments' }), {
+    fireEvent.drop(screen.getByRole('region', { name: 'Files for this agent' }), {
       dataTransfer: valid,
     });
     expect(onAttach).not.toHaveBeenCalled();

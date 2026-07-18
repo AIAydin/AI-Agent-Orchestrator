@@ -127,7 +127,7 @@ describe('WorktreeCleanupService', () => {
       type: 'warning',
       defaultId: 0,
       cancelId: 0,
-      buttons: ['Cancel', 'Clean up worktree and branch'],
+      buttons: ['Cancel', 'Delete workspace and branch'],
     });
     expect(options.detail).toContain(fixture.impact.ownership.branch);
     expect(options.detail).toContain(fixture.impact.ownership.worktreePath);
@@ -179,7 +179,7 @@ describe('WorktreeCleanupService', () => {
     const plan = await preparePlan(fixture.service, 43);
 
     await expect(fixture.service.confirm(authority(43), plan.planId)).rejects.toThrow(
-      'Stop or cancel every Forgeboard-managed agent run',
+      'Stop or cancel every agent run, terminal, preview, check, and workflow',
     );
 
     expect(fixture.cleanup).not.toHaveBeenCalled();
@@ -323,13 +323,13 @@ describe('WorktreeCleanupService', () => {
     );
     const options = fixture.showMessageBox.mock.calls[0]?.[1];
     expect(options).toMatchObject({
-      title: 'Continue interrupted worktree cleanup',
-      message: 'Continue removing the remaining exact worktree cleanup target?',
-      buttons: ['Cancel', 'Continue interrupted cleanup'],
+      title: 'Continue the interrupted cleanup?',
+      message: 'Continue deleting what remains of this agent workspace?',
+      buttons: ['Cancel', 'Continue cleanup'],
       defaultId: 0,
       cancelId: 0,
     });
-    expect(options?.detail).toContain('Fresh recovery confirmation');
+    expect(options?.detail).toContain('A previous cleanup was interrupted');
   });
 
   it('keeps an ambiguous recovery pending and non-mutating', async () => {
@@ -454,7 +454,7 @@ describe('WorktreeCleanupService', () => {
     const plan = await preparePlan(fixture.service, 44);
 
     await expect(fixture.service.confirm(authority(44), plan.planId)).rejects.toThrow(
-      'cleanup completed, but Forgeboard could not reopen',
+      'The cleanup finished, but Forgeboard could not restart all of its process controls',
     );
 
     expect(fixture.cleanup).toHaveBeenCalledTimes(1);

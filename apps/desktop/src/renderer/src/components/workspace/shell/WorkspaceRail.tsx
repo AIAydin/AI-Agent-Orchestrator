@@ -130,26 +130,28 @@ function ProjectTemplates({
       <section className="repository-summary">
         <header>
           <GitBranch size={14} />
-          <strong>{project.health.branch ?? 'Not a Git repository'}</strong>
+          <strong>{project.health.branch ?? 'Git not set up yet'}</strong>
           <span
             className={project.health.dirty ? 'dirty-dot' : 'clean-dot'}
             role="img"
             aria-label={
               project.health.dirty
-                ? 'Repository has uncommitted changes'
-                : 'Repository working tree is clean'
+                ? 'Project has changes not yet recorded in Git'
+                : 'All project changes are recorded in Git'
             }
           />
         </header>
         <small>{project.path}</small>
         {!project.health.isGitRepository && (
           <div className="repository-initialize">
-            <p>Agent worktrees and reviewed commits require Git metadata.</p>
+            <p>
+              Set up Git so agents can work in their own copies and you can review their changes.
+            </p>
             <button type="button" disabled={initializingGit} onClick={onInitializeGit}>
               <GitBranch size={14} aria-hidden="true" />
-              {initializingGit ? 'Initializing…' : 'Initialize Git…'}
+              {initializingGit ? 'Setting up…' : 'Set up Git…'}
             </button>
-            <small>Existing files stay untouched and uncommitted.</small>
+            <small>Your files stay exactly as they are.</small>
           </div>
         )}
         {project.health.frameworks.length > 0 && (
@@ -265,13 +267,13 @@ function ShieldStatus({ project }: { project: Project }) {
       <div>
         <strong>
           {project.health.sensitiveWarnings.length
-            ? 'Sensitive files protected'
-            : 'Context guard active'}
+            ? 'Private files need attention'
+            : 'Private file protection on'}
         </strong>
         <small>
           {project.health.sensitiveWarnings.length
             ? `${project.health.sensitiveWarnings.length} warning${project.health.sensitiveWarnings.length === 1 ? '' : 's'} found`
-            : 'Ignored and credential files excluded'}
+            : 'Ignored files and credentials stay hidden from agents'}
         </small>
       </div>
     </div>

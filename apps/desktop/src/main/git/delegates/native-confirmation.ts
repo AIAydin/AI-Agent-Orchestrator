@@ -39,7 +39,7 @@ export function delegateConfirmation(plan: GitDelegatePlan): MessageBoxOptions {
       .filter(({ phase, command }) => phase !== 'required' && command.trim() !== '')
       .map(
         ({ phase, command, origin }) =>
-          `${filter.driver} ${phase}: ${literal(command, 2_048)}\n  Config: ${literal(origin, 1_024)}`,
+          `${filter.driver} ${phase}: ${literal(command, 2_048)}\n  Configured in: ${literal(origin, 1_024)}`,
       ),
   );
   const paths = plan.filters.flatMap((filter) =>
@@ -51,25 +51,25 @@ export function delegateConfirmation(plan: GitDelegatePlan): MessageBoxOptions {
   );
   return {
     type: 'warning',
-    title: `Approve Git filter for ${action}`,
-    message: `Run ${String(commands.length)} Git filter command${commands.length === 1 ? '' : 's'} for ${action}?`,
+    title: `Run repository filter commands for ${action}?`,
+    message: `Git wants to run ${String(commands.length)} filter command${commands.length === 1 ? '' : 's'} configured by this repository for ${action}. Allow this?`,
     detail: [
       `Repository: ${literal(plan.repositoryPath, 2_048)}`,
-      `Plan fingerprint: ${plan.fingerprint}`,
+      `Fingerprint of this exact plan (SHA-256): ${plan.fingerprint}`,
       '',
-      'Exact shell commands Git will run:',
+      'Exact commands Git will run:',
       ...commands.map((command) => `• ${command}`),
       '',
-      'Affected paths:',
+      'Files these apply to:',
       ...paths.slice(0, 32).map((path) => `• ${path}`),
       ...(undisclosed > 0
-        ? [`• …and ${String(undisclosed)} more path(s), bound by the fingerprint`]
+        ? [`• …and ${String(undisclosed)} more file(s), covered by the same fingerprint`]
         : []),
       '',
-      'Git filter commands are repository tooling. They can read or change local files and may access the network with your user permissions.',
-      'Forgeboard will re-read the filter configuration and affected paths before execution. Any change invalidates this approval.',
+      'Filter commands are tools configured by the repository. They can read or change local files and may use the network with your computer permissions.',
+      'Forgeboard re-reads the filter setup and affected files before running them; any change cancels this approval.',
     ].join('\n'),
-    buttons: ['Cancel', 'Run exact Git filter'],
+    buttons: ['Cancel', 'Run filter commands'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,

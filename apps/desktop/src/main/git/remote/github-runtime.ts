@@ -58,17 +58,17 @@ export async function assertGitHubRuntimeCurrent(
 
 function bindingFromRuntime(runtime: GitHubCliCommandRuntime): GitHubRuntimeBinding {
   if (!/^[a-f0-9]{64}$/u.test(runtime.identityFingerprint)) {
-    throw new Error('GitHub CLI runtime returned an invalid identity fingerprint.');
+    throw new Error('Forgeboard could not verify the GitHub CLI identity.');
   }
   if (!executablesEqual(runtime.runner.executable, runtime.executable)) {
-    throw new Error('GitHub CLI runtime runner does not match its executable evidence.');
+    throw new Error('The GitHub CLI runner does not match the program Forgeboard verified.');
   }
   if (runtime.status.source !== runtime.source || runtime.status.state === 'changed') {
-    throw new Error('GitHub CLI runtime status evidence is inconsistent.');
+    throw new Error('Forgeboard got an inconsistent GitHub CLI status. Check GitHub again.');
   }
   if (runtime.status.state === 'unavailable') {
     if (runtime.available || runtime.review !== null || runtime.source !== 'automatic') {
-      throw new Error('Unavailable GitHub CLI runtime evidence is inconsistent.');
+      throw new Error('Forgeboard got an inconsistent GitHub CLI status. Check GitHub again.');
     }
     return {
       source: runtime.source,
@@ -93,11 +93,11 @@ function bindingFromRuntime(runtime: GitHubCliCommandRuntime): GitHubRuntimeBind
     review.identity.source !== runtime.source ||
     !executablesEqual(review.executablePath, runtime.executable)
   ) {
-    throw new Error('Available GitHub CLI runtime evidence is inconsistent.');
+    throw new Error('Forgeboard got an inconsistent GitHub CLI status. Check GitHub again.');
   }
   const ready = runtime.status.state === 'ready';
   if (runtime.available !== ready || (!ready && runtime.status.state !== 'unverified')) {
-    throw new Error('GitHub CLI runtime validation evidence is inconsistent.');
+    throw new Error('Forgeboard got an inconsistent GitHub CLI status. Check GitHub again.');
   }
   return {
     source: runtime.source,

@@ -121,7 +121,9 @@ export class ExtensionIpcService {
           }
           throw new ExtensionRuntimeError(
             'APPROVAL_MISMATCH',
-            'Extension installation was cancelled before trusted activation.',
+            plan.operation === 'install'
+              ? 'The extension install was cancelled. Nothing changed.'
+              : 'The extension update was cancelled. Nothing changed.',
           );
         }
         if (this.#privacyResetting) {
@@ -408,11 +410,11 @@ function extensionApprovalDetail(plan: z.output<typeof ExtensionInstallPlanViewS
   return [
     `Extension: ${plan.manifest.id}`,
     `Version: ${plan.manifest.version}`,
-    `Manifest SHA-256: ${plan.manifestDigest}`,
-    `Snapshot SHA-256: ${plan.snapshotDigest}`,
+    `Manifest fingerprint (SHA-256): ${plan.manifestDigest}`,
+    `Full package fingerprint (SHA-256): ${plan.snapshotDigest}`,
     'Permissions:',
     ...plan.requestedPermissions.map((permission) => `  • ${permission}`),
     '',
-    'The renderer requested review, but only this main-process confirmation grants trust.',
+    'Nothing changes until you confirm here.',
   ].join('\n');
 }

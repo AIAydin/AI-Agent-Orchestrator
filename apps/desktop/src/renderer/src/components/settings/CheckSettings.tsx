@@ -30,25 +30,25 @@ const STANDARD_CHECKS: ReadonlyArray<{
   {
     id: 'lint',
     label: 'Lint',
-    description: 'Catch style, quality, and static-analysis problems.',
+    description: 'Catches style and quality problems in your code.',
     settingsKey: 'lintCommand',
   },
   {
     id: 'typecheck',
     label: 'Typecheck',
-    description: 'Validate types without changing project files.',
+    description: 'Checks types for mistakes without changing any files.',
     settingsKey: 'typecheckCommand',
   },
   {
     id: 'test',
     label: 'Tests',
-    description: 'Run the project test suite configured by its package script.',
+    description: "Runs the project's tests using its package script.",
     settingsKey: 'testCommand',
   },
   {
     id: 'build',
     label: 'Build',
-    description: 'Prove the project can produce its normal build output.',
+    description: 'Checks that the project builds without errors.',
     settingsKey: 'buildCommand',
   },
 ];
@@ -133,7 +133,7 @@ export function CheckSettings({
     <div className="check-settings">
       <SettingsSection
         title="Project checks"
-        description="Configure the commands Forgeboard offers for local project validation. Forgeboard stores each process executable and its literal argument vector separately. Package-manager scripts may still invoke a shell, lifecycle hooks, and repository code."
+        description="Choose the commands Forgeboard runs to check your project. Each command is stored as a program plus its own arguments, never as a shell line. Package scripts may still run other project code and hooks."
       >
         <ProjectScriptSummary
           activeProject={activeProject}
@@ -194,12 +194,12 @@ export function CheckSettings({
 
       <SettingsSection
         title="Custom checks"
-        description="Add any additional project check without editing configuration files. Custom checks use the same separate process-and-argument format."
+        description="Add your own checks here — no config files to edit. Custom checks use the same program-plus-arguments format as the checks above."
       >
         <div className="check-settings-custom-toolbar">
           <p aria-live="polite">
             {customChecks.length >= 32
-              ? 'The maximum of 32 custom checks is configured.'
+              ? 'You have reached the maximum of 32 custom checks.'
               : customChecks.length === 0
                 ? 'No custom checks configured.'
                 : `${customChecks.length} custom check${customChecks.length === 1 ? '' : 's'} configured.`}
@@ -217,7 +217,7 @@ export function CheckSettings({
 
         {customChecks.length === 0 ? (
           <p className="check-settings-empty">
-            Add a check to configure its name, executable, and literal arguments here.
+            Add a check, then give it a name and the exact program to run.
           </p>
         ) : (
           <div className="check-settings-custom-list">
@@ -308,8 +308,8 @@ function ProjectScriptSummary({
       <div className="check-settings-project-summary" role="status">
         <strong>No project is open</strong>
         <p>
-          Open a project to adopt detected package scripts. Manual check configuration below is
-          always available.
+          Open a project and Forgeboard will find its check scripts for you. You can always set up
+          commands manually below.
         </p>
       </div>
     );
@@ -333,10 +333,10 @@ function ProjectScriptSummary({
       </div>
       <p>
         {detectedCount > 0
-          ? 'Adoption stores the package-manager process with literal “run” and script-name arguments. The package manager may still execute repository scripts, shells, and lifecycle hooks.'
+          ? 'Using a found script stores your package manager as the program, with “run” and the script name as its arguments. The package manager may still run other scripts and hooks from the project.'
           : manager === 'unknown'
             ? 'Choose commands manually, or reopen the project after installing its package manager.'
-            : 'No standard lint, typecheck, test, or build scripts were detected. Configure commands manually below.'}
+            : 'No lint, typecheck, test, or build scripts were found. Set up the commands manually below.'}
       </p>
     </div>
   );
@@ -359,9 +359,9 @@ function detectionNote(
   project: Project | null,
   scriptName: 'lint' | 'typecheck' | 'test' | 'build',
 ): string {
-  if (!project) return 'Manual configuration available';
+  if (!project) return 'Can be set up manually';
   if (project.health.packageManager === 'unknown') return 'Package manager not detected';
-  return `No ${scriptName} script detected`;
+  return `No ${scriptName} script found`;
 }
 
 function readCustomChecks(settings: AppSettings): CustomCheckConfiguration[] {

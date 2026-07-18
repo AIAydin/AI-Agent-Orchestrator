@@ -97,10 +97,10 @@ export function createDefaultSettings(): AppSettings {
     agentDefaultModels: {},
     customAgent: {
       enabled: false,
-      name: 'Custom CLI',
+      name: 'Custom agent',
       providerName: 'Custom provider',
       providerDisclosure:
-        'This user-configured CLI may send the prompt and selected context to its configured provider.',
+        'Your custom agent may send the prompt and selected context to the provider you configured.',
       sendsContextOffDevice: true,
       executable: '',
       versionArguments: ['--version'],
@@ -736,7 +736,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       await runDataOperation(async () => {
         const authority = requireIpcWindowAuthority(event, 'Local-data export');
         const selection = await dialog.showSaveDialog(authority.parent, {
-          title: 'Export portable Forgeboard data',
+          title: 'Export all local data',
           defaultPath: 'forgeboard-local-data.json',
           filters: [{ name: 'JSON', extensions: ['json'] }],
         });
@@ -764,7 +764,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         }
         const destination = currentSettings.backupDirectory.trim();
         if (destination === '') {
-          throw new Error('Choose a backup directory in Settings first.');
+          throw new Error('Choose a backup folder in Settings first.');
         }
         backups.markDataChanged();
         const outcome = await backups.flush();
@@ -810,10 +810,10 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
             authority.assertCurrent();
             const decision = await dialog.showMessageBox(authority.parent, {
               type: 'warning',
-              title: 'Recorded backups are unavailable',
-              message: `${count} recorded backup ${count === 1 ? 'file is' : 'files are'} unavailable.`,
+              title: 'Some backup files are missing',
+              message: `${count} recorded backup ${count === 1 ? 'file is' : 'files are'} missing.`,
               detail:
-                'Forgeboard cannot prove that these backup copies were deleted. Reconnect their folders and cancel, or explicitly forget the missing records and continue. Forgotten copies may still exist on a detached drive or network location and will no longer be tracked by Delete Local Data.',
+                'Forgeboard cannot confirm these backup copies were deleted. Cancel and reconnect their folders to check them, or forget the missing copies and continue. Forgotten copies may still exist outside Forgeboard — for example on a disconnected drive — and will no longer be tracked.',
               buttons: ['Cancel deletion', 'Forget missing backups and continue'],
               defaultId: 0,
               cancelId: 0,

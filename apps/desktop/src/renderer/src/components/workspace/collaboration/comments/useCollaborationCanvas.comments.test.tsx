@@ -556,7 +556,7 @@ describe('useCollaborationCanvas', () => {
       hook.result.current.createComment('agent-1', 'Rejected feedback'),
     ).resolves.toBeNull();
     expect(onError).toHaveBeenCalledWith(
-      "The collaboration server rejected this role's metadata delivery.",
+      'The shared canvas refused your changes because your role cannot share them.',
     );
   });
 
@@ -783,7 +783,7 @@ describe('useCollaborationCanvas', () => {
 
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(
-        'Collaboration paused because a durable delivery receipt changed identity during recovery.',
+        'Sharing paused because a saved delivery record did not match while restoring offline changes.',
       ),
     );
     expect(hook.result.current.canComment).toBe(false);

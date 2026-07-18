@@ -96,7 +96,7 @@ describe('managed agent commit delivery', () => {
 
     const confirmation = harness.showMessageBox.mock.calls[1]?.[1] as MessageBoxOptions;
     expect(confirmation).toMatchObject({
-      buttons: ['Cancel', 'Fast-forward primary'],
+      buttons: ['Cancel', 'Move primary branch forward'],
       defaultId: 0,
       cancelId: 0,
       noLink: true,
@@ -105,10 +105,10 @@ describe('managed agent commit delivery', () => {
     expect(confirmation.detail).toContain(`• ${first}`);
     expect(confirmation.detail).toContain('• "first.txt"');
     expect(confirmation.detail).toContain(
-      'Git identity: "Forgeboard UI" <"ui@forgeboard.invalid">',
+      'Git author for this delivery: "Forgeboard UI" <"ui@forgeboard.invalid">',
     );
     expect(confirmation.detail).toContain(
-      'Identity source: name from Forgeboard Settings; email from Forgeboard Settings',
+      'Author source: name from Forgeboard settings; email from Forgeboard settings',
     );
     expect(confirmation.detail).not.toContain(fixture.repository);
     expect(harness.appendAudit).toHaveBeenCalledWith(
@@ -184,7 +184,7 @@ describe('managed agent commit delivery', () => {
         target: agentTarget(),
         strategy: 'fast-forward-only',
       }),
-    ).rejects.toThrow(/cannot fast-forward.*cherry-pick/iu);
+    ).rejects.toThrow(/cannot move straight forward.*Copy the reviewed changes one by one/iu);
 
     const plan = await harness.service.prepareShipping(event.sender.id, {
       target: agentTarget(),
@@ -278,7 +278,7 @@ describe('managed agent commit delivery', () => {
     await expect(harness.service.confirmShipping(event, plan.planId)).resolves.toBeNull();
     const confirmation = harness.showMessageBox.mock.calls[0]?.[1] as MessageBoxOptions;
     expect(confirmation.detail).toContain(
-      'Git identity: "Primary Committer" <"primary@forgeboard.invalid">',
+      'Git author for this delivery: "Primary Committer" <"primary@forgeboard.invalid">',
     );
     expect(confirmation.detail).not.toContain('Source Worktree');
     await harness.service.dispose();
@@ -328,7 +328,7 @@ describe('managed agent commit delivery', () => {
     await git(drifted.repository, ['commit', '-m', 'Primary drift']);
     const driftHead = await git(drifted.repository, ['rev-parse', 'HEAD']);
     await expect(thirdHarness.service.confirmShipping(event, plan.planId)).rejects.toThrow(
-      /primary branch or HEAD changed/iu,
+      /primary branch or its latest commit changed/iu,
     );
     expect(thirdHarness.showMessageBox).not.toHaveBeenCalled();
     expect(await git(drifted.repository, ['rev-parse', 'HEAD'])).toBe(driftHead);
@@ -337,7 +337,8 @@ describe('managed agent commit delivery', () => {
       'ship-agent-commits',
       'failed',
       expect.objectContaining({
-        reason: 'The primary branch or HEAD changed after review. Prepare a new delivery plan.',
+        reason:
+          'The primary branch or its latest commit changed after review. Prepare a new delivery plan.',
       }),
     );
     await thirdHarness.service.dispose();

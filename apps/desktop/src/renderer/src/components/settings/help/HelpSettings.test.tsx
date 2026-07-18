@@ -38,7 +38,7 @@ describe('HelpSettings', () => {
     render(<HelpSettings keyboardPreset="vscode" activeKeyboardPreset="standard" />);
 
     expect(
-      screen.getByText('VS Code preset · unsaved; Standard preset remains active'),
+      screen.getByText('VS Code preset · not saved yet; Standard preset is still active'),
     ).toBeTruthy();
   });
 
@@ -52,24 +52,24 @@ describe('HelpSettings', () => {
     expect(screen.getByRole('status').textContent).toBe('1 matching guide');
     expect(screen.getByText('A project was moved or renamed')).toBeTruthy();
     expect(screen.getByText(/Choose Locate project/u)).toBeTruthy();
-    expect(screen.queryByText('Docker isolation is unavailable')).toBeNull();
+    expect(screen.queryByText('Running agents in Docker is unavailable')).toBeNull();
   });
 
   it('describes exact reviewed remote delivery and the implemented Docker action', () => {
     render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
-      target: { value: 'committed immutable base' },
+      target: { value: 'read-only comparison' },
     });
-    expect(screen.getByText(/read-only view of committed work/u)).toBeTruthy();
-    expect(screen.getByText(/select the completed terminal agent run/u)).toBeTruthy();
+    expect(screen.getByText(/read-only comparison of everything the run saved/u)).toBeTruthy();
+    expect(screen.getByText(/select the finished agent run/u)).toBeTruthy();
     expect(screen.getByText(/Forgeboard never force-pushes/u)).toBeTruthy();
-    expect(screen.getByText(/queried only when requested/u)).toBeTruthy();
+    expect(screen.getByText(/only checks your GitHub sign-in/u)).toBeTruthy();
     expect(screen.queryByText(/push, and pull-request controls are not available yet/u)).toBeNull();
     expect(screen.queryByText(/include both committed and uncommitted/u)).toBeNull();
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
-      target: { value: 'docker readiness' },
+      target: { value: 'docker image' },
     });
     expect(screen.getByText(/Select Check Docker/u)).toBeTruthy();
     expect(screen.queryByText(/Select Test Docker/u)).toBeNull();
@@ -83,9 +83,9 @@ describe('HelpSettings', () => {
     });
 
     expect(screen.getByRole('status').textContent).toBe('1 matching guide');
-    expect(screen.getByText('Remote delivery is blocked')).toBeTruthy();
-    expect(screen.getByText(/Use a remote name discovered beside the Remote field/u)).toBeTruthy();
-    expect(screen.getByText(/Normal Git push still uses the selected remote/u)).toBeTruthy();
+    expect(screen.getByText('Sharing your work online is blocked')).toBeTruthy();
+    expect(screen.getByText(/names listed next to the Remote field/u)).toBeTruthy();
+    expect(screen.getByText(/normal Git push still works/u)).toBeTruthy();
     expect(screen.getByText(/reports a head mismatch/u)).toBeTruthy();
     expect(screen.getByText(/rejected without force/u)).toBeTruthy();
   });
@@ -98,7 +98,7 @@ describe('HelpSettings', () => {
     });
 
     expect(screen.getByRole('status').textContent).toBe('0 matching guides');
-    expect(screen.getByText('No matching local guide')).toBeTruthy();
+    expect(screen.getByText('No guides match your search')).toBeTruthy();
   });
 
   it('explains Custom host and Docker boundaries without claiming cwd is a sandbox', () => {
@@ -108,9 +108,9 @@ describe('HelpSettings', () => {
       target: { value: 'custom cwd sandbox' },
     });
 
-    expect(screen.getByText('Build a Custom permission profile')).toBeTruthy();
-    expect(screen.getByText(/cwd is not an operating-system sandbox/u)).toBeTruthy();
-    expect(screen.getByText(/one whole-worktree read-only or read-write mount/u)).toBeTruthy();
+    expect(screen.getByText('Create a Custom permission profile')).toBeTruthy();
+    expect(screen.getByText(/\(cwd\) is not an operating-system sandbox/u)).toBeTruthy();
+    expect(screen.getByText(/whole worktree is mounted read-only or read-write/u)).toBeTruthy();
   });
 });
 

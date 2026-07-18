@@ -69,7 +69,7 @@ describe('withProcessQuiescence', () => {
     const broken = service('broken', trace, undefined, new Error('resume failed'));
 
     await expect(withProcessQuiescence([broken], () => 'cleaned')).rejects.toThrow(
-      'cleanup completed, but Forgeboard could not reopen',
+      'cleanup finished, but Forgeboard could not restart',
     );
     expect(trace).toEqual(['broken:pause', 'broken:resume']);
   });
@@ -103,7 +103,7 @@ describe('withProcessQuiescence', () => {
 
     expect(failure).toBeInstanceOf(ProcessAdmissionRestoreError);
     expect((failure as ProcessAdmissionRestoreError).operationCompleted).toBe(true);
-    expect((failure as ProcessAdmissionRestoreError).message).toContain('cleanup completed');
+    expect((failure as ProcessAdmissionRestoreError).message).toContain('cleanup finished');
     expect((failure as ProcessAdmissionRestoreError).errors).toEqual([
       completedFailure,
       expect.objectContaining({ message: 'resume failed' }),
@@ -135,7 +135,7 @@ describe('withProcessQuiescence', () => {
     await Promise.resolve();
     expect(mutationStarted).toBe(false);
     await expect(gate.run(() => 'late operation')).rejects.toThrow(
-      'Another local-data operation is in progress.',
+      'Another data change is already in progress. Wait for it to finish, then try again.',
     );
 
     release.resolve();

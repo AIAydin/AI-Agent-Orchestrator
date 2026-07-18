@@ -17,16 +17,18 @@ export function PermissionRootEditor({
   onChange,
   onBrowse,
 }: PermissionRootEditorProps) {
-  const label = kind === 'read' ? 'Readable roots' : 'Writable roots';
+  const label = kind === 'read' ? 'Folders the agent can read' : 'Folders the agent can change';
+  const itemLabel = kind === 'read' ? 'Read-only folder' : 'Writable folder';
   return (
     <fieldset className="permission-list-editor">
       <legend>{label}</legend>
       <p>
-        Paths are relative to the assigned worktree. Use <code>.</code> for its root.
+        List folders inside the agent's worktree — its own copy of your project. Use <code>.</code>{' '}
+        for the top folder.
       </p>
       {values.length === 0 ? (
         <div className="permission-list-empty">
-          No {kind === 'read' ? 'readable' : 'writable'} roots.
+          No {kind === 'read' ? 'read-only' : 'writable'} folders yet. Add one below.
         </div>
       ) : (
         <div className="permission-list-rows">
@@ -34,7 +36,7 @@ export function PermissionRootEditor({
             <div key={`${kind}-${String(index)}`} className="permission-list-row">
               <label htmlFor={`custom-permission-${kind}-root-${String(index)}`}>
                 <span className="sr-only">
-                  {label.slice(0, -1)} {index + 1}
+                  {itemLabel} {index + 1}
                 </span>
               </label>
               <input
@@ -55,7 +57,7 @@ export function PermissionRootEditor({
                 type="button"
                 className="icon-button"
                 disabled={disabled}
-                aria-label={`Remove ${kind} root ${value || index + 1}`}
+                aria-label={`Remove ${itemLabel.toLowerCase()} ${value || index + 1}`}
                 onClick={() =>
                   onChange(values.filter((_, candidateIndex) => candidateIndex !== index))
                 }
@@ -72,15 +74,15 @@ export function PermissionRootEditor({
           disabled={disabled || values.length >= 256}
           onClick={() => onChange([...values, ''])}
         >
-          <Plus size={14} aria-hidden="true" /> Add path
+          <Plus size={14} aria-hidden="true" /> Add a folder
         </button>
         <button
           type="button"
           disabled={disabled || !canBrowse || values.length >= 256}
-          title={canBrowse ? undefined : 'Open a project to choose a worktree-relative folder.'}
+          title={canBrowse ? undefined : 'Open a project first to pick one of its folders.'}
           onClick={onBrowse}
         >
-          <FolderOpen size={14} aria-hidden="true" /> Browse matching project folder
+          <FolderOpen size={14} aria-hidden="true" /> Browse project folders
         </button>
       </div>
     </fieldset>

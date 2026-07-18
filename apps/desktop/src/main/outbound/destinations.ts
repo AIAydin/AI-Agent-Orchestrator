@@ -26,11 +26,11 @@ export function dockerPullDisclosure(
       transport: 'Docker Registry API',
     },
     details: [
-      { label: 'Docker executable', value: resolvedExecutable },
-      { label: 'Expected container executable', value: input.containerExecutable },
+      { label: 'Docker program', value: resolvedExecutable },
+      { label: 'Program expected in the container', value: input.containerExecutable },
     ],
     warning:
-      'The Docker daemon may contact registry authentication and storage endpoints associated with this exact image reference. Forgeboard does not mount host folders, credentials, keychains, or control sockets into the downloaded image.',
+      'Docker may contact the sign-in and storage servers that belong to this exact image. Forgeboard does not share your folders, passwords, or keys with the downloaded image.',
   };
 }
 
@@ -50,11 +50,11 @@ export function gitCloneDisclosure(
       resource: remote.resource,
       transport: remote.transport,
     },
-    details: [{ label: 'Local destination', value: path.resolve(destinationPath) }],
+    details: [{ label: 'Destination folder', value: path.resolve(destinationPath) }],
     warning:
       remote.endpoint === 'local-filesystem'
-        ? 'This source is local. Forgeboard still requires the same per-use approval because cloning creates repository content at the disclosed destination.'
-        : 'Git may use your existing operating-system or Git credential helper. Forgeboard does not store credentials, and remote URLs containing credentials are rejected.',
+        ? 'This source is on this computer. Forgeboard still asks for approval every time, because cloning creates new files in the destination folder.'
+        : 'Git may use the sign-in details already saved on this computer or in Git. Forgeboard never stores passwords, and it refuses remote addresses that contain them.',
   };
 }
 
@@ -112,7 +112,7 @@ function parseGitRemote(value: string): ParsedGitRemote {
     parsed.hash !== ''
   ) {
     throw new Error(
-      'Remote URLs containing credentials, query values, or fragments are not accepted. Use an authenticated Git credential helper or SSH agent.',
+      'Remote addresses that contain credentials, query values, or fragments are not accepted. Sign in with a Git credential helper or SSH agent instead.',
     );
   }
   if (parsed.protocol === 'file:') {

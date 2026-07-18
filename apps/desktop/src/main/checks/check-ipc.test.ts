@@ -141,9 +141,9 @@ describe('CheckIpcService', () => {
     expect(messageBoxCall[1].buttons).toEqual(['Cancel', 'Run check']);
     expect(messageBoxCall[1].defaultId).toBe(0);
     expect(messageBoxCall[1].cancelId).toBe(0);
-    expect(messageBoxCall[1].detail).toContain(`Executable: ${PLAN.executable}`);
+    expect(messageBoxCall[1].detail).toContain(`Command: ${PLAN.executable}`);
     expect(messageBoxCall[1].detail).toContain(PLAN.approvalFingerprint);
-    expect(messageBoxCall[1].detail).toContain('exportable without redaction');
+    expect(messageBoxCall[1].detail).toContain('exported unchanged');
     expect(messageBoxCall[1].checkboxLabel).toContain('only this exact check');
     expect(fixture.appendAudit).toHaveBeenCalledWith(
       'check',

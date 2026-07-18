@@ -31,12 +31,13 @@ describe('native terminal confirmation', () => {
       cancelId: 0,
       noLink: true,
     });
-    expect(shown?.detail).toContain('Executable: "/private/tools/zsh"');
-    expect(shown?.detail).toContain('Working directory: "/private/project/apps/desktop"');
+    expect(shown?.detail).toContain('Program: "/private/tools/zsh"');
+    expect(shown?.detail).toContain('Folder to run in: "/private/project/apps/desktop"');
     expect(shown?.detail).toContain('1. "-l"');
     expect(shown?.detail).toContain('"PATH", "TERM"');
     expect(shown?.detail).toContain('not sandboxed');
-    expect(shown?.detail).toContain('single-use');
+    expect(shown?.detail).toContain('You can use this approval only once, and it expires at');
+    expect(shown?.detail).toContain('If the action or destination changes, Forgeboard blocks it.');
   });
 
   it('escapes control and directional text and fails closed when ownership changes', async () => {

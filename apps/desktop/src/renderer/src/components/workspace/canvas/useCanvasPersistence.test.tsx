@@ -188,7 +188,9 @@ describe('useCanvasPersistence', () => {
 
     expect(saved).toBe(false);
     expect(hook.result.current.saveState).toBe('error');
-    expect(onError).toHaveBeenCalledWith('Could not save the canvas: Disk is full.');
+    expect(onError).toHaveBeenCalledWith(
+      'Could not save the canvas: Disk is full. Your changes are still here; try saving again.',
+    );
 
     hook.rerender({ projectId: PROJECT_A, document: canvas('another edit') });
     hook.unmount();

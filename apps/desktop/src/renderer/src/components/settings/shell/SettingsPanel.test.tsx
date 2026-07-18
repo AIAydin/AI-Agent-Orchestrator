@@ -304,12 +304,12 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
 
     expect(
-      screen.getByText(/Repository, pull-request, and CI actions run only after explicit review/u),
+      screen.getByText(
+        /Repository, pull request, and build actions run only after you review them/u,
+      ),
     ).toBeTruthy();
     expect(
-      screen.getByText(
-        /Git pushes use the selected Git remote and its existing credential helper/u,
-      ),
+      screen.getByText(/Pushing code uses your existing Git credentials or SSH setup/u),
     ).toBeTruthy();
     expect(screen.queryByText(/CI lookups, pushes, and pull requests/u)).toBeNull();
   });
@@ -396,9 +396,9 @@ describe('SettingsPanel draft transactions', () => {
     await waitFor(() => expect(save.disabled).toBe(false));
 
     fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
-    expect(screen.getByText('Folder preflight is ready.')).toBeTruthy();
+    expect(screen.getByText('This folder is ready to use.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
-    expect(screen.getByText('Folder preflight is ready.')).toBeTruthy();
+    expect(screen.getByText('This folder is ready to use.')).toBeTruthy();
   });
 
   it('invalidates folder evidence on edit and blocks a non-writable worktree location', async () => {
@@ -530,13 +530,13 @@ describe('SettingsPanel draft transactions', () => {
       name: 'Save settings',
     });
     expect(save.disabled).toBe(true);
-    expect(
-      await screen.findAllByText(/Refresh readiness for the current executable/u),
-    ).toHaveLength(1);
+    expect(await screen.findAllByText(/Refresh readiness for the current program/u)).toHaveLength(
+      1,
+    );
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Refresh OpenAI Codex CLI readiness',
+        name: 'Check OpenAI Codex CLI again',
       }),
     );
     await waitFor(() => expect(save.disabled).toBe(false));
@@ -549,7 +549,7 @@ describe('SettingsPanel draft transactions', () => {
       target: { value: '/other/bin/codex' },
     });
     expect(save.disabled).toBe(true);
-    expect(screen.getAllByText(/Refresh readiness for the current executable/u).length).toBe(1);
+    expect(screen.getAllByText(/Refresh readiness for the current program/u).length).toBe(1);
   });
 
   it('requires an exact readiness refresh after selecting a different detected default', async () => {
@@ -575,7 +575,7 @@ describe('SettingsPanel draft transactions', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Refresh OpenAI Codex CLI readiness',
+        name: 'Check OpenAI Codex CLI again',
       }),
     );
 
@@ -602,7 +602,9 @@ describe('SettingsPanel draft transactions', () => {
         .getAllByRole('alert')
         .some((alert) => /valid environment/u.test(alert.textContent ?? '')),
     ).toBe(true);
-    expect(screen.getByText(/session values are not entered here/u)).toBeTruthy();
+    expect(
+      screen.getByText(/Values are read from this computer each time a program starts/u),
+    ).toBeTruthy();
 
     fireEvent.change(environment, { target: { value: 'PATH, CI' } });
     await waitFor(() => expect(save.disabled).toBe(false));
@@ -612,7 +614,7 @@ describe('SettingsPanel draft transactions', () => {
     render(<SettingsPanel {...props()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
-    fireEvent.change(screen.getByLabelText('Automatic backup interval (hours)'), {
+    fireEvent.change(screen.getByLabelText('Back up automatically every (hours)'), {
       target: { value: '6' },
     });
     fireEvent.change(screen.getByLabelText('Backups to keep'), {
@@ -651,9 +653,9 @@ describe('SettingsPanel draft transactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
 
-    expect(await screen.findByText(/Last attempt failed/u)).toBeTruthy();
+    expect(await screen.findByText(/Last backup failed/u)).toBeTruthy();
     expect(screen.getByText(/Backup disk is unavailable/u)).toBeTruthy();
-    expect(screen.getByText(/inherit this folder's access controls/u)).toBeTruthy();
+    expect(screen.getByText(/Backup files on Windows use this folder's permissions/u)).toBeTruthy();
   });
 
   it('settles the active canvas before destructive local-data deletion', async () => {
@@ -708,34 +710,36 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.change(screen.getByLabelText('Default permission profile'), {
       target: { value: 'custom' },
     });
-    fireEvent.change(screen.getByLabelText('Filesystem policy'), {
+    fireEvent.change(screen.getByLabelText('File access'), {
       target: { value: 'explicit-paths' },
     });
 
-    const readable = screen.getByRole('group', { name: 'Readable roots' });
+    const readable = screen.getByRole('group', { name: 'Folders the agent can read' });
     fireEvent.click(
       within(readable).getByRole('button', {
-        name: 'Browse matching project folder',
+        name: 'Browse project folders',
       }),
     );
     await waitFor(() => expect(within(readable).getByDisplayValue('src')).toBeTruthy());
-    const writable = screen.getByRole('group', { name: 'Writable roots' });
-    fireEvent.click(within(writable).getByRole('button', { name: 'Add path' }));
-    fireEvent.change(within(writable).getByRole('textbox', { name: 'Writable root 1' }), {
+    const writable = screen.getByRole('group', { name: 'Folders the agent can change' });
+    fireEvent.click(within(writable).getByRole('button', { name: 'Add a folder' }));
+    fireEvent.change(within(writable).getByRole('textbox', { name: 'Writable folder 1' }), {
       target: { value: 'src/generated' },
     });
 
-    fireEvent.change(screen.getByLabelText('Top-level launch policy'), {
+    fireEvent.change(screen.getByLabelText('Which programs can start it'), {
       target: { value: 'allowlist' },
     });
     const executableGroup = screen.getByRole('group', {
-      name: 'Allowed top-level agent executables',
+      name: 'Programs allowed to start the agent',
     });
     expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', true);
-    expect(screen.getAllByText(/Add at least one exact executable/u).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Add at least one program by its full path/u).length,
+    ).toBeGreaterThan(0);
     fireEvent.click(
       within(executableGroup).getByRole('button', {
-        name: 'Browse executable',
+        name: 'Browse for a program',
       }),
     );
     await waitFor(() =>
@@ -781,7 +785,7 @@ describe('SettingsPanel draft transactions', () => {
     expect(ignoredFiles.value).toBe('deny');
     expect(sensitiveFiles.value).toBe('deny');
 
-    fireEvent.change(screen.getByLabelText('Runtime boundary'), {
+    fireEvent.change(screen.getByLabelText('Where the agent runs'), {
       target: { value: 'docker' },
     });
 
@@ -789,18 +793,17 @@ describe('SettingsPanel draft transactions', () => {
     expect(sensitiveFiles.value).toBe('deny');
     expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', true);
     expect(
-      screen.getAllByText(/whole-worktree Docker bind cannot hide ignored or sensitive files/u)
-        .length,
+      screen.getAllByText(/Docker always gives the agent the whole worktree/u).length,
     ).toBeGreaterThan(0);
 
-    fireEvent.change(screen.getByLabelText('Top-level launch policy'), {
+    fireEvent.change(screen.getByLabelText('Which programs can start it'), {
       target: { value: 'allowlist' },
     });
-    expect(screen.getByRole('button', { name: 'Browse executable' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Browse for a program' })).toHaveProperty(
       'disabled',
       true,
     );
-    fireEvent.change(screen.getByLabelText('Top-level launch policy'), {
+    fireEvent.change(screen.getByLabelText('Which programs can start it'), {
       target: { value: 'selected-agent-only' },
     });
     fireEvent.change(ignoredFiles, { target: { value: 'allow' } });
@@ -841,7 +844,9 @@ describe('SettingsPanel draft transactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
     expect(screen.getByText('No project is open')).toBeTruthy();
-    expect(screen.getByText(/Open a project to adopt detected package scripts/u)).toBeTruthy();
+    expect(
+      screen.getByText(/Open a project and Forgeboard will find its check scripts/u),
+    ).toBeTruthy();
 
     const lintEditor = screen.getByRole('group', { name: 'Lint command' });
     fireEvent.click(within(lintEditor).getByRole('button', { name: 'Browse' }));
@@ -1001,7 +1006,7 @@ describe('SettingsPanel draft transactions', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Help & shortcuts' }));
     expect(
-      screen.getByText('VS Code preset · unsaved; Standard preset remains active'),
+      screen.getByText('VS Code preset · not saved yet; Standard preset is still active'),
     ).toBeTruthy();
     await clickSaveSettings();
 
@@ -1082,7 +1087,7 @@ describe('SettingsPanel draft transactions', () => {
       'disabled',
       true,
     );
-    expect(screen.getByText(/Manual update checks are unavailable/u)).toBeTruthy();
+    expect(screen.getByText(/Update checks are not available/u)).toBeTruthy();
     expect(screen.getByText(/Not connected/u)).toBeTruthy();
 
     await clickSaveSettings();
@@ -1107,9 +1112,7 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.change(remote, { target: { value: 'bad/remote' } });
     expect(remote.getAttribute('aria-invalid')).toBe('true');
     expect(
-      screen.getByText(
-        /The Git \/ PR node verifies that it exists in the selected agent worktree/u,
-      ),
+      screen.getByText(/checks that it exists in the selected agent's worktree/u),
     ).toBeTruthy();
     expect(save.disabled).toBe(true);
     expect(updateSettings).not.toHaveBeenCalled();
@@ -1131,7 +1134,7 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
     const cleanupPolicy = screen.getByLabelText<HTMLSelectElement>(/Cleanup policy/u);
     expect(cleanupPolicy.value).toBe('after-retention');
-    expect(screen.getByText(/imported legacy policy is not executed automatically/u)).toBeTruthy();
+    expect(screen.getByText(/never runs automatically/u)).toBeTruthy();
     fireEvent.change(cleanupPolicy, { target: { value: 'manual' } });
     await clickSaveSettings();
 

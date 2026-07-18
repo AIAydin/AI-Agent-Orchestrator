@@ -48,7 +48,7 @@ describe('native Git connection confirmation', () => {
       noLink: true,
     });
     expect(shown?.detail).toContain(LOCAL_PATH);
-    expect(shown?.detail).toContain('Network access: None');
+    expect(shown?.detail).toContain('This change is local only');
   });
 
   it('fails before opening the dialog when native ownership is stale', async () => {
@@ -107,14 +107,14 @@ describe('native Git connection confirmation', () => {
       defaultId: 0,
       cancelId: 0,
     });
-    expect(shown?.detail).toContain('remove 2 remote configuration entries');
+    expect(shown?.detail).toContain('removes the 2 remote settings');
     expect(shown?.detail).toContain('local: remote.origin.url');
     expect(shown?.detail).toContain('local: remote.origin.fetch');
     expect(shown?.detail).toContain(
-      'Values are omitted because remote URLs can contain credentials',
+      'Setting values are hidden because remote URLs can contain sign-in details',
     );
     expect(shown?.detail).toContain('refs/remotes/origin/main');
-    expect(shown?.detail).toContain('does not fetch, push, authenticate, or test reachability');
+    expect(shown?.detail).toContain('nothing is fetched, pushed, or sent over the network');
   });
 
   it('describes replacement as one changed value without claiming every entry is unchanged', async () => {
@@ -152,8 +152,8 @@ describe('native Git connection confirmation', () => {
       () => undefined,
     );
 
-    expect(shown?.detail).toContain('change one URL value');
-    expect(shown?.detail).toContain('reviewed entry count (2)');
+    expect(shown?.detail).toContain('replaces one URL');
+    expect(shown?.detail).toContain('The 2 reviewed settings otherwise stay unchanged');
     expect(shown?.detail).not.toContain('preserve all 2 existing configuration entries');
   });
 });
@@ -200,7 +200,7 @@ describe('native GitHub CLI confirmation', () => {
     expect(shown?.detail).toContain(executablePath);
     expect(shown?.detail).toContain('e'.repeat(64));
     expect(shown?.detail).toContain('--version');
-    expect(shown?.detail).toContain('Network access: None');
+    expect(shown?.detail).toContain('This check stays on this computer');
   });
 
   it('reviews automatic missing mode without claiming code execution', async () => {
@@ -228,8 +228,8 @@ describe('native GitHub CLI confirmation', () => {
         () => undefined,
       ),
     ).resolves.toBe('denied');
-    expect(shown?.detail).toContain('Validation command: (none)');
-    expect(shown?.detail).toContain('leaves GitHub CLI features unavailable');
+    expect(shown?.detail).toContain('Version check: (none)');
+    expect(shown?.detail).toContain('GitHub features stay unavailable');
   });
 });
 

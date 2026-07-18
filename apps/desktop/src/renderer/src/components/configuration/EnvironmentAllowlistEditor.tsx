@@ -53,8 +53,8 @@ export function EnvironmentAllowlistEditor({
         onBlur={() => setInputValue(serializedValue)}
       />
       <small id={helpId}>
-        Names only are saved. Values are resolved from the current app environment at launch and are
-        never persisted. Provider tokens, secrets, and session values are not entered here.
+        Enter names only, separated by commas. Values are read from this computer each time a
+        program starts and are never saved. Do not enter passwords, tokens, or other secrets here.
       </small>
       {issues[0] !== undefined && (
         <small id={issueId} className="environment-editor-issue" role="alert">
@@ -79,16 +79,16 @@ export function parseEnvironmentNames(value: string): string[] {
 export function environmentAllowlistIssues(names: readonly string[]): string[] {
   const issues: string[] = [];
   if (names.length > MAX_ENVIRONMENT_NAMES) {
-    issues.push(`Use at most ${String(MAX_ENVIRONMENT_NAMES)} environment variable names.`);
+    issues.push(`Use at most ${String(MAX_ENVIRONMENT_NAMES)} names.`);
   }
   const invalid = names.find((name) => !ENVIRONMENT_NAME.test(name) || name.length > 512);
   if (invalid !== undefined) {
     issues.push(
-      'One entry is not a valid environment variable name. Use letters, numbers, and underscores, starting with a letter or underscore.',
+      'One of the entries is not a valid environment variable name. Use only letters, numbers, and underscores, and start with a letter or underscore.',
     );
   }
   if (new Set(names).size !== names.length) {
-    issues.push('Environment variable names must be unique.');
+    issues.push('Each name may appear only once. Remove the duplicates.');
   }
   return issues;
 }

@@ -54,7 +54,7 @@ const EnvironmentAllowlistSchema = z
     if (new Set(names).size !== names.length) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Environment allowlist names must be unique.',
+        message: 'Each environment variable name can appear only once.',
       });
     }
   });
@@ -115,10 +115,7 @@ export const BranchPrefixSchema = z
   .trim()
   .min(1)
   .max(128)
-  .refine(
-    isValidBranchPrefix,
-    'Use a relative Git branch namespace such as forgeboard/ or team/agents/.',
-  );
+  .refine(isValidBranchPrefix, 'Use a branch prefix such as forgeboard/ or team/agents/.');
 
 const CustomAgentArgumentSchema = z
   .string()
@@ -136,7 +133,7 @@ const CustomAgentArgumentSchema = z
         '{extraArgs}',
         '{contextPath}',
       ].includes(value),
-    'Forgeboard reserves standalone adapter template placeholders.',
+    'Placeholders such as {prompt} are reserved for Forgeboard. Use a different argument.',
   );
 
 function containsControlCharacter(value: string): boolean {
@@ -149,7 +146,7 @@ function containsControlCharacter(value: string): boolean {
 export const CustomAgentConfigurationSchema = z
   .object({
     enabled: z.boolean().default(false),
-    name: z.string().trim().min(1).max(128).default('Custom CLI'),
+    name: z.string().trim().min(1).max(128).default('Custom agent'),
     providerName: z.string().trim().min(1).max(128).default('Custom provider'),
     providerDisclosure: z
       .string()
@@ -157,7 +154,7 @@ export const CustomAgentConfigurationSchema = z
       .min(1)
       .max(4_096)
       .default(
-        'This user-configured CLI may send the prompt and selected context to its configured provider.',
+        'This custom agent may send the prompt and selected context to its configured provider.',
       ),
     sendsContextOffDevice: z.boolean().default(true),
     executable: OptionalMachineSpecificValueSchema.default(''),
@@ -175,7 +172,7 @@ export const GitRemoteSettingSchema = z
   .string()
   .min(1)
   .max(128)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, 'Invalid Git remote name.');
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, 'Use letters, numbers, dots, underscores, or hyphens.');
 
 export const AppSettingsSchema = z
   .object({
@@ -266,56 +263,56 @@ export const AppSettingsSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['previewPortEnd'],
-        message: 'Preview port end must be greater than preview port start.',
+        message: 'Preview port end must be higher than preview port start.',
       });
     }
     if (settings.collaborationEnabled && settings.collaborationUrl === '') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['collaborationUrl'],
-        message: 'Choose a WebSocket collaboration server before enabling collaboration.',
+        message: 'Enter a collaboration server URL before enabling collaboration.',
       });
     }
     if (settings.customAgent.enabled && settings.customAgent.executable.trim() === '') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['customAgent', 'executable'],
-        message: 'Choose the custom CLI executable before enabling it.',
+        message: "Choose the custom agent's program file before enabling it.",
       });
     }
     if (settings.defaultAgent === 'custom' && !settings.customAgent.enabled) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['defaultAgent'],
-        message: 'Enable and configure the custom CLI before making it the default agent.',
+        message: 'Enable and set up the custom agent before making it the default agent.',
       });
     }
     if (settings.dockerEnabled && settings.dockerImage === '') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['dockerImage'],
-        message: 'Choose the container image before enabling Docker isolation.',
+        message: 'Choose a container image before enabling Docker profiles.',
       });
     }
     if (settings.dockerEnabled && settings.dockerContainerExecutable === '') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['dockerContainerExecutable'],
-        message: 'Choose the agent executable inside the image before enabling Docker isolation.',
+        message: 'Choose the agent executable inside the image before enabling Docker profiles.',
       });
     }
     if (settings.defaultPermissionProfile === 'docker-isolated' && !settings.dockerEnabled) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['defaultPermissionProfile'],
-        message: 'Enable and configure Docker before making it the default isolation profile.',
+        message: 'Enable and set up Docker before making it the default permission profile.',
       });
     }
     if (settings.customPermissionProfile.runtime === 'docker' && !settings.dockerEnabled) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['customPermissionProfile', 'runtime'],
-        message: 'Enable and configure Docker before selecting it for the Custom profile.',
+        message: 'Enable and set up Docker before using it for the Custom profile.',
       });
     }
     if (
@@ -327,7 +324,7 @@ export const AppSettingsSchema = z
         code: z.ZodIssueCode.custom,
         path: ['defaultAgent'],
         message:
-          'The deterministic test agent cannot run in Docker. Choose a container-ready agent or use the host Custom runtime.',
+          'The built-in test agent cannot run in Docker. Choose a different default agent, or run the Custom profile on this computer.',
       });
     }
     const hasGitIdentityName = settings.gitIdentityName.trim() !== '';
@@ -336,7 +333,8 @@ export const AppSettingsSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: hasGitIdentityName ? ['gitIdentityEmail'] : ['gitIdentityName'],
-        message: 'Provide both Git identity fields or leave both blank to use Git configuration.',
+        message:
+          'Fill in both Git identity fields, or leave both blank to use the Git settings from this repository.',
       });
     }
   });

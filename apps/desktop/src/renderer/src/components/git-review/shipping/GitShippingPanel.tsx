@@ -30,22 +30,22 @@ export function GitShippingPanel({
     !review.conflicted &&
     deliveryReady;
   const reason = review.dirty
-    ? 'Commit or discard all agent worktree edits first.'
+    ? "Commit or discard all changes in the agent's workspace first."
     : review.conflicted
-      ? 'Resolve the agent worktree conflicts first.'
+      ? "Fix the merge conflicts in the agent's workspace first."
       : comparison?.ahead === 0
-        ? 'There are no committed agent changes to deliver.'
+        ? 'There are no committed agent changes to deliver yet.'
         : !deliveryReady
-          ? 'Complete the exact required checks and current human quality approval first.'
-          : 'Forgeboard will verify the source and primary checkout again before delivery.';
+          ? 'Run every required check and approve the quality of the current changes first.'
+          : "Forgeboard will double-check the agent's work and the primary branch before delivering.";
 
   return (
     <section className="git-shipping-panel" aria-labelledby="git-shipping-title">
       <span>
-        <strong id="git-shipping-title">Deliver reviewed commits to primary</strong>
+        <strong id="git-shipping-title">Deliver the reviewed changes to the primary branch</strong>
         <small>{reason}</small>
       </span>
-      <label htmlFor="git-shipping-strategy">Delivery strategy</label>
+      <label htmlFor="git-shipping-strategy">Delivery method</label>
       <select
         id="git-shipping-strategy"
         name="git-shipping-strategy"
@@ -53,8 +53,8 @@ export function GitShippingPanel({
         disabled={busy || !ready}
         onChange={(event) => setStrategy(event.target.value as GitShippingStrategy)}
       >
-        <option value="fast-forward-only">Fast-forward only (safest)</option>
-        <option value="cherry-pick">Cherry-pick reviewed commits</option>
+        <option value="fast-forward-only">Move the primary branch forward (safest)</option>
+        <option value="cherry-pick">Copy the reviewed changes one by one</option>
       </select>
       <button
         className="button primary"
@@ -66,14 +66,14 @@ export function GitShippingPanel({
       </button>
       {result?.state === 'completed' && (
         <p className="git-shipping-result success" role="status">
-          Delivered to primary at <code>{result.headAfter.slice(0, 12)}</code>.
+          Delivered to the primary branch at <code>{result.headAfter.slice(0, 12)}</code>.
         </p>
       )}
       {result?.state === 'conflicted' && (
         <p className="git-shipping-result conflict" role="alert">
-          <TriangleAlert size={13} aria-hidden="true" /> Git stopped with conflicts in{' '}
-          {result.conflictedPaths.join(', ')}. The primary checkout was left intact for review; no
-          resolution was attempted.
+          <TriangleAlert size={13} aria-hidden="true" /> Git stopped because of conflicting changes
+          in {result.conflictedPaths.join(', ')}. The primary branch was left untouched — nothing
+          there was changed.
         </p>
       )}
     </section>

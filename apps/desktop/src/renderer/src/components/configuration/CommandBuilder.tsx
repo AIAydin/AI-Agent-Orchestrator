@@ -28,7 +28,7 @@ export function CommandBuilder({
   onBrowse,
   busy = false,
   variant = 'settings',
-  executablePlaceholder = 'Auto-detect or enter an executable',
+  executablePlaceholder = 'Auto-detect or enter a program',
   argumentsPlaceholder = 'run\ntest',
   readiness,
 }: CommandBuilderProps) {
@@ -71,7 +71,7 @@ export function CommandBuilder({
           name={`${name}-arguments`}
           aria-label={
             compact
-              ? `${label} arguments, one non-empty literal argument per line; empty lines ignored`
+              ? `${label} arguments, one argument per line; blank lines are ignored`
               : 'Arguments'
           }
           aria-describedby={helpId}

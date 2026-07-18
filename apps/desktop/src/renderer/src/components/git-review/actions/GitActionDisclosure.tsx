@@ -13,8 +13,8 @@ const MAX_VISIBLE_PATHS = 100;
 
 function targetLabel(target: GitReviewTargetView): string {
   return target.kind === 'primary'
-    ? 'Primary checkout'
-    : `Isolated agent worktree · run ${target.runId.slice(0, 12)}`;
+    ? 'Main project files'
+    : `Agent workspace · run ${target.runId.slice(0, 12)}`;
 }
 
 function PathList({ paths }: { paths: readonly string[] }) {
@@ -24,7 +24,7 @@ function PathList({ paths }: { paths: readonly string[] }) {
       {paths.slice(0, MAX_VISIBLE_PATHS).map((path) => (
         <code key={path}>{displayEscapedText(path)}</code>
       ))}
-      {remaining > 0 && <small>+ {remaining} additional paths in this exact plan</small>}
+      {remaining > 0 && <small>+ {remaining} more files in this plan</small>}
     </div>
   );
 }
@@ -114,7 +114,7 @@ function DisclosureFrame({
             ) : (
               <GitCommitHorizontal size={14} aria-hidden="true" />
             )}
-            Continue to system confirmation
+            Continue
           </button>
         </footer>
       </section>
@@ -136,8 +136,8 @@ export function GitDiscardDisclosure({
   return (
     <DisclosureFrame
       titleId="git-discard-review-title"
-      title="Review permanent hunk discard"
-      description="This removes the selected unstaged content from your working tree. Forgeboard will ask again in a native system dialog."
+      title="Discard these changes?"
+      description="This permanently removes the selected uncommitted changes from this workspace. Forgeboard will ask you to confirm once more."
       busy={busy}
       danger
       onCancel={onCancel}
@@ -145,20 +145,20 @@ export function GitDiscardDisclosure({
     >
       <dl>
         <div className="wide">
-          <dt>Target</dt>
+          <dt>Applies to</dt>
           <dd>{targetLabel(plan.target)}</dd>
         </div>
         <div>
-          <dt>Scope</dt>
+          <dt>Changes</dt>
           <dd>
-            {plan.hunkIds.length} hunk{plan.hunkIds.length === 1 ? '' : 's'} across{' '}
-            {plan.paths.length} path{plan.paths.length === 1 ? '' : 's'}
+            {plan.hunkIds.length} changed section{plan.hunkIds.length === 1 ? '' : 's'} across{' '}
+            {plan.paths.length} file{plan.paths.length === 1 ? '' : 's'}
           </dd>
         </div>
         <div>
-          <dt>Lines removed from working changes</dt>
+          <dt>Lines affected</dt>
           <dd>
-            +{plan.additions} additions · −{plan.deletions} deletions
+            +{plan.additions} added · −{plan.deletions} removed
           </dd>
         </div>
       </dl>
@@ -181,8 +181,8 @@ export function GitCommitDisclosure({
   return (
     <DisclosureFrame
       titleId="git-commit-review-title"
-      title="Review the exact local commit"
-      description="No commit exists yet. Continuing opens a native system confirmation bound to this staged snapshot."
+      title="Review your commit"
+      description="Nothing is committed yet. Continuing opens one final confirmation for exactly these changes."
       busy={busy}
       danger={false}
       onCancel={onCancel}
@@ -190,17 +190,17 @@ export function GitCommitDisclosure({
     >
       <dl>
         <div className="wide">
-          <dt>Target</dt>
+          <dt>Applies to</dt>
           <dd>{targetLabel(plan.target)}</dd>
         </div>
         <div>
           <dt>Branch</dt>
-          <dd>{plan.branch === null ? 'Unborn branch' : displayEscapedText(plan.branch)}</dd>
+          <dd>{plan.branch === null ? 'New branch' : displayEscapedText(plan.branch)}</dd>
         </div>
         <div>
-          <dt>Staged snapshot</dt>
+          <dt>Ready to commit</dt>
           <dd>
-            {plan.stagedPaths.length} paths · +{plan.additions} −{plan.deletions}
+            {plan.stagedPaths.length} files · +{plan.additions} −{plan.deletions}
           </dd>
         </div>
         <div className="wide">
@@ -217,7 +217,7 @@ export function GitCommitDisclosure({
       </dl>
       <PathList paths={plan.stagedPaths} />
       <small>
-        Plan expires at{' '}
+        This review expires at{' '}
         <time dateTime={plan.expiresAt}>{new Date(plan.expiresAt).toLocaleTimeString()}</time>.
       </small>
     </DisclosureFrame>

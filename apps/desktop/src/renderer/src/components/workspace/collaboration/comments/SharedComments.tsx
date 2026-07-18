@@ -49,7 +49,9 @@ export function SharedComments({
         <small>{comments.length}</small>
       </header>
       {visible.length === 0 ? (
-        <p className="shared-comments-empty">No shared comments on this node.</p>
+        <p className="shared-comments-empty">
+          No comments yet. Anything shared here is visible to everyone working on this canvas.
+        </p>
       ) : (
         <ol>
           {visible.map((comment) => (
@@ -69,11 +71,11 @@ export function SharedComments({
         </p>
       )}
       {rejectedCommentEntries.length > 0 && (
-        <aside className="shared-comments-rejected" aria-label="Not shared comments">
+        <aside className="shared-comments-rejected" aria-label="Comments not shared">
           <strong>Not shared</strong>
           <p>
-            The room rejected these comments. Their exact text is retained on this device so you can
-            review or try again.
+            These comments could not be shared. Their exact text is saved on this device, so you can
+            review it and try again.
           </p>
           <ol>
             {rejectedCommentEntries.slice(-MAX_RENDERED_COMMENTS).map((entry) => {
@@ -84,7 +86,7 @@ export function SharedComments({
                   <p>{comment.body}</p>
                   {canComment && (
                     <button type="button" onClick={() => setBody(comment.body)}>
-                      Restore to editor
+                      Copy to comment box
                     </button>
                   )}
                   <RejectedCommentActions entry={entry} onDiscard={onDiscardRejected} />
@@ -107,18 +109,18 @@ export function SharedComments({
             />
           </label>
           <small>
-            Shared with this room. Do not include credentials, private paths, prompts, or secrets.
+            Visible to everyone sharing this canvas. Do not include passwords, keys, or other
+            private details.
           </small>
           <button className="button" type="submit" disabled={busy || body.trim() === ''}>
             {busy ? 'Sharing…' : 'Share comment'}
           </button>
         </form>
       ) : roomEnabled ? (
-        <p className="shared-comments-empty">This role can read comments but cannot add them.</p>
+        <p className="shared-comments-empty">You can read comments, but you cannot add them.</p>
       ) : (
         <p className="shared-comments-empty">
-          Collaboration is off. Shared room comments are optional; private comments above stay on
-          this device.
+          Sharing is off. Shared comments are optional; private comments above stay on this device.
         </p>
       )}
     </section>

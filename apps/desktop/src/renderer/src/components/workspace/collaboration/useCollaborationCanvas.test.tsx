@@ -352,7 +352,7 @@ describe('useCollaborationCanvas', () => {
 
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(
-        'Collaboration paused because local and room metadata both changed since the last synchronized state.',
+        'Sharing paused because this device and the shared canvas both changed since they were last in sync.',
       ),
     );
     expect(onSnapshot).toHaveBeenCalledTimes(appliedBeforeConflict);
@@ -547,7 +547,7 @@ describe('useCollaborationCanvas', () => {
 
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(
-        'Collaboration paused because an offline edit conflicted with room changes during reconnect.',
+        'Sharing paused because an offline change clashed with shared canvas changes while reconnecting.',
       ),
     );
     expect(onSnapshot).not.toHaveBeenCalled();
@@ -584,7 +584,7 @@ describe('useCollaborationCanvas', () => {
 
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(
-        'Collaboration paused because offline metadata was not durably acknowledged after reconnect.',
+        'Sharing paused because the shared canvas did not confirm your offline changes after reconnecting.',
       ),
     );
     expect(onSnapshot).not.toHaveBeenCalled();
@@ -785,7 +785,7 @@ describe('useCollaborationCanvas', () => {
     await waitFor(() => expect(eventListener).not.toBeNull());
     act(() => eventListener?.(statusEvent('connected')));
 
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/conflict/u)));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.stringMatching(/clash/u)));
     expect(onSnapshot).not.toHaveBeenCalled();
     expect(checkpoint).not.toHaveBeenCalled();
   });
@@ -828,7 +828,7 @@ describe('useCollaborationCanvas', () => {
     act(() => eventListener?.(statusEvent('connected', 'viewer')));
 
     await waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(baseline, { initial: false }));
-    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/retained on this device/u));
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/saved on this device/u));
     expect(publish).not.toHaveBeenCalled();
     expect(checkpoint).not.toHaveBeenCalled();
   });
@@ -910,7 +910,7 @@ describe('useCollaborationCanvas', () => {
     await waitFor(() => expect(recover).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(hook.result.current.canComment).toBe(true));
     expect(onError).not.toHaveBeenCalledWith(
-      'Collaboration paused because a durable delivery receipt changed identity during recovery.',
+      'Sharing paused because a saved delivery record did not match while restoring offline changes.',
     );
     act(() => eventListener?.(deliveryAcknowledgedEvent(20, true)));
     expect(onError).not.toHaveBeenCalled();

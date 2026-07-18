@@ -142,7 +142,7 @@ export function useGitDeliveryReadiness(
         if (isCurrent(expected) && requestVersionRef.current === requestVersion) {
           const message = readinessErrorMessage(
             cause,
-            'Forgeboard could not load delivery readiness for this managed worktree.',
+            "Forgeboard couldn't load the delivery status for this agent's workspace. Try again.",
           );
           setState((current) =>
             current.activation === expected ? { ...current, view: null, error: message } : current,
@@ -234,9 +234,9 @@ export function useGitDeliveryReadiness(
         setCurrentError(
           activation,
           new Error(
-            `Select between 1 and ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} unique, configured checks before saving delivery requirements.`,
+            `Choose between 1 and ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} different checks that are set up before saving.`,
           ),
-          'Select at least one configured check before saving delivery requirements.',
+          "Choose at least one check that's set up before saving.",
         );
         return false;
       }
@@ -255,7 +255,7 @@ export function useGitDeliveryReadiness(
         setCurrentError(
           activation,
           cause,
-          'Forgeboard could not save the required delivery checks.',
+          "Forgeboard couldn't save the required checks. Try again.",
         );
         return false;
       } finally {
@@ -280,16 +280,16 @@ export function useGitDeliveryReadiness(
       if (managedTarget === null || readiness === null) {
         setCurrentError(
           activation,
-          new Error('Save the current required-check selection before running delivery checks.'),
-          'Delivery readiness is not prepared for this managed worktree.',
+          new Error('Save the current selection of required checks before running them.'),
+          "Delivery checks aren't set up for this agent's workspace yet.",
         );
         return undefined;
       }
       if (!readiness.requiredChecks.some((check) => check.checkId === checkId)) {
         setCurrentError(
           activation,
-          new Error('The selected check is not required by the current delivery binding.'),
-          'The selected delivery check cannot run.',
+          new Error("This check isn't part of the current delivery requirements."),
+          "This delivery check can't be run.",
         );
         return undefined;
       }
@@ -300,8 +300,8 @@ export function useGitDeliveryReadiness(
       ) {
         setCurrentError(
           activation,
-          new Error('Wait for the active delivery check to finish before running another check.'),
-          'A delivery check is already active.',
+          new Error('Wait for the running check to finish before starting another one.'),
+          'A delivery check is already running.',
         );
         return undefined;
       }
@@ -322,14 +322,14 @@ export function useGitDeliveryReadiness(
         } else {
           const resultCheck = result.requiredChecks.find((check) => check.checkId === checkId);
           if (resultCheck === undefined) {
-            throw new Error('The delivery-check response omitted the requested check evidence.');
+            throw new Error('The check run finished without a result for the requested check.');
           }
           notice = { kind: 'check-run-result', checkId, state: resultCheck.state };
         }
         await refreshFor(activation, managedTarget, false);
         return isCurrent(activation) ? notice : undefined;
       } catch (cause) {
-        setCurrentError(activation, cause, 'Forgeboard could not run this delivery check.');
+        setCurrentError(activation, cause, "Forgeboard couldn't run this check. Try again.");
         if (isCurrent(activation)) await refreshFor(activation, managedTarget, false);
         return undefined;
       } finally {
@@ -354,16 +354,16 @@ export function useGitDeliveryReadiness(
     if (managedTarget === null || readiness === null) {
       setCurrentError(
         activation,
-        new Error('Save the current required-check selection before approving quality.'),
-        'Delivery readiness is not prepared for this managed worktree.',
+        new Error('Save the current selection of required checks before approving quality.'),
+        "Delivery checks aren't set up for this agent's workspace yet.",
       );
       return undefined;
     }
     if (!readiness.requiredChecks.every((check) => check.state === 'passed')) {
       setCurrentError(
         activation,
-        new Error('Every required check must pass before human quality approval can be recorded.'),
-        'Required delivery checks have not passed.',
+        new Error('Every required check must pass before quality can be approved.'),
+        "The required checks haven't all passed yet.",
       );
       return undefined;
     }
@@ -384,7 +384,11 @@ export function useGitDeliveryReadiness(
       await refreshFor(activation, managedTarget, false);
       return isCurrent(activation) ? notice : undefined;
     } catch (cause) {
-      setCurrentError(activation, cause, 'Forgeboard could not record human quality approval.');
+      setCurrentError(
+        activation,
+        cause,
+        "Forgeboard couldn't record the quality approval. Try again.",
+      );
       return undefined;
     } finally {
       endOperation(activation, token);

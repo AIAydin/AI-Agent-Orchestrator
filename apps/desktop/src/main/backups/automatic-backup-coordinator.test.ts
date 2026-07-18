@@ -31,7 +31,7 @@ describe('AutomaticBackupCoordinator', () => {
     const missingAttempt = fixture.onAttempt.mock.lastCall?.[0];
     expect(missingAttempt).toMatchObject({ attemptedAt: NOW, outcome: 'failed' });
     expect(missingAttempt?.error).toBeInstanceOf(Error);
-    expect((missingAttempt?.error as Error).message).toBe('No backup directory is selected.');
+    expect((missingAttempt?.error as Error).message).toBe('No backup folder is selected.');
 
     fixture.settings.backupDirectory = '  /tmp/forgeboard-backups  ';
     await expect(fixture.coordinator.flush()).resolves.toMatchObject({ status: 'created' });

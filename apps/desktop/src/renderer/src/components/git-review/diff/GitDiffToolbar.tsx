@@ -12,32 +12,32 @@ export function GitDiffToolbar({
   onShowWhitespaceChange: (showWhitespace: boolean) => void;
 }) {
   return (
-    <div className="git-diff-toolbar" role="group" aria-label="Diff display controls">
-      <div role="group" aria-label="Diff layout">
+    <div className="git-diff-toolbar" role="group" aria-label="Change display options">
+      <div role="group" aria-label="Layout">
         <button
           type="button"
           aria-pressed={viewMode === 'unified'}
           onClick={() => onViewModeChange('unified')}
         >
-          Unified
+          One column
         </button>
         <button
           type="button"
           aria-pressed={viewMode === 'split'}
           onClick={() => onViewModeChange('split')}
         >
-          Split
+          Side by side
         </button>
       </div>
       <label>
         <input
           type="checkbox"
           name="git-diff-show-whitespace"
-          aria-label="Show whitespace characters"
+          aria-label="Show spaces and tabs"
           checked={showWhitespace}
           onChange={(event) => onShowWhitespaceChange(event.currentTarget.checked)}
         />
-        Show whitespace
+        Show spaces and tabs
       </label>
     </div>
   );

@@ -72,13 +72,13 @@ describe('resolveFileNodeContextDrop', () => {
       label: 'directory source',
       source: fileNode({ x: 220, y: 120 }, { kind: 'directory' }),
       target: agentNode({ x: 200, y: 100 }),
-      message: /ordinary File nodes/u,
+      message: /regular files/u,
     },
     {
       label: 'locked target',
       source: fileNode({ x: 220, y: 120 }),
       target: agentNode({ x: 200, y: 100 }, true),
-      message: /Unlock the Agent/u,
+      message: /Unlock the agent/u,
     },
   ])('rejects a $label after an intentional Agent collision', ({ source, target, message }) => {
     const result = resolveFileNodeContextDrop({

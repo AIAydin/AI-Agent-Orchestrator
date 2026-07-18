@@ -35,12 +35,12 @@ const BLOCKED_ENVIRONMENT_NAMES = new Set([
 const BLOCKED_ENVIRONMENT_PREFIXES = ['DYLD_', 'LD_'];
 
 export const TERMINAL_PERMISSION_INDICATOR: TerminalPermissionIndicator = {
-  label: 'Local terminal (not sandboxed)',
+  label: 'Local terminal with full access',
   sandboxed: false,
   filesystem: 'operating-system-user',
   network: 'operating-system-user',
   detail:
-    'This terminal runs as your operating-system user. Its project working directory and environment allowlist are boundaries for configuration, not a security sandbox.',
+    'This terminal runs with your computer account and can access everything you can. Its project folder and environment settings are convenience boundaries, not a security barrier.',
 };
 
 interface DirectoryIdentity {
@@ -94,7 +94,9 @@ export async function resolveTerminalLaunch(
     0,
   );
   if (argumentBytes > MAX_REVIEWABLE_ARGUMENT_BYTES) {
-    throw new Error('The terminal argument list is too large to review safely in a native dialog.');
+    throw new Error(
+      'The terminal arguments are too long to review safely. Shorten them and try again.',
+    );
   }
   const executableIdentity = await captureLaunchExecutableIdentity(executable, {
     maximumBytes: MAX_EXECUTABLE_BYTES,
@@ -131,7 +133,9 @@ export async function assertTerminalLaunchCurrent(
     project.id !== resolved.projectId ||
     !pathsEqual(project.path, resolved.projectPath)
   ) {
-    throw new Error('The selected project changed after the terminal launch was reviewed.');
+    throw new Error(
+      'The selected project changed after this terminal was reviewed. Review it again.',
+    );
   }
   const [root, cwd] = await Promise.all([
     canonicalDirectory(project.path, 'project'),
@@ -142,7 +146,7 @@ export async function assertTerminalLaunchCurrent(
     !sameDirectoryIdentity(root, resolved.rootIdentity) ||
     !sameDirectoryIdentity(cwd, resolved.cwdIdentity)
   ) {
-    throw new Error('The terminal working directory changed after review. Review a fresh launch.');
+    throw new Error('The terminal folder changed after review. Review the launch again.');
   }
   assertEnvironmentStillAllowed(resolved.environmentVariableNames, settings);
   await assertLaunchExecutableIdentity(resolved.executableIdentity, {
@@ -158,10 +162,10 @@ async function canonicalDirectory(
   try {
     canonical = await realpath(resolve(path));
   } catch {
-    throw new Error(`The terminal ${label} directory is no longer available.`);
+    throw new Error(`The terminal ${label} folder is no longer available.`);
   }
   const details = await stat(canonical);
-  if (!details.isDirectory()) throw new Error(`The terminal ${label} path is not a directory.`);
+  if (!details.isDirectory()) throw new Error(`The terminal ${label} path is not a folder.`);
   return {
     path: canonical,
     device: details.dev,
@@ -181,7 +185,7 @@ async function locateExecutable(command: string, cwd: string): Promise<string> {
       await access(canonical, process.platform === 'win32' ? constants.F_OK : constants.X_OK);
       if (process.platform === 'win32' && /\.(?:bat|cmd)$/iu.test(canonical)) {
         throw new Error(
-          'Windows batch files are not direct terminal executables. Choose PowerShell, cmd.exe, or another executable file.',
+          'Windows batch files cannot be used as terminal programs. Choose PowerShell, cmd.exe, or another program file.',
         );
       }
       return canonical;
@@ -189,7 +193,7 @@ async function locateExecutable(command: string, cwd: string): Promise<string> {
       if (error instanceof Error && error.message.startsWith('Windows batch files')) throw error;
     }
   }
-  throw new Error('The configured terminal executable was not found or is not executable.');
+  throw new Error('The configured terminal program was not found or cannot be run.');
 }
 
 function executableCandidates(command: string, cwd: string): string[] {
@@ -227,15 +231,17 @@ function terminalEnvironment(
     const actual = environmentEntry(requested);
     const value = actual?.value ?? '';
     if (value.includes('\0')) {
-      throw new Error(`Environment variable ${requested} contains an invalid NUL byte.`);
+      throw new Error(
+        `Environment variable ${requested} contains a character Forgeboard cannot pass to a terminal.`,
+      );
     }
     const bytes = Buffer.byteLength(value, 'utf8');
     if (bytes > MAX_ENVIRONMENT_VALUE_BYTES) {
-      throw new Error(`Environment variable ${requested} is too large for a terminal launch.`);
+      throw new Error(`Environment variable ${requested} is too large to pass to a terminal.`);
     }
     totalBytes += Buffer.byteLength(requested, 'utf8') + bytes;
     if (totalBytes > MAX_ENVIRONMENT_BYTES) {
-      throw new Error('The allowlisted terminal environment is too large.');
+      throw new Error('The allowed terminal environment variables are too large together.');
     }
     values[requested] = value;
   }
@@ -247,7 +253,9 @@ function assertEnvironmentStillAllowed(names: readonly string[], settings: AppSe
   for (const name of names) {
     const canonical = name.toUpperCase();
     if (!allowed.has(canonical)) {
-      throw new Error(`Environment variable ${name} is not allowed by Terminal settings.`);
+      throw new Error(
+        `Environment variable ${name} is not on the allowed list in Terminal settings.`,
+      );
     }
     if (
       BLOCKED_ENVIRONMENT_NAMES.has(canonical) ||
@@ -275,7 +283,7 @@ function environmentEntry(
 function assertContained(root: string, candidate: string): void {
   const fromRoot = relative(root, candidate);
   if (fromRoot === '' || (!fromRoot.startsWith('..') && !isAbsolute(fromRoot))) return;
-  throw new Error('The terminal working directory escapes the selected project.');
+  throw new Error('The terminal folder must stay inside the selected project.');
 }
 
 function sameDirectoryIdentity(left: DirectoryIdentity, right: DirectoryIdentity): boolean {

@@ -21,15 +21,12 @@ const RelativePermissionRootSchema = z
   .string()
   .min(1)
   .max(4_096)
-  .refine(
-    (value) => value === value.trim(),
-    'Permission roots cannot start or end with whitespace.',
-  )
-  .refine(hasNoControlCharacters, 'Permission roots cannot contain control characters.')
-  .refine((value) => !value.includes('\\'), 'Use forward slashes in permission roots.')
+  .refine((value) => value === value.trim(), 'Folder paths cannot start or end with a space.')
+  .refine(hasNoControlCharacters, 'Folder paths cannot contain non-printing characters.')
+  .refine((value) => !value.includes('\\'), 'Use forward slashes (/) in folder paths.')
   .refine(
     (value) => value === '.' || (!value.startsWith('/') && !/^[A-Za-z]:\//u.test(value)),
-    'Permission roots must be relative to the assigned project or worktree.',
+    "List folders inside the agent's worktree, not full paths from this computer.",
   )
   .refine(
     (value) =>
@@ -39,7 +36,7 @@ const RelativePermissionRootSchema = z
         !value.endsWith('/') &&
         !value.includes('//') &&
         value.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..')),
-    'Permission roots must be normalized and cannot traverse outside the assigned root.',
+    'Folder paths must stay inside the assigned worktree. Remove any "." or ".." parts.',
   );
 
 const PermissionRootListSchema = z
@@ -49,7 +46,7 @@ const PermissionRootListSchema = z
     if (new Set(roots).size !== roots.length) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Permission roots must be unique.',
+        message: 'Each folder can appear only once.',
       });
     }
   });
@@ -105,21 +102,22 @@ export const CustomPermissionProfileSettingsSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['allowedExecutables'],
-        message: 'Clear the launch allowlist when only the selected agent executable is allowed.',
+        message:
+          "Only the selected agent's program can start it. Remove the extra programs from the list.",
       });
     }
     if (profile.executablePolicy === 'allowlist' && profile.allowedExecutables.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['allowedExecutables'],
-        message: 'Add at least one exact executable before enabling the launch allowlist.',
+        message: 'Add at least one program by its full path.',
       });
     }
     if (new Set(profile.allowedExecutables).size !== profile.allowedExecutables.length) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['allowedExecutables'],
-        message: 'Launch allowlist entries must be unique.',
+        message: 'Each program can appear only once.',
       });
     }
     if (profile.filesystem === 'assigned-worktree-read-only') {
@@ -127,14 +125,15 @@ export const CustomPermissionProfileSettingsSchema = z
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['readPaths'],
-          message: 'The read-only preset reads the assigned root. Use explicit paths to narrow it.',
+          message:
+            'Read-only access always covers the whole assigned worktree. To narrow it, switch File access to specific folders.',
         });
       }
       if (profile.writePaths.length > 0) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['writePaths'],
-          message: 'The read-only preset cannot declare writable roots.',
+          message: 'Read-only access cannot include folders the agent can change.',
         });
       }
     }
@@ -143,14 +142,14 @@ export const CustomPermissionProfileSettingsSchema = z
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['readPaths'],
-          message: 'The worktree-write preset reads the whole assigned worktree.',
+          message: 'With read-and-write access, the agent reads the whole assigned worktree.',
         });
       }
       if (profile.writePaths.length !== 1 || profile.writePaths[0] !== '.') {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['writePaths'],
-          message: 'The worktree-write preset writes the whole assigned worktree.',
+          message: 'With read-and-write access, the agent can change the whole assigned worktree.',
         });
       }
     }
@@ -158,7 +157,7 @@ export const CustomPermissionProfileSettingsSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['readPaths'],
-        message: 'An explicit-path policy needs at least one readable root.',
+        message: 'Add at least one folder the agent can read.',
       });
     }
     profile.writePaths.forEach((writeRoot, index) => {
@@ -166,7 +165,7 @@ export const CustomPermissionProfileSettingsSchema = z
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['writePaths', index],
-          message: 'Every writable root must also be covered by a readable root.',
+          message: 'Every folder the agent can change must also be a folder it can read.',
         });
       }
     });
@@ -175,7 +174,7 @@ export const CustomPermissionProfileSettingsSchema = z
         code: z.ZodIssueCode.custom,
         path: ['filesystem'],
         message:
-          'Docker Custom profiles support only a whole assigned-worktree read-only or read-write bind.',
+          'A Custom profile that runs in Docker can only give read-only or read-and-write access to the whole assigned worktree.',
       });
     }
     if (
@@ -186,7 +185,7 @@ export const CustomPermissionProfileSettingsSchema = z
         code: z.ZodIssueCode.custom,
         path: [profile.ignoredFileRead === 'deny' ? 'ignoredFileRead' : 'sensitiveFileRead'],
         message:
-          'A whole-worktree Docker bind cannot hide ignored or sensitive files. Explicitly allow both or use a host disclosure-only profile.',
+          'Docker always gives the agent the whole worktree, so ignored and sensitive files in it cannot be hidden. Allow both, or run the agent on this computer instead.',
       });
     }
   });

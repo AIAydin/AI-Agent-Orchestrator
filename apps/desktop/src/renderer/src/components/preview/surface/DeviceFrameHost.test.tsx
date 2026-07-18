@@ -24,7 +24,7 @@ describe('DeviceFrameHost', () => {
     );
 
     expect(await screen.findByText('surface creation failed')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Retry surface' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeDisabled();
     expect(createSurface).toHaveBeenCalledTimes(1);
   });
 });

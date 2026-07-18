@@ -64,7 +64,7 @@ describe('FileEditorWorkspace', () => {
     await waitFor(() => expect(operations.save).toHaveBeenCalledOnce());
     await waitFor(() => expect(closeSecond.disabled).toBe(false));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reveal in tree' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show in file list' }));
     expect(onRevealInTree).toHaveBeenCalledWith('src/second.ts');
     fireEvent.click(closeSecond);
     expect(screen.getAllByRole('tab')).toHaveLength(1);
@@ -99,7 +99,7 @@ describe('FileEditorWorkspace', () => {
     await waitFor(() => expect(tab.getAttribute('draggable')).toBe('false'));
     fireEvent.dragStart(tab, { dataTransfer: transfer });
     expect(onFileDragStart).toHaveBeenCalledOnce();
-    expect(tab.title).toMatch(/Save or revert/u);
+    expect(tab.title).toMatch(/Save or discard/u);
   });
 });
 

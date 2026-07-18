@@ -126,8 +126,8 @@ export class FolderReadinessService {
       return this.#result(request, 'unavailable', {
         reason:
           readyState === 'ready-existing'
-            ? 'The managed-worktree folder uses a symbolic-link or noncanonical alias. Choose an ordinary folder with Browse.'
-            : 'A parent of the managed-worktree folder uses a symbolic-link or noncanonical alias. Choose another destination with Browse.',
+            ? 'The managed-worktree folder is an alias or shortcut, not an ordinary folder. Choose an ordinary folder with Browse.'
+            : 'A parent of the managed-worktree folder is an alias or shortcut. Choose another folder with Browse.',
       });
     }
     let canonicalDetails = selectedDetails;
@@ -137,13 +137,13 @@ export class FolderReadinessService {
         return this.#result(request, 'unavailable', {
           reason: errorMessage(
             inspected.error,
-            'Forgeboard could not inspect the canonical folder destination.',
+            'Forgeboard could not inspect the folder it points to.',
           ),
         });
       }
       if (inspected.outcome === 'missing') {
         return this.#result(request, 'unavailable', {
-          reason: 'The canonical folder destination no longer exists. Choose it again with Browse.',
+          reason: 'The folder it points to no longer exists. Choose it again with Browse.',
         });
       }
       canonicalDetails = inspected.details;
@@ -170,7 +170,7 @@ export class FolderReadinessService {
       canonicalPath,
       readyState,
       usesAlias
-        ? 'The selected backup folder uses a filesystem alias. Forgeboard will use and verify its canonical destination.'
+        ? 'The selected backup folder is an alias. Forgeboard will use and verify its canonical destination.'
         : null,
     );
   }
@@ -198,10 +198,10 @@ export class FolderReadinessService {
     }
     if (purpose !== 'backup-destination') return null;
     if ((details.mode & 0o022) !== 0) {
-      return 'The backup destination is writable by another local user. Choose a private folder or remove group and other write access.';
+      return 'The backup folder can be changed by another local user. Choose a private folder or remove write access for other users.';
     }
     if (this.#currentUid !== undefined && details.uid !== this.#currentUid) {
-      return 'The backup destination is not owned by the current user. Choose a private folder you own.';
+      return 'The backup folder is not owned by the current user. Choose a private folder you own.';
     }
     return null;
   }
@@ -296,7 +296,7 @@ function errorMessage(error: unknown, fallback: string): string {
     return 'Forgeboard does not have permission to access the selected folder.';
   }
   if (hasCode(error, 'ELOOP')) {
-    return 'The selected folder path contains a symbolic-link loop.';
+    return 'The selected folder path points to itself through an alias or shortcut.';
   }
   if (hasCode(error, 'ENAMETOOLONG')) {
     return 'The selected folder path is too long for this system.';

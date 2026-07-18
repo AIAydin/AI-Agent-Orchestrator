@@ -37,10 +37,10 @@ describe('WorkflowDecisionDialog', () => {
       />,
     );
 
-    expect(screen.getByRole('dialog', { name: 'Review this workflow launch' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Review what will run' })).toBeTruthy();
     expect(screen.getByText(/\/usr\/local\/bin\/agent/u)).toBeTruthy();
     expect(screen.getByText(/workingDirectory/u)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to native launch approval' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to approval' }));
     expect(onApproveLaunch).toHaveBeenCalledWith(request);
   });
 
@@ -57,12 +57,12 @@ describe('WorkflowDecisionDialog', () => {
     };
     render(<WorkflowDecisionDialog {...baseProps()} target={{ kind: 'launch', request }} />);
 
-    expect(screen.getByRole('region', { name: 'Effective permission profile' })).toBeTruthy();
-    expect(screen.getByText('Docker technical boundary')).toBeTruthy();
-    expect(screen.getByText(/Ignored allow · sensitive allow/u)).toBeTruthy();
-    expect(screen.getByText(/Network disabled · 2 CPU · 4096 MB memory/u)).toBeTruthy();
-    expect(screen.getByText('Not mounted')).toBeTruthy();
-    expect(screen.getByText(/in-image agent payload has not started/u)).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'What this agent can do' })).toBeTruthy();
+    expect(screen.getByText('In a Docker container (enforced by Docker)')).toBeTruthy();
+    expect(screen.getByText(/Ignored files allowed · sensitive files allowed/u)).toBeTruthy();
+    expect(screen.getByText(/Network off · 2 CPU cores · 4096 MB memory/u)).toBeTruthy();
+    expect(screen.getByText('Not shared')).toBeTruthy();
+    expect(screen.getByText(/has not started inside Docker/u)).toBeTruthy();
     expect(screen.getByText('workflow-context-manifest')).toBeTruthy();
     expect(screen.queryByText(/"contextManifestId"/u)).toBeNull();
   });
@@ -95,15 +95,15 @@ describe('WorkflowDecisionDialog', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review bound worktree changes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review what changed' }));
     expect(onReviewChanges).toHaveBeenCalledWith(reviewedRunId);
 
     fireEvent.click(screen.getByRole('radio', { name: /Request changes/u }));
     const submit = screen.getByRole('button', {
-      name: 'Continue to native review confirmation',
+      name: 'Continue to approval',
     });
     expect((submit as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText(/Actionable feedback/u), {
+    fireEvent.change(screen.getByLabelText(/Feedback/u), {
       target: { value: 'Add a regression test for the failed behavior.' },
     });
     expect((submit as HTMLButtonElement).disabled).toBe(false);

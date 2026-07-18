@@ -45,24 +45,25 @@ export function GroupFrameInspector({
     onUpdate(data);
   };
   return (
-    <section className="workflow-node-config" aria-label="Group frame configuration">
+    <section className="workflow-node-config" aria-label="Group settings">
       <header>
         <div>
           <Boxes size={14} aria-hidden="true" />
-          <h3>Group frame</h3>
+          <h3>Group</h3>
         </div>
         <span>
           {childIds.size} {childIds.size === 1 ? 'member' : 'members'}
         </span>
       </header>
       <p>
-        Set how this frame organizes its members. Run selected will execute only runnable members.
+        Choose how this group organizes its members. Run selected runs only the members that can
+        run.
       </p>
       <fieldset className="workflow-command-editor">
-        <legend>Frame behavior</legend>
+        <legend>Group behavior</legend>
         <div className="workflow-retry-grid">
           <label>
-            Frame purpose
+            Group purpose
             <select
               name={`group-${node.id}-purpose`}
               value={purpose}
@@ -70,8 +71,8 @@ export function GroupFrameInspector({
                 updateConfiguration({ purpose: event.currentTarget.value as FramePurpose })
               }
             >
-              <option value="product-surface">Product surface</option>
-              <option value="workflow-stage">Workflow stage</option>
+              <option value="product-surface">Part of the product</option>
+              <option value="workflow-stage">Workflow step</option>
               <option value="feature-area">Feature area</option>
               <option value="custom">Custom</option>
             </select>
@@ -100,13 +101,13 @@ export function GroupFrameInspector({
             onChange={(event) => updateConfiguration({ autoFit: event.currentTarget.checked })}
           />
           <span>
-            <strong>Automatically fit frame to members</strong>
-            <small>Resize the frame when its membership or member bounds change.</small>
+            <strong>Automatically fit the group to its members</strong>
+            <small>Resize the group when its members change, move, or resize.</small>
           </span>
         </label>
-        <div className="workflow-retry-grid" role="group" aria-label="Frame layout actions">
+        <div className="workflow-retry-grid" role="group" aria-label="Group layout actions">
           <button className="button" type="button" disabled={!hasMembers} onClick={onFit}>
-            Fit frame
+            Fit to members
           </button>
           <button
             className="button"
@@ -123,9 +124,9 @@ export function GroupFrameInspector({
         <small>{layoutActionExplanation(layout, hasMembers)}</small>
       </fieldset>
       <fieldset className="workflow-check-list">
-        <legend>Canvas nodes</legend>
+        <legend>Group members</legend>
         {candidates.length === 0 ? (
-          <p>Add nodes to the canvas before configuring this group.</p>
+          <p>Add nodes to the canvas before choosing members for this group.</p>
         ) : (
           candidates.map((candidate) => {
             const membershipLocked = candidate.data.locked || protectedChildIds.has(candidate.id);
@@ -168,9 +169,9 @@ function stringIds(value: unknown): readonly string[] {
 }
 
 function layoutActionExplanation(layout: FrameLayout, hasMembers: boolean): string {
-  if (!hasMembers) return 'Add at least one member before fitting or arranging this frame.';
+  if (!hasMembers) return 'Add at least one member before fitting or arranging this group.';
   if (layout === 'freeform') {
-    return 'Freeform preserves current member positions. Choose another layout to arrange members.';
+    return 'Freeform keeps members where they are. Choose another layout to line them up.';
   }
-  return `Arrange members applies the ${layout} layout. Fit frame only resizes the frame around its current members.`;
+  return `Arrange members applies the ${layout} layout. Fit to members only resizes the group around its current members.`;
 }

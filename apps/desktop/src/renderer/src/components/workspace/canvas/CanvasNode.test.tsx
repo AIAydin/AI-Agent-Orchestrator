@@ -125,9 +125,9 @@ describe('CanvasNode presentation interactions', () => {
       { selected: true },
     );
 
-    const frame = screen.getByRole('group', { name: 'Group / frame: Review stage' });
+    const frame = screen.getByRole('group', { name: 'Group: Review stage' });
     expect(frame.classList.contains('group-frame')).toBe(true);
-    expect(frame.getAttribute('aria-roledescription')).toBe('group frame');
+    expect(frame.getAttribute('aria-roledescription')).toBe('group');
     expect(frame.getAttribute('data-node-kind')).toBe('group-frame');
     expect(resizer()).toMatchObject({ visible: 'false', minWidth: '360', minHeight: '240' });
 

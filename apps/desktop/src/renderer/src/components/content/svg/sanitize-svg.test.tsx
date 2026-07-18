@@ -71,8 +71,8 @@ describe('sanitizeSvg', () => {
     expect(() => sanitizeSvg('<!DOCTYPE svg><svg xmlns="http://www.w3.org/2000/svg" />')).toThrow(
       'declarations',
     );
-    expect(() => sanitizeSvg('<svg><broken></svg>')).toThrow('malformed');
-    expect(() => sanitizeSvg('<html />')).toThrow('no SVG root');
+    expect(() => sanitizeSvg('<svg><broken></svg>')).toThrow('not a valid SVG image');
+    expect(() => sanitizeSvg('<html />')).toThrow('not a valid SVG image');
     expect(() => sanitizeSvg('<svg xmlns="https://evil.example/vector" />')).toThrow('namespace');
     expect(() => sanitizeSvg('x'.repeat(2_000_001))).toThrow('2,000,000');
   });
@@ -98,6 +98,6 @@ describe('SafeSvgImage', () => {
 
     rerender(<SafeSvgImage source="<script>attack()</script>" alt="Diagram" />);
     expect(screen.queryByRole('img', { name: 'Diagram' })).toBeNull();
-    expect(screen.getByRole('alert').textContent).toContain('SVG root');
+    expect(screen.getByRole('alert').textContent).toContain('not a valid SVG image');
   });
 });

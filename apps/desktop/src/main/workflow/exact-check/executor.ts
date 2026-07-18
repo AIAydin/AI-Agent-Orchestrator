@@ -217,7 +217,7 @@ export class ExactCheckExecutor {
       this.#assertAvailable();
       if (reservation.cancelled) throw new Error('The exact-check owner stopped before launch.');
       if (!sameExactCheckResolution(pending.resolved, current)) {
-        throw new Error('The exact check target or command changed. Review a new disclosure.');
+        throw new Error('The exact check target or command changed. Review what will run.');
       }
       const timestamp = this.#now().toISOString();
       const queued = CheckExecutionViewSchema.parse({

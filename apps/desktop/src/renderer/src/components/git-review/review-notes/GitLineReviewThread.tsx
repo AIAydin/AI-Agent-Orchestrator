@@ -48,7 +48,7 @@ export function GitLineReviewThread({
         <div className="git-review-note-composer">
           <label>
             <span>
-              Feedback for {anchor.side} line {anchor.line}
+              Your feedback on {anchor.side} line {anchor.line}
             </span>
             <textarea
               name="git-line-review-feedback"
@@ -56,13 +56,13 @@ export function GitLineReviewThread({
               value={body}
               maxLength={16_384}
               disabled={actions.busy}
-              placeholder="Describe the issue or requested change"
+              placeholder="Describe the problem or the change you want"
               onChange={(event) => setBody(event.currentTarget.value)}
             />
           </label>
           <p>
-            A revision request records local human feedback only. It does not approve AI output, run
-            an agent, or change Git.
+            A change request only saves your feedback on this computer. It does not approve the AI's
+            work, start an agent, or change your code.
           </p>
           <span>
             <button
@@ -78,7 +78,7 @@ export function GitLineReviewThread({
               disabled={actions.busy || body.trim() === ''}
               onClick={() => void create('revision-request')}
             >
-              <Send size={11} aria-hidden="true" /> Record revision request
+              <Send size={11} aria-hidden="true" /> Request changes
             </button>
             <button type="button" disabled={actions.busy} onClick={onCloseComposer}>
               Cancel

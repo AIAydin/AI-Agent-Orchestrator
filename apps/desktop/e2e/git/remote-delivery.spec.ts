@@ -154,17 +154,19 @@ test('push and GitHub PR delivery require exact review while all transport stays
       .click();
     const agentNode = page.getByRole('article', { name: 'Agent: Agent' });
     await agentNode.click();
-    const runConfiguration = page.getByRole('region', { name: 'Agent run configuration' });
-    await runConfiguration.getByLabel('Installed adapter').selectOption('test-agent');
+    const runConfiguration = page.getByRole('region', { name: 'Agent run settings' });
+    await runConfiguration.getByLabel('Agent to run').selectOption('test-agent');
     await runConfiguration.getByLabel('Permission profile').selectOption('worktree-write');
     await runConfiguration
       .getByLabel('Prompt')
       .fill('Create the deterministic file used by remote-delivery review.');
     await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
 
-    const launchDisclosure = page.getByRole('dialog', { name: 'Review the exact agent launch' });
+    const launchDisclosure = page.getByRole('dialog', {
+      name: 'Review this run before it starts',
+    });
     await approveNextNativeAgentLaunch(session.app, launchDisclosure, 'test-agent', async () => {
-      await launchDisclosure.getByRole('button', { name: 'Approve & launch' }).click();
+      await launchDisclosure.getByRole('button', { name: 'Approve and start' }).click();
     });
     await expect(page.locator('.run-history')).toContainText('succeeded · 1 changed file', {
       timeout: 20_000,
@@ -173,19 +175,19 @@ test('push and GitHub PR delivery require exact review while all transport stays
     const report = await openOnlyChangeReport(page);
     const changedFile = (await report.locator('code').innerText()).trim();
     const worktreePath = await findChangedWorktree(primaryPath, changedFile);
-    await report.getByRole('button', { name: 'Review this agent worktree' }).click();
+    await report.getByRole('button', { name: 'Review this agent’s changes' }).click();
     let reviewDialog = page.getByRole('dialog', { name: /Review changes in forgeboard-demo/ });
-    await reviewDialog.getByRole('tab', { name: 'Staged & unstaged' }).click();
-    await reviewDialog.getByRole('button', { name: `Stage ${changedFile}` }).click();
+    await reviewDialog.getByRole('tab', { name: 'Uncommitted changes' }).click();
+    await reviewDialog.getByRole('button', { name: `Add ${changedFile} to commit` }).click();
     await reviewDialog.getByLabel('Commit message').fill(COMMIT_MESSAGE);
     await reviewDialog.getByRole('button', { name: /Review commit/ }).click();
 
     const commitDisclosure = page.getByRole('alertdialog', {
-      name: 'Review the exact local commit',
+      name: 'Review your commit',
     });
     await expect(commitDisclosure).toContainText(COMMIT_MESSAGE);
-    await commitDisclosure.getByRole('button', { name: 'Continue to system confirmation' }).click();
-    await expect(reviewDialog).toContainText(/Created local commit [a-f0-9]{12}\./u);
+    await commitDisclosure.getByRole('button', { name: 'Continue' }).click();
+    await expect(reviewDialog).toContainText(/Created commit [a-f0-9]{12}\./u);
     const sourceHead = git(worktreePath, ['rev-parse', 'HEAD']);
     const sourceBranch = git(worktreePath, ['branch', '--show-current']);
     expect(sourceHead).not.toBe(baseOid);
@@ -197,8 +199,8 @@ test('push and GitHub PR delivery require exact review while all transport stays
       .click();
     const gitPrNode = page.getByRole('article', { name: 'Git / PR: Git / PR' });
     await gitPrNode.click();
-    const inspector = page.getByRole('region', { name: 'Git and pull request delivery' });
-    const runPicker = inspector.getByLabel('Terminal agent run');
+    const inspector = page.getByRole('region', { name: 'Publish changes' });
+    const runPicker = inspector.getByLabel('Finished agent run');
     await expect.poll(async () => await runPicker.locator('option').count()).toBeGreaterThan(1);
     await runPicker.selectOption({ index: 1 });
     await inspector.getByLabel('Remote', { exact: true }).fill('origin');
@@ -206,23 +208,23 @@ test('push and GitHub PR delivery require exact review while all transport stays
     await inspector.getByLabel('Base branch').fill(baseBranch);
     await inspector.getByLabel('Pull request title').fill(PULL_REQUEST_TITLE);
     await inspector.getByLabel('Pull request body').fill(PULL_REQUEST_BODY);
-    await inspector.getByLabel('Create as draft pull request').check();
+    await inspector.getByLabel('Create as a draft pull request').check();
     fakeGhState.expectedHeadBranch = sourceBranch;
     await writeFakeGhState(fakeGhStatePath, fakeGhState);
 
-    await inspector.getByRole('button', { name: 'Inspect exact Git state' }).click();
-    const exactState = inspector.getByRole('region', { name: 'Exact Git state' });
+    await inspector.getByRole('button', { name: 'Check changes' }).click();
+    const exactState = inspector.getByRole('region', { name: 'Check results' });
     await expect(exactState).toContainText(sourceBranch);
     await expect(exactState).toContainText(sourceHead);
     await expect(exactState).toContainText(baseOid);
     await expect(exactState).toContainText('ssh://github.com');
     await expect(exactState).toContainText('Blocked');
     await expect(exactState).toContainText(
-      'Delivery checks and human quality approval have not been prepared.',
+      "The required checks and a person's approval haven't been completed yet.",
     );
-    await expect(inspector).toContainText('Discovered in this agent worktree: origin.');
+    await expect(inspector).toContainText("Found in this run's project copy: origin.");
 
-    await inspector.getByRole('button', { name: 'Open readiness checks & approval' }).click();
+    await inspector.getByRole('button', { name: 'Open checks and approval' }).click();
     reviewDialog = page.getByRole('dialog', { name: /Review changes in forgeboard-demo/ });
     const readiness = reviewDialog.getByRole('region', { name: 'Delivery readiness' });
     const lintRequirement = readiness.getByRole('checkbox', { name: /^Lint\b/ });
@@ -231,45 +233,50 @@ test('push and GitHub PR delivery require exact review while all transport stays
     await readiness.getByRole('button', { name: 'Save required checks' }).click();
     await readiness.getByRole('button', { name: 'Run Lint' }).click();
     await expect(readiness).toContainText('Passed', { timeout: 20_000 });
-    await readiness.getByRole('button', { name: 'Approve reviewed quality' }).click();
+    await readiness.getByRole('button', { name: 'Approve quality' }).click();
     await expect(readiness).toContainText('Ready for delivery review');
     await expect(readiness).toContainText(sourceHead.slice(0, 12));
     await reviewDialog.getByRole('button', { name: 'Close Git review' }).click();
 
-    await inspector.getByRole('button', { name: 'Refresh exact Git state' }).click();
-    await expect(exactState).toContainText('Evidence ready');
+    await inspector.getByRole('button', { name: 'Recheck changes' }).click();
+    await expect(exactState).toContainText('Ready to publish');
     await expect(inspector.getByRole('button', { name: 'Review push' })).toBeEnabled();
 
     await inspector.getByRole('button', { name: 'Review push' }).click();
-    let planDialog = page.getByRole('alertdialog', { name: 'Review exact branch push' });
+    let planDialog = page.getByRole('alertdialog', { name: 'Review the push' });
     await expect(planDialog).toContainText(sourceHead);
     await expect(planDialog).toContainText(sourceBranch);
     await expect(planDialog).toContainText(changedFile);
     await expect(planDialog).toContainText('Force push is never offered');
     const pushCancelDialogIndex = (await nativeDialogs(electronApp)).length;
     await queueNativeDialogResponse(electronApp, 0);
-    await planDialog.getByRole('button', { name: 'Continue to system confirmation' }).click();
+    await planDialog.getByRole('button', { name: 'Continue to final confirmation' }).click();
     await expect(inspector).toContainText(
-      'Push cancelled in the system confirmation. No remote branch changed.',
+      'Push cancelled at the final confirmation. Nothing changed online.',
     );
     expect(gitBareRef(bareRemotePath, sourceBranch)).toBeNull();
     expectNativeCancelDefault(
       await waitForNativeDialog(electronApp, pushCancelDialogIndex),
       'Push reviewed branch',
-      ['Cancel', 'Push exact branch'],
+      ['Cancel', 'Push branch'],
     );
 
     await inspector.getByRole('button', { name: 'Review push' }).click();
-    planDialog = page.getByRole('alertdialog', { name: 'Review exact branch push' });
+    planDialog = page.getByRole('alertdialog', { name: 'Review the push' });
     const pushApproveDialogIndex = (await nativeDialogs(electronApp)).length;
     await queueNativeDialogResponse(electronApp, 1);
-    await planDialog.getByRole('button', { name: 'Continue to system confirmation' }).click();
-    await expect(inspector).toContainText(`Pushed exact ${sourceHead}`, { timeout: 20_000 });
+    await planDialog.getByRole('button', { name: 'Continue to final confirmation' }).click();
+    await expect(inspector).toContainText(
+      `Pushed commit ${sourceHead} to origin/${sourceBranch}.`,
+      {
+        timeout: 20_000,
+      },
+    );
     expect(gitBareRef(bareRemotePath, sourceBranch)).toBe(sourceHead);
     expectNativeCancelDefault(
       await waitForNativeDialog(electronApp, pushApproveDialogIndex),
       'Push reviewed branch',
-      ['Cancel', 'Push exact branch'],
+      ['Cancel', 'Push branch'],
     );
     const sshRecords = await readJsonLines<SshLogRecord>(fakeSshLogPath);
     expect(sshRecords).toEqual([
@@ -282,11 +289,11 @@ test('push and GitHub PR delivery require exact review while all transport stays
     await writeFakeGhState(fakeGhStatePath, fakeGhState);
     const githubDialogIndex = (await nativeDialogs(electronApp)).length;
     await queueNativeDialogResponse(electronApp, 1);
-    await inspector.getByRole('button', { name: 'Check GitHub auth & repository' }).click();
+    await inspector.getByRole('button', { name: 'Check GitHub sign-in and repository' }).click();
     const githubStatus = inspector.getByRole('region', {
-      name: 'GitHub CLI and repository status',
+      name: 'GitHub sign-in and repository status',
     });
-    await expect(githubStatus).toContainText('Authenticated', { timeout: 20_000 });
+    await expect(githubStatus).toContainText('Signed in', { timeout: 20_000 });
     await expect(githubStatus).toContainText(OWNER_REPOSITORY);
     expectNativeCancelDefault(
       await waitForNativeDialog(electronApp, githubDialogIndex),
@@ -297,7 +304,7 @@ test('push and GitHub PR delivery require exact review while all transport stays
 
     const prCreatesBeforeCancel = await countGhCommand(fakeGhLogPath, ['pr', 'create']);
     await inspector.getByRole('button', { name: 'Review pull request' }).click();
-    planDialog = page.getByRole('alertdialog', { name: 'Review pull request snapshot' });
+    planDialog = page.getByRole('alertdialog', { name: 'Review the pull request' });
     await expect(planDialog).toContainText(PULL_REQUEST_TITLE);
     await expect(planDialog).toContainText(PULL_REQUEST_BODY);
     await expect(planDialog).toContainText(sourceHead);
@@ -305,22 +312,22 @@ test('push and GitHub PR delivery require exact review while all transport stays
     await expect(planDialog).toContainText('Draft');
     const prCancelDialogIndex = (await nativeDialogs(electronApp)).length;
     await queueNativeDialogResponse(electronApp, 0);
-    await planDialog.getByRole('button', { name: 'Continue to system confirmation' }).click();
+    await planDialog.getByRole('button', { name: 'Continue to final confirmation' }).click();
     await expect(inspector).toContainText(
-      'Pull request cancelled in the system confirmation. Nothing was created.',
+      'Pull request cancelled at the final confirmation. Nothing was created.',
     );
     expect(await countGhCommand(fakeGhLogPath, ['pr', 'create'])).toBe(prCreatesBeforeCancel);
     expectNativeCancelDefault(
       await waitForNativeDialog(electronApp, prCancelDialogIndex),
       'Create GitHub pull request',
-      ['Cancel', 'Create draft PR'],
+      ['Cancel', 'Create draft pull request'],
     );
 
     await inspector.getByRole('button', { name: 'Review pull request' }).click();
-    planDialog = page.getByRole('alertdialog', { name: 'Review pull request snapshot' });
+    planDialog = page.getByRole('alertdialog', { name: 'Review the pull request' });
     const prApproveDialogIndex = (await nativeDialogs(electronApp)).length;
     await queueNativeDialogResponse(electronApp, 1);
-    await planDialog.getByRole('button', { name: 'Continue to system confirmation' }).click();
+    await planDialog.getByRole('button', { name: 'Continue to final confirmation' }).click();
     const createdPullRequest = inspector.getByRole('region', { name: 'Created pull request' });
     await expect(createdPullRequest).toContainText(PULL_REQUEST_URL, { timeout: 20_000 });
     await expect(
@@ -330,7 +337,7 @@ test('push and GitHub PR delivery require exact review while all transport stays
     expectNativeCancelDefault(
       await waitForNativeDialog(electronApp, prApproveDialogIndex),
       'Create GitHub pull request',
-      ['Cancel', 'Create draft PR'],
+      ['Cancel', 'Create draft pull request'],
     );
     const ghAfterPullRequest = await readJsonLines<GhLogRecord>(fakeGhLogPath);
     const pullRequestCommands = ghAfterPullRequest.filter((record) =>
@@ -357,8 +364,8 @@ test('push and GitHub PR delivery require exact review while all transport stays
     await writeFakeGhState(fakeGhStatePath, fakeGhState);
     const ciDialogIndex = (await nativeDialogs(electronApp)).length;
     await queueNativeDialogResponse(electronApp, 1);
-    await inspector.getByRole('button', { name: 'Check CI for exact HEAD' }).click();
-    const ciStatus = inspector.getByRole('region', { name: 'CI for exact source HEAD' });
+    await inspector.getByRole('button', { name: 'Check CI results for this commit' }).click();
+    const ciStatus = inspector.getByRole('region', { name: 'CI results for this commit' });
     await expect(ciStatus).toContainText('1 run', { timeout: 20_000 });
     await expect(ciStatus).toContainText(sourceHead);
     await expect(ciStatus).toContainText('Remote delivery validation');
@@ -366,8 +373,8 @@ test('push and GitHub PR delivery require exact review while all transport stays
     await expect(ciStatus.getByRole('button', { name: 'Copy run URL' })).toBeVisible();
     expectNativeCancelDefault(
       await waitForNativeDialog(electronApp, ciDialogIndex),
-      'Refresh GitHub CI status',
-      ['Cancel', 'Refresh CI'],
+      'Check GitHub CI results',
+      ['Cancel', 'Check CI results'],
     );
 
     const finalGhRecords = await readJsonLines<GhLogRecord>(fakeGhLogPath);

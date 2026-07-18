@@ -418,7 +418,7 @@ describe('GitIpcService with a real repository', () => {
     expect(harness.showMessageBox).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        buttons: ['Cancel', 'Run exact Git filter'],
+        buttons: ['Cancel', 'Run filter commands'],
         defaultId: 0,
         cancelId: 0,
       }),

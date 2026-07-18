@@ -69,7 +69,10 @@ export function GitDiffViewer({
       <section className="git-diff-empty" aria-label="Change preview">
         <FileQuestion size={30} aria-hidden="true" />
         <strong>Select a changed file</strong>
-        <p>Forgeboard renders only the selected file so large reviews stay responsive.</p>
+        <p>
+          Pick a file from the list to see its changes here. Forgeboard shows one file at a time so
+          large reviews stay fast.
+        </p>
       </section>
     );
   }
@@ -101,7 +104,7 @@ export function GitDiffViewer({
           },
         };
   return (
-    <section className="git-diff-viewer" aria-label={`Diff for ${file.path}`}>
+    <section className="git-diff-viewer" aria-label={`Changes in ${file.path}`}>
       <header>
         <span>
           <strong>{file.path}</strong>
@@ -136,7 +139,7 @@ export function GitDiffViewer({
           <span
             className="git-diff-totals"
             role="group"
-            aria-label={`${stats.additions} additions and ${stats.deletions} deletions in ${file.path}`}
+            aria-label={`${stats.additions} ${stats.additions === 1 ? 'line' : 'lines'} added and ${stats.deletions} ${stats.deletions === 1 ? 'line' : 'lines'} removed in ${file.path}`}
           >
             <b>+{stats.additions}</b>
             <i>−{stats.deletions}</i>
@@ -155,16 +158,17 @@ export function GitDiffViewer({
       )}
       {file.area === 'untracked' ? (
         <GitDiffNotice>
-          This file is not tracked yet. Stage the whole file to include it in the index.
+          This file is new and not tracked by Git yet. Add the whole file to a commit to start
+          tracking it.
         </GitDiffNotice>
       ) : diff?.binary === true ? (
         <GitDiffNotice>
           {readOnly
-            ? 'Binary content cannot be shown in this read-only committed comparison.'
-            : 'Binary content cannot be shown or selected by hunk. Use the whole-file action.'}
+            ? "This file isn't text, so its committed changes can't be shown here."
+            : "This file isn't text, so it can't be shown or changed in sections. Use the whole-file button in the file list instead."}
         </GitDiffNotice>
       ) : diff === undefined || diff.hunks.length === 0 ? (
-        <GitDiffNotice>No textual hunks are available for this change.</GitDiffNotice>
+        <GitDiffNotice>Forgeboard can't show the changed lines for this file.</GitDiffNotice>
       ) : (
         <div className="git-hunk-list">
           {diff.hunks.map((hunk) => (
@@ -220,24 +224,24 @@ function GitDiffHunk({
         <code>{hunk.header}</code>
         <span>
           {readOnly ? (
-            <small className="git-hunk-read-only">Committed comparison</small>
+            <small className="git-hunk-read-only">Committed (read-only)</small>
           ) : area === 'staged' ? (
             <button type="button" disabled={busy} onClick={onUnstage}>
-              <Minus size={12} aria-hidden="true" /> Unstage hunk
+              <Minus size={12} aria-hidden="true" /> Remove from commit
             </button>
           ) : (
             <>
               <button type="button" disabled={busy} onClick={onStage}>
-                <Plus size={12} aria-hidden="true" /> Stage hunk
+                <Plus size={12} aria-hidden="true" /> Add to commit
               </button>
               <button
                 className="danger-text"
                 type="button"
                 disabled={busy}
-                aria-label={`Review discard for hunk in ${path}`}
+                aria-label={`Review discard for change in ${path}`}
                 onClick={onDiscard}
               >
-                <RotateCcw size={12} aria-hidden="true" /> Discard hunk…
+                <RotateCcw size={12} aria-hidden="true" /> Discard change…
               </button>
             </>
           )}

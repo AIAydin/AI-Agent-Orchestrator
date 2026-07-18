@@ -1,5 +1,9 @@
 import type { RunDisclosure } from '../../../../shared/application/contracts.js';
-import { configuredFilesystemLabel } from './permission-profile-ui.js';
+import {
+  accessPolicyWord,
+  configuredFilesystemLabel,
+  networkModeWord,
+} from './permission-profile-ui.js';
 import './permissions.css';
 
 export function EffectivePermissionDisclosure({
@@ -9,7 +13,7 @@ export function EffectivePermissionDisclosure({
 }) {
   const custom = 'custom' in profile ? profile.custom : undefined;
   return (
-    <section className="effective-permission-disclosure" aria-label="Effective permission profile">
+    <section className="effective-permission-disclosure" aria-label="What this agent can do">
       <p>
         <strong>{profile.name}</strong> · {profile.mode} · {profile.enforcement}
       </p>
@@ -22,73 +26,81 @@ export function EffectivePermissionDisclosure({
       </p>
       {profile.enforcement === 'docker' && (
         <p className="permission-caution">
-          Preparation invoked the selected Docker client only for bounded daemon and image metadata
-          preflight. The in-image agent payload has not started; this exact launch still needs your
-          approval.
+          Getting this run ready only used Docker to check basic engine and image details. The agent
+          has not started inside Docker — it starts after you approve this exact launch.
         </p>
       )}
       {custom !== undefined && (
         <>
           <dl className="effective-permission-custom">
             <div>
-              <dt>Runtime boundary</dt>
+              <dt>Where the agent runs</dt>
               <dd>
                 {custom.runtime === 'docker'
-                  ? 'Docker technical boundary'
-                  : 'Host disclosure-only policy'}
+                  ? 'In a Docker container (enforced by Docker)'
+                  : 'On this computer (limits stated, not enforced)'}
               </dd>
             </div>
             <div>
-              <dt>Filesystem policy</dt>
+              <dt>File access</dt>
               <dd>{configuredFilesystemLabel(custom.filesystem)}</dd>
             </div>
             <div>
-              <dt>Worktree content visibility</dt>
+              <dt>Ignored and sensitive files</dt>
               <dd>
-                Ignored {custom.ignoredFileRead} · sensitive {custom.sensitiveFileRead}
+                Ignored files {accessPolicyWord(custom.ignoredFileRead)} · sensitive files{' '}
+                {accessPolicyWord(custom.sensitiveFileRead)}
               </dd>
             </div>
             <div>
-              <dt>Top-level executable policy</dt>
+              <dt>Program that starts the agent</dt>
               <dd>
                 {custom.launchExecutablePolicy === 'selected-agent-only'
-                  ? 'Selected agent only'
-                  : custom.allowedLaunchExecutables.join(', ') || 'No executable configured'}
+                  ? "Only the selected agent's program"
+                  : custom.allowedLaunchExecutables.join(', ') || 'No programs listed'}
               </dd>
             </div>
             <div>
-              <dt>Requested agent actions</dt>
+              <dt>Agent requests</dt>
               <dd>
-                Dev servers {custom.forgeboardManagedActions.developmentServers} · tests{' '}
-                {custom.forgeboardManagedActions.tests} · advisory
+                Dev servers {accessPolicyWord(custom.forgeboardManagedActions.developmentServers)} ·
+                tests {accessPolicyWord(custom.forgeboardManagedActions.tests)} · requested, not
+                enforced
               </dd>
             </div>
             <div>
-              <dt>Primary branch</dt>
+              <dt>Main branch</dt>
               <dd>
                 {custom.requireReviewBeforePrimary
                   ? 'Review always required'
-                  : 'Invalid disclosure'}
+                  : 'Invalid setup — do not approve'}
               </dd>
             </div>
             {custom.runtime === 'docker' && (
               <div>
-                <dt>Docker network and resources</dt>
+                <dt>Docker network and limits</dt>
                 <dd>
-                  Network {custom.docker.network} · {custom.docker.cpuLimit} CPU ·{' '}
-                  {custom.docker.memoryMb} MB memory
+                  Network {networkModeWord(custom.docker.network)} · {custom.docker.cpuLimit} CPU
+                  cores · {custom.docker.memoryMb} MB memory
                 </dd>
               </div>
             )}
             {custom.runtime === 'docker' && (
               <div>
-                <dt>Host credentials</dt>
-                <dd>{custom.docker.mountHostCredentials ? 'Invalid disclosure' : 'Not mounted'}</dd>
+                <dt>Your sign-in details on this computer</dt>
+                <dd>
+                  {custom.docker.mountHostCredentials
+                    ? 'Shared — invalid setup, do not approve'
+                    : 'Not shared'}
+                </dd>
               </div>
             )}
           </dl>
           {custom.policyLimitations.length > 0 && (
-            <ul className="permission-limitations" aria-label="Permission policy limitations">
+            <ul
+              className="permission-limitations"
+              aria-label="What these permissions can't guarantee"
+            >
               {custom.policyLimitations.map((limitation: string) => (
                 <li key={limitation}>{limitation}</li>
               ))}

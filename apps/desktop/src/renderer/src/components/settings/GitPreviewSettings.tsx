@@ -45,7 +45,7 @@ export function GitPreviewSettings({
       />
       <SettingsSection
         title="Git worktrees"
-        description="Writable agents are isolated from your primary checkout by default."
+        description="Agents that can change files work in separate copies (worktrees) of your project, so your main copy stays untouched."
       >
         <label>
           Branch prefix
@@ -56,8 +56,8 @@ export function GitPreviewSettings({
             onChange={(event) => setDraft({ ...draft, branchPrefix: event.target.value })}
           />
           <small>
-            Creates &lt;prefix&gt;&lt;task&gt;/&lt;agent&gt;-&lt;id&gt;. Examples: forgeboard/ or
-            team/agents/.
+            Branches are named &lt;prefix&gt;&lt;task&gt;/&lt;agent&gt;-&lt;id&gt;. Examples:
+            forgeboard/ or team/agents/.
           </small>
         </label>
         <div className="settings-form-field">
@@ -86,7 +86,8 @@ export function GitPreviewSettings({
             </button>
           </span>
           <small>
-            Forgeboard never cleans a worktree or branch without an impact-specific confirmation.
+            Forgeboard always shows exactly what will be removed and asks before deleting a worktree
+            or branch.
           </small>
           <FolderReadinessEvidence status={managedWorktreeReadiness} />
         </div>
@@ -103,28 +104,29 @@ export function GitPreviewSettings({
             }
             aria-describedby="worktree-cleanup-policy-help"
           >
-            <option value="manual">Manual · confirmation required</option>
+            <option value="manual">Manual · ask me first</option>
             {draft.worktreeCleanupPolicy !== 'manual' && (
               <option value={draft.worktreeCleanupPolicy} disabled>
-                {draft.worktreeCleanupPolicy} · stored but unavailable
+                {draft.worktreeCleanupPolicy} · saved but not supported
               </option>
             )}
           </select>
           <small id="worktree-cleanup-policy-help">
-            Manual cleanup is the only implemented policy. Automatic after-merge and retention
-            cleanup are not offered until Forgeboard can verify the lifecycle and show exact impact.
+            Manual cleanup is the only option right now. Automatic cleanup after a merge or after a
+            set time is not offered yet — Forgeboard will only automate deletion when it can show
+            exactly what would be removed.
           </small>
         </label>
         {draft.worktreeCleanupPolicy !== 'manual' && (
           <p className="recovery-guidance warning" role="status">
-            This imported legacy policy is not executed automatically. Select Manual before saving
-            to use the supported behavior.
+            This cleanup policy came from an older version and never runs automatically. Choose
+            Manual before saving.
           </p>
         )}
       </SettingsSection>
       <SettingsSection
         title="Commit identity"
-        description="Optionally override the author identity used by Forgeboard commits. Leave both fields blank to use this repository's Git configuration."
+        description="Set the name and email Forgeboard puts on its commits. Leave both fields blank to use the Git settings from this repository."
       >
         <div className="two-column">
           <label>
@@ -150,13 +152,13 @@ export function GitPreviewSettings({
           </label>
         </div>
         <small>
-          Provide both fields or neither. The exact effective identity is shown again before every
-          commit and bound to the native confirmation.
+          Fill in both fields or leave both empty. Forgeboard shows the exact name and email again
+          for you to confirm before every commit.
         </small>
       </SettingsSection>
       <SettingsSection
-        title="Remote automation"
-        description="Choose the default remote offered by Git / PR nodes. Every push, GitHub lookup, and pull request remains an explicit reviewed action."
+        title="Git remote"
+        description="Set the default remote for Git and pull request steps. Every push, GitHub check, and pull request still needs your review before it runs."
       >
         <label>
           Default remote
@@ -174,21 +176,20 @@ export function GitPreviewSettings({
           />
         </label>
         <small id="git-default-remote-help">
-          A Git / PR node verifies this name against the selected agent worktree and shows the exact
-          credential-free remote identity, branch, commits, and files before anything is pushed.
-          GitHub authentication remains owned by the optional local gh CLI; Forgeboard stores no
-          token.
+          Before anything is pushed, Forgeboard checks this name against the selected agent's
+          worktree and shows you the exact remote, branch, commits, and files. GitHub sign-in stays
+          with the optional gh tool on your computer; Forgeboard stores no token.
         </small>
         {!gitRemoteValid ? (
           <p id="git-default-remote-error" className="recovery-guidance warning" role="alert">
-            Enter a Git remote name using letters, numbers, dots, underscores, or hyphens. The Git /
-            PR node verifies that it exists in the selected agent worktree.
+            Enter a Git remote name using letters, numbers, dots, underscores, or hyphens.
+            Forgeboard checks that it exists in the selected agent's worktree.
           </p>
         ) : null}
       </SettingsSection>
       <SettingsSection
         title="Development preview"
-        description="The preview command is stored as an executable plus literal arguments—never as a shell string. Leave it blank to choose a detected package script per preview node."
+        description="Set the command that starts your app in a preview. It is stored as a program plus its arguments, never as shell text. Leave it blank to pick a package script from the project for each preview."
       >
         <CommandEditor
           label="Development server"
@@ -212,7 +213,7 @@ export function GitPreviewSettings({
       </SettingsSection>
       <SettingsSection
         title="Previews"
-        description="Forgeboard binds previews to loopback by default and validates trusted hosts."
+        description="Previews only accept connections from this computer unless you add trusted hosts below."
       >
         <div className="two-column">
           <label>

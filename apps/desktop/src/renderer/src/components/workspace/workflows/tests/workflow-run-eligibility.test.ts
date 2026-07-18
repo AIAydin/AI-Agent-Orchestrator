@@ -14,8 +14,8 @@ describe('workflow run eligibility', () => {
     const nodes = [node('agent', 'agent-1'), node('brief', 'brief-1'), node('task', 'task-1')];
     expect(runnableWorkflowNodeCount(nodes, [])).toBe(1);
     expect(workflowNodeEligibility(nodes[0]!, []).runnable).toBe(true);
-    expect(workflowNodeEligibility(nodes[1]!, []).reason).toMatch(/does not launch/u);
-    expect(workflowNodeEligibility(nodes[2]!, [], nodes).reason).toMatch(/Choose an Agent/u);
+    expect(workflowNodeEligibility(nodes[1]!, []).reason).toMatch(/nothing to run/u);
+    expect(workflowNodeEligibility(nodes[2]!, [], nodes).reason).toMatch(/Choose an agent/u);
   });
 
   it('runs a Task only when its explicitly configured assignee is an existing Agent node', () => {
@@ -25,7 +25,7 @@ describe('workflow run eligibility', () => {
 
     expect(workflowNodeEligibility(task, [], [task, agent])).toEqual({
       runnable: true,
-      reason: 'Run this Task with its configured Agent assignee and upstream dependencies',
+      reason: 'Run this task with its assigned agent and everything it depends on',
     });
     const missing = workflowNodeEligibility(task, [], [task]);
     expect(missing.runnable).toBe(false);

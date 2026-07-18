@@ -67,8 +67,8 @@ describe('GitDeliveryReadinessIpcService', () => {
     expect(fixture.showMessageBox).toHaveBeenCalledWith(
       fixture.parent,
       expect.objectContaining({
-        title: 'Run delivery check',
-        buttons: ['Cancel', 'Run exact check'],
+        title: 'Run delivery check?',
+        buttons: ['Cancel', 'Run check'],
         defaultId: 0,
         cancelId: 0,
       }),
@@ -118,8 +118,8 @@ describe('GitDeliveryReadinessIpcService', () => {
     expect(fixture.showMessageBox).toHaveBeenCalledWith(
       fixture.parent,
       expect.objectContaining({
-        title: 'Approve delivery readiness',
-        buttons: ['Cancel', 'Approve readiness'],
+        title: 'Approve quality for delivery?',
+        buttons: ['Cancel', 'Approve quality'],
         defaultId: 0,
         cancelId: 0,
       }),

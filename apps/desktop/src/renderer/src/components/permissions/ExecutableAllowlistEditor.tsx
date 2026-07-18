@@ -17,19 +17,19 @@ export function ExecutableAllowlistEditor({
 }: ExecutableAllowlistEditorProps) {
   return (
     <fieldset className="permission-list-editor">
-      <legend>Allowed top-level agent executables</legend>
+      <legend>Programs allowed to start the agent</legend>
       <p>
-        Exact absolute paths only. This validates the selected agent launch; it does not constrain
-        subprocesses the agent starts.
+        Enter each program's exact full path. Forgeboard checks the program that starts the agent —
+        programs the agent starts afterward are not covered.
       </p>
       {values.length === 0 ? (
-        <div className="permission-list-empty">Add at least one exact executable.</div>
+        <div className="permission-list-empty">Add at least one program by its full path.</div>
       ) : (
         <div className="permission-list-rows">
           {values.map((value, index) => (
             <div key={`executable-${String(index)}`} className="permission-list-row">
               <label htmlFor={`custom-permission-executable-${String(index)}`}>
-                <span className="sr-only">Allowed executable {index + 1}</span>
+                <span className="sr-only">Allowed program {index + 1}</span>
               </label>
               <input
                 id={`custom-permission-executable-${String(index)}`}
@@ -49,7 +49,7 @@ export function ExecutableAllowlistEditor({
                 type="button"
                 className="icon-button"
                 disabled={disabled}
-                aria-label={`Remove allowed executable ${value || index + 1}`}
+                aria-label={`Remove allowed program ${value || index + 1}`}
                 onClick={() =>
                   onChange(values.filter((_, candidateIndex) => candidateIndex !== index))
                 }
@@ -66,25 +66,25 @@ export function ExecutableAllowlistEditor({
           disabled={disabled || values.length >= 256}
           onClick={() => onChange([...values, ''])}
         >
-          <Plus size={14} aria-hidden="true" /> Add path
+          <Plus size={14} aria-hidden="true" /> Add a program
         </button>
         <button
           type="button"
           disabled={disabled || dockerRuntime || values.length >= 256}
           title={
             dockerRuntime
-              ? 'Enter the absolute executable path inside the configured image.'
+              ? "Type the program's full path as it appears inside the Docker image."
               : undefined
           }
           onClick={onBrowse}
         >
-          <FileSearch size={14} aria-hidden="true" /> Browse executable
+          <FileSearch size={14} aria-hidden="true" /> Browse for a program
         </button>
       </div>
       {dockerRuntime && (
         <small>
-          Docker launches use the configured Docker engine on the host. Enter the approved agent
-          entrypoint as an absolute path inside the image.
+          Docker runs use the Docker engine set up on this computer. Enter the approved agent
+          program's full path as it appears inside the image.
         </small>
       )}
     </fieldset>

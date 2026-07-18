@@ -48,19 +48,19 @@ describe('DiffReviewNodeInspector', () => {
     const onOpenReview = vi.fn<(request: DiffReviewOpenRequest) => void>();
     render(<InteractiveInspector onOpenReview={onOpenReview} />);
 
-    const target = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Review target' });
+    const target = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Changes to review' });
     expect([...target.options].map((option) => option.text)).toEqual([
-      'Primary checkout · Demo project',
+      'Main project folder · Demo project',
       'Implement auth · Codex CLI · succeeded · forgeboard/auth',
-      'Review auth · Claude Code · failed · detached branch',
+      'Review auth · Claude Code · failed · no branch',
     ]);
 
     fireEvent.change(target, { target: { value: `agent:${RUN_ID}` } });
     fireEvent.change(screen.getByRole('combobox', { name: 'Layout' }), {
       target: { value: 'split' },
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: /Show whitespace characters/u }));
-    fireEvent.click(screen.getByRole('button', { name: 'Open authoritative review' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Show spaces and tabs/u }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open review' }));
 
     expect(onOpenReview).toHaveBeenCalledWith({
       target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID },
@@ -68,7 +68,7 @@ describe('DiffReviewNodeInspector', () => {
       purpose: 'review',
     });
     expect(JSON.stringify(onOpenReview.mock.calls)).not.toMatch(/worktreeRoot|repositoryPath|cwd/u);
-    expect(screen.getByText(/never hides or discards Git changes/u)).toBeTruthy();
+    expect(screen.getByText(/never hides or deletes changes/u)).toBeTruthy();
   });
 
   it('keeps an exact older selection available outside the bounded recent-run picker', () => {
@@ -86,19 +86,16 @@ describe('DiffReviewNodeInspector', () => {
     );
 
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Open authoritative review' })).toHaveProperty(
-      'disabled',
-      false,
-    );
-    const target = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Review target' });
+    expect(screen.getByRole('button', { name: 'Open review' })).toHaveProperty('disabled', false);
+    const target = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Changes to review' });
     expect(target.disabled).toBe(false);
     expect(
       [...target.options].find((option) => option.value === `agent:${missingRunId}`),
     ).toHaveProperty('disabled', false);
-    expect(screen.getByRole('option', { name: /outside recent picker/u })).toBeTruthy();
-    expect(screen.queryByText(/No recent active or interrupted-cleanup agent runs/u)).toBeNull();
+    expect(screen.getByRole('option', { name: /not in the recent list/u })).toBeTruthy();
+    expect(screen.queryByText(/No recent agent runs can be reviewed/u)).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open authoritative review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open review' }));
     expect(onOpenReview).toHaveBeenCalledWith({
       target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: missingRunId },
       preferences: { viewMode: 'unified', showWhitespace: false },
@@ -135,10 +132,10 @@ describe('DiffReviewNodeInspector', () => {
     ).toBeTruthy();
     expect(screen.getByText('Cleanup recovery')).toBeTruthy();
     expect(screen.getByText('Agent cleanup recovery')).toBeTruthy();
-    expect(screen.getByText(/Cleanup was interrupted for this exact agent run/u)).toBeTruthy();
+    expect(screen.getByText(/Cleanup was interrupted for this run/u)).toBeTruthy();
     const open = screen.getByRole('button', { name: 'Open cleanup recovery' });
     expect(open).toHaveProperty('disabled', false);
-    expect(screen.queryByRole('button', { name: 'Open authoritative review' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open review' })).toBeNull();
 
     fireEvent.click(open);
     expect(onOpenReview).toHaveBeenCalledWith({
@@ -166,17 +163,14 @@ describe('DiffReviewNodeInspector', () => {
     expect(screen.getByText('Verifying the exact persisted run…')).toBeTruthy();
     expect(screen.getByText('Checking')).toBeTruthy();
     expect(
-      screen.getByRole<HTMLSelectElement>('combobox', { name: 'Review target' }),
+      screen.getByRole<HTMLSelectElement>('combobox', { name: 'Changes to review' }),
     ).toHaveProperty('value', `agent:${missingRunId}`);
-    expect(screen.getByRole('option', { name: /loading recent history/u })).toHaveProperty(
+    expect(screen.getByRole('option', { name: /loading recent runs/u })).toHaveProperty(
       'disabled',
       false,
     );
-    expect(screen.getByRole('button', { name: 'Open authoritative review' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(screen.getByRole('button', { name: 'Refresh persisted runs' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Open review' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Refresh run list' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -191,7 +185,7 @@ describe('DiffReviewNodeInspector', () => {
         onOpenReview={onOpenReview}
       />,
     );
-    expect(screen.getByRole('option', { name: /outside recent picker/u })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /not in the recent list/u })).toBeTruthy();
 
     view.rerender(
       <DiffReviewNodeInspector
@@ -206,18 +200,18 @@ describe('DiffReviewNodeInspector', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'The exact run no longer owns a worktree.',
     );
-    expect(screen.getByRole('combobox', { name: 'Review target' })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: 'Changes to review' })).toHaveProperty(
       'disabled',
       false,
     );
-    expect(screen.getByRole('button', { name: 'Check exact pinned run' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Check saved run' })).toHaveProperty(
       'disabled',
       false,
     );
     expect(screen.queryByText('Agent cleanup recovery')).toBeNull();
     expect(screen.queryByText(/Cleanup was interrupted/u)).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Check exact pinned run' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Check saved run' }));
     expect(onOpenReview).toHaveBeenCalledWith({
       target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: missingRunId },
       preferences: { viewMode: 'unified', showWhitespace: false },
@@ -251,9 +245,9 @@ describe('DiffReviewNodeInspector', () => {
       />,
     );
 
-    expect(screen.getByText(/no persisted review target/u)).toBeTruthy();
-    expect(screen.getByText('Default target')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Bind primary target' }));
+    expect(screen.getByText(/no saved review target/u)).toBeTruthy();
+    expect(screen.getByText('Default choice')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save main folder as target' }));
     expect(onRecord).toHaveBeenCalledTimes(1);
     expect(onTargetChange).toHaveBeenCalledWith({ kind: 'primary' });
   });
@@ -275,20 +269,20 @@ describe('DiffReviewNodeInspector', () => {
     );
 
     expect(screen.getByText(/This node is locked/u)).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'Review target' })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: 'Changes to review' })).toHaveProperty(
       'disabled',
       true,
     );
     expect(screen.getByRole('combobox', { name: 'Layout' })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('checkbox', { name: /Show whitespace characters/u })).toHaveProperty(
+    expect(screen.getByRole('checkbox', { name: /Show spaces and tabs/u })).toHaveProperty(
       'disabled',
       true,
     );
-    const refreshRuns = screen.getByRole('button', { name: 'Refresh persisted runs' });
+    const refreshRuns = screen.getByRole('button', { name: 'Refresh run list' });
     expect(refreshRuns).toHaveProperty('disabled', false);
     fireEvent.click(refreshRuns);
     expect(onRefreshAgentRuns).toHaveBeenCalledTimes(1);
-    const open = screen.getByRole('button', { name: 'Open authoritative review' });
+    const open = screen.getByRole('button', { name: 'Open review' });
     expect(open).toHaveProperty('disabled', false);
     fireEvent.click(open);
 
@@ -316,8 +310,8 @@ describe('DiffReviewNodeInspector', () => {
       />,
     );
 
-    expect(screen.getByText(/collaboration role can inspect/u)).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'Review target' })).toHaveProperty(
+    expect(screen.getByText(/role in this shared project lets you view/u)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Changes to review' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -327,13 +321,13 @@ describe('DiffReviewNodeInspector', () => {
         .map((alert) => alert.textContent)
         .join(' '),
     ).toContain('History storage is temporarily unavailable.');
-    expect(screen.queryByText(/No recent active or interrupted-cleanup agent runs/u)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Refresh persisted runs' })).toHaveProperty(
+    expect(screen.queryByText(/No recent agent runs can be reviewed/u)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh run list' })).toHaveProperty(
       'disabled',
       false,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh persisted runs' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Git summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh run list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh summary' }));
     expect(onRefreshAgentRuns).toHaveBeenCalledTimes(1);
     expect(onRefreshSummary).toHaveBeenCalledTimes(1);
   });
@@ -342,8 +336,8 @@ describe('DiffReviewNodeInspector', () => {
     const mismatched = summary({ kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID });
     const view = render(<DiffReviewNodeInspector {...baseProps()} summary={mismatched} />);
 
-    expect(screen.getByText(/summary belongs to a previous target/u)).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Bound Git summary' })).toBeNull();
+    expect(screen.getByText(/belongs to a different target/u)).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Current target summary' })).toBeNull();
 
     view.rerender(
       <DiffReviewNodeInspector
@@ -351,9 +345,9 @@ describe('DiffReviewNodeInspector', () => {
         summary={summary({ kind: 'primary', projectId: PROJECT_ID })}
       />,
     );
-    expect(screen.getByRole('region', { name: 'Bound Git summary' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Current target summary' })).toBeTruthy();
     expect(screen.getByText('feature/review')).toBeTruthy();
-    expect(screen.getByText('Changed · 3 paths')).toBeTruthy();
+    expect(screen.getByText('Changed · 3 files')).toBeTruthy();
     expect(screen.getByText('+12 −4')).toBeTruthy();
 
     view.rerender(
@@ -365,11 +359,8 @@ describe('DiffReviewNodeInspector', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'This project is not a Git repository.',
     );
-    expect(screen.getByRole('button', { name: 'Open authoritative review' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(screen.getByRole('combobox', { name: 'Review target' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Open review' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('combobox', { name: 'Changes to review' })).toHaveProperty(
       'disabled',
       false,
     );
@@ -403,9 +394,9 @@ describe('DiffReviewNodeInspector', () => {
       />,
     );
 
-    expect(screen.getByText('Agent vs base')).toBeTruthy();
-    expect(screen.getByText('Clean · 0 paths')).toBeTruthy();
-    expect(screen.getByText('2 paths · +19 −4 · 3 commits · 2 ahead · 1 behind')).toBeTruthy();
+    expect(screen.getByText('Agent changes vs. base')).toBeTruthy();
+    expect(screen.getByText('Clean · 0 files')).toBeTruthy();
+    expect(screen.getByText('2 files · +19 −4 · 3 commits · 2 ahead · 1 behind')).toBeTruthy();
   });
 
   it('derives committed-agent path and line counts from the authoritative base comparison', () => {

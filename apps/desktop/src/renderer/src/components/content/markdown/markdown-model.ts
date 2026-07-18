@@ -179,7 +179,7 @@ export function parseSafeMarkdown(markdown: string): MarkdownBlock[] {
   if (characterTruncated || lineTruncated || index < lines.length || budget.inlineOperations <= 0) {
     blocks.push({
       kind: 'notice',
-      message: 'Preview truncated for safety. The complete Markdown source remains available.',
+      message: 'Preview shortened for safety. The full text is still in the editor.',
     });
   }
   return blocks;

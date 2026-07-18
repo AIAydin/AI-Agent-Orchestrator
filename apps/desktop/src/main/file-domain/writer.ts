@@ -32,7 +32,7 @@ export async function saveProjectDocument(
   if (contentBytes.byteLength > options.maxTextBytes) {
     throw new FileDomainError(
       'FILE_TOO_LARGE',
-      'The edited content exceeds the embedded editor save limit.',
+      'The edited content is too large to save in the editor.',
     );
   }
 
@@ -48,7 +48,10 @@ export async function saveProjectDocument(
   const targetBinding = await snapshotOrdinaryFile(resolved.path);
   const parentStats = await lstat(resolvedParent.path, { bigint: true });
   if (!parentStats.isDirectory() || parentStats.isSymbolicLink()) {
-    throw new FileDomainError('NOT_A_DIRECTORY', 'The project file parent is not a directory.');
+    throw new FileDomainError(
+      'NOT_A_DIRECTORY',
+      'The folder containing this file is not a folder.',
+    );
   }
   const parentBinding = captureFileSystemSnapshot(parentStats);
   const parentHandle = await openParentForDurability(resolvedParent.path, parentBinding);
@@ -114,10 +117,10 @@ export async function saveProjectDocument(
 
 function assertEditableExpectedDocument(document: FileDocument, expectedSha256: string): void {
   if (document.contentKind === 'too-large') {
-    throw new FileDomainError('FILE_TOO_LARGE', 'Oversized files cannot be saved here.');
+    throw new FileDomainError('FILE_TOO_LARGE', 'This file is too large to save in the editor.');
   }
   if (document.contentKind === 'binary') {
-    throw new FileDomainError('BINARY_FILE', 'Binary files cannot be saved as text.');
+    throw new FileDomainError('BINARY_FILE', 'Only text files can be saved in the editor.');
   }
   if (document.sha256 !== expectedSha256) throw staleContentError();
 }
@@ -127,7 +130,7 @@ async function snapshotOrdinaryFile(filePath: string): Promise<FileSystemSnapsho
   try {
     const stats = await handle.stat({ bigint: true });
     if (!stats.isFile()) {
-      throw new FileDomainError('NOT_A_FILE', 'Only ordinary project files can be saved.');
+      throw new FileDomainError('NOT_A_FILE', 'Only regular project files can be saved.');
     }
     return captureFileSystemSnapshot(stats);
   } finally {
@@ -162,13 +165,13 @@ async function syncDirectoryIfSupported(handle: FileHandle | undefined): Promise
 function staleContentError(): FileDomainError {
   return new FileDomainError(
     'STALE_CONTENT',
-    'The file changed on disk. Revert or reopen it before saving.',
+    'This file changed on disk. Discard your changes or reopen the file before saving.',
   );
 }
 
 function staleTargetError(): FileDomainError {
   return new FileDomainError(
     'STALE_CONTENT',
-    'The file or its parent folder changed on disk. Reopen it before saving.',
+    'This file or its folder changed on disk. Reopen the file before saving.',
   );
 }

@@ -17,21 +17,19 @@ describe('CheckApprovalDialog', () => {
     const view = render(
       <CheckApprovalDialog plan={PLAN} busy={false} onCancel={onCancel} onContinue={vi.fn()} />,
     );
-    const dialog = screen.getByRole('dialog', { name: /Review the exact Lint command/u });
-    const cancelButton = screen.getByRole('button', { name: 'Cancel before launch' });
-    const continueButton = screen.getByRole('button', { name: 'Authorize exact check' });
-    const details = screen.getByLabelText('Exact check launch details');
+    const dialog = screen.getByRole('dialog', { name: /Review the Lint command/u });
+    const cancelButton = screen.getByRole('button', { name: 'Cancel' });
+    const continueButton = screen.getByRole('button', { name: 'Approve and run' });
+    const details = screen.getByLabelText('Check command details');
 
     expect(document.activeElement).toBe(cancelButton);
     expect(dialog.getAttribute('aria-describedby')).toBe(
       'check-approval-description check-approval-warning',
     );
     expect(
-      screen.getByText(
-        /Project checks execute user-approved, potentially untrusted repository code/u,
-      ),
+      screen.getByText(/Project checks run code from this project on your computer/u),
     ).toBeTruthy();
-    expect(screen.getByText(/Raw output is retained unredacted/u)).toBeTruthy();
+    expect(screen.getByText(/Output is saved in full/u)).toBeTruthy();
     expect(screen.getByText(PLAN.approvalFingerprint)).toBeTruthy();
 
     details.focus();

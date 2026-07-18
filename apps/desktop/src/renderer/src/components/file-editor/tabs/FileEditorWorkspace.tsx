@@ -134,9 +134,9 @@ export function FileEditorWorkspace({
                   draggable={contextDraggable}
                   title={
                     dirty
-                      ? 'Save or revert this tab before dragging its saved disk file.'
+                      ? 'Save or discard your changes before dragging this file.'
                       : contextDraggable
-                        ? `Drag ${tab.relativePath} to Agent context`
+                        ? `Drag ${tab.relativePath} to an agent to share it`
                         : tab.relativePath
                   }
                   onDragStart={(event) => {
@@ -160,7 +160,9 @@ export function FileEditorWorkspace({
                   type="button"
                   className="file-editor-tab-close"
                   aria-label={`Close ${tab.relativePath}`}
-                  title={dirty ? 'Save or revert this tab before closing it.' : 'Close tab'}
+                  title={
+                    dirty ? 'Save or discard your changes before closing this tab.' : 'Close tab'
+                  }
                   disabled={dirty || state === undefined || state.status === 'loading'}
                   onClick={() => closeTab(key)}
                 >
@@ -214,7 +216,7 @@ export function FileEditorWorkspace({
         })}
         {activeTab === null ? (
           <div className="file-editor-tabs-empty">
-            <p>No file tabs are open.</p>
+            <p>Files you open will show up here as tabs.</p>
             <button type="button" onClick={onBrowseFiles}>
               Browse project files
             </button>
@@ -242,7 +244,7 @@ function openTab(
     if (current.tabs.length >= MAX_OPEN_FILE_TABS) {
       return {
         ...current,
-        message: `Close a tab before opening more than ${String(MAX_OPEN_FILE_TABS)} files.`,
+        message: `You can keep up to ${String(MAX_OPEN_FILE_TABS)} files open at once. Close a tab to open another.`,
       };
     }
     return { tabs: [...current.tabs, target], activeKey: key, message: null };

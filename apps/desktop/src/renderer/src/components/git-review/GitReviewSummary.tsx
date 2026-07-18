@@ -13,11 +13,11 @@ import { workingTreeDiffStats } from './git-review-model.js';
 function identitySource(source: GitReviewView['identity']['nameSource']): string {
   if (source === 'git-config') return 'Git config';
   if (source === 'settings') return 'Forgeboard settings';
-  return 'not configured';
+  return 'not set up';
 }
 
 export function GitReviewSummary({ review }: { review: GitReviewView }) {
-  const branch = review.detached ? 'Detached HEAD' : (review.branch ?? 'Unborn branch');
+  const branch = review.detached ? 'Not on a branch' : (review.branch ?? 'No commits yet');
   const identity = review.identity;
   const diffStats = workingTreeDiffStats(review);
 
@@ -33,9 +33,10 @@ export function GitReviewSummary({ review }: { review: GitReviewView }) {
       <div>
         <GitCompareArrows size={15} aria-hidden="true" />
         <span>
-          <small>{review.upstream ?? 'No upstream'}</small>
+          <small>{review.upstream ?? 'Not linked to a remote branch'}</small>
           <strong>
-            {review.ahead} ahead · {review.behind} behind
+            {review.ahead} {review.ahead === 1 ? 'commit' : 'commits'} ahead · {review.behind}{' '}
+            {review.behind === 1 ? 'commit' : 'commits'} behind
           </strong>
         </span>
       </div>
@@ -46,18 +47,18 @@ export function GitReviewSummary({ review }: { review: GitReviewView }) {
           <GitBranch size={15} aria-hidden="true" />
         )}
         <span>
-          <small>Working tree</small>
+          <small>Local edits</small>
           <strong>
-            {review.conflicted ? 'Conflicts require attention' : review.dirty ? 'Changed' : 'Clean'}
+            {review.conflicted ? 'Conflicts to fix' : review.dirty ? 'Changed' : 'None'}
           </strong>
         </span>
       </div>
-      <div title="Authoritative tracked-text totals; untracked and binary files do not add lines.">
+      <div title="Only counts line changes in files Git already tracks. Brand-new and binary files don't add to these totals.">
         <FileDiff size={15} aria-hidden="true" />
         <span>
-          <small>Review changes · tracked text</small>
+          <small>Changes to review · tracked files</small>
           <strong>
-            {diffStats.files} {diffStats.files === 1 ? 'path' : 'paths'} · +{diffStats.additions} −
+            {diffStats.files} {diffStats.files === 1 ? 'file' : 'files'} · +{diffStats.additions} −
             {diffStats.deletions}
           </strong>
         </span>
@@ -69,7 +70,7 @@ export function GitReviewSummary({ review }: { review: GitReviewView }) {
           <UserRoundX size={15} aria-hidden="true" />
         )}
         <span>
-          <small>Commit identity · {identitySource(identity.nameSource)}</small>
+          <small>Commit author · {identitySource(identity.nameSource)}</small>
           <strong>
             {identity.ready
               ? `${identity.name} <${identity.email}>`

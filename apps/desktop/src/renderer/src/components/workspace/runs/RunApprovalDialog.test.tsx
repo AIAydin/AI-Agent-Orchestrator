@@ -21,26 +21,33 @@ describe('RunApprovalDialog', () => {
     );
 
     expect(
-      screen.getByText('Forgeboard has prepared this run, but no approved agent run has started.'),
+      screen.getByText("This run is ready. The agent won't start until you approve it."),
     ).toBeTruthy();
-    const permission = screen.getByRole('region', { name: 'Effective permission profile' });
-    expect(within(permission).getByText(/Host disclosure-only policy/u)).toBeTruthy();
-    expect(within(permission).getByText(/Ignored deny · sensitive allow/u)).toBeTruthy();
+    const permission = screen.getByRole('region', { name: 'What this agent can do' });
+    expect(within(permission).getByText('Custom host policy')).toBeTruthy();
+    expect(within(permission).getByText(/custom · disclosure-only/u)).toBeTruthy();
+    expect(
+      within(permission).getByText(/Ignored files not allowed · sensitive files allowed/u),
+    ).toBeTruthy();
     expect(within(permission).getByText('/usr/local/bin/codex')).toBeTruthy();
-    expect(within(permission).getByText(/Dev servers deny · tests allow · advisory/u)).toBeTruthy();
+    expect(
+      within(permission).getByText(
+        /Dev servers not allowed · tests allowed · requested, not enforced/u,
+      ),
+    ).toBeTruthy();
     expect(within(permission).getByText('Review always required')).toBeTruthy();
     expect(within(permission).getByText(/cwd is not an operating-system sandbox/u)).toBeTruthy();
     expect(screen.getByText('/tmp/worktrees/agent-1/src/app.ts')).toBeTruthy();
     expect(screen.getByText('e'.repeat(64))).toBeTruthy();
     expect(screen.getByText('context-manifest-1')).toBeTruthy();
     expect(screen.getByText('a'.repeat(64))).toBeTruthy();
-    expect(screen.getByLabelText('Exact launch disclosure SHA-256').textContent).toBe(
+    expect(screen.getByLabelText('Security fingerprint (SHA-256)').textContent).toBe(
       'f'.repeat(64),
     );
     expect(screen.getByLabelText('Approval expires at').getAttribute('datetime')).toBe(
       '2099-07-15T00:05:00.000Z',
     );
-    expect(screen.getByRole('button', { name: 'Approve & launch' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Approve and start' })).toBeTruthy();
   });
 });
 

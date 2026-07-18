@@ -118,7 +118,7 @@ export class ExtensionManager {
       if (discovery.invalid.some((entry) => entry.entryName === plan.manifest.id)) {
         throw new ExtensionRuntimeError(
           'REGISTRY_CORRUPT',
-          `The existing ${plan.manifest.id} registry entry is invalid and must not be overwritten.`,
+          `The saved copy of ${plan.manifest.id} is damaged, so it cannot be replaced.`,
         );
       }
       const existingLedger = this.trustStore.getTrustedExtension(plan.manifest.id);
@@ -129,7 +129,7 @@ export class ExtensionManager {
       ) {
         throw new ExtensionRuntimeError(
           'APPROVAL_MISMATCH',
-          `Extension ${plan.manifest.id} already has ${existingLedger.state} trusted state without a matching registry snapshot.`,
+          `Extension ${plan.manifest.id} already has a saved approval that does not match any installed copy.`,
         );
       }
       if (
@@ -247,7 +247,7 @@ export class ExtensionManager {
         } catch (rollbackError) {
           surfacedError = new ExtensionRuntimeError(
             'REGISTRY_CORRUPT',
-            'The extension update failed and its previous trusted approval could not be restored.',
+            'The extension update failed, and Forgeboard could not restore its previous approval.',
             { cause: new AggregateError([error, rollbackError]) },
           );
         }
@@ -268,7 +268,7 @@ export class ExtensionManager {
         } catch (cleanupError) {
           surfacedError = new ExtensionRuntimeError(
             'REGISTRY_CORRUPT',
-            'The extension install failed and its pending trusted approval could not be removed.',
+            'The extension install failed, and Forgeboard could not clean up the partial approval.',
             { cause: new AggregateError([error, cleanupError]) },
           );
         }
@@ -302,7 +302,7 @@ export class ExtensionManager {
     if (ledger?.state !== 'active') {
       throw new ExtensionRuntimeError(
         'APPROVAL_MISMATCH',
-        `Extension ${extensionId} is not active in the trusted extension ledger.`,
+        `Extension ${extensionId} has no active approval, so it cannot be removed.`,
       );
     }
     const removalOperationId = randomUUID();
@@ -385,7 +385,7 @@ export class ExtensionManager {
       });
       throw new ExtensionRuntimeError(
         'APPROVAL_MISMATCH',
-        'This extension approval has expired. Select the extension again and review a fresh plan.',
+        'This extension approval has expired. Select the extension again and review what will run.',
       );
     }
     return pending;
@@ -430,7 +430,7 @@ export class ExtensionManager {
       quarantined.push({
         extensionId,
         ledgerState: ledger?.state ?? 'missing',
-        reason: mismatch ?? 'The trusted extension approval is unavailable.',
+        reason: mismatch ?? 'Forgeboard cannot find the approval record for this extension.',
         snapshot: extensionSnapshotView(extension),
       });
     }
@@ -442,10 +442,10 @@ export class ExtensionManager {
         ledgerState: ledger.state,
         reason:
           ledger.state === 'pending'
-            ? 'An extension operation was interrupted before a matching registry snapshot became active.'
+            ? 'Its install or update was interrupted before it finished.'
             : ledger.state === 'revoked'
-              ? 'The extension trust was revoked and no registry snapshot is active.'
-              : 'The active trusted ledger entry has no matching registry snapshot.',
+              ? 'Its approval was revoked, and it has no installed copy.'
+              : 'Its approval record has no matching installed copy.',
       });
     }
 
@@ -491,7 +491,7 @@ export class ExtensionManager {
     if (registry.invalid.some((entry) => entry.entryName === pending.plan.manifest.id)) {
       throw new ExtensionRuntimeError(
         'REGISTRY_CORRUPT',
-        `The ${pending.plan.manifest.id} registry entry became invalid after review.`,
+        `The saved copy of ${pending.plan.manifest.id} became unreadable after review.`,
       );
     }
     const existing = registry.installed.find(
@@ -508,7 +508,7 @@ export class ExtensionManager {
       if (ledger !== undefined && ledger.state !== 'revoked') {
         throw new ExtensionRuntimeError(
           'APPROVAL_MISMATCH',
-          `Extension ${pending.plan.manifest.id} already has ${ledger.state} trusted state.`,
+          `Extension ${pending.plan.manifest.id} already has a saved approval.`,
         );
       }
       return undefined;
@@ -536,7 +536,7 @@ export class ExtensionManager {
     if (mismatch !== null || ledger?.state !== 'active') {
       throw new ExtensionRuntimeError(
         'APPROVAL_MISMATCH',
-        `The installed extension is not backed by its exact active approval: ${mismatch ?? 'approval unavailable'}`,
+        `The installed extension does not match its saved approval: ${mismatch ?? 'its approval record is unavailable'}`,
       );
     }
     return ledger;
@@ -555,13 +555,13 @@ function trustedLedgerMismatch(
   ledger: TrustedExtensionLedgerRecord | undefined,
 ): string | null {
   if (ledger === undefined) {
-    return 'The registry snapshot has no trusted extension ledger approval.';
+    return 'The installed copy has no matching approval record.';
   }
   if (ledger.state === 'pending') {
-    return 'The extension install or update did not reach an active trusted state.';
+    return 'The install or update was interrupted before it finished.';
   }
   if (ledger.state === 'revoked') {
-    return 'The extension trust has been revoked.';
+    return 'Its approval was revoked.';
   }
   return trustedLedgerContentMismatch(extension, ledger);
 }
@@ -578,7 +578,7 @@ function trustedLedgerContentMismatch(
     ledger.snapshotDigest !== extension.record.snapshotDigest ||
     JSON.stringify(ledger.permissions) !== JSON.stringify(permissions)
   ) {
-    return 'The active ledger does not exactly match this API version, version, digest, or permission set.';
+    return 'The saved approval does not exactly match the installed version, content, or permissions.';
   }
   return null;
 }

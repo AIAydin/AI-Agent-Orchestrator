@@ -19,11 +19,11 @@ afterEach(cleanup);
 describe('project-file to Agent context UI workflow', () => {
   it('drags a safe project-tree file into the selected Agent and shows the durable link', async () => {
     render(<TreeToSelectedAgentHarness />);
-    fireEvent.click(await screen.findByRole('treeitem', { name: 'Open project folder docs' }));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'Open folder docs' }));
     const source = await screen.findByRole('treeitem', {
-      name: 'Draggable project file docs/brief.md',
+      name: 'File docs/brief.md',
     });
-    const target = screen.getByRole('region', { name: 'Agent context attachments' });
+    const target = screen.getByRole('region', { name: 'Files for this agent' });
     const transfer = dataTransfer();
 
     fireEvent.dragStart(source, { dataTransfer: transfer });
@@ -36,14 +36,14 @@ describe('project-file to Agent context UI workflow', () => {
 
   it('attaches a keyboard-selected project-tree file to the chosen Agent', async () => {
     render(<TreeToSelectedAgentHarness />);
-    fireEvent.click(await screen.findByRole('treeitem', { name: 'Open project folder docs' }));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'Open folder docs' }));
     fireEvent.click(
       await screen.findByRole('treeitem', {
-        name: 'Draggable project file docs/brief.md',
+        name: 'File docs/brief.md',
       }),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Attach selected project file' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Attach selected file' }));
 
     expect(await screen.findByText('docs/brief.md')).toBeTruthy();
     expect(screen.getByText('1/256')).toBeTruthy();
@@ -52,7 +52,7 @@ describe('project-file to Agent context UI workflow', () => {
   it('attaches a configured File node to an Agent through the keyboard-accessible picker', async () => {
     render(<FileNodeToAgentHarness />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Attach saved disk file' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Attach saved file' }));
 
     expect(await screen.findByText('src/context.ts')).toBeTruthy();
     expect(screen.getByText('1/256')).toBeTruthy();

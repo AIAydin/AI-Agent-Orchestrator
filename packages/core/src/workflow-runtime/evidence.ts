@@ -143,9 +143,7 @@ export function recordWorkflowHumanReviewDecision(
       ? { failureCode: 'HUMAN_CHANGES_REQUESTED' }
       : {}),
     statusReason:
-      decision.decision === 'approved'
-        ? 'Human approved the current reviewed evidence'
-        : decision.feedback,
+      decision.decision === 'approved' ? 'You approved the reviewed result' : decision.feedback,
   });
   const decidedRuntime = replaceRunState(
     runtime,
@@ -481,9 +479,9 @@ export function recordWorkflowReview(
         ...(terminalStatus === 'failed'
           ? {
               failureCode: 'REVIEW_CHANGES_REQUESTED',
-              statusReason: 'A current direct reviewer assessment requested changes',
+              statusReason: 'The reviewer requested changes',
             }
-          : { statusReason: 'All current direct reviewer assessments approved' }),
+          : { statusReason: 'All reviewers approved the result' }),
       });
       reviewedRuntime = replaceRunState(
         reviewedRuntime,

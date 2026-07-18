@@ -12,7 +12,7 @@ export class ProcessActivityPresentError extends Error {
 
   public constructor(options?: ErrorOptions) {
     super(
-      'Stop or cancel every Forgeboard-managed agent run, terminal, preview, check, and workflow before cleaning up a worktree.',
+      'Stop or cancel every agent run, terminal, preview, check, and workflow that is still active, then try the cleanup again.',
       options,
     );
     this.name = 'ProcessActivityPresentError';
@@ -29,8 +29,8 @@ export class ProcessAdmissionRestoreError extends AggregateError {
     super(
       errors,
       operationCompleted
-        ? 'The cleanup completed, but Forgeboard could not reopen every process admission boundary. Restart Forgeboard before starting another process.'
-        : 'The cleanup failed, and Forgeboard could not reopen every process admission boundary. Restart Forgeboard before starting another process.',
+        ? 'The cleanup finished, but Forgeboard could not restart all of its process controls. Restart Forgeboard before starting anything new.'
+        : 'The cleanup failed, and Forgeboard could not restart all of its process controls. Restart Forgeboard before starting anything new.',
     );
     this.name = 'ProcessAdmissionRestoreError';
   }

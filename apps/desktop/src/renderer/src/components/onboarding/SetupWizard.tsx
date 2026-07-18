@@ -141,7 +141,7 @@ export function SetupWizard(props: SetupWizardProps) {
     try {
       await operation();
     } catch (cause) {
-      props.onError(cause instanceof Error ? cause.message : 'Setup could not be completed.');
+      props.onError(cause instanceof Error ? cause.message : 'Setup couldn’t finish. Try again.');
     } finally {
       setBusy(false);
     }
@@ -205,8 +205,8 @@ export function SetupWizard(props: SetupWizardProps) {
             ))}
           </ol>
           <p>
-            Everything here can be changed later in Settings. No source files or environment files
-            are required.
+            Everything here can be changed later in Settings. You won’t need to edit any files by
+            hand.
           </p>
         </aside>
 
@@ -217,34 +217,35 @@ export function SetupWizard(props: SetupWizardProps) {
                 <Sparkles size={30} />
               </div>
               <span className="eyebrow">A private workshop on your computer</span>
-              <h1 id="setup-title">Ready to build without wiring config files?</h1>
+              <h1 id="setup-title">Set up Forgeboard in a few quick steps</h1>
               <p>
-                Forgeboard works immediately with its deterministic local demo. This short setup can
-                also connect an installed coding-agent CLI, choose safe defaults, and prepare a
-                development preview through the UI.
+                Forgeboard works right away with a built-in demo that runs entirely on this
+                computer. This short setup can also connect a coding agent you have installed, pick
+                safe defaults, and prepare a preview of your app.
               </p>
               <div className="setup-assurances">
                 <div>
                   <ShieldCheck size={18} />
                   <span>
                     <strong>No Forgeboard cloud</strong>
-                    <small>No account, telemetry, analytics, or model proxy.</small>
+                    <small>No account, no tracking, nothing sent off this device.</small>
                   </span>
                 </div>
                 <div>
                   <HardDrive size={18} />
                   <span>
                     <strong>Local by default</strong>
-                    <small>
-                      Projects, canvases, transcripts, and settings stay on this device.
-                    </small>
+                    <small>Projects, canvases, chats, and settings stay on this device.</small>
                   </span>
                 </div>
                 <div>
                   <GitBranch size={18} />
                   <span>
                     <strong>Changes stay reviewable</strong>
-                    <small>Writable agents use dedicated Git worktrees by default.</small>
+                    <small>
+                      Agents that edit files work in a separate copy of your project, so you review
+                      every change.
+                    </small>
                   </span>
                 </div>
               </div>
@@ -256,10 +257,10 @@ export function SetupWizard(props: SetupWizardProps) {
               <span className="eyebrow">
                 <Bot size={14} /> Agent
               </span>
-              <h1 id="setup-title">Choose the tool you want to start with</h1>
+              <h1 id="setup-title">Choose the agent you want to start with</h1>
               <p>
-                Forgeboard launches local CLIs and uses their existing sign-in. The built-in test
-                agent works offline and is always available.
+                Forgeboard runs coding agents installed on this computer and uses the sign-in each
+                one already has. The built-in test agent works offline and is always available.
               </p>
               <div className="setup-agent-list" role="radiogroup" aria-label="Default agent">
                 {availableAgents.map((agent) => {
@@ -301,12 +302,12 @@ export function SetupWizard(props: SetupWizardProps) {
                         <strong>{agent.label}</strong>
                         <small>
                           {validated
-                            ? `${selectedReadiness.version} · validated now`
+                            ? `${selectedReadiness.version} · checked just now`
                             : agent.installed
-                              ? (agent.version ?? 'Detected on this device')
+                              ? (agent.version ?? 'Found on this device')
                               : agent.id === 'test-agent'
-                                ? 'Bundled and ready'
-                                : 'Not detected — optional'}
+                                ? 'Built in and ready'
+                                : 'Not installed — optional'}
                         </small>
                       </span>
                       <span
@@ -317,12 +318,12 @@ export function SetupWizard(props: SetupWizardProps) {
                         }
                       >
                         {validated
-                          ? 'Validated'
+                          ? 'Ready'
                           : agent.installed && agent.version
-                            ? 'Detected'
+                            ? 'Found'
                             : agent.installed
-                              ? 'Needs check'
-                              : 'Set up'}
+                              ? 'Not checked'
+                              : 'Not found'}
                       </span>
                     </label>
                   );
@@ -331,14 +332,15 @@ export function SetupWizard(props: SetupWizardProps) {
               {draft.defaultAgent !== 'test-agent' && draft.defaultAgent !== 'custom' && (
                 <div className="setup-path-field">
                   <label htmlFor={`setup-agent-${draft.defaultAgent}-executable`}>
-                    Executable override <small>Optional; automatic detection is recommended.</small>
+                    Executable override{' '}
+                    <small>Optional — leave blank to use the one Forgeboard finds.</small>
                   </label>
                   <span className="path-picker">
                     <input
                       id={`setup-agent-${draft.defaultAgent}-executable`}
                       name={`setup-agent-${draft.defaultAgent}-executable`}
                       value={draft.agentExecutableOverrides[draft.defaultAgent] ?? ''}
-                      placeholder="Use the detected executable"
+                      placeholder="Use the one Forgeboard finds"
                       onChange={(event) =>
                         setDraft({
                           ...draft,
@@ -397,14 +399,14 @@ export function SetupWizard(props: SetupWizardProps) {
                   </div>
                   <div className="setup-path-field">
                     <label htmlFor="setup-custom-agent-executable">
-                      Executable <small>Required for a custom CLI.</small>
+                      Executable <small>Required — the program that runs your agent.</small>
                     </label>
                     <span className="path-picker">
                       <input
                         id="setup-custom-agent-executable"
                         name="setup-custom-agent-executable"
                         value={draft.customAgent.executable}
-                        placeholder="Choose the custom CLI executable"
+                        placeholder="Choose the program that runs your agent"
                         onChange={(event) =>
                           setDraft({
                             ...draft,
@@ -439,7 +441,7 @@ export function SetupWizard(props: SetupWizardProps) {
                     </span>
                   </div>
                   <label>
-                    Provider disclosure
+                    Notes about the provider
                     <textarea
                       name="setup-custom-agent-provider-disclosure"
                       rows={3}
@@ -456,12 +458,11 @@ export function SetupWizard(props: SetupWizardProps) {
                     />
                   </label>
                   <small>
-                    Advanced argument, prompt-delivery, runtime, and output controls are available
-                    in Settings after setup.
+                    Fine-tune how this agent starts and reports results in Settings after setup.
                   </small>
                   {customAgentIncomplete && (
                     <span className="setup-validation" role="status">
-                      Choose an executable to continue with the custom CLI.
+                      Choose the program that runs your custom agent to continue.
                     </span>
                   )}
                 </div>
@@ -488,14 +489,12 @@ export function SetupWizard(props: SetupWizardProps) {
               <span className="eyebrow">
                 <ShieldCheck size={14} /> Safety
               </span>
-              <h1 id="setup-title">Set the default permission boundary</h1>
-              <p>
-                Every real launch still shows its exact command, context, paths, and permissions.
-              </p>
-              <div className="setup-choice-grid" role="radiogroup" aria-label="Permission profile">
+              <h1 id="setup-title">Choose what agents can do by default</h1>
+              <p>Before every run, you still see the exact command and the files it can touch.</p>
+              <div className="setup-choice-grid" role="radiogroup" aria-label="Default permissions">
                 <ChoiceCard
                   title="Plan / read-only"
-                  description="Inspect selected context without changing project files."
+                  description="Look at the files you share without changing anything."
                   icon={<ShieldCheck size={20} />}
                   checked={draft.defaultPermissionProfile === 'plan-read-only'}
                   onSelect={() =>
@@ -507,7 +506,7 @@ export function SetupWizard(props: SetupWizardProps) {
                 />
                 <ChoiceCard
                   title="Worktree write"
-                  description="Write only inside a dedicated, reviewable Git worktree."
+                  description="Make changes only in a separate copy of the project that you review."
                   icon={<FolderGit2 size={20} />}
                   checked={draft.defaultPermissionProfile === 'worktree-write'}
                   onSelect={() =>
@@ -521,8 +520,8 @@ export function SetupWizard(props: SetupWizardProps) {
                   title="Docker isolated"
                   description={
                     draft.defaultAgent === 'test-agent'
-                      ? 'Choose a container-ready coding agent first.'
-                      : 'Prepare a constrained non-root container profile.'
+                      ? 'Pick an agent that can run in Docker first.'
+                      : 'Run the agent in a Docker container, kept apart from the rest of your computer.'
                   }
                   icon={<Container size={20} />}
                   checked={draft.defaultPermissionProfile === 'docker-isolated'}
@@ -537,7 +536,7 @@ export function SetupWizard(props: SetupWizardProps) {
                 />
                 <ChoiceCard
                   title="Custom"
-                  description="Configure a reusable host policy or Docker boundary entirely here."
+                  description="Set your own rules, on this computer or in Docker."
                   icon={<ShieldCheck size={20} />}
                   checked={draft.defaultPermissionProfile === 'custom'}
                   onSelect={() =>
@@ -569,8 +568,8 @@ export function SetupWizard(props: SetupWizardProps) {
                     <>
                       <label className="switch-row">
                         <span>
-                          <strong>Disable container network</strong>
-                          <small>Recommended. It can be enabled for an approved run later.</small>
+                          <strong>Block network access</strong>
+                          <small>Recommended. You can allow it for a specific run later.</small>
                         </span>
                         <input
                           type="checkbox"
@@ -585,8 +584,8 @@ export function SetupWizard(props: SetupWizardProps) {
                         />
                       </label>
                       <p>
-                        Host credentials remain unmounted. CPU and memory limits can be adjusted in
-                        Settings.
+                        Your passwords and sign-in details stay hidden from the container. CPU and
+                        memory limits can be changed in Settings.
                       </p>
                     </>
                   )}
@@ -604,7 +603,7 @@ export function SetupWizard(props: SetupWizardProps) {
                   />
                   {dockerReadiness?.available !== true && (
                     <span className="setup-validation" role="status">
-                      Check Docker successfully before continuing with this default profile.
+                      Run the Docker check above successfully before continuing.
                     </span>
                   )}
                 </div>
@@ -622,11 +621,11 @@ export function SetupWizard(props: SetupWizardProps) {
               <span className="eyebrow">
                 <TerminalSquare size={14} /> Project defaults
               </span>
-              <h1 id="setup-title">Optional project commands, built safely in the UI</h1>
+              <h1 id="setup-title">Set project commands (optional)</h1>
               <p>
-                Leave either command blank to configure it later. Preview nodes can also use a
-                detected package script. Arguments are stored separately and never interpolated
-                through a shell.
+                Leave either command blank to set it up later. Forgeboard can suggest commands from
+                a project you have opened. Arguments are stored separately and run exactly as
+                written — never through a shell.
               </p>
               <ProjectCommandSuggestions
                 projects={props.projects ?? []}
@@ -686,12 +685,12 @@ export function SetupWizard(props: SetupWizardProps) {
                   onChange={(event) => setDraft({ ...draft, branchPrefix: event.target.value })}
                 />
                 <small>
-                  Creates &lt;prefix&gt;&lt;task&gt;/&lt;agent&gt;-&lt;id&gt;. Examples: forgeboard/
-                  or team/agents/.
+                  New branches are named &lt;prefix&gt;&lt;task&gt;/&lt;agent&gt;-&lt;id&gt;.
+                  Examples: forgeboard/ or team/agents/.
                 </small>
               </label>
               <div className="setup-path-field">
-                <label htmlFor="setup-managed-worktree-location">Managed worktree location</label>
+                <label htmlFor="setup-managed-worktree-location">Folder for agent worktrees</label>
                 <span className="path-picker">
                   <input
                     id="setup-managed-worktree-location"
@@ -715,8 +714,8 @@ export function SetupWizard(props: SetupWizardProps) {
               <span className="eyebrow">Ready</span>
               <h1 id="setup-title">Your local workshop is ready</h1>
               <p>
-                Open a repository, clone one, create an empty project, or launch the bundled demo.
-                You can revisit every choice in Settings.
+                Open a project folder, clone one from the web, start a new one, or explore the
+                built-in demo. You can change every choice later in Settings.
               </p>
               <dl className="setup-summary">
                 <div>
@@ -724,15 +723,15 @@ export function SetupWizard(props: SetupWizardProps) {
                   <dd>{agentLabel(availableAgents, draft.defaultAgent)}</dd>
                 </div>
                 <div>
-                  <dt>Agent readiness</dt>
+                  <dt>Agent status</dt>
                   <dd>
                     {selectedAgentReady
-                      ? (selectedReadiness?.version ?? selectedAgent?.version ?? 'Validated')
+                      ? (selectedReadiness?.version ?? selectedAgent?.version ?? 'Ready')
                       : 'Needs attention'}
                   </dd>
                 </div>
                 <div>
-                  <dt>Permission profile</dt>
+                  <dt>Permissions</dt>
                   <dd>{permissionProfileLabel(draft.defaultPermissionProfile)}</dd>
                 </div>
                 <div>
@@ -740,8 +739,8 @@ export function SetupWizard(props: SetupWizardProps) {
                   <dd>
                     {draft.dockerEnabled
                       ? dockerReadiness?.available === true
-                        ? `Ready · network ${draft.dockerNetwork}`
-                        : 'Configured, not verified'
+                        ? `Ready · network ${draft.dockerNetwork === 'disabled' ? 'off' : 'on'}`
+                        : 'Set up, not checked yet'
                       : 'Off'}
                   </dd>
                 </div>

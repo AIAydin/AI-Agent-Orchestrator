@@ -42,7 +42,7 @@ export function AgentContextDropZone({
   return (
     <section
       className={`agent-context-drop-zone${draggingOver ? ' dragging-over' : ''}${disabled ? ' disabled' : ''}`}
-      aria-label="Agent context attachments"
+      aria-label="Files for this agent"
       aria-disabled={disabled}
       onDragEnter={acceptDrag}
       onDragOver={acceptDrag}
@@ -55,7 +55,7 @@ export function AgentContextDropZone({
         if (disabled) return;
         const payload = readWorkspaceContextDrag(event.dataTransfer);
         if (payload === null) {
-          setMessage('That drag did not contain a valid Forgeboard project file.');
+          setMessage("That can't be attached. Drag a file from the project files list.");
           return;
         }
         event.preventDefault();
@@ -63,7 +63,9 @@ export function AgentContextDropZone({
         setMessage(null);
         void onAttach(payload)
           .catch((cause: unknown) => {
-            setMessage(cause instanceof Error ? cause.message : 'The file could not be attached.');
+            setMessage(
+              cause instanceof Error ? cause.message : "The file couldn't be attached. Try again.",
+            );
           })
           .finally(() => setPending(false));
       }}
@@ -71,7 +73,7 @@ export function AgentContextDropZone({
       <header>
         <div>
           <Link2 size={14} aria-hidden="true" />
-          <h3>Context attachments</h3>
+          <h3>Files for this agent</h3>
         </div>
         <span>
           {attachmentIds.length}/{MAX_AGENT_CONTEXT_ATTACHMENTS}
@@ -80,22 +82,22 @@ export function AgentContextDropZone({
       {readOnly ? (
         <p className="agent-context-read-only" role="status">
           <Lock size={13} aria-hidden="true" />
-          Unlock the Agent and use an editable collaboration role to change context.
+          Unlock this agent and make sure you have edit access to change these files.
         </p>
       ) : (
         <p>
-          Drop a safe project file or a clean File-node editor tab here. Forgeboard verifies the
-          saved disk file again before linking and before launch.
+          Drop a project file or a file editor tab here to share it with this agent. Forgeboard
+          checks the saved file again before the agent runs.
         </p>
       )}
-      {pending ? <p role="status">Verifying the saved project file…</p> : null}
+      {pending ? <p role="status">Checking the saved file…</p> : null}
       {message !== null ? (
         <p className="agent-context-error" role="alert">
           {message}
         </p>
       ) : null}
       {attachmentIds.length === 0 ? (
-        <p className="agent-context-empty">No project files attached.</p>
+        <p className="agent-context-empty">No files shared with this agent yet.</p>
       ) : (
         <ul>
           {attachmentIds.map((attachmentNodeId) => {
@@ -110,16 +112,16 @@ export function AgentContextDropZone({
               <li key={attachmentNodeId} className={unavailable ? 'unavailable' : ''}>
                 <FileCode2 size={13} aria-hidden="true" />
                 <span>
-                  <strong>{node?.data.title ?? 'Unavailable File node'}</strong>
+                  <strong>{node?.data.title ?? 'File no longer available'}</strong>
                   <code>{reference?.relativePath ?? attachmentNodeId}</code>
                   {unavailable ? (
-                    <small>Unavailable — remove or repair this reference.</small>
+                    <small>This file can't be found — remove it or relink it.</small>
                   ) : null}
                 </span>
                 <button
                   type="button"
                   disabled={disabled}
-                  aria-label={`Remove ${node?.data.title ?? attachmentNodeId} from context`}
+                  aria-label={`Remove ${node?.data.title ?? attachmentNodeId} from this agent`}
                   onClick={() => onRemove(attachmentNodeId)}
                 >
                   <X size={12} aria-hidden="true" />

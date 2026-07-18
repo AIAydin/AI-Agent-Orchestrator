@@ -29,15 +29,15 @@ describe('TestNodePanel', () => {
     const onStart = vi.fn();
     renderPanel({ onUpdate, onStart });
 
-    fireEvent.change(screen.getByLabelText(/Expected artifacts/u), {
+    fireEvent.change(screen.getByLabelText(/Result files/u), {
       target: { value: 'coverage/index.html\nreports/junit.xml' },
     });
     expect(onUpdate).toHaveBeenCalledWith({
       artifactPaths: ['coverage/index.html', 'reports/junit.xml'],
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Review & run' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review and run' }));
     expect(onStart).toHaveBeenCalledWith('test-1');
-    expect(screen.getByText(/Output text is never interpreted as a file path/u)).toBeTruthy();
+    expect(screen.getByText(/Output text is never treated as a file path/u)).toBeTruthy();
   });
 
   it('streams parsed output, retains attempts, and forwards trusted artifact identity', async () => {
@@ -64,8 +64,8 @@ describe('TestNodePanel', () => {
       'disabled',
       true,
     );
-    expect(screen.getByLabelText('Parsed test summary').textContent).toContain('4');
-    expect(screen.getByLabelText('Test node raw output').textContent).toContain('1 failed');
+    expect(screen.getByLabelText('Test result summary').textContent).toContain('4');
+    expect(screen.getByLabelText('Test output').textContent).toContain('1 failed');
     expect(screen.getByRole('region', { name: 'Previous test attempts' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -109,11 +109,11 @@ describe('TestNodePanel', () => {
       configurationReadOnly: true,
       executions: [awaiting],
     });
-    expect(screen.getByText(/No process has started/u)).toBeTruthy();
+    expect(screen.getByText(/Nothing has started/u)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /run/u })).toBeNull();
 
     view.rerender(<TestNodePanel {...panelProps({ executions: [execution('lost', NOW)] })} />);
-    expect(screen.getByRole('alert').textContent).toMatch(/lost the previous process/u);
+    expect(screen.getByRole('alert').textContent).toMatch(/lost track of the previous run/u);
   });
 
   it('expands a retained attempt with its complete output, summary, and verified artifacts', async () => {
@@ -148,9 +148,9 @@ describe('TestNodePanel', () => {
     renderPanel({ executions: [executionWithHistory], onOpenArtifact });
 
     fireEvent.click(screen.getByText(/Attempt 1 · Failed/u));
-    expect(screen.getByText('Retained result')).toBeTruthy();
-    expect(screen.getByLabelText('Parsed test summary').textContent).toContain('3');
-    expect(screen.getByLabelText('Test node raw output').textContent).toContain('retained failure');
+    expect(screen.getByText('Saved result')).toBeTruthy();
+    expect(screen.getByLabelText('Test result summary').textContent).toContain('3');
+    expect(screen.getByLabelText('Test output').textContent).toContain('retained failure');
     fireEvent.click(screen.getByRole('button', { name: 'Open previous report' }));
     await waitFor(() =>
       expect(onOpenArtifact).toHaveBeenCalledWith({

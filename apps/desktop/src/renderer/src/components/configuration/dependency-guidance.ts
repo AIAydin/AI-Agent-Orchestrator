@@ -6,31 +6,31 @@ export function commandDependencyGuidance(executable: string, purpose: CommandPu
   const trimmed = executable.trim();
   if (trimmed === '') {
     if (purpose === 'preview') {
-      return 'Optional: leave this blank to choose a detected package script after opening a project, or use Browse to select an exact executable.';
+      return 'Optional: leave this blank to pick a script from your project after you open it, or use Browse to pick an exact program.';
     }
     if (purpose === 'check') {
-      return 'Choose an executable with Browse, enter a command available on PATH, or adopt a detected package script from the open project.';
+      return 'Use Browse to pick a program, type the name of a command installed on this computer, or use a script from the open project.';
     }
-    return 'Optional: use Browse to select an exact executable. You can also configure this later in Settings.';
+    return 'Optional: use Browse to pick an exact program. You can also set this up later in Settings.';
   }
 
   const command = executableName(trimmed);
   if (command === 'npm' || command === 'npx' || command === 'node') {
-    return 'If this command is unavailable, install Node.js, reopen Forgeboard, or use Browse to select its exact executable.';
+    return 'If this command is not available, install Node.js and reopen Forgeboard, or use Browse to point to it directly.';
   }
   if (command === 'pnpm' || command === 'yarn') {
-    return `If ${command} is unavailable, install Node.js and enable ${command} with Corepack, then reopen Forgeboard or use Browse.`;
+    return `If ${command} is not available, install Node.js and enable ${command} with Corepack, then reopen Forgeboard or use Browse.`;
   }
   if (command === 'bun') {
-    return 'If Bun is unavailable, install Bun, reopen Forgeboard, or use Browse to select its exact executable.';
+    return 'If Bun is not available, install Bun and reopen Forgeboard, or use Browse to point to it directly.';
   }
   if (command === 'deno') {
-    return 'If Deno is unavailable, install Deno, reopen Forgeboard, or use Browse to select its exact executable.';
+    return 'If Deno is not available, install Deno and reopen Forgeboard, or use Browse to point to it directly.';
   }
   if (isPath(trimmed)) {
-    return 'Forgeboard will validate this selected file before launch. If it moved or was replaced, use Browse to select it again.';
+    return 'Forgeboard will check this file before running it. If it was moved or replaced, use Browse to pick it again.';
   }
-  return `If ${trimmed} is not available on PATH, install it and reopen Forgeboard, or use Browse to select its exact executable.`;
+  return `If ${trimmed} is not available on this computer, install it and reopen Forgeboard, or use Browse to point to it directly.`;
 }
 
 export function packageManagerDependencyGuidance(
@@ -45,10 +45,10 @@ export function agentDependencyGuidance(
 ): string {
   const id = agent?.id ?? fallbackId;
   if (id === 'test-agent') {
-    return 'The deterministic test agent is bundled with Forgeboard; reinstall the application if its executable is missing.';
+    return 'The test agent comes with Forgeboard. If its program is missing, reinstall the app.';
   }
   if (id === 'custom') {
-    return 'Use Browse to select the custom CLI, provide its version arguments, then refresh readiness. No manifest or environment file is required.';
+    return 'Use Browse to pick the program that runs your custom agent, add its version arguments, then refresh. No manifest or environment file is needed.';
   }
   const provider =
     id === 'codex'
@@ -70,7 +70,7 @@ export function agentDependencyGuidance(
           : id === 'opencode'
             ? 'opencode'
             : id;
-  return `Install ${provider} using its provider's current instructions, ensure ${expectedCommand} is on PATH, and reopen Forgeboard; or use Browse to select an existing executable, then refresh readiness.`;
+  return `Install ${provider} by following its publisher's instructions, make sure the ${expectedCommand} command works on this computer, and reopen Forgeboard. Or use Browse to point to an existing installation, then refresh.`;
 }
 
 function executableName(executable: string): string {

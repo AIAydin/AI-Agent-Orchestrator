@@ -28,7 +28,9 @@ describe('CollaboratorRoster', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Idle Reviewer, reviewer, idle').textContent).toBe('IR');
+    expect(screen.getByLabelText('Idle Reviewer, reviewer, not active right now').textContent).toBe(
+      'IR',
+    );
   });
 
   it('bounds visible avatars and reports overflow', () => {
@@ -49,6 +51,6 @@ describe('CollaboratorRoster', () => {
       />,
     );
 
-    expect(screen.getByLabelText('2 more collaborators')).toBeTruthy();
+    expect(screen.getByLabelText('2 more people')).toBeTruthy();
   });
 });

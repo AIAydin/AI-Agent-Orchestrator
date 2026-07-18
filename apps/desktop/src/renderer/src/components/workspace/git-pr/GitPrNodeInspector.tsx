@@ -94,15 +94,11 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
   };
 
   return (
-    <section
-      className="git-pr-node-inspector"
-      aria-label="Git and pull request delivery"
-      aria-busy={busy}
-    >
+    <section className="git-pr-node-inspector" aria-label="Publish changes" aria-busy={busy}>
       <header className="git-pr-header">
         <span>
           <GitPullRequest size={15} aria-hidden="true" />
-          <strong>Remote delivery</strong>
+          <strong>Publish changes</strong>
         </span>
         <span
           className={`status-chip ${inspection?.ready === true ? 'ok' : 'warning'}`}
@@ -112,8 +108,8 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
           {controller.busy !== null
             ? operationLabel(controller.busy)
             : inspection?.ready === true
-              ? 'Inspection evidence ready'
-              : 'Inspection required'}
+              ? 'Ready to publish'
+              : 'Check needed'}
         </span>
       </header>
 
@@ -121,15 +117,15 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
         <p className="git-pr-state warning" role="status">
           <Lock size={14} aria-hidden="true" />
           {props.configurationReadOnly
-            ? 'This collaboration role can inspect saved delivery state but cannot configure or run remote actions.'
-            : 'Unlock this node before configuring or running remote actions.'}
+            ? 'Your role in this shared project lets you view the saved publish settings, but not change them or publish.'
+            : 'Unlock this node before changing settings or publishing.'}
         </p>
       ) : null}
 
       <fieldset className="git-pr-configuration" disabled={effectsDisabled || busy}>
-        <legend>Delivery configuration</legend>
+        <legend>Publish settings</legend>
         <label>
-          Terminal agent run
+          Finished agent run
           <select
             name={`node-${props.nodeId}-git-pr-run`}
             value={configuration.targetRunId ?? ''}
@@ -149,7 +145,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
               });
             }}
           >
-            <option value="">Choose an owned agent worktree…</option>
+            <option value="">Choose a finished run…</option>
             {savedRunUnavailable ? (
               <option value={configuration.targetRunId}>
                 {savedRunOptionLabel(configuration.targetRunId, controller)}
@@ -172,11 +168,9 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
             disabled={!controller.agentRunsLoaded || busy}
             onClick={controller.refreshAgentRuns}
           >
-            <RefreshCw size={13} aria-hidden="true" /> Refresh persisted runs
+            <RefreshCw size={13} aria-hidden="true" /> Refresh run list
           </button>
-          {!controller.agentRunsLoaded ? (
-            <small role="status">Loading local run history…</small>
-          ) : null}
+          {!controller.agentRunsLoaded ? <small role="status">Loading run history…</small> : null}
         </div>
         {controller.agentRunsError !== null ? (
           <p className="git-pr-state error" role="alert">
@@ -187,8 +181,8 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
         controller.agentRunsError === null &&
         controller.agentRuns.length === 0 ? (
           <p className="git-pr-state" role="status">
-            Run an Agent node with a writable worktree first. Forgeboard never asks for a folder or
-            branch path by hand.
+            No finished runs to publish yet. Run an agent to the end first, then choose its run
+            above.
           </p>
         ) : null}
         <div className="git-pr-field-grid">
@@ -222,10 +216,10 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
                 className={remoteExists ? undefined : 'git-pr-field-error'}
               >
                 {remoteOptions.length === 0
-                  ? 'No Git remotes were discovered in this agent worktree. Clone a repository through Forgeboard to get its origin remote.'
+                  ? "No remotes were found in this run's project copy. Clone a repository through Forgeboard so there is an online copy to publish to."
                   : remoteExists
-                    ? `Discovered in this agent worktree: ${remoteOptions.join(', ')}.`
-                    : `Remote ${configuration.remote} was not discovered. Choose one of: ${remoteOptions.join(', ')}.`}
+                    ? `Found in this run's project copy: ${remoteOptions.join(', ')}.`
+                    : `No remote named ${configuration.remote} was found. Choose one of: ${remoteOptions.join(', ')}.`}
               </small>
             )}
           </label>
@@ -249,7 +243,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
                 id={`node-${props.nodeId}-git-pr-destination-error`}
                 className="git-pr-field-error"
               >
-                Enter the branch that should receive the selected run.
+                Enter the branch that should receive these changes.
               </small>
             ) : null}
           </label>
@@ -270,7 +264,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
             />
             {!baseBranchValid ? (
               <small id={`node-${props.nodeId}-git-pr-base-error`} className="git-pr-field-error">
-                Enter the branch a pull request should merge into.
+                Enter the branch the pull request should merge into, for example main.
               </small>
             ) : null}
           </label>
@@ -291,7 +285,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
           />
           {!pullRequestTitleValid ? (
             <small id={`node-${props.nodeId}-git-pr-title-error`} className="git-pr-field-error">
-              Enter a valid Unicode title before preparing a pull request.
+              Enter a title for the pull request.
             </small>
           ) : null}
         </label>
@@ -313,7 +307,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
           </small>
           {!pullRequestBodyValid ? (
             <small id={`node-${props.nodeId}-git-pr-body-error`} className="git-pr-field-error">
-              Remove unsupported Unicode or NUL characters, or shorten the body.
+              Remove any unusual special characters, or shorten the text.
             </small>
           ) : null}
         </label>
@@ -324,7 +318,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
             checked={configuration.pullRequestDraft}
             onChange={(event) => changeConfiguration({ pullRequestDraft: event.target.checked })}
           />
-          Create as draft pull request
+          Create as a draft pull request
         </label>
       </fieldset>
 
@@ -340,19 +334,19 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
           ) : (
             <GitBranch size={14} aria-hidden="true" />
           )}
-          {inspection === null ? 'Inspect exact Git state' : 'Refresh exact Git state'}
+          {inspection === null ? 'Check changes' : 'Recheck changes'}
         </button>
       </div>
 
       {pinnedRunMissing ? (
         <p className="git-pr-state warning" role="status">
-          This saved run is outside the bounded recent-history picker. Exact main-process ownership
-          will still be checked when you inspect it.
+          This saved run is not in the recent list. Forgeboard will still verify it when you check
+          it.
         </p>
       ) : null}
       {staleInspection ? (
         <p className="git-pr-state warning" role="status">
-          Configuration changed after inspection. Inspect again before any remote action.
+          Settings changed after the last check. Check again before publishing.
         </p>
       ) : null}
       {controller.inspectionError !== null ? (
@@ -362,10 +356,10 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
       ) : null}
       {inspection !== null ? <ExactGitState inspection={inspection} /> : null}
 
-      <section className="git-pr-actions" aria-label="Reviewed remote actions">
+      <section className="git-pr-actions" aria-label="Publish actions">
         <header>
-          <strong>On-demand actions</strong>
-          <small>No polling · no force push</small>
+          <strong>Publish actions</strong>
+          <small>Nothing runs automatically · force push is never used</small>
         </header>
         <div>
           <button
@@ -377,7 +371,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
               }
             }}
           >
-            <ShieldCheck size={14} aria-hidden="true" /> Open readiness checks &amp; approval
+            <ShieldCheck size={14} aria-hidden="true" /> Open checks and approval
           </button>
           <button
             type="button"
@@ -391,7 +385,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
             disabled={effectsDisabled || targetUnavailable || inspection === null || busy}
             onClick={controller.checkGitHub}
           >
-            <ShieldCheck size={14} aria-hidden="true" /> Check GitHub auth &amp; repository
+            <ShieldCheck size={14} aria-hidden="true" /> Check GitHub sign-in and repository
           </button>
           <button
             type="button"
@@ -423,15 +417,15 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
             }
             onClick={controller.checkCi}
           >
-            <RefreshCw size={14} aria-hidden="true" /> Check CI for exact HEAD
+            <RefreshCw size={14} aria-hidden="true" /> Check CI results for this commit
           </button>
         </div>
         <p>
-          If delivery is blocked, open readiness to run the configured exact checks and record human
-          quality approval through the existing authoritative Git review. Preparing a push or pull
-          request changes nothing. Continue only after reviewing its exact branch, HEAD, commits,
-          files, destination, and expiry; the system confirmation defaults to Cancel and the main
-          process revalidates the plan.
+          If publishing is blocked, open checks and approval to run the required checks and record a
+          person&apos;s approval in the Git review. Reviewing a push or pull request here changes
+          nothing online. Continue only after checking the branch, latest commit, commits, files,
+          destination, and expiry time — the final confirmation defaults to Cancel, and Forgeboard
+          checks the whole plan again before sending.
         </p>
       </section>
 
@@ -469,46 +463,46 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
 
 function ExactGitState({ inspection }: { readonly inspection: GitPrInspectionView }) {
   return (
-    <section className="git-pr-exact-state" aria-label="Exact Git state">
+    <section className="git-pr-exact-state" aria-label="Check results">
       <header>
         <span>
           <GitCommitHorizontal size={14} aria-hidden="true" />
-          <strong>Exact inspected state</strong>
+          <strong>Check results</strong>
         </span>
         <span className={`status-chip ${inspection.ready ? 'ok' : 'warning'}`}>
-          {inspection.ready ? 'Evidence ready' : 'Blocked'}
+          {inspection.ready ? 'Ready to publish' : 'Blocked'}
         </span>
       </header>
       <dl>
-        <Fact label="Source branch" value={inspection.sourceBranch} />
-        <Fact label="Source HEAD" value={inspection.sourceOid} code />
+        <Fact label="Branch with changes" value={inspection.sourceBranch} />
+        <Fact label="Latest commit" value={inspection.sourceOid} code />
         <Fact label="Remote" value={inspection.remote} />
-        <Fact label="Credential-free remote" value={inspection.remoteDisclosure} code />
-        <Fact label="Destination branch" value={inspection.destinationBranch} />
-        <Fact label="Requested PR base" value={inspection.requestedBaseBranch} />
+        <Fact label="Remote address" value={inspection.remoteDisclosure} code />
+        <Fact label="Publish to branch" value={inspection.destinationBranch} />
+        <Fact label="Pull request merges into" value={inspection.requestedBaseBranch} />
         {inspection.requestedBaseOid === null ? null : (
-          <Fact label="Requested PR base OID" value={inspection.requestedBaseOid} code />
+          <Fact label="Pull request base commit" value={inspection.requestedBaseOid} code />
         )}
-        <Fact label="Run base ref" value={inspection.runBaseRef} />
-        <Fact label="Run base OID" value={inspection.runBaseOid} code />
-        <Fact label="Current base OID" value={inspection.divergenceBaseOid} code />
+        <Fact label="Run started from branch" value={inspection.runBaseRef} />
+        <Fact label="Run started from commit" value={inspection.runBaseOid} code />
+        <Fact label="Base branch's latest commit" value={inspection.divergenceBaseOid} code />
         <Fact
-          label="Current-base divergence"
+          label="Compared with base branch now"
           value={`${inspection.ahead} ahead · ${inspection.behind} behind`}
         />
         <Fact
-          label="Diff stats"
+          label="Changes"
           value={`${inspection.fileCount} files · +${inspection.additions} −${inspection.deletions}`}
         />
       </dl>
       <ExactChangesEvidence inspection={inspection} />
       <div className="git-pr-readiness">
-        <strong>Readiness</strong>
+        <strong>Before publishing</strong>
         {inspection.readiness.length === 0 ? (
           <span>
             {inspection.ready
-              ? 'Configured readiness evidence passed. Push-only safeguards run when you prepare and confirm a push.'
-              : 'Not ready.'}
+              ? 'All required checks and approvals have passed. A few last safety checks run when you prepare and confirm a push.'
+              : 'Not ready to publish.'}
           </span>
         ) : (
           <ul>
@@ -519,10 +513,10 @@ function ExactGitState({ inspection }: { readonly inspection: GitPrInspectionVie
         )}
       </div>
       <small>
-        Inspected <time dateTime={inspection.inspectedAt}>{inspection.inspectedAt}</time>. This is a
-        point-in-time view; every confirmation revalidates exact HEAD and evidence. Push preparation
-        additionally checks source hooks, repository-owned transport settings, complete history, and
-        unsupported LFS pointer history.
+        Checked <time dateTime={inspection.inspectedAt}>{inspection.inspectedAt}</time>. This is a
+        snapshot; every confirmation checks the latest commit and results again. Preparing a push
+        also checks the project&apos;s hooks, transfer settings, complete history, and large-file
+        storage (LFS) history.
       </small>
     </section>
   );
@@ -533,11 +527,10 @@ function ExactChangesEvidence({ inspection }: { readonly inspection: GitPrInspec
     <>
       <div className="git-pr-evidence-list">
         <strong>
-          Commits ({inspection.commitCount})
-          {inspection.commitsTruncated ? ' · bounded preview' : ''}
+          Commits ({inspection.commitCount}){inspection.commitsTruncated ? ' · partial list' : ''}
         </strong>
         {inspection.commitCount === 0 ? (
-          <span>No commits between the selected base and exact source HEAD.</span>
+          <span>No commits between the base branch and this run&apos;s latest commit.</span>
         ) : (
           <ol>
             {inspection.commits.map((commit) => (
@@ -550,11 +543,10 @@ function ExactChangesEvidence({ inspection }: { readonly inspection: GitPrInspec
       </div>
       <div className="git-pr-evidence-list">
         <strong>
-          Changed files ({inspection.fileCount})
-          {inspection.filesTruncated ? ' · bounded preview' : ''}
+          Changed files ({inspection.fileCount}){inspection.filesTruncated ? ' · partial list' : ''}
         </strong>
         {inspection.fileCount === 0 ? (
-          <span>No changed files in the exact comparison.</span>
+          <span>No changed files in this comparison.</span>
         ) : (
           <ul>
             {inspection.files.map((file, index) => (
@@ -581,26 +573,26 @@ function GitHubStatus({ controller }: { readonly controller: GitPrNodeController
   const status = controller.githubStatus;
   if (status === null) return null;
   return (
-    <section className="git-pr-github-status" aria-label="GitHub CLI and repository status">
+    <section className="git-pr-github-status" aria-label="GitHub sign-in and repository status">
       <header>
         <strong>GitHub CLI</strong>
         <span className={`status-chip ${status.authenticated && status.fresh ? 'ok' : 'warning'}`}>
           {!status.installed
-            ? 'Missing'
+            ? 'Not installed'
             : !status.fresh
-              ? 'Expired'
+              ? 'Out of date'
               : status.authenticated
-                ? 'Authenticated'
+                ? 'Signed in'
                 : 'Sign-in needed'}
         </span>
       </header>
       <dl>
         <Fact
-          label="CLI"
+          label="Command-line tool"
           value={
             status.installed
               ? `gh${status.version === null ? '' : ` · ${status.version}`}`
-              : 'Not installed'
+              : 'gh not installed'
           }
           code
         />
@@ -609,28 +601,28 @@ function GitHubStatus({ controller }: { readonly controller: GitPrNodeController
         <Fact label="Default branch" value={status.defaultBranch ?? 'Unavailable'} />
       </dl>
       <small>
-        Checked on demand at <time dateTime={status.checkedAt}>{status.checkedAt}</time>. Forgeboard
-        does not store GitHub credentials.
+        Checked only when you ask: <time dateTime={status.checkedAt}>{status.checkedAt}</time>.
+        Forgeboard never stores GitHub passwords or tokens.
       </small>
       {!status.installed ? (
         <p className="git-pr-state warning" role="status">
-          Git push still works with the selected remote. Install GitHub CLI only if you want the
-          optional repository, pull-request, and CI actions.
+          Push still works without it. Install the GitHub CLI only if you want the repository, pull
+          request, and CI actions here.
         </p>
       ) : !status.authenticated ? (
         <p className="git-pr-state warning" role="status">
-          Complete GitHub CLI sign-in, then run this on-demand check again. Forgeboard never asks
-          for or stores the token.
+          Sign in with the GitHub CLI, then check again. Forgeboard never asks for or stores your
+          token.
         </p>
       ) : !status.fresh ? (
         <p className="git-pr-state warning" role="status">
-          This on-demand GitHub status is older than five minutes. Check GitHub again before a pull
-          request or CI action.
+          This GitHub check is more than five minutes old. Check again before creating a pull
+          request or reading CI results.
         </p>
       ) : !status.headMatchesSource ? (
         <p className="git-pr-state warning" role="status">
-          GitHub does not report the destination branch at this exact source HEAD. Push the reviewed
-          branch, then check GitHub again before creating a pull request or relying on CI.
+          GitHub doesn&apos;t have this commit on the destination branch yet. Push the reviewed
+          branch, then check again before creating a pull request or relying on CI results.
         </p>
       ) : null}
     </section>
@@ -655,22 +647,22 @@ function CiStatus({
   if (status === null) return null;
   const exact = inspection !== null && status.sourceOid === inspection.sourceOid;
   return (
-    <section className="git-pr-ci-status" aria-label="CI for exact source HEAD">
+    <section className="git-pr-ci-status" aria-label="CI results for this commit">
       <header>
-        <strong>CI for exact HEAD</strong>
+        <strong>CI results (automated checks)</strong>
         <span className={`status-chip ${exact ? 'ok' : 'warning'}`}>
           {exact
             ? `${String(status.runs.length)} ${status.runs.length === 1 ? 'run' : 'runs'}`
-            : 'Stale'}
+            : 'Out of date'}
         </span>
       </header>
       <code>{status.sourceOid}</code>
       {!exact ? (
         <p className="git-pr-state warning" role="status">
-          CI belongs to an earlier source HEAD. Check CI again before relying on it.
+          These results are for an earlier commit. Check CI again before relying on them.
         </p>
       ) : status.runs.length === 0 ? (
-        <p>No CI runs were returned for this exact source HEAD.</p>
+        <p>No CI runs were found for this commit.</p>
       ) : (
         <ul>
           {status.runs.map((run) => {
@@ -680,7 +672,7 @@ function CiStatus({
                 <span>
                   <strong>{run.workflowName}</strong>
                   <small>
-                    {run.name} · {run.status} · {run.conclusion ?? 'no conclusion'}
+                    {run.name} · {run.status} · {run.conclusion ?? 'no result yet'}
                   </small>
                 </span>
                 {url === null ? (
@@ -705,14 +697,14 @@ function PullRequestLink({ url }: { readonly url?: string }) {
       <strong>Last created pull request</strong>
       {safeUrl === null ? (
         <p className="git-pr-state error" role="alert">
-          The saved pull request URL is invalid and will not be opened.
+          The saved pull request link isn&apos;t valid, so it can&apos;t be opened.
         </p>
       ) : (
         <>
           <CopyUrl url={safeUrl} label="Copy pull request URL" />
           <small>
-            Saved from the last successful creation. It does not prove that the current fields or
-            source HEAD still match.
+            Saved when the pull request was created. The current settings or the branch&apos;s
+            latest commit may have changed since.
           </small>
         </>
       )}
@@ -790,33 +782,29 @@ function PlanDialog({
               <UploadCloud size={18} aria-hidden="true" />
             )}
             <div>
-              <span className="eyebrow">
-                {pullRequest ? 'Reviewed point-in-time plan' : 'Exact immutable plan'}
-              </span>
-              <h2 id={titleId}>
-                {pullRequest ? 'Review pull request snapshot' : 'Review exact branch push'}
-              </h2>
+              <span className="eyebrow">{pullRequest ? 'Pull request plan' : 'Push plan'}</span>
+              <h2 id={titleId}>{pullRequest ? 'Review the pull request' : 'Review the push'}</h2>
             </div>
           </div>
         </header>
         <p id={descriptionId}>
-          Nothing remote has changed. Verify every field before continuing to the cancel-default
-          system confirmation.
+          Nothing has changed online yet. Check every field before continuing to the final
+          confirmation, which defaults to Cancel.
         </p>
         <dl>
           <Fact label="Remote" value={plan.inspection.remote} />
-          <Fact label="Remote endpoint" value={plan.inspection.remoteDisclosure} code />
-          <Fact label="Source branch" value={plan.inspection.sourceBranch} />
-          <Fact label="Source HEAD" value={plan.inspection.sourceOid} code />
-          <Fact label="Destination" value={plan.inspection.destinationBranch} />
+          <Fact label="Remote address" value={plan.inspection.remoteDisclosure} code />
+          <Fact label="Branch with changes" value={plan.inspection.sourceBranch} />
+          <Fact label="Latest commit" value={plan.inspection.sourceOid} code />
+          <Fact label="Destination branch" value={plan.inspection.destinationBranch} />
           <Fact
-            label="Run base"
+            label="Run started from"
             value={`${plan.inspection.runBaseRef} @ ${plan.inspection.runBaseOid}`}
             code
           />
           {pullRequest ? (
             <Fact
-              label="Pull request base"
+              label="Merges into"
               value={`${plan.inspection.requestedBaseBranch} @ ${plan.inspection.requestedBaseOid ?? 'unavailable'}`}
               code
             />
@@ -824,7 +812,7 @@ function PlanDialog({
           <Fact label="Commits" value={String(plan.inspection.commitCount)} />
           <Fact label="Files" value={String(plan.inspection.fileCount)} />
           <Fact
-            label="Diff stats"
+            label="Line changes"
             value={`+${String(plan.inspection.additions)} −${String(plan.inspection.deletions)}`}
           />
           <Fact label="Plan ID" value={plan.planId} code />
@@ -835,20 +823,20 @@ function PlanDialog({
             <Fact label="Mode" value={plan.draft ? 'Draft' : 'Ready for review'} />
           ) : null}
         </dl>
-        <section className="git-pr-plan-evidence" aria-label="Exact commits and changed files">
+        <section className="git-pr-plan-evidence" aria-label="Commits and changed files">
           <ExactChangesEvidence inspection={plan.inspection} />
         </section>
         {pullRequest ? (
           <section className="git-pr-plan-body" aria-label="Pull request body">
-            <strong>Body</strong>
-            <pre>{plan.body === '' ? '(empty)' : plan.body}</pre>
+            <strong>Description</strong>
+            <pre>{plan.body === '' ? '(no description)' : plan.body}</pre>
           </section>
         ) : null}
         <p className="git-pr-no-force">
-          <ShieldCheck size={14} aria-hidden="true" /> Force push is never offered. HEAD and plan
-          expiry are revalidated immediately before the request.
+          <ShieldCheck size={14} aria-hidden="true" /> Force push is never offered. The latest
+          commit and the approval expiry are checked again right before anything is sent.
           {pullRequest
-            ? ' GitHub pull requests follow the remote branch, so concurrent or later branch movement can change their contents.'
+            ? ' A GitHub pull request follows its branch, so commits pushed later can change what it contains.'
             : ''}
         </p>
         <footer>
@@ -862,7 +850,7 @@ function PlanDialog({
             onClick={onConfirm}
           >
             {confirming ? <LoaderCircle className="spin" size={14} aria-hidden="true" /> : null}
-            Continue to system confirmation
+            Continue to final confirmation
           </button>
         </footer>
       </section>
@@ -892,13 +880,13 @@ function CopyUrl({ url, label }: { readonly url: string; readonly label: string 
   const copy = async (): Promise<void> => {
     try {
       if (navigator.clipboard === undefined) {
-        setNotice('Clipboard access is unavailable. Select and copy the URL shown above.');
+        setNotice("Clipboard access isn't available. Select and copy the link yourself.");
         return;
       }
       await navigator.clipboard.writeText(url);
-      setNotice('URL copied to the clipboard.');
+      setNotice('Link copied to the clipboard.');
     } catch {
-      setNotice('The URL could not be copied. Select and copy the URL shown above.');
+      setNotice("The link couldn't be copied. Select and copy it yourself.");
     }
   };
   return (
@@ -916,32 +904,32 @@ function runLabel(run: GitPrAgentRunOption): string {
   const worktree =
     run.worktreeState === 'cleanup-pending'
       ? 'cleanup interrupted · unavailable'
-      : (run.branch ?? 'detached branch');
+      : (run.branch ?? 'no branch');
   return `${run.nodeLabel} · ${run.agentLabel} · ${run.status} · ${worktree}`;
 }
 
 function savedRunOptionLabel(runId: string, controller: GitPrNodeController): string {
-  if (!controller.agentRunsLoaded) return 'Saved run · loading local history…';
-  if (controller.agentRunsError !== null) return 'Saved run · local history unavailable';
-  return `Pinned run ${runId} · outside recent history`;
+  if (!controller.agentRunsLoaded) return 'Saved run · loading run history…';
+  if (controller.agentRunsError !== null) return 'Saved run · run history unavailable';
+  return `Saved run ${runId} · not in recent history`;
 }
 
 function operationLabel(operation: NonNullable<GitPrNodeController['busy']>): string {
   switch (operation) {
     case 'inspect':
-      return 'Inspecting exact state…';
+      return 'Checking changes…';
     case 'prepare-push':
-      return 'Preparing push review…';
+      return 'Preparing the push review…';
     case 'confirm-push':
-      return 'Opening push confirmation…';
+      return 'Opening the confirmation…';
     case 'github-status':
       return 'Checking GitHub…';
     case 'prepare-pull-request':
-      return 'Preparing pull request review…';
+      return 'Preparing the pull request review…';
     case 'confirm-pull-request':
-      return 'Opening pull request confirmation…';
+      return 'Opening the confirmation…';
     case 'ci-status':
-      return 'Checking exact-head CI…';
+      return 'Checking CI results…';
   }
 }
 

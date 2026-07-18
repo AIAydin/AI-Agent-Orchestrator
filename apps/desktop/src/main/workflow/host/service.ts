@@ -362,13 +362,13 @@ export class WorkflowHost {
         prepared.preparation.approvalFingerprint !== input.approvalFingerprint
       ) {
         this.#auditApproval(input, 'denied', 'prepared-plan-unavailable');
-        throw new Error('The prepared launch is no longer available. Review a new disclosure.');
+        throw new Error('The prepared launch is no longer available. Review what will run.');
       }
       const approvedAt = occurredAt(this.#now(), record.updatedAt);
       if (Date.parse(binding.expiresAt ?? '') <= Date.parse(approvedAt)) {
         await this.#discardPrepared(nodeKey(input.executionId, input.nodeId));
         this.#auditApproval(input, 'denied', 'expired');
-        throw new Error('The prepared workflow launch expired. Review a new disclosure.');
+        throw new Error('The prepared workflow launch expired. Review what will run.');
       }
 
       const launching = bindingPayload({ ...binding, phase: 'launching', updatedAt: approvedAt });
@@ -633,7 +633,7 @@ export class WorkflowHost {
         input.decision === 'changes-requested' &&
         (input.feedback === undefined || input.feedback.trim() === '')
       ) {
-        throw new Error('Requested changes require actionable feedback.');
+        throw new Error('Say what should change before asking for changes.');
       }
       let record = this.#requireExecution(input.executionId);
       let runtime = runtimeFromRecord(record);
@@ -1280,7 +1280,9 @@ export class WorkflowHost {
     const runtime = runtimeFromRecord(record);
     const run = runtime.run.nodeRuns[input.nodeId];
     if (run === undefined || run.attempt !== input.attempt || run.status !== 'running') {
-      throw new Error(`The workflow node ${action} request is stale for the current attempt.`);
+      throw new Error(
+        `The workflow node ${action} request is out of date for the current attempt.`,
+      );
     }
     const bindingRecord = this.store
       .listWorkflowNodeBindings(input.executionId)

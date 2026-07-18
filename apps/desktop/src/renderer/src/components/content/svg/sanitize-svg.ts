@@ -97,21 +97,23 @@ const PAINT_ATTRIBUTES = new Set(['fill', 'stroke']);
  */
 export function sanitizeSvg(source: string): string {
   if (source.length === 0 || source.length > MAX_SVG_CHARACTERS) {
-    throw new Error('SVG source must be non-empty and no larger than 2,000,000 characters.');
+    throw new Error('This SVG image is empty or too large (over 2,000,000 characters).');
   }
   if (/<!\s*(?:doctype|entity)/iu.test(source)) {
-    throw new Error('SVG document declarations and entities are not accepted.');
+    throw new Error(
+      'This SVG uses document declarations or entities, which are not allowed for safety.',
+    );
   }
   const document = new DOMParser().parseFromString(source, 'image/svg+xml');
   if (
     document.querySelector('parsererror') !== null ||
     document.documentElement.localName !== 'svg'
   ) {
-    throw new Error('SVG source is malformed or has no SVG root.');
+    throw new Error('This file is not a valid SVG image.');
   }
   const sourceNamespace = document.documentElement.namespaceURI;
   if (sourceNamespace !== null && sourceNamespace !== SVG_NAMESPACE) {
-    throw new Error('SVG root uses an unsupported XML namespace.');
+    throw new Error('This SVG uses an unsupported XML namespace.');
   }
 
   // Build a new namespace-correct document instead of returning nodes from the untrusted parse.

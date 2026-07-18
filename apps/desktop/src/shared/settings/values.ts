@@ -13,33 +13,33 @@ function containsControlCharacter(value: string): boolean {
 
 const MachinePathValueSchema = z
   .string()
-  .max(MAX_MACHINE_PATH_LENGTH, 'Machine paths must be at most 32,768 characters.')
+  .max(MAX_MACHINE_PATH_LENGTH, 'Paths must be at most 32,768 characters.')
   .refine((value) => !containsControlCharacter(value), {
-    message: 'Machine paths cannot contain control characters.',
+    message: 'Paths cannot contain non-printing characters.',
   });
 
 export const MachineSpecificValueSchema = MachinePathValueSchema.refine(
   (value) => value.trim() !== '',
-  { message: 'Choose a machine path.' },
+  { message: 'Choose a path.' },
 ).refine((value) => value === value.trim(), {
-  message: 'Machine paths cannot begin or end with whitespace.',
+  message: 'Paths cannot begin or end with a space.',
 });
 
 export const OptionalMachineSpecificValueSchema = MachinePathValueSchema.refine(
   (value) => value === '' || (value.trim() !== '' && value === value.trim()),
   {
-    message: 'Machine paths must be empty or cannot begin or end with whitespace.',
+    message: 'Paths can be empty, but cannot begin or end with a space.',
   },
 );
 
 export const MachineSpecificPathSchema = MachineSpecificValueSchema.refine(isAbsoluteMachinePath, {
-  message: 'Choose an absolute machine path with Browse.',
+  message: 'Choose a full path with Browse.',
 });
 
 export const OptionalMachineSpecificPathSchema = OptionalMachineSpecificValueSchema.refine(
   (value) => value === '' || isAbsoluteMachinePath(value),
   {
-    message: 'Machine paths must be empty or absolute paths selected with Browse.',
+    message: 'Leave this empty or choose a full path with Browse.',
   },
 );
 
@@ -63,16 +63,16 @@ export function normalizePreviewLoopbackHost(value: string): string | null {
 
 export const PreviewLoopbackHostSchema = z
   .string()
-  .min(1, 'Add at least one loopback host.')
-  .max(MAX_PREVIEW_HOST_LENGTH, 'Preview hosts must be at most 512 characters.')
+  .min(1, 'Enter a trusted preview host.')
+  .max(MAX_PREVIEW_HOST_LENGTH, 'Trusted preview hosts must be at most 512 characters.')
   .refine((value) => normalizePreviewLoopbackHost(value) !== null, {
-    message: 'Preview trusted hosts must be loopback-only hostnames or IP addresses.',
+    message: 'Use localhost or a 127.x.x.x address — previews can only trust this computer.',
   });
 
 export const PreviewTrustedHostsSchema = z
   .array(PreviewLoopbackHostSchema)
-  .min(1, 'Add at least one loopback preview host.')
-  .max(MAX_PREVIEW_HOSTS, 'Configure at most 128 preview hosts.')
+  .min(1, 'Add at least one trusted preview host.')
+  .max(MAX_PREVIEW_HOSTS, 'Add at most 128 trusted preview hosts.')
   .superRefine((hosts, context) => {
     const normalized = new Set<string>();
     hosts.forEach((host, index) => {
@@ -82,7 +82,7 @@ export const PreviewTrustedHostsSchema = z
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: [index],
-          message: 'Preview trusted hosts must be unique after normalization.',
+          message: 'Each trusted preview host can appear only once.',
         });
       }
       normalized.add(value);

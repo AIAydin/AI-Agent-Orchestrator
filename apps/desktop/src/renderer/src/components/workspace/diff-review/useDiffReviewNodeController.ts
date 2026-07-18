@@ -104,7 +104,10 @@ export function useDiffReviewNodeController({
       })
       .catch((cause: unknown) => {
         if (!active || historyRequestRef.current !== request) return;
-        const message = errorMessage(cause, 'Could not load persisted agent run history.');
+        const message = errorMessage(
+          cause,
+          'Could not load the list of past agent runs. Try again.',
+        );
         setHistory({
           projectId: project.id,
           loaded: true,
@@ -157,7 +160,7 @@ export function useDiffReviewNodeController({
     if (target === null) {
       setSummaryState({
         key: summaryKey,
-        authority: { state: 'unavailable', reason: 'The selected review target is invalid.' },
+        authority: { state: 'unavailable', reason: 'The selected review target is not valid.' },
         summary: null,
       });
       return () => {
@@ -168,7 +171,10 @@ export function useDiffReviewNodeController({
     if (!project.health.isGitRepository) {
       setSummaryState({
         key: summaryKey,
-        authority: { state: 'unavailable', reason: 'This project is not a Git repository.' },
+        authority: {
+          state: 'unavailable',
+          reason: 'This project folder is not tracked by Git, so there is nothing to review.',
+        },
         summary: null,
       });
       return () => {
@@ -179,7 +185,7 @@ export function useDiffReviewNodeController({
 
     setSummaryState({
       key: summaryKey,
-      authority: { state: 'loading', message: 'Loading authoritative Git state…' },
+      authority: { state: 'loading', message: 'Loading the current Git state…' },
       summary: null,
     });
     void window.forgeboard.git
@@ -199,7 +205,7 @@ export function useDiffReviewNodeController({
           key: summaryKey,
           authority: {
             state: 'unavailable',
-            reason: errorMessage(cause, 'The selected Git review target is unavailable.'),
+            reason: errorMessage(cause, 'The selected target cannot be reviewed right now.'),
           },
           summary: null,
         });

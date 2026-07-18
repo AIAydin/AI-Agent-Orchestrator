@@ -30,7 +30,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'blocked',
         status: 'failed',
-        reason: 'Required context has no explicitly selected attachments',
+        reason: 'This required context link has no attachments selected',
       };
     }
     if (edge.config.attachmentIds.length === 0) {
@@ -39,7 +39,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'satisfied',
         status: 'succeeded',
-        reason: 'Optional context has no selected attachments',
+        reason: 'This optional context link has no attachments selected',
       };
     }
     const resolution = runtime.evidence.contextResolutions[edge.id];
@@ -49,7 +49,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'waiting',
         status: 'queued',
-        reason: 'Selected context is waiting for host verification',
+        reason: 'The selected attachments are waiting to be verified',
       };
     }
     const targetAttempt = runtime.run.nodeRuns[edge.targetNodeId]?.attempt;
@@ -66,7 +66,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'blocked',
         status: 'failed',
-        reason: 'Verified context does not match the current target attempt',
+        reason: 'The verified context is out of date for the current attempt',
       };
     }
     return {
@@ -74,7 +74,7 @@ export function evaluateExecutableEdge(
       type: edge.type,
       disposition: 'satisfied',
       status: 'succeeded',
-      reason: 'Explicit source context and configured attachments were verified by the host',
+      reason: 'The selected attachments were verified for this attempt',
     };
   }
   if (edge.type === 'dependency') {
@@ -84,7 +84,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'satisfied',
         status: 'succeeded',
-        reason: 'Required upstream task succeeded',
+        reason: 'The required earlier task succeeded',
       };
     }
     if (completed(sourceStatus)) {
@@ -93,7 +93,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'blocked',
         status: 'failed',
-        reason: `Required upstream task ended as ${sourceStatus}`,
+        reason: `The required earlier task ended as ${sourceStatus}`,
       };
     }
     return {
@@ -101,7 +101,7 @@ export function evaluateExecutableEdge(
       type: edge.type,
       disposition: 'waiting',
       status: sourceStatus === 'running' ? 'running' : 'queued',
-      reason: 'Required upstream task has not succeeded',
+      reason: 'The required earlier task has not succeeded',
     };
   }
   if (edge.type === 'execute') {
@@ -112,7 +112,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'blocked',
         status: 'failed',
-        reason: 'Authoritative reviewer changes block downstream execution',
+        reason: 'The reviewer requested changes, so later steps cannot run',
       };
     }
     const triggerSatisfied =
@@ -125,8 +125,10 @@ export function evaluateExecutableEdge(
         disposition: blocked ? 'blocked' : 'waiting',
         status: blocked ? 'failed' : sourceStatus === 'running' ? 'running' : 'queued',
         reason: blocked
-          ? `Success trigger cannot run after source ended as ${sourceStatus}`
-          : `Waiting for source ${edge.config.trigger}`,
+          ? `This step runs only after success, but the earlier step ended as ${sourceStatus}`
+          : edge.config.trigger === 'on-success'
+            ? 'Waiting for the earlier step to succeed'
+            : 'Waiting for the earlier step to finish',
       };
     }
     if (edge.config.approval === 'human' && !hasCurrentHumanApproval(runtime, edge.id)) {
@@ -135,7 +137,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'waiting-for-approval',
         status: 'waiting-for-approval',
-        reason: 'Execute edge requires human approval',
+        reason: 'This step needs your approval before it can run',
       };
     }
     if (edge.config.approval === 'review-gate') {
@@ -185,7 +187,7 @@ export function evaluateExecutableEdge(
       type: edge.type,
       disposition: 'satisfied',
       status: 'succeeded',
-      reason: 'Execution trigger and approval rules are satisfied',
+      reason: 'Everything needed for this step to run is ready',
     };
   }
   if (edge.type === 'output') {
@@ -204,7 +206,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'satisfied',
         status: 'succeeded',
-        reason: `${publication.outputKind} output was explicitly published`,
+        reason: `The ${publication.outputKind} output was shared`,
       };
     }
     if (completed(sourceStatus) && sourceStatus !== 'succeeded') {
@@ -214,8 +216,8 @@ export function evaluateExecutableEdge(
         disposition: edge.config.required ? 'blocked' : 'satisfied',
         status: edge.config.required ? 'failed' : 'succeeded',
         reason: edge.config.required
-          ? `Required output was not published before source ended as ${sourceStatus}`
-          : 'Optional output is absent',
+          ? `The required output was not shared before the earlier step ended as ${sourceStatus}`
+          : 'No optional output was shared',
       };
     }
     if (sourceStatus === 'succeeded' && !edge.config.required) {
@@ -224,7 +226,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'satisfied',
         status: 'succeeded',
-        reason: 'Optional output is absent',
+        reason: 'No optional output was shared',
       };
     }
     return {
@@ -232,7 +234,7 @@ export function evaluateExecutableEdge(
       type: edge.type,
       disposition: 'waiting',
       status: sourceStatus === 'running' ? 'running' : 'queued',
-      reason: `Waiting for required ${edge.config.outputKind} publication`,
+      reason: `Waiting for the required ${edge.config.outputKind} output`,
     };
   }
   if (edge.type === 'review') {
@@ -244,8 +246,8 @@ export function evaluateExecutableEdge(
         disposition: blocked ? 'blocked' : 'waiting',
         status: blocked ? 'failed' : sourceStatus === 'running' ? 'running' : 'queued',
         reason: blocked
-          ? `Review source ended as ${sourceStatus}`
-          : 'Review waits for successful source output',
+          ? `The step under review ended as ${sourceStatus}`
+          : 'The review waits for the earlier step to succeed',
       };
     }
     const assessment = currentReviewerAssessmentForEdge(runtime, edge);
@@ -255,7 +257,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'satisfied',
         status: 'failed',
-        reason: 'Review completed with actionable changes requested',
+        reason: 'The review finished with changes requested',
       };
     }
     if (edge.config.reviewer === 'human') {
@@ -266,7 +268,7 @@ export function evaluateExecutableEdge(
           type: edge.type,
           disposition: 'satisfied',
           status: 'failed',
-          reason: 'Human review completed with actionable changes requested',
+          reason: 'You finished the review with changes requested',
         };
       }
       if (decision?.decision === 'approved') {
@@ -275,7 +277,7 @@ export function evaluateExecutableEdge(
           type: edge.type,
           disposition: 'satisfied',
           status: 'succeeded',
-          reason: 'Human approved the reviewed source and evidence fingerprint',
+          reason: 'You approved the reviewed result',
         };
       }
       return {
@@ -283,7 +285,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'waiting-for-approval',
         status: 'waiting-for-approval',
-        reason: 'Human review requires an explicit approve-or-request-changes decision',
+        reason: 'Waiting for you to approve or request changes',
       };
     }
     const target = nodeById(runtime, edge.targetNodeId);
@@ -301,7 +303,7 @@ export function evaluateExecutableEdge(
           type: edge.type,
           disposition: 'satisfied',
           status: 'succeeded',
-          reason: 'Current reviewer assessment approved the reviewed source attempt',
+          reason: 'The reviewer approved this attempt',
         };
       }
       if (assessment?.verdict === 'changes-requested') {
@@ -310,7 +312,7 @@ export function evaluateExecutableEdge(
           type: edge.type,
           disposition: 'blocked',
           status: 'failed',
-          reason: 'Current reviewer assessment requested authoritative changes',
+          reason: 'The reviewer requested changes',
         };
       }
       if (
@@ -323,7 +325,7 @@ export function evaluateExecutableEdge(
           type: edge.type,
           disposition: 'blocked',
           status: 'failed',
-          reason: `Reviewer agent ended as ${reviewerRun.status} without an approved assessment`,
+          reason: `The reviewer agent ended as ${reviewerRun.status} without approving`,
         };
       }
       if (reviewerRun?.status === 'succeeded' || reviewerRun?.status === 'waiting-for-approval') {
@@ -332,7 +334,7 @@ export function evaluateExecutableEdge(
           type: edge.type,
           disposition: 'waiting',
           status: 'running',
-          reason: 'Reviewer process completed and must publish a current assessment',
+          reason: 'The reviewer finished and still needs to record its review',
         };
       }
       return {
@@ -340,7 +342,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'satisfied',
         status: 'succeeded',
-        reason: 'Reviewed source succeeded; configured reviewer agent may run',
+        reason: 'The step under review succeeded; the reviewer agent can run now',
       };
     }
     const assessmentRequired = edge.config.requireApproval && configuredGateReviewer !== undefined;
@@ -350,7 +352,7 @@ export function evaluateExecutableEdge(
         type: edge.type,
         disposition: 'waiting',
         status: 'queued',
-        reason: 'Review edge requires an assessment from its configured reviewer',
+        reason: 'Waiting for the configured reviewer to finish its review',
       };
     }
     return {
@@ -360,8 +362,8 @@ export function evaluateExecutableEdge(
       status: 'succeeded',
       reason:
         assessment === undefined
-          ? 'Gate review can proceed without a separate reviewer assessment'
-          : 'Review completed without blocking findings',
+          ? 'The review gate can decide without a separate reviewer'
+          : 'The review found nothing that blocks the run',
     };
   }
 
@@ -376,7 +378,7 @@ export function evaluateExecutableEdge(
       type: edge.type,
       disposition: 'satisfied',
       status: canvasNodeStatus(runtime, edge.targetNodeId),
-      reason: 'Actionable review feedback activated a bounded revision attempt',
+      reason: 'The review asked for changes, so the loop is trying again',
     };
   }
   if (loop.status === 'waiting-human') {
@@ -385,16 +387,24 @@ export function evaluateExecutableEdge(
       type: edge.type,
       disposition: 'waiting-for-approval',
       status: 'waiting-for-approval',
-      reason: 'Maximum revision attempts were exhausted; human escape is required',
+      reason: 'The loop reached its limit and needs your decision',
     };
   }
   if (loop.status === 'satisfied') {
+    const reason =
+      loop.stopCondition === 'review-approved'
+        ? 'The loop finished because the review approved the result'
+        : loop.stopCondition === 'tests-passed'
+          ? 'The loop finished because the checks passed'
+          : loop.stopCondition === 'human-accepted'
+            ? 'The loop finished because you accepted the result'
+            : 'The loop finished';
     return {
       edgeId: edge.id,
       type: edge.type,
       disposition: 'satisfied',
       status: 'succeeded',
-      reason: `Revision loop satisfied by ${loop.stopCondition ?? 'configured stop condition'}`,
+      reason,
     };
   }
   if (loop.status === 'cancelled') {
@@ -403,7 +413,7 @@ export function evaluateExecutableEdge(
       type: edge.type,
       disposition: 'inactive',
       status: 'cancelled',
-      reason: 'Revision loop was cancelled by a human',
+      reason: 'You cancelled the loop',
     };
   }
   return {
@@ -411,7 +421,7 @@ export function evaluateExecutableEdge(
     type: edge.type,
     disposition: 'inactive',
     status: 'queued',
-    reason: 'Revision edge activates only after a failed review',
+    reason: 'This step runs only after a failed review',
   };
 }
 
@@ -441,7 +451,7 @@ export function contextAttachmentsForNode(
       if (edge.config.attachmentIds.length === 0) return [];
       const resolution = runtime.evidence.contextResolutions[edge.id];
       if (resolution === undefined) {
-        throw new Error(`Context edge has not been verified by the host: ${edge.id}`);
+        throw new Error(`This context link has not been verified yet: ${edge.id}`);
       }
       const targetAttempt = runtime.run.nodeRuns[edge.targetNodeId]?.attempt;
       if (
@@ -452,7 +462,7 @@ export function contextAttachmentsForNode(
         JSON.stringify(uniqueSorted(resolution.attachmentIds)) !==
           JSON.stringify(uniqueSorted(edge.config.attachmentIds))
       ) {
-        throw new Error(`Context edge is stale for the current target attempt: ${edge.id}`);
+        throw new Error(`This context link is out of date for the current attempt: ${edge.id}`);
       }
       return [
         {
@@ -478,7 +488,7 @@ export function evaluateNodeReadiness(
       nodeId,
       disposition: 'not-runnable',
       edgeEvaluations: [],
-      reasons: ['Node is outside the current scoped plan'],
+      reasons: ['This step is outside the current run'],
     };
   }
   if (runtime.cancellationRequested || isTerminalRunStatus(runtime.run.status)) {
@@ -487,7 +497,7 @@ export function evaluateNodeReadiness(
       disposition: 'not-runnable',
       edgeEvaluations: [],
       reasons: [
-        runtime.cancellationRequested ? 'Workflow cancellation was requested' : 'Workflow ended',
+        runtime.cancellationRequested ? 'The workflow was cancelled' : 'The workflow ended',
       ],
     };
   }
@@ -558,7 +568,7 @@ export function evaluateNodeReadiness(
         nodeId,
         disposition: 'blocked',
         edgeEvaluations,
-        reasons: [`Reviewed source did not succeed: ${failedSources.join(', ')}`],
+        reasons: [`The step under review did not succeed: ${failedSources.join(', ')}`],
       };
     }
     const pendingSources = assignedSourceIds.filter(
@@ -569,7 +579,7 @@ export function evaluateNodeReadiness(
         nodeId,
         disposition: 'waiting',
         edgeEvaluations,
-        reasons: [`Reviewer waits for source: ${pendingSources.join(', ')}`],
+        reasons: [`The reviewer is waiting for these steps: ${pendingSources.join(', ')}`],
       };
     }
   }

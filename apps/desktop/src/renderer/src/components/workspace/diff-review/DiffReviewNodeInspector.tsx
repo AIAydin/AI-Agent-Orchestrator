@@ -134,11 +134,11 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
   };
 
   return (
-    <section className="diff-review-node-inspector" aria-label="Diff review configuration">
+    <section className="diff-review-node-inspector" aria-label="Review changes">
       <header>
         <span>
           <GitCompareArrows size={15} aria-hidden="true" />
-          <strong>{cleanupRecovery ? 'Agent cleanup recovery' : 'Authoritative Git review'}</strong>
+          <strong>{cleanupRecovery ? 'Agent cleanup recovery' : 'Review changes'}</strong>
         </span>
         <span
           className={`status-chip ${props.authority.state === 'ready' && !targetIsLegacyDefault ? 'ok' : 'warning'}`}
@@ -150,17 +150,17 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
       {props.locked && (
         <p className="node-lock-notice" role="status">
           <Lock size={13} aria-hidden="true" />
-          This node is locked. Its target and display preferences cannot change, but an available
-          authoritative review can still be opened. Any mutating Git action requires its own
-          authoritative approval.
+          This node is locked. Its target and display settings can&apos;t change, but you can still
+          open the review if it&apos;s available. Anything that changes files needs its own
+          approval.
         </p>
       )}
 
       {!props.locked && props.configurationReadOnly && (
         <p className="node-lock-notice" role="status">
           <Lock size={13} aria-hidden="true" />
-          Your collaboration role can inspect this review, but it cannot change the shared target or
-          display preferences. Dialog-only display changes remain local to this session.
+          Your role in this shared project lets you view this review, but not change its shared
+          target or display settings. Display changes made in the review dialog stay on this device.
         </p>
       )}
 
@@ -168,8 +168,8 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         <p className="diff-review-state warning diff-review-legacy-state" role="status">
           <TriangleAlert size={14} aria-hidden="true" />
           <span>
-            This legacy node has no persisted review target. Primary checkout is only the current
-            default until you bind it in the UI.
+            This older node has no saved review target. It points at the main project folder for
+            now.
             <button
               className="button ghost"
               type="button"
@@ -179,7 +179,7 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
                 props.onTargetChange({ kind: 'primary' });
               }}
             >
-              Bind primary target
+              Save main folder as target
             </button>
           </span>
         </p>
@@ -187,22 +187,22 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
 
       <fieldset disabled={configurationDisabled}>
         <label>
-          Review target
+          Changes to review
           <select
             name={`node-${props.nodeId}-diff-review-target`}
-            aria-label="Review target"
+            aria-label="Changes to review"
             aria-describedby={`node-${props.nodeId}-diff-review-target-description`}
             disabled={configurationDisabled}
             value={targetValue}
             onFocus={props.onRecord}
             onChange={(event) => selectTarget(event.currentTarget.value)}
           >
-            <option value={PRIMARY_TARGET_VALUE}>Primary checkout · {props.projectName}</option>
+            <option value={PRIMARY_TARGET_VALUE}>Main project folder · {props.projectName}</option>
             {targetIsUnlisted && selectedTarget.kind === 'agent-run' && (
               <option value={`${AGENT_TARGET_PREFIX}${selectedTarget.runId}`}>
                 {props.agentRunsLoaded
-                  ? 'Prior agent run · outside recent picker; verifying exact run'
-                  : 'Prior agent run · loading recent history'}
+                  ? 'Saved agent run · not in the recent list; checking it'
+                  : 'Saved agent run · loading recent runs'}
               </option>
             )}
             {runs.map((run) => (
@@ -212,9 +212,9 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
             ))}
           </select>
           <small id={`node-${props.nodeId}-diff-review-target-description`}>
-            Agent choices are finished persisted runs with either an active worktree or an
-            interrupted cleanup. Forgeboard resolves the opaque run in the main process; cleanup
-            recovery is never presented as Git-review authority.
+            The list shows finished agent runs whose project copy is still available or whose
+            cleanup was interrupted. Forgeboard checks the exact run before opening it; a run that
+            needs cleanup can only be opened for cleanup recovery.
           </small>
         </label>
 
@@ -233,8 +233,8 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
                 })
               }
             >
-              <option value="unified">Unified</option>
-              <option value="split">Split</option>
+              <option value="unified">Single column</option>
+              <option value="split">Side by side</option>
             </select>
           </label>
           <label className="diff-review-whitespace-preference">
@@ -252,8 +252,10 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
               }
             />
             <span>
-              Show whitespace characters
-              <small>This changes display only; it never hides or discards Git changes.</small>
+              Show spaces and tabs
+              <small>
+                This only changes how the diff looks; it never hides or deletes changes.
+              </small>
             </span>
           </label>
         </div>
@@ -265,23 +267,23 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         disabled={!props.agentRunsLoaded}
         onClick={props.onRefreshAgentRuns}
       >
-        Refresh persisted runs
+        Refresh run list
       </button>
 
       <DiffReviewState authority={props.authority} targetIsInvalid={targetIsInvalid} />
 
       {cleanupRecovery && (
         <p className="diff-review-state warning" role="status">
-          <TriangleAlert size={14} aria-hidden="true" /> Cleanup was interrupted for this exact
-          agent run. Git review stays unavailable, but you can open cleanup recovery to prepare a
-          fresh safe plan.
+          <TriangleAlert size={14} aria-hidden="true" /> Cleanup was interrupted for this run. Its
+          changes can&apos;t be reviewed, but you can open cleanup recovery to finish cleaning up
+          safely.
         </p>
       )}
 
       {props.agentRunsError !== null && (
         <p className="diff-review-state warning" role="alert">
           <TriangleAlert size={14} aria-hidden="true" />
-          Recent agent runs could not be loaded: {props.agentRunsError}
+          Recent agent runs couldn&apos;t be loaded: {props.agentRunsError}
         </p>
       )}
 
@@ -291,8 +293,8 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         !summaryMatches && (
           <p className="diff-review-state warning" role="status">
             <TriangleAlert size={14} aria-hidden="true" />
-            The available summary belongs to a previous target and is not shown. Open this target to
-            refresh authoritative Git state.
+            The summary belongs to a different target, so it isn&apos;t shown. Open this target to
+            see its current state.
           </p>
         )}
 
@@ -305,9 +307,8 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         runs.length === 0 &&
         !targetIsUnlisted && (
           <p className="diff-review-empty-state">
-            No recent active or interrupted-cleanup agent runs are available in the picker. The
-            primary checkout remains available, and older pinned runs are always verified by exact
-            run ID.
+            No recent agent runs can be reviewed. Finish an agent run first — the main project
+            folder is always available.
           </p>
         )}
 
@@ -328,8 +329,8 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         {cleanupRecovery
           ? 'Open cleanup recovery'
           : canOpenUnlistedUnavailable
-            ? 'Check exact pinned run'
-            : 'Open authoritative review'}
+            ? 'Check saved run'
+            : 'Open review'}
       </button>
       <button
         className="button ghost diff-review-refresh-summary"
@@ -337,11 +338,11 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         disabled={props.authority.state === 'loading'}
         onClick={props.onRefreshSummary}
       >
-        Refresh Git summary
+        Refresh summary
       </button>
       <small className="diff-review-boundary-note">
-        This node stores only an opaque target choice and display preferences. Repository and
-        worktree paths are resolved and revalidated outside the renderer.
+        This node saves only your chosen target and display settings. Forgeboard finds and checks
+        the real folders every time.
       </small>
     </section>
   );
@@ -393,7 +394,7 @@ function DiffReviewState({
     return (
       <p className="diff-review-state warning" role="alert">
         <TriangleAlert size={14} aria-hidden="true" />
-        The selected project or run identity is invalid. Refresh the project before opening review.
+        The selected project or run isn&apos;t valid. Reopen the project, then try again.
       </p>
     );
   }
@@ -409,7 +410,7 @@ function DiffReviewState({
     return (
       <p className="diff-review-state" role="status">
         <GitCompareArrows size={14} aria-hidden="true" />
-        {authority.message ?? 'Checking whether authoritative Git review is available…'}
+        {authority.message ?? 'Checking whether the review is available…'}
       </p>
     );
   }
@@ -418,40 +419,40 @@ function DiffReviewState({
 
 function DiffReviewSummary({ summary }: { summary: DiffReviewGitSummary }) {
   return (
-    <section className="diff-review-summary" aria-label="Bound Git summary">
+    <section className="diff-review-summary" aria-label="Current target summary">
       <header>
         <GitBranch size={14} aria-hidden="true" />
         <span>
-          <small>Bound Git summary</small>
-          <strong>{summary.branch ?? 'Detached or unborn branch'}</strong>
+          <small>Current target</small>
+          <strong>{summary.branch ?? 'No branch name'}</strong>
         </span>
       </header>
       <dl>
         <div>
-          <dt>Working tree</dt>
+          <dt>Working copy</dt>
           <dd>
             {summary.conflicted ? 'Conflicts' : summary.dirty ? 'Changed' : 'Clean'} ·{' '}
-            {summary.changedFileCount} {summary.changedFileCount === 1 ? 'path' : 'paths'}
+            {summary.changedFileCount} {summary.changedFileCount === 1 ? 'file' : 'files'}
           </dd>
         </div>
         <div>
-          <dt>Tracked text</dt>
+          <dt>Lines changed</dt>
           <dd>
             +{summary.additions} −{summary.deletions}
           </dd>
         </div>
         <div>
-          <dt>Upstream</dt>
+          <dt>Compared with remote branch</dt>
           <dd>
             {summary.ahead} ahead · {summary.behind} behind
           </dd>
         </div>
         {summary.baseComparison !== undefined && (
           <div>
-            <dt>Agent vs base</dt>
+            <dt>Agent changes vs. base</dt>
             <dd>
               {summary.baseComparison.changedFileCount}{' '}
-              {summary.baseComparison.changedFileCount === 1 ? 'path' : 'paths'} · +
+              {summary.baseComparison.changedFileCount === 1 ? 'file' : 'files'} · +
               {summary.baseComparison.additions} −{summary.baseComparison.deletions} ·{' '}
               {summary.baseComparison.commitCount} commits · {summary.baseComparison.ahead} ahead ·{' '}
               {summary.baseComparison.behind} behind
@@ -488,7 +489,7 @@ function uniqueRuns(runs: readonly DiffReviewAgentRunOption[]): DiffReviewAgentR
 }
 
 function runOptionLabel(run: DiffReviewAgentRunOption): string {
-  const branch = run.branch === null ? 'detached branch' : run.branch;
+  const branch = run.branch === null ? 'no branch' : run.branch;
   const state =
     run.worktreeState === 'cleanup-pending' ? 'cleanup interrupted · recovery only' : run.status;
   return `${run.nodeLabel} · ${run.agentLabel} · ${state} · ${branch}`;
@@ -500,11 +501,11 @@ function authorityLabel(
   targetIsLegacyDefault: boolean,
   cleanupRecovery: boolean,
 ): string {
-  if (targetIsInvalid) return 'Invalid target';
+  if (targetIsInvalid) return 'Invalid choice';
   if (cleanupRecovery) return 'Cleanup recovery';
   if (authority.state === 'unavailable') return 'Unavailable';
   if (authority.state === 'loading') return 'Checking';
-  return targetIsLegacyDefault ? 'Default target' : 'Ready';
+  return targetIsLegacyDefault ? 'Default choice' : 'Ready';
 }
 
 function formatTimestamp(value: string): string {

@@ -40,10 +40,12 @@ export class DataOperationGate {
     options: BeginDataMutationOptions = {},
   ): Promise<void> {
     if (this.#shuttingDown && !options.allowDuringShutdown) {
-      throw new Error('Forgeboard is shutting down.');
+      throw new Error('Forgeboard is closing, so this cannot start right now.');
     }
     if (this.#mutationKind !== null) {
-      throw new Error('Another local-data operation is in progress.');
+      throw new Error(
+        'Another data change is already in progress. Wait for it to finish, then try again.',
+      );
     }
     this.#mutationKind = kind;
     this.#mutationCompletion = new Promise<void>((resolveCompletion) => {
@@ -65,9 +67,13 @@ export class DataOperationGate {
   }
 
   #assertOrdinaryAdmission(): void {
-    if (this.#shuttingDown) throw new Error('Forgeboard is shutting down.');
+    if (this.#shuttingDown) {
+      throw new Error('Forgeboard is closing, so this cannot start right now.');
+    }
     if (this.#mutationKind !== null) {
-      throw new Error('Another local-data operation is in progress.');
+      throw new Error(
+        'Another data change is already in progress. Wait for it to finish, then try again.',
+      );
     }
   }
 }
