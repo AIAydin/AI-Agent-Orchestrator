@@ -577,6 +577,7 @@ export const PreviewNodeKeySchema = z
   .object({
     projectId: z.string().uuid(),
     nodeId: z.string().min(1).max(512),
+    slot: z.enum(['comparison-left', 'comparison-right']).optional(),
   })
   .strict();
 export type PreviewNodeKey = z.infer<typeof PreviewNodeKeySchema>;
@@ -652,6 +653,7 @@ export const PreviewSessionSnapshotSchema = z
     failure: z.string().nullable(),
     trustedHosts: z.array(z.string()),
     processes: z.array(PreviewProcessSnapshotSchema),
+    target: PreviewTargetSchema.optional(),
   })
   .strict();
 export type PreviewSessionSnapshot = z.infer<typeof PreviewSessionSnapshotSchema>;
@@ -660,14 +662,18 @@ export const PreviewEventEnvelopeSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('state'),
+      projectId: z.string().uuid(),
       nodeId: z.string().min(1).max(512),
+      slot: z.enum(['comparison-left', 'comparison-right']).optional(),
       session: PreviewSessionSnapshotSchema,
     })
     .strict(),
   z
     .object({
       kind: z.literal('output'),
+      projectId: z.string().uuid(),
       nodeId: z.string().min(1).max(512),
+      slot: z.enum(['comparison-left', 'comparison-right']).optional(),
       sessionId: z.string().uuid(),
       processId: z.string(),
       timestamp: z.string().datetime(),

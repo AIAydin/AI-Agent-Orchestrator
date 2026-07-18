@@ -26,6 +26,7 @@ import {
   type PreviewSurfaceHistoryInput,
   type PreviewSurfaceView,
 } from '../../../shared/preview/surface/index.js';
+import type { PreviewNodeKey } from '../../../shared/application/contracts.js';
 import { installPreviewSurfaceSecurity } from './security-policy.js';
 import { redactedConsoleSource, validatedSurfaceUrl } from './url-policy.js';
 
@@ -46,6 +47,7 @@ interface SurfaceRecord {
   parent: BrowserWindow;
   projectId: string;
   nodeId: string;
+  slot?: 'comparison-left' | 'comparison-right';
   allowed: URL;
   bounds: PreviewSurfaceBounds;
   status: SurfaceStatus;
@@ -137,7 +139,7 @@ export class PreviewSurfaceRuntime {
         'Forgeboard supports at most 8 live preview surfaces. Close one and try again.',
       );
     }
-    const key = nodeKey(ownerId, input.projectId, input.nodeId);
+    const key = nodeKey(ownerId, input);
     const nodeSurfaces = this.#byNode.get(key) ?? new Set<string>();
     if (nodeSurfaces.size >= MAX_SURFACES_PER_NODE) {
       this.#auditInput(input, 'create', 'denied', { reason: 'node-surface-cap' });
@@ -151,6 +153,7 @@ export class PreviewSurfaceRuntime {
       parent,
       projectId: input.projectId,
       nodeId: input.nodeId,
+      ...(input.slot === undefined ? {} : { slot: input.slot }),
       allowed,
       bounds: { ...input.bounds },
       status: 'loading',
@@ -311,9 +314,13 @@ export class PreviewSurfaceRuntime {
     });
   }
 
-  binding(ownerId: string, surfaceId: string): { projectId: string; nodeId: string } {
+  binding(ownerId: string, surfaceId: string): PreviewNodeKey {
     const record = this.#owned(ownerId, surfaceId);
-    return { projectId: record.projectId, nodeId: record.nodeId };
+    return {
+      projectId: record.projectId,
+      nodeId: record.nodeId,
+      ...(record.slot === undefined ? {} : { slot: record.slot }),
+    };
   }
 
   async screenshot(ownerId: string, surfaceId: string): Promise<PreviewScreenshotResult> {
@@ -395,8 +402,8 @@ export class PreviewSurfaceRuntime {
     return true;
   }
 
-  closeNode(ownerId: string, projectId: string, nodeId: string): void {
-    const ids = this.#byNode.get(nodeKey(ownerId, projectId, nodeId));
+  closeNode(ownerId: string, input: PreviewNodeKey): void {
+    const ids = this.#byNode.get(nodeKey(ownerId, input));
     for (const id of [...(ids ?? [])]) {
       const record = this.#surfaces.get(id);
       if (record) this.#destroy(record);
@@ -508,6 +515,7 @@ export class PreviewSurfaceRuntime {
       surfaceId: record.id,
       projectId: record.projectId,
       nodeId: record.nodeId,
+      ...(record.slot === undefined ? {} : { slot: record.slot }),
       url: current === '' || current === 'about:blank' ? record.allowed.toString() : current,
       status: record.status,
       bounds: record.bounds,
@@ -581,7 +589,7 @@ export class PreviewSurfaceRuntime {
       record.consoleNotificationTimer = null;
     }
     this.#surfaces.delete(record.id);
-    const key = nodeKey(record.ownerId, record.projectId, record.nodeId);
+    const key = nodeKey(record.ownerId, record);
     const nodeSurfaces = this.#byNode.get(key);
     nodeSurfaces?.delete(record.id);
     if (nodeSurfaces?.size === 0) this.#byNode.delete(key);
@@ -596,8 +604,15 @@ export class PreviewSurfaceRuntime {
   }
 }
 
-function nodeKey(ownerId: string, projectId: string, nodeId: string): string {
-  return `${ownerId}\0${projectId}\0${nodeId}`;
+function nodeKey(
+  ownerId: string,
+  input: {
+    projectId: string;
+    nodeId: string;
+    slot?: 'comparison-left' | 'comparison-right' | undefined;
+  },
+): string {
+  return `${ownerId}\0${input.projectId}\0${input.nodeId}\0${input.slot ?? 'primary'}`;
 }
 
 function surfaceRectangle(bounds: PreviewSurfaceBounds): Electron.Rectangle {

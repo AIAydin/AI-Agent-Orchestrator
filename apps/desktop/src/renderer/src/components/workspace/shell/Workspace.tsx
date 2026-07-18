@@ -1252,6 +1252,59 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     setEvents,
   });
 
+  const attachWhiteboardContext = useCallback(
+    (sourceNodeId: string, targetNodeId: string): string => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return 'Your collaboration role cannot change Context connections.';
+      }
+      const currentNodes = nodesRef.current;
+      const source = currentNodes.find((node) => node.id === sourceNodeId);
+      const target = currentNodes.find((node) => node.id === targetNodeId);
+      if (source?.data.kind !== 'whiteboard' || target?.data.kind !== 'agent') {
+        return 'The whiteboard or Agent node is no longer available.';
+      }
+      const protectedIds = lockedCanvasNodeIds(currentNodes);
+      if (protectedIds.has(sourceNodeId) || protectedIds.has(targetNodeId)) {
+        return 'Unlock the whiteboard, its group, and the Agent before attaching context.';
+      }
+      const existing = edgesRef.current.some(
+        (edge) =>
+          edge.source === sourceNodeId &&
+          edge.target === targetNodeId &&
+          edge.data?.edgeType === 'context' &&
+          edge.data.config.attachmentIds.includes(sourceNodeId),
+      );
+      if (existing)
+        return `The whiteboard specification is already attached to ${target.data.title}.`;
+      recordSnapshot(currentNodes, edgesRef.current);
+      const nextEdge: WorkshopEdge = {
+        id: crypto.randomUUID(),
+        source: sourceNodeId,
+        target: targetNodeId,
+        type: 'smoothstep',
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: createEdgeData('context', sourceNodeId),
+        label: 'context',
+      };
+      setEdges((items) => addEdge(nextEdge, items));
+      setEvents((items) =>
+        [
+          `Attached ${source.data.title} to ${target.data.title} as explicit Context.`,
+          ...items,
+        ].slice(0, 30),
+      );
+      return `Attached the exact whiteboard specification to ${target.data.title}.`;
+    },
+    [
+      collaborationCanvas.graphReadOnly,
+      recordSnapshot,
+      reportCollaborationReadOnly,
+      setEdges,
+      setEvents,
+    ],
+  );
+
   function updateEdgeType(edgeType: EdgeKind) {
     if (collaborationCanvas.graphReadOnly) {
       reportCollaborationReadOnly();
@@ -1643,6 +1696,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           }}
           onRecord={record}
           onUpdateSelected={updateSelected}
+          onAttachWhiteboardContext={attachWhiteboardContext}
           onFitGroupFrame={fitSelectedGroupFrame}
           onArrangeGroupFrame={arrangeSelectedGroupFrame}
           onUpdateEdgeType={updateEdgeType}

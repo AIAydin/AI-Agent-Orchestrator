@@ -127,6 +127,10 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   altText?: Record<string, string>;
   mermaidSource?: string;
   agentEditable?: boolean;
+  excalidraw?: unknown;
+  annotationIds?: string[];
+  exportArtifactIds?: string[];
+  contextSpecificationArtifactId?: string;
   taskStatus?: 'backlog' | 'ready' | 'in-progress' | 'review' | 'done' | 'cancelled';
   command?: WorkshopCommandConfiguration;
   checkKind?: 'lint' | 'typecheck' | 'test' | 'build' | 'custom';
@@ -159,6 +163,12 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   previewSecondaryPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewOrientation?: 'portrait' | 'landscape';
   previewSideBySide?: boolean;
+  previewComparison?: {
+    leftTarget?: { kind: 'agent-run'; runId: string };
+    rightTarget?: { kind: 'agent-run'; runId: string };
+    leftPreset: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
+    rightPreset: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
+  };
   extensionId?: string;
   extensionVersion?: string;
   extensionNodeTypeId?: string;

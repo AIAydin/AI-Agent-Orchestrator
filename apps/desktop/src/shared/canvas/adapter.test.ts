@@ -13,6 +13,7 @@ import type { LegacyCanvasDocument, LegacyCanvasNode } from './types.js';
 const T1 = '2026-07-15T12:00:00.000Z';
 const T2 = '2026-07-15T12:01:00.000Z';
 const AGENT_RUN_ID = '11111111-1111-4111-8111-111111111111';
+const COMPETING_RUN_ID = '22222222-2222-4222-8222-222222222222';
 
 function node(id: string, kind: string, data: Record<string, unknown> = {}): LegacyCanvasNode {
   return {
@@ -435,6 +436,56 @@ describe('canonical desktop canvas adapter', () => {
     });
   });
 
+  it('round-trips Excalidraw-compatible whiteboard data and context/export references exactly', () => {
+    const excalidraw = {
+      type: 'excalidraw',
+      version: 2,
+      source: 'https://forgeboard.local',
+      elements: [
+        {
+          id: 'annotation-1',
+          type: 'text',
+          x: 24,
+          y: 24,
+          width: 180,
+          height: 42,
+          text: 'Review checkout',
+        },
+      ],
+      appState: { viewBackgroundColor: '#ffffff', gridSize: 20 },
+      files: {},
+    };
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('whiteboard-1', 'whiteboard', {
+            excalidraw,
+            annotationIds: ['annotation-1'],
+            exportArtifactIds: ['artifact-export-1'],
+            contextSpecificationArtifactId: 'artifact-specification-1',
+          }),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.canvas.nodes[0]).toMatchObject({
+      type: 'whiteboard-mockup',
+      data: {
+        excalidraw,
+        annotationIds: ['annotation-1'],
+        exportArtifactIds: ['artifact-export-1'],
+        contextSpecificationArtifactId: 'artifact-specification-1',
+      },
+    });
+    const reloaded = canonicalCanvasFromLegacy(legacySurfaceFromCanonical(migrated.canvas));
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) return;
+    expect(reloaded.canvas.nodes[0]?.data).toEqual(migrated.canvas.nodes[0]?.data);
+  });
+
   it('round-trips an opaque Diff review target and presentation preferences exactly', () => {
     const migrated = canonicalCanvasFromLegacy(
       legacy({
@@ -552,6 +603,12 @@ describe('canonical desktop canvas adapter', () => {
             previewSecondaryPreset: 'tablet',
             previewOrientation: 'landscape',
             previewSideBySide: true,
+            previewComparison: {
+              leftTarget: previewTarget,
+              rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
+              leftPreset: 'desktop',
+              rightPreset: 'tablet',
+            },
           }),
           node('mobile-1', 'mobile-preview', {
             previewTarget: { kind: 'primary' },
@@ -587,6 +644,12 @@ describe('canonical desktop canvas adapter', () => {
         secondaryPreset: 'tablet',
         orientation: 'landscape',
         sideBySide: true,
+        comparison: {
+          leftTarget: previewTarget,
+          rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
+          leftPreset: 'desktop',
+          rightPreset: 'tablet',
+        },
       },
     });
 
@@ -605,6 +668,12 @@ describe('canonical desktop canvas adapter', () => {
       previewSecondaryPreset: 'tablet',
       previewOrientation: 'landscape',
       previewSideBySide: true,
+      previewComparison: {
+        leftTarget: previewTarget,
+        rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
+        leftPreset: 'desktop',
+        rightPreset: 'tablet',
+      },
     });
 
     const roundTripped = canonicalCanvasFromLegacy({
@@ -637,6 +706,30 @@ describe('canonical desktop canvas adapter', () => {
     expect(preserved.canvas.nodes.map((candidate) => candidate.data)).toEqual(
       migrated.canvas.nodes.map((candidate) => candidate.data),
     );
+  });
+
+  it('rejects imported preview comparisons that repeat one agent target', () => {
+    const repeated = { kind: 'agent-run', runId: AGENT_RUN_ID } as const;
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('web-1', 'web-preview', {
+            previewComparison: {
+              leftTarget: repeated,
+              rightTarget: repeated,
+              leftPreset: 'desktop',
+              rightPreset: 'tablet',
+            },
+          }),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated).toMatchObject({
+      ok: false,
+      issues: [{ code: 'INVALID_TYPED_NODE', entityId: 'web-1' }],
+    });
   });
 
   it('rejects preview targets that contain a renderer-selected checkout path', () => {

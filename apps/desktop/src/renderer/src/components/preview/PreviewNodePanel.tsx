@@ -15,6 +15,8 @@ import type { PreviewCommand, PreviewTarget } from '../../../../shared/preview/t
 import { unwrap } from '../../lib/ipc.js';
 import type { WorkshopNodeData } from '../workspace/canvas/CanvasNode.js';
 import { PreviewConfiguration } from './config/PreviewConfiguration.js';
+import { PreviewComparisonPanel } from './comparison/PreviewComparisonPanel.js';
+import type { PreviewComparisonConfiguration } from './comparison/types.js';
 import type { PreviewTargetOption } from './config/types.js';
 import { PreviewConsole } from './console/PreviewConsole.js';
 import {
@@ -49,6 +51,7 @@ interface PreviewRendererConfiguration {
     arguments?: unknown;
     args?: unknown;
   };
+  previewComparison?: unknown;
 }
 
 const PRIMARY_TARGET: PreviewTargetOption = {
@@ -117,6 +120,7 @@ export function PreviewNodePanel({
     kind === 'mobile-preview' ? 'iphone' : 'desktop',
   );
   const secondaryPreset = previewPreset(data.previewSecondaryPreset, 'pixel');
+  const comparison = rendererComparison(rendererConfiguration.previewComparison);
   const orientation: PreviewOrientation =
     data.previewOrientation === 'landscape' ? 'landscape' : 'portrait';
 
@@ -140,6 +144,26 @@ export function PreviewNodePanel({
       projectId,
       selectedScript,
       target,
+    ],
+  );
+  const comparisonInput = useMemo<Omit<PreviewStartInput, 'target' | 'slot'>>(
+    () => ({
+      projectId,
+      nodeId,
+      ...(selectedScript ? { packageScript: selectedScript.name } : {}),
+      ...(!selectedScript && command ? { command } : {}),
+      cwdRelative: selectedScript ? '.' : data.previewCwdRelative?.trim() || '.',
+      readinessPath: normalizedUiPath(data.previewReadinessPath),
+      urlPath: normalizedUiPath(data.previewUrlPath),
+    }),
+    [
+      command,
+      data.previewCwdRelative,
+      data.previewReadinessPath,
+      data.previewUrlPath,
+      nodeId,
+      projectId,
+      selectedScript,
     ],
   );
 
@@ -262,6 +286,19 @@ export function PreviewNodePanel({
         onSideBySide={(value) => updatePreview({ previewSideBySide: value })}
       />
 
+      <PreviewComparisonPanel
+        projectId={projectId}
+        nodeId={nodeId}
+        baseInput={comparisonInput}
+        targets={targets}
+        configuration={comparison}
+        launchConfigured={launchConfigured && !stalePackageScript}
+        readOnly={readOnly}
+        operations={operations}
+        onConfiguration={(value) => updatePreview({ previewComparison: value })}
+        onError={onError}
+      />
+
       {targetFailure ? (
         <p className="preview-failure" role="alert">
           {targetFailure} Your main project folder (Primary checkout) is still available. Close and
@@ -369,6 +406,31 @@ function rendererCommand(
       ? values.filter((item): item is string => typeof item === 'string')
       : [],
   };
+}
+
+function rendererComparison(value: unknown): PreviewComparisonConfiguration {
+  const fallback: PreviewComparisonConfiguration = {
+    leftPreset: 'desktop',
+    rightPreset: 'desktop',
+  };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
+  const candidate = value as Record<string, unknown>;
+  const leftTarget = rendererAgentTarget(candidate['leftTarget']);
+  const rightTarget = rendererAgentTarget(candidate['rightTarget']);
+  return {
+    ...(leftTarget === undefined ? {} : { leftTarget }),
+    ...(rightTarget === undefined ? {} : { rightTarget }),
+    leftPreset: previewPreset(candidate['leftPreset'], 'desktop'),
+    rightPreset: previewPreset(candidate['rightPreset'], 'desktop'),
+  };
+}
+
+function rendererAgentTarget(value: unknown): { kind: 'agent-run'; runId: string } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const target = value as Record<string, unknown>;
+  return target['kind'] === 'agent-run' && typeof target['runId'] === 'string'
+    ? { kind: 'agent-run', runId: target['runId'] }
+    : undefined;
 }
 
 function targetKey(target: PreviewTarget): string {

@@ -17,6 +17,7 @@ import { canEditEdge } from '../canvas/interactions/lock-protection.js';
 import { GroupFrameInspector } from '../canvas/GroupFrameInspector.js';
 import { BuiltInContentInspector } from '../content/BuiltInContentInspector.js';
 import { MermaidDiagramInspector } from '../content/diagram/MermaidDiagramInspector.js';
+import { WhiteboardMockupInspector } from '../content/whiteboard/WhiteboardMockupInspector.js';
 import {
   FileEditorWorkspace,
   ProjectFileBrowser,
@@ -116,6 +117,7 @@ interface WorkspaceInspectorProps {
     payload: WorkspaceContextDragPayload,
   ) => Promise<void>;
   onRemoveAgentContext: (targetNodeId: string, attachmentNodeId: string) => void;
+  onAttachWhiteboardContext: (sourceNodeId: string, targetNodeId: string) => string;
   onOpenSettings: () => void;
   onError: (message: string) => void;
 }
@@ -256,10 +258,13 @@ function NodeInspector(
         )}
         {(selectedNode.data.kind === 'brief' || selectedNode.data.kind === 'note-image') && (
           <BuiltInContentInspector
+            projectId={props.project.id}
             node={selectedNode}
             nodes={props.nodes}
+            readOnly={configurationReadOnly}
             onRecord={onRecord}
             onUpdate={onUpdateSelected}
+            onError={props.onError}
           />
         )}
         {selectedNode.data.kind === 'diagram' && (
@@ -271,6 +276,16 @@ function NodeInspector(
           />
         )}
       </fieldset>
+      {selectedNode.data.kind === 'whiteboard' && (
+        <WhiteboardMockupInspector
+          node={selectedNode}
+          nodes={props.nodes}
+          readOnly={configurationReadOnly}
+          onRecord={onRecord}
+          onUpdate={onUpdateSelected}
+          onAttachContext={props.onAttachWhiteboardContext}
+        />
+      )}
       {selectedNode.data.kind === 'test' && (
         <TestNodePanel
           projectId={props.project.id}

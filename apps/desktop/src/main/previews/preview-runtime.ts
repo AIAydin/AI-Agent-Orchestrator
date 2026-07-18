@@ -15,6 +15,7 @@ import type {
   Project,
 } from '../../shared/application/contracts.js';
 import type { PreviewTargetView } from '../../shared/preview/targets.js';
+import type { PreviewTarget } from '../../shared/preview/targets.js';
 import {
   PreviewService,
   canonicalPreviewCwd,
@@ -68,6 +69,8 @@ interface OwnedSession {
   ownerId: string;
   projectId: string;
   nodeId: string;
+  slot?: 'comparison-left' | 'comparison-right';
+  target: PreviewTarget;
   sessionId: string;
 }
 
@@ -173,6 +176,7 @@ export class PreviewRuntime {
   ): Promise<PreviewSessionSnapshot> {
     this.#assertAvailable();
     const currentPlan = await this.#revalidatePlan(approvedPlan);
+    this.#assertComparisonTargetAvailable(currentPlan.input);
     authorization.authorizeReplacement?.();
     await this.stop(ownerId, approvedPlan.input);
     return await this.#startResolved(ownerId, currentPlan, approvedPlan, authorization);
@@ -189,6 +193,7 @@ export class PreviewRuntime {
     const input = command.input;
     const key = nodeKey(command.input);
     if (this.#attempts.has(key)) throw new Error('This preview is already starting.');
+    this.#assertComparisonTargetAvailable(input);
 
     const existing = this.#sessionsByNode.get(key);
     if (existing) {
@@ -254,7 +259,14 @@ export class PreviewRuntime {
           signal: abortController.signal,
           onSessionCreated: (sessionId) => {
             attempt.sessionId = sessionId;
-            const owned = { ownerId, projectId: input.projectId, nodeId: input.nodeId, sessionId };
+            const owned = {
+              ownerId,
+              projectId: input.projectId,
+              nodeId: input.nodeId,
+              ...(input.slot === undefined ? {} : { slot: input.slot }),
+              target: cloneTarget(input.target ?? { kind: 'primary' }),
+              sessionId,
+            };
             this.#sessionsByNode.set(key, owned);
             this.#nodesBySession.set(sessionId, owned);
           },
@@ -284,7 +296,7 @@ export class PreviewRuntime {
           ? {}
           : { packageManifestSha256: command.packageScript.packageJsonIdentity.digest }),
       });
-      return serializeSnapshot(session);
+      return serializeSnapshot(session, input.target ?? { kind: 'primary' });
     } catch (error) {
       if (generation === this.#generation) {
         this.store.appendAudit('preview', 'start', 'failed', {
@@ -327,7 +339,7 @@ export class PreviewRuntime {
         sessionId: owned.sessionId,
       });
     }
-    return serializeSnapshot(stopped);
+    return serializeSnapshot(stopped, owned.target);
   }
 
   get(ownerId: string, input: PreviewNodeKey): PreviewSessionSnapshot | null {
@@ -336,7 +348,7 @@ export class PreviewRuntime {
     if (!owned) return null;
     this.#assertOwner(ownerId, owned.ownerId);
     const session = this.#service.get(owned.sessionId);
-    return session ? serializeSnapshot(session) : null;
+    return session ? serializeSnapshot(session, owned.target) : null;
   }
 
   validateNavigation(ownerId: string, input: PreviewNavigateInput): string {
@@ -447,7 +459,9 @@ export class PreviewRuntime {
     if (event.type === 'output') {
       this.emit(owned.ownerId, {
         kind: 'output',
+        projectId: owned.projectId,
         nodeId: owned.nodeId,
+        ...(owned.slot === undefined ? {} : { slot: owned.slot }),
         sessionId: owned.sessionId,
         processId: event.processId,
         timestamp: new Date().toISOString(),
@@ -460,9 +474,34 @@ export class PreviewRuntime {
     if (session) {
       this.emit(owned.ownerId, {
         kind: 'state',
+        projectId: owned.projectId,
         nodeId: owned.nodeId,
-        session: serializeSnapshot(session),
+        ...(owned.slot === undefined ? {} : { slot: owned.slot }),
+        session: serializeSnapshot(session, owned.target),
       });
+    }
+  }
+
+  #assertComparisonTargetAvailable(input: PreviewStartInput): void {
+    if (input.slot === undefined) return;
+    if (input.target?.kind !== 'agent-run') {
+      throw new Error('Worktree comparison slots require an explicit agent-run target.');
+    }
+    const oppositeSlot = input.slot === 'comparison-left' ? 'comparison-right' : 'comparison-left';
+    const oppositeKey = nodeKey({
+      projectId: input.projectId,
+      nodeId: input.nodeId,
+      slot: oppositeSlot,
+    });
+    const attempt = this.#attempts.get(oppositeKey);
+    if (sameAgentTarget(attempt?.input.target, input.target)) {
+      throw new Error('Worktree comparison slots must use different agent-run targets.');
+    }
+    const owned = this.#sessionsByNode.get(oppositeKey);
+    if (!owned || !sameAgentTarget(owned.target, input.target)) return;
+    const session = this.#service.get(owned.sessionId);
+    if (session && !isTerminal(session.status)) {
+      throw new Error('Worktree comparison slots must use different agent-run targets.');
     }
   }
 
@@ -806,6 +845,7 @@ function clonePreviewInput(input: PreviewStartInput): PreviewStartInput {
   return {
     projectId: input.projectId,
     nodeId: input.nodeId,
+    ...(input.slot === undefined ? {} : { slot: input.slot }),
     cwdRelative: input.cwdRelative,
     readinessPath: input.readinessPath,
     urlPath: input.urlPath,
@@ -822,14 +862,17 @@ function sha256(value: string): string {
 }
 
 function nodeKey(input: PreviewNodeKey): string {
-  return `${input.projectId}\0${input.nodeId}`;
+  return `${input.projectId}\0${input.nodeId}\0${input.slot ?? 'primary'}`;
 }
 
 function isTerminal(status: ServiceSnapshot['status']): boolean {
   return !['starting', 'ready', 'stopping'].includes(status);
 }
 
-function serializeSnapshot(session: ServiceSnapshot): PreviewSessionSnapshot {
+function serializeSnapshot(
+  session: ServiceSnapshot,
+  target: PreviewTarget = { kind: 'primary' },
+): PreviewSessionSnapshot {
   return {
     id: session.id,
     status: session.status,
@@ -855,5 +898,16 @@ function serializeSnapshot(session: ServiceSnapshot): PreviewSessionSnapshot {
         data: log.data.toString('utf8'),
       })),
     })),
+    target: cloneTarget(target),
   };
+}
+
+function cloneTarget(target: PreviewTarget): PreviewTarget {
+  return target.kind === 'primary'
+    ? { kind: 'primary' }
+    : { kind: 'agent-run', runId: target.runId };
+}
+
+function sameAgentTarget(left: PreviewTarget | undefined, right: PreviewTarget): boolean {
+  return left?.kind === 'agent-run' && right.kind === 'agent-run' && left.runId === right.runId;
 }

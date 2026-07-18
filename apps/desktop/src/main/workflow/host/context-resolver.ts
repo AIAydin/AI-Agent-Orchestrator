@@ -271,7 +271,7 @@ function requireContextNode(
   if (isWorkflowCanvasContextNode(node)) return node;
   if (node.type !== 'file' || node.data.file === undefined) {
     throw new Error(
-      `Workflow context attachment "${attachmentId}" must be a File, Product Brief, Task, Diagram, or Note node.`,
+      `Workflow context attachment "${attachmentId}" must be a File, Product Brief, Task, Diagram, Whiteboard, or Note node.`,
     );
   }
   if (node.data.file.projectId !== projectId) {

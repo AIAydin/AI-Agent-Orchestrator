@@ -96,6 +96,7 @@ export const PreviewSurfaceViewSchema = z
     surfaceId: PreviewSurfaceIdSchema,
     projectId: z.string().uuid(),
     nodeId: z.string().min(1).max(256),
+    slot: z.enum(['comparison-left', 'comparison-right']).optional(),
     url: z.string().url().max(32_768),
     status: z.enum(['loading', 'ready', 'failed']),
     bounds: PreviewSurfaceBoundsSchema,

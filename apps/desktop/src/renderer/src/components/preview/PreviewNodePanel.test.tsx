@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable @typescript-eslint/unbound-method -- API members are Vitest mocks in this file. */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -180,7 +180,7 @@ function installPreviewBridge(start = vi.fn().mockResolvedValue({ ok: true, valu
         restart: vi.fn(),
         stop: vi.fn().mockResolvedValue({ ok: true, value: null }),
         navigate: vi.fn(),
-        onEvent: vi.fn(),
+        onEvent: vi.fn().mockReturnValue(() => undefined),
       },
     },
   });
@@ -260,7 +260,11 @@ describe('PreviewNodePanel', () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole('option', { name: /Agent run aaaaaaaa/u })).toBeTruthy(),
+      expect(
+        within(screen.getByRole('combobox', { name: 'Run the preview in' })).getByRole('option', {
+          name: /Agent run aaaaaaaa/u,
+        }),
+      ).toBeTruthy(),
     );
     fireEvent.change(screen.getByRole('combobox', { name: 'Run the preview in' }), {
       target: { value: `agent-run:${RUN_ID}` },
@@ -320,9 +324,7 @@ describe('PreviewNodePanel', () => {
       operations,
     });
 
-    expect((await screen.findByRole('status')).textContent).toContain(
-      'owned worktree was cleaned up',
-    );
+    expect(await screen.findByText('The owned worktree was cleaned up.')).toBeTruthy();
     expect(screen.getByRole<HTMLButtonElement>('button', { name: /Start preview/u }).disabled).toBe(
       true,
     );
@@ -395,7 +397,11 @@ describe('PreviewNodePanel', () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole('option', { name: /Agent run aaaaaaaa/u })).toBeTruthy(),
+      expect(
+        within(screen.getByRole('combobox', { name: 'Run the preview in' })).getByRole('option', {
+          name: /Agent run aaaaaaaa/u,
+        }),
+      ).toBeTruthy(),
     );
     expect(screen.getByRole('combobox', { name: 'Run the preview in' })).toHaveProperty(
       'disabled',

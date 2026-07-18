@@ -110,6 +110,48 @@ describe('createFileApi', () => {
       api.openExternal({ projectId: PROJECT_ID, relativePath: 'src/index.ts' }),
     ).rejects.toBeTruthy();
   });
+
+  it('validates project-image selection and inert preview responses', async () => {
+    const reference = {
+      projectId: PROJECT_ID,
+      relativePath: 'design/safe.png',
+      kind: 'image' as const,
+      missing: false,
+      lastKnownHash: 'c'.repeat(64),
+    };
+    const preview = {
+      status: 'available' as const,
+      projectId: PROJECT_ID,
+      relativePath: reference.relativePath,
+      dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAAA',
+    };
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, value: reference })
+      .mockResolvedValueOnce({ ok: true, value: preview });
+    const api = createFileApi(invoke);
+
+    await expect(api.chooseImage({ projectId: PROJECT_ID })).resolves.toEqual(reference);
+    await expect(
+      api.loadImage({ projectId: PROJECT_ID, relativePath: reference.relativePath }),
+    ).resolves.toEqual(preview);
+
+    invoke.mockResolvedValueOnce({
+      ok: true,
+      value: { ...preview, dataUrl: 'data:image/png;base64,R0lGODlhAAAA' },
+    });
+    await expect(
+      api.loadImage({ projectId: PROJECT_ID, relativePath: reference.relativePath }),
+    ).rejects.toBeTruthy();
+
+    invoke.mockResolvedValueOnce({
+      ok: true,
+      value: { ...preview, relativePath: 'design/other.png' },
+    });
+    await expect(
+      api.loadImage({ projectId: PROJECT_ID, relativePath: reference.relativePath }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  });
 });
 
 function textDocument(): FileDocument {

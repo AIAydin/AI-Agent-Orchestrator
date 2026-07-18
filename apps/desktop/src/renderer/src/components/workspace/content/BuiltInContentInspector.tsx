@@ -1,14 +1,18 @@
-import { BookOpenCheck, ImagePlus, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { BookOpenCheck, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 
 import { MarkdownComposer } from '../../content/markdown/MarkdownComposer.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import { NoteImageInspector } from './note-image/NoteImageInspector.js';
 import './content-inspector.css';
 
 interface BuiltInContentInspectorProps {
+  readonly projectId: string;
   readonly node: WorkshopNode;
   readonly nodes: readonly WorkshopNode[];
+  readonly readOnly: boolean;
   readonly onRecord: () => void;
   readonly onUpdate: (data: Partial<WorkshopNode['data']>) => void;
+  readonly onError: (message: string) => void;
 }
 
 export function BuiltInContentInspector(props: BuiltInContentInspectorProps) {
@@ -316,91 +320,6 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
           </ol>
         )}
       </section>
-    </section>
-  );
-}
-
-function NoteImageInspector({ node, nodes, onRecord, onUpdate }: BuiltInContentInspectorProps) {
-  const images = node.data.images ?? [];
-  const selectedPaths = new Set(images.map((image) => image.relativePath));
-  const imageNodes = nodes.filter(
-    (candidate) => candidate.data.kind === 'file' && candidate.data.file?.kind === 'image',
-  );
-  return (
-    <section className="content-node-inspector" aria-label="Note and image settings">
-      <header>
-        <div>
-          <ImagePlus size={14} />
-          <h3>Note & images</h3>
-        </div>
-        <span>{images.length} images</span>
-      </header>
-      <MarkdownComposer
-        label="Note"
-        value={node.data.markdown ?? ''}
-        readOnly={node.data.locked}
-        emptyLabel="Write a note that stays on this device."
-        onBeginEdit={onRecord}
-        onChange={(markdown) => onUpdate({ markdown })}
-      />
-      <section className="content-attachments" aria-label="Images on this device">
-        <header>
-          <strong>Images on this device</strong>
-          <span>{images.length}</span>
-        </header>
-        {imageNodes.length === 0 ? (
-          <p>Add an image file to the canvas, then select it here.</p>
-        ) : (
-          imageNodes.map((candidate) => {
-            const reference = candidate.data.file;
-            if (reference === undefined) return null;
-            return (
-              <label key={candidate.id}>
-                <input
-                  type="checkbox"
-                  name={`note-image-${candidate.id}`}
-                  aria-label={`Include image ${candidate.data.title}`}
-                  checked={selectedPaths.has(reference.relativePath)}
-                  onFocus={onRecord}
-                  onChange={(event) =>
-                    onUpdate({
-                      images: event.target.checked
-                        ? [...images, reference]
-                        : images.filter((image) => image.relativePath !== reference.relativePath),
-                    })
-                  }
-                />
-                <span>{candidate.data.title}</span>
-                <small>{reference.missing ? 'missing' : reference.relativePath}</small>
-              </label>
-            );
-          })
-        )}
-      </section>
-      {images.map((image, index) => (
-        <label key={`${image.projectId}:${image.relativePath}`}>
-          Alt text · {image.relativePath}
-          <input
-            name="note-image-alt-text"
-            value={node.data.altText?.[image.relativePath] ?? ''}
-            aria-label={`Alt text for image ${index + 1}`}
-            onFocus={onRecord}
-            onChange={(event) =>
-              onUpdate({
-                altText: {
-                  ...(node.data.altText ?? {}),
-                  [image.relativePath]: event.target.value.slice(0, 10_000),
-                },
-              })
-            }
-          />
-          {image.missing ? (
-            <small className="missing-local-reference">
-              This image can't be found on this device.
-            </small>
-          ) : null}
-        </label>
-      ))}
     </section>
   );
 }

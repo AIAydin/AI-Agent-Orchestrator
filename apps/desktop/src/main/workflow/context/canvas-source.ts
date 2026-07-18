@@ -3,8 +3,16 @@ import { createHash } from 'node:crypto';
 import { EntityIdSchema, type CanvasNode } from '@forgeboard/core/domain';
 import { z } from 'zod';
 
+import { safeWhiteboardDocument } from './whiteboard-source.js';
+
 const MAX_SERIALIZED_CONTEXT_BYTES = 4 * 1024 * 1024;
-const ContextSourceTypeSchema = z.enum(['product-brief', 'task', 'diagram', 'note-image']);
+const ContextSourceTypeSchema = z.enum([
+  'product-brief',
+  'task',
+  'diagram',
+  'whiteboard-mockup',
+  'note-image',
+]);
 
 export const WorkflowCanvasContextSourceSchema = z
   .object({
@@ -54,8 +62,13 @@ export function serializeWorkflowCanvasContext(node: CanvasNode): WorkflowCanvas
 
 export function isWorkflowCanvasContextNode(
   node: CanvasNode,
-): node is Extract<CanvasNode, { type: 'product-brief' | 'task' | 'diagram' | 'note-image' }> {
-  return ['product-brief', 'task', 'diagram', 'note-image'].includes(node.type);
+): node is Extract<
+  CanvasNode,
+  { type: 'product-brief' | 'task' | 'diagram' | 'whiteboard-mockup' | 'note-image' }
+> {
+  return ['product-brief', 'task', 'diagram', 'whiteboard-mockup', 'note-image'].includes(
+    node.type,
+  );
 }
 
 function serializeSupportedNode(node: CanvasNode): string {
@@ -84,22 +97,45 @@ function serializeSupportedNode(node: CanvasNode): string {
         agentEditable: node.data.agentEditable,
         exportArtifactIds: [...node.data.exportArtifactIds].sort(),
       });
+    case 'whiteboard-mockup': {
+      const document = safeWhiteboardDocument(node.data.excalidraw);
+      const elementIds = new Set(document.elements.map((element) => element.id));
+      return record(node, {
+        format: 'excalidraw',
+        document,
+        annotationIds: [...node.data.annotationIds]
+          .filter((id) => elementIds.has(id))
+          .slice(0, 1_000)
+          .sort(),
+        exportArtifactIds: [...node.data.exportArtifactIds].sort(),
+        contextSpecificationArtifactId: node.data.contextSpecificationArtifactId ?? null,
+        referencedExportBytesIncluded: false,
+      });
+    }
     case 'note-image':
       return record(node, {
         markdown: node.data.markdown,
         referencedImageCount: node.data.images.length,
         referencedImageBytesIncluded: false,
-        altTextValues: Object.values(node.data.altText).sort(),
+        altTextValues: node.data.images
+          .flatMap((image) => {
+            const value = node.data.altText[image.relativePath];
+            return value === undefined ? [] : [value];
+          })
+          .sort(),
       });
     default:
       throw new Error(
-        `Workflow context attachment "${node.id}" must be a File, Product Brief, Task, Diagram, or Note node.`,
+        `Workflow context attachment "${node.id}" must be a File, Product Brief, Task, Diagram, Whiteboard, or Note node.`,
       );
   }
 }
 
 function record(
-  node: Extract<CanvasNode, { type: 'product-brief' | 'task' | 'diagram' | 'note-image' }>,
+  node: Extract<
+    CanvasNode,
+    { type: 'product-brief' | 'task' | 'diagram' | 'whiteboard-mockup' | 'note-image' }
+  >,
   data: unknown,
 ): string {
   return [

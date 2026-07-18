@@ -619,7 +619,7 @@ function canonicalContextSelection(
     }
     if (node.type !== 'file' || node.data.file?.kind !== 'file') {
       throw new Error(
-        `Context attachment ${attachmentId} must be a regular File, Product Brief, Task, Diagram, or Note node.`,
+        `Context attachment ${attachmentId} must be a regular File, Product Brief, Task, Diagram, Whiteboard, or Note node.`,
       );
     }
     if (node.data.file.projectId !== runtime.canvas.projectId || node.data.file.missing) {

@@ -84,7 +84,7 @@ describe('PreviewSurfaceRuntime', () => {
       runtime.create('owner-a', parent, { ...createInput(), touchEmulation: true }, URL),
     ).rejects.toThrow('two live surfaces');
     await expect(Promise.all([first, second])).resolves.toHaveLength(2);
-    runtime.closeNode('owner-a', PROJECT_ID, 'preview-node');
+    runtime.closeNode('owner-a', { projectId: PROJECT_ID, nodeId: 'preview-node' });
     expect(views.slice(0, 2).every((view) => view.webContents.destroyed)).toBe(true);
   });
 

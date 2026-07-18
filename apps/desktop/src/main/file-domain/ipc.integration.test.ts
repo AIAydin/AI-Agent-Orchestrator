@@ -11,7 +11,9 @@ import {
   type FileIpcResult,
 } from '../../shared/files/contracts.js';
 import { FileIpcService } from './ipc.js';
+import { ProjectImageService } from './images/service.js';
 import { ProjectFileService } from './service.js';
+import { PROJECT_IMAGE_IPC_CHANNELS } from '../../shared/files/images/contracts.js';
 
 const electronMock = vi.hoisted(() => {
   const handlers = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
@@ -41,6 +43,7 @@ describe('FileIpcService', () => {
   let service: FileIpcService;
   let showItemInFolder: ReturnType<typeof vi.fn>;
   let openPath: ReturnType<typeof vi.fn>;
+  let showOpenDialog: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     electronMock.handlers.clear();
@@ -53,14 +56,18 @@ describe('FileIpcService', () => {
     await mkdir(outsideRoot);
     showItemInFolder = vi.fn();
     openPath = vi.fn().mockResolvedValue('');
+    showOpenDialog = vi.fn();
+    const projectStore = {
+      getProject: (projectId: string) =>
+        projectId === PROJECT_ID
+          ? { id: PROJECT_ID, path: projectRoot, missing: false }
+          : undefined,
+    };
     service = new FileIpcService(
-      new ProjectFileService({
-        getProject: (projectId) =>
-          projectId === PROJECT_ID
-            ? { id: PROJECT_ID, path: projectRoot, missing: false }
-            : undefined,
-      }),
+      new ProjectFileService(projectStore),
       { showItemInFolder, openPath },
+      undefined,
+      new ProjectImageService(projectStore, { showOpenDialog }),
     );
     service.registerIpcHandlers();
   });
@@ -185,6 +192,32 @@ describe('FileIpcService', () => {
         message: 'The operating system could not open this file in its default application.',
       },
     });
+  });
+
+  it('selects and loads project images without disclosing renderer filesystem paths', async () => {
+    const target = path.join(projectRoot, 'design.png');
+    await writeFile(target, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]));
+    showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [target] });
+
+    const selected = await invoke(PROJECT_IMAGE_IPC_CHANNELS.choose, liveEvent(), {
+      projectId: PROJECT_ID,
+    });
+    expect(selected).toMatchObject({
+      ok: true,
+      value: { relativePath: 'design.png', kind: 'image', missing: false },
+    });
+    expect(JSON.stringify(selected)).not.toContain(projectRoot);
+
+    const loaded = await invoke(PROJECT_IMAGE_IPC_CHANNELS.load, liveEvent(), {
+      projectId: PROJECT_ID,
+      relativePath: 'design.png',
+    });
+    expect(loaded).toMatchObject({
+      ok: true,
+      value: { status: 'available' },
+    });
+    expect(JSON.stringify(loaded)).toMatch(/data:image\/png;base64,/u);
+    expect(JSON.stringify(loaded)).not.toContain(projectRoot);
   });
 });
 

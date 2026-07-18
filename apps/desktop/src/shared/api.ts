@@ -103,6 +103,10 @@ import type {
 } from './updates/contracts.js';
 import type { DiagramSvgExportInput, DiagramSvgExportResult } from './diagram/contracts.js';
 import type {
+  WhiteboardSvgExportInput,
+  WhiteboardSvgExportResult,
+} from './whiteboard/contracts.js';
+import type {
   GitCommitPlanInput,
   GitCommitPlanView,
   GitCommitResultView,
@@ -186,6 +190,12 @@ import type {
   FileTreeInput,
   FileTreeResult,
 } from './files/contracts.js';
+import type {
+  ProjectImageChooseInput,
+  ProjectImageLoadInput,
+  ProjectImageLoadResult,
+  ProjectImageReference,
+} from './files/images/contracts.js';
 import type { IntegrityCheckInput, IntegrityCheckResult } from './integrity/contracts.js';
 import type {
   RunHistoryGetInput,
@@ -323,6 +333,8 @@ export interface ForgeboardApi {
     revert(input: FileRevertInput): Promise<FileDocument>;
     reveal(input: FileRevealInput): Promise<void>;
     openExternal(input: FileOpenExternalInput): Promise<void>;
+    chooseImage(input: ProjectImageChooseInput): Promise<ProjectImageReference | null>;
+    loadImage(input: ProjectImageLoadInput): Promise<ProjectImageLoadResult>;
   };
   collaboration: {
     get(): Promise<IpcResult<CollaborationConnection | null>>;
@@ -570,5 +582,8 @@ export interface ForgeboardApi {
   };
   diagram: {
     exportSvg(input: DiagramSvgExportInput): Promise<IpcResult<DiagramSvgExportResult>>;
+  };
+  whiteboard: {
+    exportSvg(input: WhiteboardSvgExportInput): Promise<IpcResult<WhiteboardSvgExportResult>>;
   };
 }

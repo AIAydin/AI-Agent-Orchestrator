@@ -11,11 +11,19 @@ import {
 const NOW = '2026-07-17T12:00:00.000Z';
 
 describe('workflow canvas context serialization', () => {
-  it('serializes Product Brief, Task, Diagram, and Note nodes deterministically', () => {
+  it('serializes Product Brief, Task, Diagram, Whiteboard, and Note nodes deterministically', () => {
     const nodes = [
       node('brief', 'product-brief', { markdown: '# Brief', variables: { z: 'last', a: 'first' } }),
       node('task', 'task', { description: 'Implement it', priority: 'high' }),
       node('diagram', 'diagram', { mermaidSource: 'flowchart LR\nA-->B' }),
+      node('whiteboard', 'whiteboard-mockup', {
+        excalidraw: {
+          type: 'excalidraw',
+          version: 2,
+          elements: [{ id: 'screen', type: 'rectangle', x: 10, y: 20 }],
+        },
+        annotationIds: ['annotation-1'],
+      }),
       node('note', 'note-image', { markdown: 'A note' }),
     ];
 
@@ -65,20 +73,87 @@ describe('workflow canvas context serialization', () => {
             lastKnownHash: 'image-secret-hash',
           },
         ],
-        altText: { 'credentials/private.png': 'diagram description' },
+        altText: {
+          'credentials/private.png': 'diagram description',
+          'removed.png': 'stale alternative text',
+        },
       }),
     );
     expect(`${task.content}\n${note.content}`).not.toMatch(
       /\.env|credentials\/private|secret-hash/iu,
     );
     expect(note.content).toContain('diagram description');
+    expect(note.content).not.toContain('stale alternative text');
     expect(note.content).toContain('referencedImageBytesIncluded');
+  });
+
+  it('normalizes whiteboards without disclosing embedded files or opaque element fields', () => {
+    const source = serializeWorkflowCanvasContext(
+      node('whiteboard', 'whiteboard-mockup', {
+        excalidraw: {
+          elements: [
+            {
+              id: 'label',
+              type: 'text',
+              x: 12,
+              y: 18,
+              width: 240,
+              height: 40,
+              text: 'Checkout heading',
+              link: 'file:///Users/example/private.txt',
+              customData: { token: 'OPAQUE_SECRET' },
+              boundElements: [{ id: 'private-binding' }],
+            },
+            { id: 'unsupported', type: 'image', fileId: 'private-file' },
+          ],
+          appState: { viewBackgroundColor: '#abcdef', secret: 'APP_STATE_SECRET' },
+          files: {
+            'private-file': {
+              dataURL: 'data:image/png;base64,EMBEDDED_SECRET',
+              mimeType: 'image/png',
+            },
+          },
+          opaque: 'DOCUMENT_SECRET',
+        },
+        annotationIds: ['label', 'unsupported', 'missing'],
+      }),
+    );
+
+    expect(source.content).toContain('Checkout heading');
+    expect(source.content).toContain('"annotationIds": [\n    "label"');
+    expect(source.content).toContain('"embeddedFilesIncluded": false');
+    expect(source.content).toContain('"discardedElementCount": 1');
+    expect(source.content).not.toMatch(
+      /EMBEDDED_SECRET|OPAQUE_SECRET|APP_STATE_SECRET|DOCUMENT_SECRET|file:\/\/|private-binding|private-file/iu,
+    );
+  });
+
+  it('bounds whiteboard element count and text before creating context', () => {
+    const source = serializeWorkflowCanvasContext(
+      node('whiteboard', 'whiteboard-mockup', {
+        excalidraw: {
+          elements: Array.from({ length: 1_005 }, (_, index) => ({
+            id: `element-${index}`,
+            type: 'text',
+            text: index === 0 ? 'x'.repeat(3_000) : 'bounded',
+          })),
+        },
+      }),
+    );
+
+    const document = JSON.parse(source.content.split('```json\n')[1]!.split('\n```')[0]!) as {
+      document: { elements: Array<{ text?: string }>; truncatedElementCount: number };
+    };
+    expect(document.document.elements).toHaveLength(1_000);
+    expect(document.document.elements[0]?.text).toHaveLength(2_048);
+    expect(document.document.truncatedElementCount).toBe(5);
+    expect(Buffer.byteLength(source.content, 'utf8')).toBeLessThan(4 * 1024 * 1024);
   });
 });
 
 function node(
   id: string,
-  type: 'product-brief' | 'task' | 'diagram' | 'note-image',
+  type: 'product-brief' | 'task' | 'diagram' | 'whiteboard-mockup' | 'note-image',
   data: Record<string, unknown>,
 ): CanvasNode {
   return CanvasNodeSchema.parse({

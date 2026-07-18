@@ -17,7 +17,7 @@ not be reclassified as future work.
 - [x] Document a one-command fresh-clone install and prove it in a clean checkout.
 - [ ] Publish GitHub Release installers/artifacts so a user can download, install, and enter solo
       mode without cloning the repository, installing developer tools, or editing code/config files.
-- [ ] Make every required setup and runtime option configurable in the UI; text manifests, env files,
+- [x] Make every required setup and runtime option configurable in the UI; text manifests, env files,
       and config-file import/export remain optional advanced paths only.
 
 ## Core models, persistence, and recovery
@@ -43,7 +43,7 @@ not be reclassified as future work.
 - [ ] Scoped/revocable approvals and impact-specific confirmations for external/destructive actions.
 - [ ] Append-only redacted audit log for all required security and outbound events.
 - [x] Renderer isolation, narrow validated IPC, strict CSP, and navigation/window/download controls.
-- [ ] Sandboxed preview surface and sanitized Markdown, Mermaid, SVG, and imports.
+- [x] Sandboxed preview surface and sanitized Markdown, Mermaid, SVG, and imports.
 - [x] Data & Privacy screen with locations, integrations, retention, backup configuration/health,
       portable export/import, canvas recovery, and deletion.
 - [x] No telemetry or Forgeboard-owned outbound requests in default solo mode, proven by tests.
@@ -94,10 +94,10 @@ not be reclassified as future work.
 - [ ] Extensible registry and shared title/color/icon/resize/collapse/lock/duplicate/delete/group/comment/
       status/run-history/inspector behavior.
 - [ ] Agent node.
-- [ ] Product brief node with Markdown, checklists, attachments, criteria, versions, and variables.
-- [ ] Task node with priority, assignee, dependencies, criteria, files, status, and execution.
+- [x] Product brief node with Markdown, checklists, attachments, criteria, versions, and variables.
+- [x] Task node with priority, assignee, dependencies, criteria, files, status, and execution.
 - [x] Live Monaco file node with history, dirty state, reveal, and context drag.
-- [ ] Diff/review node with hunk decisions, comments, revision requests, and approval gate.
+- [x] Diff/review node with hunk decisions, comments, revision requests, and approval gate.
 - [x] Interactive terminal node with UI-only literal process configuration, two-step native-reviewed
       PTY launch, ANSI/raw input/resize, bounded private replay/history, and honest
       interrupt/terminate/lost recovery.
@@ -107,10 +107,10 @@ not be reclassified as future work.
 - [x] Review gate node with human/deterministic/agent checks and bounded retries.
 - [x] Git/PR node with commits, divergence, remote, readiness, CI, and approved actions.
 - [x] Mermaid diagram node with synchronized source/render/export.
-- [ ] Excalidraw-compatible whiteboard/mockup node with annotations/export/context.
-- [ ] Note/image node with safe local references.
+- [x] Excalidraw-compatible whiteboard/mockup node with annotations/export/context.
+- [x] Note/image node with safe local references.
 - [x] Group/frame node with real containment behavior.
-- [ ] Recoverable missing-local-reference warnings.
+- [x] Recoverable missing-local-reference warnings.
 
 ## Typed workflows
 
@@ -124,10 +124,10 @@ not be reclassified as future work.
 
 - [x] Ignore-aware tree, quick open, tabs, breadcrumbs, search, diagnostics, save/revert, and external
       editor handoff with write protection outside the selected root.
-- [ ] Rich Markdown, Mermaid, and Excalidraw editing.
+- [x] Rich Markdown, Mermaid, and Excalidraw editing.
 - [x] Safe argument-array command configuration and common package script detection.
 - [x] Port allocation, readiness, multiple worktree dev servers, logs, cleanup, and collisions.
-- [ ] Side-by-side desktop/tablet/phone previews bound to competing worktrees.
+- [x] Side-by-side desktop/tablet/phone previews bound to competing worktrees.
 - [x] Lint/typecheck/test/build/custom checks with raw output and best-effort parsing.
 - [x] Review gates enforce selected passing commands before merge/push.
 
@@ -156,7 +156,7 @@ not be reclassified as future work.
       the UI without editing a file; portable non-secret settings can be exported/imported, while
       secret-, device-, and project-bound authority follows the manifest's safe reconnect/reset and
       never-export policy.
-- [ ] Documented validated extension API for local agent adapters and canvas node types, with
+- [x] Documented validated extension API for local agent adapters and canvas node types, with
       explicit install/permissions and no renderer execution.
 - [x] Drag/drop from tree/templates and node-to-agent context linking.
 - [x] Templates: single agent, parallel implementations, implement/review loop, bug investigation,
@@ -1415,3 +1415,77 @@ unchecked when only a subset of their required behavior has proof.
   Fifty-six focused approval, check IPC, workflow-template, Mermaid, SVG-policy, preload, and export
   tests passed, including forced audit-trigger failures that prove authority and audit-chain state
   remain unchanged together. The broader exhaustive security-event coverage item remains open.
+- 2026-07-18: the local extension API is now re-audited as complete against current source and
+  documentation. `docs/EXTENSIONS.md` specifies the strict v1 adapter and declarative canvas-node
+  contracts, inferred least-privilege permissions, UI folder/manifest installation, native
+  cancel-default review, trusted-ledger and snapshot integrity, quarantine/removal behavior, and the
+  explicit prohibition on renderer JavaScript, HTML, CSS, Electron, or arbitrary Node entrypoints.
+  Main, preload, renderer, and runtime implementations validate both request and response contracts,
+  resolve active adapter authority again before launch, and render extension nodes only through
+  Forgeboard-owned controls. Thirty-six focused schema, service, manager, IPC, node, and real UI
+  integration-action tests passed.
+- 2026-07-18: the existing Product Brief, Task, and Diff/Review node implementations were re-audited
+  against their complete checklist contracts rather than their earlier partial milestones. Product
+  Brief provides safe Markdown authoring/preview, checklists, explicit canvas attachments,
+  acceptance criteria, reusable variables, and restorable version history. Task combines generic
+  title/description with priority, status, agent assignment, typed dependency edges, criteria,
+  local-file references, inherited permission disclosure, and node/selection workflow execution.
+  Diff/Review binds the canvas node to the authoritative Git review surface with unified/split
+  navigation, exact hunk stage/unstage/discard decisions, line comments, revision requests, and
+  quality-gate approval evidence. Sixty-three focused content, workflow-inspector, eligibility,
+  context-menu, diff-node, diff-viewer, and Git-review tests passed.
+- 2026-07-18: the complete untrusted-content boundary was re-audited after Mermaid rendering landed.
+  Preview pages run in a main-owned sandboxed `WebContentsView` with Node/preload disabled and strict
+  loopback navigation, popup, permission, download, and bounds policies. Markdown is tokenized into
+  Forgeboard-owned React elements; Mermaid runs with locked strict settings; generated/imported SVG
+  is rebuilt into an inert allowlisted image document; and canvas JSON import is strictly parsed,
+  canonicalized, integrity-checked, and committed transactionally. Eighty-one focused preview,
+  URL-policy, Markdown, SVG, Mermaid, canvas-adapter, import, retention, and recovery tests passed.
+- 2026-07-18: the top-level zero-code configuration requirement was reconciled with the already
+  completed Settings and integration manifests. The renderer exposes all 57 persisted ordinary
+  settings and every main-owned integration lifecycle action through validated UI controls,
+  including native pickers/readiness checks for paths and executables, OAuth-first provider
+  connections, Git/GitHub, Docker, previews, terminals, backups/recovery, extensions, collaboration
+  rooms/invites, and updates. Portable non-secret configuration can be imported/exported, while
+  secret-, device-, project-, and native approval authority remains intentionally reconnect-only or
+  never-export. Text manifests, environment files, and hand-edited configuration remain optional
+  advanced paths rather than prerequisites.
+- 2026-07-18: Note/Image nodes now provide UI-only native choose, relink, and clear controls for
+  project-local PNG, JPEG, GIF, and WebP references, preserve alternative text across recovery, and
+  visibly explain that note context excludes image paths and bytes unless a File node is attached
+  separately. Main-process path authority canonicalizes every selection beneath the current project,
+  applies ignore/sensitive-file policy, rejects symlink escapes and disguised active content, and
+  reads through one read-only/no-follow handle with an 8 MiB + 1 byte bound, before/after path and
+  handle identity checks, revision stability, and Windows-safe canonical revalidation. The preload
+  accepts only signature-matching bounded inline image bytes and binds the response to the requested
+  project-relative reference; forgeable MIME, size, and digest metadata is not exposed. Missing or
+  moved images persist a recoverable warning and can be reconnected from the same native chooser;
+  locked nodes and view-only collaboration sessions cannot mutate references. Agent context includes
+  note text, linked-image count, and alternative text only for currently linked images, never stale
+  text, paths, or image bytes. Thirty-eight focused reader-race/oversize, shared-contract,
+  main-service, IPC, preload, renderer, context, and immutable reference-update tests passed, along
+  with desktop strict typecheck and focused zero-warning lint.
+- 2026-07-18: Whiteboard/Mockup nodes now provide UI-only rectangle, ellipse, diamond, arrow, and
+  text-annotation editing backed by bounded Excalidraw-compatible version-2 JSON. The preview is
+  rendered solely with Forgeboard-owned inert React SVG primitives. Image export crosses a strict
+  preload contract, opens a cancel-default native save dialog, revalidates the SVG allowlist in the
+  main process, writes with private permissions, and returns only the selected basename. An explicit
+  Agent picker creates a typed Context edge rather than silently attaching data; workflow evidence
+  binds a normalized, bounded visual specification and its annotation/export references before
+  creating the disclosed immutable agent-context snapshot while excluding embedded files, data
+  URLs, links, bindings, and opaque custom fields. Node, group, and collaboration locks disable every
+  graph mutation while leaving safe local export available. Fifty-six focused UI,
+  canvas-adapter, context-evidence/resolution, preload, contract, and native-export tests passed,
+  alongside desktop strict typecheck and the 1,250-file structure gate.
+- 2026-07-18: the editor surface now covers safe Markdown composition/preview, synchronized Mermaid
+  source/render/export, and a persisted Excalidraw-compatible whiteboard editor with shapes, text
+  annotations, inert preview, native export, and explicit normalized agent context. Competing
+  worktree comparison persists two distinct opaque agent-run targets and independent desktop,
+  tablet, or phone presets, then launches two separately owned main-process sessions and secured
+  native surfaces with independent start/restart/stop and unavailable-target recovery. Snapshots and
+  events remain bound to their exact project, node, slot, and opaque target; schema, UI, and an
+  atomic main-process reservation reject duplicate targets even under concurrent direct IPC starts.
+  Forty focused comparison, canvas, surface, and contract unit tests passed. A production integration
+  test proved distinct worktrees, content, processes, ports, restart/stop, duplicate-race rejection,
+  and complete cleanup. The full repository suite passed 2,462 unit and 314 integration tests, along
+  with formatting, lint, strict typecheck, all production builds, and the 1,255-file structure gate.

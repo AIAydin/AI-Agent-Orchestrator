@@ -31,10 +31,13 @@ describe('BuiltInContentInspector', () => {
     });
     render(
       <BuiltInContentInspector
+        projectId="project-1"
         node={brief}
         nodes={[brief, file]}
+        readOnly={false}
         onRecord={onRecord}
         onUpdate={onUpdate}
+        onError={vi.fn()}
       />,
     );
 
@@ -74,10 +77,13 @@ describe('BuiltInContentInspector', () => {
     });
     const { rerender } = render(
       <BuiltInContentInspector
+        projectId="project-1"
         node={note}
         nodes={[note, image]}
+        readOnly={false}
         onRecord={vi.fn()}
         onUpdate={onUpdate}
+        onError={vi.fn()}
       />,
     );
 
@@ -92,10 +98,13 @@ describe('BuiltInContentInspector', () => {
     });
     rerender(
       <BuiltInContentInspector
+        projectId="project-1"
         node={selected}
         nodes={[selected, image]}
+        readOnly={false}
         onRecord={vi.fn()}
         onUpdate={onUpdate}
+        onError={vi.fn()}
       />,
     );
     fireEvent.change(screen.getByRole('textbox', { name: 'Alt text for image 1' }), {
@@ -109,10 +118,13 @@ describe('BuiltInContentInspector', () => {
   it('keeps Markdown source read-only when a content node is locked', () => {
     render(
       <BuiltInContentInspector
+        projectId="project-1"
         node={node('brief', { locked: true, markdown: 'Locked' })}
         nodes={[]}
+        readOnly={true}
         onRecord={vi.fn()}
         onUpdate={vi.fn()}
+        onError={vi.fn()}
       />,
     );
     expect(
@@ -127,6 +139,7 @@ describe('BuiltInContentInspector', () => {
     const onUpdate = vi.fn<(data: Partial<WorkshopNode['data']>) => void>();
     render(
       <BuiltInContentInspector
+        projectId="project-1"
         node={node('brief', {
           markdown: '# Current',
           versions: [
@@ -139,8 +152,10 @@ describe('BuiltInContentInspector', () => {
           ],
         })}
         nodes={[]}
+        readOnly={false}
         onRecord={onRecord}
         onUpdate={onUpdate}
+        onError={vi.fn()}
       />,
     );
 

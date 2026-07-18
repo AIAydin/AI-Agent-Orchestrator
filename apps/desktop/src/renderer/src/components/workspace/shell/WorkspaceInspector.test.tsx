@@ -265,7 +265,7 @@ describe('WorkspaceInspector Custom permissions', () => {
           restart: vi.fn(),
           stop: vi.fn(),
           navigate: vi.fn(),
-          onEvent: vi.fn(),
+          onEvent: vi.fn().mockReturnValue(() => undefined),
         },
       },
     });
@@ -613,6 +613,32 @@ describe('WorkspaceInspector Custom permissions', () => {
   });
 });
 
+describe('WorkspaceInspector whiteboard read-only operations', () => {
+  it('keeps safe local export outside the disabled configuration fieldset', async () => {
+    const exportSvg = vi.fn().mockResolvedValue({ ok: true, value: { fileName: 'Board.svg' } });
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        runs: { list: vi.fn().mockResolvedValue({ ok: true, value: [] }) },
+        whiteboard: { exportSvg },
+      },
+    });
+    const selectedNode = whiteboardNode({ locked: true });
+    const inspectorProps = props(settings(), selectedNode);
+
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    const exportButton = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Export SVG image',
+    });
+    expect(exportButton.disabled).toBe(false);
+    expect(exportButton.closest('fieldset[disabled]')).toBeNull();
+    fireEvent.click(exportButton);
+    await waitFor(() => expect(exportSvg).toHaveBeenCalledTimes(1));
+    expect(inspectorProps.onUpdateSelected).not.toHaveBeenCalled();
+  });
+});
+
 function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
   return {
     project,
@@ -678,6 +704,7 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     collaborationGraphReadOnly: false,
     onAttachAgentContext: vi.fn().mockResolvedValue(undefined),
     onRemoveAgentContext: vi.fn(),
+    onAttachWhiteboardContext: vi.fn().mockReturnValue('Attached whiteboard context.'),
     onOpenSettings: vi.fn(),
     onError: vi.fn(),
   };
@@ -697,6 +724,29 @@ function agentNode(data: Partial<WorkshopNode['data']>): WorkshopNode {
       collapsed: false,
       color: '#445566',
       adapterId: 'test-agent',
+      ...data,
+    },
+  };
+}
+
+function whiteboardNode(data: Partial<WorkshopNode['data']>): WorkshopNode {
+  return {
+    id: 'whiteboard-1',
+    type: 'workshop',
+    position: { x: 0, y: 0 },
+    data: {
+      kind: 'whiteboard',
+      title: 'Board',
+      description: 'A mockup',
+      color: '#445566',
+      status: 'idle',
+      locked: false,
+      collapsed: false,
+      excalidraw: {
+        type: 'excalidraw',
+        version: 2,
+        elements: [{ id: 'shape-1', type: 'rectangle', width: 100, height: 80 }],
+      },
       ...data,
     },
   };

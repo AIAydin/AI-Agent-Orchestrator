@@ -138,7 +138,7 @@ export class PreviewIpcService {
         try {
           return await this.#runtime.stop(ownerId, input);
         } finally {
-          this.#surfaces.closeNode(ownerId, input.projectId, input.nodeId);
+          this.#surfaces.closeNode(ownerId, input);
         }
       },
     );
