@@ -22,6 +22,7 @@ import {
 } from './values.js';
 import { writeCanvas, writeSnapshot } from './writes.js';
 import { pruneAuditPrefix } from './security/audit-integrity.js';
+import { loadCanvasHistory, sanitizeHistory, writeHistory } from './canvas-history/repository.js';
 
 export function redactStoredSecrets(database: DatabaseSync): void {
   transaction(database, () => {
@@ -50,11 +51,13 @@ export function sanitizeStoredExtensionData(database: DatabaseSync): void {
     for (const row of canvases) {
       const parsed = CanvasDocumentSchema.parse(parseJson(row.value_json));
       const sanitized = sanitizeCanvasDocument(parsed);
+      const history = loadCanvasHistory(database, parsed.projectId);
       if (!isDeepStrictEqual(parsed, sanitized)) {
         database
           .prepare('UPDATE canvas_documents SET value_json = ? WHERE project_id = ?')
           .run(JSON.stringify(sanitized), row.project_id);
       }
+      if (history) writeHistory(database, sanitized, sanitizeHistory(sanitized, history));
     }
 
     const snapshots = database
@@ -128,18 +131,43 @@ export function applyRetention(
 function scrubExpiredTranscripts(
   database: DatabaseSync,
   cutoff: string,
-): { scrubbedCanvasTranscripts: number; scrubbedSnapshotTranscripts: number } {
+): {
+  scrubbedCanvasTranscripts: number;
+  scrubbedSnapshotTranscripts: number;
+  scrubbedHistoryTranscripts: number;
+} {
   let scrubbedCanvasTranscripts = 0;
   let scrubbedSnapshotTranscripts = 0;
+  let scrubbedHistoryTranscripts = 0;
   const canvases = database
     .prepare('SELECT value_json FROM canvas_documents')
     .all() as unknown as JsonRow[];
   for (const row of canvases) {
-    const document = CanvasDocumentSchema.parse(parseJson(row.value_json));
+    const document = sanitizeCanvasDocument(CanvasDocumentSchema.parse(parseJson(row.value_json)));
+    const history = loadCanvasHistory(database, document.projectId);
     const scrubbed = scrubCanvasTranscripts(document, cutoff);
+    let scrubbedHistory = history;
+    let historyChanged = false;
+    if (history) {
+      const scrubLane = (lane: typeof history.past): typeof history.past =>
+        lane.map((graph) => {
+          const checkpoint = scrubCanvasTranscripts({ ...document, ...graph }, cutoff);
+          scrubbedHistoryTranscripts += checkpoint.count;
+          historyChanged ||= checkpoint.count > 0;
+          return { nodes: checkpoint.document.nodes, edges: checkpoint.document.edges };
+        });
+      scrubbedHistory = {
+        ...history,
+        past: scrubLane(history.past),
+        future: scrubLane(history.future),
+      };
+    }
     if (scrubbed.count > 0) {
       writeCanvas(database, scrubbed.document, false, 'import');
       scrubbedCanvasTranscripts += scrubbed.count;
+    }
+    if (scrubbedHistory && (scrubbed.count > 0 || historyChanged)) {
+      writeHistory(database, scrubbed.document, scrubbedHistory);
     }
   }
 
@@ -158,5 +186,9 @@ function scrubExpiredTranscripts(
       scrubbedSnapshotTranscripts += scrubbed.count;
     }
   }
-  return { scrubbedCanvasTranscripts, scrubbedSnapshotTranscripts };
+  return {
+    scrubbedCanvasTranscripts,
+    scrubbedSnapshotTranscripts,
+    scrubbedHistoryTranscripts,
+  };
 }

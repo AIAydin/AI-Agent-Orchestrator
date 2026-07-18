@@ -436,6 +436,19 @@ export const MIGRATIONS = [
       ELSE 0
     END;
   `,
+  `
+    CREATE TABLE IF NOT EXISTS canvas_history (
+      project_id TEXT PRIMARY KEY,
+      canvas_id TEXT NOT NULL,
+      current_hash TEXT NOT NULL CHECK(length(current_hash) = 64),
+      value_json TEXT NOT NULL CHECK(
+        length(CAST(value_json AS BLOB)) BETWEEN 2 AND 16777216
+      ),
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES recent_projects(id) ON DELETE CASCADE,
+      FOREIGN KEY(canvas_id) REFERENCES canvas_documents(id) ON DELETE CASCADE
+    );
+  `,
 ] as const;
 
 export interface ExpectedDatabaseIdentity {
@@ -522,6 +535,7 @@ export function clearAllTables(database: DatabaseSync): void {
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM trusted_extension_ledger').run();
   database.prepare('DELETE FROM approval_records').run();
+  database.prepare('DELETE FROM canvas_history').run();
   database.prepare('DELETE FROM canvas_snapshots').run();
   database.prepare('DELETE FROM canvas_documents').run();
   database.prepare('DELETE FROM project_path_history').run();
@@ -552,6 +566,7 @@ export function clearPortableTables(database: DatabaseSync): void {
   database.prepare('DELETE FROM collaboration_sync_states').run();
   database.prepare('DELETE FROM check_executions').run();
   database.prepare('DELETE FROM approval_records').run();
+  database.prepare('DELETE FROM canvas_history').run();
   database.prepare('DELETE FROM canvas_snapshots').run();
   database.prepare('DELETE FROM canvas_documents').run();
   database.prepare('DELETE FROM project_path_history').run();

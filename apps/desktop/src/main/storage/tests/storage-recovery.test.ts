@@ -494,6 +494,7 @@ describe('LocalStore persistence and recovery', () => {
       deletedSnapshots: 3,
       scrubbedCanvasTranscripts: 0,
       scrubbedSnapshotTranscripts: 0,
+      scrubbedHistoryTranscripts: 0,
     });
     expect(
       store
@@ -621,6 +622,7 @@ describe('LocalStore persistence and recovery', () => {
     expect(result).toMatchObject({
       scrubbedCanvasTranscripts: 1,
       scrubbedSnapshotTranscripts: 1,
+      scrubbedHistoryTranscripts: 0,
     });
     expect(JSON.stringify(store.exportData())).not.toContain('expired-transcript-secret');
     expect(store.checkIntegrity('full')).toMatchObject({

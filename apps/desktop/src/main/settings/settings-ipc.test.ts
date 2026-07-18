@@ -55,6 +55,7 @@ const retention = {
   deletedSnapshots: 4,
   scrubbedCanvasTranscripts: 5,
   scrubbedSnapshotTranscripts: 6,
+  scrubbedHistoryTranscripts: 7,
 };
 
 beforeEach(() => {

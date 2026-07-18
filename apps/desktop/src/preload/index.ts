@@ -11,6 +11,7 @@ import {
   CheckPlanViewSchema,
 } from '../shared/checks/contracts.js';
 import type { IpcResult } from '../shared/application/contracts.js';
+import { CanvasWorkspaceStateSchema } from '../shared/canvas/history/contracts.js';
 import {
   AppCloseRequestSchema,
   AppCloseResponseSchema,
@@ -190,7 +191,10 @@ const api: ForgeboardApi = {
   },
   canvas: {
     load: (projectId) => ipcRenderer.invoke(IPC_CHANNELS.canvasLoad, projectId),
+    loadWithHistory: (projectId) =>
+      invokeValidated(IPC_CHANNELS.canvasLoadWithHistory, CanvasWorkspaceStateSchema, projectId),
     save: (document) => ipcRenderer.invoke(IPC_CHANNELS.canvasSave, document),
+    saveWithHistory: (input) => ipcRenderer.invoke(IPC_CHANNELS.canvasSaveWithHistory, input),
   },
   files: createFileApi(async (channel, ...args) => {
     const result: unknown = await ipcRenderer.invoke(channel, ...args);

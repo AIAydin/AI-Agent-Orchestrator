@@ -1276,3 +1276,15 @@ unchecked when only a subset of their required behavior has proof.
   proves cleanup after disconnect; it passed in the full ten-test collaboration-server integration
   suite and five additional isolated repetitions. The broad multiplayer E2E requirement remains
   open pending a combined user-interface journey.
+- 2026-07-18: canvas undo and redo now survive full desktop-process restarts through a dedicated,
+  local SQLite history record saved atomically with the current canvas. The record is bound to the
+  exact project, canvas, and current-content digest; stale, malformed, restored, imported, or deleted
+  state fails closed instead of replaying against the wrong graph. History keeps the nearest 50 undo
+  and redo checkpoints, deterministically sheds distant checkpoints at its 16 MiB storage bound,
+  participates in extension sanitation and transcript retention, and remains separate from user
+  recovery snapshots and portable exports. Fourteen focused contract, storage, controller, and
+  workspace tests, 28 existing recovery tests, desktop typecheck, focused zero-warning lint,
+  formatting, production build, `git diff --check`, and the 1,181-file structure gate passed. A
+  production Electron journey also proved Undo after one full restart, Redo after another, and zero
+  external requests. The aggregate checklist item remains open pending dedicated moved-project
+  recovery journey evidence.

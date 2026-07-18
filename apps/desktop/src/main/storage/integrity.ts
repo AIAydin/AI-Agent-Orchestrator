@@ -8,6 +8,10 @@ import {
   ProjectSchema,
 } from '../../shared/application/contracts.js';
 import {
+  CANVAS_HISTORY_MAX_BYTES,
+  CanvasHistoryStateSchema,
+} from '../../shared/canvas/history/contracts.js';
+import {
   CanvasSnapshotSchema,
   StoredCheckExecutionRecordSchema,
   StoredRunRecordSchema,
@@ -229,6 +233,39 @@ function validateMirroredColumns(database: DatabaseSync, messages: string[]): vo
         parsed.data.updatedAt !== row.updated_at)
     ) {
       messages.push(`canvas_documents row ${index + 1}: indexed columns do not match JSON`);
+    }
+  });
+
+  const historyRows = database
+    .prepare(
+      `SELECT history.project_id, history.canvas_id, history.current_hash, history.value_json,
+              canvases.value_json AS canvas_json
+       FROM canvas_history AS history
+       LEFT JOIN canvas_documents AS canvases ON canvases.project_id = history.project_id`,
+    )
+    .all() as unknown as Array<{
+    project_id: string;
+    canvas_id: string;
+    current_hash: string;
+    value_json: string;
+    canvas_json: string | null;
+  }>;
+  historyRows.forEach((row, index) => {
+    try {
+      if (new TextEncoder().encode(row.value_json).byteLength > CANVAS_HISTORY_MAX_BYTES) {
+        throw new Error('serialized history exceeds its storage bound');
+      }
+      const history = CanvasHistoryStateSchema.parse(parseJson(row.value_json));
+      if (history.projectId !== row.project_id || history.canvasId !== row.canvas_id) {
+        throw new Error('indexed columns do not match JSON');
+      }
+      if (row.canvas_json === null) throw new Error('current canvas is missing');
+      const canvas = CanvasDocumentSchema.parse(parseJson(row.canvas_json));
+      if (canvas.id !== row.canvas_id || canvasContentHash(canvas) !== row.current_hash) {
+        throw new Error('current canvas binding does not match');
+      }
+    } catch (error) {
+      messages.push(`canvas_history row ${index + 1}: ${errorMessage(error)}`);
     }
   });
 

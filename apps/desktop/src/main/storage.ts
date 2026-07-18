@@ -12,6 +12,10 @@ import type {
   SettingsRepairEvidence,
   SettingsRepairSummary,
 } from '../shared/settings/repair/contracts.js';
+import type {
+  CanvasHistorySaveInput,
+  CanvasHistoryState,
+} from '../shared/canvas/history/contracts.js';
 import type { CheckExecutionView } from '../shared/checks/contracts.js';
 import type { GitTargetInput } from '../shared/git/contracts.js';
 import type {
@@ -106,6 +110,10 @@ import {
   setProjectMissing as setDatabaseProjectMissing,
   type AuditedCanvasSnapshotRestore,
 } from './storage/projects-canvases.js';
+import {
+  loadCanvasHistory as loadDatabaseCanvasHistory,
+  saveCanvasWithHistory as saveDatabaseCanvasWithHistory,
+} from './storage/canvas-history/repository.js';
 import {
   appendAudit as appendDatabaseAudit,
   getRun as getDatabaseRun,
@@ -530,6 +538,18 @@ export class LocalStore implements DeliveryReadinessStore {
 
   saveCanvas(document: CanvasDocument): CanvasDocument {
     const saved = saveDatabaseCanvas(this.database, document);
+    this.notifyDurableChange();
+    return saved;
+  }
+
+  loadCanvasHistory(projectId: string): CanvasHistoryState | undefined {
+    const history = loadDatabaseCanvasHistory(this.database, projectId);
+    this.notifyDurableChange();
+    return history;
+  }
+
+  saveCanvasWithHistory(input: CanvasHistorySaveInput): CanvasDocument {
+    const saved = saveDatabaseCanvasWithHistory(this.database, input);
     this.notifyDurableChange();
     return saved;
   }

@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type { CanvasDocument } from '../../../../../shared/application/contracts.js';
+import {
+  fitCanvasHistory,
+  type CanvasHistoryState,
+} from '../../../../../shared/canvas/history/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
 
 export type CanvasSaveState = 'saved' | 'saving' | 'error';
 
-type PersistCanvas = (document: CanvasDocument) => Promise<void>;
+type PersistCanvas = (
+  document: CanvasDocument,
+  history: CanvasHistoryState | null,
+) => Promise<void>;
 
 interface UseCanvasPersistenceOptions {
   projectId: string;
   document: CanvasDocument | null;
+  history?: CanvasHistoryState | null;
   autosaveIntervalMs: number;
   onError: (message: string) => void;
   persistCanvas?: PersistCanvas;
@@ -19,6 +27,7 @@ interface PendingCanvasRevision {
   projectId: string;
   revision: number;
   document: CanvasDocument | null;
+  history: CanvasHistoryState | null;
 }
 
 interface CanvasPersistenceController {
@@ -27,13 +36,26 @@ interface CanvasPersistenceController {
   flushCanvas: () => Promise<boolean>;
 }
 
-async function persistThroughForgeboard(document: CanvasDocument): Promise<void> {
-  unwrap(await window.forgeboard.canvas.save(document));
+async function persistThroughForgeboard(
+  document: CanvasDocument,
+  history: CanvasHistoryState | null,
+): Promise<void> {
+  if (history === null) {
+    unwrap(await window.forgeboard.canvas.save(document));
+    return;
+  }
+  unwrap(
+    await window.forgeboard.canvas.saveWithHistory({
+      document,
+      history: fitCanvasHistory(history),
+    }),
+  );
 }
 
 export function useCanvasPersistence({
   projectId,
   document,
+  history = null,
   autosaveIntervalMs,
   onError,
   persistCanvas = persistThroughForgeboard,
@@ -51,6 +73,7 @@ export function useCanvasPersistence({
     projectId,
     revision: 0,
     document: null,
+    history: null,
   });
   const inFlightRef = useRef<Promise<boolean> | null>(null);
   const onErrorRef = useRef(onError);
@@ -59,8 +82,8 @@ export function useCanvasPersistence({
   onErrorRef.current = onError;
   persistCanvasRef.current = persistCanvas;
   const documentFingerprint = useMemo(
-    () => (document === null ? null : JSON.stringify(document)),
-    [document],
+    () => (document === null ? null : JSON.stringify({ document, history })),
+    [document, history],
   );
 
   const clearAutosave = useCallback(() => {
@@ -81,6 +104,7 @@ export function useCanvasPersistence({
         projectId,
         revision: revisionRef.current,
         document: null,
+        history: null,
       };
       setPersistedUpdatedAt(null);
       setSaveState('saved');
@@ -96,7 +120,7 @@ export function useCanvasPersistence({
 
     observedFingerprintRef.current = documentFingerprint;
     revisionRef.current += 1;
-    latestRef.current = { projectId, revision: revisionRef.current, document };
+    latestRef.current = { projectId, revision: revisionRef.current, document, history };
 
     if (!initializedScopeRef.current) {
       initializedScopeRef.current = true;
@@ -107,7 +131,7 @@ export function useCanvasPersistence({
     }
 
     setSaveState('saving');
-  }, [clearAutosave, document, documentFingerprint, projectId]);
+  }, [clearAutosave, document, documentFingerprint, history, projectId]);
 
   const drainSaves = useCallback((): Promise<boolean> => {
     if (inFlightRef.current) return inFlightRef.current;
@@ -134,7 +158,7 @@ export function useCanvasPersistence({
         };
 
         try {
-          await persistCanvasRef.current(saving.document);
+          await persistCanvasRef.current(saving.document, saving.history);
         } catch (cause) {
           if (saving.projectId !== scopeRef.current) continue;
 

@@ -9,6 +9,7 @@ import {
 } from '../../shared/application/contracts.js';
 import { CanvasSnapshotSchema, type CanvasSnapshot } from '../storage-schemas.js';
 import { transaction, type TransactionalAuditEvent } from './database.js';
+import { clearCanvasHistory } from './canvas-history/repository.js';
 import {
   canvasContentHash,
   type JsonRow,
@@ -265,6 +266,7 @@ function restoreSnapshotTransaction(
     if (current && canvasContentHash(current) !== canvasContentHash(restored)) {
       insertCanvasSnapshot(database, current, 'restore');
     }
+    clearCanvasHistory(database, restored.projectId);
     writeCanvas(database, restored, false, 'restore');
     if (audit !== undefined) {
       writeAudit(

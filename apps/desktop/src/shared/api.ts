@@ -29,6 +29,7 @@ import type {
   RunEventEnvelope,
 } from './application/contracts.js';
 import type { AgentReadinessRequest, AgentReadinessResult } from './readiness/contracts.js';
+import type { CanvasHistorySaveInput, CanvasWorkspaceState } from './canvas/history/contracts.js';
 import type {
   ProviderConnectionCancelResult,
   ProviderConnectionGetInput,
@@ -305,7 +306,9 @@ export interface ForgeboardApi {
   };
   canvas: {
     load(projectId: string): Promise<IpcResult<CanvasDocument>>;
+    loadWithHistory(projectId: string): Promise<IpcResult<CanvasWorkspaceState>>;
     save(document: CanvasDocument): Promise<IpcResult<CanvasDocument>>;
+    saveWithHistory(input: CanvasHistorySaveInput): Promise<IpcResult<CanvasDocument>>;
   };
   files: {
     tree(input: FileTreeInput): Promise<FileTreeResult>;

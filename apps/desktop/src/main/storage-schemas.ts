@@ -230,6 +230,7 @@ export interface RetentionResult {
   deletedSnapshots: number;
   scrubbedCanvasTranscripts: number;
   scrubbedSnapshotTranscripts: number;
+  scrubbedHistoryTranscripts: number;
 }
 
 export interface InterruptedRunRecoveryReport {

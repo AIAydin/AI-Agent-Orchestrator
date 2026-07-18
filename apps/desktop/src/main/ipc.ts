@@ -25,6 +25,10 @@ import {
   type IpcResult,
 } from '../shared/application/contracts.js';
 import { CommandReadinessRequestSchema } from '../shared/command-readiness/contracts.js';
+import {
+  CanvasHistorySaveInputSchema,
+  emptyCanvasHistory,
+} from '../shared/canvas/history/contracts.js';
 import { IntegrityCheckInputSchema } from '../shared/integrity/contracts.js';
 import { ApprovalService } from './approvals/approval-service.js';
 import { AutomaticBackupCoordinator } from './backups/automatic-backup-coordinator.js';
@@ -746,6 +750,50 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           throw new Error('The selected project is no longer available.');
         }
         return store.saveCanvas(document);
+      }),
+  );
+
+  handleWithEvent(
+    IPC_CHANNELS.canvasLoadWithHistory,
+    z.tuple([ProjectIdSchema]),
+    async (event, projectId) =>
+      await runDataOperation(() => {
+        requireIpcWindowAuthority(event, 'Canvas workspace load').assertCurrent();
+        if (!store.listProjects().some((project) => project.id === projectId && !project.missing)) {
+          throw new Error('The selected project is no longer available.');
+        }
+        const document =
+          store.loadCanvas(projectId) ??
+          store.saveCanvas({
+            id: randomUUID(),
+            projectId,
+            name: 'Workshop',
+            nodes: [],
+            edges: [],
+            viewport: { x: 0, y: 0, zoom: 1 },
+            updatedAt: new Date().toISOString(),
+          });
+        return {
+          document,
+          history: store.loadCanvasHistory(projectId) ?? emptyCanvasHistory(projectId, document.id),
+        };
+      }),
+  );
+
+  handleWithEvent(
+    IPC_CHANNELS.canvasSaveWithHistory,
+    z.tuple([CanvasHistorySaveInputSchema]),
+    async (event, input) =>
+      await runDataOperation(() => {
+        requireIpcWindowAuthority(event, 'Canvas history save').assertCurrent();
+        if (
+          !store
+            .listProjects()
+            .some((project) => project.id === input.document.projectId && !project.missing)
+        ) {
+          throw new Error('The selected project is no longer available.');
+        }
+        return store.saveCanvasWithHistory(input);
       }),
   );
 

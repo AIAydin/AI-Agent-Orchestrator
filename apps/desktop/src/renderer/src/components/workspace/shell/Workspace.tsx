@@ -21,6 +21,7 @@ import {
 import { PanelBottomOpen } from 'lucide-react';
 
 import type { CanvasDocument, RunAdapterId } from '../../../../../shared/application/contracts.js';
+import { emptyCanvasHistory } from '../../../../../shared/canvas/history/contracts.js';
 import {
   CollaborationCommentMetadataSchema,
   type CollaborationCommentMetadata,
@@ -89,7 +90,6 @@ import type {
   CheckCommand,
   EdgeKind,
   ExtensionTemplate,
-  Snapshot,
   WorkshopEdge,
   WorkspaceHandle,
   WorkspaceProps,
@@ -99,6 +99,8 @@ import { useAgentRunController } from '../runs/useAgentRunController.js';
 import { useAgentStatusReconciliation } from '../runs/useAgentStatusReconciliation.js';
 import { effectiveNodeModel } from '../runs/agent-node/model-selection.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
+import { useDurableCanvasHistory } from '../canvas/history/useDurableCanvasHistory.js';
+import { durableHistoryState, hydrateHistorySnapshot } from '../canvas/history/serialization.js';
 import { normalizeCanvasViewport } from '../canvas/view-state/viewport.js';
 import { useCollaborationCanvas } from '../collaboration/useCollaborationCanvas.js';
 import { mergeCollaborationCanvasSnapshot } from '../collaboration/merge-canvas.js';
@@ -223,8 +225,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const [instance, setInstance] = useState<ReactFlowInstance<WorkshopNode, WorkshopEdge> | null>(
     null,
   );
-  const [past, setPast] = useState<Snapshot[]>([]);
-  const [future, setFuture] = useState<Snapshot[]>([]);
+  const { past, future, recordSnapshot, replaceHistory, clearHistory, undoSnapshot, redoSnapshot } =
+    useDurableCanvasHistory();
   const [events, setEvents] = useState<string[]>([
     'Finished checking this project on this computer.',
   ]);
@@ -239,41 +241,37 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
 
   useEffect(() => {
     loaded.current = false;
-    void window.forgeboard.canvas
-      .load(project.id)
-      .then((result) => {
-        const document = unwrap(result);
+    const loadWorkspace = async () => {
+      if (typeof window.forgeboard.canvas.loadWithHistory === 'function') {
+        return unwrap(await window.forgeboard.canvas.loadWithHistory(project.id));
+      }
+      const document = unwrap(await window.forgeboard.canvas.load(project.id));
+      return { document, history: emptyCanvasHistory(project.id, document.id) };
+    };
+    void loadWorkspace()
+      .then(({ document, history }) => {
+        const graph = hydrateHistorySnapshot(
+          { nodes: document.nodes, edges: document.edges },
+          extensionDiscoveryRef.current,
+        );
         setCanvas(document);
         setViewport(normalizeCanvasViewport(document.viewport));
-        setNodes(
-          document.nodes.map((node) => ({
-            id: node.id,
-            type: 'workshop' as const,
-            position: node.position,
-            ...(node.width === undefined ? {} : { width: node.width }),
-            ...(node.height === undefined ? {} : { height: node.height }),
-            data: hydrateNodeData(node.data, extensionDiscoveryRef.current),
-          })),
-        );
-        setEdges(
-          document.edges.map((edge) => ({
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
-            ...(edge.sourceHandle === undefined ? {} : { sourceHandle: edge.sourceHandle }),
-            ...(edge.targetHandle === undefined ? {} : { targetHandle: edge.targetHandle }),
-            type: 'smoothstep',
-            markerEnd: { type: MarkerType.ArrowClosed },
-            data: createEdgeData(edge.type, edge.source, edge.data),
-            label: edge.type,
-          })),
+        setNodes(graph.nodes);
+        setEdges(graph.edges);
+        replaceHistory(
+          history.past.map((snapshot) =>
+            hydrateHistorySnapshot(snapshot, extensionDiscoveryRef.current),
+          ),
+          history.future.map((snapshot) =>
+            hydrateHistorySnapshot(snapshot, extensionDiscoveryRef.current),
+          ),
         );
         loaded.current = true;
       })
       .catch((cause: unknown) =>
         onError(cause instanceof Error ? cause.message : 'Could not load the canvas.'),
       );
-  }, [onError, project.id]);
+  }, [onError, project.id, replaceHistory]);
 
   useEffect(() => {
     extensionDiscoveryRef.current = extensionDiscovery;
@@ -364,6 +362,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       viewport: viewport ?? normalizeCanvasViewport(canvas.viewport),
     };
   }, [canvas, edges, nodes, viewport]);
+  const pendingHistory = useMemo(
+    () => (canvas === null ? null : durableHistoryState(project.id, canvas.id, past, future)),
+    [canvas, future, past, project.id],
+  );
   const applyCollaborationSnapshot = useCallback(
     (snapshot: CollaborationMetadataSnapshot, context: { readonly initial: boolean }): boolean => {
       if (pendingCanvas === null) return false;
@@ -407,8 +409,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       );
       setSelectedNodeId(nextSelectedNodeId);
       setSelectedEdgeId(nextSelectedEdgeId);
-      setPast([]);
-      setFuture([]);
+      clearHistory();
       setEvents((items) =>
         items[0] === 'Applied the latest shared canvas changes.'
           ? items
@@ -416,7 +417,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       );
       return true;
     },
-    [onError, pendingCanvas, selectedEdgeId, selectedNodeId],
+    [clearHistory, onError, pendingCanvas, selectedEdgeId, selectedNodeId],
   );
   const collaborationCanvas = useCollaborationCanvas({
     enabled: settings.collaborationEnabled,
@@ -439,6 +440,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const { saveState, persistedUpdatedAt, flushCanvas } = useCanvasPersistence({
     projectId: project.id,
     document: pendingCanvas,
+    history: pendingHistory,
     autosaveIntervalMs: settings.autosaveIntervalMs,
     onError,
   });
@@ -473,14 +475,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     }
   }, [onError, onProjectUpdated, project.id]);
 
-  const recordSnapshot = useCallback(
-    (snapshotNodes: WorkshopNode[], snapshotEdges: WorkshopEdge[]) => {
-      setPast((items) => [...items.slice(-49), { nodes: snapshotNodes, edges: snapshotEdges }]);
-      setFuture([]);
-    },
-    [],
-  );
-
   const record = useCallback(() => {
     recordSnapshot(nodes, edges);
   }, [edges, nodes, recordSnapshot]);
@@ -501,28 +495,24 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       reportCollaborationReadOnly();
       return;
     }
-    const snapshot = past.at(-1);
+    const snapshot = undoSnapshot({ nodes, edges });
     if (!snapshot) return;
-    setFuture((items) => [{ nodes, edges }, ...items].slice(0, 50));
-    setPast((items) => items.slice(0, -1));
     setNodes(snapshot.nodes);
     setEdges(snapshot.edges);
     setEvents((items) => ['Undid the last canvas change.', ...items].slice(0, 30));
-  }, [collaborationCanvas.graphReadOnly, edges, nodes, past, reportCollaborationReadOnly]);
+  }, [collaborationCanvas.graphReadOnly, edges, nodes, reportCollaborationReadOnly, undoSnapshot]);
 
   const redo = useCallback(() => {
     if (collaborationCanvas.graphReadOnly) {
       reportCollaborationReadOnly();
       return;
     }
-    const snapshot = future[0];
+    const snapshot = redoSnapshot({ nodes, edges });
     if (!snapshot) return;
-    setPast((items) => [...items, { nodes, edges }].slice(-50));
-    setFuture((items) => items.slice(1));
     setNodes(snapshot.nodes);
     setEdges(snapshot.edges);
     setEvents((items) => ['Redid a canvas change.', ...items].slice(0, 30));
-  }, [collaborationCanvas.graphReadOnly, edges, future, nodes, reportCollaborationReadOnly]);
+  }, [collaborationCanvas.graphReadOnly, edges, nodes, redoSnapshot, reportCollaborationReadOnly]);
 
   const { copySelected, duplicateNode, duplicateSelected, pasteClipboard } =
     useCanvasClipboardActions({
