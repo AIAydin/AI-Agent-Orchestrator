@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type {
+  ProviderConnectionPlanInput,
+  ProviderConnectionPrepareInput,
+} from '../../../../../../shared/provider-connections/index.js';
 import { ProviderConnectionCards } from './ProviderConnectionCards.js';
 import { ProviderConnectionSummary } from './ProviderConnectionSummary.js';
 
@@ -98,6 +102,68 @@ describe('ProviderConnectionCards', () => {
         providerId: 'codex',
         action: 'refresh',
       }),
+    );
+  });
+
+  it('names both provider cards and scopes their independent connection lifecycles', async () => {
+    get.mockImplementation(({ providerId }) =>
+      Promise.resolve({
+        ok: true,
+        value:
+          providerId === 'codex'
+            ? connected
+            : {
+                ...disconnected,
+                providerId: 'claude',
+                reason: 'Claude Code is not signed in.',
+              },
+      }),
+    );
+    prepare.mockImplementation(({ providerId, action }: ProviderConnectionPrepareInput) =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          schemaVersion: 1,
+          planId:
+            providerId === 'codex'
+              ? '10000000-0000-4000-8000-000000000001'
+              : '20000000-0000-4000-8000-000000000002',
+          providerId,
+          action,
+          expiresAt: '2026-07-17T12:05:00.000Z',
+        },
+      }),
+    );
+    confirm.mockImplementation(({ planId }: ProviderConnectionPlanInput) =>
+      Promise.resolve({
+        ok: true,
+        value:
+          planId === '10000000-0000-4000-8000-000000000001'
+            ? disconnected
+            : { ...connected, providerId: 'claude' },
+      }),
+    );
+
+    render(<ProviderConnectionCards />);
+
+    const codexCard = screen.getByRole('article', { name: 'Codex CLI' });
+    const claudeCard = screen.getByRole('article', { name: 'Claude Code' });
+    expect(within(codexCard).getByRole('heading', { name: 'Codex CLI' })).toBeTruthy();
+    expect(within(claudeCard).getByRole('heading', { name: 'Claude Code' })).toBeTruthy();
+    await within(codexCard).findByText('Connected');
+    await within(claudeCard).findByText('Not connected');
+
+    fireEvent.click(within(codexCard).getByRole('button', { name: 'Disconnect' }));
+    await within(codexCard).findByRole('button', { name: 'Connect with OpenAI' });
+    expect(prepare).toHaveBeenCalledWith({ providerId: 'codex', action: 'disconnect' });
+
+    fireEvent.click(within(claudeCard).getByRole('button', { name: 'Connect with Anthropic' }));
+    await within(claudeCard).findByRole('button', { name: 'Disconnect' });
+    expect(prepare).toHaveBeenCalledWith({ providerId: 'claude', action: 'connect' });
+
+    fireEvent.click(within(claudeCard).getByRole('button', { name: 'Refresh' }));
+    await waitFor(() =>
+      expect(prepare).toHaveBeenCalledWith({ providerId: 'claude', action: 'refresh' }),
     );
   });
 
