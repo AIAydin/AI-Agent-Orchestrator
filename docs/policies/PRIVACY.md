@@ -46,6 +46,20 @@ an OAuth credential. These connection controls apply only to Codex and Claude Co
 not claim OAuth management for Gemini, OpenCode, or custom CLIs. The deterministic local test agent
 requires no provider account and does not contact a model provider.
 
+## Application update checks
+
+Forgeboard does not poll for releases in the background. **Settings → Connectivity →
+Application updates** stores a stable, prerelease, or disabled channel, but a network request occurs
+only after the user selects **Check for updates** and approves a cancel-default native disclosure for
+the fixed official Forgeboard GitHub Releases endpoint. Disabled mode makes no release request. The
+response is bounded and used only to show release version, name, publication time, and channel.
+
+Forgeboard never downloads or installs an application update automatically. Opening a discovered
+official release page in the system browser requires a second native confirmation over fresh,
+short-lived release evidence. An imported legacy automatic-download preference is inactive and can
+be cleared in the UI. This capability does not imply that an installer is available; availability
+is determined from the official repository at check time.
+
 Selected context is copied immediately before launch into a randomized, per-run private snapshot;
 the provider receives those verified bytes rather than mutable source paths. On Windows, Host and
 Docker snapshots stay inside Forgeboard's per-user application-data directory under separate

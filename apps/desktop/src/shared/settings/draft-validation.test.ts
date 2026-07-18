@@ -65,7 +65,7 @@ describe('settings draft validation', () => {
         ...base,
         terminalShell: '/bin/sh\u0007',
       }),
-    ).toContainEqual(expect.stringMatching(/^Terminal shell:/u));
+    ).toContainEqual(expect.stringMatching(/^Default terminal executable:/u));
   });
 
   it('requires a destination only while automatic backups are enabled', () => {

@@ -1155,3 +1155,32 @@ unchecked when only a subset of their required behavior has proof.
   and can be cleared in the UI. Twenty-seven focused transport, service, preload, shared-contract,
   renderer, and installer-integrity tests passed. The broad Settings requirements and public release
   lifecycle remain unchecked.
+- 2026-07-17: **Settings → Agents & runtime → Process launching** now exposes the required default
+  Terminal executable as an ordinary UI setting with direct editing and a native executable picker.
+  Save is blocked until passive evidence for the exact current value is ready; main uses the same
+  direct PTY executable-resolution rules as reviewed Terminal launches without starting a process or
+  depending on the open project. Empty legacy values repair to the safe platform default, and new
+  Terminal nodes inherit the saved executable while existing nodes retain their own reviewed command.
+  Seventy-four focused shared-schema, repair, import, readiness-service, Settings, and node-default
+  tests across eight files passed. This closes only the terminal-default slice; the broad Settings
+  and zero-code configuration entries remain unchecked.
+- 2026-07-17: canvas nodes gained a real context menu backed by the existing explicit-node graph
+  mutations for Inspect, collapse/expand, lock/unlock, duplicate, and delete. It opens by right-click,
+  the Context Menu key, or Shift+F10; clamps within the canvas; supports Arrow, Home, End, Escape, and
+  Tab behavior; restores focus; and preserves undo, read-only collaboration authority, inherited
+  group locks, protected deletion, preview cleanup, membership reconciliation, and automatic frame
+  fitting. Forty-one focused component, canvas-action, and shell-persistence tests across five files
+  passed, including real target binding, preview cleanup, authority rejection, protected-group, and
+  duplicate/delete undo proof. Context actions were also split into feature modules, reducing the
+  main Workspace component from 1,996 to 1,781 lines. The broad contextual-menu/polish and
+  shared-node behavior entries remain unchecked.
+- 2026-07-17: README, release guidance, security documentation, privacy disclosure, and prepared
+  v0.1.0 notes now describe the existing explicit check-only updater consistently: fixed official
+  GitHub endpoint, native review, no background polling, no automatic download/install, second review
+  before opening a validated release page, and no assumption that a public release exists. The
+  broad documentation and release-publication entries remain unchecked. Across the terminal-default
+  and context-menu slices, all 146 focused tests in fourteen files passed. Repository verification
+  passed the 1,088-file structure gate, formatting, lint, all eight workspace typechecks, 2,089 unit
+  tests across 319 files, and every workspace build. The parallel integration run passed 282 of 286
+  tests; four unchanged long-running Git tests timed out under contention, then all three affected
+  files passed sequentially (43 of 43 tests). `git diff --check` also passed.

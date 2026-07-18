@@ -276,6 +276,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 busy={busy}
                 perform={perform}
                 readiness={agentReadiness}
+                terminalReadiness={commandReadiness.statuses['terminal-default']}
                 onError={props.onError}
               />
             )}

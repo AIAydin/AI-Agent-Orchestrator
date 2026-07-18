@@ -72,6 +72,21 @@ describe('stored settings upgrade compatibility', () => {
     expect(store.listSettingsRepairs()[0]?.sourceDatabaseVersion).toBe(MIGRATIONS.length);
   });
 
+  it('resets a project-relative terminal executable before stored settings can activate', () => {
+    const path = temporaryDatabasePath();
+    const defaults = settings();
+    seedDatabase(
+      path,
+      MIGRATIONS.length,
+      JSON.stringify({ ...defaults, terminalShell: './project-tools/shell' }),
+    );
+
+    const store = openStore(path, defaults);
+
+    expect(store.getSettings(defaults).terminalShell).toBe(defaults.terminalShell);
+    expect(store.listSettingsRepairs()[0]?.repairedFieldPaths).toEqual(['terminalShell']);
+  });
+
   it('enforces the 16 MiB UTF-8 evidence boundary in SQLite', () => {
     const path = temporaryDatabasePath();
     seedDatabase(path, MIGRATIONS.length, JSON.stringify(settings()));

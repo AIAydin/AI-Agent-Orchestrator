@@ -158,6 +158,40 @@ describe('SettingsIpcService transactions', () => {
     fixture.service.dispose();
   });
 
+  it.each(['', './tools/shell', 'C:tools\\shell.exe'])(
+    'defaults a legacy imported terminal executable before returning the draft: %s',
+    async (terminalShell) => {
+      const current = settings();
+      const defaults = settings({ terminalShell: '/safe/default/shell' });
+      const imported = { ...settings({ theme: 'dark' }), terminalShell };
+      const directory = mkdtempSync(join(tmpdir(), 'forgeboard-settings-ipc-'));
+      temporaryDirectories.push(directory);
+      const importPath = join(directory, 'settings.json');
+      writeFileSync(
+        importPath,
+        JSON.stringify({
+          format: 'forgeboard-settings',
+          version: 1,
+          settings: imported,
+        }),
+        'utf8',
+      );
+      const fixture = createFixture(current, defaults, importPath);
+      electronMock.fromWebContents.mockReturnValue(liveParent());
+
+      const result = await requiredHandler(IPC_CHANNELS.settingsImport)(liveEvent());
+
+      expect(result).toEqual({
+        ok: true,
+        value: { ...imported, terminalShell: defaults.terminalShell },
+      });
+      expect(fixture.store.saveSettings).not.toHaveBeenCalled();
+      expect(fixture.store.applyRetention).not.toHaveBeenCalled();
+      expect(fixture.store.appendAudit).not.toHaveBeenCalled();
+      fixture.service.dispose();
+    },
+  );
+
   it('rejects a schema-valid configured-agent change without main-owned readiness evidence', async () => {
     const current = settings();
     const draft = settings({
@@ -318,7 +352,10 @@ describe('SettingsIpcService transactions', () => {
   it('rejects a schema-valid command change without main-bound passive readiness', async () => {
     const current = settings();
     const draft = settings({
-      lintCommand: { executable: '/usr/local/bin/eslint', arguments: ['--max-warnings=0'] },
+      lintCommand: {
+        executable: '/usr/local/bin/eslint',
+        arguments: ['--max-warnings=0'],
+      },
     });
     const verifyCommand = vi.fn(() =>
       Promise.reject(new Error('Wait for command readiness to finish for the current draft.')),
@@ -357,12 +394,18 @@ describe('SettingsIpcService transactions', () => {
       agentDefaultModels: { codex: 'gpt-5' },
       worktreeRoot: '/tmp/changed-worktrees',
       backupDirectory: '/tmp/changed-backups',
-      lintCommand: { executable: '/usr/local/bin/eslint', arguments: ['--max-warnings=0'] },
+      lintCommand: {
+        executable: '/usr/local/bin/eslint',
+        arguments: ['--max-warnings=0'],
+      },
       customChecks: [
         {
           id: '10000000-0000-4000-8000-000000000001',
           label: 'Security scan',
-          command: { executable: '/usr/local/bin/scan', arguments: ['--strict'] },
+          command: {
+            executable: '/usr/local/bin/scan',
+            arguments: ['--strict'],
+          },
         },
       ],
     });
@@ -501,7 +544,10 @@ describe('SettingsIpcService transactions', () => {
     const directory = mkdtempSync(join(tmpdir(), 'forgeboard-settings-repair-ipc-'));
     temporaryDirectories.push(directory);
     const exportPath = join(directory, 'repair.json');
-    fixture.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: exportPath });
+    fixture.dialog.showSaveDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePath: exportPath,
+    });
     electronMock.fromWebContents.mockReturnValue(liveParent());
     await expect(
       requiredHandler(IPC_CHANNELS.settingsRepairExport)(liveEvent(), evidence.id),
@@ -510,7 +556,10 @@ describe('SettingsIpcService transactions', () => {
     expect(exported).toMatchObject({
       format: 'forgeboard-settings-repair-evidence',
       version: 1,
-      repair: { id: evidence.id, sourceSettingsJson: evidence.sourceSettingsJson },
+      repair: {
+        id: evidence.id,
+        sourceSettingsJson: evidence.sourceSettingsJson,
+      },
     });
     fixture.service.dispose();
   });

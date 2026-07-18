@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { CommandConfigurationSchema } from '../commands/configuration.js';
 
-export const CommandReadinessPurposeSchema = z.enum(['check', 'preview']);
+export const CommandReadinessPurposeSchema = z.enum(['check', 'preview', 'terminal']);
 export type CommandReadinessPurpose = z.infer<typeof CommandReadinessPurposeSchema>;
 
 export const CommandReadinessRequestSchema = z

@@ -7,6 +7,8 @@ import type {
 } from '../../../../../shared/provider-connections/index.js';
 import { unwrap } from '../../../lib/ipc.js';
 import { EnvironmentAllowlistEditor } from '../../configuration/EnvironmentAllowlistEditor.js';
+import { CommandReadinessEvidence } from '../../configuration/CommandReadinessEvidence.js';
+import type { CommandReadinessStatus } from '../../configuration/useCommandReadiness.js';
 import { AgentReadinessPanel } from '../../readiness/AgentReadinessPanel.js';
 import { permissionProfileNeedsDocker } from '../../permissions/permission-profile-ui.js';
 import { CustomAgentSettings } from './CustomAgentSettings.js';
@@ -18,6 +20,7 @@ import { SettingsSection, type AsyncSettingsProps } from '../shared.js';
 interface AgentsSettingsProps extends AsyncSettingsProps {
   agents: AgentDetection[];
   readiness: SettingsAgentReadinessView;
+  terminalReadiness?: CommandReadinessStatus | undefined;
   onError: (message: string) => void;
 }
 
@@ -28,6 +31,7 @@ export function AgentsSettings({
   busy,
   perform,
   readiness,
+  terminalReadiness,
   onError,
 }: AgentsSettingsProps) {
   const [providerStatuses, setProviderStatuses] = useState<
@@ -370,23 +374,44 @@ export function AgentsSettings({
       </SettingsSection>
       <SettingsSection
         title="Process launching"
-        description="Forgeboard launches validated executables with literal argument arrays. It does not evaluate a configurable shell command."
+        description="Choose the direct executable used by new Terminal nodes. Forgeboard validates it without running it and never evaluates a shell command string."
       >
-        <label>
-          Terminal shell
-          <input
-            name="terminal-shell"
-            value={draft.terminalShell}
-            readOnly
-            disabled
-            aria-describedby="terminal-shell-unavailable"
-          />
-        </label>
-        <p id="terminal-shell-unavailable" className="recovery-guidance" role="status">
-          Shell selection is not an active Forgeboard capability. This stored or imported legacy
-          value is shown for transparency but is not used by agent, check, or preview launches.
-          Configure the exact executable and arguments in their UI fields instead.
-        </p>
+        <div className="settings-form-field">
+          <label htmlFor="terminal-shell">Default terminal executable</label>
+          <span className="path-picker">
+            <input
+              id="terminal-shell"
+              name="terminal-shell"
+              value={draft.terminalShell}
+              autoComplete="off"
+              spellCheck={false}
+              aria-describedby="terminal-shell-help"
+              onChange={(event) => setDraft({ ...draft, terminalShell: event.target.value })}
+            />
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void perform(async () => {
+                  const selected = unwrap(await window.forgeboard.projects.pickExecutable());
+                  if (selected !== null) {
+                    setDraft((current) => ({
+                      ...current,
+                      terminalShell: selected,
+                    }));
+                  }
+                })
+              }
+            >
+              Browse
+            </button>
+          </span>
+          <small id="terminal-shell-help">
+            Use an absolute path or installed command name. Existing Terminal nodes keep their own
+            reviewed executable; this default applies to newly created nodes.
+          </small>
+          <CommandReadinessEvidence status={terminalReadiness} />
+        </div>
       </SettingsSection>
       <DockerSettings
         draft={draft}

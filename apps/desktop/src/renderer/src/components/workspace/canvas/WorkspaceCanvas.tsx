@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -48,6 +48,16 @@ import {
   normalizeCanvasViewport,
 } from './view-state/viewport.js';
 import { useViewportRestore } from './view-state/useViewportRestore.js';
+import {
+  CanvasNodeContextMenu,
+  type CanvasNodeContextMenuPosition,
+} from './context-menu/CanvasNodeContextMenu.js';
+
+interface OpenNodeContextMenu {
+  readonly nodeId: string;
+  readonly position: CanvasNodeContextMenuPosition;
+  readonly returnFocus: HTMLElement | null;
+}
 
 interface WorkspaceCanvasProps {
   canvas: CanvasDocument | null;
@@ -70,6 +80,10 @@ interface WorkspaceCanvasProps {
     recordUndoCheckpoint: boolean,
   ) => CanvasKeyboardMoveSummary;
   onSelectionChange: (selection: OnSelectionChangeParams<WorkshopNode, WorkshopEdge>) => void;
+  onInspectNode: (nodeId: string) => void;
+  onSetNodeLocked: (nodeId: string, locked: boolean) => void;
+  onDuplicateNode: (nodeId: string) => void;
+  onDeleteNode: (nodeId: string) => void;
   onAddNode: (kind: NodeKind, position?: { x: number; y: number }) => void;
   onAddExtensionNode: (template: ExtensionTemplate, position?: { x: number; y: number }) => void;
   onAttachAgentContext: (
@@ -81,6 +95,8 @@ interface WorkspaceCanvasProps {
   onCollaborationCursorMove: (position: { readonly x: number; readonly y: number }) => void;
   onCollaborationCursorLeave: () => void;
   collaborationGraphReadOnly: boolean;
+  inheritedLockedNodeIds: ReadonlySet<string>;
+  deletionProtectedNodeIds: ReadonlySet<string>;
 }
 
 export function WorkspaceCanvas({
@@ -101,6 +117,10 @@ export function WorkspaceCanvas({
   onNodeResizeStart,
   onKeyboardMove,
   onSelectionChange,
+  onInspectNode,
+  onSetNodeLocked,
+  onDuplicateNode,
+  onDeleteNode,
   onAddNode,
   onAddExtensionNode,
   onAttachAgentContext,
@@ -109,13 +129,37 @@ export function WorkspaceCanvas({
   onCollaborationCursorMove,
   onCollaborationCursorLeave,
   collaborationGraphReadOnly,
+  inheritedLockedNodeIds,
+  deletionProtectedNodeIds,
 }: WorkspaceCanvasProps) {
+  const regionRef = useRef<HTMLElement>(null);
   useViewportRestore(instance, canvas?.id ?? null, canvas?.viewport ?? null);
   const [alignmentGuides, setAlignmentGuides] = useState<CanvasAlignmentGuides>({});
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState({
     message: '',
     sequence: 0,
   });
+  const [contextMenu, setContextMenu] = useState<OpenNodeContextMenu | null>(null);
+
+  const openContextMenu = (
+    node: WorkshopNode,
+    clientPosition: { readonly x: number; readonly y: number },
+    returnFocus: HTMLElement | null,
+  ): void => {
+    const bounds = regionRef.current?.getBoundingClientRect();
+    if (bounds === undefined) return;
+    onInspectNode(node.id);
+    setContextMenu({
+      nodeId: node.id,
+      returnFocus,
+      position: {
+        x: clientPosition.x - bounds.left,
+        y: clientPosition.y - bounds.top,
+        boundsWidth: bounds.width,
+        boundsHeight: bounds.height,
+      },
+    });
+  };
   const onNodeDrag: OnNodeDrag<WorkshopNode> = (_event, node, draggedNodes) => {
     const activeNodes = (draggedNodes.length > 0 ? draggedNodes : [node]).filter(
       (activeNode) => !activeNode.data.locked,
@@ -149,6 +193,7 @@ export function WorkspaceCanvas({
 
   return (
     <section
+      ref={regionRef}
       className="canvas-region"
       onPointerMove={(event) => {
         const position = instance?.screenToFlowPosition({
@@ -255,9 +300,32 @@ export function WorkspaceCanvas({
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}
             onSelectionChange={onSelectionChange}
+            onNodeContextMenu={(event, node) => {
+              event.preventDefault();
+              openContextMenu(
+                node,
+                { x: event.clientX, y: event.clientY },
+                event.currentTarget as HTMLElement,
+              );
+            }}
             onKeyDownCapture={(event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
+              if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+                const nodeElement = target.closest<HTMLElement>('.react-flow__node[data-id]');
+                const node = nodes.find(({ id }) => id === nodeElement?.dataset['id']);
+                if (nodeElement !== null && node !== undefined) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const nodeBounds = nodeElement.getBoundingClientRect();
+                  openContextMenu(
+                    node,
+                    { x: nodeBounds.left + 20, y: nodeBounds.top + 20 },
+                    nodeElement,
+                  );
+                }
+                return;
+              }
               if (
                 target.closest('input, textarea, select, [contenteditable="true"]') !== null ||
                 target.closest('.react-flow__node, .react-flow__nodesselection-rect') === null
@@ -329,9 +397,9 @@ export function WorkspaceCanvas({
             }}
             ariaLabelConfig={{
               'node.a11yDescription.default':
-                'Press Enter or Space to select a focused node. Arrow keys move selected unlocked nodes by one pixel; hold Shift to move ten pixels. Press Delete to remove an unlocked selection or Escape to cancel.',
+                'Press Enter or Space to select a focused node. Arrow keys move selected unlocked nodes by one pixel; hold Shift to move ten pixels. Press the Context Menu key or Shift+F10 for node actions. Press Delete to remove an unlocked selection or Escape to cancel.',
               'node.a11yDescription.keyboardDisabled':
-                'Press Enter or Space to select a focused node. Arrow keys move selected unlocked nodes by one pixel; hold Shift to move ten pixels. Press Delete to remove an unlocked selection or Escape to cancel.',
+                'Press Enter or Space to select a focused node. Arrow keys move selected unlocked nodes by one pixel; hold Shift to move ten pixels. Press the Context Menu key or Shift+F10 for node actions. Press Delete to remove an unlocked selection or Escape to cancel.',
             }}
           >
             <Background
@@ -367,7 +435,8 @@ export function WorkspaceCanvas({
               className="canvas-keyboard-hint"
               aria-label="Canvas keyboard shortcuts"
             >
-              Tab focus · Enter/Space select · Arrows move 1 px · Shift+Arrows move 10 px
+              Tab focus · Enter/Space select · Arrows move · Shift+Arrows 10 px · Context
+              Menu/Shift+F10 actions
             </Panel>
             <span className="sr-only" aria-live="polite" aria-atomic="true">
               <span key={keyboardAnnouncement.sequence}>{keyboardAnnouncement.message}</span>
@@ -403,6 +472,27 @@ export function WorkspaceCanvas({
               </Panel>
             )}
           </ReactFlow>
+          {contextMenu !== null &&
+            (() => {
+              const node = nodes.find(({ id }) => id === contextMenu.nodeId);
+              if (node === undefined) return null;
+              return (
+                <CanvasNodeContextMenu
+                  node={node}
+                  position={contextMenu.position}
+                  readOnly={collaborationGraphReadOnly}
+                  inheritedLock={inheritedLockedNodeIds.has(node.id)}
+                  deletionProtected={deletionProtectedNodeIds.has(node.id)}
+                  returnFocus={contextMenu.returnFocus}
+                  onInspect={() => onInspectNode(node.id)}
+                  onSetCollapsed={(collapsed) => onSetNodeCollapsed(node.id, collapsed)}
+                  onSetLocked={(locked) => onSetNodeLocked(node.id, locked)}
+                  onDuplicate={() => onDuplicateNode(node.id)}
+                  onDelete={() => onDeleteNode(node.id)}
+                  onClose={() => setContextMenu(null)}
+                />
+              );
+            })()}
         </CanvasNodeInteractionProvider>
       ) : (
         <div className="canvas-loading">Loading local canvas…</div>

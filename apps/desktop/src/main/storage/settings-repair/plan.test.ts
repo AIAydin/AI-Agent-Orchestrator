@@ -12,7 +12,11 @@ describe('legacy settings repair planning', () => {
     source.theme = 'dark';
     source.defaultAgent = 'custom';
     source.agentExecutableOverrides = { codex: ' codex ' };
-    source.customAgent = { ...source.customAgent, enabled: true, executable: ' custom-cli ' };
+    source.customAgent = {
+      ...source.customAgent,
+      enabled: true,
+      executable: ' custom-cli ',
+    };
     source.defaultPermissionProfile = 'docker-isolated';
     source.customPermissionProfile = {
       ...source.customPermissionProfile,
@@ -21,11 +25,17 @@ describe('legacy settings repair planning', () => {
     };
     source.worktreeRoot = 'relative/worktrees';
     source.gitRemote = 'origin with spaces';
-    source.terminalShell = ' /bin/sh ';
-    source.developmentCommand = { executable: ' npm ', arguments: ['run', 'dev'] };
+    source.terminalShell = '';
+    source.developmentCommand = {
+      executable: ' npm ',
+      arguments: ['run', 'dev'],
+    };
     source.testCommand = { executable: ' npm ', arguments: ['test'] };
     source.lintCommand = { executable: ' npm ', arguments: ['run', 'lint'] };
-    source.typecheckCommand = { executable: ' npm ', arguments: ['run', 'typecheck'] };
+    source.typecheckCommand = {
+      executable: ' npm ',
+      arguments: ['run', 'typecheck'],
+    };
     source.buildCommand = { executable: ' npm ', arguments: ['run', 'build'] };
     source.customChecks = [
       {
@@ -53,6 +63,7 @@ describe('legacy settings repair planning', () => {
     expect(planned.settings.theme).toBe('dark');
     expect(planned.settings.worktreeRoot).toBe(defaults.worktreeRoot);
     expect(planned.settings.gitRemote).toBe(defaults.gitRemote);
+    expect(planned.settings.terminalShell).toBe(defaults.terminalShell);
     expect(planned.settings.previewTrustedHosts).toHaveLength(128);
     expect(planned.settings.previewTrustedHosts).not.toContain('example.com');
     expect(planned.settings.customChecks?.[0]?.command).toEqual({
@@ -97,7 +108,10 @@ describe('legacy settings repair planning', () => {
 
   it('preserves legacy evidence larger than the previous four-MiB boundary', () => {
     const defaults = settings();
-    const source = { ...defaults, worktreeRoot: 'x'.repeat(4 * 1024 * 1024 + 1) };
+    const source = {
+      ...defaults,
+      worktreeRoot: 'x'.repeat(4 * 1024 * 1024 + 1),
+    };
     const sourceJson = JSON.stringify(source);
 
     const planned = planLegacySettingsRepair(sourceJson, 12, defaults);
@@ -110,7 +124,11 @@ describe('legacy settings repair planning', () => {
     const defaults = settings();
     expect(() =>
       planLegacySettingsRepair(
-        JSON.stringify({ ...defaults, theme: 'broken', worktreeRoot: 'relative' }),
+        JSON.stringify({
+          ...defaults,
+          theme: 'broken',
+          worktreeRoot: 'relative',
+        }),
         12,
         defaults,
       ),
@@ -124,6 +142,53 @@ describe('legacy settings repair planning', () => {
     const defaults = settings();
     expect(planLegacySettingsRepair(JSON.stringify(defaults), 12, defaults)).toBeUndefined();
   });
+
+  it.each([
+    './tools/shell',
+    '../tools/shell',
+    '.\\tools\\shell.exe',
+    '..\\tools\\shell.exe',
+    'tools/shell',
+    'tools\\shell.exe',
+    'C:tools\\shell.exe',
+  ])('resets a legacy project-relative terminal executable: %s', (terminalShell) => {
+    const defaults = settings();
+    const planned = planLegacySettingsRepair(
+      JSON.stringify({ ...defaults, terminalShell }),
+      12,
+      defaults,
+    );
+
+    expect(planned?.settings.terminalShell).toBe(defaults.terminalShell);
+    expect(planned?.evidence.repairedFieldPaths).toEqual(['terminalShell']);
+  });
+
+  it.each([
+    'fish',
+    'pwsh.exe',
+    '/bin/zsh',
+    'C:\\Windows\\System32\\cmd.exe',
+    'C:/Windows/System32/cmd.exe',
+    '\\\\server\\share\\pwsh.exe',
+    '//server/share/pwsh.exe',
+  ])(
+    'preserves a portable terminal executable while repairing another field: %s',
+    (terminalShell) => {
+      const defaults = settings();
+      const planned = planLegacySettingsRepair(
+        JSON.stringify({
+          ...defaults,
+          terminalShell,
+          worktreeRoot: 'relative/worktrees',
+        }),
+        12,
+        defaults,
+      );
+
+      expect(planned?.settings.terminalShell).toBe(terminalShell);
+      expect(planned?.evidence.repairedFieldPaths).toEqual(['worktreeRoot']);
+    },
+  );
 
   it('keeps omitted legacy default fields compatible while repairing a tightened value', () => {
     const defaults = settings();

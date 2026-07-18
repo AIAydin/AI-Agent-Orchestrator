@@ -43,6 +43,22 @@ export const OptionalMachineSpecificPathSchema = OptionalMachineSpecificValueSch
   },
 );
 
+/** True when an executable would resolve relative to whichever project happens to be open. */
+export function isProjectRelativeExecutable(value: string): boolean {
+  return (
+    !isAbsoluteMachinePath(value) &&
+    (value.includes('/') || value.includes('\\') || /^[A-Za-z]:/u.test(value))
+  );
+}
+
+export const TerminalExecutableSettingSchema = MachineSpecificValueSchema.refine(
+  (value) => !isProjectRelativeExecutable(value),
+  {
+    message:
+      'Choose an absolute executable path or an installed command name that works across projects.',
+  },
+);
+
 export function normalizePreviewLoopbackHost(value: string): string | null {
   if (value !== value.trim() || value === '' || containsControlCharacter(value)) return null;
   const unwrapped = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;

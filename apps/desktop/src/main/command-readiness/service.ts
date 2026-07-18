@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
-import { basename, isAbsolute, join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import type { Project } from '../../shared/application/contracts.js';
 import {
@@ -10,7 +10,9 @@ import {
   type CommandReadinessResult,
 } from '../../shared/command-readiness/contracts.js';
 import { settingsCommandFingerprint } from '../../shared/settings/readiness-requests.js';
+import { isProjectRelativeExecutable } from '../../shared/settings/values.js';
 import { canonicalProjectRoot, resolveCheckExecutable } from '../checks/check-process.js';
+import { resolveTerminalExecutable } from '../terminal/launch-resolution.js';
 
 const MAX_PACKAGE_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_VERIFIED_SETTINGS_COMMANDS = 256;
@@ -20,11 +22,13 @@ interface CommandReadinessStore {
 }
 
 type ResolveCommand = typeof resolveCheckExecutable;
+type ResolveTerminalCommand = typeof resolveTerminalExecutable;
 type CanonicalizeProject = typeof canonicalProjectRoot;
 type ReadScripts = (projectRoot: string) => Promise<ReadonlySet<string>>;
 
 interface CommandReadinessDependencies {
   readonly resolveCommand?: ResolveCommand;
+  readonly resolveTerminalCommand?: ResolveTerminalCommand;
   readonly canonicalizeProject?: CanonicalizeProject;
   readonly readScripts?: ReadScripts;
   readonly now?: () => Date;
@@ -33,6 +37,7 @@ interface CommandReadinessDependencies {
 /** Passively verifies a configured process and package script without starting either. */
 export class CommandReadinessService {
   readonly #resolveCommand: ResolveCommand;
+  readonly #resolveTerminalCommand: ResolveTerminalCommand;
   readonly #canonicalizeProject: CanonicalizeProject;
   readonly #readScripts: ReadScripts;
   readonly #now: () => Date;
@@ -44,6 +49,7 @@ export class CommandReadinessService {
     dependencies: CommandReadinessDependencies = {},
   ) {
     this.#resolveCommand = dependencies.resolveCommand ?? resolveCheckExecutable;
+    this.#resolveTerminalCommand = dependencies.resolveTerminalCommand ?? resolveTerminalExecutable;
     this.#canonicalizeProject = dependencies.canonicalizeProject ?? canonicalProjectRoot;
     this.#readScripts = dependencies.readScripts ?? readPackageScripts;
     this.#now = dependencies.now ?? (() => new Date());
@@ -62,6 +68,8 @@ export class CommandReadinessService {
             reason: 'Choose an executable or remove the orphaned arguments before saving.',
           });
     }
+
+    if (request.purpose === 'terminal') return await this.#checkTerminalExecutable(request);
 
     let cwd = this.fallbackDirectory;
     let project: Project | null = null;
@@ -195,6 +203,35 @@ export class CommandReadinessService {
     }
   }
 
+  async #checkTerminalExecutable(
+    request: CommandReadinessRequest,
+  ): Promise<CommandReadinessResult> {
+    if (request.command.arguments.length !== 0) {
+      return this.#result(request, 'invalid-configuration', {
+        reason: 'The default terminal setting accepts an executable only, without arguments.',
+      });
+    }
+    if (isProjectRelativeExecutable(request.command.executable.trim())) {
+      return this.#result(request, 'invalid-configuration', {
+        reason:
+          'The default terminal executable must be an absolute path or an installed command name so it works across projects.',
+      });
+    }
+    try {
+      const resolved = await this.#resolveTerminalCommand(
+        request.command.executable.trim(),
+        this.fallbackDirectory,
+      );
+      return this.#result(request, 'ready', {
+        ready: true,
+        validationScope: 'executable',
+        resolvedExecutable: resolved,
+      });
+    } catch (error) {
+      return this.#resolutionFailure(request, null, error);
+    }
+  }
+
   #resolutionFailure(
     request: CommandReadinessRequest,
     project: Project | null,
@@ -254,13 +291,6 @@ function packageScriptName(request: CommandReadinessRequest): string | null {
   if (request.command.arguments[0] !== 'run') return null;
   const script = request.command.arguments[1] ?? '';
   return script.trim() === '' ? '' : script;
-}
-
-function isProjectRelativeExecutable(executable: string): boolean {
-  return (
-    !isAbsolute(executable) &&
-    (executable.includes('/') || executable.includes('\\') || /^[A-Za-z]:/u.test(executable))
-  );
 }
 
 function boundedProjectName(name: string): string {

@@ -181,7 +181,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
       'Open Settings → Data & privacy to see local database, transcript, backup, and retention locations.',
       'Before every agent launch, inspect the named provider, exact context files, environment variable names, and network boundary.',
       'Provider CLIs may send approved prompts and context under their own terms; Forgeboard never hides that disclosure.',
-      'Collaboration and updater preferences remain inactive unless a corresponding reviewed desktop capability is present.',
+      'Collaboration remains inactive until you explicitly configure and approve a connection. Application update checks run only when you select Check for updates and approve the exact GitHub request; Forgeboard never downloads or installs updates automatically.',
     ],
   },
   {

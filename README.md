@@ -233,8 +233,15 @@ The release workflow is designed to emit clearly identified unsigned development
 the optional signing secrets documented in the release guide are configured. Such artifacts may
 trigger the operating system's standard warning.
 
-Still unfinished are broader merge and visual conflict-resolution flows, the updater, direct SQLite
-backup restore UI, and complete wiring of every persisted setting. See
+**Settings → Connectivity → Application updates** provides an explicit stable, prerelease, or
+disabled release check. Forgeboard contacts only the fixed official GitHub Releases endpoint after
+the user selects **Check for updates** and approves the exact native outbound disclosure. It never
+polls in the background or downloads or installs an update automatically; opening a discovered
+release page requires another native confirmation. Availability depends on releases published to
+the official repository at the time of the check.
+
+Still unfinished are broader merge and visual conflict-resolution flows, direct SQLite backup
+restore UI, and complete wiring of every persisted setting. See
 `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
 
 Optional collaboration is explicitly enabled and configured under **Settings → Connectivity**.

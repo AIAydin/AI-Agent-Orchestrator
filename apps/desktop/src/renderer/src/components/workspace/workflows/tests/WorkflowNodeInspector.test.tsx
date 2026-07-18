@@ -320,9 +320,15 @@ describe('WorkflowNodeInspector', () => {
       adapterId: 'test-agent',
       permissionProfile: 'worktree-write',
     });
-    expect(initialWorkflowNodeData('terminal', 'terminal-1', settings)).toEqual({
+    const settingsWithUiSelectedTerminal = {
+      ...settings,
+      terminalShell: '/opt/tools/fish',
+    };
+    expect(
+      initialWorkflowNodeData('terminal', 'terminal-1', settingsWithUiSelectedTerminal),
+    ).toEqual({
       command: {
-        executable: '/bin/sh',
+        executable: '/opt/tools/fish',
         arguments: [],
         cwdRelative: '.',
         environmentNames: ['PATH', 'CI'],

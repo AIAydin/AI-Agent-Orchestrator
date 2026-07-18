@@ -1,0 +1,41 @@
+.canvas-node-context-menu {
+  position: absolute;
+  z-index: 1400;
+  width: 190px;
+  padding: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 12px 32px rgb(21 25 22 / 18%);
+}
+
+.canvas-node-context-menu > button {
+  width: 100%;
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 9px;
+  text-align: left;
+}
+
+.canvas-node-context-menu > button:hover:not(:disabled),
+.canvas-node-context-menu > button:focus-visible {
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent);
+}
+
+.canvas-node-context-menu > button:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+.canvas-node-context-menu > button.danger-text:not(:disabled) {
+  color: var(--danger);
+}

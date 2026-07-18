@@ -22,6 +22,13 @@ Unsigned development artifacts can trigger normal operating-system provenance wa
 notarized releases remove or reduce those warnings; release notes must always state which kind was
 produced.
 
+Installed builds expose **Settings → Connectivity → Application updates** for an explicit
+stable, prerelease, or disabled check against the fixed official Forgeboard GitHub Releases
+endpoint. The check runs only after a cancel-default native approval. Forgeboard does not poll,
+download, or install updates automatically; it can only show a validated release and, after another
+native confirmation, open that exact release page in the system browser. This capability does not
+mean a release exists; availability is determined from the official repository at check time.
+
 Developers who intentionally build from a clone can use the single cross-platform command
 `corepack pnpm start`. It installs the pinned lockfile and starts the desktop app; it is not required
 for normal end-user installation.

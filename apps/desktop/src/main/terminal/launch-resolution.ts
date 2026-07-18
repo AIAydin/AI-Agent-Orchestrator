@@ -88,7 +88,7 @@ export async function resolveTerminalLaunch(
   if (!pathsEqual(canonicalRelative, parsed.cwdRelative)) {
     throw new Error('The terminal working directory must use its canonical project-relative path.');
   }
-  const executable = await locateExecutable(parsed.executable, cwd.path);
+  const executable = await resolveTerminalExecutable(parsed.executable, cwd.path);
   const argumentBytes = parsed.arguments.reduce(
     (total, argument) => total + Buffer.byteLength(argument, 'utf8'),
     0,
@@ -172,7 +172,8 @@ async function canonicalDirectory(
   };
 }
 
-async function locateExecutable(command: string, cwd: string): Promise<string> {
+/** Resolves a direct PTY executable with the same platform rules used by reviewed launches. */
+export async function resolveTerminalExecutable(command: string, cwd: string): Promise<string> {
   for (const candidate of executableCandidates(command, cwd)) {
     try {
       const canonical = await realpath(candidate);

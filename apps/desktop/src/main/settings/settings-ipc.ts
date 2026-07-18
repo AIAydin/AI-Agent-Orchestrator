@@ -16,13 +16,14 @@ import {
   SettingsRepairSummarySchema,
 } from '../../shared/settings/repair/contracts.js';
 import type { LocalStore } from '../storage.js';
+import { planLegacySettingsRepair } from '../storage/settings-repair/plan.js';
 import { assertLiveMainFrame } from '../security/ipc-authority.js';
 
 const SettingsImportSchema = z
   .object({
     format: z.literal('forgeboard-settings'),
     version: z.literal(1),
-    settings: AppSettingsSchema,
+    settings: z.record(z.string(), z.unknown()),
   })
   .strict();
 
@@ -132,7 +133,15 @@ export class SettingsIpcService {
         if (selection.canceled || !path) return null;
         const imported = SettingsImportSchema.parse(JSON.parse(await readFile(path, 'utf8')));
         assertSettingsParent(event, parent);
-        return AppSettingsSchema.parse(imported.settings);
+        const current = AppSettingsSchema.safeParse(imported.settings);
+        if (current.success) return current.data;
+        const repaired = planLegacySettingsRepair(
+          JSON.stringify(imported.settings),
+          1,
+          this.createDefaultSettings(),
+        );
+        if (repaired === undefined) throw current.error;
+        return repaired.settings;
       },
     );
     this.#handle(

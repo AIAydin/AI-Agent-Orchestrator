@@ -26,6 +26,7 @@ import {
   OptionalMachineSpecificPathSchema,
   OptionalMachineSpecificValueSchema,
   PreviewTrustedHostsSchema,
+  TerminalExecutableSettingSchema,
 } from '../settings/values.js';
 
 export {
@@ -206,7 +207,7 @@ export const AppSettingsSchema = z
       .refine((value) => !containsControlCharacter(value))
       .default(''),
     gitRemote: GitRemoteSettingSchema.default('origin'),
-    terminalShell: OptionalMachineSpecificValueSchema,
+    terminalShell: TerminalExecutableSettingSchema,
     envAllowlist: EnvironmentAllowlistSchema,
     developmentCommand: CommandConfigurationSchema.default({
       executable: '',

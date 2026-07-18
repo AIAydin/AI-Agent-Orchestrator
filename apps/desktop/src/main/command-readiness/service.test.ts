@@ -38,10 +38,16 @@ function service(
       identities: [],
     });
   });
+  const resolveTerminalCommand = vi.fn((executable: string) => {
+    if (options.resolveError) return Promise.reject(options.resolveError);
+    return Promise.resolve(`/terminal/${executable}`);
+  });
   return {
     resolveCommand,
+    resolveTerminalCommand,
     readiness: new CommandReadinessService({ getProject: () => options.project }, '/home/user', {
       resolveCommand,
+      resolveTerminalCommand,
       canonicalizeProject: () =>
         Promise.resolve({
           path: '/canonical/project',
@@ -181,6 +187,59 @@ describe('CommandReadinessService', () => {
       ready: false,
     });
     expect(missingScriptArgument.reason).toMatch(/adopt a detected script in the UI/u);
+  });
+
+  it('validates terminal defaults with direct-launch rules independent of the active project', async () => {
+    const fixture = service({ project });
+    const result = await fixture.readiness.check({
+      purpose: 'terminal',
+      command: { executable: '/bin/zsh', arguments: [] },
+      projectId: PROJECT_ID,
+    });
+
+    expect(result).toMatchObject({
+      state: 'ready',
+      ready: true,
+      validationScope: 'executable',
+      resolvedExecutable: '/terminal//bin/zsh',
+      projectName: null,
+    });
+    expect(fixture.resolveTerminalCommand).toHaveBeenCalledWith('/bin/zsh', '/home/user');
+    expect(fixture.resolveCommand).not.toHaveBeenCalled();
+    fixture.readiness.recordVerifiedSettingsReadiness(result);
+    await expect(
+      fixture.readiness.verifySettingsReadiness({
+        purpose: 'terminal',
+        command: { executable: '/bin/zsh', arguments: [] },
+      }),
+    ).resolves.toMatchObject({ ready: true });
+    await expect(
+      fixture.readiness.verifySettingsReadiness({
+        purpose: 'terminal',
+        command: { executable: '/bin/bash', arguments: [] },
+      }),
+    ).rejects.toThrow(/Wait for command readiness/u);
+
+    for (const executable of [
+      './tools/shell',
+      '../tools/shell',
+      '.\\tools\\shell.exe',
+      'tools/shell',
+      'tools\\shell.exe',
+      'C:tools\\shell.exe',
+    ]) {
+      const relative = await fixture.readiness.check({
+        purpose: 'terminal',
+        command: { executable, arguments: [] },
+        projectId: PROJECT_ID,
+      });
+      expect(relative).toMatchObject({
+        state: 'invalid-configuration',
+        ready: false,
+      });
+      expect(relative.reason).toMatch(/across projects/u);
+    }
+    expect(fixture.resolveTerminalCommand).toHaveBeenCalledTimes(2);
   });
 
   it('binds Settings only to an owner-admitted exact check and recomputes it passively', async () => {

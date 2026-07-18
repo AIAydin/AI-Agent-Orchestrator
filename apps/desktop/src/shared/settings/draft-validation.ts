@@ -16,7 +16,7 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
   backupDirectory: 'Backup destination',
   backupIntervalHours: 'Backup interval',
   backupRetentionCount: 'Backup retention',
-  terminalShell: 'Terminal shell',
+  terminalShell: 'Default terminal executable',
 };
 
 /** Returns bounded, user-facing failures for the exact unsaved settings draft. */

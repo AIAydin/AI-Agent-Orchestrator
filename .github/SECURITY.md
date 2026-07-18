@@ -45,6 +45,21 @@ the Docker client identity and mutable tag-to-image-ID binding, then runs the ex
 once against the approved immutable image ID with `--pull never`. A missing or broken in-image
 entrypoint fails that supervised launch instead of causing an undisclosed preflight execution.
 
+### Application update checks
+
+Application update checking is an explicit outbound action, not a background service. The low-level
+executor has one fixed HTTPS GitHub Releases API endpoint and requires an owner-bound, short-lived,
+single-use permit issued only after a cancel-default native confirmation. Main rejects redirects,
+compressed or unexpected content, oversized responses, malformed release metadata, noncanonical
+tags and release URLs, and stale or mismatched window authority. Checks can be cancelled and use an
+absolute deadline.
+
+Forgeboard does not download or install application updates. A discovered release is retained as
+short-lived main-process authority only; opening its exact official GitHub page requires a second
+cancel-default native confirmation. Disabled mode sends no release request, and an imported legacy
+automatic-download preference grants no capability. No published release or installer is implied by
+this check-only surface.
+
 ### Project checks
 
 Lint, typecheck, test, build, and custom checks execute user-approved, potentially untrusted

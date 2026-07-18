@@ -77,6 +77,12 @@ describe('shared Settings readiness request derivation', () => {
     expect(settingsCommandReadinessDrafts(draft)).toEqual(
       expect.arrayContaining([
         {
+          id: 'terminal-default',
+          label: 'Default terminal executable',
+          purpose: 'terminal',
+          command: { executable: '/bin/sh', arguments: [] },
+        },
+        {
           id: 'development',
           label: 'Development server',
           purpose: 'preview',

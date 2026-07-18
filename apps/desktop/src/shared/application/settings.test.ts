@@ -70,6 +70,35 @@ describe('Git remote settings', () => {
 });
 
 describe('process settings', () => {
+  it('requires a terminal default while preserving installed command names', () => {
+    expect(AppSettingsSchema.safeParse({ ...baseSettings, terminalShell: '' }).success).toBe(false);
+    for (const terminalShell of [
+      'fish',
+      'pwsh.exe',
+      '/bin/zsh',
+      'C:\\Windows\\System32\\cmd.exe',
+      'C:/Windows/System32/cmd.exe',
+      '\\\\server\\share\\pwsh.exe',
+      '//server/share/pwsh.exe',
+    ]) {
+      expect(AppSettingsSchema.safeParse({ ...baseSettings, terminalShell }).success).toBe(true);
+    }
+  });
+
+  it('rejects project-relative terminal executable paths on every supported path syntax', () => {
+    for (const terminalShell of [
+      './tools/shell',
+      '../tools/shell',
+      '.\\tools\\shell.exe',
+      '..\\tools\\shell.exe',
+      'tools/shell',
+      'tools\\shell.exe',
+      'C:tools\\shell.exe',
+    ]) {
+      expect(AppSettingsSchema.safeParse({ ...baseSettings, terminalShell }).success).toBe(false);
+    }
+  });
+
   it('rejects command values that cannot be launched literally and safely', () => {
     const oversizedUtf8 = 'é'.repeat(20_000);
     expect(

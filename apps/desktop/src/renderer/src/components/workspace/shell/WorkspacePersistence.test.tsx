@@ -83,6 +83,8 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
     onNodesChange,
     onKeyboardMove,
     onSelectionChange,
+    onDuplicateNode,
+    onDeleteNode,
     collaborationGraphReadOnly,
   }: {
     nodes: WorkshopNode[];
@@ -93,6 +95,8 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
     ) => void;
     onKeyboardMove: (movement: { x: number; y: number }, recordUndoCheckpoint: boolean) => unknown;
     onSelectionChange: (selection: { nodes: WorkshopNode[]; edges: [] }) => void;
+    onDuplicateNode: (nodeId: string) => void;
+    onDeleteNode: (nodeId: string) => void;
     collaborationGraphReadOnly: boolean;
   }) => (
     <div>
@@ -134,6 +138,24 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
         }}
       >
         Remove first node
+      </button>
+      <button type="button" onClick={() => nodes[0] && onDuplicateNode(nodes[0].id)}>
+        Context duplicate first node
+      </button>
+      <button type="button" onClick={() => nodes[0] && onDeleteNode(nodes[0].id)}>
+        Context delete first node
+      </button>
+      <button type="button" onClick={() => nodes.at(-1) && onDeleteNode(nodes.at(-1)!.id)}>
+        Context delete last node
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          const last = nodes.at(-1);
+          if (last !== undefined) onSelectionChange({ nodes: [last], edges: [] });
+        }}
+      >
+        Inspect last node
       </button>
     </div>
   ),
@@ -382,6 +404,95 @@ describe('Workspace persistence boundary', () => {
         { id: 'locked-node', position: { x: 30, y: 20 } },
       ]),
     );
+  });
+
+  it('routes context-menu duplicate and delete through real undoable graph mutations', async () => {
+    const document = canvas([canvasNode('context-node', 10, false)]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: {
+          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
+        },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(canvasNodes()).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Context duplicate first node' }));
+    await waitFor(() => expect(canvasNodes()).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo canvas' }));
+    await waitFor(() => expect(canvasNodes()).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Context delete first node' }));
+    await waitFor(() => expect(canvasNodes()).toHaveLength(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo canvas' }));
+    await waitFor(() => expect(canvasNodes()).toHaveLength(1));
+  });
+
+  it('binds a context duplicate to its explicit target after the inspected selection changes', async () => {
+    const document = canvas([
+      canvasNode('context-target', 10, false),
+      canvasNode('inspected-later', 90, false),
+    ]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    renderWorkspace();
+
+    await waitFor(() => expect(canvasNodes()).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect last node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Context duplicate first node' }));
+
+    await waitFor(() => expect(canvasNodes()).toHaveLength(3));
+    expect(canvasNodes().map((node) => node.data.title)).toContain('context-target copy');
+    expect(canvasNodes().map((node) => node.data.title)).not.toContain('inspected-later copy');
+  });
+
+  it('stops a running preview before context deletion removes its node', async () => {
+    const preview = {
+      ...canvasNode('preview-node', 10, false),
+      type: 'web-preview',
+      data: { ...canvasNode('preview-node', 10, false).data, kind: 'web-preview' as const },
+    };
+    const document = canvas([preview]);
+    const stop = vi.fn(() => Promise.resolve({ ok: true, value: undefined }));
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
+        previews: { stop, onEvent: vi.fn(() => vi.fn()) },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    renderWorkspace();
+
+    await waitFor(() => expect(canvasNodes()).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Context delete first node' }));
+
+    await waitFor(() => expect(canvasNodes()).toHaveLength(0));
+    expect(stop).toHaveBeenCalledWith({ projectId: project().id, nodeId: 'preview-node' });
   });
 
   it('links a verified file against current canvas state and records that exact state for undo', async () => {
@@ -742,6 +853,30 @@ describe('Workspace persistence boundary', () => {
     expect(screen.getByTestId('workspace-events').textContent).toMatch(/protected members/u);
   });
 
+  it('protects both a group and its locked member from forced context deletion', async () => {
+    const group = groupFrameCanvasNode('group-frame', 0, ['locked-member']);
+    const member = {
+      ...sizedCanvasNode('locked-member', 130, 80, 210, 92),
+      data: { ...sizedCanvasNode('locked-member', 130, 80, 210, 92).data, locked: true },
+    };
+    const document = canvas([group, member]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    renderWorkspace();
+
+    await waitFor(() => expect(canvasNodes()).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Context delete first node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Context delete last node' }));
+
+    expect(canvasNodes().map(({ id }) => id)).toEqual(['group-frame', 'locked-member']);
+    expect(screen.getByTestId('workspace-events').textContent).toMatch(/Unlock locked-member/u);
+  });
+
   it('rebases undo history when an authoritative collaboration snapshot replaces the graph', async () => {
     const document = canvas([canvasNode('shared-node', 10, false)]);
     Object.defineProperty(window, 'forgeboard', {
@@ -844,11 +979,36 @@ describe('Workspace persistence boundary', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Select canvas nodes' }));
     fireEvent.click(screen.getByRole('button', { name: 'Move selected right' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove first node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Context duplicate first node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Context delete first node' }));
     expect(JSON.parse(screen.getByTestId('canvas-node-positions').textContent ?? '[]')).toEqual([
       { id: 'shared-node', position: { x: 10, y: 20 } },
     ]);
+    expect(screen.getByTestId('workspace-events').textContent).toMatch(
+      /cannot edit the shared graph/u,
+    );
   });
 });
+
+function renderWorkspace(): void {
+  render(
+    <Workspace
+      project={project()}
+      settings={settings()}
+      agents={[]}
+      extensionDiscovery={{
+        registryPath: '/tmp/extensions.json',
+        installed: [],
+        quarantined: [],
+        invalid: [],
+      }}
+      onClose={vi.fn()}
+      onProjectUpdated={vi.fn()}
+      onOpenSettings={vi.fn()}
+      onError={vi.fn()}
+    />,
+  );
+}
 
 function project(): Project {
   return {

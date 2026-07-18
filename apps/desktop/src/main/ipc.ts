@@ -26,7 +26,6 @@ import {
 } from '../shared/application/contracts.js';
 import { CommandReadinessRequestSchema } from '../shared/command-readiness/contracts.js';
 import { IntegrityCheckInputSchema } from '../shared/integrity/contracts.js';
-import { MachineSpecificValueSchema } from '../shared/settings/values.js';
 import { ApprovalService } from './approvals/approval-service.js';
 import { AutomaticBackupCoordinator } from './backups/automatic-backup-coordinator.js';
 import { CheckIpcService } from './checks/check-ipc.js';
@@ -68,6 +67,7 @@ import { RecoveryIpcService } from './recovery/recovery-ipc.js';
 import { RunService } from './runs/run-service.js';
 import { SettingsIpcService } from './settings/settings-ipc.js';
 import { SettingsPersistenceReadinessVerifier } from './settings/persistence-readiness.js';
+import { defaultTerminalExecutable } from './settings/defaults/terminal-executable.js';
 import { FolderReadinessIpcService } from './settings/folder-readiness/ipc.js';
 import { FolderReadinessService } from './settings/folder-readiness/service.js';
 import type { LocalStore } from './storage.js';
@@ -86,8 +86,6 @@ const ProjectIdSchema = z.string().uuid();
 
 export function createDefaultSettings(): AppSettings {
   const documents = app.getPath('documents');
-  const platformShell = process.platform === 'win32' ? 'powershell.exe' : '/bin/zsh';
-  const environmentShell = MachineSpecificValueSchema.safeParse(process.env.SHELL);
   return {
     onboardingCompleted: false,
     theme: 'system',
@@ -141,7 +139,10 @@ export function createDefaultSettings(): AppSettings {
     gitIdentityName: '',
     gitIdentityEmail: '',
     gitRemote: 'origin',
-    terminalShell: environmentShell.success ? environmentShell.data : platformShell,
+    terminalShell: defaultTerminalExecutable({
+      platform: process.platform,
+      environmentShell: process.env.SHELL,
+    }),
     envAllowlist: ['PATH', 'HOME', 'LANG', 'TERM', 'COLORTERM'],
     developmentCommand: { executable: '', arguments: [] },
     testCommand: { executable: '', arguments: [] },

@@ -42,6 +42,13 @@ vi.mock('@xyflow/react', () => ({
       <div
         data-testid="react-flow"
         onKeyDownCapture={props['onKeyDownCapture'] as React.KeyboardEventHandler<HTMLDivElement>}
+        onContextMenu={(event) =>
+          (
+            props['onNodeContextMenu'] as
+              | ((event: React.MouseEvent, node: WorkshopNode) => void)
+              | undefined
+          )?.(event, renderedNodes[0]!)
+        }
       >
         {renderedNodes.map((node, index) => (
           <div
@@ -95,7 +102,7 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     });
     expect(onKeyboardMove).toHaveBeenCalledTimes(2);
     expect(screen.getByLabelText('Canvas keyboard shortcuts').textContent).toMatch(
-      /Shift\+Arrows move 10 px/u,
+      /Context Menu\/Shift\+F10 actions/u,
     );
     const flowProps = mocks.reactFlowProps as {
       snapGrid: [number, number];
@@ -114,6 +121,11 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     expect(flowProps.fitView).toBeUndefined();
     expect(flowProps.defaultViewport).toEqual({ x: 0, y: 0, zoom: 1 });
     expect(flowProps['aria-label']).toBe('Canvas canvas');
+    expect(
+      (mocks.reactFlowProps as { ariaLabelConfig: Record<string, string> }).ariaLabelConfig[
+        'node.a11yDescription.default'
+      ],
+    ).toContain('Context Menu key or Shift+F10');
   });
 
   it('renders viewport alignment guides only while a node is being dragged near a peer', () => {
@@ -190,6 +202,59 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
       ),
     );
     expect(mocks.reactFlowProps).not.toHaveProperty('fitView', true);
+  });
+});
+
+describe('WorkspaceCanvas node context menu', () => {
+  it('opens for right-click and dispatches an explicit-node action', () => {
+    const canvasProps = props(vi.fn());
+    const view = render(<WorkspaceCanvas {...canvasProps} />);
+    const region = canvasRegion(view.container);
+    vi.spyOn(region, 'getBoundingClientRect').mockReturnValue(canvasBounds());
+
+    fireEvent.contextMenu(screen.getByTestId('react-flow'), {
+      clientX: 200,
+      clientY: 160,
+    });
+    expect(canvasProps.onInspectNode).toHaveBeenCalledWith('dragged');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+    expect(canvasProps.onDuplicateNode).toHaveBeenCalledWith('dragged');
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it.each([
+    { key: 'ContextMenu', shiftKey: false },
+    { key: 'F10', shiftKey: true },
+  ])('opens from $key and restores node focus on Escape', ({ key, shiftKey }) => {
+    const canvasProps = props(vi.fn());
+    const view = render(<WorkspaceCanvas {...canvasProps} />);
+    vi.spyOn(canvasRegion(view.container), 'getBoundingClientRect').mockReturnValue(canvasBounds());
+    const target = screen.getByTestId('focusable-node');
+    target.focus();
+
+    fireEvent.keyDown(target, { key, shiftKey });
+    const menu = screen.getByRole('menu', { name: 'Actions for dragged' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Inspect' }));
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(target);
+  });
+
+  it('keeps protected and read-only mutations unavailable', () => {
+    const canvasProps = props(vi.fn());
+    canvasProps.collaborationGraphReadOnly = true;
+    canvasProps.deletionProtectedNodeIds = new Set(['dragged']);
+    const view = render(<WorkspaceCanvas {...canvasProps} />);
+    vi.spyOn(canvasRegion(view.container), 'getBoundingClientRect').mockReturnValue(canvasBounds());
+    fireEvent.contextMenu(screen.getByTestId('react-flow'));
+
+    expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Duplicate' }).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Delete' }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Inspect' }).disabled).toBe(
+      false,
+    );
   });
 });
 
@@ -443,6 +508,10 @@ function props(
     onNodeResizeStart: vi.fn(),
     onKeyboardMove,
     onSelectionChange: vi.fn(),
+    onInspectNode: vi.fn(),
+    onSetNodeLocked: vi.fn(),
+    onDuplicateNode: vi.fn(),
+    onDeleteNode: vi.fn(),
     onAddNode: vi.fn(),
     onAddExtensionNode: vi.fn(),
     onAttachAgentContext: vi.fn().mockResolvedValue(undefined),
@@ -451,6 +520,8 @@ function props(
     onCollaborationCursorMove: vi.fn(),
     onCollaborationCursorLeave: vi.fn(),
     collaborationGraphReadOnly: false,
+    inheritedLockedNodeIds: new Set(),
+    deletionProtectedNodeIds: new Set(),
   };
 }
 

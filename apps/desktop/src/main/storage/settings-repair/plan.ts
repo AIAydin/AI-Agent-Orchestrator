@@ -21,6 +21,7 @@ import {
   OptionalMachineSpecificPathSchema,
   OptionalMachineSpecificValueSchema,
   PreviewTrustedHostsSchema,
+  TerminalExecutableSettingSchema,
 } from '../../../shared/settings/values.js';
 import {
   SettingsRepairEvidenceSchema,
@@ -96,7 +97,7 @@ export function planLegacySettingsRepair(
   repairSimpleField(
     candidate,
     'terminalShell',
-    OptionalMachineSpecificValueSchema,
+    TerminalExecutableSettingSchema,
     LegacyTerminalShellSchema,
     defaults.terminalShell,
     mark,

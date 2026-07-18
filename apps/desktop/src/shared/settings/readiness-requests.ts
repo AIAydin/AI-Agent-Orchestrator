@@ -86,6 +86,10 @@ export function settingsCommandReadinessDrafts(
   settings: AppSettings,
 ): SettingsCommandReadinessDraft[] {
   return [
+    standardCommand('terminal-default', 'Default terminal executable', 'terminal', {
+      executable: settings.terminalShell,
+      arguments: [],
+    }),
     standardCommand('development', 'Development server', 'preview', settings.developmentCommand),
     standardCommand('check-lint', 'Lint command', 'check', settings.lintCommand),
     standardCommand('check-typecheck', 'Typecheck command', 'check', settings.typecheckCommand),

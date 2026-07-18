@@ -380,9 +380,7 @@ describe('SettingsPanel draft transactions', () => {
   it('passively preflights every enabled machine folder before Save', async () => {
     render(<SettingsPanel {...props()} />);
 
-    const save = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Save settings',
-    });
+    const save = screen.getByRole<HTMLButtonElement>('button', { name: 'Save settings' });
     expect(save.disabled).toBe(true);
     await waitFor(() => expect(folderCheck).toHaveBeenCalledTimes(2));
     expect(folderCheck).toHaveBeenCalledWith({
@@ -869,22 +867,26 @@ describe('SettingsPanel draft transactions', () => {
 
   it('validates changed commands before saving and gives dependency remediation in Settings', async () => {
     commandCheck.mockImplementation((input) =>
-      Promise.resolve({
-        ok: true,
-        value: {
-          schemaVersion: 1,
-          request: input,
-          state: 'executable-missing',
-          ready: false,
-          validationScope: 'none',
-          resolvedExecutable: null,
-          projectName: null,
-          checkedAt: '2026-07-15T18:00:00.000Z',
-          reason:
-            'The configured executable was not found. Use Browse or install the dependency and reopen Forgeboard.',
-          warning: null,
-        },
-      }),
+      Promise.resolve(
+        input.purpose === 'terminal'
+          ? { ok: true, value: readyCommand(input) }
+          : {
+              ok: true,
+              value: {
+                schemaVersion: 1,
+                request: input,
+                state: 'executable-missing',
+                ready: false,
+                validationScope: 'none',
+                resolvedExecutable: null,
+                projectName: null,
+                checkedAt: '2026-07-15T18:00:00.000Z',
+                reason:
+                  'The configured executable was not found. Use Browse or install the dependency and reopen Forgeboard.',
+                warning: null,
+              },
+            },
+      ),
     );
     render(<SettingsPanel {...props()} />);
 
@@ -988,6 +990,7 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove License scan' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add custom check' }));
     expect(screen.getByText('No custom checks configured.')).toBeTruthy();
+    await waitFor(() => expect(save.disabled).toBe(false));
     fireEvent.click(save);
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
@@ -1010,7 +1013,11 @@ describe('SettingsPanel draft transactions', () => {
     expect(updateSettings.mock.calls[0]?.[0].keyboardPreset).toBe('vscode');
   });
 
-  it('preserves unavailable legacy settings while exposing remote and collaboration controls', async () => {
+  it('configures the validated terminal default in UI while exposing remote and collaboration controls', async () => {
+    pickExecutable.mockResolvedValue({
+      ok: true,
+      value: '/usr/local/bin/fish',
+    });
     render(
       <SettingsPanel
         {...props({
@@ -1023,12 +1030,25 @@ describe('SettingsPanel draft transactions', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    const terminalShell = screen.getByLabelText<HTMLInputElement>('Terminal shell');
-    expect(terminalShell.disabled).toBe(true);
+    const terminalShell = screen.getByLabelText<HTMLInputElement>('Default terminal executable');
+    expect(terminalShell.disabled).toBe(false);
     expect(terminalShell.value).toBe('/bin/sh');
-    expect(
-      screen.getByText(/Shell selection is not an active Forgeboard capability/u),
-    ).toBeTruthy();
+    const terminalSection = terminalShell.closest('.settings-section');
+    if (terminalSection === null) throw new Error('Expected the terminal Settings section.');
+    fireEvent.click(
+      within(terminalSection as HTMLElement).getByRole('button', {
+        name: 'Browse',
+      }),
+    );
+    await waitFor(() => expect(terminalShell.value).toBe('/usr/local/bin/fish'));
+    await waitFor(() =>
+      expect(commandCheck).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'terminal',
+          command: { executable: '/usr/local/bin/fish', arguments: [] },
+        }),
+      ),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
     expect(screen.getByText('Development preview')).toBeTruthy();
@@ -1087,13 +1107,56 @@ describe('SettingsPanel draft transactions', () => {
     await clickSaveSettings();
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
-      terminalShell: '/bin/sh',
+      terminalShell: '/usr/local/bin/fish',
       gitRemote: 'upstream',
       collaborationEnabled: true,
       collaborationSubject: 'team-editor',
       collaborationColor: '#123456',
       automaticUpdateDownloads: true,
     });
+  });
+
+  it('blocks saving an invalid terminal default until current passive evidence is ready', async () => {
+    commandCheck.mockImplementation((input) =>
+      Promise.resolve(
+        input.purpose === 'terminal' && input.command.executable === 'missing-shell'
+          ? {
+              ok: true,
+              value: {
+                schemaVersion: 1,
+                request: input,
+                state: 'executable-missing',
+                ready: false,
+                validationScope: 'none',
+                resolvedExecutable: null,
+                projectName: null,
+                checkedAt: '2026-07-15T18:00:00.000Z',
+                reason: 'The configured terminal executable was not found.',
+                warning: null,
+              },
+            }
+          : { ok: true, value: readyCommand(input) },
+      ),
+    );
+    render(<SettingsPanel {...props()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
+    const terminalShell = screen.getByLabelText<HTMLInputElement>('Default terminal executable');
+    const save = screen.getByRole<HTMLButtonElement>('button', { name: 'Save settings' });
+    await waitFor(() => expect(save.disabled).toBe(false));
+
+    fireEvent.change(terminalShell, { target: { value: '' } });
+    expect(save.disabled).toBe(true);
+    expect(screen.getByText(/Default terminal executable: Choose a machine path/u)).toBeTruthy();
+
+    fireEvent.change(terminalShell, { target: { value: 'missing-shell' } });
+    expect(save.disabled).toBe(true);
+    expect(await screen.findAllByText(/terminal executable was not found/u)).toHaveLength(2);
+    expect(save.disabled).toBe(true);
+    fireEvent.submit(screen.getByRole('dialog', { name: 'Settings' }));
+    expect(updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(terminalShell, { target: { value: '/bin/zsh' } });
+    await waitFor(() => expect(save.disabled).toBe(false));
   });
 
   it('blocks an invalid default remote with in-context UI guidance', async () => {
