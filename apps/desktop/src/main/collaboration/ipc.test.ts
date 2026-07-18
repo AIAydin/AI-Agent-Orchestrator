@@ -5,6 +5,7 @@ import type {
   CollaborationCreateCommentResult,
   CollaborationEvent,
   CollaborationJoinInput,
+  CollaborationInviteSafeView,
   CollaborationMetadataSnapshot,
   CollaborationPublishReceipt,
   CollaborationSyncRecovery,
@@ -14,10 +15,12 @@ import { OutboundActionGate } from '../outbound/outbound-action-gate.js';
 const electron = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>(),
   fromWebContents: vi.fn(),
+  writeText: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: electron.fromWebContents },
+  clipboard: { writeText: electron.writeText },
   ipcMain: {
     handle: vi.fn(
       (channel: string, handler: (event: unknown, ...args: unknown[]) => Promise<unknown>) =>
@@ -41,6 +44,7 @@ const CANVAS_ID = '00000000-0000-4000-8000-000000000030';
 beforeEach(() => {
   electron.handlers.clear();
   electron.fromWebContents.mockReset();
+  electron.writeText.mockReset();
 });
 
 describe('CollaborationIpcService ownership and approval', () => {
@@ -187,6 +191,173 @@ describe('CollaborationIpcService ownership and approval', () => {
     expect(client.join).toHaveBeenCalledOnce();
     expect(JSON.stringify(dialog.showMessageBox.mock.calls)).not.toContain(token);
     expect(JSON.stringify(audit.appendAudit.mock.calls)).not.toContain(token);
+  });
+
+  it('admits only one same-tick invite mutation and therefore one native and HTTP side effect', async () => {
+    const client = fakeClient('owner');
+    const invites = fakeInviteOperations();
+    let finish: ((value: CollaborationInviteSafeView | null) => void) | undefined;
+    let nativeDialogs = 0;
+    let httpEffects = 0;
+    invites.create.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          nativeDialogs += 1;
+          httpEffects += 1;
+          finish = resolve;
+        }),
+    );
+    const dialog = {
+      showMessageBox: vi.fn().mockResolvedValue({ response: 1 }),
+    };
+    const service = new CollaborationIpcService(
+      dialog,
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      {
+        client,
+        invites,
+      },
+    );
+    service.registerIpcHandlers();
+    const owner = renderer(1);
+    electron.fromWebContents.mockReturnValue(owner.parent);
+    await invoke('join', owner.event, {
+      ...joinInput('owner-token'),
+      managementBaseUrl: 'https://collaboration.example.test/control/',
+    });
+    const input = { role: 'viewer', expiresInSeconds: 600, maxUses: 1 };
+
+    const first = invoke('createInvite', owner.event, input);
+    await vi.waitFor(() => expect(invites.create).toHaveBeenCalledOnce());
+    await expect(invoke('createInvite', owner.event, input)).resolves.toMatchObject({ ok: false });
+    expect(nativeDialogs).toBe(1);
+    expect(httpEffects).toBe(1);
+    finish?.({
+      id: '95c8589e-b738-4506-9ea9-7578f062f294',
+      roomId: 'launch-room',
+      role: 'viewer',
+      expiresAt: '2099-12-31T23:59:59.000Z',
+      maxUses: 1,
+    });
+    await expect(first).resolves.toMatchObject({ ok: true });
+    expect(invites.create).toHaveBeenCalledOnce();
+  });
+
+  it('settles an in-flight invite effect before leaving and clearing its volatile authority', async () => {
+    const client = fakeClient('owner');
+    const invites = fakeInviteOperations();
+    let finish: ((value: CollaborationInviteSafeView | null) => void) | undefined;
+    invites.create.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    const service = new CollaborationIpcService(
+      { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      { client, invites },
+    );
+    service.registerIpcHandlers();
+    const owner = renderer(1);
+    electron.fromWebContents.mockReturnValue(owner.parent);
+    await invoke('join', owner.event, {
+      ...joinInput('owner-token'),
+      managementBaseUrl: 'https://collaboration.example.test/control/',
+    });
+
+    const creating = invoke('createInvite', owner.event, {
+      role: 'viewer',
+      expiresInSeconds: 600,
+      maxUses: 1,
+    });
+    await vi.waitFor(() => expect(invites.create).toHaveBeenCalledOnce());
+    const leaving = invoke('leave', owner.event);
+    await Promise.resolve();
+    expect(client.leave).not.toHaveBeenCalled();
+    finish?.({
+      id: '95c8589e-b738-4506-9ea9-7578f062f294',
+      roomId: 'launch-room',
+      role: 'viewer',
+      expiresAt: '2099-12-31T23:59:59.000Z',
+      maxUses: 1,
+    });
+
+    await expect(creating).resolves.toMatchObject({ ok: true });
+    await expect(leaving).resolves.toEqual({ ok: true, value: null });
+    expect(client.leave).toHaveBeenCalledOnce();
+    expect(invites.clear).toHaveBeenCalled();
+  });
+
+  it('waits for an in-flight invite effect before pausing the client', async () => {
+    const client = fakeClient('owner');
+    const invites = fakeInviteOperations();
+    let finish: ((value: CollaborationInviteSafeView | null) => void) | undefined;
+    invites.create.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    const service = new CollaborationIpcService(
+      { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      { client, invites },
+    );
+    service.registerIpcHandlers();
+    const owner = renderer(1);
+    electron.fromWebContents.mockReturnValue(owner.parent);
+    await invoke('join', owner.event, {
+      ...joinInput('owner-token'),
+      managementBaseUrl: 'https://collaboration.example.test/control/',
+    });
+
+    const creating = invoke('createInvite', owner.event, {
+      role: 'viewer',
+      expiresInSeconds: 600,
+      maxUses: 1,
+    });
+    await vi.waitFor(() => expect(invites.create).toHaveBeenCalledOnce());
+    const pausing = service.pauseForShutdown();
+    await Promise.resolve();
+    expect(client.pause).not.toHaveBeenCalled();
+    finish?.({
+      id: '95c8589e-b738-4506-9ea9-7578f062f294',
+      roomId: 'launch-room',
+      role: 'viewer',
+      expiresAt: '2099-12-31T23:59:59.000Z',
+      maxUses: 1,
+    });
+
+    await expect(creating).resolves.toMatchObject({ ok: true });
+    await pausing;
+    expect(client.pause).toHaveBeenCalledOnce();
+    expect(invites.clear).toHaveBeenCalled();
+  });
+
+  it('clears volatile invite authority on pause, window destruction, privacy reset, and dispose', async () => {
+    for (const lifecycle of ['pause', 'destroy', 'reset', 'dispose'] as const) {
+      const client = fakeClient('owner');
+      const invites = fakeInviteOperations();
+      const service = new CollaborationIpcService(
+        { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+        new OutboundActionGate({ appendAudit: vi.fn() }),
+        { client, invites },
+      );
+      service.registerIpcHandlers();
+      const owner = renderer(10 + invites.clear.mock.calls.length);
+      electron.fromWebContents.mockReturnValue(owner.parent);
+      await invoke('join', owner.event, {
+        ...joinInput('owner-token'),
+        managementBaseUrl: 'https://collaboration.example.test/control/',
+      });
+      const baseline = invites.clear.mock.calls.length;
+
+      if (lifecycle === 'pause') await service.pauseForShutdown();
+      if (lifecycle === 'reset') await service.resetForPrivacy();
+      if (lifecycle === 'dispose') await service.dispose();
+      if (lifecycle === 'destroy') {
+        const onceCalls = owner.sender.once.mock.calls as unknown as Array<
+          [string, (...args: unknown[]) => void]
+        >;
+        const destroyed = onceCalls.find(([event]) => event === 'destroyed')?.[1];
+        if (typeof destroyed !== 'function') throw new Error('Missing destroyed cleanup hook.');
+        destroyed();
+      }
+
+      expect(invites.clear.mock.calls.length, lifecycle).toBeGreaterThan(baseline);
+      if (lifecycle === 'dispose') expect(invites.dispose).toHaveBeenCalledOnce();
+    }
   });
 
   it('fails closed for another owner and clears ownership on leave', async () => {
@@ -1333,6 +1504,11 @@ describe('CollaborationIpcService ownership and approval', () => {
 function invoke(
   operation:
     | 'join'
+    | 'joinInvite'
+    | 'listSessionInvites'
+    | 'createInvite'
+    | 'copyInviteLink'
+    | 'revokeInvite'
     | 'leave'
     | 'snapshot'
     | 'publish'
@@ -1437,6 +1613,9 @@ function fakeClient(role: 'owner' | 'editor' | 'reviewer' | 'viewer' = 'editor')
       connection = {
         connectionId: CONNECTION_ID,
         serverUrl: input.serverUrl,
+        ...(input.managementBaseUrl === undefined
+          ? {}
+          : { managementBaseUrl: input.managementBaseUrl }),
         roomId: input.roomId,
         subject: input.subject,
         displayName: input.displayName,
@@ -1562,6 +1741,19 @@ function fakeClient(role: 'owner' | 'editor' | 'reviewer' | 'viewer' = 'editor')
     setSnapshot: (snapshot: CollaborationMetadataSnapshot) => {
       currentSnapshot = snapshot;
     },
+  };
+}
+
+function fakeInviteOperations() {
+  return {
+    establishDirect: vi.fn(),
+    clear: vi.fn(),
+    dispose: vi.fn(),
+    list: vi.fn(() => []),
+    create: vi.fn<() => Promise<CollaborationInviteSafeView | null>>(() => Promise.resolve(null)),
+    copy: vi.fn(() => Promise.resolve(false)),
+    revoke: vi.fn(() => Promise.resolve(false)),
+    redeemAndJoin: vi.fn(),
   };
 }
 

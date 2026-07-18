@@ -18,7 +18,7 @@
     "prebuild": "corepack pnpm --dir ../../packages/test-agent build",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
-    "pretest:e2e": "corepack pnpm build",
+    "pretest:e2e": "corepack pnpm --dir ../collab-server build && corepack pnpm build",
     "test:e2e": "playwright test",
     "package": "corepack pnpm build && electron-builder --publish never",
     "package:dir": "corepack pnpm build && electron-builder --dir --publish never",

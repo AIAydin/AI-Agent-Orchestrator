@@ -328,6 +328,7 @@ function defaultSettings(root: string): AppSettings {
     backupRetentionCount: 30,
     collaborationEnabled: false,
     collaborationUrl: '',
+    collaborationManagementUrl: '',
     collaborationDisplayName: 'Local user',
     collaborationSubject: 'local-user',
     collaborationColor: '#6d5efc',

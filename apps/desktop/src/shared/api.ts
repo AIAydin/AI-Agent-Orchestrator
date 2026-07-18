@@ -63,7 +63,11 @@ import type {
   CollaborationCreateCommentResult,
   CollaborationEvent,
   CollaborationJoinInput,
+  CollaborationJoinInviteInput,
   CollaborationJoinResult,
+  CollaborationInviteCreateInput,
+  CollaborationInviteIdInput,
+  CollaborationInviteSafeView,
   CollaborationMetadataSnapshot,
   CollaborationPublishInput,
   CollaborationPublishReceipt,
@@ -306,6 +310,13 @@ export interface ForgeboardApi {
     get(): Promise<IpcResult<CollaborationConnection | null>>;
     snapshot(): Promise<IpcResult<CollaborationMetadataSnapshot | null>>;
     join(input: CollaborationJoinInput): Promise<CollaborationJoinResult>;
+    joinInvite(input: CollaborationJoinInviteInput): Promise<CollaborationJoinResult>;
+    listSessionInvites(): Promise<IpcResult<CollaborationInviteSafeView[]>>;
+    createInvite(
+      input: CollaborationInviteCreateInput,
+    ): Promise<IpcResult<CollaborationInviteSafeView | null>>;
+    copyInviteLink(input: CollaborationInviteIdInput): Promise<IpcResult<boolean>>;
+    revokeInvite(input: CollaborationInviteIdInput): Promise<IpcResult<boolean>>;
     leave(): Promise<IpcResult<CollaborationConnection | null>>;
     publish(
       input: CollaborationPublishInput,

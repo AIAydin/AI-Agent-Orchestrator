@@ -7,7 +7,8 @@ export const CollaborationServerUrlSchema = z
   .max(2_048)
   .url()
   .superRefine((value, context) => {
-    const url = new URL(value);
+    const url = parseAbsoluteUrl(value);
+    if (url === null) return;
     if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -28,6 +29,51 @@ export const CollaborationServerUrlSchema = z
     }
   });
 export type CollaborationServerUrl = z.infer<typeof CollaborationServerUrlSchema>;
+
+/** Explicit HTTP control-plane endpoint used for room and invite management. */
+export const CollaborationManagementUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2_048)
+  .url()
+  .superRefine((value, context) => {
+    const url = parseAbsoluteUrl(value);
+    if (url === null) return;
+    if (url.username !== '' || url.password !== '') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Collaboration management URLs cannot contain credentials.',
+      });
+    }
+    if (url.search !== '' || url.hash !== '') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Collaboration management URLs cannot contain query parameters or fragments.',
+      });
+    }
+    if (url.protocol === 'https:') return;
+    if (url.protocol !== 'http:' || !isLoopbackHostname(url.hostname)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Use HTTPS, or HTTP only for a loopback collaboration server.',
+      });
+    }
+  })
+  .transform((value, context) => {
+    const url = parseAbsoluteUrl(value);
+    if (url === null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Enter a valid collaboration management URL.',
+        fatal: true,
+      });
+      return z.NEVER;
+    }
+    if (!url.pathname.endsWith('/')) url.pathname += '/';
+    return url.toString();
+  });
+export type CollaborationManagementUrl = z.infer<typeof CollaborationManagementUrlSchema>;
 
 export const CollaborationRoomIdSchema = z
   .string()
@@ -83,3 +129,21 @@ export const CollaborationAccessTokenSchema = z
   .refine((value) => !/[\0\r\n]/u.test(value), {
     message: 'Collaboration access tokens cannot contain line breaks or NUL bytes.',
   });
+
+function parseAbsoluteUrl(value: string): URL | null {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  if (hostname === 'localhost' || hostname === '[::1]') return true;
+  const octets = hostname.split('.');
+  return (
+    octets.length === 4 &&
+    octets[0] === '127' &&
+    octets.every((octet) => /^\d{1,3}$/u.test(octet) && Number(octet) <= 255)
+  );
+}

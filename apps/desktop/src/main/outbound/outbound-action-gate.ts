@@ -23,6 +23,9 @@ export type ForgeboardOutboundAction =
   | 'github-pull-request'
   | 'github-ci-status'
   | 'collaboration-connect'
+  | 'collaboration-invite-create'
+  | 'collaboration-invite-redeem'
+  | 'collaboration-invite-revoke'
   | 'diagnostics-send'
   | 'update-check';
 
@@ -331,6 +334,9 @@ function assertDisclosure(disclosure: OutboundActionDisclosure): void {
     'github-pull-request',
     'github-ci-status',
     'collaboration-connect',
+    'collaboration-invite-create',
+    'collaboration-invite-redeem',
+    'collaboration-invite-revoke',
     'diagnostics-send',
     'update-check',
   ]);

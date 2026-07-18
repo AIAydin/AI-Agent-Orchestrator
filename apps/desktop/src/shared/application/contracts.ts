@@ -12,6 +12,7 @@ import {
 import {
   CollaborationColorSchema,
   CollaborationDisplayNameSchema,
+  CollaborationManagementUrlSchema,
   CollaborationRoomIdSchema,
   CollaborationServerUrlSchema,
   CollaborationSubjectSchema,
@@ -254,6 +255,9 @@ export const AppSettingsSchema = z
     backupRetentionCount: z.number().int().min(1).max(365).default(30),
     collaborationEnabled: z.boolean(),
     collaborationUrl: z.union([z.literal(''), CollaborationServerUrlSchema]),
+    collaborationManagementUrl: z
+      .union([z.literal(''), CollaborationManagementUrlSchema])
+      .default(''),
     collaborationDisplayName: CollaborationDisplayNameSchema.default('Local user'),
     collaborationSubject: CollaborationSubjectSchema.default('local-user'),
     collaborationColor: CollaborationColorSchema.default('#6d5efc'),

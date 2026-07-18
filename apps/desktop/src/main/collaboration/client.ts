@@ -241,6 +241,9 @@ export class CollaborationClient {
     this.#connection = CollaborationConnectionSchema.parse({
       connectionId: this.#createId(),
       serverUrl: input.serverUrl,
+      ...(input.managementBaseUrl === undefined
+        ? {}
+        : { managementBaseUrl: input.managementBaseUrl }),
       roomId: input.roomId,
       subject: input.subject,
       displayName: input.displayName,
@@ -340,6 +343,9 @@ export class CollaborationClient {
     this.#connection = CollaborationConnectionSchema.parse({
       connectionId: previous.connectionId,
       serverUrl: previous.serverUrl,
+      ...(previous.managementBaseUrl === undefined
+        ? {}
+        : { managementBaseUrl: previous.managementBaseUrl }),
       roomId: previous.roomId,
       subject: previous.subject,
       displayName: previous.displayName,
@@ -631,6 +637,9 @@ export class CollaborationClient {
     this.#connection = CollaborationConnectionSchema.parse({
       connectionId: connection.connectionId,
       serverUrl: connection.serverUrl,
+      ...(connection.managementBaseUrl === undefined
+        ? {}
+        : { managementBaseUrl: connection.managementBaseUrl }),
       roomId: connection.roomId,
       subject: connection.subject,
       displayName: connection.displayName,
@@ -934,6 +943,9 @@ export class CollaborationClient {
     this.#connection = CollaborationConnectionSchema.parse({
       connectionId: failedConnection.connectionId,
       serverUrl: failedConnection.serverUrl,
+      ...(failedConnection.managementBaseUrl === undefined
+        ? {}
+        : { managementBaseUrl: failedConnection.managementBaseUrl }),
       roomId: failedConnection.roomId,
       subject: failedConnection.subject,
       displayName: failedConnection.displayName,
@@ -968,6 +980,9 @@ export class CollaborationClient {
     this.#connection = CollaborationConnectionSchema.parse({
       connectionId: connection.connectionId,
       serverUrl: connection.serverUrl,
+      ...(connection.managementBaseUrl === undefined
+        ? {}
+        : { managementBaseUrl: connection.managementBaseUrl }),
       roomId: connection.roomId,
       subject: connection.subject,
       displayName: connection.displayName,

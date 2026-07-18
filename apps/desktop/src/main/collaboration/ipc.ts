@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   BrowserWindow,
+  clipboard,
   ipcMain,
   type Dialog,
   type IpcMainInvokeEvent,
@@ -18,7 +19,11 @@ import {
   CollaborationCreateCommentResultSchema,
   CollaborationDiscardRejectedCommentInputSchema,
   CollaborationJoinInputSchema,
+  CollaborationJoinInviteInputSchema,
   CollaborationJoinResultSchema,
+  CollaborationInviteCreateInputSchema,
+  CollaborationInviteIdInputSchema,
+  CollaborationInviteSafeViewSchema,
   CollaborationMetadataSnapshotSchema,
   CollaborationPublishInputSchema,
   CollaborationSyncCheckpointInputSchema,
@@ -35,6 +40,7 @@ import {
   type CollaborationCreateCommentResult,
   type CollaborationEvent,
   type CollaborationJoinInput,
+  type CollaborationInviteSafeView,
   type CollaborationJoinResult,
   type CollaborationMetadataSnapshot,
   type CollaborationPublishReceipt,
@@ -50,6 +56,10 @@ import type {
 import { createNativeOutboundConfirmation } from '../outbound/native-confirmation.js';
 import { assertLiveMainFrame } from '../security/ipc-authority.js';
 import { CollaborationClient } from './client.js';
+import {
+  CollaborationInviteOperations,
+  type CollaborationInviteNativeAuthority,
+} from './invites/operations.js';
 
 type CollaborationOperations = Pick<
   CollaborationClient,
@@ -81,6 +91,17 @@ export interface CollaborationIpcServiceOptions {
     | 'discardRejectedCollaborationComment'
     | 'settleCollaborationSyncDelivery'
   >;
+  readonly invites?: Pick<
+    CollaborationInviteOperations,
+    | 'establishDirect'
+    | 'clear'
+    | 'dispose'
+    | 'list'
+    | 'create'
+    | 'copy'
+    | 'revoke'
+    | 'redeemAndJoin'
+  >;
 }
 
 /** Owner-scoped IPC boundary for authenticated collaboration connections. */
@@ -92,6 +113,7 @@ export class CollaborationIpcService {
   readonly #client: CollaborationOperations;
   readonly #createOwnerId: () => string;
   readonly #store: CollaborationIpcServiceOptions['store'] | undefined;
+  readonly #invites: NonNullable<CollaborationIpcServiceOptions['invites']>;
   readonly #unsubscribe: () => void;
   readonly #recordedDeliveryIds = new Set<string>();
   readonly #deliveryScopes = new Map<string, CollaborationSyncStorageScope>();
@@ -112,6 +134,8 @@ export class CollaborationIpcService {
   #registered = false;
   #disposed = false;
   #paused = false;
+  #inviteOperationActive = false;
+  #inviteOperationPending: Promise<unknown> | null = null;
 
   public constructor(
     private readonly dialog: Pick<Dialog, 'showMessageBox'>,
@@ -121,6 +145,8 @@ export class CollaborationIpcService {
     this.#client = options.client ?? new CollaborationClient();
     this.#createOwnerId = options.createOwnerId ?? randomUUID;
     this.#store = options.store;
+    this.#invites =
+      options.invites ?? new CollaborationInviteOperations(dialog, outbound, { clipboard });
     this.#unsubscribe = this.#client.onEvent((event) => this.#sendEvent(event));
   }
 
@@ -132,6 +158,21 @@ export class CollaborationIpcService {
       this.#snapshot(event, rawArgs),
     );
     this.#handle(COLLABORATION_IPC_CHANNELS.join, (event, rawArgs) => this.#join(event, rawArgs));
+    this.#handle(COLLABORATION_IPC_CHANNELS.joinInvite, (event, rawArgs) =>
+      this.#joinInvite(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.listSessionInvites, (event, rawArgs) =>
+      this.#listSessionInvites(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.createInvite, (event, rawArgs) =>
+      this.#createInvite(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.copyInviteLink, (event, rawArgs) =>
+      this.#copyInviteLink(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.revokeInvite, (event, rawArgs) =>
+      this.#revokeInvite(event, rawArgs),
+    );
     this.#handle(COLLABORATION_IPC_CHANNELS.leave, (event, rawArgs) => this.#leave(event, rawArgs));
     this.#handle(COLLABORATION_IPC_CHANNELS.publish, (event, rawArgs) =>
       this.#publish(event, rawArgs),
@@ -186,6 +227,7 @@ export class CollaborationIpcService {
   public async pauseForShutdown(): Promise<void> {
     if (this.#disposed) return;
     this.#paused = true;
+    await this.#waitForInviteOperation();
     this.#client.pause();
     this.#discardOwner();
     await this.#drain();
@@ -204,7 +246,9 @@ export class CollaborationIpcService {
   public async resetForPrivacy(): Promise<void> {
     if (this.#disposed) return;
     this.#paused = true;
+    await this.#waitForInviteOperation();
     this.#client.reset();
+    this.#invites.clear();
     this.#discardOwner();
     this.#deliveryScopes.clear();
     this.#earlyDeliverySettlements.clear();
@@ -215,7 +259,9 @@ export class CollaborationIpcService {
     if (this.#disposed) return;
     this.#disposed = true;
     this.#paused = true;
+    await this.#waitForInviteOperation();
     this.#client.dispose();
+    this.#invites.dispose();
     this.#unsubscribe();
     this.#discardOwner();
     if (this.#registered) {
@@ -267,7 +313,8 @@ export class CollaborationIpcService {
       const parent = this.#requireLiveParent(event);
       if (
         (this.#owner !== null && this.#owner !== event.sender) ||
-        (this.#joiningOwner !== null && this.#joiningOwner !== event.sender)
+        this.#joiningOwner !== null ||
+        this.#inviteOperationActive
       ) {
         return joinFailure(
           'authorization-failed',
@@ -307,8 +354,15 @@ export class CollaborationIpcService {
           this.#assignOwner(event.sender);
           approvalConsumed = true;
           this.#clearSessionRejectedCommentSuppressions(false);
+          this.#invites.clear();
           const joined = await this.#client.join(input);
           assertCurrent();
+          if (joined.ok) {
+            this.#invites.establishDirect(input, joined.connection);
+          } else {
+            this.#invites.clear();
+            this.#discardOwner();
+          }
           return joined;
         },
       });
@@ -320,6 +374,11 @@ export class CollaborationIpcService {
       return CollaborationJoinResultSchema.parse(result.value);
     } catch (error) {
       if (this.#joiningOwner === event.sender) this.#joiningOwner = null;
+      if (this.#owner === event.sender && this.#client.connection?.status === 'error') {
+        this.#client.leave();
+        this.#invites.clear();
+        this.#discardOwner();
+      }
       const invalid = error instanceof z.ZodError;
       return joinFailure(
         invalid ? 'invalid-configuration' : 'network-failed',
@@ -331,12 +390,210 @@ export class CollaborationIpcService {
     }
   }
 
-  #leave(event: IpcMainInvokeEvent, rawArgs: unknown[]): IpcResult<CollaborationConnection | null> {
+  async #joinInvite(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<CollaborationJoinResult> {
+    try {
+      return await this.#withInviteOperation(
+        async () => await this.#joinInviteOperation(event, rawArgs),
+      );
+    } catch {
+      return joinFailure(
+        'authorization-failed',
+        'Another collaboration invite action is already in progress.',
+        false,
+      );
+    }
+  }
+
+  async #joinInviteOperation(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<CollaborationJoinResult> {
+    let replacementStarted = false;
+    try {
+      this.#assertAvailable();
+      const [input] = z.tuple([CollaborationJoinInviteInputSchema]).parse(rawArgs);
+      const parent = this.#requireLiveParent(event);
+      if ((this.#owner !== null && this.#owner !== event.sender) || this.#joiningOwner !== null) {
+        return joinFailure(
+          'authorization-failed',
+          'Another Forgeboard window owns the active or pending collaboration session.',
+          false,
+        );
+      }
+      this.#joiningOwner = event.sender;
+      const ownerId = this.#ownerId(event.sender);
+      const ownerBeforeApproval = this.#owner;
+      const assertCurrent = (): void => {
+        assertLiveMainFrame(event, 'Collaboration invite redemption');
+        if (
+          this.#owner !== (replacementStarted ? event.sender : ownerBeforeApproval) ||
+          this.#joiningOwner !== event.sender ||
+          this.#ownerIds.get(event.sender) !== ownerId ||
+          parent.isDestroyed() ||
+          BrowserWindow.fromWebContents(event.sender) !== parent
+        ) {
+          throw new Error('The originating Forgeboard window or room session changed.');
+        }
+      };
+      const result = await this.#invites.redeemAndJoin(
+        { ownerId, parent, assertCurrent },
+        input,
+        async (joinInput) => {
+          assertCurrent();
+          this.#assignOwner(event.sender);
+          replacementStarted = true;
+          this.#clearSessionRejectedCommentSuppressions(false);
+          const joined = await this.#client.join(joinInput);
+          assertCurrent();
+          if (!joined.ok) {
+            this.#client.leave();
+            this.#discardOwner(false);
+          }
+          return joined;
+        },
+      );
+      this.#joiningOwner = null;
+      return CollaborationJoinResultSchema.parse(result);
+    } catch (error) {
+      if (replacementStarted) {
+        this.#client.leave();
+        this.#discardOwner(false);
+      } else if (this.#joiningOwner === event.sender) {
+        this.#joiningOwner = null;
+      }
+      const invalid = error instanceof z.ZodError;
+      return joinFailure(
+        invalid ? 'invalid-configuration' : 'network-failed',
+        invalid
+          ? 'Forgeboard rejected invalid collaboration invite settings.'
+          : 'Forgeboard could not redeem and join the collaboration invite.',
+        !invalid,
+      );
+    }
+  }
+
+  #listSessionInvites(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): IpcResult<CollaborationInviteSafeView[]> {
+    try {
+      this.#assertAvailable();
+      z.tuple([]).parse(rawArgs);
+      const { connection } = this.#inviteAuthority(event, 'Collaboration invite list');
+      return {
+        ok: true,
+        value: CollaborationInviteSafeViewSchema.array()
+          .max(100)
+          .parse(this.#invites.list(connection)),
+      };
+    } catch (error) {
+      return ipcFailure(error, 'Forgeboard could not list collaboration invites.');
+    }
+  }
+
+  async #createInvite(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationInviteSafeView | null>> {
+    try {
+      return await this.#withInviteOperation(
+        async () => await this.#createInviteOperation(event, rawArgs),
+      );
+    } catch (error) {
+      return ipcFailure(error, 'Forgeboard could not create the collaboration invite.');
+    }
+  }
+
+  async #createInviteOperation(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationInviteSafeView | null>> {
+    try {
+      this.#assertAvailable();
+      const [input] = z.tuple([CollaborationInviteCreateInputSchema]).parse(rawArgs);
+      const authority = this.#inviteAuthority(event, 'Collaboration invite creation');
+      const value = await this.#invites.create(authority, authority.connection, input);
+      authority.assertCurrent();
+      return {
+        ok: true,
+        value: CollaborationInviteSafeViewSchema.nullable().parse(value),
+      };
+    } catch (error) {
+      return ipcFailure(error, 'Forgeboard could not create the collaboration invite.');
+    }
+  }
+
+  async #copyInviteLink(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<boolean>> {
+    try {
+      return await this.#withInviteOperation(
+        async () => await this.#copyInviteLinkOperation(event, rawArgs),
+      );
+    } catch (error) {
+      return ipcFailure(error, 'Forgeboard could not copy the collaboration invite.');
+    }
+  }
+
+  async #copyInviteLinkOperation(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<boolean>> {
+    try {
+      this.#assertAvailable();
+      const [input] = z.tuple([CollaborationInviteIdInputSchema]).parse(rawArgs);
+      const authority = this.#inviteAuthority(event, 'Collaboration invite copy');
+      const value = await this.#invites.copy(authority, authority.connection, input.inviteId);
+      authority.assertCurrent();
+      return { ok: true, value };
+    } catch (error) {
+      return ipcFailure(error, 'Forgeboard could not copy the collaboration invite.');
+    }
+  }
+
+  async #revokeInvite(event: IpcMainInvokeEvent, rawArgs: unknown[]): Promise<IpcResult<boolean>> {
+    try {
+      return await this.#withInviteOperation(
+        async () => await this.#revokeInviteOperation(event, rawArgs),
+      );
+    } catch (error) {
+      return ipcFailure(error, 'Forgeboard could not revoke the collaboration invite.');
+    }
+  }
+
+  async #revokeInviteOperation(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<boolean>> {
+    try {
+      this.#assertAvailable();
+      const [input] = z.tuple([CollaborationInviteIdInputSchema]).parse(rawArgs);
+      const authority = this.#inviteAuthority(event, 'Collaboration invite revocation');
+      const value = await this.#invites.revoke(authority, authority.connection, input.inviteId);
+      authority.assertCurrent();
+      return { ok: true, value };
+    } catch (error) {
+      return ipcFailure(error, 'Forgeboard could not revoke the collaboration invite.');
+    }
+  }
+
+  async #leave(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationConnection | null>> {
     try {
       this.#assertAvailable();
       z.tuple([]).parse(rawArgs);
       this.#assertOwner(event, 'Collaboration leave');
+      await this.#waitForInviteOperation();
+      this.#assertAvailable();
+      this.#assertOwner(event, 'Collaboration leave');
       this.#client.leave();
+      this.#invites.clear();
       this.#discardOwner();
       return { ok: true, value: null };
     } catch (error) {
@@ -650,11 +907,12 @@ export class CollaborationIpcService {
     this.#owner = owner;
   }
 
-  #discardOwner(): void {
+  #discardOwner(clearInvites = true): void {
     const owner = this.#owner;
     this.#owner = null;
     this.#joiningOwner = null;
     this.#recordedDeliveryIds.clear();
+    if (clearInvites) this.#invites.clear();
     this.#clearSessionRejectedCommentSuppressions();
     if (owner === null) return;
     const ownerId = this.#ownerIds.get(owner);
@@ -687,6 +945,58 @@ export class CollaborationIpcService {
       throw new Error('A live Forgeboard window is required to confirm collaboration.');
     }
     return parent;
+  }
+
+  #inviteAuthority(
+    event: IpcMainInvokeEvent,
+    operation: string,
+  ): CollaborationInviteNativeAuthority & {
+    readonly connection: CollaborationConnection;
+  } {
+    if (this.#joiningOwner !== null) {
+      throw new Error('Collaboration invite management is unavailable while a join is pending.');
+    }
+    this.#assertOwner(event, operation);
+    const parent = this.#requireLiveParent(event);
+    const ownerId = this.#ownerIds.get(event.sender);
+    if (ownerId === undefined) throw new Error(`${operation} has no active window authority.`);
+    const connection = this.#requiredActiveConnection();
+    if (connection.role !== 'owner') {
+      throw new Error('Only the connected room owner can manage collaboration invites.');
+    }
+    const fingerprint = JSON.stringify(connection);
+    const assertCurrent = (): void => {
+      this.#assertOwner(event, operation);
+      if (
+        parent.isDestroyed() ||
+        BrowserWindow.fromWebContents(event.sender) !== parent ||
+        this.#ownerIds.get(event.sender) !== ownerId ||
+        JSON.stringify(this.#requiredActiveConnection()) !== fingerprint
+      ) {
+        throw new Error('The originating Forgeboard window or room session changed.');
+      }
+    };
+    return { ownerId, parent, assertCurrent, connection };
+  }
+
+  async #withInviteOperation<Value>(operation: () => Promise<Value>): Promise<Value> {
+    if (this.#inviteOperationActive) {
+      throw new Error('Another collaboration invite action is already in progress.');
+    }
+    this.#inviteOperationActive = true;
+    const pending = Promise.resolve().then(operation);
+    this.#inviteOperationPending = pending;
+    try {
+      return await pending;
+    } finally {
+      this.#inviteOperationActive = false;
+      if (this.#inviteOperationPending === pending) this.#inviteOperationPending = null;
+    }
+  }
+
+  async #waitForInviteOperation(): Promise<void> {
+    const pending = this.#inviteOperationPending;
+    if (pending !== null) await Promise.allSettled([pending]);
   }
 
   #assertOwner(event: IpcMainInvokeEvent, operation: string): void {

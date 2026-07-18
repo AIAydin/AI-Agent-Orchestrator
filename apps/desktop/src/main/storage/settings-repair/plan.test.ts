@@ -207,6 +207,7 @@ describe('legacy settings repair planning', () => {
       'dockerExecutable',
       'dockerContainerExecutable',
       'backupDirectory',
+      'collaborationManagementUrl',
     ]) {
       delete source[field];
     }
@@ -216,6 +217,7 @@ describe('legacy settings repair planning', () => {
     expect(planned?.evidence.repairedFieldPaths).toEqual(['worktreeRoot']);
     expect(planned?.settings.dockerExecutable).toBe('docker');
     expect(planned?.settings.customAgent.enabled).toBe(false);
+    expect(planned?.settings.collaborationManagementUrl).toBe('');
   });
 });
 
@@ -298,6 +300,7 @@ function settings(): AppSettings {
     backupRetentionCount: 30,
     collaborationEnabled: false,
     collaborationUrl: '',
+    collaborationManagementUrl: '',
     collaborationDisplayName: 'Local user',
     collaborationSubject: 'local-user',
     collaborationColor: '#6d5efc',

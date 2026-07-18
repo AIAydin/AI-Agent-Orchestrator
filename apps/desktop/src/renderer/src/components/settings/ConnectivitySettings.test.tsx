@@ -45,6 +45,11 @@ beforeEach(() => {
       collaboration: {
         get: vi.fn(() => Promise.resolve({ ok: true, value: null })),
         join,
+        joinInvite: vi.fn(),
+        listSessionInvites: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
+        createInvite: vi.fn(),
+        copyInviteLink: vi.fn(),
+        revokeInvite: vi.fn(),
         leave,
         publish: vi.fn(),
         updateAwareness: vi.fn(),
@@ -71,16 +76,38 @@ describe('ConnectivitySettings collaboration controls', () => {
     expect(document.body.textContent).not.toMatch(/credentials, and tokens are not shared/u);
   });
 
+  it('configures an explicit management API without guessing from the WebSocket URL', () => {
+    render(<Harness />);
+
+    const managementUrl = screen.getByRole<HTMLInputElement>('textbox', {
+      name: /Collaboration management API URL/u,
+    });
+    expect(managementUrl.value).toBe('https://management.example.test/control/');
+    expect(screen.getByText(/Used for explicit room and invite management/u)).toBeTruthy();
+    expect(
+      screen.getByText(/Plain HTTP is accepted only for a server on this device/u),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/does not guess this API address from the WebSocket URL/u),
+    ).toBeTruthy();
+
+    fireEvent.change(managementUrl, {
+      target: { value: 'http://127.0.0.1:1234' },
+    });
+    expect(managementUrl.value).toBe('http://127.0.0.1:1234');
+  });
+
   it('joins explicitly, clears the session token, and renders validated awareness', async () => {
     render(<Harness />);
     fireEvent.change(screen.getByLabelText('Session access token'), {
       target: { value: 'SESSION_TOKEN_DO_NOT_PERSIST' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with access token' }));
 
     await waitFor(() => expect(join).toHaveBeenCalledOnce());
     expect(join).toHaveBeenCalledWith({
       serverUrl: 'wss://collaboration.example.test/team',
+      managementBaseUrl: 'https://management.example.test/control/',
       roomId: 'launch-room',
       subject: 'local-user',
       displayName: 'Local editor',
@@ -126,7 +153,7 @@ describe('ConnectivitySettings collaboration controls', () => {
     fireEvent.change(screen.getByLabelText('Session access token'), {
       target: { value: 'SESSION_TOKEN' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with access token' }));
     await waitFor(() => expect(join).toHaveBeenCalledOnce());
 
     const enabled = screen.getByRole<HTMLInputElement>('checkbox', {
@@ -156,6 +183,7 @@ function Harness() {
       transcriptRetentionDays: 30,
       collaborationEnabled: true,
       collaborationUrl: 'wss://collaboration.example.test/team',
+      collaborationManagementUrl: 'https://management.example.test/control',
       collaborationDisplayName: 'Local editor',
       collaborationRoom: 'launch-room',
       collaborationReconnect: true,

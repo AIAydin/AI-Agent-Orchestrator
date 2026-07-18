@@ -164,6 +164,7 @@ describe('collaboration settings', () => {
     expect(parsed).toMatchObject({
       collaborationSubject: 'local-user',
       collaborationColor: '#6d5efc',
+      collaborationManagementUrl: '',
     });
     expect(parsed).not.toHaveProperty('collaborationAccessToken');
     expect(
@@ -172,6 +173,36 @@ describe('collaboration settings', () => {
         collaborationSubject: '../private',
       }).success,
     ).toBe(false);
+    for (const collaborationManagementUrl of [
+      'https://collaboration.example.test',
+      'https://collaboration.example.test/control/',
+      'http://localhost:1234',
+      'http://127.0.0.2:1234',
+      'http://[::1]:1234',
+    ]) {
+      expect(
+        AppSettingsSchema.safeParse({ ...baseSettings, collaborationManagementUrl }).success,
+      ).toBe(true);
+    }
+    expect(
+      AppSettingsSchema.parse({
+        ...baseSettings,
+        collaborationManagementUrl: 'https://collaboration.example.test/control',
+      }).collaborationManagementUrl,
+    ).toBe('https://collaboration.example.test/control/');
+    for (const collaborationManagementUrl of [
+      'http://collaboration.example.test',
+      'http://128.0.0.1:1234',
+      'ftp://127.0.0.1:1234',
+      'https://user:secret@collaboration.example.test',
+      'https://collaboration.example.test?token=secret',
+      'https://collaboration.example.test/#secret',
+      'https://localhost'.padEnd(2_049, 'x'),
+    ]) {
+      expect(
+        AppSettingsSchema.safeParse({ ...baseSettings, collaborationManagementUrl }).success,
+      ).toBe(false);
+    }
     expect(
       AppSettingsSchema.safeParse({
         ...baseSettings,

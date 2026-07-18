@@ -171,6 +171,7 @@ export function createDefaultSettings(): AppSettings {
     backupRetentionCount: 30,
     collaborationEnabled: false,
     collaborationUrl: 'ws://127.0.0.1:1234',
+    collaborationManagementUrl: 'http://127.0.0.1:1234/',
     collaborationDisplayName: 'Local user',
     collaborationSubject: 'local-user',
     collaborationColor: '#6d5efc',

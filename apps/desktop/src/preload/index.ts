@@ -10,23 +10,6 @@ import {
   CheckExecutionViewSchema,
   CheckPlanViewSchema,
 } from '../shared/checks/contracts.js';
-import {
-  COLLABORATION_IPC_CHANNELS,
-  CollaborationConnectionSchema,
-  CollaborationCreateCommentInputSchema,
-  CollaborationCreateCommentResultSchema,
-  CollaborationEventSchema,
-  CollaborationJoinInputSchema,
-  CollaborationJoinResultSchema,
-  CollaborationMetadataSnapshotSchema,
-  CollaborationPublishInputSchema,
-  CollaborationPublishReceiptSchema,
-  CollaborationSyncCheckpointInputSchema,
-  CollaborationDiscardRejectedCommentInputSchema,
-  CollaborationSyncRecoverInputSchema,
-  CollaborationSyncRecoverySchema,
-  CollaborationUpdateAwarenessInputSchema,
-} from '../shared/collaboration/index.js';
 import type { IpcResult } from '../shared/application/contracts.js';
 import {
   AppCloseRequestSchema,
@@ -87,6 +70,7 @@ import {
   WorkflowStartInputSchema,
 } from '../shared/workflow/contracts.js';
 import { createFileApi } from './files.js';
+import { createCollaborationApi } from './collaboration/index.js';
 import { createGitConnectionsApi } from './git/connections/index.js';
 import { createGitLifecycleApi } from './git/lifecycle/cleanup.js';
 import { createGitDeliveryReadinessApi } from './git/readiness/bridge.js';
@@ -212,68 +196,11 @@ const api: ForgeboardApi = {
     const result: unknown = await ipcRenderer.invoke(channel, ...args);
     return result;
   }),
-  collaboration: {
-    get: () =>
-      invokeValidated(COLLABORATION_IPC_CHANNELS.get, CollaborationConnectionSchema.nullable()),
-    snapshot: () =>
-      invokeValidated(
-        COLLABORATION_IPC_CHANNELS.snapshot,
-        CollaborationMetadataSnapshotSchema.nullable(),
-      ),
-    join: async (input) => {
-      const result: unknown = await ipcRenderer.invoke(
-        COLLABORATION_IPC_CHANNELS.join,
-        CollaborationJoinInputSchema.parse(input),
-      );
-      return CollaborationJoinResultSchema.parse(result);
-    },
-    leave: () =>
-      invokeValidated(COLLABORATION_IPC_CHANNELS.leave, CollaborationConnectionSchema.nullable()),
-    publish: (input) =>
-      invokeValidated(
-        COLLABORATION_IPC_CHANNELS.publish,
-        CollaborationPublishReceiptSchema.nullable(),
-        CollaborationPublishInputSchema.parse(input),
-      ),
-    recover: (input) =>
-      invokeValidated(
-        COLLABORATION_IPC_CHANNELS.recover,
-        CollaborationSyncRecoverySchema.nullable(),
-        CollaborationSyncRecoverInputSchema.parse(input),
-      ),
-    checkpoint: (input) =>
-      invokeValidated(
-        COLLABORATION_IPC_CHANNELS.checkpoint,
-        z.boolean(),
-        CollaborationSyncCheckpointInputSchema.parse(input),
-      ),
-    discardRejectedComment: (input) =>
-      invokeValidated(
-        COLLABORATION_IPC_CHANNELS.discardRejectedComment,
-        CollaborationSyncRecoverySchema.nullable(),
-        CollaborationDiscardRejectedCommentInputSchema.parse(input),
-      ),
-    createComment: (input) =>
-      invokeValidated(
-        COLLABORATION_IPC_CHANNELS.createComment,
-        CollaborationCreateCommentResultSchema.nullable(),
-        CollaborationCreateCommentInputSchema.parse(input),
-      ),
-    updateAwareness: (input) =>
-      invokeValidated(
-        COLLABORATION_IPC_CHANNELS.updateAwareness,
-        z.boolean(),
-        CollaborationUpdateAwarenessInputSchema.parse(input),
-      ),
-    onEvent: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
-        const event = CollaborationEventSchema.safeParse(payload);
-        if (event.success) listener(event.data);
-      };
-      ipcRenderer.on(COLLABORATION_IPC_CHANNELS.event, handler);
-      return () => ipcRenderer.removeListener(COLLABORATION_IPC_CHANNELS.event, handler);
-    },
-  },
+  collaboration: createCollaborationApi(
+    (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+    (channel, listener) => ipcRenderer.on(channel, listener),
+    (channel, listener) => ipcRenderer.removeListener(channel, listener),
+  ),
   runs: {
     ...createRunHistoryApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     ...createRunContinuationApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),

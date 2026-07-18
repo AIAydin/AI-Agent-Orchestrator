@@ -10,6 +10,7 @@ import {
   CollaborationAccessTokenSchema,
   CollaborationColorSchema,
   CollaborationDisplayNameSchema,
+  CollaborationManagementUrlSchema,
   CollaborationRoleSchema,
   CollaborationRoomIdSchema,
   CollaborationServerUrlSchema,
@@ -49,6 +50,7 @@ export const CollaborationConnectionSchema = z
   .object({
     connectionId: z.string().uuid(),
     serverUrl: CollaborationServerUrlSchema,
+    managementBaseUrl: CollaborationManagementUrlSchema.optional(),
     roomId: CollaborationRoomIdSchema,
     subject: CollaborationSubjectSchema,
     displayName: CollaborationDisplayNameSchema,
@@ -97,6 +99,9 @@ export type CollaborationConnection = z.infer<typeof CollaborationConnectionSche
 export const CollaborationJoinInputSchema = z
   .object({
     serverUrl: CollaborationServerUrlSchema,
+    managementBaseUrl: z
+      .union([z.literal('').transform(() => undefined), CollaborationManagementUrlSchema])
+      .optional(),
     roomId: CollaborationRoomIdSchema,
     subject: CollaborationSubjectSchema,
     displayName: CollaborationDisplayNameSchema,

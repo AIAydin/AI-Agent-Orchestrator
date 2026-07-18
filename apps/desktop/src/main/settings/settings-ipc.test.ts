@@ -132,6 +132,7 @@ describe('SettingsIpcService transactions', () => {
       transcriptRetentionDays: 7,
       collaborationSubject: 'team-editor',
       collaborationColor: '#123456',
+      collaborationManagementUrl: 'https://management.example.test/control/',
     });
     const directory = mkdtempSync(join(tmpdir(), 'forgeboard-settings-ipc-'));
     temporaryDirectories.push(directory);
@@ -155,6 +156,30 @@ describe('SettingsIpcService transactions', () => {
     expect(fixture.store.saveSettings).not.toHaveBeenCalled();
     expect(fixture.store.applyRetention).not.toHaveBeenCalled();
     expect(fixture.store.appendAudit).not.toHaveBeenCalled();
+    fixture.service.dispose();
+  });
+
+  it('defaults a legacy import with no collaboration management endpoint to inactive', async () => {
+    const imported = structuredClone(settings()) as Record<string, unknown>;
+    delete imported['collaborationManagementUrl'];
+    const directory = mkdtempSync(join(tmpdir(), 'forgeboard-settings-ipc-'));
+    temporaryDirectories.push(directory);
+    const importPath = join(directory, 'settings.json');
+    writeFileSync(
+      importPath,
+      JSON.stringify({ format: 'forgeboard-settings', version: 1, settings: imported }),
+      'utf8',
+    );
+    const fixture = createFixture(settings(), settings(), importPath);
+    electronMock.fromWebContents.mockReturnValue(liveParent());
+
+    const result = await requiredHandler(IPC_CHANNELS.settingsImport)(liveEvent());
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { collaborationManagementUrl: '' },
+    });
+    expect(fixture.store.saveSettings).not.toHaveBeenCalled();
     fixture.service.dispose();
   });
 
@@ -486,6 +511,7 @@ describe('SettingsIpcService transactions', () => {
     const current = settings({
       collaborationSubject: 'team-editor',
       collaborationColor: '#123456',
+      collaborationManagementUrl: 'https://management.example.test/control/',
     });
     const directory = mkdtempSync(join(tmpdir(), 'forgeboard-settings-ipc-'));
     temporaryDirectories.push(directory);
@@ -507,6 +533,7 @@ describe('SettingsIpcService transactions', () => {
     expect(exported.settings).toMatchObject({
       collaborationSubject: 'team-editor',
       collaborationColor: '#123456',
+      collaborationManagementUrl: 'https://management.example.test/control/',
     });
     expect(exported.settings).not.toHaveProperty('collaborationAccessToken');
     fixture.service.dispose();
@@ -854,6 +881,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     backupRetentionCount: 30,
     collaborationEnabled: false,
     collaborationUrl: 'ws://127.0.0.1:1234',
+    collaborationManagementUrl: 'http://127.0.0.1:1234/',
     collaborationDisplayName: 'Local user',
     collaborationSubject: 'local-user',
     collaborationColor: '#6d5efc',

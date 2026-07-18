@@ -84,4 +84,13 @@ describe('settings draft validation', () => {
       }),
     ).toEqual([]);
   });
+
+  it('reports an unsafe collaboration management endpoint before save', () => {
+    expect(
+      settingsDraftValidationIssues({
+        ...base,
+        collaborationManagementUrl: 'http://collaboration.example.test',
+      }),
+    ).toContainEqual(expect.stringMatching(/^Collaboration management API URL:/u));
+  });
 });

@@ -137,6 +137,8 @@ not be reclassified as future work.
 - [x] Offline/reconnect, shared graph, cursors, selection, presence, comments, and avatars.
 - [x] Owner/editor/reviewer/viewer authorization.
 - [x] Signed expiring invites, revocation, room authorization, rate limits, TLS, and audit trail.
+- [x] UI invite redemption plus owner-only current-session invite creation, native clipboard copy,
+      and revocation without exposing raw invite links or access tokens to the renderer.
 - [x] Schema/test proof that source, file contents, diffs, prompts, terminals, env, secrets, and
       transcripts never enter collaboration documents.
 - [x] Metadata-only state when a collaborator cannot resolve an authorized local file.
@@ -1212,3 +1214,22 @@ unchecked when only a subset of their required behavior has proof.
   canvas, and shell-persistence tests passed alongside desktop typecheck, focused zero-warning lint,
   formatting, and the 1,117-file structure gate. The broader lifecycle-controls item remains open
   for real Agent pause/continue and complete node/edge lifecycle coverage.
+- 2026-07-17: **Settings → Connectivity** now persists an explicit validated collaboration
+  management API URL and supports two deliberate join paths: invite-link redemption and the advanced
+  direct access-token flow. Invite redemption, owner-only role/lifetime/use-limited creation,
+  cancel-default native clipboard copy, and revocation are bound to the exact live window, connected
+  room, role, server, and management endpoint. Invite links and access credentials stay in volatile
+  main-process authority; preload rejects token-bearing management responses, renderer rows contain
+  only safe session metadata, pasted credentials clear after every attempt, and leave/reset/quit
+  clear the session authority. One hundred fifty-four focused shared-contract, main-operation,
+  preload-bridge, Settings, renderer, import/export, and legacy-repair tests passed across fifteen
+  files. The repository-wide 337-file/2,266-test unit suite and 34-file/304-test integration suite
+  also passed alongside strict workspace typecheck, zero-warning lint, formatting, production build,
+  `git diff --check`, and the 1,144-file structure gate. A dedicated Electron journey now builds and
+  launches the production
+  collaboration server on an ephemeral loopback port, covers direct owner join, cancel-default
+  create/copy/revoke disclosures, rejected redemption of a revoked invite, valid second-profile
+  viewer redemption, role enforcement, credential clearing, and absence of external requests; its
+  focused Playwright run passed alongside the 1,144-file structure gate. The broad Settings entries
+  remain unchecked, as do desktop room bootstrap, membership administration, room audit UI, and
+  durable server-wide invite listing.

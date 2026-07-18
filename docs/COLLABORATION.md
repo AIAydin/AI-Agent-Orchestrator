@@ -12,21 +12,43 @@ curl http://127.0.0.1:1234/healthz
 
 In development, a missing signing key creates an ephemeral key and prints a warning. Existing access and invite tokens consequently stop working when that process restarts. The server binds to `127.0.0.1`, permits room bootstrap only from loopback, and persists metadata in `./data/forgeboard-collab.sqlite`. Production mode refuses to start without explicit signing and administrator secrets.
 
-The desktop client configures and controls an ordinary room session without source, environment, or
-manifest edits. Room creation, invitations, membership changes, and deployment administration use
-the authenticated management API described below; deployment environment variables are only for
-operators of this optional service. This checkpoint does not yet claim desktop UI for room creation,
-invite issuance/revocation, or membership administration; those broader integration/settings items
-remain open in the implementation ledger.
+The desktop client configures and controls ordinary room and invite sessions without source,
+environment, or manifest edits. Invite redemption and current-session owner invite creation, copy,
+and revocation are available in the UI. Room creation, membership changes, room audit access, and
+deployment administration still use the authenticated management API described below; deployment
+environment variables are only for operators of this optional service. Those broader room and
+administration UI items remain open in the implementation ledger.
 
 ## Desktop connection and recovery
 
-In **Settings → Connectivity**, enable collaboration and enter the server URL, room, collaborator
-identity, display name, color, and a current access token. **Connect** remains disabled until those
-fields are valid. The access token field clears after every attempt; the token is held only in
-volatile main-process memory for the approved session and automatic reconnect, and is cleared on
-leave, privacy reset, or quit. A native confirmation identifies the exact network destination before
-the first connection.
+In **Settings → Connectivity**, enable collaboration and enter the WebSocket server URL,
+collaboration management API URL, collaborator identity, display name, and color. The management URL
+must use HTTPS, except that plain HTTP is accepted for a loopback server on the same device. It is an
+explicit setting: Forgeboard does not derive or guess it from the WebSocket URL.
+
+The ordinary invite path accepts a trusted invite link and remains disabled until the explicit
+server, management API, and identity fields are present. The pasted link is a password-style,
+volatile field that clears after every accepted, rejected, cancelled, or malformed attempt. Before
+redemption, a cancel-default native review shows the exact destinations, display identity, and an
+invite SHA-256 fingerprint—not the raw link. The management service's returned access credential is
+consumed by the main process and never returned to the renderer.
+
+The advanced access-token path remains available for an already provisioned room. Enter the room
+and current access token, then select **Connect with access token**. The access-token field clears
+after every attempt; the token is held only in volatile main-process memory for the approved session
+and automatic reconnect, and is cleared on leave, privacy reset, or quit. Its cancel-default native
+confirmation identifies the exact network destination before the first connection. Supplying the
+explicit management URL also binds owner invite management to that exact connected session.
+
+The connected role is visible in Settings. Only a connected owner whose session is bound to the
+explicit management URL sees invite-management controls. The owner chooses editor, reviewer, or
+viewer access, a bounded lifetime, and a maximum-use count. Create and revoke each require a fresh
+cancel-default native review. The UI lists only token-free metadata for invites created during the
+current owner session: role, expiration, and maximum uses. **Copy** requires a separate native review
+and writes the link from protected main-process memory directly to the system clipboard; the raw link
+does not cross back through preload or render in the page. Leaving, resetting privacy data, quitting,
+or changing the owning session clears the volatile invite list and credentials. This UI does not
+claim to list every durable invite already present on the server.
 
 Authenticated roles are enforced in both the desktop and server. Owners and editors can publish
 graph metadata. Reviewers can add their own node comments through a separate main-owned operation

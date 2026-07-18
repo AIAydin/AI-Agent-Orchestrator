@@ -17,6 +17,7 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
   backupIntervalHours: 'Backup interval',
   backupRetentionCount: 'Backup retention',
   terminalShell: 'Default terminal executable',
+  collaborationManagementUrl: 'Collaboration management API URL',
 };
 
 /** Returns bounded, user-facing failures for the exact unsaved settings draft. */

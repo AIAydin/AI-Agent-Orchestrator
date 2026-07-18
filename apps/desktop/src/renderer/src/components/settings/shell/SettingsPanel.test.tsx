@@ -1092,7 +1092,10 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.change(screen.getByLabelText('Collaborator color'), {
       target: { value: '#123456' },
     });
-    expect(screen.getByRole('button', { name: 'Connect' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Connect with access token' })).toHaveProperty(
+      'disabled',
+      true,
+    );
     expect(screen.getByLabelText('Update channel')).toHaveProperty('disabled', false);
     expect(screen.queryByRole('checkbox', { name: /Download updates automatically/u })).toBeNull();
     expect(
