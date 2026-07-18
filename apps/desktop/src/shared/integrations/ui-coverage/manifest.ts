@@ -207,11 +207,11 @@ export const INTEGRATION_UI_MANIFEST = {
     exportPolicy: 'reference-only',
     evidence: {
       source: 'apps/desktop/src/renderer/src/components/docker/DockerConfiguration.tsx',
-      test: PRESENCE_TEST,
-      testTitle: 'renders Docker browse, readiness, and reviewed image actions',
+      test: 'apps/desktop/src/renderer/src/components/docker/DockerConfiguration.test.tsx',
+      testTitle: 'does not emit a completed check after the configuration changed externally',
     },
     limitation:
-      'Configuration may export, but runtime readiness and registry sign-in do not. Check Docker remains advisory in Settings; only onboarding gates progression on successful readiness.',
+      'Configuration may export, but runtime readiness and registry sign-in do not. Enabling or changing Docker requires a recent exact device-local check before Settings can save.',
   },
   collaborationSession: {
     route: 'Settings > Connectivity',

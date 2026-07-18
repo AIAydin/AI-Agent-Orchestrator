@@ -143,6 +143,25 @@ describe('legacy settings repair planning', () => {
     expect(planLegacySettingsRepair(JSON.stringify(defaults), 12, defaults)).toBeUndefined();
   });
 
+  it('safely clears a legacy enabled host-credential mount without disabling Docker', () => {
+    const defaults = settings();
+    const source = {
+      ...defaults,
+      dockerEnabled: true,
+      dockerImage: 'registry.example/agent:1',
+      dockerContainerExecutable: '/usr/local/bin/codex',
+      dockerMountHostCredentials: true,
+    };
+
+    const planned = planLegacySettingsRepair(JSON.stringify(source), 12, defaults);
+
+    expect(planned?.settings).toMatchObject({
+      dockerEnabled: true,
+      dockerMountHostCredentials: false,
+    });
+    expect(planned?.evidence.repairedFieldPaths).toEqual(['dockerMountHostCredentials']);
+  });
+
   it.each([
     './tools/shell',
     '../tools/shell',

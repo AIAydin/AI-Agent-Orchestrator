@@ -277,15 +277,16 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   );
   const commandReadiness = new CommandReadinessService(store, app.getPath('home'));
   const folderReadinessService = new FolderReadinessService();
+  const docker = new DockerIpcService(dialog, store, undefined, outbound);
   const settingsPersistenceReadiness = new SettingsPersistenceReadinessVerifier(
     agentReadiness,
     folderReadinessService,
     commandReadiness,
+    docker,
   );
   const integrity = new IntegrityService(store);
   const approvals = new ApprovalService(store);
   const extensions = new ExtensionIpcService(app, dialog, store);
-  const docker = new DockerIpcService(dialog, store, undefined, outbound);
   const backups = new AutomaticBackupCoordinator(
     store,
     () => store.getSettings(createDefaultSettings()),

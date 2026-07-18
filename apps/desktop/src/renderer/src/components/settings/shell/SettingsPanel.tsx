@@ -27,7 +27,6 @@ import { AgentsSettings } from '../agents/AgentsSettings.js';
 import { AppearanceSettings } from '../AppearanceSettings.js';
 import { CheckSettings } from '../CheckSettings.js';
 import { ConnectivitySettings } from '../ConnectivitySettings.js';
-import { dockerConfigurationIncomplete } from '../agents/DockerSettings.js';
 import { GitPreviewSettings } from '../GitPreviewSettings.js';
 import { HelpSettings } from '../help/HelpSettings.js';
 import { PermissionSettings } from '../PermissionSettings.js';
@@ -39,6 +38,10 @@ import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadines
 import { useSettingsFolderReadiness } from '../readiness/useSettingsFolderReadiness.js';
 import { settingsCommandDrafts } from './command-drafts.js';
 import { UpdateSettings } from '../updates/UpdateSettings.js';
+import {
+  dockerReadinessIssue,
+  type DockerReadinessEvidence,
+} from '../../docker/readiness-evidence.js';
 
 export type SettingsTab =
   | 'appearance'
@@ -73,6 +76,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
   const [busy, setBusy] = useState(false);
   const [deletePhrase, setDeletePhrase] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [dockerReadiness, setDockerReadiness] = useState<DockerReadinessEvidence | null>(null);
   const dialog = useRef<HTMLFormElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const closeRef = useRef(props.onClose);
@@ -95,6 +99,16 @@ export function SettingsPanel(props: SettingsPanelProps) {
     checkAgentReadiness,
   );
   const folderReadiness = useSettingsFolderReadiness(draft, checkFolderReadiness);
+  const dockerIssue = dockerReadinessIssue(draft, dockerReadiness, props.settings);
+
+  useEffect(() => {
+    setDockerReadiness(null);
+  }, [
+    draft.dockerEnabled,
+    draft.dockerExecutable,
+    draft.dockerImage,
+    draft.dockerContainerExecutable,
+  ]);
 
   useEffect(() => {
     const previousFocus =
@@ -161,12 +175,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
       permissionIssues[0] ??
       environmentIssues[0] ??
       draftIssues[0] ??
+      dockerIssue ??
       folderReadiness.blockingIssues[0] ??
       agentReadiness.blockingIssues[0] ??
       commandReadiness.blockingIssues[0] ??
-      (dockerConfigurationIncomplete(draft)
-        ? 'Complete the selected Docker configuration before saving.'
-        : undefined);
+      undefined;
     if (validationIssue !== undefined) {
       setNotice(`Settings were not saved: ${validationIssue}`);
       return;
@@ -277,6 +290,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 perform={perform}
                 readiness={agentReadiness}
                 terminalReadiness={commandReadiness.statuses['terminal-default']}
+                dockerReadiness={dockerReadiness}
+                onDockerReadinessChange={setDockerReadiness}
                 onError={props.onError}
               />
             )}
@@ -385,6 +400,15 @@ export function SettingsPanel(props: SettingsPanelProps) {
             {permissionIssues.length === 0 &&
               environmentIssues.length === 0 &&
               draftIssues.length === 0 &&
+              dockerIssue !== undefined && (
+                <small id="settings-docker-validation" role="alert">
+                  {dockerIssue}
+                </small>
+              )}
+            {permissionIssues.length === 0 &&
+              environmentIssues.length === 0 &&
+              draftIssues.length === 0 &&
+              dockerIssue === undefined &&
               folderReadiness.blockingIssues[0] !== undefined && (
                 <small id="settings-folder-validation" role="alert">
                   {folderReadiness.blockingIssues[0]}
@@ -393,6 +417,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
             {permissionIssues.length === 0 &&
               environmentIssues.length === 0 &&
               draftIssues.length === 0 &&
+              dockerIssue === undefined &&
               folderReadiness.blockingIssues.length === 0 &&
               agentReadiness.blockingIssues[0] !== undefined && (
                 <small id="settings-agent-validation" role="alert">
@@ -402,6 +427,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
             {permissionIssues.length === 0 &&
               environmentIssues.length === 0 &&
               draftIssues.length === 0 &&
+              dockerIssue === undefined &&
               folderReadiness.blockingIssues.length === 0 &&
               agentReadiness.blockingIssues.length === 0 &&
               commandReadiness.blockingIssues[0] !== undefined && (
@@ -430,7 +456,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
               type="submit"
               disabled={
                 busy ||
-                dockerConfigurationIncomplete(draft) ||
+                dockerIssue !== undefined ||
                 permissionIssues.length > 0 ||
                 environmentIssues.length > 0 ||
                 draftIssues.length > 0 ||
@@ -442,6 +468,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 permissionIssues[0] ??
                 environmentIssues[0] ??
                 draftIssues[0] ??
+                dockerIssue ??
                 folderReadiness.blockingIssues[0] ??
                 agentReadiness.blockingIssues[0] ??
                 commandReadiness.blockingIssues[0]
@@ -453,13 +480,15 @@ export function SettingsPanel(props: SettingsPanelProps) {
                     ? 'settings-environment-validation'
                     : draftIssues.length > 0
                       ? 'settings-draft-validation'
-                      : folderReadiness.blockingIssues.length > 0
-                        ? 'settings-folder-validation'
-                        : agentReadiness.blockingIssues.length > 0
-                          ? 'settings-agent-validation'
-                          : commandReadiness.blockingIssues.length > 0
-                            ? 'settings-command-validation'
-                            : undefined
+                      : dockerIssue !== undefined
+                        ? 'settings-docker-validation'
+                        : folderReadiness.blockingIssues.length > 0
+                          ? 'settings-folder-validation'
+                          : agentReadiness.blockingIssues.length > 0
+                            ? 'settings-agent-validation'
+                            : commandReadiness.blockingIssues.length > 0
+                              ? 'settings-command-validation'
+                              : undefined
               }
             >
               <Save size={15} /> Save settings

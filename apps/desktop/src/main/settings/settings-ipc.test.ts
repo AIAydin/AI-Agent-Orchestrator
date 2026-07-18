@@ -375,6 +375,55 @@ describe('SettingsIpcService transactions', () => {
     fixture.service.dispose();
   });
 
+  it('requires exact main-owned Docker readiness before enabling a Docker profile', async () => {
+    const current = settings();
+    const draft = settings({
+      dockerEnabled: true,
+      dockerExecutable: '/selected/bin/docker',
+      dockerImage: 'registry.example/agent:1',
+      dockerContainerExecutable: '/usr/local/bin/codex',
+    });
+    const requireSettingsReadiness = vi.fn(() =>
+      Promise.reject(new Error('Run Check Docker successfully for the current Settings draft.')),
+    );
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness: vi.fn() },
+      { check: vi.fn() },
+      { verifySettingsReadiness: vi.fn() },
+      { requireSettingsReadiness },
+    );
+
+    await expect(readiness.verify(current, draft)).rejects.toThrow('Run Check Docker successfully');
+    expect(requireSettingsReadiness).toHaveBeenCalledWith({
+      dockerExecutable: '/selected/bin/docker',
+      image: 'registry.example/agent:1',
+      containerExecutable: '/usr/local/bin/codex',
+    });
+  });
+
+  it('accepts exact Docker authority and skips dormant disabled Docker changes', async () => {
+    const requireSettingsReadiness = vi.fn(() => Promise.resolve());
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness: vi.fn() },
+      { check: vi.fn() },
+      { verifySettingsReadiness: vi.fn() },
+      { requireSettingsReadiness },
+    );
+    const current = settings();
+    const enabled = settings({
+      dockerEnabled: true,
+      dockerImage: 'registry.example/agent:1',
+      dockerContainerExecutable: '/usr/local/bin/codex',
+    });
+
+    await expect(readiness.verify(current, enabled)).resolves.toBeUndefined();
+    expect(requireSettingsReadiness).toHaveBeenCalledTimes(1);
+    await expect(
+      readiness.verify(current, settings({ dockerImage: 'dormant:2' })),
+    ).resolves.toBeUndefined();
+    expect(requireSettingsReadiness).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a schema-valid command change without main-bound passive readiness', async () => {
     const current = settings();
     const draft = settings({

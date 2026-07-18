@@ -1,4 +1,5 @@
 import type { AppSettings } from '../../../../../shared/application/contracts.js';
+import type { DockerReadinessEvidence } from '../../docker/readiness-evidence.js';
 import { DockerConfiguration } from '../../docker/DockerConfiguration.js';
 import { numericDraftValue } from '../fields/numeric-draft.js';
 import { SettingsSection, type AsyncSettingsProps } from '../shared.js';
@@ -13,10 +14,19 @@ export function dockerConfigurationIncomplete(settings: AppSettings): boolean {
 }
 
 interface DockerSettingsProps extends AsyncSettingsProps {
+  readiness: DockerReadinessEvidence | null;
+  onReadinessChange: (evidence: DockerReadinessEvidence | null) => void;
   onError: (message: string) => void;
 }
 
-export function DockerSettings({ draft, setDraft, busy, onError }: DockerSettingsProps) {
+export function DockerSettings({
+  draft,
+  setDraft,
+  busy,
+  readiness,
+  onReadinessChange,
+  onError,
+}: DockerSettingsProps) {
   const runtimeFieldsIncomplete =
     draft.dockerEnabled &&
     (draft.dockerImage.trim() === '' || draft.dockerContainerExecutable.trim() === '');
@@ -43,6 +53,7 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
           }
           onChange={(event) => {
             const dockerEnabled = event.target.checked;
+            onReadinessChange(null);
             setDraft({
               ...draft,
               dockerEnabled,
@@ -67,6 +78,8 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
         }}
         disabled={busy}
         onChange={(docker) => setDraft({ ...draft, ...docker })}
+        initialReadiness={readiness}
+        onReadinessChange={onReadinessChange}
         onError={onError}
       />
       {runtimeFieldsIncomplete && (

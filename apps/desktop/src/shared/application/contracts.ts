@@ -306,6 +306,13 @@ export const AppSettingsSchema = z
         message: 'Choose the agent executable inside the image before enabling Docker profiles.',
       });
     }
+    if (settings.dockerEnabled && settings.dockerMountHostCredentials) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dockerMountHostCredentials'],
+        message: 'Disable host credential mounting before enabling Docker profiles.',
+      });
+    }
     if (settings.defaultPermissionProfile === 'docker-isolated' && !settings.dockerEnabled) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

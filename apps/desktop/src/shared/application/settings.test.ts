@@ -297,4 +297,16 @@ describe('Custom permission settings', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('rejects host credential mounting whenever Docker profiles are enabled', () => {
+    expect(
+      AppSettingsSchema.safeParse({
+        ...baseSettings,
+        dockerEnabled: true,
+        dockerImage: 'forgeboard-agent:local',
+        dockerContainerExecutable: '/usr/local/bin/agent',
+        dockerMountHostCredentials: true,
+      }).success,
+    ).toBe(false);
+  });
 });

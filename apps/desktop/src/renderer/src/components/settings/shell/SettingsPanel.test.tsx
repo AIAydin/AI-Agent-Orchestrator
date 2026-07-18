@@ -22,6 +22,10 @@ import type {
   FolderReadinessRequest,
   FolderReadinessResult,
 } from '../../../../../shared/settings/folder-readiness.js';
+import type {
+  DockerReadiness,
+  DockerReadinessInput,
+} from '../../../../../shared/docker/contracts.js';
 import {
   SETTINGS_UI_MANIFEST,
   type SettingsUiTarget,
@@ -74,6 +78,9 @@ const agentCheck = vi.fn((input: AgentReadinessRequest) =>
 );
 const folderCheck = vi.fn((input: FolderReadinessRequest) =>
   Promise.resolve({ ok: true as const, value: readyFolder(input) }),
+);
+const dockerCheck = vi.fn((input: DockerReadinessInput) =>
+  Promise.resolve({ ok: true as const, value: readyDocker(input) }),
 );
 
 function readyCommand(input: CommandReadinessRequest): CommandReadinessResult {
@@ -137,6 +144,25 @@ function blockedFolder(input: FolderReadinessRequest, reason: string): FolderRea
   };
 }
 
+function readyDocker(input: DockerReadinessInput): DockerReadiness {
+  return {
+    executable: input.dockerExecutable,
+    image: input.image,
+    containerExecutable: input.containerExecutable,
+    executableAvailable: true,
+    daemonAvailable: true,
+    imageAvailable: true,
+    imageCompatible: true,
+    containerExecutableAvailable: true,
+    available: true,
+    status: 'ready',
+    checkedAt: '2026-07-15T18:00:00.000Z',
+    daemonVersion: '27.5.1',
+    imageId: 'sha256:abc123',
+    agentVersion: 'codex 1.2.3',
+  };
+}
+
 beforeEach(() => {
   updateSettings.mockClear();
   resetSettings.mockClear();
@@ -155,6 +181,10 @@ beforeEach(() => {
   folderCheck.mockReset();
   folderCheck.mockImplementation((input) =>
     Promise.resolve({ ok: true, value: readyFolder(input) }),
+  );
+  dockerCheck.mockReset();
+  dockerCheck.mockImplementation((input) =>
+    Promise.resolve({ ok: true, value: readyDocker(input) }),
   );
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
@@ -176,6 +206,10 @@ beforeEach(() => {
       },
       commands: { checkReadiness: commandCheck },
       agents: { checkReadiness: agentCheck },
+      docker: {
+        check: dockerCheck,
+        pull: vi.fn(),
+      },
       git: {
         connections: {
           list: vi.fn(({ projectId }: { projectId: string }) =>
@@ -880,13 +914,6 @@ describe('SettingsPanel draft transactions', () => {
     });
     fireEvent.change(ignoredFiles, { target: { value: 'allow' } });
     fireEvent.change(sensitiveFiles, { target: { value: 'allow' } });
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty(
-        'disabled',
-        false,
-      ),
-    );
-
     fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
     const dockerEnabled = screen.getByRole<HTMLInputElement>('checkbox', {
       name: /Enable Docker profiles/u,
@@ -894,6 +921,8 @@ describe('SettingsPanel draft transactions', () => {
     expect(dockerEnabled.checked).toBe(true);
     expect(dockerEnabled.disabled).toBe(true);
     expect(screen.getByText(/Switch Custom to Host in the Permissions centre/u)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Check Docker' }));
+    await screen.findByText('Docker profile ready');
     await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
@@ -1292,12 +1321,14 @@ describe('SettingsPanel draft transactions', () => {
     render(
       <SettingsPanel
         {...props({
-          settings: settings({
-            dockerEnabled: true,
-            dockerImage: 'example/agent:latest',
-            dockerContainerExecutable: '/usr/local/bin/agent',
+          settings: {
+            ...settings({
+              dockerEnabled: true,
+              dockerImage: 'example/agent:latest',
+              dockerContainerExecutable: '/usr/local/bin/agent',
+            }),
             dockerMountHostCredentials: true,
-          }),
+          },
         })}
       />,
     );
@@ -1314,16 +1345,32 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.click(credentialMount);
     expect(credentialMount.checked).toBe(false);
     expect(credentialMount.disabled).toBe(true);
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty(
-        'disabled',
-        false,
-      ),
-    );
     await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(dockerCheck).not.toHaveBeenCalled();
     expect(updateSettings.mock.calls[0]?.[0].dockerMountHostCredentials).toBe(false);
+  });
+
+  it('saves unrelated changes without rechecking an unchanged enabled Docker profile', async () => {
+    render(
+      <SettingsPanel
+        {...props({
+          settings: settings({
+            dockerEnabled: true,
+            dockerImage: 'example/agent:latest',
+            dockerContainerExecutable: '/usr/local/bin/agent',
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'dark' }));
+    await clickSaveSettings();
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0].theme).toBe('dark');
+    expect(dockerCheck).not.toHaveBeenCalled();
   });
 });
 

@@ -57,6 +57,7 @@ export const SettingsRepairFieldPathSchema = z.enum([
   'previewTrustedHosts',
   'dockerExecutable',
   'dockerContainerExecutable',
+  'dockerMountHostCredentials',
   'dockerEnabled',
   'backupDirectory',
   'backupsEnabled',

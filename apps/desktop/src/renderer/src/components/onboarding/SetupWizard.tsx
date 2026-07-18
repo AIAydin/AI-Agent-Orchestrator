@@ -23,7 +23,6 @@ import type {
   AgentReadinessResult,
   CheckAgentReadiness,
 } from '../../../../shared/readiness/contracts.js';
-import type { DockerReadiness } from '../../../../shared/docker/contracts.js';
 import type {
   ProviderConnectionId,
   ProviderConnectionStatus,
@@ -45,6 +44,7 @@ import {
   readinessDraftForAgent,
 } from '../readiness/readiness-ui.js';
 import { DockerConfiguration } from '../docker/DockerConfiguration.js';
+import type { DockerReadinessEvidence } from '../docker/readiness-evidence.js';
 import { CustomPermissionProfileEditor } from '../permissions/CustomPermissionProfileEditor.js';
 import {
   initialCommandSuggestionProjectId,
@@ -77,7 +77,7 @@ export function SetupWizard(props: SetupWizardProps) {
   const [busy, setBusy] = useState(false);
   const [checkingAgent, setCheckingAgent] = useState(false);
   const [agentReadiness, setAgentReadiness] = useState<Record<string, AgentReadinessResult>>({});
-  const [dockerReadiness, setDockerReadiness] = useState<DockerReadiness | null>(null);
+  const [dockerReadiness, setDockerReadiness] = useState<DockerReadinessEvidence | null>(null);
   const [providerStatuses, setProviderStatuses] = useState<
     Partial<Record<ProviderConnectionId, ProviderConnectionStatus>>
   >({});
@@ -714,7 +714,7 @@ export function SetupWizard(props: SetupWizardProps) {
                     onReadinessChange={setDockerReadiness}
                     onError={props.onError}
                   />
-                  {dockerReadiness?.available !== true && (
+                  {dockerReadiness?.readiness.available !== true && (
                     <span className="setup-validation" role="status">
                       Run the Docker check above successfully before continuing.
                     </span>
@@ -851,7 +851,7 @@ export function SetupWizard(props: SetupWizardProps) {
                   <dt>Docker</dt>
                   <dd>
                     {draft.dockerEnabled
-                      ? dockerReadiness?.available === true
+                      ? dockerReadiness?.readiness.available === true
                         ? `Ready · network ${draft.dockerNetwork === 'disabled' ? 'off' : 'on'}`
                         : 'Set up, not checked yet'
                       : 'Off'}
@@ -896,7 +896,8 @@ export function SetupWizard(props: SetupWizardProps) {
                     (selectedPermissionUnavailable !== null ||
                       (draft.defaultPermissionProfile === 'custom' &&
                         customPermissionIssues.length > 0) ||
-                      (selectedPermissionNeedsDocker && dockerReadiness?.available !== true))) ||
+                      (selectedPermissionNeedsDocker &&
+                        dockerReadiness?.readiness.available !== true))) ||
                   (step === 3 &&
                     (environmentIssues.length > 0 || commandReadiness.blockingIssues.length > 0))
                 }

@@ -263,6 +263,10 @@ function repairDocker(
   mark: (field: SettingsRepairFieldPath) => void,
 ): boolean {
   let unsafeReset = false;
+  if (candidate.dockerEnabled === true && candidate.dockerMountHostCredentials === true) {
+    candidate.dockerMountHostCredentials = false;
+    mark('dockerMountHostCredentials');
+  }
   if (
     candidate.dockerExecutable !== undefined &&
     !DockerExecutableSettingSchema.safeParse(candidate.dockerExecutable).success

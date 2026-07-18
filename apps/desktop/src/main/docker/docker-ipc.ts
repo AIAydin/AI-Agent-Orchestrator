@@ -78,9 +78,18 @@ const DEFAULT_OPERATIONS: DockerOperations = {
 };
 
 interface DockerActionPlan {
+  readonly requestedInput: DockerReadinessInput;
   readonly input: DockerReadinessInput;
   readonly executableIdentity: ReadinessExecutableIdentity;
   readonly probeContainerNames: readonly string[];
+  readonly expiresAtMs: number;
+}
+
+interface DockerSettingsEvidence {
+  readonly requestedInput: DockerReadinessInput;
+  readonly resolvedExecutable: string;
+  readonly executableIdentity: ReadinessExecutableIdentity;
+  readonly readiness: DockerReadiness;
   readonly expiresAtMs: number;
 }
 
@@ -97,6 +106,7 @@ export class DockerIpcService {
   #disposed = false;
   #paused = false;
   #pullInProgress = false;
+  #settingsEvidence: DockerSettingsEvidence | null = null;
   readonly #outbound: OutboundActionGate;
 
   public constructor(
@@ -131,6 +141,7 @@ export class DockerIpcService {
     if (!this.#disposed) {
       this.#disposed = true;
       this.#paused = true;
+      this.#settingsEvidence = null;
       for (const channel of this.#registeredChannels) ipcMain.removeHandler(channel);
       this.#registeredChannels.length = 0;
       for (const ownerId of this.#activeOwnerIds) this.#outbound.discardOwner(ownerId);
@@ -143,6 +154,7 @@ export class DockerIpcService {
   public async pauseForShutdown(): Promise<void> {
     if (this.#disposed) throw new Error('The Docker service has been disposed.');
     this.#paused = true;
+    this.#settingsEvidence = null;
     await this.#drainOperations();
   }
 
@@ -150,11 +162,40 @@ export class DockerIpcService {
     if (!this.#disposed) this.#paused = false;
   }
 
+  public async requireSettingsReadiness(input: DockerReadinessInput): Promise<void> {
+    this.#assertAvailable();
+    const requestedInput = DockerReadinessInputSchema.parse(input);
+    const evidence = this.#settingsEvidence;
+    if (
+      evidence === null ||
+      evidence.expiresAtMs <= this.#nowMs() ||
+      !sameDockerInput(evidence.requestedInput, requestedInput)
+    ) {
+      throw new Error(
+        'Run Check Docker successfully for the current Settings draft before saving.',
+      );
+    }
+    const resolved = await this.operations.resolve(requestedInput.dockerExecutable);
+    const identity = await this.operations.identify(resolved);
+    this.#assertAvailable();
+    if (
+      this.#settingsEvidence !== evidence ||
+      evidence.expiresAtMs <= this.#nowMs() ||
+      !sameDockerInput(evidence.requestedInput, requestedInput) ||
+      resolved !== evidence.resolvedExecutable ||
+      !sameReadinessExecutable(evidence.executableIdentity, identity)
+    ) {
+      if (this.#settingsEvidence === evidence) this.#settingsEvidence = null;
+      throw new Error('The selected Docker executable changed. Run Check Docker again.');
+    }
+  }
+
   async #confirmAndCheck(
     event: IpcMainInvokeEvent,
     input: DockerReadinessInput,
   ): Promise<DockerReadiness | null> {
     this.#assertLiveMainFrame(event);
+    this.#settingsEvidence = null;
     let plan: DockerActionPlan;
     try {
       plan = await this.#prepare(input, 1);
@@ -195,6 +236,7 @@ export class DockerIpcService {
       readiness.available ? 'allowed' : 'denied',
       auditDetails(readiness),
     );
+    this.#rememberSettingsEvidence(plan, readiness);
     return readiness;
   }
 
@@ -204,6 +246,7 @@ export class DockerIpcService {
   ): Promise<DockerPullResult> {
     if (this.#pullInProgress) throw new Error('A Docker image pull is already in progress.');
     this.#assertLiveMainFrame(event);
+    this.#settingsEvidence = null;
     const parent = this.#requireLiveParent(event, 'confirm a Docker image pull');
     this.#pullInProgress = true;
     try {
@@ -247,22 +290,40 @@ export class DockerIpcService {
       if (result.outcome === 'denied') {
         return DockerPullResultSchema.parse({ outcome: 'cancelled', readiness: null });
       }
-      return DockerPullResultSchema.parse({ outcome: 'pulled', readiness: result.value });
+      const readiness = DockerReadinessSchema.parse(result.value);
+      this.#rememberSettingsEvidence(plan, readiness);
+      return DockerPullResultSchema.parse({ outcome: 'pulled', readiness });
     } finally {
       this.#pullInProgress = false;
     }
   }
 
   async #prepare(input: DockerReadinessInput, probeCount: number): Promise<DockerActionPlan> {
-    const executable = await this.operations.resolve(input.dockerExecutable);
+    const requestedInput = DockerReadinessInputSchema.parse(input);
+    const executable = await this.operations.resolve(requestedInput.dockerExecutable);
     const executableIdentity = await this.operations.identify(executable);
     return {
-      input: DockerReadinessInputSchema.parse({ ...input, dockerExecutable: executable }),
+      requestedInput,
+      input: DockerReadinessInputSchema.parse({ ...requestedInput, dockerExecutable: executable }),
       executableIdentity,
       probeContainerNames: Array.from(
         { length: probeCount },
         () => `forgeboard-readiness-${randomUUID()}`,
       ),
+      expiresAtMs: this.#nowMs() + DOCKER_APPROVAL_TTL_MS,
+    };
+  }
+
+  #rememberSettingsEvidence(plan: DockerActionPlan, readiness: DockerReadiness): void {
+    if (this.#disposed || this.#paused || !readinessIsReadyFor(readiness, plan.input)) {
+      this.#settingsEvidence = null;
+      return;
+    }
+    this.#settingsEvidence = {
+      requestedInput: plan.requestedInput,
+      resolvedExecutable: plan.input.dockerExecutable,
+      executableIdentity: plan.executableIdentity,
+      readiness,
       expiresAtMs: this.#nowMs() + DOCKER_APPROVAL_TTL_MS,
     };
   }
@@ -522,4 +583,27 @@ function auditDetails(readiness: DockerReadiness): Record<string, unknown> {
 
 function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function sameDockerInput(left: DockerReadinessInput, right: DockerReadinessInput): boolean {
+  return (
+    left.dockerExecutable === right.dockerExecutable &&
+    left.image === right.image &&
+    left.containerExecutable === right.containerExecutable
+  );
+}
+
+function readinessIsReadyFor(readiness: DockerReadiness, input: DockerReadinessInput): boolean {
+  return (
+    readiness.available &&
+    readiness.status === 'ready' &&
+    readiness.executableAvailable &&
+    readiness.daemonAvailable &&
+    readiness.imageAvailable &&
+    readiness.imageCompatible &&
+    readiness.containerExecutableAvailable &&
+    readiness.executable === input.dockerExecutable &&
+    readiness.image === input.image &&
+    readiness.containerExecutable === input.containerExecutable
+  );
 }

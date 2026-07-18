@@ -23,6 +23,7 @@ import {
   type FolderReadinessResult,
 } from '../../shared/settings/folder-readiness.js';
 import type { AppSettings } from '../../shared/application/contracts.js';
+import type { DockerReadinessInput } from '../../shared/docker/contracts.js';
 
 interface SettingsAgentReadinessVerifier {
   verifySettingsReadiness(input: unknown): Promise<AgentReadinessResult>;
@@ -38,12 +39,17 @@ interface SettingsCommandReadinessVerifier {
   ): Promise<CommandReadinessResult>;
 }
 
+interface SettingsDockerReadinessVerifier {
+  requireSettingsReadiness(input: DockerReadinessInput): Promise<void>;
+}
+
 /** Trusted save-time verification for newly changed executable and folder configuration. */
 export class SettingsPersistenceReadinessVerifier {
   public constructor(
     private readonly agents: SettingsAgentReadinessVerifier,
     private readonly folders: SettingsFolderReadinessVerifier,
     private readonly commands: SettingsCommandReadinessVerifier,
+    private readonly docker?: SettingsDockerReadinessVerifier,
   ) {}
 
   public async verify(current: AppSettings, next: AppSettings): Promise<void> {
@@ -79,11 +85,34 @@ export class SettingsPersistenceReadinessVerifier {
         path: next.backupDirectory,
       });
     }
+    const dockerChanged =
+      next.dockerEnabled &&
+      (!current.dockerEnabled ||
+        current.dockerExecutable !== next.dockerExecutable ||
+        current.dockerImage !== next.dockerImage ||
+        current.dockerContainerExecutable !== next.dockerContainerExecutable);
+    const dockerRequest: DockerReadinessInput | null = dockerChanged
+      ? {
+          dockerExecutable: next.dockerExecutable,
+          image: next.dockerImage,
+          containerExecutable: next.dockerContainerExecutable,
+        }
+      : null;
     await Promise.all([
       ...changedAgents.map(async (request) => await this.#verifyAgent(request)),
       ...changedCommands.map(async (request) => await this.#verifyCommand(request)),
       ...changedFolders.map(async (request) => await this.#verifyFolder(request)),
+      ...(dockerRequest === null ? [] : [this.#verifyDocker(dockerRequest)]),
     ]);
+  }
+
+  async #verifyDocker(request: DockerReadinessInput): Promise<void> {
+    if (this.docker === undefined) {
+      throw new Error(
+        'Docker readiness verification is unavailable. Restart Forgeboard and try again.',
+      );
+    }
+    await this.docker.requireSettingsReadiness(request);
   }
 
   async #verifyAgent(request: AgentReadinessRequest): Promise<void> {

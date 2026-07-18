@@ -1322,9 +1322,9 @@ unchecked when only a subset of their required behavior has proof.
   heading-bound accessible names and a two-provider lifecycle regression; renderer coverage now
   exercises extension install/update/remove review and update-check cancellation. Fifteen focused
   UI/manifest tests, desktop strict typecheck, zero-warning lint, formatting, and the 1,189-file
-  structure gate passed. The broad lifecycle checkbox remains open: Docker readiness is advisory in
-  ordinary Settings, Git identity has no separate test action, and collaboration invite history is
-  current-session rather than durable server-wide state.
+  structure gate passed. The broad lifecycle checkbox remains open: Git identity has no separate
+  test action, and collaboration invite history is current-session rather than durable server-wide
+  state.
 - 2026-07-18: tag publication now fails closed on the complete four-platform `RELEASE-INFO` set and
   derives the visible GitHub Release title, leading warning, and per-platform signing summary from
   post-package Developer ID/notarization and Authenticode evidence. Prepared notes no longer make a
@@ -1342,3 +1342,15 @@ unchecked when only a subset of their required behavior has proof.
   bundled test agent was built and the installed Electron ABI dependency was exposed, covering all
   311 integration cases. Repository-wide formatting, zero-warning lint, all workspace typechecks,
   the production build, `git diff --check`, and the 1,189-file structure gate passed.
+- 2026-07-18: enabled or changed Docker profiles now fail closed until the exact executable, image,
+  and in-container agent executable pass a recent main-process check. Renderer evidence is bound to
+  the request that produced it, external draft changes and in-flight races clear or discard it, and
+  save-time authority re-resolves and fingerprints the Docker executable before persistence. Failed,
+  cancelled, expired, mismatched, and shutdown-invalidated checks cannot authorize a save; disabled
+  dormant Docker preferences remain editable without starting Docker. The shared settings contract
+  also rejects enabled host-credential mounting. One hundred twenty-two focused main, repair,
+  shared-contract,
+  onboarding, Settings, and renderer tests passed, including executable drift and stale-result
+  regressions. The complete 2,352-test unit suite and production build also passed. The broad
+  integration-lifecycle checkbox remains open for the separate Git identity action and durable
+  collaboration-invite history gaps recorded above.
