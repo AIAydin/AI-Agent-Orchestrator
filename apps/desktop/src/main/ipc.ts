@@ -73,6 +73,7 @@ import { FolderReadinessService } from './settings/folder-readiness/service.js';
 import type { LocalStore } from './storage.js';
 import { TerminalIpcService } from './terminal/ipc.js';
 import { TerminalService } from './terminal/service.js';
+import { UpdateIpcService } from './updates/service.js';
 import { createWorkflowRuntimeComposition } from './workflow/host/composition.js';
 import { WorkflowIpcService } from './workflow/host/ipc.js';
 import { ExactCheckExecutor } from './workflow/exact-check/executor.js';
@@ -174,7 +175,7 @@ export function createDefaultSettings(): AppSettings {
     collaborationColor: '#6d5efc',
     collaborationRoom: 'default',
     collaborationReconnect: true,
-    updateChannel: 'stable',
+    updateChannel: 'prerelease',
     automaticUpdateDownloads: false,
   };
 }
@@ -199,6 +200,7 @@ export interface ApplicationServices {
   collaboration: CollaborationIpcService;
   workflows: WorkflowIpcService;
   recovery: RecoveryIpcService;
+  updates: UpdateIpcService;
   prepareToQuit(): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -239,6 +241,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const projectFiles = new ProjectFileService(store);
   const files = new FileIpcService(projectFiles, shell, runDataOperation);
   const outbound = new OutboundActionGate(store);
+  const updates = new UpdateIpcService(dialog, shell, store, () => app.getVersion(), outbound);
   const collaboration = new CollaborationIpcService(dialog, outbound, {
     store,
   });
@@ -880,6 +883,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   );
 
   settings.registerIpcHandlers();
+  updates.registerIpcHandlers();
   folderReadiness.registerIpcHandler();
   readiness.registerIpcHandler();
   providerConnections.registerIpcHandlers();
@@ -900,6 +904,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   recovery.registerIpcHandlers();
   return {
     settings,
+    updates,
     folderReadiness,
     readiness,
     providerConnections,
@@ -932,6 +937,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     dispose: async () => {
       dataOperations.beginShutdown();
       settings.dispose();
+      updates.dispose();
       folderReadiness.dispose();
       await files.dispose();
       await recovery.dispose();

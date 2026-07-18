@@ -38,6 +38,7 @@ import { useCommandReadiness } from '../../configuration/useCommandReadiness.js'
 import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadiness.js';
 import { useSettingsFolderReadiness } from '../readiness/useSettingsFolderReadiness.js';
 import { settingsCommandDrafts } from './command-drafts.js';
+import { UpdateSettings } from '../updates/UpdateSettings.js';
 
 export type SettingsTab =
   | 'appearance'
@@ -315,7 +316,15 @@ export function SettingsPanel(props: SettingsPanelProps) {
               <ExtensionSettings onError={props.onError} onChanged={props.onExtensionsChanged} />
             )}
             {tab === 'connectivity' && (
-              <ConnectivitySettings settings={draft} setSettings={setDraft} busy={busy} />
+              <>
+                <ConnectivitySettings settings={draft} setSettings={setDraft} busy={busy} />
+                <UpdateSettings
+                  currentVersion={props.info.version}
+                  draft={draft}
+                  setDraft={setDraft}
+                  busy={busy}
+                />
+              </>
             )}
             {tab === 'privacy' && (
               <PrivacySettings

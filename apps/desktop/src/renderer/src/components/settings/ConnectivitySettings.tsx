@@ -309,44 +309,6 @@ export function ConnectivitySettings({ settings, setSettings, busy }: Connectivi
           </div>
         )}
       </SettingsSection>
-      <SettingsSection
-        title="Application updates"
-        description="This build does not include an updater runtime. Release discovery, download verification, and installation are not performed in the background."
-      >
-        <label>
-          Update channel
-          <select
-            name="update-channel"
-            value={settings.updateChannel}
-            disabled
-            aria-describedby="updater-unavailable"
-          >
-            <option value="stable">Stable · stored but inactive</option>
-            <option value="prerelease">Prerelease · stored but inactive</option>
-            <option value="disabled">Disabled</option>
-          </select>
-        </label>
-        <label className="switch-row">
-          <span>
-            <strong>Download updates automatically</strong>
-            <small>No automatic updater is bundled in this build.</small>
-          </span>
-          <input
-            type="checkbox"
-            name="automatic-update-downloads"
-            checked={settings.automaticUpdateDownloads}
-            disabled
-          />
-        </label>
-        <button className="button" type="button" disabled>
-          Check for updates
-        </button>
-        <p id="updater-unavailable" className="recovery-guidance" role="status">
-          Manual update checks are unavailable. Install a newer signed release from the project’s
-          GitHub Releases page when one is published. A stored or imported automatic-download
-          preference is not acted on by this build.
-        </p>
-      </SettingsSection>
     </>
   );
 }

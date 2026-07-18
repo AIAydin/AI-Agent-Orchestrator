@@ -98,6 +98,7 @@ import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
 import { createTerminalApi } from './terminal/index.js';
 import { createPreviewSurfaceApi } from './preview/surface/index.js';
 import { createProviderConnectionsApi } from './provider-connections/index.js';
+import { createUpdatesApi } from './updates/bridge.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -133,6 +134,7 @@ const api: ForgeboardApi = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.appCloseRequested, handler);
     },
   },
+  updates: createUpdatesApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
     update: (settings) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, settings),

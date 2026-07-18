@@ -1137,3 +1137,21 @@ unchecked when only a subset of their required behavior has proof.
   labeled honestly. Twenty-six release/startup tests, the structure gate, lint, formatting, and diff
   validation passed. Public GitHub Release publication, repository visibility, account billing,
   production signing secrets, and fresh hosted cross-platform artifacts remain external/open work.
+- 2026-07-17: native installer smoke now fails before installation unless the exact platform and
+  architecture release metadata binds the artifact set to the expected 40-character source commit,
+  uses an allowed platform signing status, and every top-level distributable and blockmap has an
+  exact SHA-256 entry whose bytes still match. Caller-resolved installer paths must be the declared
+  files under the release root. The Release workflow generates checksums before packaged and native
+  smoke, and treats both `v0.*` and hyphenated version tags as prereleases. Ten focused integrity
+  tests and all six standalone release-artifact tests passed. Hosted publication, signing and
+  notarization, and fresh native Windows/Linux installer proof remain unchecked.
+- 2026-07-17: **Settings → Connectivity → Application updates** now exposes persisted
+  stable/prerelease/disabled channels and an explicit Check for updates action. A native disclosure
+  gates the fixed official GitHub Releases API request; the main process enforces a one-MiB response
+  limit, ten-second deadline, no redirects or compressed responses, strict release contracts and
+  version ordering, cancellation, per-window concurrency, five-minute release authority, and a
+  second native review before opening the exact release page. Forgeboard never downloads or installs
+  an update automatically, and any imported legacy automatic-download preference is labeled inactive
+  and can be cleared in the UI. Twenty-seven focused transport, service, preload, shared-contract,
+  renderer, and installer-integrity tests passed. The broad Settings requirements and public release
+  lifecycle remain unchecked.

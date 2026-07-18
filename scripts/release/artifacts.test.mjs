@@ -151,6 +151,15 @@ test('release workflow keeps build permissions read-only and tag-gates publicati
   assert.match(workflow, /node scripts\/release\/artifacts\.mjs artifacts --all/u);
   assert.match(workflow, /apps\/desktop\/release\/RELEASE-INFO-\*\.json/u);
   assert.match(workflow, /scripts\/release\/signing\.test\.mjs/u);
+  assert.match(
+    workflow,
+    /if \[\[ "\$GITHUB_REF_NAME" == v0\.\* \|\| "\$GITHUB_REF_NAME" == \*-\* \]\]; then\n {12}release_args\+=\(--prerelease --latest=false\)/u,
+  );
+  assert.ok(
+    workflow.indexOf('node scripts/release/checksums.mjs apps/desktop/release') <
+      workflow.indexOf('pnpm --filter @forgeboard/desktop smoke:installer'),
+    'Native installer smoke must verify checksums generated from the exact packaged artifacts.',
+  );
 });
 
 async function expectComplete(root, artifactCount, sourceCommit) {

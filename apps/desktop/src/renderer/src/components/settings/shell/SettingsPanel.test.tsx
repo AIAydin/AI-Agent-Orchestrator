@@ -1073,17 +1073,15 @@ describe('SettingsPanel draft transactions', () => {
       target: { value: '#123456' },
     });
     expect(screen.getByRole('button', { name: 'Connect' })).toHaveProperty('disabled', true);
-    expect(screen.getByLabelText('Update channel')).toHaveProperty('disabled', true);
-    const automaticDownloads = screen.getByRole<HTMLInputElement>('checkbox', {
-      name: /Download updates automatically/u,
-    });
-    expect(automaticDownloads.disabled).toBe(true);
-    expect(automaticDownloads.checked).toBe(true);
+    expect(screen.getByLabelText('Update channel')).toHaveProperty('disabled', false);
+    expect(screen.queryByRole('checkbox', { name: /Download updates automatically/u })).toBeNull();
+    expect(
+      screen.getByText(/imported legacy automatic-download preference is inactive/u),
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Check for updates' })).toHaveProperty(
       'disabled',
-      true,
+      false,
     );
-    expect(screen.getByText(/Manual update checks are unavailable/u)).toBeTruthy();
     expect(screen.getByText(/Not connected/u)).toBeTruthy();
 
     await clickSaveSettings();

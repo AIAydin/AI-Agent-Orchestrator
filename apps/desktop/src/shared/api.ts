@@ -79,6 +79,11 @@ import type {
   DockerReadinessInput,
 } from './docker/contracts.js';
 import type {
+  UpdateCancelResult,
+  UpdateCheckInput,
+  UpdateCheckResult,
+} from './updates/contracts.js';
+import type {
   GitCommitPlanInput,
   GitCommitPlanView,
   GitCommitResultView,
@@ -219,6 +224,11 @@ export interface ForgeboardApi {
   app: {
     getInfo(): Promise<IpcResult<AppInfo>>;
     onCloseRequested(listener: () => boolean | Promise<boolean>): () => void;
+  };
+  updates: {
+    check(input: UpdateCheckInput): Promise<IpcResult<UpdateCheckResult | null>>;
+    cancel(): Promise<IpcResult<UpdateCancelResult>>;
+    openRelease(input: { releaseId: number }): Promise<IpcResult<boolean>>;
   };
   settings: {
     get(): Promise<IpcResult<AppSettings>>;

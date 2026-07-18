@@ -19,7 +19,16 @@ describe('Forgeboard-owned outbound architecture', () => {
 
     const executor = requiredSource(sources, 'outbound/outbound-executors.ts');
     expect(executor).toContain('assertOutboundExecutionPermit(permit)');
-    expect(executor.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(2);
+    expect(executor.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(3);
+    expect(moduleImportSites(sources, 'node:http')).toEqual(['previews/preview-service.ts']);
+    expect(moduleImportSites(sources, 'node:https')).toEqual([
+      'outbound/outbound-executors.ts',
+      'previews/preview-service.ts',
+    ]);
+    expect(executor.match(/\bhttpsRequest\s*\(/gu)).toHaveLength(1);
+    expect(executor).toContain(
+      "'https://api.github.com/repos/AIAydin/AI-Agent-Orchestrator/releases?per_page=20'",
+    );
     expect(requiredSource(sources, 'projects/project-service.ts')).toContain(
       'authorization.gate.confirmAndExecute',
     );
@@ -98,6 +107,11 @@ function importSites(sources: Map<string, string>, importedName: string): string
     `import\\s*\\{[^}]*\\b${importedName}\\b[^}]*\\}\\s*from\\s*['"][^'"]+docker-runtime\\.js['"]`,
     'gu',
   );
+  return callSites(sources, pattern);
+}
+
+function moduleImportSites(sources: Map<string, string>, moduleName: string): string[] {
+  const pattern = new RegExp(`from\\s*['"]${moduleName.replace('/', '\\/')}['"]`, 'gu');
   return callSites(sources, pattern);
 }
 

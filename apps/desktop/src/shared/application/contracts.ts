@@ -258,7 +258,7 @@ export const AppSettingsSchema = z
     collaborationColor: CollaborationColorSchema.default('#6d5efc'),
     collaborationRoom: CollaborationRoomIdSchema.default('default'),
     collaborationReconnect: z.boolean().default(true),
-    updateChannel: z.enum(['stable', 'prerelease', 'disabled']).default('stable'),
+    updateChannel: z.enum(['stable', 'prerelease', 'disabled']).default('prerelease'),
     automaticUpdateDownloads: z.boolean().default(false),
   })
   .superRefine((settings, context) => {

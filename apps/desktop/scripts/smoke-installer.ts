@@ -5,6 +5,11 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { resolveInstallerArtifacts, type InstallerArtifacts } from './installer-smoke/artifacts.js';
+import {
+  expectedSourceCommit,
+  type InstallerIntegrityOptions,
+  verifyInstallerIntegrity,
+} from './installer-smoke/integrity.js';
 import { smokeLinuxArtifacts } from './installer-smoke/linux.js';
 import { smokeMacDmg } from './installer-smoke/macos.js';
 import { runWithCleanup } from './installer-smoke/process.js';
@@ -12,8 +17,15 @@ import { smokeWindowsNsis } from './installer-smoke/windows.js';
 
 export { resolveInstallerArtifacts, type InstallerArtifacts };
 
-export async function runInstallerSmoke(releaseRoot: string): Promise<void> {
+export async function runInstallerSmoke(
+  releaseRoot: string,
+  integrity: InstallerIntegrityOptions = {},
+): Promise<void> {
   const artifacts = await resolveInstallerArtifacts(releaseRoot);
+  await verifyInstallerIntegrity(releaseRoot, artifacts, {
+    ...integrity,
+    expectedSourceCommit: integrity.expectedSourceCommit ?? expectedSourceCommit(),
+  });
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'forgeboard-installer-smoke-'));
   await runWithCleanup(
     async () => {
