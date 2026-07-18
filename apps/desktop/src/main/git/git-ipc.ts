@@ -54,6 +54,7 @@ import {
 } from '../../shared/git/shipping-contracts.js';
 import {
   GIT_LIFECYCLE_IPC_CHANNELS,
+  GitWorkspaceExternalOpenResultSchema,
   GitWorktreeCleanupConfirmationInputSchema,
   GitWorktreeCleanupPrepareOutcomeSchema,
   GitWorktreeCleanupResultViewSchema,
@@ -61,6 +62,7 @@ import {
   type GitWorktreeCleanupPrepareOutcome,
   type GitWorktreeCleanupResultView,
   type GitWorktreeCleanupTargetInput,
+  type GitWorkspaceExternalOpenResult,
 } from '../../shared/git/lifecycle/contracts.js';
 import {
   GIT_REVIEW_NOTE_IPC_CHANNELS,
@@ -159,6 +161,7 @@ type WindowResolver = (event: IpcMainInvokeEvent) => BrowserWindow | null;
 export interface GitIpcServiceOptions {
   readonly withCleanupAdmission?: WorktreeCleanupAdmission;
   readonly shippingReadiness?: GitShippingReadinessAuthority;
+  readonly openExternalPath?: (path: string) => Promise<string>;
 }
 
 export class GitIpcService {
@@ -171,6 +174,7 @@ export class GitIpcService {
   readonly #shipping: GitShippingService;
   readonly #reviewNotes: GitReviewNotesService;
   readonly #cleanup: WorktreeCleanupService;
+  readonly #openExternalPath: (path: string) => Promise<string>;
   #disposed = false;
   #disposePromise: Promise<void> | null = null;
   #privacyResetting = false;
@@ -211,6 +215,7 @@ export class GitIpcService {
         ? {}
         : { withCleanupAdmission: options.withCleanupAdmission }),
     });
+    this.#openExternalPath = options.openExternalPath ?? unavailableExternalOpen;
   }
 
   public registerIpcHandlers(): void {
@@ -303,6 +308,15 @@ export class GitIpcService {
       z.tuple([GitPlanConfirmationInputSchema]),
       GitShippingResultViewSchema.nullable(),
       (event, input) => this.confirmShipping(event, input.planId),
+    );
+    this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.openExternal,
+      z.tuple([GitTargetInputSchema]),
+      GitWorkspaceExternalOpenResultSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.openExternal(event, input);
+      },
     );
     this.#handle(
       GIT_LIFECYCLE_IPC_CHANNELS.prepareCleanup,
@@ -582,6 +596,58 @@ export class GitIpcService {
     input: GitWorktreeCleanupTargetInput,
   ): Promise<GitWorktreeCleanupPrepareOutcome> {
     return this.#withOperation(async () => await this.#cleanup.prepare(ownerId, input));
+  }
+
+  public openExternal(
+    event: IpcMainInvokeEvent,
+    input: GitTargetInput,
+  ): Promise<GitWorkspaceExternalOpenResult> {
+    return this.#withOperation(async () => {
+      const target = await this.#resolveTarget(input);
+      const status = await this.repositories.status(target.repositoryRoot);
+      const parent = this.#requireLiveWindow(event);
+      const decision = await this.dialog.showMessageBox(
+        parent,
+        externalOpenConfirmation(target, status.branch),
+      );
+      this.#assertLiveSender(event);
+      if (decision.response !== 1) {
+        this.store.appendAudit('git', 'open-workspace-external', 'denied', {
+          ...auditTargetMetadata(target.view),
+          reason: 'native-confirmation-cancelled',
+        });
+        return {
+          opened: false,
+          targetKind: target.view.kind,
+          branch: status.branch,
+        };
+      }
+      try {
+        const current = await this.#resolveTarget(input);
+        if (
+          current.repositoryRoot !== target.repositoryRoot ||
+          JSON.stringify(current.view) !== JSON.stringify(target.view)
+        ) {
+          throw new Error('The selected workspace changed after review. Open it again.');
+        }
+        this.#requireLiveWindow(event);
+        this.store.appendAudit('git', 'open-workspace-external', 'allowed', {
+          ...auditTargetMetadata(current.view),
+          application: 'system-registered',
+        });
+        const error = await this.#openExternalPath(current.repositoryRoot);
+        if (error !== '') throw new Error('The system could not open the selected workspace.');
+        const currentStatus = await this.repositories.status(current.repositoryRoot);
+        return {
+          opened: true,
+          targetKind: current.view.kind,
+          branch: currentStatus.branch,
+        };
+      } catch (error) {
+        this.#auditFailure('open-workspace-external', target.view, error);
+        throw error;
+      }
+    });
   }
 
   public confirmCommit(
@@ -1272,6 +1338,25 @@ function discardConfirmation(plan: PendingDiscardPlan): MessageBoxOptions {
   };
 }
 
+function externalOpenConfirmation(target: GitTarget, branch: string | null): MessageBoxOptions {
+  return {
+    type: 'warning',
+    title: 'Open workspace in an external application?',
+    message: `Open the ${target.view.kind === 'primary' ? 'main project workspace' : 'agent workspace'} outside Forgeboard?`,
+    detail: [
+      `Where: ${targetDisclosure(target.view)}`,
+      `Branch: ${branch === null ? 'no branch checked out' : displayBoundedLiteral(branch, 4_096)}`,
+      '',
+      'Your operating system chooses the registered application. It runs outside Forgeboard’s sandbox and may read or change any file in this workspace.',
+      'Forgeboard passes only the main-owned workspace path after revalidating the selected project or agent run. The path is never accepted from the renderer.',
+    ].join('\n'),
+    buttons: ['Cancel', 'Open externally'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
+}
+
 function boundedPathDisclosure(paths: readonly string[]): string[] {
   const shown = paths.slice(0, 20).map((path) => `• ${displayBoundedLiteral(path, 512)}`);
   return paths.length > shown.length
@@ -1319,4 +1404,8 @@ function targetDisclosure(target: GitReviewTargetView): string {
   return target.kind === 'primary'
     ? 'primary checkout'
     : `agent workspace for run ${target.runId.slice(0, 12)} (base ${target.baseCommit.slice(0, 12)})`;
+}
+
+function unavailableExternalOpen(): Promise<string> {
+  return Promise.reject(new Error('Opening an external workspace is unavailable.'));
 }

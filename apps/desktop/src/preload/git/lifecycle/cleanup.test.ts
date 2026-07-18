@@ -8,6 +8,30 @@ const RUN_ID = '95000000-0000-4000-8000-000000000002';
 const PLAN_ID = '95000000-0000-4000-8000-000000000003';
 
 describe('createGitLifecycleApi', () => {
+  it('validates an opaque review target and path-free external-open result', async () => {
+    const result = {
+      opened: true,
+      targetKind: 'agent-worktree' as const,
+      branch: 'forgeboard/task',
+    };
+    const invoke = vi.fn().mockResolvedValue({ ok: true, value: result });
+    const api = createGitLifecycleApi(invoke);
+
+    await expect(
+      api.openExternal({ kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID }),
+    ).resolves.toEqual({ ok: true, value: result });
+    expect(invoke).toHaveBeenCalledWith(GIT_LIFECYCLE_IPC_CHANNELS.openExternal, {
+      kind: 'agent-worktree',
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+    });
+
+    invoke.mockResolvedValue({ ok: true, value: { ...result, path: '/private/worktree' } });
+    await expect(
+      api.openExternal({ kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID }),
+    ).rejects.toBeTruthy();
+  });
+
   it('validates an opaque project/run target before invoking main', async () => {
     const invoke = vi.fn().mockResolvedValue({ ok: true, value: cleanupPlan() });
     const api = createGitLifecycleApi(invoke);

@@ -71,6 +71,9 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
           setInviteClearSignal((current) => current + 1);
           setMessage('Collaboration is offline.');
           ownerAccess.clearExpiry();
+        } else {
+          // Do not let a completed management action mask live connecting/reconnecting/error state.
+          setMessage(null);
         }
       } else if (event.type === 'awareness-changed') {
         setCollaborators(event.states);

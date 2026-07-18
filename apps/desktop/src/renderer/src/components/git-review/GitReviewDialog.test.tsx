@@ -267,6 +267,11 @@ const prepareCleanupMock = vi.fn<() => Promise<IpcResult<GitWorktreeCleanupPrepa
 const confirmCleanupMock = vi.fn(() =>
   Promise.resolve(success<GitWorktreeCleanupResultView | null>(null)),
 );
+const openExternalMock = vi.fn(() =>
+  Promise.resolve(
+    success({ opened: true, targetKind: 'primary' as const, branch: 'feature/review' }),
+  ),
+);
 const reviewNotesListMock = vi.fn((input: { readonly target: GitTargetInput }) =>
   Promise.resolve(success(reviewNotesFor(input.target))),
 );
@@ -299,6 +304,7 @@ beforeEach(() => {
     readinessApproveMock,
     prepareCleanupMock,
     confirmCleanupMock,
+    openExternalMock,
     reviewNotesListMock,
     reviewNoteCreateMock,
     reviewNoteUpdateMock,
@@ -328,6 +334,7 @@ beforeEach(() => {
           approve: readinessApproveMock,
         },
         lifecycle: {
+          openExternal: openExternalMock,
           prepareCleanup: prepareCleanupMock,
           confirmCleanup: confirmCleanupMock,
         },
@@ -348,6 +355,18 @@ afterEach(() => {
 });
 
 describe('GitReviewDialog', () => {
+  it('opens only the current opaque review target through the native external handoff', async () => {
+    render(<GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={vi.fn()} />);
+    await screen.findByText('origin/feature/review');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open externally…' }));
+
+    await waitFor(() => expect(openExternalMock).toHaveBeenCalledWith(primaryTarget));
+    expect(
+      await screen.findByText(/Opened the main project externally on feature\/review/u),
+    ).toBeTruthy();
+  });
+
   it('loads authoritative status, focuses close, and sends only bounded stage selections', async () => {
     const origin = document.createElement('button');
     document.body.append(origin);
@@ -468,7 +487,9 @@ describe('GitReviewDialog', () => {
       hunkIds: [unstagedHunkId],
     });
     expect(confirmDiscardMock).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' })),
+    );
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Review changes in Workshop' })).toBeTruthy();
@@ -584,7 +605,9 @@ describe('GitReviewDialog', () => {
     expect(disclosure.textContent).toContain('Files with unsaved changes0');
     expect(disclosure.textContent).toContain('Branch deletionRequired');
     expect(disclosure.textContent).toContain('no way to force cleanup');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' })),
+    );
 
     fireEvent.click(
       screen.getByRole('button', {
@@ -761,7 +784,9 @@ describe('GitReviewDialog', () => {
     expect(disclosure.textContent).toContain('Ada Developer <ada@example.test>');
     expect(disclosure.textContent).toContain('name from Forgeboard settings');
     expect(confirmShippingMock).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go back' })),
+    );
     fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(
       screen.getByRole('button', { name: 'Continue to final confirmation' }),

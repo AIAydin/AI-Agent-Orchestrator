@@ -8,6 +8,7 @@ import {
   GitWorktreeCleanupReconciledViewSchema,
   GitWorktreeCleanupResultViewSchema,
   GitWorktreeCleanupTargetInputSchema,
+  GitWorkspaceExternalOpenResultSchema,
 } from './contracts.js';
 
 const PROJECT_ID = '94000000-0000-4000-8000-000000000001';
@@ -15,6 +16,17 @@ const RUN_ID = '94000000-0000-4000-8000-000000000002';
 const PLAN_ID = '94000000-0000-4000-8000-000000000003';
 
 describe('Git worktree cleanup contracts', () => {
+  it('keeps external workspace handoff results path-free', () => {
+    const result = { opened: true, targetKind: 'agent-worktree', branch: 'forgeboard/task' };
+    expect(GitWorkspaceExternalOpenResultSchema.parse(result)).toEqual(result);
+    expect(
+      GitWorkspaceExternalOpenResultSchema.safeParse({
+        ...result,
+        path: '/private/managed/worktree',
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepts only opaque project/run ownership as a cleanup target', () => {
     const target = { projectId: PROJECT_ID, runId: RUN_ID };
     expect(GitWorktreeCleanupTargetInputSchema.parse(target)).toEqual(target);

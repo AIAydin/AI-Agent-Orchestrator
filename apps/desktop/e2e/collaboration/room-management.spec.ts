@@ -238,6 +238,31 @@ test('room creation, member administration, audit, and renewal work entirely thr
       ]);
     });
 
+    await test.step('server loss is visible while local canvas work remains usable', async () => {
+      await server!.stop();
+      server = null;
+      await expect(collaborationStatus(ownerSettings)).toContainText(
+        'Reconnecting to the approved room',
+        { timeout: 20_000 },
+      );
+
+      await ownerSettings.getByRole('button', { name: /Save settings/u }).click();
+      await expect(ownerSettings).toBeHidden();
+      await owner.page.getByRole('button', { name: /Explore the safe demo/i }).click();
+      await expect(owner.page.locator('.project-switcher')).toContainText('forgeboard-demo');
+      await expect(
+        owner.page.getByText(/^Sharing · (?:reconnecting|error|offline)$/u),
+      ).toBeVisible();
+      await owner.page
+        .locator('.template-section')
+        .getByRole('button', { name: /Product brief/u })
+        .click();
+      await expect(
+        owner.page.getByRole('article', { name: 'Product brief: Product brief' }),
+      ).toBeVisible();
+      await expect(owner.page.getByText('Saved locally')).toBeVisible();
+    });
+
     expect(externalRequests).toEqual([]);
   } finally {
     if (priorClipboard !== null) {

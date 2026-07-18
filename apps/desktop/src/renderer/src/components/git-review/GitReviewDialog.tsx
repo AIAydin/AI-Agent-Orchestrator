@@ -1,6 +1,7 @@
 import {
   CheckCircle2,
   CircleDashed,
+  ExternalLink,
   GitCompareArrows,
   LoaderCircle,
   RefreshCw,
@@ -8,6 +9,8 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+
+import { unwrap } from '../../lib/ipc.js';
 
 import type { CheckId } from '../../../../shared/checks/contracts.js';
 import type {
@@ -105,6 +108,7 @@ export function GitReviewDialog({
   const [shippingResult, setShippingResult] = useState<GitShippingResultView | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<GitWorktreeCleanupPlanView | null>(null);
   const [notice, setNotice] = useState<GitReviewNotice | null>(null);
+  const [externalOpenBusy, setExternalOpenBusy] = useState(false);
   const [reviewMode, setReviewMode] = useState<GitReviewMode>(
     target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree',
   );
@@ -125,9 +129,14 @@ export function GitReviewDialog({
   const readinessBusyLabel = deliveryReadinessBusyLabel(deliveryReadiness.busy);
   const busy =
     controller.busyLabel !== null ||
+    externalOpenBusy ||
     cleanupController.busyLabel !== null ||
     deliveryReadiness.busy !== null;
-  const busyLabel = controller.busyLabel ?? cleanupController.busyLabel ?? readinessBusyLabel;
+  const busyLabel =
+    controller.busyLabel ??
+    cleanupController.busyLabel ??
+    readinessBusyLabel ??
+    (externalOpenBusy ? 'Waiting for external workspace confirmation…' : null);
   const actionError = controller.error ?? cleanupController.error ?? deliveryReadiness.error;
   const cleanupRecoveryOnly = target.kind === 'agent-worktree' && cleanupRecovery;
   const deliveryReady =
@@ -256,6 +265,28 @@ export function GitReviewDialog({
     void deliveryReadiness.refresh();
   };
 
+  const openExternal = async () => {
+    setNotice(null);
+    setExternalOpenBusy(true);
+    try {
+      const result = unwrap(await window.forgeboard.git.lifecycle.openExternal(target));
+      setNotice(
+        gitReviewNotice(
+          result.opened
+            ? `Opened the ${result.targetKind === 'primary' ? 'main project' : 'agent workspace'} externally${result.branch === null ? '' : ` on ${result.branch}`}.`
+            : 'External open cancelled. No application was launched.',
+          result.opened ? 'success' : 'neutral',
+        ),
+      );
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not open this workspace.';
+      setNotice(gitReviewNotice(message, 'warning'));
+      onError?.(message);
+    } finally {
+      setExternalOpenBusy(false);
+    }
+  };
+
   const confirmShipping = () => {
     if (shippingPlan === null) return;
     void controller.confirmShipping(shippingPlan.planId).then((result) => {
@@ -350,6 +381,14 @@ export function GitReviewDialog({
                 : `Review changes in ${projectName}`}
             </h2>
           </span>
+          <button
+            className="button"
+            type="button"
+            disabled={busy}
+            onClick={() => void openExternal()}
+          >
+            <ExternalLink size={14} aria-hidden="true" /> Open externally…
+          </button>
           <button
             className="icon-button"
             type="button"

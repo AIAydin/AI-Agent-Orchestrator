@@ -7,6 +7,7 @@ export const GIT_WORKTREE_CLEANUP_MAX_DIRTY_PATH_COUNT = 1_000_000;
 export const GIT_LIFECYCLE_IPC_CHANNELS = Object.freeze({
   prepareCleanup: 'git:lifecycle:prepare-cleanup',
   confirmCleanup: 'git:lifecycle:confirm-cleanup',
+  openExternal: 'git:lifecycle:open-external',
 });
 
 const GitLifecycleIdSchema = z.string().uuid();
@@ -149,6 +150,16 @@ export const GitWorktreeCleanupResultViewSchema = z
   })
   .strict();
 export type GitWorktreeCleanupResultView = z.infer<typeof GitWorktreeCleanupResultViewSchema>;
+
+/** Path-free result for a native-confirmed handoff to the system-registered external application. */
+export const GitWorkspaceExternalOpenResultSchema = z
+  .object({
+    opened: z.boolean(),
+    targetKind: z.enum(['primary', 'agent-worktree']),
+    branch: GitLifecycleRefSchema.nullable(),
+  })
+  .strict();
+export type GitWorkspaceExternalOpenResult = z.infer<typeof GitWorkspaceExternalOpenResultSchema>;
 
 function isRendererSafeGitRef(value: string): boolean {
   if (value.trim() !== value || value.startsWith('/') || value.includes('\\')) return false;

@@ -36,6 +36,27 @@ describe('performPrivacyDeletion', () => {
     expect(fixture.confirmForgetMissingBackups).not.toHaveBeenCalled();
     expect(fixture.deleteData).toHaveBeenCalledWith([]);
   });
+
+  it('fails closed before resetting services when authority changes during backup inspection', async () => {
+    const fixture = createFixture(0, false);
+    let current = true;
+    const coordinator = {
+      ...fixture.coordinator,
+      assertCurrent: () => {
+        if (!current) throw new Error('origin changed');
+      },
+      listMissingBackupIds: () => {
+        fixture.order.push('list-missing');
+        current = false;
+        return Promise.resolve([]);
+      },
+    };
+
+    await expect(performPrivacyDeletion(coordinator)).rejects.toThrow('origin changed');
+
+    expect(fixture.resetDataServices).not.toHaveBeenCalled();
+    expect(fixture.deleteData).not.toHaveBeenCalled();
+  });
 });
 
 function createFixture(missingBackupCount: number, confirmMissing: boolean) {
@@ -54,6 +75,7 @@ function createFixture(missingBackupCount: number, confirmMissing: boolean) {
   });
   return {
     coordinator: {
+      assertCurrent: () => undefined,
       pauseBackups: () => {
         order.push('pause-backups');
         return Promise.resolve();

@@ -166,6 +166,7 @@ import type {
   GitRemotePushResultView,
 } from './git/remote/index.js';
 import type {
+  GitWorkspaceExternalOpenResult,
   GitWorktreeCleanupConfirmationInput,
   GitWorktreeCleanupPrepareOutcome,
   GitWorktreeCleanupResultView,
@@ -544,6 +545,7 @@ export interface ForgeboardApi {
       ): Promise<IpcResult<GitHubCiResultView | null>>;
     };
     lifecycle: {
+      openExternal(input: GitTargetInput): Promise<IpcResult<GitWorkspaceExternalOpenResult>>;
       prepareCleanup(
         input: GitWorktreeCleanupTargetInput,
       ): Promise<IpcResult<GitWorktreeCleanupPrepareOutcome>>;

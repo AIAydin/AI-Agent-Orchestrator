@@ -64,6 +64,7 @@ import { createBundledGitRepositoryService } from './git/git-runtime.js';
 import { IntegrityService } from './integrity/service.js';
 import { DataOperationGate } from './lifecycle/data-operation-gate.js';
 import { createProcessQuiescenceAdmission } from './lifecycle/process-quiescence.js';
+import { confirmPrivacyDeletion } from './lifecycle/privacy-deletion-confirmation.js';
 import { performPrivacyDeletion } from './lifecycle/privacy-deletion.js';
 import { OutboundActionGate } from './outbound/outbound-action-gate.js';
 import { createGitHubCliCommandRunner } from './outbound/git/executors.js';
@@ -440,6 +441,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     () => store.getSettings(createDefaultSettings()),
     undefined,
     {
+      openExternalPath: async (path) => await shell.openPath(path),
       withCleanupAdmission: createProcessQuiescenceAdmission(dataOperations, [
         workflows,
         runs,
@@ -899,10 +901,19 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     async (event, confirmation) => {
       const authority = requireIpcWindowAuthority(event, 'Local-data deletion');
       if (confirmation !== 'DELETE ALL LOCAL DATA') throw new Error('Deletion was not confirmed.');
+      const confirmed = await confirmPrivacyDeletion(dialog, authority.parent, () => {
+        authority.assertCurrent();
+        store.appendAudit('privacy', 'delete-all-local-data', 'denied', {
+          reason: 'native-confirmation-cancelled',
+        });
+      });
+      authority.assertCurrent();
+      if (!confirmed) return false;
       await dataOperations.beginMutation('delete');
       try {
         authority.assertCurrent();
         return await performPrivacyDeletion({
+          assertCurrent: () => authority.assertCurrent(),
           pauseBackups: async () => await backups.pause(),
           listMissingBackupIds: async () => await store.listMissingRecordedBackupIds(),
           confirmForgetMissingBackups: async (count) => {
@@ -922,6 +933,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
             return decision.response === 1;
           },
           resetDataServices: async () => {
+            authority.assertCurrent();
             agentReadiness.clearVerifiedSettingsReadiness();
             commandReadiness.clearVerifiedSettingsReadiness();
             await workflows.resetForPrivacy();

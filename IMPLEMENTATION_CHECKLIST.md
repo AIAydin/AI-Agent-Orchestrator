@@ -1522,6 +1522,38 @@ unchecked when only a subset of their required behavior has proof.
   outbound allowed event must persist before the permit-bearing external effect can run. Seventy-five
   focused security tests passed, but the two broad security checklist items remain open pending an
   exhaustive consumer/event coverage audit.
+- 2026-07-18: the privacy deletion IPC now treats the renderer's typed phrase only as intent and
+  requires a second, cancel-default native confirmation before any service reset or storage
+  mutation. The trusted dialog enumerates local projects/canvases, execution history, settings,
+  integrations, approvals, audit history, snapshots, and tracked backups; it also distinguishes
+  Forgeboard data from untouched source repositories and warns that disconnected backup copies can
+  survive. Native cancellation records one redacted denial event. Four focused confirmation tests
+  passed. The deletion coordinator also revalidates its scoped authority before and after every
+  awaited stage, and a focused race test proves revoked authority cannot reach service reset or
+  storage deletion. Checklist items 43 and 44 remain open while the destructive/outbound consumer map is
+  completed and privacy deletion's intentionally erased successful audit history is reconciled with
+  the product's delete-all-data promise.
+- 2026-07-18: Git review gained a path-free `Open externally…` handoff for both the primary project
+  and a resolver-owned agent worktree. The renderer supplies only an opaque project/run target;
+  main resolves it, presents a cancel-default native warning about leaving Forgeboard's sandbox,
+  re-resolves it after approval, persists the redacted allowed audit before calling the operating
+  system, and returns no path. It revalidates the live owner window immediately before the allowed
+  audit and operating-system handoff; a replacement-window integration test proves a stale approval
+  cannot open the resolved workspace. Fifty focused unit tests, ten real-repository integration tests,
+  desktop strict typecheck, and the 1,267-file structure gate passed. Checklist item 72 remains open
+  because the system-registered application may be a file manager and rename/archive/editor-specific
+  selection are not complete.
+- 2026-07-18: the real two-profile collaboration-management Electron journey now stops its actual
+  loopback server after owner recovery, observes the live reconnecting state, saves the complete
+  UI configuration, opens a project with sharing visibly unavailable, creates a Product brief node,
+  and observes `Saved locally`. The focused Playwright journey passed in 7.9 seconds with zero
+  unintended external requests. Checklist item 179 remains open for its other enumerated failure
+  cases.
+- 2026-07-18: the integrated checkpoint passed the 1,267-file structure gate, repository formatting,
+  zero-warning lint, every workspace strict typecheck, 2,498 unit tests, 317 integration tests, and
+  every production build. The changed Git-review keyboard-focus test also passed independently after
+  its async focus assertion was made scheduler-safe, and the focused offline-server Electron journey
+  passed against the freshly built desktop application.
 - 2026-07-18: the complete repository checkpoint passed the 1,265-file structure gate, formatting,
   zero-warning lint, every workspace strict typecheck, 2,490 unit tests, 315 integration tests, and
   all production builds. A fresh unsigned macOS arm64 unpacked app rebuilt against Electron 36.5.0,

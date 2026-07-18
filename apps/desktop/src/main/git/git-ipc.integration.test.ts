@@ -32,6 +32,7 @@ vi.mock('electron', () => ({
 import type { AppSettings, Project } from '../../shared/application/contracts.js';
 import { IPC_CHANNELS, ipcResultSchema } from '../../shared/application/contracts.js';
 import type { GitTargetInput } from '../../shared/git/contracts.js';
+import { GIT_LIFECYCLE_IPC_CHANNELS } from '../../shared/git/lifecycle/contracts.js';
 import {
   GIT_REVIEW_NOTE_IPC_CHANNELS,
   GitReviewNotesViewSchema,
@@ -71,6 +72,77 @@ afterEach(async () => {
 });
 
 describe('GitIpcService with a real repository', () => {
+  it('opens only the main-resolved workspace after a cancel-default native disclosure', async () => {
+    const fixture = await createRepository();
+    const openExternalPath = vi.fn<() => Promise<string>>();
+    const harness = createHarness(fixture, [0, 1], { openExternalPath });
+    openExternalPath.mockImplementation(() => {
+      expect(harness.appendAudit).toHaveBeenCalledWith(
+        'git',
+        'open-workspace-external',
+        'allowed',
+        expect.objectContaining({ projectId: harness.project().id, targetKind: 'primary' }),
+      );
+      return Promise.resolve('');
+    });
+    harness.service.registerIpcHandlers();
+    const handler = requiredHandler(GIT_LIFECYCLE_IPC_CHANNELS.openExternal);
+    const target = primaryTarget(harness);
+
+    await expect(handler(liveEvent(10), target)).resolves.toMatchObject({
+      ok: true,
+      value: { opened: false, targetKind: 'primary', branch: 'main' },
+    });
+    expect(openExternalPath).not.toHaveBeenCalled();
+
+    await expect(handler(liveEvent(10), target)).resolves.toMatchObject({
+      ok: true,
+      value: { opened: true, targetKind: 'primary', branch: 'main' },
+    });
+    expect(openExternalPath).toHaveBeenCalledWith(fixture.repository);
+    expect(JSON.stringify(harness.showMessageBox.mock.calls)).not.toContain(fixture.repository);
+    expect(harness.appendAudit).toHaveBeenCalledWith(
+      'git',
+      'open-workspace-external',
+      'allowed',
+      expect.objectContaining({ projectId: harness.project().id, targetKind: 'primary' }),
+    );
+    expect(JSON.stringify(harness.appendAudit.mock.calls)).not.toContain(fixture.repository);
+    await harness.service.dispose();
+  });
+
+  it('refuses to open an external workspace after the originating window is replaced', async () => {
+    const fixture = await createRepository();
+    const first = { isDestroyed: () => false } as BrowserWindow;
+    const replacement = { isDestroyed: () => false } as BrowserWindow;
+    let current = first;
+    const openExternalPath = vi.fn(() => Promise.resolve(''));
+    const harness = createHarness(fixture, [1], {
+      onShow: () => {
+        current = replacement;
+      },
+      openExternalPath,
+      resolveWindow: () => current,
+    });
+    harness.service.registerIpcHandlers();
+
+    const result = await requiredHandler(GIT_LIFECYCLE_IPC_CHANNELS.openExternal)(
+      liveEvent(53),
+      primaryTarget(harness),
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(JSON.stringify(result)).toContain('window changed');
+    expect(openExternalPath).not.toHaveBeenCalled();
+    expect(harness.appendAudit).not.toHaveBeenCalledWith(
+      'git',
+      'open-workspace-external',
+      'allowed',
+      expect.anything(),
+    );
+    await harness.service.dispose();
+  });
+
   it('resolves a projectId through the main-owned project path and returns authoritative review', async () => {
     const fixture = await createRepository();
     const harness = createHarness(fixture);
@@ -459,6 +531,7 @@ function createHarness(
   responses: readonly number[] = [],
   options: {
     readonly onShow?: () => void;
+    readonly openExternalPath?: (path: string) => Promise<string>;
     readonly resolveWindow?: () => BrowserWindow;
   } = {},
 ): TestHarness {
@@ -541,6 +614,7 @@ function createHarness(
     repositories,
     () => settings,
     options.resolveWindow ?? (() => window),
+    options.openExternalPath === undefined ? {} : { openExternalPath: options.openExternalPath },
   );
   return { service, repositories, appendAudit, showMessageBox, project: () => project };
 }
