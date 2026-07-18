@@ -1201,3 +1201,14 @@ unchecked when only a subset of their required behavior has proof.
   smoke passed, and the startup/product and adversarial security audits returned GO. The broad
   database-failure Electron E2E checklist item remains open pending its dedicated visible chooser,
   rejection, cancellation, rollback, and interrupted-recovery journey.
+- 2026-07-17: every authoritative node context menu now includes **Run with dependencies** using the
+  same workflow eligibility and scope resolution as the toolbar. The action targets the exact
+  context-clicked Agent, runnable Task, Test, Review Gate, human Diff, or Group even when another
+  node was selected; includes upstream dependencies; and preserves the existing workflow controller
+  as the only execution authority. Ineligible Tasks and node kinds expose the exact eligibility
+  reason, while workflow activity, graph read-only state, and workflow-specific collaboration
+  authority disable the action without emitting a run or graph mutation. Keyboard navigation,
+  menu dismissal, focus restoration, and undo state remain unchanged. Forty-three focused menu,
+  canvas, and shell-persistence tests passed alongside desktop typecheck, focused zero-warning lint,
+  formatting, and the 1,117-file structure gate. The broader lifecycle-controls item remains open
+  for real Agent pause/continue and complete node/edge lifecycle coverage.

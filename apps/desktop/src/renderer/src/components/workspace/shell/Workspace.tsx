@@ -1515,6 +1515,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onSetNodeLocked={setNodeLocked}
           onDuplicateNode={duplicateNode}
           onDeleteNode={deleteNode}
+          workflowRunBusy={workflowStartBusy}
+          workflowMutationsAuthorized={workflows.mutationsAuthorized}
+          onRunWorkflowScope={(scope) => void workflows.start(scope)}
           onSelectionChange={({
             nodes: selectedNodes,
             edges: selectedEdges,

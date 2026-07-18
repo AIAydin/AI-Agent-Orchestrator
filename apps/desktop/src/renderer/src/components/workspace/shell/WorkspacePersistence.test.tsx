@@ -22,6 +22,7 @@ import type { WorkspaceHandle } from '../model/types.js';
 
 const mocks = vi.hoisted(() => ({
   flushCanvas: vi.fn<() => Promise<boolean>>(),
+  workflowStart: vi.fn(),
   collaborationGraphReadOnly: false,
   applyCollaborationSnapshot: null as
     | null
@@ -85,6 +86,7 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
     onSelectionChange,
     onDuplicateNode,
     onDeleteNode,
+    onRunWorkflowScope,
     collaborationGraphReadOnly,
   }: {
     nodes: WorkshopNode[];
@@ -97,6 +99,7 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
     onSelectionChange: (selection: { nodes: WorkshopNode[]; edges: [] }) => void;
     onDuplicateNode: (nodeId: string) => void;
     onDeleteNode: (nodeId: string) => void;
+    onRunWorkflowScope: (scope: { kind: 'node'; nodeId: string; includeUpstream: boolean }) => void;
     collaborationGraphReadOnly: boolean;
   }) => (
     <div>
@@ -147,6 +150,15 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
       </button>
       <button type="button" onClick={() => nodes.at(-1) && onDeleteNode(nodes.at(-1)!.id)}>
         Context delete last node
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          nodes[0] &&
+          onRunWorkflowScope({ kind: 'node', nodeId: nodes[0].id, includeUpstream: true })
+        }
+      >
+        Context run first node
       </button>
       <button
         type="button"
@@ -265,9 +277,10 @@ vi.mock('../workflows/useWorkflowRuns.js', () => ({
     selectedExecutionId: null,
     loading: false,
     busyAction: null,
+    mutationsAuthorized: true,
     selectExecution: vi.fn(),
     refresh: vi.fn(),
-    start: vi.fn(),
+    start: mocks.workflowStart,
     approveNode: vi.fn(),
     approveHuman: vi.fn(),
     decideReview: vi.fn(),
@@ -281,6 +294,7 @@ beforeEach(() => {
   mocks.applyCollaborationSnapshot = null;
   mocks.flushCanvas.mockReset();
   mocks.flushCanvas.mockResolvedValue(true);
+  mocks.workflowStart.mockReset();
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -468,6 +482,35 @@ describe('Workspace persistence boundary', () => {
     await waitFor(() => expect(canvasNodes()).toHaveLength(3));
     expect(canvasNodes().map((node) => node.data.title)).toContain('context-target copy');
     expect(canvasNodes().map((node) => node.data.title)).not.toContain('inspected-later copy');
+  });
+
+  it('routes the exact context-menu workflow scope to the workflow controller', async () => {
+    const document = canvas([
+      {
+        ...canvasNode('context-agent', 10, false),
+        data: { ...canvasNode('context-agent', 10, false).data, kind: 'agent' },
+      },
+      canvasNode('inspected-later', 90, false),
+    ]);
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
+        runs: { onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    renderWorkspace();
+
+    await waitFor(() => expect(canvasNodes()).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect last node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Context run first node' }));
+
+    expect(mocks.workflowStart).toHaveBeenCalledOnce();
+    expect(mocks.workflowStart).toHaveBeenCalledWith({
+      kind: 'node',
+      nodeId: 'context-agent',
+      includeUpstream: true,
+    });
   });
 
   it('stops a running preview before context deletion removes its node', async () => {

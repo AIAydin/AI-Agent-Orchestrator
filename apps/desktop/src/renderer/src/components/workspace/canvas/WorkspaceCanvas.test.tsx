@@ -255,6 +255,102 @@ describe('WorkspaceCanvas node context menu', () => {
     expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Inspect' }).disabled).toBe(
       false,
     );
+    const run = screen.getByRole<HTMLButtonElement>('menuitem', {
+      name: 'Run with dependencies',
+    });
+    expect(run.disabled).toBe(true);
+    expect(run.title).toMatch(/cannot edit the shared graph/u);
+  });
+
+  it('runs the exact context target with upstream dependencies regardless of prior selection', () => {
+    const canvasProps = props(vi.fn());
+    canvasProps.nodes = [
+      node('context-agent', 101, 99, 'agent'),
+      { ...node('previous-selection', 100, 100, 'agent'), selected: true },
+    ];
+    const view = render(<WorkspaceCanvas {...canvasProps} />);
+    vi.spyOn(canvasRegion(view.container), 'getBoundingClientRect').mockReturnValue(canvasBounds());
+
+    fireEvent.contextMenu(screen.getByTestId('react-flow'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Run with dependencies' }));
+
+    expect(canvasProps.onRunWorkflowScope).toHaveBeenCalledOnce();
+    expect(canvasProps.onRunWorkflowScope).toHaveBeenCalledWith({
+      kind: 'node',
+      nodeId: 'context-agent',
+      includeUpstream: true,
+    });
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('uses group eligibility and keeps an unassigned Task disabled with its exact reason', () => {
+    const groupProps = props(vi.fn());
+    const group = node('delivery-group', 101, 99, 'group-frame');
+    groupProps.nodes = [
+      { ...group, data: { ...group.data, childNodeIds: ['agent'] } },
+      node('agent', 100, 100, 'agent'),
+    ];
+    const groupView = render(<WorkspaceCanvas {...groupProps} />);
+    vi.spyOn(canvasRegion(groupView.container), 'getBoundingClientRect').mockReturnValue(
+      canvasBounds(),
+    );
+    fireEvent.contextMenu(screen.getByTestId('react-flow'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Run with dependencies' }));
+    expect(groupProps.onRunWorkflowScope).toHaveBeenCalledWith({
+      kind: 'group',
+      groupId: 'delivery-group',
+      includeUpstream: true,
+    });
+    groupView.unmount();
+
+    const taskProps = props(vi.fn());
+    taskProps.nodes = [node('unassigned-task', 101, 99, 'task')];
+    const taskView = render(<WorkspaceCanvas {...taskProps} />);
+    vi.spyOn(canvasRegion(taskView.container), 'getBoundingClientRect').mockReturnValue(
+      canvasBounds(),
+    );
+    fireEvent.contextMenu(screen.getByTestId('react-flow'));
+    const taskRun = screen.getByRole<HTMLButtonElement>('menuitem', {
+      name: 'Run with dependencies',
+    });
+    expect(taskRun.disabled).toBe(true);
+    expect(taskRun.title).toBe('Choose an Agent assignee before running this Task.');
+    expect(taskProps.onRunWorkflowScope).not.toHaveBeenCalled();
+  });
+
+  it('disables Run while another workflow action is busy', () => {
+    const canvasProps = props(vi.fn());
+    canvasProps.nodes = [node('agent', 101, 99, 'agent')];
+    canvasProps.workflowRunBusy = true;
+    const view = render(<WorkspaceCanvas {...canvasProps} />);
+    vi.spyOn(canvasRegion(view.container), 'getBoundingClientRect').mockReturnValue(canvasBounds());
+    fireEvent.contextMenu(screen.getByTestId('react-flow'));
+
+    const run = screen.getByRole<HTMLButtonElement>('menuitem', {
+      name: 'Run with dependencies',
+    });
+    expect(run.disabled).toBe(true);
+    expect(run.title).toBe('Another workflow action is already in progress.');
+    fireEvent.click(run);
+    expect(canvasProps.onRunWorkflowScope).not.toHaveBeenCalled();
+  });
+
+  it('disables Run for workflow-read-only authority independently of graph editing', () => {
+    const canvasProps = props(vi.fn());
+    canvasProps.nodes = [node('agent', 101, 99, 'agent')];
+    canvasProps.workflowMutationsAuthorized = false;
+    expect(canvasProps.collaborationGraphReadOnly).toBe(false);
+    const view = render(<WorkspaceCanvas {...canvasProps} />);
+    vi.spyOn(canvasRegion(view.container), 'getBoundingClientRect').mockReturnValue(canvasBounds());
+    fireEvent.contextMenu(screen.getByTestId('react-flow'));
+
+    const run = screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Run with dependencies' });
+    expect(run.disabled).toBe(true);
+    expect(run.title).toBe(
+      'This collaboration role can inspect workflow history but cannot start execution.',
+    );
+    fireEvent.click(run);
+    expect(canvasProps.onRunWorkflowScope).not.toHaveBeenCalled();
   });
 });
 
@@ -512,6 +608,9 @@ function props(
     onSetNodeLocked: vi.fn(),
     onDuplicateNode: vi.fn(),
     onDeleteNode: vi.fn(),
+    workflowRunBusy: false,
+    workflowMutationsAuthorized: true,
+    onRunWorkflowScope: vi.fn(),
     onAddNode: vi.fn(),
     onAddExtensionNode: vi.fn(),
     onAttachAgentContext: vi.fn().mockResolvedValue(undefined),

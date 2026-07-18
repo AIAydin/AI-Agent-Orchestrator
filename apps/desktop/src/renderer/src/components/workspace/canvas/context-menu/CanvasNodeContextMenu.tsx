@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, Copy, Eye, Lock, Trash2, Unlock } from 'lucide-react';
+import { ChevronDown, Copy, Eye, Lock, Play, Trash2, Unlock } from 'lucide-react';
 
 import type { WorkshopNode } from '../CanvasNode.js';
 import './context-menu.css';
@@ -17,8 +17,11 @@ interface CanvasNodeContextMenuProps {
   readonly readOnly: boolean;
   readonly inheritedLock: boolean;
   readonly deletionProtected: boolean;
+  readonly runDisabled: boolean;
+  readonly runDisabledReason?: string | undefined;
   readonly returnFocus: HTMLElement | null;
   readonly onInspect: () => void;
+  readonly onRun: () => void;
   readonly onSetCollapsed: (collapsed: boolean) => void;
   readonly onSetLocked: (locked: boolean) => void;
   readonly onDuplicate: () => void;
@@ -83,6 +86,19 @@ export function CanvasNodeContextMenu(props: CanvasNodeContextMenuProps) {
     >
       <MenuItem label="Inspect" onRun={props.onInspect} onClose={props.onClose}>
         <Eye size={14} aria-hidden="true" />
+      </MenuItem>
+      <MenuItem
+        label="Run with dependencies"
+        disabled={props.readOnly || props.runDisabled}
+        reason={
+          readOnlyReason(props) ??
+          props.runDisabledReason ??
+          (props.runDisabled ? 'This workflow cannot start right now.' : undefined)
+        }
+        onRun={props.onRun}
+        onClose={props.onClose}
+      >
+        <Play size={14} aria-hidden="true" />
       </MenuItem>
       <MenuItem
         label={props.node.data.collapsed ? 'Expand' : 'Collapse'}

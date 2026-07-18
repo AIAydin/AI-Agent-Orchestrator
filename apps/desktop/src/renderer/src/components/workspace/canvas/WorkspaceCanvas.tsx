@@ -19,6 +19,7 @@ import { Bot, LayoutGrid } from 'lucide-react';
 
 import type { AppSettings, CanvasDocument } from '../../../../../shared/application/contracts.js';
 import type { CollaborationAwarenessEntry } from '../../../../../shared/collaboration/index.js';
+import type { WorkflowStartInput } from '../../../../../shared/workflow/contracts.js';
 import { NODE_KINDS, WORKSHOP_NODE_TYPES, type NodeKind, type WorkshopNode } from './CanvasNode.js';
 import { CollaborationPresence } from '../collaboration/CollaborationPresence.js';
 import { CollaboratorRoster } from '../collaboration/presence/CollaboratorRoster.js';
@@ -48,6 +49,7 @@ import {
   normalizeCanvasViewport,
 } from './view-state/viewport.js';
 import { useViewportRestore } from './view-state/useViewportRestore.js';
+import { workflowSelectionEligibility } from '../workflows/workflow-run-eligibility.js';
 import {
   CanvasNodeContextMenu,
   type CanvasNodeContextMenuPosition,
@@ -84,6 +86,9 @@ interface WorkspaceCanvasProps {
   onSetNodeLocked: (nodeId: string, locked: boolean) => void;
   onDuplicateNode: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
+  workflowRunBusy: boolean;
+  workflowMutationsAuthorized: boolean;
+  onRunWorkflowScope: (scope: WorkflowStartInput['scope']) => void;
   onAddNode: (kind: NodeKind, position?: { x: number; y: number }) => void;
   onAddExtensionNode: (template: ExtensionTemplate, position?: { x: number; y: number }) => void;
   onAttachAgentContext: (
@@ -121,6 +126,9 @@ export function WorkspaceCanvas({
   onSetNodeLocked,
   onDuplicateNode,
   onDeleteNode,
+  workflowRunBusy,
+  workflowMutationsAuthorized,
+  onRunWorkflowScope,
   onAddNode,
   onAddExtensionNode,
   onAttachAgentContext,
@@ -476,6 +484,14 @@ export function WorkspaceCanvas({
             (() => {
               const node = nodes.find(({ id }) => id === contextMenu.nodeId);
               if (node === undefined) return null;
+              const runEligibility = workflowSelectionEligibility([node], nodes, edges);
+              const runDisabledReason = !workflowMutationsAuthorized
+                ? 'This collaboration role can inspect workflow history but cannot start execution.'
+                : workflowRunBusy
+                  ? 'Another workflow action is already in progress.'
+                  : runEligibility.runnable
+                    ? undefined
+                    : runEligibility.reason;
               return (
                 <CanvasNodeContextMenu
                   node={node}
@@ -483,8 +499,17 @@ export function WorkspaceCanvas({
                   readOnly={collaborationGraphReadOnly}
                   inheritedLock={inheritedLockedNodeIds.has(node.id)}
                   deletionProtected={deletionProtectedNodeIds.has(node.id)}
+                  runDisabled={
+                    !workflowMutationsAuthorized || workflowRunBusy || !runEligibility.runnable
+                  }
+                  runDisabledReason={runDisabledReason}
                   returnFocus={contextMenu.returnFocus}
                   onInspect={() => onInspectNode(node.id)}
+                  onRun={() => {
+                    if (runEligibility.scope !== undefined) {
+                      onRunWorkflowScope(runEligibility.scope);
+                    }
+                  }}
                   onSetCollapsed={(collapsed) => onSetNodeCollapsed(node.id, collapsed)}
                   onSetLocked={(locked) => onSetNodeLocked(node.id, locked)}
                   onDuplicate={() => onDuplicateNode(node.id)}

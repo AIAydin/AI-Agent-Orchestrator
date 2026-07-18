@@ -30,7 +30,9 @@ describe('CanvasNodeContextMenu', () => {
     expect(menu.getAttribute('style')).toContain('top: 32px');
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Inspect' }));
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Collapse' }));
+    expect(document.activeElement).toBe(
+      screen.getByRole('menuitem', { name: 'Run with dependencies' }),
+    );
     fireEvent.keyDown(menu, { key: 'End' });
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Delete' }));
     fireEvent.keyDown(menu, { key: 'Escape' });
@@ -46,9 +48,14 @@ describe('CanvasNodeContextMenu', () => {
   it('runs exact callbacks and disables mutations for read-only or protected nodes', () => {
     const callbacks = props();
     const view = render(<CanvasNodeContextMenu {...callbacks} />);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Run with dependencies' }));
+    expect(callbacks.onRun).toHaveBeenCalledTimes(1);
+    expect(callbacks.onClose).toHaveBeenCalledTimes(1);
+
+    view.rerender(<CanvasNodeContextMenu {...callbacks} />);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
     expect(callbacks.onDuplicate).toHaveBeenCalledTimes(1);
-    expect(callbacks.onClose).toHaveBeenCalledTimes(1);
+    expect(callbacks.onClose).toHaveBeenCalledTimes(2);
 
     view.rerender(
       <CanvasNodeContextMenu
@@ -65,12 +72,36 @@ describe('CanvasNodeContextMenu', () => {
     expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Delete' }).disabled).toBe(true);
 
     view.rerender(<CanvasNodeContextMenu {...callbacks} readOnly />);
+    expect(
+      screen.getByRole<HTMLButtonElement>('menuitem', {
+        name: 'Run with dependencies',
+      }).disabled,
+    ).toBe(true);
     expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Duplicate' }).disabled).toBe(
       true,
     );
     expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Inspect' }).disabled).toBe(
       false,
     );
+  });
+
+  it('exposes an exact reason when workflow eligibility or activity disables Run', () => {
+    const callbacks = props();
+    render(
+      <CanvasNodeContextMenu
+        {...callbacks}
+        runDisabled
+        runDisabledReason="Choose an Agent assignee before running this Task."
+      />,
+    );
+
+    const run = screen.getByRole<HTMLButtonElement>('menuitem', {
+      name: 'Run with dependencies',
+    });
+    expect(run.disabled).toBe(true);
+    expect(run.title).toBe('Choose an Agent assignee before running this Task.');
+    fireEvent.click(run);
+    expect(callbacks.onRun).not.toHaveBeenCalled();
   });
 
   it('dismisses for an outside pointer without running an action', () => {
@@ -89,8 +120,10 @@ function props(): React.ComponentProps<typeof CanvasNodeContextMenu> {
     readOnly: false,
     inheritedLock: false,
     deletionProtected: false,
+    runDisabled: false,
     returnFocus: null,
     onInspect: vi.fn(),
+    onRun: vi.fn(),
     onSetCollapsed: vi.fn(),
     onSetLocked: vi.fn(),
     onDuplicate: vi.fn(),
