@@ -6,11 +6,13 @@ import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
 import { PACKAGED_SMOKE_MARKER } from '../shared/smoke/contracts.js';
 import { attemptContextSnapshotStorageStartup } from './agent-execution/context/snapshot-store/startup.js';
 import { CloseCoordinator } from './lifecycle/close-coordinator.js';
-import { createDefaultSettings, registerIpcHandlers } from './ipc.js';
+import { registerIpcHandlers } from './ipc.js';
 import type { ApplicationServices } from './ipc.js';
 import { verifyBundledGit } from './git/git-runtime.js';
+import { openLocalStoreWithStartupDatabaseRecovery } from './recovery/database/startup-adapter/open-store.js';
 import { configurePackagedSmokeProfile, runPackagedApplicationSmoke } from './smoke/packaged.js';
-import { LocalStore } from './storage.js';
+import { createNonInteractiveSmokeStartupDialog } from './smoke/startup-recovery-dialog.js';
+import type { LocalStore } from './storage.js';
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
@@ -42,15 +44,27 @@ void app
     );
     if (!contextSnapshotStorage.ready) {
       if (packagedSmokeProfile !== null) {
-        throw new Error(contextSnapshotStorage.reason, { cause: contextSnapshotStorage.error });
+        throw new Error(contextSnapshotStorage.reason, {
+          cause: contextSnapshotStorage.error,
+        });
       }
       process.stderr.write(
         `Forgeboard context startup deferred: ${contextSnapshotStorage.reason}\n`,
       );
     }
-    store = new LocalStore(join(app.getPath('userData'), 'forgeboard.sqlite'), {
-      legacySettingsDefaults: createDefaultSettings(),
+    const userDataPath = app.getPath('userData');
+    const databasePath = join(userDataPath, 'forgeboard.sqlite');
+    store = await openLocalStoreWithStartupDatabaseRecovery({
+      databasePath,
+      dialog: packagedSmokeProfile === null ? dialog : createNonInteractiveSmokeStartupDialog(),
+      userDataPath,
     });
+    if (store === null) {
+      // Recovery cancellation is a safe startup quit, before IPC registration or window creation.
+      quitReady = true;
+      app.quit();
+      return;
+    }
     services = registerIpcHandlers(store);
     closeCoordinator = new CloseCoordinator(dialog, ipcMain);
     mainWindow = createWindow(services, closeCoordinator, packagedSmokeProfile === null);

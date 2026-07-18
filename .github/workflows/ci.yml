@@ -55,6 +55,10 @@ jobs:
           node-version: 22.17.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - if: runner.os == 'Windows'
+        run: pnpm --filter @forgeboard/windows-durable-fs test:native
+      - if: runner.os == 'Windows'
+        run: pnpm --filter @forgeboard/windows-durable-fs test:electron
       - if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum pnpm test:e2e
       - if: runner.os != 'Linux'

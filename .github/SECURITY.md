@@ -140,7 +140,16 @@ selected destination. Deletion does not rewrite a suspect file's ACL before that
 Cleanup failures remain visible in Backup health and do not invalidate the newly created backup. A
 missing recorded backup is never treated as proof of deletion; complete local-data deletion requires
 a separate cancel-default native choice before forgetting its record, with an explicit warning that
-a detached copy may survive. Direct SQLite backup restore is not implemented in the UI.
+a detached copy may survive. If the primary database cannot be opened safely, startup offers a
+cancel-default native chooser for a verified Forgeboard SQLite backup. The selected file is copied
+without modification into private staging, checked read-only for exact Forgeboard schema
+provenance, migrated only in that private copy when necessary, fully integrity-checked, and bound by
+size and SHA-256 before installation. The primary database and sidecars are quarantined through a
+durable, fsync-backed journal; interrupted operations are reconciled before SQLite opens, and failed
+installation rolls the exact prior files back without overwriting unexpected content. Newer-schema,
+permission, and unavailable-storage failures are quit-only and never enter the replacement flow.
+Successful recovery records the exact source and staged digests in the chained local audit log;
+terminal quarantine evidence is verified and removed on the next startup.
 
 Canvas restore and portable JSON import never accept renderer-supplied file contents. Pending
 actions are window-owned, expiring, bounded, and single-use, followed by a cancel-default native

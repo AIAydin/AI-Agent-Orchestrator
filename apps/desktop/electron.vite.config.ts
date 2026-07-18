@@ -18,12 +18,14 @@ export default defineConfig({
           '@forgeboard/git-engine',
           '@forgeboard/test-agent',
           '@forgeboard/ui',
+          '@forgeboard/windows-durable-fs',
         ],
       }),
     ],
     build: {
       outDir: 'dist/main',
       rollupOptions: {
+        external: ['@forgeboard/windows-durable-fs/native'],
         input: resolve(import.meta.dirname, 'src/main/index.ts'),
       },
     },

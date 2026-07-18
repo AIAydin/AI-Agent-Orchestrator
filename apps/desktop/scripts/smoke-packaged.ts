@@ -5,6 +5,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { runWithCleanup, smokeExecutable } from './installer-smoke/process.js';
+import { assertWindowsDurableNativeArtifact } from './packaged-smoke/native-artifact.js';
 
 export interface PackagedLaunch {
   executable: string;
@@ -69,6 +70,7 @@ export async function resolvePackagedLaunch(
 }
 
 export async function runPackagedSmoke(releaseRoot: string): Promise<void> {
+  if (process.platform === 'win32') await assertWindowsDurableNativeArtifact(releaseRoot);
   const launch = await resolvePackagedLaunch(releaseRoot);
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'forgeboard-packaged-runtime-smoke-'));
   await runWithCleanup(

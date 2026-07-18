@@ -240,8 +240,15 @@ polls in the background or downloads or installs an update automatically; openin
 release page requires another native confirmation. Availability depends on releases published to
 the official repository at the time of the check.
 
-Still unfinished are broader merge and visual conflict-resolution flows, direct SQLite backup
-restore UI, and complete wiring of every persisted setting. See
+If Forgeboard cannot safely open its local database, startup offers a cancel-default native chooser
+for a verified Forgeboard SQLite backup before creating the application window. The selected source
+is never edited: Forgeboard copies it into private staging, verifies exact Forgeboard provenance and
+SHA-256 identity, then uses a durable quarantine-and-rollback journal for installation. Newer-version
+or unavailable-storage failures remain quit-only, and recovery never falls through to an empty
+replacement database.
+
+Still unfinished are broader merge and visual conflict-resolution flows and complete wiring of
+every persisted setting. See
 `IMPLEMENTATION_CHECKLIST.md` for the complete evidence-backed status.
 
 Optional collaboration is explicitly enabled and configured under **Settings → Connectivity**.

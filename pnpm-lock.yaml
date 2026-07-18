@@ -177,6 +177,9 @@ importers:
       '@forgeboard/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@forgeboard/windows-durable-fs':
+        specifier: workspace:*
+        version: link:../../packages/windows-durable-fs
       '@hocuspocus/provider':
         specifier: 'catalog:'
         version: 3.4.4(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27)
@@ -355,6 +358,15 @@ importers:
       tsup:
         specifier: 'catalog:'
         version: 8.5.0(jiti@2.7.0)(postcss@8.5.19)(tsx@4.20.3)(typescript@5.8.3)
+
+  packages/windows-durable-fs:
+    devDependencies:
+      electron:
+        specifier: 'catalog:'
+        version: 36.5.0
+      node-gyp:
+        specifier: 12.4.0
+        version: 12.4.0
 
 packages:
 

@@ -14,8 +14,8 @@ immutable corresponding source archives for the bundled Git toolchain; see
 
 Follow the concise [platform install guide](install/README.md) for exact architecture-specific
 filenames, checksum commands, and first-launch instructions. Each published build will attach a
-machine-readable `RELEASE-INFO` file that binds its source commit, installer names, and declared
-signing/notarization credential state. The bundled deterministic demo requires no provider account,
+machine-readable `RELEASE-INFO` file that binds its source commit and installer names to the
+post-package signing and notarization checks that actually passed. The bundled deterministic demo requires no provider account,
 API key, development tools, or configuration file.
 
 Unsigned development artifacts can trigger normal operating-system provenance warnings. Signed and

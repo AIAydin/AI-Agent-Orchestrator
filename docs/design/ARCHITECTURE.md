@@ -169,11 +169,12 @@ are blank. The Git connections screen inspects a selected saved project, adds cr
 network or picker-selected local remotes, replaces simple managed targets, removes exactly disclosed
 managed configuration and tracking refs, and selects automatic or custom GitHub CLI discovery.
 Collaboration connection settings drive the explicit desktop join/leave boundary; its access token
-remains volatile and is not persisted with those settings. Several persisted settings are not yet
-connected to a complete runtime surface, including updates. Terminal process defaults and
-environment allowlists are consumed by its main-owned PTY runtime and can be overridden per node in
-the inspector. Direct SQLite backup restore UI remains unfinished; its presence in a schema is not
-treated as implemented behavior.
+remains volatile and is not persisted with those settings. Update settings drive the implemented
+explicit check-only release surface; automatic download and installation remain intentionally
+unavailable. Terminal process defaults and environment allowlists are consumed by its main-owned
+PTY runtime and can be overridden per node in the inspector. Verified SQLite backup restoration is
+implemented as a native startup flow when the authoritative database cannot open safely. An
+in-session restore action while a healthy database is open is not provided.
 
 First-run setup treats agent readiness as a trusted gate. Main resolves and probes only the selected
 bundled, detected, overridden, or custom executable and returns strict ready/failure evidence;
@@ -316,8 +317,16 @@ Each backup is integrity-checked and recorded before older verified records in t
 pruned. Removal never rewrites a recorded file's ACL before canonical path, ordinary-file identity,
 size, and digest match its ledger row. A cleanup failure is persisted in Backup health while the
 newly verified backup remains recorded, so the selected count is a cleanup target rather than a
-reason to discard a successful backup. Forgeboard does not yet provide a UI to restore one of these
-SQLite backup files.
+reason to discard a successful backup. If the primary database fails safe startup inspection,
+Electron presents a cancel-default native backup chooser before IPC registration or window creation.
+Read-only provenance validation accepts only an exact supported Forgeboard migration schema; the
+source is copied into private staging and only that copy may be migrated. Atomic installation binds
+the source and staged SHA-256 identities, hashes displaced database files, persists a basename-only
+JSON-lines journal with file and directory sync barriers, and rolls back exact quarantined files on
+failure. Pre-open reconciliation tolerates only one torn final journal record, verifies terminal
+state before cleanup, and never permits SQLite to create an empty replacement. Newer-schema and
+storage-authority failures are quit-only. A reopened recovered store receives a chained, path-free
+recovery audit event.
 
 Canvas recovery and portable data import use a separate main-process service. Snapshot listings
 expose bounded summaries rather than complete canvas documents. A restore plan is window-owned,

@@ -32,6 +32,7 @@
     "@forgeboard/git-engine": "workspace:*",
     "@forgeboard/test-agent": "workspace:*",
     "@forgeboard/ui": "workspace:*",
+    "@forgeboard/windows-durable-fs": "workspace:*",
     "@hocuspocus/provider": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@xterm/addon-fit": "catalog:",
@@ -75,6 +76,7 @@
     ],
     "asarUnpack": [
       "**/node-pty/**",
+      "**/@forgeboard/windows-durable-fs/**",
       "**/dugite/git/**"
     ],
     "extraResources": [

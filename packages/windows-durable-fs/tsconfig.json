@@ -1,0 +1,10 @@
+{
+  "extends": "../../config/tooling/tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "rootDir": ".",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "loader.cjs", "test/**/*.cjs"]
+}

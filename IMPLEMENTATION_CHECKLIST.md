@@ -1184,3 +1184,20 @@ unchecked when only a subset of their required behavior has proof.
   tests across 319 files, and every workspace build. The parallel integration run passed 282 of 286
   tests; four unchanged long-running Git tests timed out under contention, then all three affected
   files passed sequentially (43 of 43 tests). `git diff --check` also passed.
+- 2026-07-17: startup database recovery now fails closed instead of silently creating a replacement
+  database when an initialized profile loses, corrupts, or receives a foreign primary database.
+  The native cancel-default flow can choose one verified SQLite backup; Forgeboard stages and hashes
+  it without modifying the source, proves an exact migration-aware schema and audit-trigger
+  provenance, then installs it through a durable journal with byte-exact rollback, interrupted-startup
+  reconciliation, and path-free audit evidence. A private durable initialized-profile marker
+  distinguishes genuine first run from missing data, cleanup failures cannot turn a committed restore
+  into false failure, and bounded deferred cleanup retries safely on the next startup. Windows uses a
+  bundled Node-API authority for write-through directory publication and moves, with real Node and
+  Electron execution wired into hosted Windows CI; local macOS verification correctly skips those
+  Windows-only native calls. The focused recovery suites passed 115 tests; the complete unit suite
+  passed 2,203 tests across 329 files; the complete integration suite passed 304 tests across 34
+  files; and formatting, zero-warning lint, all workspace typechecks, every production build, and the
+  1,117-file structure gate passed. A fresh packaged macOS application and its production startup
+  smoke passed, and the startup/product and adversarial security audits returned GO. The broad
+  database-failure Electron E2E checklist item remains open pending its dedicated visible chooser,
+  rejection, cancellation, rollback, and interrupted-recovery journey.

@@ -1,0 +1,26 @@
+{
+  "name": "@forgeboard/windows-durable-fs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "gypfile": true,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./native": "./loader.cjs"
+  },
+  "scripts": {
+    "build": "node scripts/build-native.mjs",
+    "install": "node scripts/build-native.mjs",
+    "test": "vitest run src/index.test.ts",
+    "test:electron": "electron test/electron.test.cjs",
+    "test:native": "node --test test/native.test.cjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "electron": "catalog:",
+    "node-gyp": "12.4.0"
+  }
+}

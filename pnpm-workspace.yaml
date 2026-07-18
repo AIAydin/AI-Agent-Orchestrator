@@ -10,6 +10,7 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   node-pty: true
+  '@forgeboard/windows-durable-fs': true
 
 catalog:
   '@hocuspocus/provider': 3.4.4

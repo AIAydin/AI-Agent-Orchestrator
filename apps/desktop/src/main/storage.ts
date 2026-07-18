@@ -77,7 +77,12 @@ import {
   recoverInterruptedCheckExecutions as recoverDatabaseInterruptedCheckExecutions,
   saveCheckExecution as saveDatabaseCheckExecution,
 } from './storage/checks.js';
-import { migrate, openDatabase, type TransactionalAuditEvent } from './storage/database.js';
+import {
+  migrate,
+  openDatabase,
+  type ExpectedDatabaseIdentity,
+  type TransactionalAuditEvent,
+} from './storage/database.js';
 import { assertIntegrity, checkDatabaseIntegrity } from './storage/integrity.js';
 import {
   applyRetention as applyDatabaseRetention,
@@ -270,9 +275,15 @@ export class LocalStore implements DeliveryReadinessStore {
     recoveredAt: new Date(0).toISOString(),
   };
 
-  constructor(databasePath: string, options: { legacySettingsDefaults?: AppSettings } = {}) {
+  constructor(
+    databasePath: string,
+    options: {
+      legacySettingsDefaults?: AppSettings;
+      expectedDatabaseIdentity?: ExpectedDatabaseIdentity;
+    } = {},
+  ) {
     this.databasePath = databasePath;
-    this.database = openDatabase(databasePath);
+    this.database = openDatabase(databasePath, options.expectedDatabaseIdentity);
     this.deliveryReadiness = new SqliteDeliveryReadinessStore(this.database);
     try {
       const sourceDatabaseVersion = (

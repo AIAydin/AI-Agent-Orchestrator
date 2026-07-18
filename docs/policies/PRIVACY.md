@@ -121,8 +121,15 @@ if ACL inspection is unavailable or sees an absent or unsupported DACL. An exist
 exclude untrusted read/discovery as well as content mutation. New destinations, staging directories,
 and backup files receive protected current-SID/LocalSystem DACLs before private bytes are published,
 and the published hard link is rechecked. SQLite backups contain a copy of the local Forgeboard
-database and should be protected accordingly. Direct restore of a SQLite backup is not yet available
-in the UI.
+database and should be protected accordingly. When the primary database cannot be opened safely,
+startup can restore a user-selected Forgeboard SQLite backup without config files or source edits.
+Forgeboard never modifies the selected source: it copies it into private staging, validates exact
+Forgeboard provenance and SHA-256 identity, and uses a durable quarantine-and-rollback journal before
+installing it. A successful restore adds a path-free chained audit event containing the exact source
+and staged digests and byte count. Displaced database files remain private recovery evidence only
+until a later startup verifies the terminal journal state and removes them. Canceling the chooser,
+selecting Quit, or encountering a newer-schema, permission, or unavailable-storage error does not
+install a backup or create an empty replacement database.
 
 Interactive Terminal output is unredacted and can contain secrets printed by the launched process.
 The UI-authored executable, literal arguments, project-relative directory, and environment names are

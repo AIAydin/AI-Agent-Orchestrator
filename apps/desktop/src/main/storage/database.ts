@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { lstatSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -438,10 +438,29 @@ export const MIGRATIONS = [
   `,
 ] as const;
 
-export function openDatabase(databasePath: string): DatabaseSync {
+export interface ExpectedDatabaseIdentity {
+  readonly dev: number;
+  readonly ino: number;
+}
+
+export function openDatabase(
+  databasePath: string,
+  expectedIdentity?: ExpectedDatabaseIdentity,
+): DatabaseSync {
   mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const database = new DatabaseSync(databasePath);
   try {
+    if (expectedIdentity !== undefined) {
+      const openedPath = lstatSync(databasePath);
+      if (
+        !openedPath.isFile() ||
+        openedPath.isSymbolicLink() ||
+        openedPath.dev !== expectedIdentity.dev ||
+        openedPath.ino !== expectedIdentity.ino
+      ) {
+        throw new Error('The local database path changed before its writable handle was bound.');
+      }
+    }
     database.exec('PRAGMA journal_mode = WAL;');
     database.exec('PRAGMA foreign_keys = ON;');
     database.exec('PRAGMA busy_timeout = 5000;');
