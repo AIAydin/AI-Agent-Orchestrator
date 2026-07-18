@@ -139,6 +139,9 @@ not be reclassified as future work.
 - [x] Signed expiring invites, revocation, room authorization, rate limits, TLS, and audit trail.
 - [x] UI invite redemption plus owner-only current-session invite creation, native clipboard copy,
       and revocation without exposing raw invite links or access tokens to the renderer.
+- [x] UI room creation, owner recovery/renewal, paginated membership administration, and room audit
+      access with volatile administrator input, main-only owner credentials, native reviews,
+      idempotency, and version conflicts.
 - [x] Schema/test proof that source, file contents, diffs, prompts, terminals, env, secrets, and
       transcripts never enter collaboration documents.
 - [x] Metadata-only state when a collaborator cannot resolve an authorized local file.
@@ -1233,3 +1236,18 @@ unchecked when only a subset of their required behavior has proof.
   focused Playwright run passed alongside the 1,144-file structure gate. The broad Settings entries
   remain unchecked, as do desktop room bootstrap, membership administration, room audit UI, and
   durable server-wide invite listing.
+- 2026-07-18: **Settings → Connectivity → Room administration** now creates or recovers an owner
+  room, renews the live owner credential without replacing the Yjs document, pages members and audit
+  events, changes roles with version-safe conflict handling, and revokes members entirely through
+  visible controls. Every management request has a cancel-default native outbound review; returned
+  owner credentials and retry authority remain main-process-only, administrator input is volatile,
+  token-bearing responses are rejected at preload, and server replay records contain no bearer
+  secrets. Durable UUID idempotency is room/server scoped and cleared on session replacement;
+  destroyed windows cannot retain an in-flight owner response; refreshed JWT claims must exactly
+  match the active room and response metadata; and awareness client IDs are socket-bound so a member
+  cannot publish an empty identity, spoof another identity, or remove another client's presence.
+  The complete unit suite passed 2,316 tests across 343 files, the complete sequential integration
+  suite passed 310 tests across 35 files, and both real two-profile Electron collaboration journeys
+  passed. Formatting, zero-warning lint, all workspace typechecks, every production build including
+  the built collaboration-server startup smoke, `git diff --check`, and the 1,168-file structure gate
+  also passed. Broad Settings coverage and durable server-wide invite listing remain unchecked.

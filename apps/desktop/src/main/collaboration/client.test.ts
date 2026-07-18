@@ -92,6 +92,7 @@ interface ProviderHarness {
     typeof vi.fn<(input: CollaborationProviderFactoryInput) => CollaborationProviderHandle>
   >;
   readonly clearCredential: ReturnType<typeof vi.fn>;
+  readonly replaceCredential: ReturnType<typeof vi.fn>;
   readonly destroy: ReturnType<typeof vi.fn>;
   readonly sendStateless: ReturnType<typeof vi.fn<(payload: string) => void>>;
   input: CollaborationProviderFactoryInput | null;
@@ -110,6 +111,7 @@ function providerHarness(): ProviderHarness {
     awareness: [],
     stateless: [],
     clearCredential: vi.fn(),
+    replaceCredential: vi.fn(),
     destroy: vi.fn(),
     sendStateless: vi.fn((payload: string) => harness.stateless.push(payload)),
     factory: vi.fn(),
@@ -124,6 +126,7 @@ function providerHarness(): ProviderHarness {
       awarenessStates: () => harness.awareness,
       sendStateless: harness.sendStateless,
       clearCredential: harness.clearCredential,
+      replaceCredential: harness.replaceCredential,
       destroy: harness.destroy,
     };
   });
@@ -150,7 +153,29 @@ describe('CollaborationClient', () => {
     client.onEvent((event) => events.push(event));
     const token = joinInput().accessToken;
 
-    const result = await connect(client, provider);
+    const pending = client.join(joinInput());
+    expect(provider.input?.initialAwareness).toEqual({
+      user: {
+        id: 'editor-1',
+        displayName: 'Local editor',
+        color: '#6d5efc',
+        role: 'editor',
+      },
+    });
+    provider.awareness = [
+      { clientId: 7, state: provider.input?.initialAwareness },
+      {
+        clientId: 8,
+        state: {
+          user: { id: 'owner-1', displayName: 'Owner', color: '#334455', role: 'owner' },
+        },
+      },
+    ];
+    provider.input?.onAwarenessChange();
+    provider.input?.onAuthenticated();
+    provider.input?.onSynced();
+
+    const result = await pending;
 
     expect(result).toMatchObject({
       ok: true,
@@ -192,7 +217,7 @@ describe('CollaborationClient', () => {
     provider.input?.onAwarenessChange();
     expect(events.at(-1)).toMatchObject({
       type: 'awareness-changed',
-      removedClientIds: [],
+      removedClientIds: [8],
     });
 
     expect(client.leave()).toBeNull();

@@ -1,12 +1,33 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { z, ZodError } from 'zod';
 
+import {
+  CollaborationAuditListQuerySchema,
+  CollaborationAuditListResponseSchema,
+  CollaborationManagementIdempotencyKeySchema,
+  CollaborationManagementMembershipSchema,
+  CollaborationManagementOwnerAccessReplaySchema,
+  CollaborationMemberDeleteHeadersSchema,
+  CollaborationMemberListQuerySchema,
+  CollaborationMemberListResponseSchema,
+  CollaborationMemberMutationResponseSchema,
+  CollaborationMemberUpdateRequestSchema,
+  CollaborationOwnerRecoverRequestSchema,
+  CollaborationRoomBootstrapRequestSchema,
+  type CollaborationManagementMembership,
+  type CollaborationManagementOwnerAccessReplay,
+} from '@forgeboard/core/collaboration-management';
+
 import type { CollaborationConfig } from './config.js';
 import { FixedWindowRateLimiter } from './rate-limit.js';
-import type { CollaborationStore, Membership } from './store.js';
-import { InviteNotRedeemableError, RoomAlreadyExistsError } from './store.js';
+import type { CollaborationStore, IdempotencyRecord, Membership } from './store.js';
+import {
+  IdempotencyConflictError,
+  InviteNotRedeemableError,
+  RoomAlreadyExistsError,
+} from './store.js';
 import type { CollaborationTokenService } from './tokens.js';
 import { TokenValidationError } from './tokens.js';
 import {
@@ -17,13 +38,6 @@ import {
   SubjectIdSchema,
   type AccessClaims,
 } from './types.js';
-
-const CreateRoomSchema = z
-  .object({
-    roomId: RoomIdSchema,
-    owner: z.object({ id: SubjectIdSchema, displayName: DisplayNameSchema }).strict(),
-  })
-  .strict();
 
 const CreateInviteSchema = z
   .object({
@@ -40,8 +54,6 @@ const RedeemInviteSchema = z
     displayName: DisplayNameSchema,
   })
   .strict();
-
-const UpdateMemberSchema = z.object({ role: InviteRoleSchema }).strict();
 
 class HttpError extends Error {
   constructor(
@@ -85,7 +97,10 @@ export class CollaborationHttpApi {
     }
     if (request.method === 'OPTIONS') {
       response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-      response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      response.setHeader(
+        'Access-Control-Allow-Headers',
+        'Authorization, Content-Type, Idempotency-Key, If-Match',
+      );
       response.writeHead(204);
       response.end();
       return;
@@ -95,7 +110,13 @@ export class CollaborationHttpApi {
     const rate = this.limiter.consume(ipHash);
     if (!rate.allowed) {
       response.setHeader('Retry-After', String(rate.retryAfterSeconds));
-      writeJson(response, 429, { error: { code: 'rate_limited', message: 'Too many requests.' } });
+      writeJson(response, 429, {
+        error: {
+          code: 'rate_limited',
+          message: 'Too many requests.',
+          retryAfterSeconds: rate.retryAfterSeconds,
+        },
+      });
       return;
     }
 
@@ -116,6 +137,7 @@ export class CollaborationHttpApi {
     url: URL,
     ipHash: string,
   ): Promise<void> {
+    assertValidPathEncoding(url.pathname);
     if (request.method === 'GET' && url.pathname === '/healthz') {
       writeJson(response, 200, {
         status: 'ok',
@@ -140,27 +162,108 @@ export class CollaborationHttpApi {
     }
     if (request.method === 'POST' && url.pathname === '/v1/rooms') {
       this.assertBootstrapAuthorized(request);
-      const body = CreateRoomSchema.parse(await this.readJson(request));
-      const owner = this.store.createRoom(body.roomId, body.owner.id, body.owner.displayName);
-      const access = this.tokens.createAccessToken({
-        roomId: owner.roomId,
-        subject: owner.subject,
-        role: owner.role,
-        tokenVersion: owner.tokenVersion,
-        expiresInSeconds: this.config.accessTtlSeconds,
-      });
-      this.store.appendAudit({
-        category: 'room',
-        action: 'room.created',
-        outcome: 'allowed',
-        details: { roomId: owner.roomId, actorId: owner.subject, role: owner.role, ipHash },
-      });
-      writeJson(response, 201, {
-        room: { id: owner.roomId },
-        membership: publicMembership(owner),
-        accessToken: access.token,
-        expiresAt: new Date(access.claims.exp * 1_000).toISOString(),
-      });
+      const body = CollaborationRoomBootstrapRequestSchema.parse(await this.readJson(request));
+      const result = this.store.executeIdempotent(
+        idempotencyBinding(request, 'POST', '/v1/rooms', body),
+        () => {
+          const owner = this.store.createRoom(body.roomId, body.owner.id, body.owner.displayName);
+          const access = this.tokens.createAccessToken({
+            roomId: owner.roomId,
+            subject: owner.subject,
+            role: owner.role,
+            tokenVersion: owner.tokenVersion,
+            expiresInSeconds: this.config.accessTtlSeconds,
+          });
+          this.store.appendAudit({
+            category: 'room',
+            action: 'room.created',
+            outcome: 'allowed',
+            details: { roomId: owner.roomId, actorId: owner.subject, role: owner.role, ipHash },
+          });
+          return {
+            status: 201,
+            response: accessResponse(owner, access.claims.exp),
+            accessClaims: access.claims,
+          };
+        },
+      );
+      writeIdempotentJson(response, result.record, this.tokens);
+      return;
+    }
+
+    const ownerTokenMatch = /^\/v1\/rooms\/([^/]+)\/owner-tokens\/(refresh|recover)$/.exec(
+      url.pathname,
+    );
+    if (request.method === 'POST' && ownerTokenMatch?.[1] && ownerTokenMatch[2]) {
+      const roomId = RoomIdSchema.parse(decodePathSegment(ownerTokenMatch[1]));
+      const action = ownerTokenMatch[2];
+      if (action === 'refresh') {
+        const owner = this.authenticateOwner(request, roomId);
+        await this.assertEmptyBody(request);
+        const result = this.store.executeIdempotent(
+          idempotencyBinding(request, 'POST', `/v1/rooms/${roomId}/owner-tokens/refresh`, null),
+          () => {
+            const access = this.tokens.createAccessToken({
+              roomId,
+              subject: owner.membership.subject,
+              role: 'owner',
+              tokenVersion: owner.membership.tokenVersion,
+              expiresInSeconds: this.config.accessTtlSeconds,
+            });
+            this.store.appendAudit({
+              category: 'authorization',
+              action: 'owner.token_refreshed',
+              outcome: 'allowed',
+              details: { roomId, actorId: owner.membership.subject, role: 'owner', ipHash },
+            });
+            return {
+              status: 200,
+              response: accessResponse(owner.membership, access.claims.exp),
+              accessClaims: access.claims,
+            };
+          },
+        );
+        writeIdempotentJson(response, result.record, this.tokens);
+        return;
+      }
+      this.assertBootstrapAuthorized(request);
+      const body = CollaborationOwnerRecoverRequestSchema.parse(await this.readJson(request));
+      const result = this.store.executeIdempotent(
+        idempotencyBinding(request, 'POST', `/v1/rooms/${roomId}/owner-tokens/recover`, body),
+        () => {
+          const owner = this.store.getMembership(roomId, body.ownerId);
+          if (owner === undefined || owner.revokedAt !== undefined || owner.role !== 'owner') {
+            throw new HttpError(404, 'owner_not_found', 'Active room owner not found.');
+          }
+          const rotated = this.store.rotateOwnerTokenVersion(roomId, body.ownerId);
+          if (rotated === undefined) {
+            throw new HttpError(
+              409,
+              'owner_recovery_conflict',
+              'Owner recovery could not continue.',
+            );
+          }
+          const access = this.tokens.createAccessToken({
+            roomId,
+            subject: rotated.subject,
+            role: 'owner',
+            tokenVersion: rotated.tokenVersion,
+            expiresInSeconds: this.config.accessTtlSeconds,
+          });
+          this.store.appendAudit({
+            category: 'authorization',
+            action: 'owner.token_recovered',
+            outcome: 'allowed',
+            details: { roomId, actorId: rotated.subject, role: 'owner', ipHash },
+          });
+          return {
+            status: 200,
+            response: accessResponse(rotated, access.claims.exp),
+            accessClaims: access.claims,
+          };
+        },
+      );
+      writeIdempotentJson(response, result.record, this.tokens);
       return;
     }
     if (request.method === 'POST' && url.pathname === '/v1/invites/redeem') {
@@ -206,7 +309,7 @@ export class CollaborationHttpApi {
 
     const roomInviteMatch = /^\/v1\/rooms\/([^/]+)\/invites$/.exec(url.pathname);
     if (request.method === 'POST' && roomInviteMatch?.[1]) {
-      const roomId = RoomIdSchema.parse(decodeURIComponent(roomInviteMatch[1]));
+      const roomId = RoomIdSchema.parse(decodePathSegment(roomInviteMatch[1]));
       const owner = this.authenticateOwner(request, roomId);
       const body = CreateInviteSchema.parse(await this.readJson(request));
       if (body.expiresInSeconds > this.config.maxInviteTtlSeconds) {
@@ -263,8 +366,8 @@ export class CollaborationHttpApi {
 
     const revokeInviteMatch = /^\/v1\/rooms\/([^/]+)\/invites\/([^/]+)$/.exec(url.pathname);
     if (request.method === 'DELETE' && revokeInviteMatch?.[1] && revokeInviteMatch[2]) {
-      const roomId = RoomIdSchema.parse(decodeURIComponent(revokeInviteMatch[1]));
-      const inviteId = decodeURIComponent(revokeInviteMatch[2]);
+      const roomId = RoomIdSchema.parse(decodePathSegment(revokeInviteMatch[1]));
+      const inviteId = decodePathSegment(revokeInviteMatch[2]);
       const owner = this.authenticateOwner(request, roomId);
       const revoked = this.store.revokeInvite(inviteId, roomId);
       if (!revoked) throw new HttpError(404, 'invite_not_found', 'Active invite not found.');
@@ -279,65 +382,145 @@ export class CollaborationHttpApi {
       return;
     }
 
+    const membersMatch = /^\/v1\/rooms\/([^/]+)\/members$/.exec(url.pathname);
+    if (request.method === 'GET' && membersMatch?.[1]) {
+      const roomId = RoomIdSchema.parse(decodePathSegment(membersMatch[1]));
+      this.authenticateOwner(request, roomId);
+      const rawQuery = exactQuery(url, ['after', 'limit']);
+      const query = CollaborationMemberListQuerySchema.parse(rawQuery);
+      const after = decodeMemberCursor(query.after);
+      const page = this.store.listActiveMemberships(roomId, after, query.limit);
+      const last = page.members.at(-1);
+      writeJson(
+        response,
+        200,
+        CollaborationMemberListResponseSchema.parse({
+          members: page.members.map(publicVersionedMembership),
+          nextCursor: page.hasMore && last !== undefined ? encodeMemberCursor(last.subject) : null,
+          hasMore: page.hasMore,
+        }),
+      );
+      return;
+    }
+
     const memberMatch = /^\/v1\/rooms\/([^/]+)\/members\/([^/]+)$/.exec(url.pathname);
     if (
       (request.method === 'PATCH' || request.method === 'DELETE') &&
       memberMatch?.[1] &&
       memberMatch[2]
     ) {
-      const roomId = RoomIdSchema.parse(decodeURIComponent(memberMatch[1]));
-      const targetId = SubjectIdSchema.parse(decodeURIComponent(memberMatch[2]));
+      const roomId = RoomIdSchema.parse(decodePathSegment(memberMatch[1]));
+      const targetId = SubjectIdSchema.parse(decodePathSegment(memberMatch[2]));
       const owner = this.authenticateOwner(request, roomId);
       if (request.method === 'PATCH') {
-        const body = UpdateMemberSchema.parse(await this.readJson(request));
-        const updated = this.store.updateMembershipRole(roomId, targetId, body.role);
-        if (!updated) throw new HttpError(404, 'member_not_found', 'Active member not found.');
-        this.store.appendAudit({
-          category: 'membership',
-          action: 'membership.role_changed',
-          outcome: 'allowed',
-          details: {
-            roomId,
-            actorId: owner.membership.subject,
-            targetId,
-            role: body.role,
-            ipHash,
+        const body = CollaborationMemberUpdateRequestSchema.parse(await this.readJson(request));
+        const result = this.store.executeIdempotent(
+          idempotencyBinding(request, 'PATCH', `/v1/rooms/${roomId}/members/${targetId}`, body),
+          () => {
+            const current = requiredMutableMember(this.store.getMembership(roomId, targetId));
+            if (current.tokenVersion !== body.expectedTokenVersion) {
+              throw membershipConflict();
+            }
+            if (current.role === body.role) {
+              return {
+                status: 200,
+                response: CollaborationMemberMutationResponseSchema.parse({
+                  membership: publicVersionedMembership(current),
+                  changed: false,
+                }),
+              };
+            }
+            const updated = this.store.updateMembershipRole(
+              roomId,
+              targetId,
+              body.role,
+              body.expectedTokenVersion,
+            );
+            if (updated === undefined) throw membershipConflict();
+            this.store.appendAudit({
+              category: 'membership',
+              action: 'membership.role_changed',
+              outcome: 'allowed',
+              details: {
+                roomId,
+                actorId: owner.membership.subject,
+                targetId,
+                role: body.role,
+                ipHash,
+              },
+            });
+            return {
+              status: 200,
+              response: CollaborationMemberMutationResponseSchema.parse({
+                membership: publicVersionedMembership(updated),
+                changed: true,
+              }),
+            };
           },
-        });
-        writeJson(response, 200, { membership: publicMembership(updated) });
+        );
+        writeJson(response, result.record.status, result.record.response);
       } else {
-        const revoked = this.store.revokeMembership(roomId, targetId);
-        if (!revoked) throw new HttpError(404, 'member_not_found', 'Active member not found.');
-        this.store.appendAudit({
-          category: 'membership',
-          action: 'membership.revoked',
-          outcome: 'allowed',
-          details: { roomId, actorId: owner.membership.subject, targetId, ipHash },
-        });
-        response.writeHead(204);
-        response.end();
+        await this.assertEmptyBody(request);
+        const expectedTokenVersion = expectedVersion(request);
+        const result = this.store.executeIdempotent(
+          idempotencyBinding(request, 'DELETE', `/v1/rooms/${roomId}/members/${targetId}`, {
+            expectedTokenVersion,
+          }),
+          () => {
+            const current = this.store.getMembership(roomId, targetId);
+            if (current === undefined) {
+              throw new HttpError(404, 'member_not_found', 'Member not found.');
+            }
+            if (current.role === 'owner') throw ownerImmutable();
+            if (current.revokedAt !== undefined) {
+              if (
+                current.tokenVersion !== expectedTokenVersion &&
+                current.tokenVersion !== expectedTokenVersion + 1
+              ) {
+                throw membershipConflict();
+              }
+              return { status: 204, response: null };
+            }
+            if (current.tokenVersion !== expectedTokenVersion) throw membershipConflict();
+            if (!this.store.revokeMembership(roomId, targetId, expectedTokenVersion)) {
+              throw membershipConflict();
+            }
+            this.store.appendAudit({
+              category: 'membership',
+              action: 'membership.revoked',
+              outcome: 'allowed',
+              details: { roomId, actorId: owner.membership.subject, targetId, ipHash },
+            });
+            return { status: 204, response: null };
+          },
+        );
+        if (result.record.status === 204) {
+          response.writeHead(204);
+          response.end();
+        } else {
+          writeJson(response, result.record.status, result.record.response);
+        }
       }
       return;
     }
 
     const auditMatch = /^\/v1\/rooms\/([^/]+)\/audit$/.exec(url.pathname);
     if (request.method === 'GET' && auditMatch?.[1]) {
-      const roomId = RoomIdSchema.parse(decodeURIComponent(auditMatch[1]));
+      const roomId = RoomIdSchema.parse(decodePathSegment(auditMatch[1]));
       this.authenticateOwner(request, roomId);
-      const after = z.coerce
-        .number()
-        .int()
-        .nonnegative()
-        .default(0)
-        .parse(url.searchParams.get('after') ?? 0);
-      const limit = z.coerce
-        .number()
-        .int()
-        .min(1)
-        .max(500)
-        .default(100)
-        .parse(url.searchParams.get('limit') ?? 100);
-      writeJson(response, 200, { events: this.store.listAudit(roomId, after, limit) });
+      const query = CollaborationAuditListQuerySchema.parse(exactQuery(url, ['after', 'limit']));
+      const events = this.store.listAudit(roomId, query.after, query.limit + 1);
+      const hasMore = events.length > query.limit;
+      const visible = events.slice(0, query.limit);
+      writeJson(
+        response,
+        200,
+        CollaborationAuditListResponseSchema.parse({
+          events: visible,
+          nextAfter: hasMore ? (visible.at(-1)?.sequence ?? null) : null,
+          hasMore,
+        }),
+      );
       return;
     }
 
@@ -398,6 +581,152 @@ export class CollaborationHttpApi {
     } catch {
       throw new HttpError(400, 'invalid_json', 'Request body must be valid JSON.');
     }
+  }
+
+  private async assertEmptyBody(request: IncomingMessage): Promise<void> {
+    let total = 0;
+    for await (const chunk of request) {
+      total += Buffer.isBuffer(chunk) ? chunk.byteLength : Buffer.byteLength(chunk as Uint8Array);
+      if (total > this.config.maxHttpBodyBytes) {
+        throw new HttpError(413, 'body_too_large', 'Request body is too large.');
+      }
+    }
+    if (total !== 0) {
+      throw new HttpError(400, 'invalid_request', 'This request does not accept a body.');
+    }
+  }
+}
+
+function idempotencyBinding(
+  request: IncomingMessage,
+  method: string,
+  resource: string,
+  body: unknown,
+): Pick<IdempotencyRecord, 'key' | 'method' | 'resource' | 'requestHash'> {
+  const key = CollaborationManagementIdempotencyKeySchema.parse(
+    firstHeader(request.headers['idempotency-key']),
+  );
+  return {
+    key,
+    method,
+    resource,
+    requestHash: createHash('sha256').update(JSON.stringify(body)).digest('hex'),
+  };
+}
+
+function expectedVersion(request: IncomingMessage): number {
+  return CollaborationMemberDeleteHeadersSchema.parse({
+    'idempotency-key': firstHeader(request.headers['idempotency-key']),
+    'if-match': firstHeader(request.headers['if-match']),
+  }).expectedTokenVersion;
+}
+
+function accessResponse(
+  membership: Membership,
+  expiresAtSeconds: number,
+): CollaborationManagementOwnerAccessReplay {
+  return CollaborationManagementOwnerAccessReplaySchema.parse({
+    room: { id: membership.roomId },
+    membership: publicVersionedMembership(membership),
+    expiresAt: new Date(expiresAtSeconds * 1_000).toISOString(),
+  });
+}
+
+function writeIdempotentJson(
+  response: ServerResponse,
+  record: IdempotencyRecord,
+  tokens: CollaborationTokenService,
+): void {
+  if (record.accessClaims === undefined) {
+    writeJson(response, record.status, record.response);
+    return;
+  }
+  if (record.accessClaims.exp <= Math.floor(Date.now() / 1_000)) {
+    throw new HttpError(
+      409,
+      'idempotency_result_expired',
+      'The replayed access credential has expired; retry with a new idempotency key.',
+    );
+  }
+  if (record.response === null || !('membership' in record.response)) {
+    throw new Error('Access claims require a token-free owner access response.');
+  }
+  writeJson(response, record.status, {
+    ...record.response,
+    accessToken: tokens.reconstructAccessToken(record.accessClaims),
+  });
+}
+
+function publicVersionedMembership(membership: Membership): CollaborationManagementMembership {
+  return CollaborationManagementMembershipSchema.parse({
+    ...publicMembership(membership),
+    tokenVersion: membership.tokenVersion,
+  });
+}
+
+function requiredMutableMember(membership: Membership | undefined): Membership {
+  if (membership === undefined || membership.revokedAt !== undefined) {
+    throw new HttpError(404, 'member_not_found', 'Active member not found.');
+  }
+  if (membership.role === 'owner') throw ownerImmutable();
+  return membership;
+}
+
+function membershipConflict(): HttpError {
+  return new HttpError(
+    409,
+    'membership_conflict',
+    'Membership changed since it was loaded; refresh and try again.',
+  );
+}
+
+function ownerImmutable(): HttpError {
+  return new HttpError(409, 'owner_immutable', 'The room owner cannot be changed or revoked.');
+}
+
+function encodeMemberCursor(subject: string): string {
+  return Buffer.from(SubjectIdSchema.parse(subject), 'utf8').toString('base64url');
+}
+
+function decodeMemberCursor(cursor: string | undefined): string | undefined {
+  if (cursor === undefined) return undefined;
+  if (!/^[A-Za-z0-9_-]{1,512}$/u.test(cursor)) {
+    throw new HttpError(400, 'invalid_cursor', 'Member cursor is invalid.');
+  }
+  const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+  if (Buffer.from(decoded, 'utf8').toString('base64url') !== cursor) {
+    throw new HttpError(400, 'invalid_cursor', 'Member cursor is invalid.');
+  }
+  const subject = SubjectIdSchema.safeParse(decoded);
+  if (!subject.success) throw new HttpError(400, 'invalid_cursor', 'Member cursor is invalid.');
+  return subject.data;
+}
+
+function exactQuery(url: URL, allowed: readonly string[]): Record<string, string | undefined> {
+  const allowedNames = new Set(allowed);
+  const result: Record<string, string | undefined> = {};
+  for (const name of url.searchParams.keys()) {
+    if (!allowedNames.has(name) || url.searchParams.getAll(name).length !== 1) {
+      throw new HttpError(400, 'invalid_query', 'Query parameters are invalid.');
+    }
+    result[name] = url.searchParams.get(name) ?? undefined;
+  }
+  return result;
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    throw new HttpError(400, 'invalid_path_encoding', 'Path encoding is invalid.');
+  }
+}
+
+function assertValidPathEncoding(pathname: string): void {
+  try {
+    decodeURIComponent(pathname);
+  } catch {
+    throw new HttpError(400, 'invalid_path_encoding', 'Path encoding is invalid.');
   }
 }
 
@@ -465,6 +794,9 @@ function normalizeHttpError(error: unknown): HttpError {
   }
   if (error instanceof RoomAlreadyExistsError) {
     return new HttpError(409, 'room_exists', error.message);
+  }
+  if (error instanceof IdempotencyConflictError) {
+    return new HttpError(409, 'idempotency_conflict', error.message);
   }
   if (error instanceof InviteNotRedeemableError) {
     return new HttpError(410, 'invite_unavailable', error.message);

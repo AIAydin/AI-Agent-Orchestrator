@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +10,7 @@ import {
   CollaborationDeliveryRejectionSchema,
 } from '@forgeboard/core/collaboration-delivery';
 import { encodeCollaborationStateVector } from '@forgeboard/core/collaboration-delivery-codec';
+import { Awareness, removeAwarenessStates } from 'y-protocols/awareness';
 import * as Y from 'yjs';
 import { z } from 'zod';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -83,7 +85,7 @@ async function createRoom(
 ): Promise<string> {
   const response = await requestJson(address, '/v1/rooms', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${adminToken}` },
+    headers: { Authorization: `Bearer ${adminToken}`, 'Idempotency-Key': randomUUID() },
     body: JSON.stringify({
       roomId: 'launch-room',
       owner: { id: 'owner-1', displayName: 'Owner' },
@@ -122,6 +124,7 @@ async function connectClient(
   onDisconnected?: () => void,
   onStateless?: (payload: string) => void,
   onSynced?: () => void,
+  awareness: Awareness | null = null,
 ): Promise<HocuspocusProvider> {
   let provider: HocuspocusProvider | undefined;
   const connected = new Promise<HocuspocusProvider>((resolve, reject) => {
@@ -133,6 +136,7 @@ async function connectClient(
       url: address.webSocketUrl,
       name: 'launch-room',
       document,
+      awareness,
       token,
       onSynced: ({ state }) => {
         if (state) onSynced?.();
@@ -216,6 +220,75 @@ describe('optional collaboration service', () => {
     editorDocument.destroy();
   });
 
+  it('keeps simultaneous identities while rejecting another client awareness removal', async () => {
+    const { address, adminToken, service } = await startService();
+    const ownerToken = await createRoom(address, adminToken);
+    const editorToken = await inviteAndRedeem(address, ownerToken, 'editor', 'editor-1');
+    const ownerDocument = initializeOwnerDocument();
+    const editorDocument = new Y.Doc();
+    const ownerAwareness = new Awareness(ownerDocument);
+    const editorAwareness = new Awareness(editorDocument);
+    ownerAwareness.setLocalState({
+      user: { id: 'owner-1', displayName: 'Owner', color: '#6d5efc', role: 'owner' },
+    });
+    editorAwareness.setLocalState({
+      user: { id: 'editor-1', displayName: 'Editor', color: '#21a179', role: 'editor' },
+    });
+    const ownerProvider = await connectClient(
+      address,
+      ownerToken,
+      ownerDocument,
+      undefined,
+      undefined,
+      undefined,
+      ownerAwareness,
+    );
+    const editorProvider = await connectClient(
+      address,
+      editorToken,
+      editorDocument,
+      undefined,
+      undefined,
+      undefined,
+      editorAwareness,
+    );
+    await waitFor(
+      () =>
+        ownerAwareness.getStates().has(editorDocument.clientID) &&
+        editorAwareness.getStates().has(ownerDocument.clientID),
+    );
+
+    removeAwarenessStates(editorAwareness, [ownerDocument.clientID], editorProvider);
+    await waitFor(() =>
+      service.store
+        .listAudit('launch-room', 0, 500)
+        .some(
+          (event) =>
+            event.action === 'metadata.rejected' &&
+            event.outcome === 'denied' &&
+            event.details.reason === 'privacy-allowlist',
+        ),
+    );
+    expect(ownerAwareness.getStates().has(ownerDocument.clientID)).toBe(true);
+    expect(
+      service.store
+        .listAudit('launch-room', 0, 500)
+        .some(
+          (event) =>
+            event.action === 'metadata.rejected' &&
+            event.outcome === 'denied' &&
+            event.details.reason === 'privacy-allowlist',
+        ),
+    ).toBe(true);
+
+    ownerProvider.destroy();
+    editorProvider.destroy();
+    ownerAwareness.destroy();
+    editorAwareness.destroy();
+    ownerDocument.destroy();
+    editorDocument.destroy();
+  });
+
   it('revokes invites and rejects forbidden document roots before they reach another client', async () => {
     const { address, adminToken, service } = await startService();
     const ownerToken = await createRoom(address, adminToken);
@@ -290,7 +363,11 @@ describe('optional collaboration service', () => {
 
     const revoked = await requestJson(address, '/v1/rooms/launch-room/members/editor-1', {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${ownerToken}` },
+      headers: {
+        Authorization: `Bearer ${ownerToken}`,
+        'Idempotency-Key': randomUUID(),
+        'If-Match': '"0"',
+      },
     });
     expect(revoked.status).toBe(204);
     editorDocument.getMap('comments').set('revoked-comment', {
@@ -330,8 +407,11 @@ describe('optional collaboration service', () => {
 
     const changed = await requestJson(address, '/v1/rooms/launch-room/members/editor-1', {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${ownerToken}` },
-      body: JSON.stringify({ role: 'viewer' }),
+      headers: {
+        Authorization: `Bearer ${ownerToken}`,
+        'Idempotency-Key': randomUUID(),
+      },
+      body: JSON.stringify({ role: 'viewer', expectedTokenVersion: 0 }),
     });
     expect(changed.status).toBe(200);
     editorDocument.getMap('nodes').set('node-1', {

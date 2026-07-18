@@ -13,6 +13,9 @@ import { ConnectionFields } from './ConnectionFields.js';
 import { DirectJoinControls } from './DirectJoinControls.js';
 import { InviteJoinControls } from './InviteJoinControls.js';
 import { InviteManagementControls } from './InviteManagementControls.js';
+import { RoomAccessControls } from './room/RoomAccessControls.js';
+import { RoomAdministrationControls } from './room/RoomAdministrationControls.js';
+import { useOwnerRoomAccess } from './room/useOwnerRoomAccess.js';
 
 interface CollaborationSettingsProps {
   readonly settings: AppSettings;
@@ -29,6 +32,13 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
   const [message, setMessage] = useState<string | null>(null);
   const [inviteClearSignal, setInviteClearSignal] = useState(0);
   const operationLock = useRef(false);
+  const ownerAccess = useOwnerRoomAccess({
+    beginOperation,
+    endOperation,
+    setConnection,
+    setMessage,
+    onConnected: () => setInviteClearSignal((current) => current + 1),
+  });
 
   useEffect(() => {
     const collaboration = window.forgeboard.collaboration;
@@ -56,6 +66,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
           clearSession(setCollaborators, setSessionInvites);
           setInviteClearSignal((current) => current + 1);
           setMessage('Collaboration is offline.');
+          ownerAccess.clearExpiry();
         }
       } else if (event.type === 'awareness-changed') {
         setCollaborators(event.states);
@@ -181,6 +192,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
       setAccessToken('');
       setInviteClearSignal((current) => current + 1);
       setMessage('Left the collaboration room.');
+      ownerAccess.clearExpiry();
       return true;
     } catch {
       setMessage(validationFailure());
@@ -292,6 +304,14 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
         connecting={operationBusy && !connectionActive}
         onJoin={join}
       />
+      {!connectionActive && (
+        <RoomAccessControls
+          settings={settings}
+          busy={controlsBusy}
+          onBootstrap={ownerAccess.bootstrapRoom}
+          onRecover={ownerAccess.recoverOwner}
+        />
+      )}
       <div className="button-row">
         <button
           className="button"
@@ -310,13 +330,21 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
       {connection?.status === 'connected' &&
         connection.role === 'owner' &&
         connection.managementBaseUrl !== undefined && (
-          <InviteManagementControls
-            invites={sessionInvites}
-            busy={controlsBusy}
-            onCreate={createInvite}
-            onCopy={copyInvite}
-            onRevoke={revokeInvite}
-          />
+          <>
+            <InviteManagementControls
+              invites={sessionInvites}
+              busy={controlsBusy}
+              onCreate={createInvite}
+              onCopy={copyInvite}
+              onRevoke={revokeInvite}
+            />
+            <RoomAdministrationControls
+              ownerSubject={connection.subject}
+              expiresAt={ownerAccess.expiresAt}
+              disabled={controlsBusy}
+              onRenew={ownerAccess.refreshOwner}
+            />
+          </>
         )}
     </SettingsSection>
   );

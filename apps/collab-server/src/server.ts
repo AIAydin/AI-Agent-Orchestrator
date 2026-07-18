@@ -4,6 +4,7 @@ import {
   IncomingMessage as HocuspocusIncomingMessage,
   MessageType,
   Server,
+  type Document as HocuspocusDocument,
   type onAuthenticatePayload,
   type onConnectPayload,
   type onStatelessPayload,
@@ -67,6 +68,7 @@ export class CollaborationService {
 
   private readonly webSocketConnectionLimiter: FixedWindowRateLimiter;
   private readonly messageLimiter: FixedWindowRateLimiter;
+  private readonly awarenessClientIds = new Map<string, number>();
   private started = false;
   private closed = false;
 
@@ -113,7 +115,7 @@ export class CollaborationService {
         });
         return Promise.resolve();
       },
-      beforeHandleMessage: ({ context, document, update }) => {
+      beforeHandleMessage: ({ context, document, socketId, update }) => {
         const collaboration = CollaborationContextSchema.parse(context);
         this.assertActiveConnection(collaboration);
         const rate = this.messageLimiter.consume(collaboration.accessTokenId);
@@ -126,7 +128,7 @@ export class CollaborationService {
           throw new CollaborationConnectionError('message-too-large');
         }
         try {
-          this.validateWireMessage(update, collaboration, document);
+          this.validateWireMessage(update, collaboration, document, socketId);
         } catch (error) {
           if (error instanceof CollaborationPrivacyError) {
             this.auditRejection(collaboration, 'metadata.rejected', 'privacy-allowlist');
@@ -185,7 +187,8 @@ export class CollaborationService {
         });
         return Promise.resolve();
       },
-      onDisconnect: ({ context, documentName }) => {
+      onDisconnect: ({ context, documentName, socketId }) => {
+        this.awarenessClientIds.delete(socketId);
         const parsed = CollaborationContextSchema.safeParse(context);
         if (!parsed.success) return Promise.resolve();
         this.store.appendAudit({
@@ -378,7 +381,8 @@ export class CollaborationService {
   private validateWireMessage(
     update: Uint8Array,
     context: CollaborationContext,
-    document: Y.Doc,
+    document: HocuspocusDocument,
+    socketId: string,
   ): void {
     try {
       const message = new HocuspocusIncomingMessage(update);
@@ -399,7 +403,17 @@ export class CollaborationService {
         }
       }
       if (type === MessageType.Awareness) {
-        validateAwarenessPayload(message.readVarUint8Array(), context);
+        const currentClocks = new Map<number, number>();
+        for (const [clientId, metadata] of document.awareness.meta) {
+          currentClocks.set(clientId, metadata.clock);
+        }
+        const boundClientId = this.awarenessClientIds.get(socketId);
+        const clientId = validateAwarenessPayload(message.readVarUint8Array(), context, {
+          ...(boundClientId === undefined ? {} : { boundClientId }),
+          currentStates: document.awareness.getStates(),
+          currentClocks,
+        });
+        if (clientId !== undefined) this.awarenessClientIds.set(socketId, clientId);
       }
       if (type === MessageType.Stateless) {
         CollaborationDeliveryRequestSchema.parse(

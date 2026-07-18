@@ -26,6 +26,13 @@ export type ForgeboardOutboundAction =
   | 'collaboration-invite-create'
   | 'collaboration-invite-redeem'
   | 'collaboration-invite-revoke'
+  | 'collaboration-room-bootstrap'
+  | 'collaboration-owner-recover'
+  | 'collaboration-owner-refresh'
+  | 'collaboration-members-list'
+  | 'collaboration-member-update'
+  | 'collaboration-member-revoke'
+  | 'collaboration-audit-list'
   | 'diagnostics-send'
   | 'update-check';
 
@@ -337,6 +344,13 @@ function assertDisclosure(disclosure: OutboundActionDisclosure): void {
     'collaboration-invite-create',
     'collaboration-invite-redeem',
     'collaboration-invite-revoke',
+    'collaboration-room-bootstrap',
+    'collaboration-owner-recover',
+    'collaboration-owner-refresh',
+    'collaboration-members-list',
+    'collaboration-member-update',
+    'collaboration-member-revoke',
+    'collaboration-audit-list',
     'diagnostics-send',
     'update-check',
   ]);

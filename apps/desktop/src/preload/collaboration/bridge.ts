@@ -15,8 +15,18 @@ import {
   CollaborationJoinInviteInputSchema,
   CollaborationJoinResultSchema,
   CollaborationMetadataSnapshotSchema,
+  CollaborationOwnerRecoverJoinInputSchema,
+  CollaborationOwnerSessionViewSchema,
   CollaborationPublishInputSchema,
   CollaborationPublishReceiptSchema,
+  CollaborationRoomAuditListInputSchema,
+  CollaborationRoomAuditPageSchema,
+  CollaborationRoomBootstrapJoinInputSchema,
+  CollaborationRoomMemberListInputSchema,
+  CollaborationRoomMemberMutationSchema,
+  CollaborationRoomMemberPageSchema,
+  CollaborationRoomMemberRevokeInputSchema,
+  CollaborationRoomMemberUpdateInputSchema,
   CollaborationSyncCheckpointInputSchema,
   CollaborationSyncRecoverInputSchema,
   CollaborationSyncRecoverySchema,
@@ -63,6 +73,54 @@ export function createCollaborationApi(
       );
       return CollaborationJoinResultSchema.parse(result);
     },
+    bootstrapRoomAndJoin: async (input) =>
+      await invokeResult(
+        invoke,
+        COLLABORATION_IPC_CHANNELS.bootstrapRoomAndJoin,
+        CollaborationOwnerSessionViewSchema.nullable(),
+        CollaborationRoomBootstrapJoinInputSchema.parse(input),
+      ),
+    recoverOwnerAndJoin: async (input) =>
+      await invokeResult(
+        invoke,
+        COLLABORATION_IPC_CHANNELS.recoverOwnerAndJoin,
+        CollaborationOwnerSessionViewSchema.nullable(),
+        CollaborationOwnerRecoverJoinInputSchema.parse(input),
+      ),
+    refreshOwnerSession: async () =>
+      await invokeResult(
+        invoke,
+        COLLABORATION_IPC_CHANNELS.refreshOwnerSession,
+        CollaborationOwnerSessionViewSchema.nullable(),
+      ),
+    listRoomMembers: async (input) =>
+      await invokeResult(
+        invoke,
+        COLLABORATION_IPC_CHANNELS.listRoomMembers,
+        CollaborationRoomMemberPageSchema,
+        CollaborationRoomMemberListInputSchema.parse(input),
+      ),
+    updateRoomMember: async (input) =>
+      await invokeResult(
+        invoke,
+        COLLABORATION_IPC_CHANNELS.updateRoomMember,
+        CollaborationRoomMemberMutationSchema.nullable(),
+        CollaborationRoomMemberUpdateInputSchema.parse(input),
+      ),
+    revokeRoomMember: async (input) =>
+      await invokeResult(
+        invoke,
+        COLLABORATION_IPC_CHANNELS.revokeRoomMember,
+        z.boolean(),
+        CollaborationRoomMemberRevokeInputSchema.parse(input),
+      ),
+    listRoomAudit: async (input) =>
+      await invokeResult(
+        invoke,
+        COLLABORATION_IPC_CHANNELS.listRoomAudit,
+        CollaborationRoomAuditPageSchema,
+        CollaborationRoomAuditListInputSchema.parse(input),
+      ),
     listSessionInvites: async () =>
       await invokeResult(
         invoke,

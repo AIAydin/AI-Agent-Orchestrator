@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { Awareness, applyAwarenessUpdate } from 'y-protocols/awareness';
 import * as Y from 'yjs';
 import { z } from 'zod';
 
@@ -201,8 +200,7 @@ const AwarenessStateSchema = z
         color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
         role: z.enum(['owner', 'editor', 'reviewer', 'viewer']),
       })
-      .strict()
-      .optional(),
+      .strict(),
     cursor: PositionSchema.optional(),
     selection: z
       .object({ nodeIds: z.array(IdSchema).max(200) })
@@ -275,28 +273,91 @@ function materializeSharedMaps(document: Y.Doc): void {
   for (const name of document.share.keys()) document.getMap(name);
 }
 
-export function validateAwarenessPayload(payload: Uint8Array, context: CollaborationContext): void {
-  const document = new Y.Doc();
-  const awareness = new Awareness(document);
+export interface AwarenessValidationOptions {
+  readonly boundClientId?: number;
+  readonly currentStates?: ReadonlyMap<number, unknown>;
+  readonly currentClocks?: ReadonlyMap<number, number>;
+}
+
+export function validateAwarenessPayload(
+  payload: Uint8Array,
+  context: CollaborationContext,
+  options: AwarenessValidationOptions = {},
+): number | undefined {
   try {
-    applyAwarenessUpdate(awareness, payload, null);
-    for (const state of awareness.getStates().values()) {
-      const result = AwarenessStateSchema.safeParse(state);
+    const entries = decodeAwarenessPayload(payload);
+    let claimedClientId = options.boundClientId;
+    for (const entry of entries) {
+      const currentState = options.currentStates?.get(entry.clientId) ?? null;
+      const currentClock = options.currentClocks?.get(entry.clientId);
+      const exactEcho =
+        currentClock === entry.clock && isDeepStrictEqual(entry.state, currentState);
+      if (entry.clientId !== claimedClientId && exactEcho) continue;
+      if (claimedClientId !== undefined && entry.clientId !== claimedClientId) {
+        throw new CollaborationPrivacyError(
+          'Presence updates cannot change another connection identity.',
+        );
+      }
+      if (entry.state === null) {
+        if (claimedClientId === undefined) {
+          throw new CollaborationPrivacyError('Presence identity is required before removal.');
+        }
+        continue;
+      }
+      const result = AwarenessStateSchema.safeParse(entry.state);
       if (!result.success) throw new CollaborationPrivacyError('Invalid presence metadata.');
-      if (
-        result.data.user &&
-        (result.data.user.id !== context.subject || result.data.user.role !== context.role)
-      ) {
+      if (result.data.user.id !== context.subject || result.data.user.role !== context.role) {
         throw new CollaborationPrivacyError('Presence identity does not match the access token.');
       }
+      claimedClientId = entry.clientId;
     }
+    return claimedClientId;
   } catch (error) {
     if (error instanceof CollaborationPrivacyError) throw error;
     throw new CollaborationPrivacyError('Invalid presence metadata.');
-  } finally {
-    awareness.destroy();
-    document.destroy();
   }
+}
+
+interface DecodedAwarenessEntry {
+  readonly clientId: number;
+  readonly clock: number;
+  readonly state: unknown;
+}
+
+function decodeAwarenessPayload(payload: Uint8Array): DecodedAwarenessEntry[] {
+  let offset = 0;
+  const readVarUint = (): number => {
+    let value = 0;
+    let multiplier = 1;
+    for (let index = 0; index < 8; index += 1) {
+      const byte = payload[offset];
+      if (byte === undefined) throw new Error('Truncated awareness payload.');
+      offset += 1;
+      value += (byte & 0x7f) * multiplier;
+      if (!Number.isSafeInteger(value)) throw new Error('Unsafe awareness integer.');
+      if ((byte & 0x80) === 0) return value;
+      multiplier *= 128;
+    }
+    throw new Error('Oversized awareness integer.');
+  };
+  const count = readVarUint();
+  if (count < 1 || count > 1_000) throw new Error('Invalid awareness entry count.');
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const entries: DecodedAwarenessEntry[] = [];
+  const clientIds = new Set<number>();
+  for (let index = 0; index < count; index += 1) {
+    const clientId = readVarUint();
+    const clock = readVarUint();
+    const byteLength = readVarUint();
+    if (byteLength > payload.byteLength - offset) throw new Error('Truncated awareness state.');
+    const json = decoder.decode(payload.subarray(offset, offset + byteLength));
+    offset += byteLength;
+    if (clientIds.has(clientId)) throw new Error('Duplicate awareness client identity.');
+    clientIds.add(clientId);
+    entries.push({ clientId, clock, state: JSON.parse(json) as unknown });
+  }
+  if (offset !== payload.byteLength) throw new Error('Trailing awareness payload bytes.');
+  return entries;
 }
 
 function assertReviewerOnlyChangedReviewData(

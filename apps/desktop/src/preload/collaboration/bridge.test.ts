@@ -30,6 +30,17 @@ const connected = {
   lastTransitionAt: '2026-07-17T12:00:00.000Z',
 };
 
+const ownerSession = {
+  connection: {
+    ...connected,
+    subject: 'owner-1',
+    displayName: 'Owner One',
+    role: 'owner' as const,
+  },
+  expiresAt: '2026-07-18T20:00:00.000Z',
+  tokenVersion: 2,
+};
+
 function bridge(invoke = vi.fn()) {
   const on = vi.fn();
   const remove = vi.fn();
@@ -37,6 +48,94 @@ function bridge(invoke = vi.fn()) {
 }
 
 describe('createCollaborationApi invite bridge', () => {
+  it('forwards strict management inputs and accepts only token-free projections', async () => {
+    const member = {
+      subject: 'member-2',
+      displayName: 'Member Two',
+      role: 'viewer' as const,
+      tokenVersion: 3,
+    };
+    const invoke = vi.fn((channel: string) => {
+      switch (channel) {
+        case COLLABORATION_IPC_CHANNELS.bootstrapRoomAndJoin:
+        case COLLABORATION_IPC_CHANNELS.recoverOwnerAndJoin:
+        case COLLABORATION_IPC_CHANNELS.refreshOwnerSession:
+          return Promise.resolve({ ok: true, value: ownerSession });
+        case COLLABORATION_IPC_CHANNELS.listRoomMembers:
+          return Promise.resolve({
+            ok: true,
+            value: { members: [member], nextCursor: null, hasMore: false },
+          });
+        case COLLABORATION_IPC_CHANNELS.updateRoomMember:
+          return Promise.resolve({ ok: true, value: { membership: member, changed: true } });
+        case COLLABORATION_IPC_CHANNELS.listRoomAudit:
+          return Promise.resolve({
+            ok: true,
+            value: { events: [], nextAfter: null, hasMore: false },
+          });
+        default:
+          return Promise.resolve({ ok: true, value: true });
+      }
+    });
+    const { api } = bridge(invoke);
+    const accessInput = {
+      serverUrl: 'wss://collab.example/ws',
+      managementBaseUrl: 'https://collab.example/control',
+      roomId: 'room-1',
+      subject: 'member-1',
+      displayName: 'Member One',
+      color: '#6d5efc',
+      adminToken: 'volatile-admin-token',
+      reconnect: true,
+    };
+
+    await expect(api.bootstrapRoomAndJoin(accessInput)).resolves.toEqual({
+      ok: true,
+      value: ownerSession,
+    });
+    await expect(api.recoverOwnerAndJoin(accessInput)).resolves.toEqual({
+      ok: true,
+      value: ownerSession,
+    });
+    await expect(api.refreshOwnerSession()).resolves.toEqual({ ok: true, value: ownerSession });
+    await api.listRoomMembers({ limit: 100 });
+    await api.updateRoomMember({
+      subject: member.subject,
+      role: 'viewer',
+      expectedTokenVersion: 3,
+    });
+    await api.revokeRoomMember({ subject: member.subject, expectedTokenVersion: 3 });
+    await api.listRoomAudit({ after: 0, limit: 100 });
+
+    expect(invoke.mock.calls).toContainEqual([
+      COLLABORATION_IPC_CHANNELS.bootstrapRoomAndJoin,
+      { ...accessInput, managementBaseUrl: 'https://collab.example/control/' },
+    ]);
+    expect(invoke.mock.calls).toContainEqual([
+      COLLABORATION_IPC_CHANNELS.revokeRoomMember,
+      { subject: member.subject, expectedTokenVersion: 3 },
+    ]);
+  });
+
+  it('rejects token-bearing management results and extra mutation inputs', async () => {
+    const { api, invoke } = bridge(
+      vi.fn().mockResolvedValue({
+        ok: true,
+        value: { ...ownerSession, accessToken: 'must-not-return' },
+      }),
+    );
+    await expect(api.refreshOwnerSession()).rejects.toBeTruthy();
+    await expect(
+      api.updateRoomMember({
+        subject: 'member-2',
+        role: 'viewer',
+        expectedTokenVersion: 3,
+        accessToken: 'must-not-cross',
+      } as never),
+    ).rejects.toBeTruthy();
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
   it('forwards only strict invite requests and token-free result schemas', async () => {
     const invoke = vi.fn((channel: string) => {
       switch (channel) {

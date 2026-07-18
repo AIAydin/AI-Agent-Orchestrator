@@ -51,7 +51,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
         dialog = await waitForCollaborationDialog(owner.app, dialogIndex);
       } catch (error) {
         throw new Error(
-          `The collaboration dialog did not open. Status: ${await ownerSettings.getByRole('status').innerText()}`,
+          `The collaboration dialog did not open. Status: ${await collaborationStatus(ownerSettings).innerText()}`,
           { cause: error },
         );
       }
@@ -62,7 +62,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
       });
       expect(dialog.detail).toContain(`Endpoint: ${server!.webSocketUrl}`);
       expect(dialog.detail).toContain('Resource: invite-e2e-room');
-      await expect(ownerSettings.getByRole('status')).toContainText('Your role is owner', {
+      await expect(collaborationStatus(ownerSettings)).toContainText('Your role is owner', {
         timeout: 20_000,
       });
       await expect(ownerSettings.getByLabel('Session access token')).toHaveValue('');
@@ -80,7 +80,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
         title: 'Create collaboration invite?',
         confirmLabel: 'Create invite',
       });
-      await expect(ownerSettings.getByRole('status')).toContainText(
+      await expect(collaborationStatus(ownerSettings)).toContainText(
         'Invite creation was cancelled',
       );
       await expect(
@@ -129,7 +129,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
         title: 'Copy collaboration invite?',
         confirmLabel: 'Copy invite',
       });
-      await expect(ownerSettings.getByRole('status')).toContainText('Copy cancelled');
+      await expect(collaborationStatus(ownerSettings)).toContainText('Copy cancelled');
       expect(await owner.app.evaluate(({ clipboard }) => clipboard.readText())).toBe(
         priorClipboard,
       );
@@ -141,7 +141,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
         title: 'Copy collaboration invite?',
         confirmLabel: 'Copy invite',
       });
-      await expect(ownerSettings.getByRole('status')).toContainText('Invite link copied');
+      await expect(collaborationStatus(ownerSettings)).toContainText('Invite link copied');
       inviteLink = await owner.app.evaluate(({ clipboard }) => clipboard.readText());
       expect(inviteLink).toMatch(/^forgeboard:\/\/collaboration\/invite#token=\S+$/u);
       const inviteToken = new URLSearchParams(new URL(inviteLink).hash.slice(1)).get('token');
@@ -173,7 +173,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
         confirmLabel: 'Revoke invite',
         secrets: [inviteLink, inviteToken ?? '', revokedInviteLink, revokedToken],
       });
-      await expect(ownerSettings.getByRole('status')).toContainText('Invite revoked');
+      await expect(collaborationStatus(ownerSettings)).toContainText('Invite revoked');
       await expect(sessionInvite(ownerSettings, 'reviewer')).toHaveCount(0);
       await expect(sessionInvite(ownerSettings, 'viewer')).toBeVisible();
     });
@@ -204,11 +204,11 @@ test('owners manage token-free invite rows and a second profile redeems through 
         confirmLabel: 'Redeem and join',
         secrets: [revokedInviteLink],
       });
-      await expect(viewerSettings.getByRole('status')).toContainText(
+      await expect(collaborationStatus(viewerSettings)).toContainText(
         'could not redeem and join the collaboration invite',
       );
       await expect(inviteField).toHaveValue('');
-      await expect(viewerSettings.getByRole('status')).not.toContainText('Your role is');
+      await expect(collaborationStatus(viewerSettings)).not.toContainText('Your role is');
       const revokedToken =
         new URLSearchParams(new URL(revokedInviteLink).hash.slice(1)).get('token') ?? '';
       await expectSecretsAbsent(viewer.page, [revokedInviteLink, revokedToken]);
@@ -223,7 +223,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
         secrets: [inviteLink],
       });
       expect(dialog.detail).toContain('Invite fingerprint:');
-      await expect(viewerSettings.getByRole('status')).toContainText('redemption was cancelled');
+      await expect(collaborationStatus(viewerSettings)).toContainText('redemption was cancelled');
       await expect(inviteField).toHaveValue('');
 
       await inviteField.fill(inviteLink);
@@ -235,21 +235,23 @@ test('owners manage token-free invite rows and a second profile redeems through 
         confirmLabel: 'Redeem and join',
         secrets: [inviteLink],
       });
-      await expect(viewerSettings.getByRole('status')).toContainText(
+      await expect(collaborationStatus(viewerSettings)).toContainText(
         'Connected to room invite-e2e-room',
         {
           timeout: 20_000,
         },
       );
-      await expect(viewerSettings.getByRole('status')).toContainText('Your role is viewer');
+      await expect(collaborationStatus(viewerSettings)).toContainText('Your role is viewer');
       await expect(inviteField).toHaveValue('');
       await expect(viewerSettings.getByRole('button', { name: 'Create invite' })).toHaveCount(0);
       const inviteToken = new URLSearchParams(new URL(inviteLink).hash.slice(1)).get('token') ?? '';
       await expectSecretsAbsent(viewer.page, [inviteLink, inviteToken]);
 
       await viewerSettings.getByRole('button', { name: 'Leave room' }).click();
-      await expect(viewerSettings.getByRole('status')).toContainText('Left the collaboration room');
-      await expect(viewerSettings.getByRole('status')).not.toContainText('Your role is viewer');
+      await expect(collaborationStatus(viewerSettings)).toContainText(
+        'Left the collaboration room',
+      );
+      await expect(collaborationStatus(viewerSettings)).not.toContainText('Your role is viewer');
       await expect(inviteField).toHaveValue('');
     });
 
@@ -303,6 +305,10 @@ function sessionInvite(settings: Locator, role: 'reviewer' | 'viewer'): Locator 
     .getByRole('list', { name: 'Session invites' })
     .getByRole('listitem')
     .filter({ hasText: new RegExp(`^${role} \\u00b7`, 'u') });
+}
+
+function collaborationStatus(settings: Locator): Locator {
+  return settings.locator('.recovery-guidance[role="status"]');
 }
 
 async function expectSecretsAbsent(page: Page, secrets: readonly string[]): Promise<void> {

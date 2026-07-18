@@ -10,6 +10,26 @@ import {
   type CollaborationInviteSafeView,
   type CollaborationInviteSessionBinding,
 } from '../../../shared/collaboration/index.js';
+import {
+  CollaborationManagementOwnerAccessResponseSchema,
+  type CollaborationManagementOwnerAccessResponse,
+} from '@forgeboard/core/collaboration-management';
+import { z } from 'zod';
+
+const RenewedOwnerAccessClaimsSchema = z
+  .object({
+    iss: z.literal('forgeboard-collab'),
+    aud: z.literal('forgeboard-collab-client'),
+    typ: z.literal('access'),
+    jti: z.string().uuid(),
+    roomId: z.string(),
+    role: z.literal('owner'),
+    sub: z.string(),
+    ver: z.number().int().nonnegative().safe(),
+    iat: z.number().int().nonnegative().safe(),
+    exp: z.number().int().positive().safe(),
+  })
+  .strict();
 
 export interface CollaborationInviteSessionLease {
   readonly generation: number;
@@ -53,6 +73,74 @@ export class CollaborationInviteSessionAuthority {
     });
     this.establish(binding);
     return structuredClone(binding);
+  }
+
+  public establishOwnerAccess(
+    rawServerUrl: string,
+    rawManagementBaseUrl: string,
+    rawResponse: CollaborationManagementOwnerAccessResponse,
+  ): CollaborationInviteSessionBinding {
+    const serverUrl = CollaborationServerUrlSchema.parse(rawServerUrl);
+    const managementBaseUrl = CollaborationManagementUrlSchema.parse(rawManagementBaseUrl);
+    const response = CollaborationManagementOwnerAccessResponseSchema.parse(rawResponse);
+    const binding = CollaborationInviteSessionBindingSchema.parse({
+      serverUrl,
+      managementBaseUrl,
+      roomId: response.room.id,
+      subject: response.membership.subject,
+      role: response.membership.role,
+      accessToken: response.accessToken,
+      expiresAt: response.expiresAt,
+    });
+    this.establish(binding);
+    return structuredClone(binding);
+  }
+
+  /** Replaces only the owner credential while retaining current-session invite records. */
+  public renewOwnerAccess(
+    lease: CollaborationInviteSessionLease,
+    rawResponse: CollaborationManagementOwnerAccessResponse,
+  ): CollaborationInviteSessionBinding {
+    const binding = this.#ownerRenewalBinding(lease, rawResponse);
+    this.#binding = binding;
+    this.#generation += 1;
+    return structuredClone(binding);
+  }
+
+  /** Validates a renewal before an external live client swaps to the replacement credential. */
+  public assertOwnerAccessRenewal(
+    lease: CollaborationInviteSessionLease,
+    rawResponse: CollaborationManagementOwnerAccessResponse,
+  ): void {
+    this.#ownerRenewalBinding(lease, rawResponse);
+  }
+
+  #ownerRenewalBinding(
+    lease: CollaborationInviteSessionLease,
+    rawResponse: CollaborationManagementOwnerAccessResponse,
+  ): CollaborationInviteSessionBinding {
+    const current = this.assertCurrent(lease);
+    const response = CollaborationManagementOwnerAccessResponseSchema.parse(rawResponse);
+    const claims = decodeRenewedOwnerAccessClaims(response.accessToken);
+    if (
+      current.role !== 'owner' ||
+      response.membership.role !== 'owner' ||
+      response.room.id !== current.roomId ||
+      response.membership.subject !== current.subject ||
+      claims.roomId !== response.room.id ||
+      claims.sub !== response.membership.subject ||
+      claims.role !== response.membership.role ||
+      claims.ver !== response.membership.tokenVersion ||
+      claims.exp * 1_000 !== new Date(response.expiresAt).getTime()
+    ) {
+      throw new Error('The renewed owner credential does not match the active room session.');
+    }
+    const binding = CollaborationInviteSessionBindingSchema.parse({
+      ...current,
+      accessToken: response.accessToken,
+      expiresAt: response.expiresAt,
+    });
+    return binding;
   }
 
   public ownerLease(
@@ -192,5 +280,18 @@ export class CollaborationInviteSessionAuthority {
     ) {
       throw new Error('The collaboration room credential is expired. Reconnect before continuing.');
     }
+  }
+}
+
+function decodeRenewedOwnerAccessClaims(
+  accessToken: string,
+): z.infer<typeof RenewedOwnerAccessClaimsSchema> {
+  try {
+    const parts = accessToken.split('.');
+    if (parts.length !== 3 || parts[1] === undefined) throw new Error('invalid');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as unknown;
+    return RenewedOwnerAccessClaimsSchema.parse(payload);
+  } catch {
+    throw new Error('The renewed owner credential does not match the active room session.');
   }
 }

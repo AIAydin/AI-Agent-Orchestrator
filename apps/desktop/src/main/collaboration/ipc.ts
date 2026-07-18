@@ -25,7 +25,17 @@ import {
   CollaborationInviteIdInputSchema,
   CollaborationInviteSafeViewSchema,
   CollaborationMetadataSnapshotSchema,
+  CollaborationOwnerRecoverJoinInputSchema,
+  CollaborationOwnerSessionViewSchema,
   CollaborationPublishInputSchema,
+  CollaborationRoomAuditListInputSchema,
+  CollaborationRoomAuditPageSchema,
+  CollaborationRoomBootstrapJoinInputSchema,
+  CollaborationRoomMemberListInputSchema,
+  CollaborationRoomMemberMutationSchema,
+  CollaborationRoomMemberPageSchema,
+  CollaborationRoomMemberRevokeInputSchema,
+  CollaborationRoomMemberUpdateInputSchema,
   CollaborationSyncCheckpointInputSchema,
   CollaborationSyncRecoverInputSchema,
   CollaborationSyncRecoverySchema,
@@ -43,7 +53,11 @@ import {
   type CollaborationInviteSafeView,
   type CollaborationJoinResult,
   type CollaborationMetadataSnapshot,
+  type CollaborationOwnerSessionView,
   type CollaborationPublishReceipt,
+  type CollaborationRoomAuditPage,
+  type CollaborationRoomMemberMutation,
+  type CollaborationRoomMemberPage,
   type CollaborationRejectedCommentEntry,
   type CollaborationSyncRecovery,
 } from '../../shared/collaboration/index.js';
@@ -60,6 +74,12 @@ import {
   CollaborationInviteOperations,
   type CollaborationInviteNativeAuthority,
 } from './invites/operations.js';
+import { CollaborationInviteSessionAuthority } from './invites/session.js';
+import {
+  CollaborationManagementOperations,
+  type CollaborationManagementNativeAuthority,
+} from './management/operations.js';
+import { CollaborationManagementHttpError } from './management/http-client.js';
 
 type CollaborationOperations = Pick<
   CollaborationClient,
@@ -77,7 +97,8 @@ type CollaborationOperations = Pick<
   | 'resume'
   | 'reset'
   | 'dispose'
->;
+> &
+  Partial<Pick<CollaborationClient, 'replaceAccessToken'>>;
 
 export interface CollaborationIpcServiceOptions {
   readonly client?: CollaborationOperations;
@@ -102,6 +123,19 @@ export interface CollaborationIpcServiceOptions {
     | 'revoke'
     | 'redeemAndJoin'
   >;
+  readonly management?: Pick<
+    CollaborationManagementOperations,
+    | 'clear'
+    | 'clearPendingEffects'
+    | 'dispose'
+    | 'bootstrapAndJoin'
+    | 'recoverAndJoin'
+    | 'refresh'
+    | 'listMembers'
+    | 'updateMember'
+    | 'revokeMember'
+    | 'listAudit'
+  >;
 }
 
 /** Owner-scoped IPC boundary for authenticated collaboration connections. */
@@ -114,6 +148,7 @@ export class CollaborationIpcService {
   readonly #createOwnerId: () => string;
   readonly #store: CollaborationIpcServiceOptions['store'] | undefined;
   readonly #invites: NonNullable<CollaborationIpcServiceOptions['invites']>;
+  readonly #management: NonNullable<CollaborationIpcServiceOptions['management']>;
   readonly #unsubscribe: () => void;
   readonly #recordedDeliveryIds = new Set<string>();
   readonly #deliveryScopes = new Map<string, CollaborationSyncStorageScope>();
@@ -145,8 +180,15 @@ export class CollaborationIpcService {
     this.#client = options.client ?? new CollaborationClient();
     this.#createOwnerId = options.createOwnerId ?? randomUUID;
     this.#store = options.store;
+    const session = new CollaborationInviteSessionAuthority();
     this.#invites =
-      options.invites ?? new CollaborationInviteOperations(dialog, outbound, { clipboard });
+      options.invites ??
+      new CollaborationInviteOperations(dialog, outbound, {
+        clipboard,
+        session,
+      });
+    this.#management =
+      options.management ?? new CollaborationManagementOperations(dialog, outbound, { session });
     this.#unsubscribe = this.#client.onEvent((event) => this.#sendEvent(event));
   }
 
@@ -160,6 +202,27 @@ export class CollaborationIpcService {
     this.#handle(COLLABORATION_IPC_CHANNELS.join, (event, rawArgs) => this.#join(event, rawArgs));
     this.#handle(COLLABORATION_IPC_CHANNELS.joinInvite, (event, rawArgs) =>
       this.#joinInvite(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.bootstrapRoomAndJoin, (event, rawArgs) =>
+      this.#bootstrapRoomAndJoin(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.recoverOwnerAndJoin, (event, rawArgs) =>
+      this.#recoverOwnerAndJoin(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.refreshOwnerSession, (event, rawArgs) =>
+      this.#refreshOwnerSession(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.listRoomMembers, (event, rawArgs) =>
+      this.#listRoomMembers(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.updateRoomMember, (event, rawArgs) =>
+      this.#updateRoomMember(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.revokeRoomMember, (event, rawArgs) =>
+      this.#revokeRoomMember(event, rawArgs),
+    );
+    this.#handle(COLLABORATION_IPC_CHANNELS.listRoomAudit, (event, rawArgs) =>
+      this.#listRoomAudit(event, rawArgs),
     );
     this.#handle(COLLABORATION_IPC_CHANNELS.listSessionInvites, (event, rawArgs) =>
       this.#listSessionInvites(event, rawArgs),
@@ -249,6 +312,7 @@ export class CollaborationIpcService {
     await this.#waitForInviteOperation();
     this.#client.reset();
     this.#invites.clear();
+    this.#management.clear();
     this.#discardOwner();
     this.#deliveryScopes.clear();
     this.#earlyDeliverySettlements.clear();
@@ -262,6 +326,7 @@ export class CollaborationIpcService {
     await this.#waitForInviteOperation();
     this.#client.dispose();
     this.#invites.dispose();
+    this.#management.dispose();
     this.#unsubscribe();
     this.#discardOwner();
     if (this.#registered) {
@@ -355,6 +420,7 @@ export class CollaborationIpcService {
           approvalConsumed = true;
           this.#clearSessionRejectedCommentSuppressions(false);
           this.#invites.clear();
+          this.#management.clearPendingEffects();
           const joined = await this.#client.join(input);
           assertCurrent();
           if (joined.ok) {
@@ -446,6 +512,7 @@ export class CollaborationIpcService {
           this.#assignOwner(event.sender);
           replacementStarted = true;
           this.#clearSessionRejectedCommentSuppressions(false);
+          this.#management.clearPendingEffects();
           const joined = await this.#client.join(joinInput);
           assertCurrent();
           if (!joined.ok) {
@@ -472,6 +539,203 @@ export class CollaborationIpcService {
           : 'Forgeboard could not redeem and join the collaboration invite.',
         !invalid,
       );
+    }
+  }
+
+  async #bootstrapRoomAndJoin(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationOwnerSessionView | null>> {
+    return await this.#roomOwnerAccessAndJoin(event, rawArgs, 'bootstrap');
+  }
+
+  async #recoverOwnerAndJoin(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationOwnerSessionView | null>> {
+    return await this.#roomOwnerAccessAndJoin(event, rawArgs, 'recover');
+  }
+
+  async #roomOwnerAccessAndJoin(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+    mode: 'bootstrap' | 'recover',
+  ): Promise<IpcResult<CollaborationOwnerSessionView | null>> {
+    try {
+      return await this.#withInviteOperation(async () => {
+        let replacementStarted = false;
+        try {
+          this.#assertAvailable();
+          const schema =
+            mode === 'bootstrap'
+              ? CollaborationRoomBootstrapJoinInputSchema
+              : CollaborationOwnerRecoverJoinInputSchema;
+          const [input] = z.tuple([schema]).parse(rawArgs);
+          const parent = this.#requireLiveParent(event);
+          if (
+            (this.#owner !== null && this.#owner !== event.sender) ||
+            this.#joiningOwner !== null
+          ) {
+            throw new Error('Another Forgeboard window owns the collaboration session.');
+          }
+          this.#joiningOwner = event.sender;
+          const ownerId = this.#ownerId(event.sender);
+          const ownerBeforeApproval = this.#owner;
+          const assertCurrent = (): void => {
+            assertLiveMainFrame(event, `Collaboration owner ${mode}`);
+            if (
+              this.#owner !== (replacementStarted ? event.sender : ownerBeforeApproval) ||
+              this.#joiningOwner !== event.sender ||
+              this.#ownerIds.get(event.sender) !== ownerId ||
+              parent.isDestroyed() ||
+              BrowserWindow.fromWebContents(event.sender) !== parent
+            ) {
+              throw new Error('The originating Forgeboard window or room session changed.');
+            }
+          };
+          const authority = { ownerId, parent, assertCurrent };
+          const join = async (
+            joinInput: CollaborationJoinInput,
+          ): Promise<CollaborationJoinResult> => {
+            assertCurrent();
+            this.#assignOwner(event.sender);
+            replacementStarted = true;
+            this.#clearSessionRejectedCommentSuppressions(false);
+            this.#invites.clear();
+            this.#management.clearPendingEffects();
+            const joined = await this.#client.join(joinInput);
+            assertCurrent();
+            if (!joined.ok) {
+              this.#client.leave();
+              this.#discardOwner(false);
+            }
+            return joined;
+          };
+          const value =
+            mode === 'bootstrap'
+              ? await this.#management.bootstrapAndJoin(authority, input, join)
+              : await this.#management.recoverAndJoin(authority, input, join);
+          this.#joiningOwner = null;
+          return {
+            ok: true,
+            value: CollaborationOwnerSessionViewSchema.nullable().parse(value),
+          };
+        } catch (error) {
+          if (replacementStarted) {
+            this.#client.leave();
+            this.#discardOwner(false);
+          } else if (this.#joiningOwner === event.sender) {
+            this.#joiningOwner = null;
+          }
+          return ipcFailure(error, `Forgeboard could not ${mode} the collaboration owner.`);
+        }
+      });
+    } catch (error) {
+      return ipcFailure(error, 'Another collaboration management action is already in progress.');
+    }
+  }
+
+  async #refreshOwnerSession(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationOwnerSessionView | null>> {
+    return await this.#managementIpc(event, rawArgs, z.tuple([]), async (authority) =>
+      CollaborationOwnerSessionViewSchema.nullable().parse(
+        await this.#management.refresh(authority, authority.connection, (token) =>
+          this.#replaceAccessToken(token),
+        ),
+      ),
+    );
+  }
+
+  async #listRoomMembers(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationRoomMemberPage>> {
+    return await this.#managementIpc(
+      event,
+      rawArgs,
+      z.tuple([CollaborationRoomMemberListInputSchema]),
+      async (authority, input) =>
+        CollaborationRoomMemberPageSchema.parse(
+          await this.#management.listMembers(
+            authority,
+            authority.connection,
+            CollaborationRoomMemberListInputSchema.parse(input),
+          ),
+        ),
+    );
+  }
+
+  async #updateRoomMember(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationRoomMemberMutation | null>> {
+    return await this.#managementIpc(
+      event,
+      rawArgs,
+      z.tuple([CollaborationRoomMemberUpdateInputSchema]),
+      async (authority, input) =>
+        CollaborationRoomMemberMutationSchema.nullable().parse(
+          await this.#management.updateMember(authority, authority.connection, input),
+        ),
+    );
+  }
+
+  async #revokeRoomMember(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<boolean>> {
+    return await this.#managementIpc(
+      event,
+      rawArgs,
+      z.tuple([CollaborationRoomMemberRevokeInputSchema]),
+      async (authority, input) =>
+        await this.#management.revokeMember(authority, authority.connection, input),
+    );
+  }
+
+  async #listRoomAudit(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationRoomAuditPage>> {
+    return await this.#managementIpc(
+      event,
+      rawArgs,
+      z.tuple([CollaborationRoomAuditListInputSchema]),
+      async (authority, input) =>
+        CollaborationRoomAuditPageSchema.parse(
+          await this.#management.listAudit(
+            authority,
+            authority.connection,
+            CollaborationRoomAuditListInputSchema.parse(input),
+          ),
+        ),
+    );
+  }
+
+  async #managementIpc<Input extends unknown[], Value>(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+    schema: z.ZodType<Input>,
+    operation: (
+      authority: CollaborationManagementNativeAuthority & {
+        readonly connection: CollaborationConnection;
+      },
+      ...input: Input
+    ) => Promise<Value>,
+  ): Promise<IpcResult<Value>> {
+    try {
+      return await this.#withInviteOperation(async () => {
+        this.#assertAvailable();
+        const input = schema.parse(rawArgs);
+        const authority = this.#managementAuthority(event, 'Collaboration room administration');
+        const value = await operation(authority, ...input);
+        authority.assertCurrent();
+        return { ok: true, value };
+      });
+    } catch (error) {
+      return ipcFailure(error, 'Forgeboard could not complete the collaboration room action.');
     }
   }
 
@@ -594,6 +858,7 @@ export class CollaborationIpcService {
       this.#assertOwner(event, 'Collaboration leave');
       this.#client.leave();
       this.#invites.clear();
+      this.#management.clear();
       this.#discardOwner();
       return { ok: true, value: null };
     } catch (error) {
@@ -913,6 +1178,7 @@ export class CollaborationIpcService {
     this.#joiningOwner = null;
     this.#recordedDeliveryIds.clear();
     if (clearInvites) this.#invites.clear();
+    if (clearInvites) this.#management.clear();
     this.#clearSessionRejectedCommentSuppressions();
     if (owner === null) return;
     const ownerId = this.#ownerIds.get(owner);
@@ -931,6 +1197,14 @@ export class CollaborationIpcService {
         this.#client.leave();
         this.#discardOwner();
         return;
+      }
+      if (this.#joiningOwner === owner) {
+        this.#joiningOwner = null;
+        this.#invites.clear();
+        this.#management.clear();
+      } else if (this.#owner === null && this.#joiningOwner === null) {
+        this.#invites.clear();
+        this.#management.clear();
       }
       this.#ownerIds.delete(owner);
       this.outbound.discardOwner(ownerId);
@@ -977,6 +1251,45 @@ export class CollaborationIpcService {
       }
     };
     return { ownerId, parent, assertCurrent, connection };
+  }
+
+  #managementAuthority(
+    event: IpcMainInvokeEvent,
+    operation: string,
+  ): CollaborationManagementNativeAuthority & {
+    readonly connection: CollaborationConnection;
+  } {
+    if (this.#joiningOwner !== null) {
+      throw new Error('Collaboration room administration is unavailable while a join is pending.');
+    }
+    this.#assertOwner(event, operation);
+    const parent = this.#requireLiveParent(event);
+    const ownerId = this.#ownerIds.get(event.sender);
+    if (ownerId === undefined) throw new Error(`${operation} has no active window authority.`);
+    const connection = this.#requiredActiveConnection();
+    if (connection.role !== 'owner') {
+      throw new Error('Only the connected room owner can administer collaboration membership.');
+    }
+    const fingerprint = JSON.stringify(connection);
+    const assertCurrent = (): void => {
+      this.#assertOwner(event, operation);
+      if (
+        parent.isDestroyed() ||
+        BrowserWindow.fromWebContents(event.sender) !== parent ||
+        this.#ownerIds.get(event.sender) !== ownerId ||
+        JSON.stringify(this.#requiredActiveConnection()) !== fingerprint
+      ) {
+        throw new Error('The originating Forgeboard window or room session changed.');
+      }
+    };
+    return { ownerId, parent, assertCurrent, connection };
+  }
+
+  #replaceAccessToken(accessToken: string): void {
+    if (this.#client.replaceAccessToken === undefined) {
+      throw new Error('The collaboration client cannot renew credentials in place.');
+    }
+    this.#client.replaceAccessToken(accessToken);
   }
 
   async #withInviteOperation<Value>(operation: () => Promise<Value>): Promise<Value> {
@@ -1368,10 +1681,13 @@ function joinFailure(
 }
 
 function ipcFailure<Value>(error: unknown, fallback: string): IpcResult<Value> {
+  const managementCode =
+    error instanceof CollaborationManagementHttpError ? error.serverCode : undefined;
   return {
     ok: false,
     error: {
-      code: error instanceof z.ZodError ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
+      code:
+        managementCode ?? (error instanceof z.ZodError ? 'INVALID_REQUEST' : 'OPERATION_FAILED'),
       message:
         error instanceof z.ZodError ? fallback : error instanceof Error ? error.message : fallback,
     },

@@ -65,6 +65,16 @@ import type {
   CollaborationJoinInput,
   CollaborationJoinInviteInput,
   CollaborationJoinResult,
+  CollaborationOwnerRecoverJoinInput,
+  CollaborationOwnerSessionView,
+  CollaborationRoomAuditListInput,
+  CollaborationRoomAuditPage,
+  CollaborationRoomBootstrapJoinInput,
+  CollaborationRoomMemberListInput,
+  CollaborationRoomMemberMutation,
+  CollaborationRoomMemberPage,
+  CollaborationRoomMemberRevokeInput,
+  CollaborationRoomMemberUpdateInput,
   CollaborationInviteCreateInput,
   CollaborationInviteIdInput,
   CollaborationInviteSafeView,
@@ -311,6 +321,23 @@ export interface ForgeboardApi {
     snapshot(): Promise<IpcResult<CollaborationMetadataSnapshot | null>>;
     join(input: CollaborationJoinInput): Promise<CollaborationJoinResult>;
     joinInvite(input: CollaborationJoinInviteInput): Promise<CollaborationJoinResult>;
+    bootstrapRoomAndJoin(
+      input: CollaborationRoomBootstrapJoinInput,
+    ): Promise<IpcResult<CollaborationOwnerSessionView | null>>;
+    recoverOwnerAndJoin(
+      input: CollaborationOwnerRecoverJoinInput,
+    ): Promise<IpcResult<CollaborationOwnerSessionView | null>>;
+    refreshOwnerSession(): Promise<IpcResult<CollaborationOwnerSessionView | null>>;
+    listRoomMembers(
+      input: CollaborationRoomMemberListInput,
+    ): Promise<IpcResult<CollaborationRoomMemberPage>>;
+    updateRoomMember(
+      input: CollaborationRoomMemberUpdateInput,
+    ): Promise<IpcResult<CollaborationRoomMemberMutation | null>>;
+    revokeRoomMember(input: CollaborationRoomMemberRevokeInput): Promise<IpcResult<boolean>>;
+    listRoomAudit(
+      input: CollaborationRoomAuditListInput,
+    ): Promise<IpcResult<CollaborationRoomAuditPage>>;
     listSessionInvites(): Promise<IpcResult<CollaborationInviteSafeView[]>>;
     createInvite(
       input: CollaborationInviteCreateInput,

@@ -4,12 +4,22 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
+  CollaborationManagementOwnerAccessReplaySchema,
+  CollaborationMemberMutationResponseSchema,
+  type CollaborationManagementOwnerAccessReplay,
+  type CollaborationMemberMutationResponse,
+} from '@forgeboard/core/collaboration-management';
+import { z } from 'zod';
+
+import {
+  AccessClaimsSchema,
   CollaborationRoleSchema,
   DisplayNameSchema,
   InviteRoleSchema,
   RoomIdSchema,
   SubjectIdSchema,
   type CollaborationRole,
+  type AccessClaims,
   type InviteRole,
 } from './types.js';
 
@@ -116,9 +126,40 @@ interface AuditRow {
 
 export class RoomAlreadyExistsError extends Error {}
 export class InviteNotRedeemableError extends Error {}
+export class IdempotencyConflictError extends Error {}
+
+export interface IdempotencyRecord {
+  key: string;
+  method: string;
+  resource: string;
+  requestHash: string;
+  status: number;
+  response: IdempotencyReplayResponse;
+  accessClaims?: AccessClaims;
+}
+
+export type IdempotencyReplayResponse =
+  | CollaborationManagementOwnerAccessReplay
+  | CollaborationMemberMutationResponse
+  | null;
+
+export interface ActiveMembershipPage {
+  members: Membership[];
+  hasMore: boolean;
+}
+
+const IdempotencyReplayResponseSchema = z.union([
+  CollaborationManagementOwnerAccessReplaySchema,
+  CollaborationMemberMutationResponseSchema,
+  z.null(),
+]);
+const IDEMPOTENCY_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
+const MAX_IDEMPOTENCY_RECORDS = 10_000;
+const SENSITIVE_REPLAY_KEYS = new Set(['accessToken', 'adminToken', 'inviteToken', 'token']);
 
 export class CollaborationStore {
   private readonly database: DatabaseSync;
+  private transactionDepth = 0;
 
   constructor(readonly databasePath: string) {
     if (databasePath !== ':memory:') {
@@ -199,6 +240,143 @@ export class CollaborationStore {
       )
       .get(RoomIdSchema.parse(roomId), SubjectIdSchema.parse(subject)) as MembershipRow | undefined;
     return row ? mapMembership(row) : undefined;
+  }
+
+  listActiveMemberships(
+    roomId: string,
+    afterSubject: string | undefined,
+    limit: number,
+  ): ActiveMembershipPage {
+    const parsedRoomId = RoomIdSchema.parse(roomId);
+    const parsedAfter = afterSubject === undefined ? '' : SubjectIdSchema.parse(afterSubject);
+    const boundedLimit = Math.min(Math.max(limit, 1), 100);
+    const rows = this.database
+      .prepare(
+        `SELECT room_id, subject, display_name, role, token_version, revoked_at
+         FROM memberships
+         WHERE room_id = ? AND subject > ? AND revoked_at IS NULL
+         ORDER BY subject ASC LIMIT ?`,
+      )
+      .all(parsedRoomId, parsedAfter, boundedLimit + 1) as unknown as MembershipRow[];
+    return {
+      members: rows.slice(0, boundedLimit).map(mapMembership),
+      hasMore: rows.length > boundedLimit,
+    };
+  }
+
+  rotateOwnerTokenVersion(roomId: string, ownerId: string): Membership | undefined {
+    const result = this.database
+      .prepare(
+        `UPDATE memberships SET token_version = token_version + 1
+         WHERE room_id = ? AND subject = ? AND role = 'owner' AND revoked_at IS NULL`,
+      )
+      .run(RoomIdSchema.parse(roomId), SubjectIdSchema.parse(ownerId));
+    return result.changes === 1 ? this.getMembership(roomId, ownerId) : undefined;
+  }
+
+  executeIdempotent(
+    input: Pick<IdempotencyRecord, 'key' | 'method' | 'resource' | 'requestHash'>,
+    operation: () => Omit<IdempotencyRecord, 'key' | 'method' | 'resource' | 'requestHash'>,
+  ): { replayed: boolean; record: IdempotencyRecord } {
+    return this.transaction(() => {
+      this.pruneIdempotencyRecords();
+      const existing = this.getIdempotencyRecord(input.key);
+      if (existing !== undefined) {
+        if (
+          existing.method !== input.method ||
+          existing.resource !== input.resource ||
+          existing.requestHash !== input.requestHash
+        ) {
+          throw new IdempotencyConflictError(
+            'The idempotency key was already used for a different operation.',
+          );
+        }
+        return { replayed: true, record: existing };
+      }
+      const result = operation();
+      assertNoSensitiveReplayKeys(result.response);
+      const response = IdempotencyReplayResponseSchema.parse(result.response);
+      const accessClaims =
+        result.accessClaims === undefined
+          ? undefined
+          : AccessClaimsSchema.parse(result.accessClaims);
+      assertReplayBinding(result.status, response, accessClaims);
+      const record: IdempotencyRecord = {
+        ...input,
+        ...result,
+        response,
+        ...(accessClaims === undefined ? {} : { accessClaims }),
+      };
+      this.database
+        .prepare(
+          `INSERT INTO idempotency_records(
+             idempotency_key, method, resource, request_hash, status, response_json,
+             access_claims_json, created_at
+           ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          record.key,
+          record.method,
+          record.resource,
+          record.requestHash,
+          record.status,
+          JSON.stringify(record.response),
+          record.accessClaims === undefined ? null : JSON.stringify(record.accessClaims),
+          new Date().toISOString(),
+        );
+      this.pruneIdempotencyRecords();
+      return { replayed: false, record };
+    });
+  }
+
+  private getIdempotencyRecord(key: string): IdempotencyRecord | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT idempotency_key, method, resource, request_hash, status, response_json,
+                access_claims_json
+         FROM idempotency_records WHERE idempotency_key = ?`,
+      )
+      .get(key) as
+      | {
+          idempotency_key: string;
+          method: string;
+          resource: string;
+          request_hash: string;
+          status: number;
+          response_json: string;
+          access_claims_json: string | null;
+        }
+      | undefined;
+    if (row === undefined) return undefined;
+    const response = parseReplayResponse(row.response_json);
+    const accessClaims =
+      row.access_claims_json === null
+        ? undefined
+        : AccessClaimsSchema.parse(JSON.parse(row.access_claims_json));
+    assertReplayBinding(row.status, response, accessClaims);
+    return {
+      key: row.idempotency_key,
+      method: row.method,
+      resource: row.resource,
+      requestHash: row.request_hash,
+      status: row.status,
+      response,
+      ...(accessClaims === undefined ? {} : { accessClaims }),
+    };
+  }
+
+  private pruneIdempotencyRecords(now = new Date()): void {
+    const cutoff = new Date(now.getTime() - IDEMPOTENCY_RETENTION_MS).toISOString();
+    this.database.prepare('DELETE FROM idempotency_records WHERE created_at < ?').run(cutoff);
+    this.database
+      .prepare(
+        `DELETE FROM idempotency_records WHERE idempotency_key IN (
+           SELECT idempotency_key FROM idempotency_records
+           ORDER BY rowid DESC
+           LIMIT -1 OFFSET ?
+         )`,
+      )
+      .run(MAX_IDEMPOTENCY_RECORDS);
   }
 
   createInvite(input: {
@@ -315,24 +493,37 @@ export class CollaborationStore {
     roomId: string,
     subject: string,
     role: Exclude<CollaborationRole, 'owner'>,
+    expectedTokenVersion: number,
   ): Membership | undefined {
     const result = this.database
       .prepare(
         `UPDATE memberships SET role = ?, token_version = token_version + 1
-         WHERE room_id = ? AND subject = ? AND role != 'owner' AND revoked_at IS NULL`,
+         WHERE room_id = ? AND subject = ? AND role != 'owner' AND revoked_at IS NULL
+           AND token_version = ?`,
       )
-      .run(role, RoomIdSchema.parse(roomId), SubjectIdSchema.parse(subject));
+      .run(role, RoomIdSchema.parse(roomId), SubjectIdSchema.parse(subject), expectedTokenVersion);
     return result.changes === 1 ? this.getMembership(roomId, subject) : undefined;
   }
 
-  revokeMembership(roomId: string, subject: string, now = new Date()): boolean {
+  revokeMembership(
+    roomId: string,
+    subject: string,
+    expectedTokenVersion: number,
+    now = new Date(),
+  ): boolean {
     const result = this.database
       .prepare(
         `UPDATE memberships
          SET revoked_at = ?, token_version = token_version + 1
-         WHERE room_id = ? AND subject = ? AND role != 'owner' AND revoked_at IS NULL`,
+         WHERE room_id = ? AND subject = ? AND role != 'owner' AND revoked_at IS NULL
+           AND token_version = ?`,
       )
-      .run(now.toISOString(), RoomIdSchema.parse(roomId), SubjectIdSchema.parse(subject));
+      .run(
+        now.toISOString(),
+        RoomIdSchema.parse(roomId),
+        SubjectIdSchema.parse(subject),
+        expectedTokenVersion,
+      );
     return result.changes === 1;
   }
 
@@ -406,7 +597,7 @@ export class CollaborationStore {
       .all(
         afterSequence,
         RoomIdSchema.parse(roomId),
-        Math.min(Math.max(limit, 1), 500),
+        Math.min(Math.max(limit, 1), 501),
       ) as unknown as AuditRow[];
     return rows.map(mapAudit);
   }
@@ -458,6 +649,16 @@ export class CollaborationStore {
         previous_hash TEXT NOT NULL,
         event_hash TEXT NOT NULL UNIQUE
       );
+      CREATE TABLE IF NOT EXISTS idempotency_records (
+        idempotency_key TEXT PRIMARY KEY,
+        method TEXT NOT NULL,
+        resource TEXT NOT NULL,
+        request_hash TEXT NOT NULL,
+        status INTEGER NOT NULL,
+        response_json TEXT NOT NULL,
+        access_claims_json TEXT,
+        created_at TEXT NOT NULL
+      );
       CREATE TRIGGER IF NOT EXISTS audit_events_no_update
       BEFORE UPDATE ON audit_events BEGIN
         SELECT RAISE(ABORT, 'audit events are append-only');
@@ -507,7 +708,9 @@ export class CollaborationStore {
   }
 
   private transaction<T>(operation: () => T): T {
+    if (this.transactionDepth > 0) return operation();
     this.database.exec('BEGIN IMMEDIATE;');
+    this.transactionDepth += 1;
     try {
       const result = operation();
       this.database.exec('COMMIT;');
@@ -515,6 +718,8 @@ export class CollaborationStore {
     } catch (error) {
       this.database.exec('ROLLBACK;');
       throw error;
+    } finally {
+      this.transactionDepth -= 1;
     }
   }
 }
@@ -566,4 +771,57 @@ function sanitizeAuditDetails(
     sanitized[key] = typeof value === 'string' ? value.slice(0, 300) : value;
   }
   return sanitized;
+}
+
+function parseReplayResponse(encoded: string): IdempotencyReplayResponse {
+  const parsed = JSON.parse(encoded) as unknown;
+  assertNoSensitiveReplayKeys(parsed);
+  return IdempotencyReplayResponseSchema.parse(parsed);
+}
+
+function assertNoSensitiveReplayKeys(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) assertNoSensitiveReplayKeys(item);
+    return;
+  }
+  if (value === null || typeof value !== 'object') return;
+  for (const [key, nested] of Object.entries(value)) {
+    if (SENSITIVE_REPLAY_KEYS.has(key)) {
+      throw new Error(`Sensitive credential key is forbidden in idempotency replay data: ${key}`);
+    }
+    assertNoSensitiveReplayKeys(nested);
+  }
+}
+
+function assertReplayBinding(
+  status: number,
+  response: IdempotencyReplayResponse,
+  accessClaims: AccessClaims | undefined,
+): void {
+  if (response === null) {
+    if (status !== 204 || accessClaims !== undefined) {
+      throw new Error('A bodyless idempotency replay must be a credential-free 204 response.');
+    }
+    return;
+  }
+  const ownerResponse = CollaborationManagementOwnerAccessReplaySchema.safeParse(response);
+  if (ownerResponse.success) {
+    if ((status !== 200 && status !== 201) || accessClaims === undefined) {
+      throw new Error('An owner access replay requires claims and a successful access status.');
+    }
+    const owner = ownerResponse.data;
+    if (
+      accessClaims.roomId !== owner.room.id ||
+      accessClaims.sub !== owner.membership.subject ||
+      accessClaims.role !== 'owner' ||
+      accessClaims.ver !== owner.membership.tokenVersion ||
+      new Date(accessClaims.exp * 1_000).toISOString() !== owner.expiresAt
+    ) {
+      throw new Error('Owner access replay claims do not match the token-free response metadata.');
+    }
+    return;
+  }
+  if (status !== 200 || accessClaims !== undefined) {
+    throw new Error('A member mutation replay must be a credential-free 200 response.');
+  }
 }

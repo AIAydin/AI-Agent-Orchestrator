@@ -96,6 +96,10 @@ export class CollaborationTokenService {
     return InviteClaimsSchema.parse(this.verify(token, now));
   }
 
+  reconstructAccessToken(rawClaims: AccessClaims): string {
+    return this.sign(AccessClaimsSchema.parse(rawClaims));
+  }
+
   fingerprint(value: string): string {
     return createHmac('sha256', this.key).update(value).digest('base64url').slice(0, 24);
   }

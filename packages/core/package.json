@@ -24,6 +24,10 @@
       "types": "./src/collaboration/delivery-codec.ts",
       "default": "./src/collaboration/delivery-codec.ts"
     },
+    "./collaboration-management": {
+      "types": "./src/collaboration/management/index.ts",
+      "default": "./src/collaboration/management/index.ts"
+    },
     "./workflow-runtime": {
       "types": "./src/workflow-runtime/index.ts",
       "default": "./src/workflow-runtime/index.ts"

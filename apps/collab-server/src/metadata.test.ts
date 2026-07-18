@@ -166,7 +166,23 @@ describe('collaboration metadata privacy allowlist', () => {
       selection: { nodeIds: ['node-1'] },
     });
     const valid = encodeAwarenessUpdate(awareness, [document.clientID]);
-    expect(() => validateAwarenessPayload(valid, context)).not.toThrow();
+    expect(validateAwarenessPayload(valid, context)).toBe(document.clientID);
+
+    awareness.setLocalState({});
+    const missingIdentity = encodeAwarenessUpdate(awareness, [document.clientID]);
+    expect(() => validateAwarenessPayload(missingIdentity, context)).toThrow(
+      'Invalid presence metadata.',
+    );
+
+    awareness.setLocalState(null);
+    const unboundRemoval = encodeAwarenessUpdate(awareness, [document.clientID]);
+    expect(() => validateAwarenessPayload(unboundRemoval, context)).toThrow(
+      'Presence identity is required before removal.',
+    );
+
+    expect(
+      validateAwarenessPayload(unboundRemoval, context, { boundClientId: document.clientID }),
+    ).toBe(document.clientID);
 
     awareness.setLocalState({
       user: { id: 'editor-1', displayName: 'Editor', color: '#6d5efc', role: 'editor' },
@@ -174,6 +190,40 @@ describe('collaboration metadata privacy allowlist', () => {
     });
     const invalid = encodeAwarenessUpdate(awareness, [document.clientID]);
     expect(() => validateAwarenessPayload(invalid, context)).toThrow('Invalid presence metadata.');
+    awareness.destroy();
+    document.destroy();
+  });
+
+  it('binds awareness client IDs while allowing only harmless server-state echoes', () => {
+    const context: CollaborationContext = {
+      roomId: 'room-1',
+      subject: 'editor-1',
+      role: 'editor',
+      accessTokenId: 'f5f1c46f-f4ee-483b-a165-f66c408b6573',
+      tokenVersion: 0,
+      accessTokenExpiresAt: 1_999_999_999,
+      ipHash: 'a'.repeat(24),
+    };
+    const document = new Y.Doc();
+    const awareness = new Awareness(document);
+    const state = {
+      user: { id: 'editor-1', displayName: 'Editor', color: '#6d5efc', role: 'editor' as const },
+    };
+    awareness.setLocalState(state);
+    const update = encodeAwarenessUpdate(awareness, [document.clientID]);
+    const clock = awareness.meta.get(document.clientID)?.clock;
+    if (clock === undefined) throw new Error('Missing awareness clock.');
+
+    expect(
+      validateAwarenessPayload(update, context, {
+        currentStates: new Map([[document.clientID, state]]),
+        currentClocks: new Map([[document.clientID, clock]]),
+      }),
+    ).toBeUndefined();
+    expect(() =>
+      validateAwarenessPayload(update, context, { boundClientId: document.clientID + 1 }),
+    ).toThrow('Presence updates cannot change another connection identity.');
+
     awareness.destroy();
     document.destroy();
   });

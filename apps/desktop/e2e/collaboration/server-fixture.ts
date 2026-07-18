@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -10,10 +11,36 @@ export interface CollaborationServerFixture {
   stop(): Promise<void>;
 }
 
+export interface EmptyCollaborationServerFixture {
+  readonly httpUrl: string;
+  readonly webSocketUrl: string;
+  readonly adminToken: string;
+  stop(): Promise<void>;
+}
+
 const SERVER_ENTRY = resolve(import.meta.dirname, '../../../collab-server/dist/index.js');
 const ADMIN_TOKEN = 'electron-e2e-admin-token-at-least-24-chars';
 
 export async function startCollaborationServer(): Promise<CollaborationServerFixture> {
+  const fixture = await startServer();
+  try {
+    const ownerAccessToken = await createOwnerRoom(fixture.httpUrl);
+    return { ...fixture, ownerAccessToken };
+  } catch (error) {
+    await fixture.stop();
+    throw error;
+  }
+}
+
+export async function startEmptyCollaborationServer(): Promise<EmptyCollaborationServerFixture> {
+  return { ...(await startServer()), adminToken: ADMIN_TOKEN };
+}
+
+async function startServer(): Promise<{
+  httpUrl: string;
+  webSocketUrl: string;
+  stop(): Promise<void>;
+}> {
   const root = await mkdtemp(join(tmpdir(), 'forgeboard-collaboration-e2e-'));
   const child = spawn(process.execPath, [SERVER_ENTRY], {
     env: {
@@ -32,11 +59,9 @@ export async function startCollaborationServer(): Promise<CollaborationServerFix
 
   try {
     const httpUrl = await listeningUrl(child);
-    const ownerAccessToken = await createOwnerRoom(httpUrl);
     return {
       httpUrl,
       webSocketUrl: httpUrl.replace(/^http:/u, 'ws:'),
-      ownerAccessToken,
       stop: async () => {
         await stopProcess(child);
         await rm(root, { recursive: true, force: true });
@@ -105,6 +130,7 @@ async function createOwnerRoom(httpUrl: string): Promise<string> {
     headers: {
       Authorization: `Bearer ${ADMIN_TOKEN}`,
       'Content-Type': 'application/json',
+      'Idempotency-Key': randomUUID(),
     },
     body: JSON.stringify({
       roomId: 'invite-e2e-room',

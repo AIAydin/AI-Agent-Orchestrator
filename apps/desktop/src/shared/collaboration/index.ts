@@ -8,6 +8,7 @@ export * from './comments/contracts.js';
 export * from './connection-contracts.js';
 export * from './invites/contracts.js';
 export * from './ipc-contracts.js';
+export * from './management/ipc-contracts.js';
 export * from './metadata-contracts.js';
 export * from './sync/comment-intent.js';
 export * from './sync/contracts.js';

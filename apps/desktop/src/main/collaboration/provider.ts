@@ -1,5 +1,6 @@
 import { HocuspocusProvider, WebSocketStatus } from '@hocuspocus/provider';
 import type * as Y from 'yjs';
+import { Awareness } from 'y-protocols/awareness';
 
 import type { CollaborationAwarenessState } from '../../shared/collaboration/index.js';
 
@@ -21,6 +22,7 @@ export interface CollaborationProviderFactoryInput extends CollaborationProvider
   readonly roomId: string;
   readonly accessToken: string;
   readonly reconnect: boolean;
+  readonly initialAwareness: CollaborationAwarenessState;
 }
 
 export interface CollaborationProviderHandle {
@@ -31,6 +33,7 @@ export interface CollaborationProviderHandle {
     readonly state: unknown;
   }>;
   sendStateless(payload: string): void;
+  replaceCredential(accessToken: string): void;
   clearCredential(): void;
   destroy(): void;
 }
@@ -40,11 +43,14 @@ export type CollaborationProviderFactory = (
 ) => CollaborationProviderHandle;
 
 export const createHocuspocusCollaborationProvider: CollaborationProviderFactory = (input) => {
+  const awareness = new Awareness(input.document);
+  awareness.setLocalState(input.initialAwareness);
   let provider: HocuspocusProvider | undefined;
   provider = new HocuspocusProvider({
     name: input.roomId,
     url: input.serverUrl,
     document: input.document,
+    awareness,
     token: input.accessToken,
     onAuthenticated: () => input.onAuthenticated(),
     onAuthenticationFailed: () => input.onAuthenticationFailed(),
@@ -83,6 +89,10 @@ export const createHocuspocusCollaborationProvider: CollaborationProviderFactory
             state,
           })),
     sendStateless: (payload) => provider?.sendStateless(payload),
+    replaceCredential: (accessToken) => {
+      if (provider === undefined) throw new Error('The collaboration provider is unavailable.');
+      provider.configuration.token = accessToken;
+    },
     clearCredential: () => {
       if (provider !== undefined) provider.configuration.token = null;
     },

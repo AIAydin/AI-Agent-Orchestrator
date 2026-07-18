@@ -86,6 +86,97 @@ describe('CollaborationInviteSessionAuthority', () => {
     ).toThrow('Only the connected room owner');
   });
 
+  it('establishes and renews exact owner access while preserving current invite records', () => {
+    const authority = new CollaborationInviteSessionAuthority(() => NOW);
+    const established = authority.establishOwnerAccess(
+      'wss://collab.example/ws',
+      'https://collab.example/control',
+      ownerAccessResponse(),
+    );
+    expect(established).toEqual(binding({ accessToken: 'initial-owner-access' }));
+    const lease = authority.ownerLease(
+      'wss://collab.example/ws',
+      'https://collab.example/control',
+      'room-1',
+    );
+    authority.recordCreatedInvite(lease, invite());
+
+    const renewedToken = ownerAccessToken({ exp: timestamp('2026-07-19T12:00:00.000Z') });
+    const renewed = authority.renewOwnerAccess(lease, {
+      ...ownerAccessResponse(),
+      accessToken: renewedToken,
+      expiresAt: '2026-07-19T12:00:00.000Z',
+    });
+
+    expect(renewed.accessToken).toBe(renewedToken);
+    expect(renewed.expiresAt).toBe('2026-07-19T12:00:00.000Z');
+    expect(authority.createdInviteCount).toBe(1);
+    expect(() => authority.assertCurrent(lease)).toThrow('session changed');
+    const current = authority.ownerLease(
+      'wss://collab.example/ws',
+      'https://collab.example/control',
+      'room-1',
+    );
+    expect(authority.createdInviteViews(current)).toHaveLength(1);
+  });
+
+  it('rejects mismatched owner renewal without changing the current credential', () => {
+    const authority = new CollaborationInviteSessionAuthority(() => NOW);
+    authority.establishOwnerAccess(
+      'wss://collab.example/ws',
+      'https://collab.example/control',
+      ownerAccessResponse(),
+    );
+    const lease = authority.ownerLease(
+      'wss://collab.example/ws',
+      'https://collab.example/control',
+      'room-1',
+    );
+    expect(() =>
+      authority.renewOwnerAccess(lease, {
+        ...ownerAccessResponse(),
+        room: { id: 'other-room' },
+        accessToken: 'must-not-replace-current',
+      }),
+    ).toThrow('does not match');
+    expect(authority.assertCurrent(lease).accessToken).toBe('initial-owner-access');
+  });
+
+  it('binds renewed credential claims, expiry, and token version to the response before renewal', () => {
+    const authority = new CollaborationInviteSessionAuthority(() => NOW);
+    authority.establishOwnerAccess(
+      'wss://collab.example/ws',
+      'https://collab.example/control',
+      ownerAccessResponse(),
+    );
+    const lease = authority.ownerLease(
+      'wss://collab.example/ws',
+      'https://collab.example/control',
+      'room-1',
+    );
+    const response = {
+      ...ownerAccessResponse(),
+      accessToken: ownerAccessToken(),
+    };
+    const mismatches = [
+      { ...response, accessToken: ownerAccessToken({ roomId: 'other-room' }) },
+      { ...response, accessToken: ownerAccessToken({ sub: 'other-owner' }) },
+      { ...response, accessToken: ownerAccessToken({ role: 'editor' }) },
+      { ...response, accessToken: ownerAccessToken({ ver: 1 }) },
+      {
+        ...response,
+        accessToken: ownerAccessToken({ exp: timestamp('2026-07-19T12:00:00.000Z') }),
+      },
+      { ...response, accessToken: 'not-a-jwt' },
+    ];
+
+    for (const mismatch of mismatches) {
+      expect(() => authority.assertOwnerAccessRenewal(lease, mismatch)).toThrow('does not match');
+      expect(authority.assertCurrent(lease).accessToken).toBe('initial-owner-access');
+    }
+    expect(() => authority.assertOwnerAccessRenewal(lease, response)).not.toThrow();
+  });
+
   it('rejects absent, expired, non-owner, and mismatched room authority without token disclosure', () => {
     const authority = new CollaborationInviteSessionAuthority(() => NOW);
     expect(() =>
@@ -171,3 +262,38 @@ describe('CollaborationInviteSessionAuthority', () => {
     expect(() => authority.recordCreatedInvite(lease, invite())).toThrow('session changed');
   });
 });
+
+function ownerAccessResponse() {
+  return {
+    room: { id: 'room-1' },
+    membership: {
+      subject: 'owner-1',
+      displayName: 'Owner',
+      role: 'owner' as const,
+      tokenVersion: 0,
+    },
+    accessToken: 'initial-owner-access',
+    expiresAt: '2026-07-18T12:00:00.000Z',
+  };
+}
+
+function ownerAccessToken(overrides: Record<string, unknown> = {}): string {
+  const payload = {
+    iss: 'forgeboard-collab',
+    aud: 'forgeboard-collab-client',
+    typ: 'access',
+    jti: '00000000-0000-4000-8000-000000000020',
+    roomId: 'room-1',
+    role: 'owner',
+    sub: 'owner-1',
+    ver: 0,
+    iat: timestamp('2026-07-17T12:00:00.000Z'),
+    exp: timestamp('2026-07-18T12:00:00.000Z'),
+    ...overrides,
+  };
+  return `${Buffer.from('{}').toString('base64url')}.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.TEST_SIGNATURE`;
+}
+
+function timestamp(value: string): number {
+  return Math.floor(new Date(value).getTime() / 1_000);
+}

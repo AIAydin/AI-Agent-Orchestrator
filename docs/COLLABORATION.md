@@ -13,11 +13,10 @@ curl http://127.0.0.1:1234/healthz
 In development, a missing signing key creates an ephemeral key and prints a warning. Existing access and invite tokens consequently stop working when that process restarts. The server binds to `127.0.0.1`, permits room bootstrap only from loopback, and persists metadata in `./data/forgeboard-collab.sqlite`. Production mode refuses to start without explicit signing and administrator secrets.
 
 The desktop client configures and controls ordinary room and invite sessions without source,
-environment, or manifest edits. Invite redemption and current-session owner invite creation, copy,
-and revocation are available in the UI. Room creation, membership changes, room audit access, and
-deployment administration still use the authenticated management API described below; deployment
-environment variables are only for operators of this optional service. Those broader room and
-administration UI items remain open in the implementation ledger.
+environment, or manifest edits. Its UI supports room creation, owner recovery and renewal,
+paginated membership and audit access, version-safe role changes and revocation, invite redemption,
+and current-session owner invite creation, copy, and revocation. Deployment environment variables
+remain only for operators of this optional service; ordinary desktop users do not edit them.
 
 ## Desktop connection and recovery
 
@@ -41,14 +40,22 @@ confirmation identifies the exact network destination before the first connectio
 explicit management URL also binds owner invite management to that exact connected session.
 
 The connected role is visible in Settings. Only a connected owner whose session is bound to the
-explicit management URL sees invite-management controls. The owner chooses editor, reviewer, or
-viewer access, a bounded lifetime, and a maximum-use count. Create and revoke each require a fresh
-cancel-default native review. The UI lists only token-free metadata for invites created during the
-current owner session: role, expiration, and maximum uses. **Copy** requires a separate native review
-and writes the link from protected main-process memory directly to the system clipboard; the raw link
-does not cross back through preload or render in the page. Leaving, resetting privacy data, quitting,
-or changing the owning session clears the volatile invite list and credentials. This UI does not
-claim to list every durable invite already present on the server.
+explicit management URL sees room and invite administration. A disconnected user can create a room
+or recover its owner from the same Settings form; the optional administrator credential clears
+immediately and is never saved. Recovery warns that it rotates the owner version and invalidates
+prior credentials for subsequent requests, messages, and reconnects. Connected owners can renew their expiring
+credential, page through active members and the hash-chained audit trail, and explicitly apply or
+revoke a non-owner membership. Each network read or effect has a fresh cancel-default native review,
+and stale member versions force a refresh instead of replaying an outdated action.
+
+For invites, the owner chooses editor, reviewer, or viewer access, a bounded lifetime, and a
+maximum-use count. Create and revoke each require a fresh cancel-default native review. The UI lists
+only token-free metadata for invites created during the current owner session: role, expiration,
+and maximum uses. **Copy** requires a separate native review and writes the link from protected
+main-process memory directly to the system clipboard; the raw link does not cross back through
+preload or render in the page. Leaving, resetting privacy data, quitting, or changing the owning
+session clears all volatile room-management authority, invite records, and credentials. This UI
+does not claim to list every durable invite already present on the server.
 
 Authenticated roles are enforced in both the desktop and server. Owners and editors can publish
 graph metadata. Reviewers can add their own node comments through a separate main-owned operation
@@ -108,6 +115,9 @@ Invite tokens are HMAC-SHA256 signed, time-limited, room- and role-scoped, usage
 Relevant management endpoints are:
 
 - `POST /v1/rooms` — create a room and its owner; requires the server administrator token in production
+- `POST /v1/rooms/:roomId/owner-tokens/refresh` — renew a valid owner session without invalidating its other current tokens
+- `POST /v1/rooms/:roomId/owner-tokens/recover` — administrator-authorized recovery that rotates the owner token version and invalidates every prior owner token
+- `GET /v1/rooms/:roomId/members` — owner reads active, versioned memberships with bounded cursor pagination
 - `POST /v1/rooms/:roomId/invites` — owner creates an editor, reviewer, or viewer invite
 - `POST /v1/invites/redeem` — redeem a live invite for an expiring access token
 - `DELETE /v1/rooms/:roomId/invites/:inviteId` — owner revokes an invite
@@ -116,6 +126,20 @@ Relevant management endpoints are:
 - `GET /v1/rooms/:roomId/audit` — owner reads the room's paginated audit trail
 
 All request bodies are strict JSON schemas with a bounded size. API and WebSocket rates are limited per pseudonymous client-IP hash; WebSocket messages and persisted Yjs documents have independent size ceilings. CORS and WebSocket origin checks use exact origin matches—wildcards are refused.
+
+Room creation, owner-token refresh/recovery, and membership mutations require a UUID
+`Idempotency-Key`. Member deletion additionally requires `If-Match: "<tokenVersion>"`; member role
+changes carry the same expected version in their strict JSON body. Exact retries replay without a
+second mutation or audit event, while reuse for different input and stale membership versions return
+conflicts. Replay records retain token-free response metadata and signed access claims—not raw
+credentials—and are pruned after seven days and to at most 10,000 rows. An expired replay result
+requires a new idempotency key.
+
+Production always requires the server administrator token for room creation and owner recovery. If
+no administrator token is configured in development or test mode, those two operations are allowed
+only from the same machine's loopback interface. Ordinary owner refresh still requires a currently
+valid owner access token; recovery increments the owner membership version specifically so a lost or
+compromised token stops authorizing HTTP and WebSocket operations.
 
 ## Configuration
 

@@ -247,11 +247,10 @@ export class CollaborationInviteOperations {
           reconnect: input.reconnect,
         });
         const joined = await join(joinInput);
+        if (!joined.ok) return joined;
         authority.assertCurrent();
-        if (joined.ok) {
-          this.#session.establishRedeemed(input.serverUrl, input.managementBaseUrl, redeemed);
-          this.#pendingRedemptions.delete(redemptionKey);
-        }
+        this.#session.establishRedeemed(input.serverUrl, input.managementBaseUrl, redeemed);
+        this.#pendingRedemptions.delete(redemptionKey);
         return joined;
       },
     });

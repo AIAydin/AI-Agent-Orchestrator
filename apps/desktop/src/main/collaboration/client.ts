@@ -291,6 +291,7 @@ export class CollaborationClient {
         roomId: input.roomId,
         accessToken: input.accessToken,
         reconnect: input.reconnect,
+        initialAwareness: this.#localAwarenessState(),
         onAuthenticated: () => this.#handleAuthenticated(generation),
         onAuthenticationFailed: () =>
           this.#fail(
@@ -319,6 +320,29 @@ export class CollaborationClient {
       );
     }
     return await result;
+  }
+
+  /** Updates the volatile credential used by future reconnects without discarding shared state. */
+  public replaceAccessToken(rawAccessToken: string): void {
+    this.#assertAvailable();
+    const connection = this.#connection;
+    if (connection === null || connection.role !== 'owner' || this.#provider === null) {
+      throw new Error('A connected owner session is required to renew its credential.');
+    }
+    let claims: z.infer<typeof UnverifiedAccessClaimsSchema>;
+    try {
+      claims = decodeUnverifiedAccessClaims(rawAccessToken);
+    } catch {
+      throw new Error('The renewed collaboration credential is invalid.');
+    }
+    if (
+      claims.roomId !== connection.roomId ||
+      claims.sub !== connection.subject ||
+      claims.role !== 'owner'
+    ) {
+      throw new Error('The renewed collaboration credential does not match the owner session.');
+    }
+    this.#provider.replaceCredential(rawAccessToken);
   }
 
   public leave(): CollaborationConnection | null {
@@ -921,7 +945,15 @@ export class CollaborationClient {
     if (!this.#sharingReady() || this.#provider === null || this.#identity === null) {
       return false;
     }
-    const state = CollaborationAwarenessStateSchema.parse({
+    this.#provider.setLocalAwareness(this.#localAwarenessState());
+    return true;
+  }
+
+  #localAwarenessState(): z.infer<typeof CollaborationAwarenessStateSchema> {
+    if (this.#identity === null) {
+      throw new Error('A collaboration identity is required to create awareness metadata.');
+    }
+    return CollaborationAwarenessStateSchema.parse({
       user: {
         id: this.#identity.subject,
         displayName: this.#identity.displayName,
@@ -930,8 +962,6 @@ export class CollaborationClient {
       },
       ...this.#latestAwareness,
     });
-    this.#provider.setLocalAwareness(state);
-    return true;
   }
 
   #fail(generation: number, error: CollaborationConnectionError): void {
