@@ -33,6 +33,7 @@ test('a moved project is detected, reviewed, and relinked entirely in the UI', a
     await selectNextFolder(electronApp, originalPath);
     await page.getByRole('button', { name: /Open a project folder/i }).click();
     await expect(page.locator('.project-switcher')).toContainText('project-before-move');
+    await expect(page.locator('.canvas-title')).toContainText('0 nodes');
     await page.keyboard.press(`${shortcutModifier}+K`);
     const palette = page.getByRole('dialog', { name: 'Command palette' });
     await expect(palette).toBeVisible();
