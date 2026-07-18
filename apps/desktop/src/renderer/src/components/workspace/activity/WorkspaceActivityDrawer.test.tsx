@@ -93,11 +93,11 @@ describe('WorkspaceActivityDrawer', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: 'Changes' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Review primary checkout' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review project changes' }));
     expect(onOpenGitReview).toHaveBeenLastCalledWith();
 
     const worktreeActions = screen.getAllByRole('button', {
-      name: 'Review this agent worktree',
+      name: 'Review this agent’s changes',
     });
     expect(worktreeActions).toHaveLength(1);
     fireEvent.click(worktreeActions[0] as HTMLButtonElement);

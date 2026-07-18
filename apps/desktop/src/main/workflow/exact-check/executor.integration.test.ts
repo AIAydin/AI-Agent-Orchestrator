@@ -236,7 +236,7 @@ describe('ExactCheckExecutor', () => {
         planId: disclosure.planId,
         fingerprint: disclosure.fingerprint,
       }),
-    ).rejects.toThrow('changed. Review a new disclosure');
+    ).rejects.toThrow('changed. Review what will run');
     expect(fixture.store.listCheckExecutions(PROJECT_ID)).toEqual([]);
   });
 
@@ -257,7 +257,7 @@ describe('ExactCheckExecutor', () => {
         planId: disclosure.planId,
         fingerprint: disclosure.fingerprint,
       }),
-    ).rejects.toThrow('changed. Review a new disclosure');
+    ).rejects.toThrow('changed. Review what will run');
     await expect(access(marker)).rejects.toThrow();
     expect(fixture.store.listCheckExecutions(PROJECT_ID)).toEqual([]);
   });
@@ -309,7 +309,7 @@ describe('ExactCheckExecutor', () => {
         planId: disclosure.planId,
         fingerprint: disclosure.fingerprint,
       }),
-    ).rejects.toThrow('changed. Review a new disclosure');
+    ).rejects.toThrow('changed. Review what will run');
     expect(fixture.store.listCheckExecutions(PROJECT_ID)).toEqual([]);
     const serializedDisclosure = JSON.stringify(disclosure);
     const serializedAudit = JSON.stringify(fixture.store.listAuditEvents(20));

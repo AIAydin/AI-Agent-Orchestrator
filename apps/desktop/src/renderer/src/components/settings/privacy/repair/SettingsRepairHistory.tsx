@@ -23,7 +23,9 @@ export function SettingsRepairHistory({ onError, onNotice }: SettingsRepairHisto
     try {
       setRepairs(unwrap(await window.forgeboard.settings.listRepairs()));
     } catch (error) {
-      onError(error instanceof Error ? error.message : 'Settings repair history could not load.');
+      onError(
+        error instanceof Error ? error.message : 'The settings repair history could not load.',
+      );
     }
   }, [onError]);
 
@@ -34,14 +36,14 @@ export function SettingsRepairHistory({ onError, onNotice }: SettingsRepairHisto
   if (repairs.length === 0) return null;
   return (
     <SettingsSection
-      title="Settings recovery evidence"
-      description="Forgeboard repaired legacy values that no longer met local safety rules. Originals stay on this device, are excluded from ordinary exports, and are removed by complete data deletion."
+      title="Repaired settings"
+      description="Forgeboard replaced old settings that no longer meet its safety rules. The originals stay on this computer, are left out of normal exports, and are removed when you delete all local data."
     >
       <div className="settings-repair-warning">
         <ShieldAlert size={18} aria-hidden="true" />
         <span>
-          Review the affected fields below. Reconfigure anything you still need with the normal
-          Settings controls—source-code changes are not required.
+          Check the repaired settings below. If you still need any of them, set them again here in
+          Settings — no code changes needed.
         </span>
       </div>
       <div className="settings-repair-list">
@@ -62,7 +64,7 @@ export function SettingsRepairHistory({ onError, onNotice }: SettingsRepairHisto
                   .then((result) => setSelected(unwrap(result)))
                   .catch((error: unknown) =>
                     onError(
-                      error instanceof Error ? error.message : 'Recovery evidence could not load.',
+                      error instanceof Error ? error.message : 'The repair details could not load.',
                     ),
                   )
                   .finally(() => setBusy(false));
@@ -80,13 +82,13 @@ export function SettingsRepairHistory({ onError, onNotice }: SettingsRepairHisto
                   .exportRepair(repair.id)
                   .then((result) => {
                     const path = unwrap(result);
-                    if (path !== null) onNotice(`Recovery evidence exported to ${path}`);
+                    if (path !== null) onNotice(`Original settings exported to ${path}`);
                   })
                   .catch((error: unknown) =>
                     onError(
                       error instanceof Error
                         ? error.message
-                        : 'Recovery evidence could not be exported.',
+                        : 'The original settings could not be exported.',
                     ),
                   )
                   .finally(() => setBusy(false));
@@ -98,12 +100,15 @@ export function SettingsRepairHistory({ onError, onNotice }: SettingsRepairHisto
         ))}
       </div>
       {selected !== null && (
-        <div className="settings-repair-evidence" aria-label="Settings repair evidence">
+        <div className="settings-repair-evidence" aria-label="Settings repair details">
           <EvidenceBlock
-            title="Preserved settings before repair"
+            title="Original settings, before repair"
             value={selected.sourceSettingsJson}
           />
-          <EvidenceBlock title="Settings after safe repair" value={selected.repairedSettingsJson} />
+          <EvidenceBlock
+            title="Repaired settings, after repair"
+            value={selected.repairedSettingsJson}
+          />
         </div>
       )}
     </SettingsSection>

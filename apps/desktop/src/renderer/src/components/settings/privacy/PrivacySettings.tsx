@@ -61,7 +61,9 @@ export function PrivacySettings({
       setBackupHealthError(null);
     } catch (error) {
       setBackupHealthError(
-        error instanceof Error ? error.message : 'Backup health could not be loaded.',
+        error instanceof Error
+          ? error.message
+          : 'The backup status could not be loaded. Try Refresh status.',
       );
     }
   }, []);
@@ -80,21 +82,21 @@ export function PrivacySettings({
     <>
       <SettingsRepairHistory onError={onError} onNotice={setNotice} />
       <SettingsSection
-        title="Providers & outbound integrations"
-        description="Forgeboard has no model proxy or telemetry. Installed CLIs connect only when you approve their exact local launch."
+        title="Connections to other tools"
+        description="Forgeboard has no telemetry or model proxy, and solo mode makes no outbound connections by default. Provider, collaboration, Git, and update actions connect only after you configure or approve them."
       >
         <div className="privacy-integrations">
           <div>
-            <strong>Forgeboard telemetry</strong>
+            <strong>Usage tracking</strong>
             <span className="status-chip ok">None</span>
           </div>
           <div>
             <span>
               <strong>GitHub CLI</strong>
               <small>
-                Optional local gh authentication. Repository, pull-request, and CI actions run only
-                after explicit review; Forgeboard stores no token. Git pushes use the selected Git
-                remote and its existing credential helper or SSH configuration.
+                Optional GitHub sign-in on this computer. Repository, pull request, and build
+                actions run only after you review them, and Forgeboard never stores your token.
+                Pushing code uses your existing Git credentials or SSH setup.
               </small>
             </span>
             <span className="status-chip">On demand</span>
@@ -114,28 +116,28 @@ export function PrivacySettings({
                   <strong>{agent.label}</strong>
                   <small>{agent.providerDisclosure}</small>
                 </span>
-                <span className="status-chip">Local CLI</span>
+                <span className="status-chip">Runs locally</span>
               </div>
             ))}
         </div>
       </SettingsSection>
       <SettingsSection
         title="Local storage"
-        description="Forgeboard has no telemetry, analytics, or proprietary model proxy."
+        description="Everything Forgeboard saves stays on this computer — no tracking and no hidden cloud service."
       >
+        <InfoPath icon={<HardDrive size={16} />} label="App data" value={info.dataDirectory} />
         <InfoPath
-          icon={<HardDrive size={16} />}
-          label="Application data"
-          value={info.dataDirectory}
+          icon={<Database size={16} />}
+          label="Database (SQLite)"
+          value={info.databasePath}
         />
-        <InfoPath icon={<Database size={16} />} label="SQLite database" value={info.databasePath} />
         <InfoPath
           icon={<Bot size={16} />}
-          label="Local transcripts"
+          label="Saved transcripts"
           value={info.transcriptDirectory}
         />
         <label>
-          Transcript retention (days)
+          Days to keep transcripts
           <input
             type="number"
             name="transcript-retention-days"
@@ -152,7 +154,7 @@ export function PrivacySettings({
         </label>
         <div className="two-column">
           <label>
-            Audit retention (days)
+            Days to keep activity history
             <input
               type="number"
               name="audit-retention-days"
@@ -168,7 +170,7 @@ export function PrivacySettings({
             />
           </label>
           <label>
-            Snapshot retention
+            Snapshots to keep
             <input
               type="number"
               name="snapshot-retention-count"
@@ -184,7 +186,7 @@ export function PrivacySettings({
             />
           </label>
           <label>
-            Autosave interval (ms)
+            Autosave every (milliseconds)
             <input
               type="number"
               name="autosave-interval-ms"
@@ -205,7 +207,8 @@ export function PrivacySettings({
           <span>
             <strong>Local backups</strong>
             <small>
-              Create verified SQLite backups and clean older records per selected folder.
+              Save verified copies of the database to a folder you choose, and remove older copies
+              automatically.
             </small>
           </span>
           <input
@@ -219,7 +222,7 @@ export function PrivacySettings({
           <>
             <div className="two-column">
               <label>
-                Automatic backup interval (hours)
+                Back up automatically every (hours)
                 <input
                   type="number"
                   name="backup-interval-hours"
@@ -252,15 +255,17 @@ export function PrivacySettings({
                   }
                 />
                 <small id="backup-retention-help">
-                  Applies per backup folder. Cleanup failures appear in Backup health and can
-                  temporarily leave extra files.
+                  Applies to each backup folder. If cleanup fails, you'll see it under Backup
+                  activity, and a few extra files may remain for a while.
                 </small>
               </label>
             </div>
             <label className="switch-row">
               <span>
                 <strong>Back up unsaved changes when quitting</strong>
-                <small>Creates one final verified backup when local data changed.</small>
+                <small>
+                  When you quit, Forgeboard makes one final verified backup if anything changed.
+                </small>
               </span>
               <input
                 type="checkbox"
@@ -270,7 +275,7 @@ export function PrivacySettings({
               />
             </label>
             <div className="settings-form-field">
-              <label htmlFor="backup-directory">Backup directory</label>
+              <label htmlFor="backup-directory">Backup folder</label>
               <span className="path-picker">
                 <input
                   id="backup-directory"
@@ -297,8 +302,8 @@ export function PrivacySettings({
               </span>
               {info.platform === 'win32' && (
                 <small className="recovery-guidance warning">
-                  Windows backup files inherit this folder&apos;s access controls. Choose a folder
-                  available only to your Windows account.
+                  Backup files on Windows use this folder's permissions. Pick a folder only you can
+                  open.
                 </small>
               )}
               <FolderReadinessEvidence status={backupReadiness} />
@@ -307,11 +312,15 @@ export function PrivacySettings({
               type="button"
               className="button"
               disabled={busy || backupSettingsDirty}
-              title={backupSettingsDirty ? 'Save backup settings before creating one.' : undefined}
+              title={
+                backupSettingsDirty
+                  ? 'Save your backup settings before creating a backup.'
+                  : undefined
+              }
               onClick={() =>
                 void perform(async () => {
                   const backup = unwrap(await window.forgeboard.storage.createBackup());
-                  setNotice(`Backup created at ${backup.path} · ${backup.sha256.slice(0, 12)}…`);
+                  setNotice(`Backup created at ${backup.path}.`);
                   await refreshBackupHealth();
                 })
               }
@@ -329,7 +338,7 @@ export function PrivacySettings({
             {backupHealthError ? (
               <small>{backupHealthError}</small>
             ) : backupHealth === null ? (
-              <small>Loading persisted backup status…</small>
+              <small>Loading backup status…</small>
             ) : (
               <BackupHealthSummary health={backupHealth} />
             )}
@@ -356,8 +365,8 @@ export function PrivacySettings({
         setNotice={setNotice}
       />
       <SettingsSection
-        title="Portability"
-        description="Portable JSON covers settings—including the no-code Custom permission profile—projects, canvases, runs, checks, snapshots, and audit history. Repository and extension files stay in their folders."
+        title="Export and import"
+        description="One file covers your settings, projects, canvases, runs, checks, snapshots, and activity history. Files in your project folders and extension folders stay where they are."
       >
         <div className="button-row">
           <button
@@ -400,13 +409,13 @@ export function PrivacySettings({
               })
             }
           >
-            <Download size={15} /> Export portable local data
+            <Download size={15} /> Export all local data
           </button>
         </div>
       </SettingsSection>
       <SettingsSection
         title="Delete local data"
-        description="This stops active runs, checks, and previews, then clears settings, recent projects, canvases, snapshots, run and check history, audit records, installed extensions, and every recorded SQLite backup in current or previously selected backup folders. If a recorded file is unavailable, a native warning lets you cancel or explicitly forget it; a forgotten copy may still exist outside Forgeboard. Repositories and managed worktrees are repository files, so they are not deleted."
+        description="This stops running agents, checks, and previews, then deletes your settings, recent projects, canvases, snapshots, run and check history, activity records, installed extensions, and every backup Forgeboard has recorded — including ones in folders you no longer use. If a backup file is missing, a warning lets you cancel or skip it; a skipped copy may still exist outside Forgeboard. Your project folders and agent worktrees are files on disk, so they are not deleted."
       >
         <div className="danger-zone">
           <label>
@@ -446,12 +455,12 @@ function BackupHealthSummary({ health }: { health: BackupHealth }) {
   return (
     <small>
       {health.lastAttemptOutcome === null
-        ? 'No backup attempt recorded yet.'
-        : `Last attempt ${health.lastAttemptOutcome === 'verified' ? 'verified' : 'failed'} ${formatDate(health.lastAttemptAt)}.`}{' '}
+        ? 'No backups have been made yet.'
+        : `Last backup ${health.lastAttemptOutcome === 'verified' ? 'succeeded' : 'failed'} ${formatDate(health.lastAttemptAt)}.`}{' '}
       {health.lastError ? `${health.lastError} ` : ''}
       {health.lastVerifiedAt === null
-        ? 'No verified backup is recorded.'
-        : `Last backup verified when created ${formatDate(health.lastVerifiedAt)} · ${formatBytes(health.lastVerifiedSizeBytes ?? 0)} · SHA-256 ${health.lastVerifiedSha256Prefix}… · ${health.verifiedBackupCount} recorded. This is creation history; files are not continuously monitored.`}
+        ? 'No verified backup on record.'
+        : `Last verified backup created ${formatDate(health.lastVerifiedAt)} · ${formatBytes(health.lastVerifiedSizeBytes ?? 0)} · checksum ${health.lastVerifiedSha256Prefix}… · ${health.verifiedBackupCount} on record. This is a history of created backups; Forgeboard does not keep watching these files.`}
     </small>
   );
 }

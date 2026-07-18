@@ -381,7 +381,7 @@ export class GitHubCliRuntimeService {
       assertCurrent();
       if (decision !== 'approved') return null;
       if (selection.expiresAtMs <= this.#validNow().getTime()) {
-        throw new Error('The GitHub CLI selection expired. Choose the executable again.');
+        throw new Error('The GitHub CLI review expired. Choose the program again.');
       }
       this.#assertSelectionCurrent(selection);
       return await withMutationAdmission(async () => {
@@ -440,7 +440,9 @@ export class GitHubCliRuntimeService {
     assertCurrent();
     const currentCaptured = current.captured;
     if (!optionalExecutablesMatch(selection.captured, currentCaptured)) {
-      throw new Error('Automatic GitHub CLI discovery changed. Review automatic mode again.');
+      throw new Error(
+        'The automatically found GitHub CLI changed. Review the automatic option again.',
+      );
     }
     if (currentCaptured === null) {
       this.#assertSelectionCurrent(selection);
@@ -511,12 +513,10 @@ export class GitHubCliRuntimeService {
     const runner = this.#createRunner('gh');
     if (!path.isAbsolute(runner.executable)) {
       if (runner.executableResolution === 'missing') return { runner, captured: null };
-      throw new Error(
-        'Automatic GitHub CLI discovery could not prove that the executable is absent.',
-      );
+      throw new Error('Forgeboard could not confirm whether the GitHub CLI is installed.');
     }
     if (runner.executableResolution !== undefined && runner.executableResolution !== 'resolved') {
-      throw new Error('Automatic GitHub CLI discovery returned unverifiable executable evidence.');
+      throw new Error('Forgeboard could not verify the GitHub CLI program it found automatically.');
     }
     const captured = await captureGitHubCliExecutable(runner.executable);
     assertRunnerExecutable(runner, captured.executablePath);
@@ -531,7 +531,7 @@ export class GitHubCliRuntimeService {
     const beforeSpawn: GitHubCliBeforeSpawn = async (executable) => {
       assertCurrent();
       if (!pathsEqual(executable, captured.executablePath)) {
-        throw new Error('GitHub CLI launch target does not match the reviewed executable.');
+        throw new Error('The GitHub CLI about to run does not match the reviewed program.');
       }
       await assertGitHubCliExecutableCurrent(captured);
       assertCurrent();
@@ -553,7 +553,7 @@ export class GitHubCliRuntimeService {
         assertCurrent();
         assertRunnerExecutable(delegate, captured.executablePath);
         if (!pathsEqual(result.executable, captured.executablePath)) {
-          throw new Error('GitHub CLI returned evidence for a different executable.');
+          throw new Error('The GitHub CLI returned a response for a different program.');
         }
         return result;
       },
@@ -623,7 +623,7 @@ export class GitHubCliRuntimeService {
       !pathsEqual(current.executable, captured.executablePath)
     ) {
       throw new Error(
-        'Automatic GitHub CLI discovery changed during command validation. Check GitHub again.',
+        'The automatically found GitHub CLI changed during the version check. Check GitHub again.',
       );
     }
   }
@@ -671,7 +671,7 @@ export class GitHubCliRuntimeService {
     const selection = this.#pending.get(planId);
     if (selection === undefined || selection.ownerId !== ownerId) {
       throw new Error(
-        'The GitHub CLI selection is missing, expired, already used, or belongs to another owner.',
+        'The GitHub CLI review is missing, expired, already used, or belongs to another window.',
       );
     }
     this.#pending.delete(planId);
@@ -683,7 +683,7 @@ export class GitHubCliRuntimeService {
       selection.expectedSelectionRevision !== this.#selectionRevision ||
       selection.expectedConfigurationFingerprint !== this.#configurationFingerprint()
     ) {
-      throw new Error('GitHub CLI configuration changed. Review the selection again.');
+      throw new Error('The GitHub CLI setup changed. Review the selection again.');
     }
   }
 
@@ -870,11 +870,11 @@ async function validateVersion(
 
 function validatedVersion(result: GitHubCommandResult): string {
   if (result.exitCode !== 0) {
-    throw new Error('The selected executable did not complete the GitHub CLI version check.');
+    throw new Error('The selected program did not finish the GitHub CLI version check.');
   }
   const version = parseGitHubCliVersion(result.stdout);
   if (version === null) {
-    throw new Error('The selected executable did not return a valid GitHub CLI version.');
+    throw new Error('The selected program did not return a valid GitHub CLI version.');
   }
   return version;
 }
@@ -885,7 +885,7 @@ function isVersionCommand(args: readonly string[]): boolean {
 
 function automaticValidationRequired(): Error {
   return new Error(
-    'The automatically discovered GitHub CLI is not version-validated. Check GitHub or review automatic discovery in Settings before using authentication or API commands.',
+    'Forgeboard found the GitHub CLI automatically but has not verified it yet. Use Check GitHub, or review the automatic setup in Settings, before signing in or running GitHub commands.',
   );
 }
 
@@ -910,7 +910,7 @@ function optionalExecutablesMatch(
 
 function assertRunnerExecutable(runner: GitHubCommandRunner, expected: string): void {
   if (!pathsEqual(runner.executable, expected)) {
-    throw new Error('GitHub CLI runner does not match the selected executable.');
+    throw new Error('The GitHub CLI runner does not match the selected program.');
   }
 }
 

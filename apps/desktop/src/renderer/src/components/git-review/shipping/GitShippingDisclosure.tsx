@@ -43,7 +43,9 @@ export function GitShippingDisclosure({
   }, []);
 
   const strategy =
-    plan.strategy === 'fast-forward-only' ? 'Fast-forward-only merge' : 'Ordered cherry-pick';
+    plan.strategy === 'fast-forward-only'
+      ? 'Move the primary branch forward'
+      : 'Copy the reviewed changes one by one';
   const qualityApproval = plan.readiness.approvals.find(
     (approval) => approval.approvalId === plan.readinessApprovalId,
   );
@@ -61,10 +63,10 @@ export function GitShippingDisclosure({
         <header>
           <ShieldAlert size={20} aria-hidden="true" />
           <span>
-            <h3 id="git-shipping-review-title">Review exact primary delivery</h3>
+            <h3 id="git-shipping-review-title">Review delivery to the primary branch</h3>
             <p id="git-shipping-review-description">
-              No primary history has changed. Continuing opens a cancel-default native system
-              confirmation bound to this plan.
+              Nothing has changed yet. If you continue, your computer will ask you to confirm this
+              exact delivery — you can still cancel there.
             </p>
           </span>
         </header>
@@ -96,7 +98,7 @@ export function GitShippingDisclosure({
               </dd>
             </div>
             <div className="wide">
-              <dt>Git identity supplied to delivery</dt>
+              <dt>Git author for this delivery</dt>
               <dd>
                 {displayEscapedText(plan.identity.name)} &lt;
                 {displayEscapedText(plan.identity.email)}&gt; · name from{' '}
@@ -117,23 +119,24 @@ export function GitShippingDisclosure({
               <code key={path}>{displayEscapedText(path)}</code>
             ))}
           </div>
-          <h4>Content-bound delivery readiness</h4>
+          <h4>Required checks for this exact delivery</h4>
           <div className="git-disclosure-paths">
             {plan.readiness.requiredChecks.map((check) => (
               <span key={check.checkId}>
                 {displayEscapedText(check.label)} · passed{' '}
                 {check.endedAt === null
-                  ? 'without a reported finish time'
+                  ? 'with no recorded finish time'
                   : formatTime(check.endedAt)}
               </span>
             ))}
           </div>
           <small>
             {qualityApproval === undefined
-              ? 'Exact human quality approval is unavailable.'
-              : `${displayEscapedText(qualityApproval.actorLabel)} approved this exact check evidence ${formatTime(qualityApproval.approvedAt)}.`}{' '}
-            Evidence <code>{plan.readiness.evidenceFingerprint.slice(0, 12)}</code> is revalidated
-            before the system confirmation and again before Git changes primary.
+              ? 'No one has approved these exact check results yet.'
+              : `${displayEscapedText(qualityApproval.actorLabel)} approved these exact check results ${formatTime(qualityApproval.approvedAt)}.`}{' '}
+            Forgeboard re-checks this evidence (
+            <code>{plan.readiness.evidenceFingerprint.slice(0, 12)}</code>) before you confirm and
+            again before it updates the primary branch.
           </small>
           <small>
             Plan expires at{' '}
@@ -151,7 +154,7 @@ export function GitShippingDisclosure({
             Go back
           </button>
           <button className="button primary" type="button" disabled={busy} onClick={onConfirm}>
-            <GitMerge size={14} aria-hidden="true" /> Continue to system confirmation
+            <GitMerge size={14} aria-hidden="true" /> Continue to final confirmation
           </button>
         </footer>
       </section>
@@ -165,7 +168,7 @@ function formatTime(value: string): string {
 }
 
 function identitySource(source: GitShippingPlanView['identity']['nameSource']): string {
-  if (source === 'settings') return 'Forgeboard Settings';
-  if (source === 'git-config') return 'primary checkout Git configuration';
-  return 'unavailable source';
+  if (source === 'settings') return 'Forgeboard settings';
+  if (source === 'git-config') return "the primary checkout's Git settings";
+  return 'an unknown source';
 }

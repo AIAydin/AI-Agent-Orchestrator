@@ -23,7 +23,7 @@ describe('CommandPalette accessibility', () => {
       />,
     );
 
-    const query = screen.getByRole('combobox', { name: 'Search commands' });
+    const query = screen.getByRole('combobox', { name: 'Search actions' });
     const options = screen.getAllByRole('option');
     expect(query.getAttribute('name')).toBe('command-palette-query');
     expect(query.getAttribute('aria-controls')).toBe('command-palette-results');

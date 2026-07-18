@@ -71,7 +71,8 @@ export function RecoverySettings({
         if (current) setSnapshots(unwrap(result));
       })
       .catch((cause: unknown) => {
-        if (current) onError(errorMessage(cause, 'Canvas recovery history could not be loaded.'));
+        if (current)
+          onError(errorMessage(cause, 'The recovery history for this canvas could not be loaded.'));
       })
       .finally(() => {
         if (current) setSnapshotsLoading(false);
@@ -88,15 +89,18 @@ export function RecoverySettings({
     <>
       <SettingsSection
         title="Canvas recovery"
-        description="Browse durable canvas checkpoints, create one now, or restore an exact verified snapshot."
+        description="Look back at saved snapshots of a canvas, take a new one, or restore an exact earlier state."
       >
         {availableProjects.length === 0 ? (
-          <p className="settings-empty-state">Open a project once to create recovery history.</p>
+          <p className="settings-empty-state">
+            Snapshots let you go back to an earlier version of a canvas. Open a project once to
+            start saving them.
+          </p>
         ) : (
           <>
             <div className="recovery-toolbar">
               <label>
-                Recovery project
+                Project
                 <select
                   name="recovery-project"
                   value={projectId}
@@ -127,14 +131,12 @@ export function RecoverySettings({
                 onClick={() =>
                   void perform(async () => {
                     if (!(await onFlushActiveCanvas())) {
-                      throw new Error(
-                        'Save the active canvas before creating a recovery snapshot.',
-                      );
+                      throw new Error('Save the open canvas before creating a snapshot.');
                     }
                     const snapshot = unwrap(
                       await window.forgeboard.recovery.createSnapshot({ projectId }),
                     );
-                    setNotice(`Recovery snapshot created for ${snapshot.canvasName}.`);
+                    setNotice(`Snapshot created for ${snapshot.canvasName}.`);
                     setSnapshotRefresh((value) => value + 1);
                   })
                 }
@@ -145,15 +147,15 @@ export function RecoverySettings({
 
             {projectOpen && (
               <p className="recovery-guidance">
-                Close the open project before restoring a snapshot so its live autosave cannot
-                overwrite recovered content. You can still create snapshots while it is open.
+                Close the open project before restoring a snapshot, so autosave can't overwrite the
+                restored content. You can still create snapshots while it's open.
               </p>
             )}
 
             {snapshotsLoading ? (
               <p className="settings-empty-state">Loading recovery history…</p>
             ) : snapshots.length === 0 ? (
-              <p className="settings-empty-state">No recovery snapshots for this project yet.</p>
+              <p className="settings-empty-state">No snapshots saved for this project yet.</p>
             ) : (
               <div className="recovery-snapshot-list" aria-label="Canvas recovery snapshots">
                 {snapshots.map((snapshot) => (
@@ -193,12 +195,12 @@ export function RecoverySettings({
         )}
 
         {restorePlan && (
-          <section className="recovery-disclosure" aria-label="Snapshot restore disclosure">
-            <h4>Restore this exact snapshot?</h4>
+          <section className="recovery-disclosure" aria-label="Confirm snapshot restore">
+            <h4>Restore this snapshot?</h4>
             <p>
               {restorePlan.snapshot.nodeCount} nodes and {restorePlan.snapshot.edgeCount}{' '}
-              connections from {formatDate(restorePlan.snapshot.createdAt)}. The current canvas will
-              first become another recovery checkpoint if its content differs.
+              connections from {formatDate(restorePlan.snapshot.createdAt)}. If your current canvas
+              differs, Forgeboard saves it as another snapshot first.
             </p>
             <dl>
               <div>
@@ -228,15 +230,15 @@ export function RecoverySettings({
                       }),
                     );
                     if (restored === null) {
-                      setNotice('Snapshot restore cancelled. No canvas data changed.');
+                      setNotice('Restore cancelled. Your canvas was not changed.');
                       return;
                     }
-                    setNotice(`Restored ${restored.name} from the verified snapshot.`);
+                    setNotice(`Restored ${restored.name} from the snapshot.`);
                     await onRecoveryApplied();
                   })
                 }
               >
-                Continue to native approval
+                Continue to confirmation
               </button>
             </div>
           </section>
@@ -244,22 +246,21 @@ export function RecoverySettings({
       </SettingsSection>
 
       <SettingsSection
-        title="Portable data import"
-        description="Import a validated Forgeboard JSON export through a reviewed, native-confirmed transaction."
+        title="Import local data"
+        description="Bring in a Forgeboard export file. You'll review exactly what it contains and confirm before anything changes."
       >
         <p className="recovery-guidance">
-          Repository files and extension source folders are never embedded in portable exports. Keep
-          those folders separately.
+          Export files never include your project files or extension folders, so keep copies of
+          those separately.
         </p>
         {projectOpen && (
           <p className="recovery-guidance warning">
-            Close the open project before importing so active processes and autosave can stop
-            cleanly.
+            Close the open project before importing, so running agents and autosave can stop safely.
           </p>
         )}
         <div className="recovery-toolbar">
           <label>
-            Import behavior
+            How to import
             <select
               name="data-import-mode"
               value={importMode}
@@ -268,8 +269,8 @@ export function RecoverySettings({
                 setImportPlan(null);
               }}
             >
-              <option value="merge">Merge without replacing conflicts</option>
-              <option value="replace">Replace all portable local data</option>
+              <option value="merge">Add to current data without replacing anything</option>
+              <option value="replace">Replace all current data</option>
             </select>
           </label>
           <button
@@ -283,39 +284,39 @@ export function RecoverySettings({
                   await window.forgeboard.recovery.chooseImport({ mode: importMode }),
                 );
                 setImportPlan(plan);
-                if (plan === null) setNotice('Data import cancelled. No local data changed.');
+                if (plan === null) setNotice('Import cancelled. Nothing changed.');
               })
             }
           >
-            <FileInput size={14} /> Choose data export
+            <FileInput size={14} /> Choose export file
           </button>
         </div>
 
         {importPlan && (
-          <section className="recovery-disclosure" aria-label="Local data import disclosure">
+          <section className="recovery-disclosure" aria-label="Confirm local data import">
             <h4>
-              {importPlan.mode === 'replace' ? 'Replace local data' : 'Merge local data'} from{' '}
-              {importPlan.fileName}?
+              {importPlan.mode === 'replace' ? 'Replace all current data' : 'Add to current data'}{' '}
+              with {importPlan.fileName}?
             </h4>
             <p>
               {importPlan.mode === 'replace'
-                ? 'Active runs, checks, and previews will stop. Current portable project, canvas, run, check, snapshot, settings, and audit data will be replaced; backup and trusted-extension records stay local.'
-                : 'Current data and settings stay in place. Settings in the file are ignored, and any conflicting identity or active run, check, or preview cancels the entire import without a partial write.'}
+                ? 'Running agents, checks, and previews will stop. Your current projects, canvases, runs, checks, snapshots, settings, and activity history will be replaced. Backups and trusted extensions are kept.'
+                : 'Your current data and settings stay in place, and settings in the file are ignored. If anything conflicts, or an agent, check, or preview is running, the whole import is cancelled — nothing is half-imported.'}
             </p>
             <ul className="recovery-counts">
               <li>{importPlan.counts.projects} projects</li>
               <li>{importPlan.counts.canvases} canvases</li>
               <li>{importPlan.counts.runs} agent runs</li>
-              <li>{importPlan.counts.checkExecutions} check executions</li>
+              <li>{importPlan.counts.checkExecutions} check runs</li>
               <li>{importPlan.counts.snapshots} snapshots</li>
-              <li>{importPlan.counts.auditEvents} audit events</li>
+              <li>{importPlan.counts.auditEvents} activity records</li>
             </ul>
             <p>
-              {formatBytes(importPlan.sizeBytes)} · SHA-256 {importPlan.sha256.slice(0, 16)}… ·
+              {formatBytes(importPlan.sizeBytes)} · checksum {importPlan.sha256.slice(0, 16)}… ·
               settings{' '}
               {importPlan.includesSettings
                 ? importPlan.mode === 'merge'
-                  ? 'included but kept local'
+                  ? 'included but yours stay unchanged'
                   : 'included'
                 : 'not included'}
             </p>
@@ -337,7 +338,7 @@ export function RecoverySettings({
                       }),
                     );
                     if (imported === null) {
-                      setNotice('Data import cancelled. No local data changed.');
+                      setNotice('Import cancelled. Nothing changed.');
                       return;
                     }
                     setNotice(
@@ -347,7 +348,7 @@ export function RecoverySettings({
                   })
                 }
               >
-                Continue to native approval
+                Continue to confirmation
               </button>
             </div>
           </section>

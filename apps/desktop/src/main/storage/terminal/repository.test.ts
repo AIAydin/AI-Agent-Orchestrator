@@ -108,7 +108,7 @@ function session(overrides: Partial<TerminalSessionView> = {}): TerminalSessionV
     columns: 100,
     rows: 30,
     permission: {
-      label: 'Local terminal (not sandboxed)',
+      label: 'Local terminal with full access',
       sandboxed: false,
       filesystem: 'operating-system-user',
       network: 'operating-system-user',

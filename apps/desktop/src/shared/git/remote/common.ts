@@ -29,7 +29,7 @@ export const GitRemoteNameSchema = z
   .string()
   .min(1)
   .max(128)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, 'Invalid Git remote name.');
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, 'Use letters, numbers, dots, underscores, or hyphens.');
 
 /** Safe display identity for existing Git remotes, including names this UI will not mutate. */
 export const GitRemoteDisplayNameSchema = z

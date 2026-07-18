@@ -95,7 +95,9 @@ describe('useProjectChecks', () => {
       }),
     );
     await waitFor(() =>
-      expect(hook.result.current.events[0]).toBe('Cancelled the check approval before launch.'),
+      expect(hook.result.current.events[0]).toBe(
+        'Cancelled the check approval before anything ran.',
+      ),
     );
   });
 

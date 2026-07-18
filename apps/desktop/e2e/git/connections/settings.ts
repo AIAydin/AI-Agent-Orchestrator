@@ -23,10 +23,10 @@ export async function configureNetworkRemoteThroughUi(input: {
 }): Promise<NativeDialogRecord> {
   const settings = await openGitConnectionsSettings(input.page);
   await settings.getByLabel('Remote name').fill(input.name);
-  await settings.getByLabel('Network remote URL').fill(input.url);
-  await settings.getByRole('button', { name: 'Add network remote' }).click();
+  await settings.getByLabel('Remote URL').fill(input.url);
+  await settings.getByRole('button', { name: 'Add remote' }).click();
   const plan = input.page.getByRole('alertdialog', { name: 'Review remote addition' });
-  await expect(plan).toContainText('Network access: none');
+  await expect(plan).toContainText('No internet access needed');
   const record = await continuePlanWithNativeResponse({
     app: input.app,
     plan,
@@ -47,20 +47,20 @@ export async function configureCustomGitHubCliThroughUi(input: {
 }): Promise<NativeDialogRecord> {
   const settings = await openGitConnectionsSettings(input.page);
   await selectNextNativePath(input.app, input.executablePath);
-  await settings.getByRole('button', { name: 'Browse for GitHub CLI' }).click();
-  const plan = input.page.getByRole('alertdialog', { name: 'GitHub CLI configuration' });
+  await settings.getByRole('button', { name: 'Choose GitHub CLI file' }).click();
+  const plan = input.page.getByRole('alertdialog', { name: 'GitHub CLI setup' });
   await expect(plan).toContainText(input.executableFileName);
   await expect(plan).not.toContainText(input.executablePath);
   const record = await continuePlanWithNativeResponse({
     app: input.app,
     plan,
     response: 1,
-    title: 'Change GitHub CLI configuration?',
+    title: 'Change GitHub CLI setup?',
     buttons: ['Cancel', 'Use selected GitHub CLI'],
   });
   expect(nativeDialogText(record)).toContain(input.executablePath);
   expect(nativeDialogText(record)).toContain(`${input.executablePath} --version`);
-  await expect(settings.getByText('GitHub CLI version validated')).toBeVisible();
+  await expect(settings.getByText('GitHub CLI ready')).toBeVisible();
   await settings.getByRole('button', { name: 'Close settings' }).click();
   return record;
 }

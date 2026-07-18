@@ -12,19 +12,19 @@ export const CollaborationServerUrlSchema = z
     if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Collaboration server URLs must use ws or wss.',
+        message: 'Collaboration server URLs must start with ws:// or wss://.',
       });
     }
     if (url.username !== '' || url.password !== '') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Collaboration server URLs cannot contain credentials.',
+        message: 'Remove the username and password from the collaboration server URL.',
       });
     }
     if (url.search !== '' || url.hash !== '') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Collaboration server URLs cannot contain query parameters or fragments.',
+        message: 'Remove everything after any ? or # in the collaboration server URL.',
       });
     }
   });
@@ -91,7 +91,7 @@ export const CollaborationSubjectSchema = z
   .min(1)
   .max(120)
   .regex(/^[A-Za-z0-9][A-Za-z0-9:@._-]*$/u, {
-    message: 'Invalid collaborator identifier.',
+    message: 'Use a valid collaborator ID, such as a username or email address.',
   });
 export type CollaborationSubject = z.infer<typeof CollaborationSubjectSchema>;
 

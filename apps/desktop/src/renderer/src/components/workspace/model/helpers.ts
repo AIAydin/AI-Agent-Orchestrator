@@ -13,12 +13,12 @@ import type { EdgeKind } from './types.js';
 
 export function edgeExplanation(kind: EdgeKind): string {
   return {
-    context: 'Offers the source as explicit context. It is not attached until launch review.',
-    execute: 'Allows source completion to queue the destination after its approval rules pass.',
-    output: 'Publishes a branch, diff, preview, check result, or artifact to the destination.',
-    review: 'Routes source output to a reviewer and records structured findings.',
-    revision: 'Returns actionable failed-review feedback through a bounded retry loop.',
-    dependency: 'Blocks the destination task until the upstream task succeeds.',
+    context: 'Shares the source as context. It is only attached after launch review.',
+    execute: 'Starts the destination after the source finishes and approvals are given.',
+    output: 'Sends a result (branch, diff, preview, check result, or file) to the destination.',
+    review: 'Sends the source output to a reviewer and records their feedback.',
+    revision: 'Returns failed-review feedback for another try, up to a set number of attempts.',
+    dependency: 'Waits to start the destination until the earlier task succeeds.',
   }[kind];
 }
 

@@ -23,23 +23,19 @@ export function RejectedCommentActions({ entry, onDiscard }: RejectedCommentActi
           setPendingEntry(entry);
         }}
       >
-        Discard local copy
+        Delete saved copy
       </button>
     );
   }
 
   return (
-    <div
-      className="rejected-comment-discard-confirmation"
-      role="group"
-      aria-label="Confirm discard"
-    >
+    <div className="rejected-comment-discard-confirmation" role="group" aria-label="Confirm delete">
       <span>
-        Discard this exact local copy? This cannot be undone. Leave and rejoin the room before
+        Delete this saved copy? This cannot be undone. Leave and rejoin the shared canvas before
         sharing more changes.
       </span>
       <button type="button" disabled={busy} onClick={() => setPendingEntry(null)}>
-        Keep retained copy
+        Keep saved copy
       </button>
       <button
         type="button"
@@ -56,9 +52,11 @@ export function RejectedCommentActions({ entry, onDiscard }: RejectedCommentActi
             .finally(() => setBusy(false));
         }}
       >
-        {busy ? 'Discarding…' : 'Confirm discard local copy'}
+        {busy ? 'Deleting…' : 'Delete this copy'}
       </button>
-      {failed && <small role="alert">The retained copy changed or could not be discarded.</small>}
+      {failed && (
+        <small role="alert">The saved copy changed or could not be deleted. Try again.</small>
+      )}
     </div>
   );
 }

@@ -58,7 +58,7 @@ export function useSettingsFolderReadiness(
               ? ({
                   phase: 'unavailable',
                   message:
-                    'Folder validation is unavailable. Reopen Forgeboard before saving this path.',
+                    'Folder checks are unavailable right now. Reopen Forgeboard before saving this path.',
                 } satisfies FolderReadinessStatus)
               : ({ phase: 'checking' } satisfies FolderReadinessStatus),
         ]),
@@ -86,7 +86,7 @@ export function useSettingsFolderReadiness(
                 [draft.id]: {
                   phase: 'unavailable',
                   message:
-                    'Forgeboard discarded stale folder evidence. Validate the current path again.',
+                    'That check was for an older path, so Forgeboard ignored it. Check the current path again.',
                 },
               }));
               return;
@@ -105,7 +105,7 @@ export function useSettingsFolderReadiness(
                 message:
                   error instanceof Error && error.message.trim() !== ''
                     ? error.message
-                    : 'Forgeboard could not validate this folder.',
+                    : 'Forgeboard could not check this folder.',
               },
             }));
           },
@@ -150,10 +150,10 @@ export function useSettingsFolderReadiness(
       if (status?.phase === 'ready') continue;
       if (status?.phase === 'checking' || status === undefined) {
         checking = true;
-        blockingIssues.push(`${draft.label} is still being checked without creating it.`);
+        blockingIssues.push(`${draft.label} is still being checked.`);
       } else if (status.phase === 'blocked') {
         blockingIssues.push(
-          `${draft.label}: ${status.result.reason ?? 'The folder is not ready.'}`,
+          `${draft.label}: ${status.result.reason ?? "This folder isn't ready."}`,
         );
       } else {
         blockingIssues.push(`${draft.label}: ${status.message}`);
@@ -174,7 +174,7 @@ function folderDrafts(settings: AppSettings): NamedFolderDraft[] {
       ? [
           {
             id: 'backup-destination' as const,
-            label: 'Backup destination',
+            label: 'Backup folder',
             candidate: {
               purpose: 'backup-destination',
               path: settings.backupDirectory,

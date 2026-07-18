@@ -257,7 +257,10 @@ export function useGitPrNodeController({
       })
       .catch((cause: unknown) => {
         if (!active || historyRequestRef.current !== request) return;
-        const message = errorMessage(cause, 'Could not load persisted agent run history.');
+        const message = errorMessage(
+          cause,
+          'Could not load the list of past agent runs. Try again.',
+        );
         setHistory({ loaded: true, records: [], error: message });
         onErrorRef.current(message);
       });
@@ -311,7 +314,7 @@ export function useGitPrNodeController({
 
   const inspect = useCallback(() => {
     if (target === null) {
-      const message = 'Choose a valid persisted terminal agent run before inspecting Git state.';
+      const message = 'Choose a finished agent run before checking its changes.';
       setInspectionError(message);
       return;
     }
@@ -359,11 +362,13 @@ export function useGitPrNodeController({
 
   const preparePush = useCallback(() => {
     if (target === null) {
-      setActionError('Choose a valid persisted terminal agent run before preparing a push.');
+      setActionError('Choose a finished agent run before preparing a push.');
       return;
     }
     if (currentInspection?.ready !== true) {
-      setActionError('Inspect current Git state and complete readiness before preparing a push.');
+      setActionError(
+        "Check the run's changes and finish the required checks and approval before preparing a push.",
+      );
       return;
     }
     const key = deliveryKey;
@@ -412,11 +417,11 @@ export function useGitPrNodeController({
 
   const checkGitHub = useCallback(() => {
     if (target === null) {
-      setGitHubError('Choose a valid persisted terminal agent run before checking GitHub.');
+      setGitHubError('Choose a finished agent run before checking GitHub.');
       return;
     }
     if (currentInspection === null) {
-      setGitHubError('Inspect current Git state before contacting GitHub.');
+      setGitHubError("Check the run's changes before contacting GitHub.");
       return;
     }
     const key = deliveryKey;
@@ -442,7 +447,7 @@ export function useGitPrNodeController({
         const result = unwrap(await operations.confirmGitHubStatus({ planId: plan.planId }));
         if (deliveryKeyRef.current !== key) return;
         if (result === null) {
-          setNotice('GitHub status check cancelled before any request was sent.');
+          setNotice('The GitHub check was cancelled. Nothing was sent.');
           return;
         }
         setGitHubState({ key, value: mapGitHubStatus(result) });
@@ -462,14 +467,12 @@ export function useGitPrNodeController({
 
   const preparePullRequest = useCallback(() => {
     if (target === null) {
-      setActionError(
-        'Choose a valid persisted terminal agent run before preparing a pull request.',
-      );
+      setActionError('Choose a finished agent run before preparing a pull request.');
       return;
     }
     if (currentInspection?.ready !== true) {
       setActionError(
-        'Inspect current Git state and complete readiness before preparing a pull request.',
+        "Check the run's changes and finish the required checks and approval before preparing a pull request.",
       );
       return;
     }
@@ -483,7 +486,7 @@ export function useGitPrNodeController({
       currentGitHub.headMatchesSource !== true ||
       !githubStatusIsFresh(currentGitHub.checkedAt)
     ) {
-      setActionError('Check this exact GitHub destination again before preparing a pull request.');
+      setActionError('Check GitHub again right before preparing a pull request.');
       return;
     }
     const key = pullRequestKey;
@@ -542,11 +545,11 @@ export function useGitPrNodeController({
 
   const checkCi = useCallback(() => {
     if (target === null) {
-      setCiError('Choose a valid persisted terminal agent run before checking CI.');
+      setCiError('Choose a finished agent run before checking CI results.');
       return;
     }
     if (currentInspection === null) {
-      setCiError('Inspect current Git state before contacting GitHub for CI.');
+      setCiError("Check the run's changes before asking GitHub for CI results.");
       return;
     }
     const currentGitHub =
@@ -559,7 +562,7 @@ export function useGitPrNodeController({
       currentGitHub.headMatchesSource !== true ||
       !githubStatusIsFresh(currentGitHub.checkedAt)
     ) {
-      setCiError('Check this exact GitHub destination again before reading CI.');
+      setCiError('Check GitHub again right before reading CI results.');
       return;
     }
     const key = deliveryKey;
@@ -582,7 +585,7 @@ export function useGitPrNodeController({
         const result = unwrap(await operations.confirmCi({ planId: plan.planId }));
         if (deliveryKeyRef.current !== key) return;
         if (result === null) {
-          setNotice('CI status check cancelled before any request was sent.');
+          setNotice('The CI check was cancelled. Nothing was sent.');
           return;
         }
         setCiState({ key, value: mapCiStatus(result) });
@@ -610,16 +613,16 @@ export function useGitPrNodeController({
     const planId = takePendingPlanId(pendingState?.value.planId);
     setPendingState(null);
     if (planId === null) {
-      setNotice('The prepared remote action is already unavailable. Nothing remote changed.');
+      setNotice('This prepared action is no longer available. Nothing changed online.');
       return;
     }
-    setNotice('Releasing the prepared remote action…');
+    setNotice('Cancelling the prepared action…');
     void releasePreparedPlan(planId).then(
-      () => setNotice('Cancelled the prepared remote action. Nothing remote changed.'),
+      () => setNotice('Cancelled. Nothing changed online.'),
       (cause: unknown) => {
         const message = errorMessage(
           cause,
-          'The action was removed from this view, but its local approval could not be released.',
+          "The action was closed here, but Forgeboard couldn't release its saved approval. Nothing was sent.",
         );
         setNotice(null);
         setActionError(message);
@@ -630,7 +633,9 @@ export function useGitPrNodeController({
 
   const confirmPlan = useCallback(() => {
     if (visiblePending === null) {
-      setActionError('The prepared remote plan is stale. Prepare it again from current settings.');
+      setActionError(
+        'This prepared action is out of date. Prepare it again with the current settings.',
+      );
       const planId = takePendingPlanId();
       if (planId !== null) releasePreparedPlanSilently(planId);
       setPendingState(null);
@@ -642,7 +647,7 @@ export function useGitPrNodeController({
         ? pullRequestKeyRef.current === key
         : deliveryKeyRef.current === key;
     if (takePendingPlanId(visiblePending.planId) === null) {
-      setActionError('The prepared remote plan is already being released. Prepare it again.');
+      setActionError('This prepared action is already being cancelled. Prepare it again.');
       setPendingState(null);
       return;
     }
@@ -657,13 +662,13 @@ export function useGitPrNodeController({
           const result = unwrap(await operations.confirmPush({ planId: visiblePending.planId }));
           if (!isCurrent()) return;
           if (result === null) {
-            setNotice('Push cancelled in the system confirmation. No remote branch changed.');
+            setNotice('Push cancelled at the final confirmation. Nothing changed online.');
             return;
           }
           setGitHubState(null);
           setCiState(null);
           setNotice(
-            `Pushed exact ${result.sourceOid} to ${result.remote}/${result.destinationBranch}.`,
+            `Pushed commit ${result.sourceOid} to ${result.remote}/${result.destinationBranch}.`,
           );
         },
         isCurrent,
@@ -679,12 +684,12 @@ export function useGitPrNodeController({
         );
         if (!isCurrent()) return;
         if (result === null) {
-          setNotice('Pull request cancelled in the system confirmation. Nothing was created.');
+          setNotice('Pull request cancelled at the final confirmation. Nothing was created.');
           return;
         }
         onPullRequestCreatedRef.current(result.url);
         setNotice(
-          `Created the pull request after revalidating reviewed source ${result.sourceOid}. The remote branch can still move concurrently or later.`,
+          `Pull request created after Forgeboard rechecked the reviewed commit ${result.sourceOid}. The remote branch can still change afterwards.`,
         );
       },
       isCurrent,
@@ -938,26 +943,27 @@ function inspectionReadiness(
 ): string[] {
   const reasons: string[] = [];
   if (!GitRemoteNameSchema.safeParse(configuration.remote).success) {
-    reasons.push('Enter a valid Git remote name.');
+    reasons.push('Enter a valid remote name.');
   } else if (remote === undefined) {
-    reasons.push(`Remote ${configuration.remote} does not exist in this agent worktree.`);
+    reasons.push(`No remote named ${configuration.remote} exists in this run's project copy.`);
   }
   if (!GitRemoteBranchSchema.safeParse(configuration.destinationBranch).success) {
     reasons.push('Enter a valid destination branch.');
   }
   if (!GitRemoteBranchSchema.safeParse(configuration.baseBranch).success) {
-    reasons.push('Enter a valid pull-request base branch.');
+    reasons.push('Enter a valid branch for the pull request to merge into.');
   }
-  if (view.dirty) reasons.push('Commit or discard every agent-worktree change before delivery.');
-  if (view.commitCount === 0)
-    reasons.push('No committed changes exist between run base and source.');
+  if (view.dirty) reasons.push("Commit or undo all of the run's changes before publishing.");
+  if (view.commitCount === 0) reasons.push('There are no committed changes to publish.');
   if (view.commitsTruncated || view.filesTruncated) {
-    reasons.push('The bounded inspection is truncated; an exact actionable plan cannot be shown.');
+    reasons.push(
+      "This run has too many changes to verify fully, so a publish plan can't be shown.",
+    );
   }
   if (view.readiness.staleReason !== null) reasons.push(view.readiness.staleReason);
   const readiness = view.readiness.readiness;
   if (readiness === null) {
-    reasons.push('Delivery checks and human quality approval have not been prepared.');
+    reasons.push("The required checks and a person's approval haven't been completed yet.");
   } else {
     reasons.push(...readiness.evaluation.blockers.map(readinessBlockerLabel));
   }
@@ -968,10 +974,12 @@ function readinessBlockerLabel(blocker: {
   readonly code: string;
   readonly label?: string | undefined;
 }): string {
-  if (blocker.code === 'human-approval-missing') return 'Human quality approval is missing.';
-  if (blocker.code === 'human-approval-stale') return 'Human quality approval is stale.';
+  if (blocker.code === 'human-approval-missing')
+    return 'A person still needs to approve these changes.';
+  if (blocker.code === 'human-approval-stale')
+    return 'The approval is out of date. Ask for approval again.';
   const state = blocker.code.replace('required-check-', '');
-  return `${blocker.label ?? 'Required check'} is ${state}.`;
+  return `${blocker.label ?? 'A required check'} is ${state}.`;
 }
 
 function remoteDisclosure(remote: GitRemoteDescriptorView | undefined, name: string): string {
@@ -983,19 +991,19 @@ function remoteDisclosure(remote: GitRemoteDescriptorView | undefined, name: str
 function operationFallback(operation: GitPrOperation): string {
   switch (operation) {
     case 'inspect':
-      return 'Could not inspect the exact agent-worktree Git state.';
+      return "Could not check the run's changes. Try again.";
     case 'prepare-push':
-      return 'Could not prepare the exact push plan.';
+      return 'Could not prepare the push. Try again.';
     case 'confirm-push':
-      return 'The exact push did not complete.';
+      return 'The push did not complete. Try again.';
     case 'github-status':
-      return 'The GitHub authentication and repository check failed.';
+      return 'The GitHub sign-in and repository check failed. Try again.';
     case 'prepare-pull-request':
-      return 'Could not prepare the exact pull request plan.';
+      return 'Could not prepare the pull request. Try again.';
     case 'confirm-pull-request':
-      return 'The pull request was not created.';
+      return 'The pull request was not created. Try again.';
     case 'ci-status':
-      return 'The exact-head CI check failed.';
+      return 'The CI check failed. Try again.';
   }
 }
 

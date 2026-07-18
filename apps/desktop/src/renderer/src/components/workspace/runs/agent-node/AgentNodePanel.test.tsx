@@ -68,7 +68,7 @@ describe('AgentNodePanel configuration and usage', () => {
     const onUpdateSelected = vi.fn();
     renderPanel(agentNode(), { onRecord, onUpdateSelected });
 
-    const adapter = screen.getByRole('combobox', { name: 'Installed adapter' });
+    const adapter = screen.getByRole('combobox', { name: 'Agent to run' });
     fireEvent.focus(adapter);
     fireEvent.change(adapter, { target: { value: 'test-agent' } });
 

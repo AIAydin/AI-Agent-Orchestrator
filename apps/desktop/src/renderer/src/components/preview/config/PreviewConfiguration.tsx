@@ -78,7 +78,7 @@ export function PreviewConfiguration({
 
       <div className="preview-command-summary">
         <TerminalSquare size={13} />
-        {displayedCommand ? <code>{displayedCommand}</code> : <span>No launch command set.</span>}
+        {displayedCommand ? <code>{displayedCommand}</code> : <span>No start command set.</span>}
         <button
           type="button"
           disabled={readOnly}
@@ -90,9 +90,9 @@ export function PreviewConfiguration({
       </div>
 
       <label className="preview-script-picker">
-        Command source
+        Run the preview with
         <select
-          aria-label="Preview command source"
+          aria-label="Run the preview with"
           name={`node-${nodeId}-preview-command-source`}
           value={commandMode}
           disabled={readOnly || runtimeBusy}
@@ -101,9 +101,9 @@ export function PreviewConfiguration({
             else if (scripts[0]) onPackageScript(scripts[0].name);
           }}
         >
-          <option value="literal">Literal command configured here</option>
+          <option value="literal">A command typed below</option>
           <option value="package-script" disabled={scripts.length === 0}>
-            Detected package script
+            A script from package.json
           </option>
         </select>
       </label>
@@ -128,16 +128,16 @@ export function PreviewConfiguration({
 
       {selectedScript ? (
         <p className="preview-command-help">
-          Detected from the opened primary checkout's root <code>package.json</code>. For an agent
-          target, Forgeboard resolves this same script inside that owned worktree and refuses launch
-          if it is absent. It passes an exact argument array to{' '}
-          <code>{selectedScript.executable}</code>; detection never runs the script.{' '}
+          Found in the <code>package.json</code> file at the root of your main project folder (the
+          primary checkout). When the preview runs in an agent's workspace, Forgeboard looks for the
+          same script there and will not start if it is missing. It passes fixed arguments to{' '}
+          <code>{selectedScript.executable}</code>; finding scripts never runs them.{' '}
           {commandDependencyGuidance(selectedScript.executable, 'preview')}
         </p>
       ) : stalePackageScript ? (
         <p className="preview-command-guidance" role="status">
-          That package script is unavailable for the current target. Select another detected script
-          or switch to a literal command.
+          That script is not available where the preview will run. Pick another script from
+          package.json, or type the command yourself.
         </p>
       ) : null}
 
@@ -154,9 +154,9 @@ export function PreviewConfiguration({
           />
         </label>
         <label>
-          Readiness path
+          Health check path
           <input
-            aria-label="Readiness path"
+            aria-label="Health check path"
             name={`node-${nodeId}-preview-readiness-path`}
             value={readinessPath}
             disabled={readOnly || runtimeBusy}
@@ -165,9 +165,9 @@ export function PreviewConfiguration({
           />
         </label>
         <label>
-          Initial URL path
+          First page to open
           <input
-            aria-label="Initial URL path"
+            aria-label="First page to open"
             name={`node-${nodeId}-preview-initial-url-path`}
             value={urlPath}
             disabled={readOnly || runtimeBusy}
@@ -197,15 +197,15 @@ function PackageScriptPicker({
 }) {
   return (
     <label className="preview-script-picker">
-      Preview command
+      Script to run
       <select
-        aria-label="Preview command"
+        aria-label="Script to run"
         name={`node-${nodeId}-preview-command`}
         value={selected}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       >
-        {stale ? <option value={selected}>Unavailable: {selected}</option> : null}
+        {stale ? <option value={selected}>Not available: {selected}</option> : null}
         {scripts.map((script) => (
           <option key={script.name} value={script.name}>
             {script.name} — {truncate(script.declaration, 90)}
@@ -229,11 +229,11 @@ function LiteralCommandEditor({
 }) {
   return (
     <fieldset className="preview-literal-command" disabled={disabled}>
-      <legend>Literal launch command</legend>
+      <legend>Type the start command</legend>
       <label>
-        Executable
+        Program to run
         <input
-          aria-label="Preview executable"
+          aria-label="Program to run"
           name={`node-${nodeId}-preview-executable`}
           value={command?.executable ?? ''}
           placeholder="pnpm"
@@ -246,7 +246,7 @@ function LiteralCommandEditor({
       <label>
         Arguments, one per line
         <textarea
-          aria-label="Preview arguments"
+          aria-label="Arguments, one per line"
           name={`node-${nodeId}-preview-arguments`}
           value={(command?.args ?? []).join('\n')}
           placeholder={'run\ndev'}
@@ -256,7 +256,10 @@ function LiteralCommandEditor({
           }}
         />
       </label>
-      <p>Each line is one literal argument. Forgeboard does not split these values with a shell.</p>
+      <p>
+        Each line is passed to the program exactly as written. Forgeboard does not split or
+        reinterpret these values.
+      </p>
     </fieldset>
   );
 }

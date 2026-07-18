@@ -11,8 +11,8 @@ export function CommandReadinessEvidence({
   if (status.phase === 'checking') {
     return (
       <span className="command-readiness-evidence checking" role="status">
-        <LoaderCircle className="spin" size={13} aria-hidden="true" /> Checking the executable and
-        literal arguments without running them…
+        <LoaderCircle className="spin" size={13} aria-hidden="true" /> Checking the program and
+        arguments. Nothing is being run…
       </span>
     );
   }

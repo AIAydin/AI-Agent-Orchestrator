@@ -16,7 +16,7 @@ import type {
 import { unwrap } from '../../lib/ipc.js';
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Forgeboard could not complete the Git action.';
+  return error instanceof Error ? error.message : "Forgeboard couldn't complete this change.";
 }
 
 interface GitReviewController {
@@ -112,7 +112,7 @@ export function useGitReview(
 
   const stagePaths = useCallback(
     async (paths: readonly string[]) => {
-      await applyMutation('Staging file', () =>
+      await applyMutation('Adding file to commit', () =>
         window.forgeboard.git.stagePaths({ target, paths: [...paths] }),
       );
     },
@@ -121,7 +121,7 @@ export function useGitReview(
 
   const stageHunks = useCallback(
     async (hunkIds: readonly string[]) => {
-      await applyMutation('Staging hunk', () =>
+      await applyMutation('Adding change to commit', () =>
         window.forgeboard.git.stageHunks({ target, hunkIds: [...hunkIds] }),
       );
     },
@@ -130,7 +130,7 @@ export function useGitReview(
 
   const unstagePaths = useCallback(
     async (paths: readonly string[]) => {
-      await applyMutation('Unstaging file', () =>
+      await applyMutation('Removing file from commit', () =>
         window.forgeboard.git.unstagePaths({ target, paths: [...paths] }),
       );
     },
@@ -139,7 +139,7 @@ export function useGitReview(
 
   const unstageHunks = useCallback(
     async (hunkIds: readonly string[]) => {
-      await applyMutation('Unstaging hunk', () =>
+      await applyMutation('Removing change from commit', () =>
         window.forgeboard.git.unstageHunks({ target, hunkIds: [...hunkIds] }),
       );
     },
@@ -148,7 +148,7 @@ export function useGitReview(
 
   const prepareDiscard = useCallback(
     (hunkIds: readonly string[]) =>
-      perform('Preparing discard review', () =>
+      perform('Preparing the discard review', () =>
         window.forgeboard.git.prepareDiscard({ target, hunkIds: [...hunkIds] }),
       ),
     [perform, target],
@@ -156,7 +156,7 @@ export function useGitReview(
 
   const confirmDiscard = useCallback(
     async (planId: string) => {
-      const nextReview = await perform('Waiting for system confirmation', () =>
+      const nextReview = await perform('Waiting for your confirmation', () =>
         window.forgeboard.git.confirmDiscard({ planId }),
       );
       if (nextReview !== null && nextReview !== undefined && mounted.current) {
@@ -169,7 +169,7 @@ export function useGitReview(
 
   const prepareCommit = useCallback(
     (message: string) =>
-      perform('Preparing commit review', () =>
+      perform('Preparing the commit review', () =>
         window.forgeboard.git.prepareCommit({ target, message }),
       ),
     [perform, target],
@@ -177,7 +177,7 @@ export function useGitReview(
 
   const confirmCommit = useCallback(
     async (planId: string) => {
-      const result = await perform('Waiting for system confirmation', () =>
+      const result = await perform('Waiting for your confirmation', () =>
         window.forgeboard.git.confirmCommit({ planId }),
       );
       if (result !== null && result !== undefined && mounted.current) setReview(result.review);
@@ -188,7 +188,7 @@ export function useGitReview(
 
   const prepareShipping = useCallback(
     (strategy: GitShippingStrategy) =>
-      perform('Preparing primary delivery review', () =>
+      perform('Preparing the delivery review', () =>
         window.forgeboard.git.prepareShipping({ target, strategy }),
       ),
     [perform, target],
@@ -196,7 +196,7 @@ export function useGitReview(
 
   const confirmShipping = useCallback(
     (planId: string) =>
-      perform('Waiting for system confirmation', () =>
+      perform('Waiting for your confirmation', () =>
         window.forgeboard.git.confirmShipping({ planId }),
       ),
     [perform],

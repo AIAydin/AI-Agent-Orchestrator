@@ -25,7 +25,7 @@ interface UseWorkflowRunsOptions {
 }
 
 export const WORKFLOW_ROLE_READ_ONLY_MESSAGE =
-  'This collaboration role can inspect workflow history but cannot mutate workflow execution.';
+  'Your role lets you view workflow history, but not change workflow runs.';
 
 export function useWorkflowRuns({
   projectId,
@@ -163,7 +163,7 @@ export function useWorkflowRuns({
       setBusyAction('start');
       try {
         if (!(await flushCanvas())) {
-          onError('The workflow was not started because the canvas could not be saved.');
+          onError("The workflow didn't start because the canvas couldn't be saved.");
           return;
         }
         const execution = unwrap(
@@ -225,8 +225,8 @@ export function useWorkflowRuns({
             approvalFingerprint: request.approvalFingerprint,
             confirmed: true,
           }),
-        'Launch approval was cancelled; no process started.',
-        'Could not approve the workflow launch.',
+        'Launch approval was cancelled; nothing started.',
+        'Could not approve the workflow start.',
       );
     },
     [runMutation],
@@ -236,7 +236,7 @@ export function useWorkflowRuns({
     async (request: WorkflowHumanDecisionRequest) => {
       const targetType = request.targetType;
       if (targetType === 'human-review') {
-        onError('Choose approve or request changes for this human review.');
+        onError('Choose Approve or Request changes for this review.');
         return;
       }
       await runMutation(
@@ -250,8 +250,8 @@ export function useWorkflowRuns({
             evidenceFingerprint: request.evidenceFingerprint,
             confirmed: true,
           }),
-        'Approval was cancelled; the workflow remains paused.',
-        'Could not record the workflow approval.',
+        'Approval was cancelled; the run is still paused.',
+        'Could not save the approval.',
       );
     },
     [onError, runMutation],
@@ -280,8 +280,8 @@ export function useWorkflowRuns({
             ...(feedback === undefined ? {} : { feedback }),
             confirmed: true,
           }),
-        'Review confirmation was cancelled; the workflow remains paused.',
-        'Could not record the review decision.',
+        'Review confirmation was cancelled; the run is still paused.',
+        'Could not save the review decision.',
       );
     },
     [onError, runMutation],
@@ -300,8 +300,8 @@ export function useWorkflowRuns({
             decision,
             confirmed: true,
           }),
-        'Revision decision was cancelled; the workflow remains paused.',
-        'Could not resolve the revision limit.',
+        'Revision decision was cancelled; the run is still paused.',
+        'Could not save the retry-limit decision.',
       );
     },
     [runMutation],
@@ -312,8 +312,8 @@ export function useWorkflowRuns({
       await runMutation(
         `cancel:${executionId}`,
         () => window.forgeboard.workflows.cancel({ executionId, confirmed: true }),
-        'Workflow cancellation was dismissed.',
-        'Could not cancel the workflow.',
+        'The run was not cancelled.',
+        'Could not cancel the run.',
       );
     },
     [runMutation],
@@ -324,8 +324,8 @@ export function useWorkflowRuns({
       await runMutation(
         `cancel-node:${input.nodeId}`,
         () => window.forgeboard.workflows.cancelNode({ ...input, confirmed: true }),
-        'Test cancellation was dismissed.',
-        'Could not cancel the Test node.',
+        'The test was not cancelled.',
+        'Could not cancel the test.',
       );
     },
     [runMutation],
@@ -342,15 +342,15 @@ export function useWorkflowRuns({
         const accepted = unwrap(await window.forgeboard.workflows.sendInput(input));
         if (accepted) {
           setEvents((current) =>
-            [
-              `Sent interactive input to ${input.nodeId} attempt ${String(input.attempt)}.`,
-              ...current,
-            ].slice(0, 80),
+            [`Sent input to ${input.nodeId} (attempt ${String(input.attempt)}).`, ...current].slice(
+              0,
+              80,
+            ),
           );
         }
         return accepted;
       } catch (cause) {
-        onError(errorMessage(cause, 'Could not send input to the workflow node.'));
+        onError(errorMessage(cause, 'Could not send input to that node.'));
         return false;
       } finally {
         setBusyAction(null);
@@ -370,7 +370,7 @@ export function useWorkflowRuns({
         const accepted = unwrap(await window.forgeboard.workflows.interrupt(input));
         if (accepted) {
           setEvents((current) =>
-            [`Interrupted ${input.nodeId} attempt ${String(input.attempt)}.`, ...current].slice(
+            [`Stopped ${input.nodeId} (attempt ${String(input.attempt)}).`, ...current].slice(
               0,
               80,
             ),
@@ -378,7 +378,7 @@ export function useWorkflowRuns({
         }
         return accepted;
       } catch (cause) {
-        onError(errorMessage(cause, 'Could not interrupt the workflow node.'));
+        onError(errorMessage(cause, 'Could not stop the node.'));
         return false;
       } finally {
         setBusyAction(null);
@@ -462,7 +462,7 @@ function errorMessage(cause: unknown, fallback: string): string {
 
 function scopeLabel(scope: WorkflowStartInput['scope']): string {
   if (scope.kind === 'workflow') return 'Started the saved canvas workflow.';
-  if (scope.kind === 'node') return 'Started the selected node and its upstream dependencies.';
+  if (scope.kind === 'node') return 'Started the selected node and everything it depends on.';
   if (scope.kind === 'selection') return 'Started the selected workflow nodes.';
   return 'Started the selected workflow group.';
 }
@@ -471,20 +471,20 @@ function workflowEventLabel(type: string, nodeId: string | undefined): string {
   const node = nodeId === undefined ? '' : ` for ${nodeId}`;
   switch (type) {
     case 'approval-requested':
-      return `Workflow approval requested${node}.`;
+      return `Approval needed${node}.`;
     case 'node-started':
-      return `Workflow node started${node}.`;
+      return `Node started${node}.`;
     case 'node-completed':
-      return `Workflow node completed${node}.`;
+      return `Node finished${node}.`;
     case 'execution-cancelled':
-      return 'Workflow cancelled.';
+      return 'Run cancelled.';
     case 'execution-recovered':
-      return 'Recovered a durable workflow after restart.';
+      return 'A workflow run was restored after restart.';
     case 'decision-recorded':
-      return `Workflow decision recorded${node}.`;
+      return `Decision saved${node}.`;
     case 'host-error':
-      return `Workflow host reported an error${node}.`;
+      return `The workflow runner reported an error${node}.`;
     default:
-      return 'Workflow execution created.';
+      return 'Workflow run created.';
   }
 }

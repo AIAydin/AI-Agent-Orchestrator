@@ -30,8 +30,8 @@ export function terminalLaunchMessage(review: TerminalLaunchNativeReview): Messa
     detail: [
       `Project: ${displayEscapedText(view.projectName)}`,
       `Node: ${displayLiteral(view.nodeId)}`,
-      `Executable: ${displayLiteral(exact.executable)}`,
-      `Working directory: ${displayLiteral(exact.cwd)}`,
+      `Program: ${displayLiteral(exact.executable)}`,
+      `Folder to run in: ${displayLiteral(exact.cwd)}`,
       `Columns × rows: ${String(view.columns)} × ${String(view.rows)}`,
       `Environment variable names: ${
         exact.environmentVariableNames.length === 0
@@ -42,10 +42,10 @@ export function terminalLaunchMessage(review: TerminalLaunchNativeReview): Messa
       `Arguments (${String(exact.arguments.length)}):`,
       argumentsDisclosure,
       '',
-      'Permission: local operating-system user (not sandboxed).',
-      'The working directory and environment allowlist do not prevent this executable from accessing anything your operating-system account can access. The executable can also use the network under your account permissions.',
+      'Runs as: your user account on this computer (not sandboxed).',
+      'The folder it runs in and the environment settings do not limit what this program can access. It can reach anything your user account can reach, and it can use the network.',
       '',
-      `This approval is single-use and expires at ${view.expiresAt}. Forgeboard rechecks the exact executable identity, project, and working directory immediately before spawning it.`,
+      `You can use this approval only once, and it expires at ${view.expiresAt}. Forgeboard rechecks the exact program identity, project, and folder immediately before starting it.`,
     ].join('\n'),
     buttons: ['Cancel', 'Launch terminal'],
     defaultId: 0,

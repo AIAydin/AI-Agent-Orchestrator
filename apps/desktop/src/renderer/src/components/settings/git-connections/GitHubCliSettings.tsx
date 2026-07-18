@@ -23,8 +23,8 @@ export function GitHubCliSettings({
         <div>
           <h4 id="git-connections-cli-title">GitHub CLI</h4>
           <p>
-            Choose the optional local executable used by separately reviewed GitHub actions.
-            Configuration does not sign in, contact GitHub, or verify repository access.
+            Pick the GitHub CLI program on this computer that reviewed GitHub actions will use.
+            Setting it here does not sign in, contact GitHub, or check access to any project.
           </p>
         </div>
         <button
@@ -39,33 +39,35 @@ export function GitHubCliSettings({
       </header>
       {status === null ? (
         <p className="git-connections-empty" role="status">
-          {loading ? 'Reading local GitHub CLI status…' : 'GitHub CLI status is unavailable.'}
+          {loading
+            ? 'Checking GitHub CLI status…'
+            : 'GitHub CLI status is not available right now. Try refreshing.'}
         </p>
       ) : (
         <div className="git-connections-cli-status" role="status">
           <div>
             <strong>{cliStateTitle(status)}</strong>
             <span className={`status-chip ${status.state === 'ready' ? 'ok' : 'warning'}`}>
-              {status.source}
+              {cliSourceLabel(status.source)}
             </span>
           </div>
           <p>{cliStateDescription(status)}</p>
           {status.identity === null ? null : (
             <dl>
               <div>
-                <dt>Executable file</dt>
+                <dt>Program file</dt>
                 <dd>{status.identity.filename}</dd>
               </div>
               <div>
                 <dt>Version</dt>
-                <dd>{status.identity.version ?? 'Not validated'}</dd>
+                <dd>{status.identity.version ?? 'Not checked'}</dd>
               </div>
               <div>
                 <dt>Size</dt>
                 <dd>{formatBytes(status.identity.sizeBytes)}</dd>
               </div>
               <div>
-                <dt>SHA-256</dt>
+                <dt>Fingerprint (SHA-256)</dt>
                 <dd>
                   <code>{status.identity.sha256}</code>
                 </dd>
@@ -74,14 +76,18 @@ export function GitHubCliSettings({
           )}
         </div>
       )}
-      <div className="git-connections-actions" role="group" aria-label="GitHub CLI source">
+      <div
+        className="git-connections-actions"
+        role="group"
+        aria-label="How Forgeboard finds GitHub CLI"
+      >
         <button
           className="button"
           type="button"
           disabled={disabled || loading}
           onClick={() => void onUseAutomatic()}
         >
-          <RotateCcw size={14} aria-hidden="true" /> Use automatic GitHub CLI
+          <RotateCcw size={14} aria-hidden="true" /> Find GitHub CLI automatically
         </button>
         <button
           className="button"
@@ -89,36 +95,41 @@ export function GitHubCliSettings({
           disabled={disabled || loading}
           onClick={() => void onChoose()}
         >
-          <FileSearch size={14} aria-hidden="true" /> Browse for GitHub CLI
+          <FileSearch size={14} aria-hidden="true" /> Choose GitHub CLI file
         </button>
       </div>
       <small>
-        Automatic uses desktop-process PATH discovery. Browse stores a device-local identity only
-        after review, native confirmation, and a direct version check. Git push does not require
-        GitHub CLI.
+        Automatic looks in the usual install locations on this computer. Choosing a file saves it
+        only after you review it, your computer confirms, and Forgeboard checks its version. Pushing
+        code does not need the GitHub CLI.
       </small>
     </section>
   );
 }
 
 function cliStateTitle(status: GitHubCliStatusView): string {
-  if (status.state === 'ready') return 'GitHub CLI version validated';
-  if (status.state === 'unverified') return 'GitHub CLI detected';
-  if (status.state === 'changed') return 'Selected GitHub CLI changed';
+  if (status.state === 'ready') return 'GitHub CLI ready';
+  if (status.state === 'unverified') return 'GitHub CLI found';
+  if (status.state === 'changed') return 'Chosen GitHub CLI file changed';
   return 'GitHub CLI not found';
 }
 
 function cliStateDescription(status: GitHubCliStatusView): string {
   if (status.state === 'ready') {
-    return 'The executable identity and version are current. Authentication is checked only by an explicit GitHub action.';
+    return 'The program file and its version have been checked. Sign-in is checked only when you run a GitHub action that needs it.';
   }
   if (status.state === 'unverified') {
-    return 'A local executable was detected, but this status makes no authentication or repository-access claim.';
+    return 'A GitHub CLI program was found on this computer. Forgeboard has not checked whether you are signed in or can access any project.';
   }
   if (status.state === 'changed') {
-    return 'The saved executable identity is no longer current. Browse and validate it again, or review automatic discovery.';
+    return 'The previously chosen file has changed or moved. Choose it again, or switch to automatic detection.';
   }
-  return 'Optional GitHub repository, pull-request, and CI actions need a GitHub CLI executable. Normal Git push remains available.';
+  return 'Optional GitHub features — managing repositories, pull requests, and automated checks (CI) — need the GitHub CLI program. Pushing code works without it.';
+}
+
+function cliSourceLabel(source: GitHubCliStatusView['source']): string {
+  if (source === 'custom') return 'Chosen file';
+  return 'Automatic';
 }
 
 function formatBytes(value: number): string {

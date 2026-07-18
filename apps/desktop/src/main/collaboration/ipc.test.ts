@@ -51,9 +51,11 @@ describe('CollaborationIpcService ownership and approval', () => {
   it('discloses allowlisted free text without claiming to inspect or redact secrets', () => {
     const disclosure = collaborationJoinDisclosure(joinInput('SESSION_TOKEN_DO_NOT_DISCLOSE'));
 
-    expect(disclosure.warning).toMatch(/only the allowlisted fields/u);
-    expect(disclosure.warning).toMatch(/does not inspect or redact secrets/u);
-    expect(disclosure.warning).toMatch(/not selected automatically/u);
+    expect(disclosure.warning).toMatch(/only the fields listed/u);
+    expect(disclosure.warning).toMatch(/never selected automatically/u);
+    expect(disclosure.warning).toMatch(/does not check .* for secrets/u);
+    expect(disclosure.warning).toMatch(/sensitive information.*is sent to the room/u);
+    expect(disclosure.warning).not.toMatch(/stay on this computer/u);
     expect(disclosure.warning).not.toMatch(/are excluded/u);
     expect(JSON.stringify(disclosure)).not.toContain('SESSION_TOKEN_DO_NOT_DISCLOSE');
   });

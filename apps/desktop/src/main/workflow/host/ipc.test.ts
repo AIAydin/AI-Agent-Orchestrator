@@ -379,7 +379,7 @@ describe('WorkflowIpcService', () => {
     expect(fixture.fake.launch).not.toHaveBeenCalled();
     expect(fixture.showMessageBox).toHaveBeenCalledTimes(1);
     expect(messageBoxOptions(fixture.showMessageBox)).toMatchObject({
-      buttons: ['Cancel', 'Run exact Git filter'],
+      buttons: ['Cancel', 'Run filter commands'],
       defaultId: 0,
       cancelId: 0,
     });
@@ -412,9 +412,9 @@ describe('WorkflowIpcService', () => {
     expect(fixture.fake.launch).not.toHaveBeenCalled();
     expect(fixture.showMessageBox).toHaveBeenCalledTimes(1);
     const options = messageBoxOptions(fixture.showMessageBox);
-    expect(options.buttons).toEqual(['Cancel', 'Launch node']);
+    expect(options.buttons).toEqual(['Cancel', 'Run node']);
     expect(options.defaultId).toBe(0);
-    expect(options.detail).toContain('Exact disclosure');
+    expect(options.detail).toContain('What will run');
     expect(fixture.appendAuditSpy).toHaveBeenCalledWith(
       'workflow',
       'launch-node',

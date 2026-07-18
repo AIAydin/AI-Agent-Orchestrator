@@ -82,7 +82,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
 
   return (
     <>
-      <section className="agent-run-config" aria-label="Agent run configuration">
+      <section className="agent-run-config" aria-label="Agent run settings">
         <header>
           <div>
             <Bot size={14} />
@@ -91,7 +91,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
           <span>Approval required</span>
         </header>
         <label>
-          Installed adapter
+          Agent to run
           <select
             name={`node-${selectedNode.id}-agent-adapter`}
             value={selectedAdapter}
@@ -172,16 +172,16 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
         />
         {permissionUnavailable !== null ? (
           <p id={permissionIssueId} className="recovery-guidance warning" role="alert">
-            {permissionUnavailable} Choose another adapter or permission profile before reviewing
+            {permissionUnavailable} Choose a different agent or permission profile before reviewing
             this run.
           </p>
         ) : null}
         {selectedAdapter === 'custom' &&
         !permissionProfileNeedsDocker(selectedPermission, settings) ? (
           <small>
-            A generic CLI has no provider-specific sandbox flags. Worktree mode protects the primary
-            checkout, but OS-level access remains disclosure-only; choose Docker for a technical
-            boundary.
+            A custom agent runs like any program on this computer: Forgeboard shows you exactly what
+            it will do but cannot wall it off. A separate worktree protects your main project
+            folder; choose Docker for a hard technical boundary.
           </small>
         ) : null}
         <label>
@@ -191,7 +191,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             rows={6}
             value={selectedNode.data.prompt ?? selectedNode.data.description}
             disabled={props.running || props.configurationReadOnly}
-            placeholder="Describe the concrete outcome for this agent…"
+            placeholder="Describe what you want this agent to do…"
             onFocus={props.onRecord}
             onChange={(event) => onUpdateSelected({ prompt: event.target.value })}
           />
@@ -202,8 +202,8 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
               <input
                 name={`node-${selectedNode.id}-agent-input`}
                 value={props.runInput}
-                placeholder="Send interactive input"
-                aria-label="Agent input"
+                placeholder="Type a message for the running agent"
+                aria-label="Message to the running agent"
                 disabled={!interactiveInputSupported || props.configurationReadOnly}
                 title={
                   mutationUnavailableReason ??
@@ -283,12 +283,12 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             onClick={props.onPrepareRun}
           >
             <ShieldCheck size={14} />
-            {props.preparingRun ? 'Preparing exact launch…' : 'Review & run'}
+            {props.preparingRun ? 'Preparing the run…' : 'Review & run'}
           </button>
         )}
         <p>
-          Nothing launches from this button alone. Forgeboard first shows the exact command, folder,
-          context, environment names, and permissions for approval.
+          Nothing starts from this button alone. Forgeboard first shows the exact command, folder,
+          files, and permissions for your approval.
         </p>
       </section>
       <section

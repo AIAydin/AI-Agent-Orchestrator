@@ -230,7 +230,7 @@ export class WorkflowIpcService {
     await this.#drainOperations();
     if (this.store.listRecoverableWorkflowExecutions(1).length > 0) {
       this.#paused = false;
-      throw new Error('Cancel every active workflow before merging local data.');
+      throw new Error('Cancel every active workflow before adding to current data.');
     }
   }
 
@@ -354,7 +354,7 @@ export class WorkflowIpcService {
         candidate.approvalFingerprint === input.approvalFingerprint,
     );
     if (approval === undefined)
-      throw new Error('The workflow launch approval is stale or missing.');
+      throw new Error('The workflow launch approval is out of date or missing.');
     const confirmed = await this.#confirm(event, launchConfirmation(approval));
     this.#assertOwnedInvocation(event, ownerToken, input.executionId);
     if (!confirmed) {
@@ -427,7 +427,7 @@ export class WorkflowIpcService {
       request.attemptsStarted !== input.attemptsStarted ||
       request.evidenceFingerprint !== input.evidenceFingerprint
     ) {
-      throw new Error('The revision escape decision is stale or missing.');
+      throw new Error('The revision loop decision is out of date or missing.');
     }
     const confirmed = await this.#confirm(
       event,
@@ -857,7 +857,7 @@ function assertCurrentHumanDecision(
     request.targetAttempt !== input.targetAttempt ||
     request.evidenceFingerprint !== input.evidenceFingerprint
   ) {
-    throw new Error('The human workflow decision is stale or missing.');
+    throw new Error('The workflow decision is out of date or missing.');
   }
   return request;
 }
@@ -865,20 +865,20 @@ function assertCurrentHumanDecision(
 function launchConfirmation(approval: WorkflowHostState['approvals'][number]): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Launch workflow node',
-    message: 'Launch this exact prepared workflow action?',
+    title: 'Run workflow node',
+    message: 'Run this workflow node exactly as reviewed?',
     detail: boundedDetail([
       `Node: ${approval.nodeId}`,
-      `Executor: ${approval.executorId}`,
+      `Runs with: ${approval.executorId}`,
       `Attempt: ${String(approval.attempt)}`,
       `Expires: ${approval.expiresAt}`,
       '',
-      'Exact disclosure:',
+      'What will run:',
       JSON.stringify(approval.disclosure, null, 2),
       '',
-      'Forgeboard will revalidate the exact preparation and fingerprint after this confirmation.',
+      'Forgeboard checks that nothing changed before starting.',
     ]),
-    buttons: ['Cancel', 'Launch node'],
+    buttons: ['Cancel', 'Run node'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -892,19 +892,19 @@ function semanticDecisionConfirmation(
   return {
     type: 'warning',
     title: 'Confirm workflow decision',
-    message: `Record “${decision}” for this workflow decision?`,
+    message: `Save “${decision}” as this workflow decision?`,
     detail: boundedDetail([
       `Target: ${input.targetId}`,
       `Decision type: ${input.targetType}`,
       '',
-      'Exact evidence bound to this decision:',
+      'What this decision is based on:',
       JSON.stringify(input.evidence, null, 2),
       '',
-      `Evidence binding: ${input.evidenceFingerprint}`,
+      `Evidence ID: ${input.evidenceFingerprint}`,
       '',
-      'Forgeboard will revalidate the current evidence fingerprint before recording this decision.',
+      'Forgeboard checks that this is still the current evidence before saving the decision.',
     ]),
-    buttons: ['Cancel', 'Record decision'],
+    buttons: ['Cancel', 'Save decision'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -917,24 +917,24 @@ function revisionEscapeConfirmation(
 ): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Resolve exhausted revision loop',
+    title: 'Revision loop out of tries',
     message:
       decision === 'accept'
-        ? 'Accept the exhausted revision loop?'
-        : 'Cancel the exhausted revision loop?',
+        ? 'The revision loop used all its tries. Accept the last result?'
+        : 'The revision loop used all its tries. Cancel the workflow?',
     detail: boundedDetail([
       `Loop: ${request.loopId}`,
-      `Attempts: ${String(request.attemptsStarted)}`,
+      `Tries used: ${String(request.attemptsStarted)}`,
       `Decision: ${decision}`,
       '',
-      'Exact exhausted-loop evidence:',
+      'What the loop produced:',
       JSON.stringify(request.evidence, null, 2),
       '',
-      `Evidence binding: ${request.evidenceFingerprint}`,
+      `Evidence ID: ${request.evidenceFingerprint}`,
       '',
-      'Deterministic gate failures remain authoritative. Forgeboard will revalidate the exact loop evidence before applying this decision.',
+      'Failed checks still stand. Forgeboard checks the loop evidence again before applying this decision.',
     ]),
-    buttons: ['Cancel', decision === 'accept' ? 'Accept loop' : 'Cancel workflow'],
+    buttons: ['Cancel', decision === 'accept' ? 'Accept result' : 'Cancel workflow'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -945,9 +945,9 @@ function cancelConfirmation(): MessageBoxOptions {
   return {
     type: 'warning',
     title: 'Cancel workflow',
-    message: 'Cancel this workflow and stop its active processes?',
+    message: 'Cancel this workflow and stop everything it is running?',
     detail:
-      'Forgeboard will request full-tree cancellation, keep the workflow in Cancelling state until acknowledgements arrive, and persist the terminal result.',
+      'Forgeboard stops every running step and saves the final result. This can take a moment.',
     buttons: ['Keep running', 'Cancel workflow'],
     defaultId: 0,
     cancelId: 0,
@@ -959,8 +959,8 @@ function nodeCancelConfirmation(nodeId: string): MessageBoxOptions {
   return {
     type: 'warning',
     title: 'Cancel workflow node',
-    message: 'Stop only this active workflow node attempt?',
-    detail: `Node: ${nodeId}\n\nForgeboard will verify the current execution, node, and attempt before signalling its supervised process.`,
+    message: 'Stop only this run of the workflow node?',
+    detail: `Node: ${nodeId}\n\nForgeboard checks that nothing changed before stopping it.`,
     buttons: ['Keep running', 'Cancel node'],
     defaultId: 0,
     cancelId: 0,
@@ -972,7 +972,7 @@ function boundedDetail(lines: readonly string[]): string {
   const detail = lines.join('\n');
   return detail.length <= MAX_CONFIRMATION_DETAIL
     ? detail
-    : `${detail.slice(0, MAX_CONFIRMATION_DETAIL)}\n[Disclosure truncated for display]`;
+    : `${detail.slice(0, MAX_CONFIRMATION_DETAIL)}\n[Details shortened to fit]`;
 }
 
 function normalizedScope(scope: WorkflowStartInput['scope']): WorkflowRunScope {

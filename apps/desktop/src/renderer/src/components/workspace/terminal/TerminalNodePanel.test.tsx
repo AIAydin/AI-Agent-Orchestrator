@@ -114,11 +114,11 @@ describe('TerminalNodePanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
     await waitFor(() =>
-      expect(screen.getByLabelText<HTMLInputElement>('Executable').value).toBe('/usr/bin/fish'),
+      expect(screen.getByLabelText<HTMLInputElement>('Program').value).toBe('/usr/bin/fish'),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Add argument' }));
     fireEvent.change(screen.getByLabelText('Argument 2'), { target: { value: '--private' } });
-    fireEvent.change(screen.getByLabelText('Project-relative working directory'), {
+    fireEvent.change(screen.getByLabelText('Folder to run in'), {
       target: { value: 'apps/desktop' },
     });
     fireEvent.change(screen.getByLabelText('Environment variable names allowed into processes'), {
@@ -126,12 +126,12 @@ describe('TerminalNodePanel', () => {
     });
     expect(onRecord).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review & start' }));
-    await screen.findByRole('dialog', { name: 'Review the exact terminal launch' });
+    fireEvent.click(screen.getByRole('button', { name: 'Review and start' }));
+    await screen.findByRole('dialog', { name: 'Review this terminal command' });
     expect(screen.getByText('/usr/bin/fish', { exact: false })).toBeTruthy();
     expect(screen.getByText('["-l","--private"]')).toBeTruthy();
     expect(screen.getByText('Unsandboxed local terminal')).toBeTruthy();
-    expect(screen.getByText(/separate native confirmation/u)).toBeTruthy();
+    expect(screen.getByText(/ask you to confirm once more/u)).toBeTruthy();
     expect(fixture.operations.prepareLaunch).toHaveBeenCalledWith(
       expect.objectContaining({
         executable: '/usr/bin/fish',
@@ -143,14 +143,12 @@ describe('TerminalNodePanel', () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Continue to native confirmation/u }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() =>
       expect(fixture.operations.confirmLaunch).toHaveBeenCalledWith({ planId: PLAN_ID }),
     );
     expect(
-      await screen.findByText(
-        'Cancelled in the native confirmation. No terminal process launched.',
-      ),
+      await screen.findByText('Cancelled at the confirmation step. Nothing was started.'),
     ).toBeTruthy();
   });
 
@@ -163,7 +161,7 @@ describe('TerminalNodePanel', () => {
     fixture.operations.interrupt.mockReturnValue(pendingInterrupt.promise);
     render(<PanelHarness operations={fixture.operations} locked />);
     expect(await screen.findByText(/ready/u)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Review & restart' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Review and restart' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -193,7 +191,7 @@ describe('TerminalNodePanel', () => {
     render(<PanelHarness operations={fixture.operations} configurationReadOnly />);
 
     await screen.findByRole('button', { name: 'Terminate' });
-    expect(screen.getByRole('button', { name: 'Review & restart' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Review and restart' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -203,7 +201,7 @@ describe('TerminalNodePanel', () => {
     );
     expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('button', { name: 'Terminate' })).toHaveProperty('disabled', false);
-    expect(screen.getByText(/safety controls for an already-running local process/u)).toBeTruthy();
+    expect(screen.getByText(/so you can stop a process that is already running/u)).toBeTruthy();
   });
 
   it('forwards raw xterm input, supports retained-history search, and explains a lost session', async () => {
@@ -222,11 +220,11 @@ describe('TerminalNodePanel', () => {
         data: '\u001b[A',
       }),
     );
-    fireEvent.change(screen.getByLabelText('Search retained terminal history'), {
+    fireEvent.change(screen.getByLabelText('Search terminal output'), {
       target: { value: 'ready' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Find next' }));
-    expect(screen.getByText('Selected the next match for “ready”.')).toBeTruthy();
+    expect(screen.getByText('Found the next match for “ready”.')).toBeTruthy();
 
     fixture.emit({
       kind: 'session',
@@ -234,8 +232,8 @@ describe('TerminalNodePanel', () => {
       nodeId: 'terminal-node',
       session: lost,
     });
-    await screen.findByText(/lost process authority/u);
-    expect(screen.getByRole('button', { name: 'Review & restart' })).toHaveProperty(
+    await screen.findByText(/lost track of this process/u);
+    expect(screen.getByRole('button', { name: 'Review and restart' })).toHaveProperty(
       'disabled',
       false,
     );

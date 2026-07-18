@@ -54,8 +54,8 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
             </h2>
             <p>
               {mode === 'create'
-                ? 'Everything is configured here—no files to edit.'
-                : 'This explicit action may contact the remote shown below.'}
+                ? 'Set everything up here — no files to edit.'
+                : 'Forgeboard will contact the address below to download the project.'}
             </p>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
@@ -114,16 +114,16 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
               onChange={(event) => setInitializeGit(event.target.checked)}
             />
             <span>
-              <strong>Initialize a Git repository</strong>
-              <small>Recommended for reviewable agent worktrees.</small>
+              <strong>Start a Git repository</strong>
+              <small>Recommended — lets agents work in separate copies you review.</small>
             </span>
           </label>
         ) : (
           <div className="impact-box">
             <strong>Before Forgeboard connects</strong>
-            <span>Remote: {remote || 'not entered'}</span>
-            <span>Destination: {cloneDestination || 'not selected'}</span>
-            <span>No credentials are stored by Forgeboard.</span>
+            <span>Download from: {remote || 'not entered yet'}</span>
+            <span>Save to: {cloneDestination || 'not chosen yet'}</span>
+            <span>Forgeboard does not store your passwords or sign-in details.</span>
           </div>
         )}
 
@@ -136,7 +136,7 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
             type="submit"
             disabled={!location || !name || (mode === 'clone' && !remote)}
           >
-            {mode === 'create' ? 'Create project' : 'Approve & clone'}
+            {mode === 'create' ? 'Create project' : 'Clone repository'}
           </button>
         </footer>
       </form>

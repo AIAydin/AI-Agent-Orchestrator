@@ -206,7 +206,7 @@ export class FileNodeWorkflowContextResolver {
         `sha256:${contextSelectionDigest(files, sources, fileIds, edge.attachmentIds)}`
       ) {
         throw new Error(
-          `Context edge "${edge.edgeId}" changed after its evidence was verified. Review a fresh launch.`,
+          `Context link "${edge.edgeId}" changed after its evidence was verified. Review what will run.`,
         );
       }
     }

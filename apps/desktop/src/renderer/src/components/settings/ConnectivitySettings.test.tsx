@@ -67,12 +67,16 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('ConnectivitySettings collaboration controls', () => {
-  it('warns that allowlisted free text is shared without secret inspection or redaction', () => {
+  it('warns that shared canvas text is not checked for secrets', () => {
     render(<Harness />);
 
-    expect(screen.getByText(/Forgeboard sends allowlisted canvas fields/u)).toBeTruthy();
-    expect(screen.getByText(/does not inspect or redact secrets/u)).toBeTruthy();
-    expect(screen.getByText(/fields are not selected automatically/u)).toBeTruthy();
+    expect(screen.getByText(/Forgeboard shares only these canvas details/u)).toBeTruthy();
+    expect(
+      screen.getByText(/does not check shared titles, connection labels, or comments for secrets/u),
+    ).toBeTruthy();
+    expect(screen.getByText(/never selected automatically/u)).toBeTruthy();
+    expect(screen.getByText(/sensitive information typed.*is sent to the room/u)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/stay on this computer/u);
     expect(document.body.textContent).not.toMatch(/credentials, and tokens are not shared/u);
   });
 

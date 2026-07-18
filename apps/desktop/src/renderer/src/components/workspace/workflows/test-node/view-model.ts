@@ -119,7 +119,7 @@ export function testStatusLabel(attempt: TestNodeAttemptView): string {
     passed: 'Passed',
     failed: 'Failed',
     cancelled: 'Cancelled',
-    lost: 'Recovery needed',
+    lost: 'Needs attention',
     'waiting-for-approval': 'Review required',
     paused: 'Paused',
     cancelling: 'Cancelling',

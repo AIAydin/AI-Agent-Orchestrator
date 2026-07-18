@@ -50,19 +50,19 @@ describe('TypedEdgeInspector', () => {
       />,
     );
 
-    expect(screen.getByRole('status').textContent).toMatch(/touches a locked node/u);
+    expect(screen.getByRole('status').textContent).toMatch(/linked to a locked node/u);
     expect(
-      screen.getByRole<HTMLFieldSetElement>('group', { name: 'Connection configuration' }),
+      screen.getByRole<HTMLFieldSetElement>('group', { name: 'Connection settings' }),
     ).toHaveProperty('disabled', true);
     expect(
       screen
-        .getByRole<HTMLSelectElement>('combobox', { name: 'Connection behavior' })
+        .getByRole<HTMLSelectElement>('combobox', { name: 'Connection type' })
         .matches(':disabled'),
     ).toBe(true);
     expect(
       screen
         .getByRole<HTMLInputElement>('checkbox', {
-          name: 'Block the agent until this exact attachment resolves',
+          name: "Don't let the agent start until this attachment is ready",
         })
         .matches(':disabled'),
     ).toBe(true);
@@ -82,10 +82,10 @@ describe('TypedEdgeInspector', () => {
     );
 
     expect(screen.getByText('brief-1', { selector: 'code' })).toBeTruthy();
-    expect(screen.getByText(/1 explicit attachment ID/u)).toBeTruthy();
+    expect(screen.getByText(/1 attachment will be shared/u)).toBeTruthy();
     fireEvent.click(
       screen.getByRole('checkbox', {
-        name: 'Block the agent until this exact attachment resolves',
+        name: "Don't let the agent start until this attachment is ready",
       }),
     );
     expect(onChange).toHaveBeenCalledWith({
@@ -112,8 +112,10 @@ describe('TypedEdgeInspector', () => {
       />,
     );
 
-    expect(screen.getByRole('combobox', { name: 'Gate node' })).toMatchObject({ value: 'gate-1' });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Trigger' }), {
+    expect(screen.getByRole('combobox', { name: 'Review gate node' })).toMatchObject({
+      value: 'gate-1',
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'When to run' }), {
       target: { value: 'on-completion' },
     });
     expect(onChange).toHaveBeenCalledWith({
@@ -137,7 +139,7 @@ describe('TypedEdgeInspector', () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Bounded loop ID' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Loop ID' }), {
       target: { value: 'loop 1/unsafe' },
     });
     const sanitized = onChange.mock.calls.at(-1)?.[0];

@@ -203,7 +203,7 @@ export class DeliveryReadinessService {
       } catch {
         // Stale stored evidence is intentionally omitted rather than retargeted to current content.
         staleReason =
-          'Existing delivery readiness is stale. Prepare it again for the current source and checks.';
+          'Existing delivery readiness is out of date. Prepare it again for the current source and checks.';
       }
     }
     this.#assertLifecycle(lifecycleEpoch);
@@ -364,7 +364,7 @@ export class DeliveryReadinessService {
         (candidate) => candidate.definition.checkId === input.checkId,
       );
       if (current?.resolution === null || current === undefined) {
-        throw new Error('The exact delivery check changed after authorization.');
+        throw new Error('The delivery check changed after approval.');
       }
       assertExactPlan(plan, current.resolution, required);
       const handle = await this.exactExecutor.launchApproved(ownerId, {
@@ -490,7 +490,7 @@ export class DeliveryReadinessService {
       const evidenceFingerprint = deliveryEvidenceFingerprint(record);
       if (evidenceFingerprint !== expectedEvidenceFingerprint) {
         throw new Error(
-          'Delivery check evidence changed after human review. Review the current evidence again.',
+          'The check results changed after your review. Review the current results and approve again.',
         );
       }
       let approval = this.store.findDeliveryReadinessApprovalForEvidence(
@@ -501,7 +501,7 @@ export class DeliveryReadinessService {
         approval !== undefined &&
         !gitDeliverySourceFingerprintsEqual(approval.sourceFingerprint, record.sourceFingerprint)
       ) {
-        throw new Error('Stored human approval does not match the current delivery source.');
+        throw new Error('The saved approval does not match the current changes.');
       }
       if (approval === undefined) {
         approval = DeliveryHumanApprovalRecordSchema.parse({
@@ -528,7 +528,9 @@ export class DeliveryReadinessService {
         current.revision !== record.revision ||
         approval.evidenceFingerprint !== deliveryEvidenceFingerprint(current)
       ) {
-        throw new Error('Delivery readiness changed while human approval was recorded.');
+        throw new Error(
+          'Delivery readiness changed while the approval was being saved. Review and approve again.',
+        );
       }
       return this.#view(current, fresh.availableChecks);
     });
@@ -572,7 +574,7 @@ export class DeliveryReadinessService {
         !gitDeliverySourceFingerprintsEqual(approval.sourceFingerprint, record.sourceFingerprint) ||
         approval.evidenceFingerprint !== deliveryEvidenceFingerprint(record)
       ) {
-        throw new Error('The human delivery approval is stale for the current check evidence.');
+        throw new Error('The saved quality approval is out of date for the current check results.');
       }
       return this.#view(record, fresh.availableChecks);
     });
@@ -662,7 +664,7 @@ export class DeliveryReadinessService {
       source.worktreeId !== record.sourceFingerprint.worktreeId ||
       source.runId !== record.sourceFingerprint.runId
     ) {
-      throw new Error('The managed delivery source changed after readiness was prepared.');
+      throw new Error('The committed changes to deliver changed after readiness was prepared.');
     }
     const required = record.requiredChecks.map((stored) => {
       const current = discovery.find(
@@ -686,7 +688,7 @@ export class DeliveryReadinessService {
     );
     const expected = sourceFingerprint(source, configurationDigest);
     if (!gitDeliverySourceFingerprintsEqual(expected, record.sourceFingerprint)) {
-      throw new Error('The delivery source or required check configuration changed.');
+      throw new Error('The changes to deliver or the required check setup changed.');
     }
     this.#workflowGateAuthority.assertCurrent(record.target, record.workflowBinding);
     await this.#workflowGateAuthority.assertReviewedGitIdentity(
@@ -745,16 +747,16 @@ export class DeliveryReadinessService {
     const resolved = await this.targets.resolve(target);
     const status = resolved.state.status;
     if (status === null || resolved.state.branchOid === null) {
-      throw new Error('The managed delivery worktree is unavailable.');
+      throw new Error('The agent worktree is unavailable.');
     }
     if (status.dirty) throw new Error('Commit or discard every managed worktree change first.');
     if (status.conflicted) throw new Error('Resolve managed worktree conflicts before delivery.');
     if (status.detached || status.branch !== resolved.ownership.branch) {
-      throw new Error('The managed delivery worktree is no longer on its owned branch.');
+      throw new Error('The agent worktree is no longer on its own branch.');
     }
     const sourceHead = resolved.state.branchOid;
     if (sourceHead === resolved.ownership.baseCommit) {
-      throw new Error('The managed worktree has no committed changes to validate for delivery.');
+      throw new Error('The agent worktree has no committed changes to check for delivery.');
     }
     if (
       !(await this.repositories.isAncestor(
@@ -763,7 +765,7 @@ export class DeliveryReadinessService {
         sourceHead,
       ))
     ) {
-      throw new Error('The managed delivery branch no longer descends from its recorded base.');
+      throw new Error('The agent branch no longer includes its recorded base commit.');
     }
     const treeResult = await this.repositories.git.run([
       '-C',
@@ -774,7 +776,8 @@ export class DeliveryReadinessService {
       `${sourceHead}^{tree}`,
     ]);
     const sourceTree = treeResult.stdout.trim();
-    if (!SOURCE_OID.test(sourceTree)) throw new Error('Git returned an invalid delivery tree ID.');
+    if (!SOURCE_OID.test(sourceTree))
+      throw new Error('Git returned an invalid content fingerprint for the delivery.');
     return sourceIdentity({
       target,
       worktreeId: resolved.ownership.id,
@@ -844,7 +847,7 @@ export class DeliveryReadinessService {
     const active = this.store.listDeliveryReadinessForTarget(record.target, 1)[0];
     if (active?.id !== record.id) {
       throw new Error(
-        'This delivery readiness was superseded by newer requirements. Review the active evidence.',
+        'Newer check requirements replaced this readiness. Review the current results.',
       );
     }
   }
@@ -929,7 +932,7 @@ export class DeliveryReadinessService {
 
   #assertLifecycle(expectedEpoch: number): void {
     if (this.#disposed || this.#resetting || this.#lifecycleEpoch !== expectedEpoch) {
-      throw new Error('Delivery readiness changed lifecycle while the operation was active.');
+      throw new Error('Delivery readiness was reset while the operation was running. Try again.');
     }
   }
 
@@ -1022,7 +1025,9 @@ function assertExactPlan(
     exactCheckDisclosureFingerprint(disclosure) !== resolvedCommandPublicFingerprint(resolution) ||
     resolvedCommandAuthorityFingerprint(resolution) !== required.resolvedCommand.fingerprint
   ) {
-    throw new Error('The exact-check launch no longer matches the prepared delivery command.');
+    throw new Error(
+      'The check about to run no longer matches the prepared command. Prepare readiness again.',
+    );
   }
 }
 
@@ -1037,7 +1042,9 @@ function assertResolutionSource(
     resolution.targetBinding.worktreeId !== source.worktreeId ||
     resolution.targetBinding.headCommit !== source.sourceHead
   ) {
-    throw new Error('The exact delivery check resolved another run, worktree, or source HEAD.');
+    throw new Error(
+      'The check resolved a different run, workspace, or source commit than reviewed.',
+    );
   }
 }
 
@@ -1051,7 +1058,7 @@ function assertSourceIdentity(
     expected.worktreeId !== current.worktreeId ||
     expected.runId !== current.runId
   ) {
-    throw new Error('The managed delivery source changed during readiness preparation.');
+    throw new Error('The committed changes to deliver changed during preparation.');
   }
 }
 
@@ -1067,9 +1074,7 @@ function uniqueCheckIds(checkIds: readonly CheckId[]): CheckId[] {
 
 function assertExpectedSource(record: DeliveryReadinessRecord, expected: string): void {
   if (record.sourceFingerprint.digest !== expected) {
-    throw new Error(
-      'The delivery source fingerprint changed. Refresh readiness before continuing.',
-    );
+    throw new Error('The changes to deliver changed. Refresh readiness before continuing.');
   }
 }
 
@@ -1097,7 +1102,7 @@ function assertTarget(
     actual.projectId !== expected.projectId ||
     actual.runId !== expected.runId
   ) {
-    throw new Error('The delivery approval belongs to another project or managed run.');
+    throw new Error('The delivery approval belongs to another project or agent run.');
   }
 }
 
@@ -1126,7 +1131,7 @@ function lostCompletionEvidence(
       exitCode: null,
     }),
     failureReason: (rawReason.trim() === ''
-      ? 'Exact delivery-check completion failed.'
+      ? 'The delivery check did not finish cleanly.'
       : rawReason
     ).slice(0, 20_000),
   });
@@ -1137,7 +1142,7 @@ function orphanedCheckEvidence(
   updatedAt: string,
 ): DeliveryRequiredCheckRecord {
   if (check.executionId === null || check.sourceFingerprint === null) {
-    throw new Error('An orphaned delivery check is missing its execution binding.');
+    throw new Error('A recovered delivery check is missing its run record.');
   }
   return DeliveryRequiredCheckRecordSchema.parse({
     ...check,
@@ -1147,7 +1152,7 @@ function orphanedCheckEvidence(
     updatedAt,
     exitCode: null,
     outputDigest: checkOutputDigest({
-      output: '[Forgeboard recovered an orphaned delivery check without retained output.]',
+      output: '[Forgeboard recovered an interrupted delivery check; its output was not kept.]',
       outputTruncated: true,
       status: 'lost',
       exitCode: null,
@@ -1160,7 +1165,7 @@ function terminalState(status: CheckExecutionView['status']) {
   if (status === 'passed' || status === 'failed' || status === 'cancelled' || status === 'lost') {
     return status;
   }
-  throw new Error('The exact delivery check returned non-terminal completion evidence.');
+  throw new Error('The delivery check returned an unfinished result.');
 }
 
 function nextTimestamp(previous: string, now: Date): string {

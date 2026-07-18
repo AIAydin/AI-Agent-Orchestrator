@@ -109,7 +109,7 @@ describe('configured agent readiness', () => {
     };
     const stale = evaluate(changed, mismatched).find((entry) => entry.agentId === 'codex');
     expect(stale?.phase).toBe('unavailable');
-    expect(stale?.blockingIssue).toMatch(/discarded stale executable evidence/u);
+    expect(stale?.blockingIssue).toMatch(/different settings/u);
   });
 
   it('requires current evidence for every configured built-in and the enabled custom CLI', () => {

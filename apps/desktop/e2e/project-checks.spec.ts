@@ -28,24 +28,24 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     await expect(lint).toContainText('Not run');
     await lint.getByRole('button', { name: 'Run Lint' }).click();
     const lintDisclosure = page.getByRole('dialog', {
-      name: 'Review the exact Lint command',
+      name: 'Review the Lint command',
     });
     await expect(lintDisclosure).toContainText('node');
     await expect(lintDisclosure).toContainText('FORGEBOARD_CHECK_E2E');
-    await expect(lintDisclosure).toContainText('No process has started');
-    await lintDisclosure.getByRole('button', { name: /Authorize exact check/ }).click();
+    await expect(lintDisclosure).toContainText('Nothing has run yet');
+    await lintDisclosure.getByRole('button', { name: /Approve and run/ }).click();
     await expect(lint).toContainText('passed');
     await expect(lint).toContainText('FORGEBOARD_CHECK_E2E');
-    await expect(lint).toContainText('Exit 0');
+    await expect(lint).toContainText('Exit code 0');
     expect(await nativeDialogCount(electronApp)).toBe(1);
 
     await test.step('an exact remembered grant skips native re-prompting and can be revoked', async () => {
       await lint.getByRole('button', { name: 'Run Lint' }).click();
       const repeatedDisclosure = page.getByRole('dialog', {
-        name: 'Review the exact Lint command',
+        name: 'Review the Lint command',
       });
-      await expect(repeatedDisclosure).toContainText(/Exact approval fingerprint/);
-      await repeatedDisclosure.getByRole('button', { name: /Authorize exact check/ }).click();
+      await expect(repeatedDisclosure).toContainText(/Approval fingerprint/);
+      await repeatedDisclosure.getByRole('button', { name: /Approve and run/ }).click();
       await expect(lint).toContainText('passed');
       expect(await nativeDialogCount(electronApp!)).toBe(1);
 
@@ -54,15 +54,13 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
       await settings.getByRole('button', { name: 'Permissions', exact: true }).click();
       await expect(settings.getByText('Saved approvals', { exact: true })).toBeVisible();
       await settings.getByRole('button', { name: 'Revoke Command execute' }).click();
-      await expect(
-        settings.getByText('No active saved approvals exist for this project.'),
-      ).toBeVisible();
+      await expect(settings.getByText('No active saved approvals for this project.')).toBeVisible();
       await settings.getByRole('button', { name: 'Close settings' }).click();
 
       await lint.getByRole('button', { name: 'Run Lint' }).click();
       await page
-        .getByRole('dialog', { name: 'Review the exact Lint command' })
-        .getByRole('button', { name: /Authorize exact check/ })
+        .getByRole('dialog', { name: 'Review the Lint command' })
+        .getByRole('button', { name: /Approve and run/ })
         .click();
       await expect(lint).toContainText('passed');
       expect(await nativeDialogCount(electronApp!)).toBe(2);
@@ -71,12 +69,12 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     const tests = checkCard(page, 'Tests');
     await tests.getByRole('button', { name: 'Run Tests' }).click();
     const testDisclosure = page.getByRole('dialog', {
-      name: 'Review the exact Tests command',
+      name: 'Review the Tests command',
     });
-    await testDisclosure.getByRole('button', { name: /Authorize exact check/ }).click();
+    await testDisclosure.getByRole('button', { name: /Approve and run/ }).click();
     await expect(tests).toContainText('passed');
     await expect(tests).toContainText('FORGEBOARD_TEST_E2E');
-    await expect(tests.getByRole('group', { name: 'Tests parsed test summary' })).toContainText(
+    await expect(tests.getByRole('group', { name: 'Tests test summary' })).toContainText(
       '2 passed0 failed1 skipped3 total',
     );
 
@@ -85,9 +83,9 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     await expect(runBuild).toBeEnabled();
     await runBuild.click();
     const buildDisclosure = page.getByRole('dialog', {
-      name: 'Review the exact Build command',
+      name: 'Review the Build command',
     });
-    await buildDisclosure.getByRole('button', { name: /Authorize exact check/ }).click();
+    await buildDisclosure.getByRole('button', { name: /Approve and run/ }).click();
     await expect(build.getByRole('button', { name: 'Cancel Build' })).toBeVisible();
     await expect(build).toContainText('FORGEBOARD_CANCEL_E2E');
     await build.getByRole('button', { name: 'Cancel Build' }).click();
@@ -113,8 +111,8 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
     const restartedBuild = checkCard(page, 'Build');
     await restartedBuild.getByRole('button', { name: 'Run Build' }).click();
     await page
-      .getByRole('dialog', { name: 'Review the exact Build command' })
-      .getByRole('button', { name: /Authorize exact check/ })
+      .getByRole('dialog', { name: 'Review the Build command' })
+      .getByRole('button', { name: /Approve and run/ })
       .click();
     await expect(restartedBuild.getByRole('button', { name: 'Cancel Build' })).toBeVisible();
     const heartbeat = join(

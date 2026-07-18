@@ -41,7 +41,7 @@ describe('WorkspaceChecksPanel', () => {
     });
 
     expect(screen.getByText(/real stdout/u)).toBeTruthy();
-    expect(screen.getByText('Running · exit code pending')).toBeTruthy();
+    expect(screen.getByText('Running · no result yet')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Lint' }));
     expect(onCancel).toHaveBeenCalledWith(execution.id);
   });
@@ -101,12 +101,12 @@ describe('WorkspaceChecksPanel', () => {
       ]),
     });
 
-    const summary = screen.getByRole('group', { name: 'Tests parsed test summary' });
+    const summary = screen.getByRole('group', { name: 'Tests test summary' });
     expect(summary.textContent).toContain('4 passed');
     expect(summary.textContent).toContain('1 failed');
     expect(summary.textContent).toContain('2 skipped');
     expect(summary.textContent).toContain('7 total');
-    const raw = screen.getByLabelText('Tests raw output');
+    const raw = screen.getByLabelText('Tests full output');
     expect(raw.textContent).toBe(rawOutput);
     expect(raw.getAttribute('tabindex')).toBe('0');
   });

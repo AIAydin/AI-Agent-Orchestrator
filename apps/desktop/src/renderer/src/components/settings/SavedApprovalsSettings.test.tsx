@@ -82,12 +82,12 @@ describe('SavedApprovalsSettings', () => {
     expect(screen.getByText(/per-use approval/iu)).toBeTruthy();
   });
 
-  it('can request inactive local decisions through the UI', async () => {
+  it('can request inactive approvals through the UI', async () => {
     list.mockResolvedValue({ ok: true, value: [] });
     render(<SavedApprovalsSettings activeProject={null} busy={false} onError={vi.fn()} />);
 
-    await screen.findByText('No active saved approvals exist on this device.');
-    fireEvent.click(screen.getByRole('checkbox', { name: /Show inactive decisions/ }));
+    await screen.findByText('No active saved approvals on this device.');
+    fireEvent.click(screen.getByRole('checkbox', { name: /Show inactive approvals/ }));
 
     await waitFor(() =>
       expect(list).toHaveBeenLastCalledWith({ includeInactive: true, limit: 200 }),

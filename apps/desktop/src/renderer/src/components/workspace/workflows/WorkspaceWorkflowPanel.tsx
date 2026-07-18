@@ -68,15 +68,16 @@ export function WorkspaceWorkflowPanel({
     >
       {!mutationsAuthorized && (
         <p className="workflow-role-notice" role="status">
-          This collaboration role can inspect workflow history, status, and output but cannot start,
-          approve, control, or cancel execution.
+          Your role lets you view workflow history, status, and output, but not start, approve,
+          control, or cancel a run.
         </p>
       )}
       <header className="drawer-panel-summary workflow-panel-toolbar">
         <div>
-          <strong>Durable workflow runs</strong>
+          <strong>Workflow runs</strong>
           <small>
-            Run the saved canvas or selected node from the toolbar. Decisions stay local.
+            Run the saved canvas or a selected node from the toolbar. Decisions stay on this
+            computer.
           </small>
         </div>
         <div className="drawer-panel-actions">
@@ -107,7 +108,7 @@ export function WorkspaceWorkflowPanel({
               disabled={busyAction !== null || !mutationsAuthorized}
               onClick={() => onCancel(current.id)}
             >
-              <Square size={11} aria-hidden="true" /> Cancel workflow
+              <Square size={11} aria-hidden="true" /> Cancel run
             </button>
           )}
         </div>
@@ -165,7 +166,9 @@ function WorkflowExecutionDetails({
     <div className="workflow-run-layout">
       <section className="workflow-run-summary" aria-label="Workflow run summary">
         <div>
-          <span className={`workflow-state ${execution.status}`}>{execution.status}</span>
+          <span className={`workflow-state ${execution.status}`}>
+            {statusLabel(execution.status)}
+          </span>
           <strong>{scopeLabel(execution, nodeTitles)}</strong>
           <small>
             Updated <time dateTime={execution.updatedAt}>{formatDate(execution.updatedAt)}</time>
@@ -225,7 +228,7 @@ function WorkflowExecutionDetails({
         </section>
       )}
 
-      <section className="workflow-node-list" aria-label="Workflow node lifecycle">
+      <section className="workflow-node-list" aria-label="Workflow node status">
         {execution.nodeRuns.map((run) => (
           <article key={run.nodeId}>
             <span className={`workflow-node-icon ${run.status}`}>
@@ -242,7 +245,7 @@ function WorkflowExecutionDetails({
             <div>
               <strong>{nodeTitle(nodeTitles, run.nodeId)}</strong>
               <small>
-                Attempt {run.attempt} · {run.status}
+                Attempt {run.attempt} · {statusLabel(run.status)}
               </small>
               {run.statusReason && <p>{run.statusReason}</p>}
               {run.reviewableAgentRunId !== undefined && (
@@ -276,7 +279,7 @@ function WorkflowExecutionDetails({
       </section>
 
       {execution.edges.length > 0 && (
-        <section className="workflow-edge-list" aria-label="Workflow edge lifecycle">
+        <section className="workflow-edge-list" aria-label="Workflow connection status">
           <header>
             <GitBranch size={12} aria-hidden="true" />
             <strong>Connections</strong>
@@ -284,10 +287,10 @@ function WorkflowExecutionDetails({
           {execution.edges.map((edge) => (
             <article key={edge.edgeId}>
               <span className={`workflow-edge-run-status ${edge.status}`}>
-                {edge.status.replaceAll('-', ' ')}
+                {statusLabel(edge.status)}
               </span>
               <span className={`workflow-edge-state ${edge.disposition}`}>
-                {edge.disposition.replaceAll('-', ' ')}
+                {statusLabel(edge.disposition)}
               </span>
               <strong>
                 {nodeTitle(nodeTitles, edge.sourceNodeId)} →{' '}
@@ -317,13 +320,14 @@ function LaunchDecisionCard({
   return (
     <article>
       <div>
-        <strong>Launch {title}</strong>
+        <strong>Start {title}</strong>
         <small>
-          Exact executor disclosure · expires {new Date(request.expiresAt).toLocaleTimeString()}
+          You&apos;ll review the exact command first · expires{' '}
+          {new Date(request.expiresAt).toLocaleTimeString()}
         </small>
       </div>
       <button type="button" disabled={disabled} onClick={onReview}>
-        Review launch
+        Review what will run
       </button>
     </article>
   );
@@ -344,7 +348,7 @@ function HumanDecisionCard({
     <article>
       <div>
         <strong>{humanDecisionLabel(request.targetType, title)}</strong>
-        <small>Attempt {request.targetAttempt} · evidence-bound request</small>
+        <small>Attempt {request.targetAttempt} · tied to this exact result</small>
       </div>
       <button type="button" disabled={disabled} onClick={onReview}>
         {request.targetType === 'human-review' ? 'Review result' : 'Review approval'}
@@ -365,13 +369,13 @@ function RevisionDecisionCard({
   return (
     <article>
       <div>
-        <strong>Revision limit reached</strong>
+        <strong>Retry limit reached</strong>
         <small>
-          Loop {request.loopId} · {request.attemptsStarted} attempts started
+          Loop {request.loopId} · tried {request.attemptsStarted} times
         </small>
       </div>
       <button type="button" disabled={disabled} onClick={onReview}>
-        Resolve limit
+        Choose what to do
       </button>
     </article>
   );
@@ -387,9 +391,15 @@ function scopeLabel(
 ): string {
   const scope = execution.scope;
   if (scope.kind === 'workflow') return 'Entire saved canvas';
-  if (scope.kind === 'node') return `${nodeTitle(nodeTitles, scope.nodeId)} with dependencies`;
+  if (scope.kind === 'node')
+    return `${nodeTitle(nodeTitles, scope.nodeId)} and everything it needs`;
   if (scope.kind === 'selection') return `${scope.nodeIds.length} selected nodes`;
   return `Group ${scope.groupId}`;
+}
+
+function statusLabel(status: string): string {
+  const words = status.replaceAll('-', ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function humanDecisionLabel(
@@ -406,7 +416,7 @@ function humanRequestKey(request: WorkflowHumanDecisionRequest): string {
 }
 
 function formatRunOption(execution: WorkflowExecutionView): string {
-  return `${new Date(execution.createdAt).toLocaleString()} · ${execution.status}`;
+  return `${new Date(execution.createdAt).toLocaleString()} · ${statusLabel(execution.status)}`;
 }
 
 function formatDate(value: string): string {

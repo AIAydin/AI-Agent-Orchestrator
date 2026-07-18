@@ -2,6 +2,7 @@ import { AlertTriangle, Container, ShieldCheck } from 'lucide-react';
 
 import type { AppSettings, PermissionProfile } from '../../../../shared/application/contracts.js';
 import {
+  accessPolicyWord,
   configuredFilesystemLabel,
   permissionProfileLabel,
   permissionProfileUnavailableReason,
@@ -41,15 +42,19 @@ export function ConfiguredPermissionSummary({
       )}
       <span>
         <strong>
-          Custom · {custom.runtime === 'docker' ? 'Docker boundary' : 'host disclosure-only'}
+          Custom ·{' '}
+          {custom.runtime === 'docker'
+            ? 'runs in Docker (enforced)'
+            : 'runs on this computer (not enforced)'}
         </strong>
         <small>{configuredFilesystemLabel(custom.filesystem)}</small>
         <small>
-          Ignored {custom.ignoredFileRead} · sensitive {custom.sensitiveFileRead} · dev servers{' '}
-          {custom.forgeboardManagedActions.developmentServers} · tests{' '}
-          {custom.forgeboardManagedActions.tests}
+          Ignored files {accessPolicyWord(custom.ignoredFileRead)} · sensitive files{' '}
+          {accessPolicyWord(custom.sensitiveFileRead)} · dev servers{' '}
+          {accessPolicyWord(custom.forgeboardManagedActions.developmentServers)} · tests{' '}
+          {accessPolicyWord(custom.forgeboardManagedActions.tests)}
         </small>
-        <small>Primary-branch review always required.</small>
+        <small>You always review changes before they reach the main branch.</small>
         {custom.runtime === 'docker' && <DockerPreflightNotice />}
       </span>
       {unavailable && <em>{unavailable}</em>}
@@ -60,8 +65,8 @@ export function ConfiguredPermissionSummary({
 function DockerPreflightNotice() {
   return (
     <small>
-      Review &amp; run invokes the selected Docker client for bounded daemon and image metadata
-      preflight. No in-image agent payload starts until you approve the exact launch.
+      “Review &amp; run” uses Docker only to check basic engine and image details. Nothing starts
+      inside Docker until you approve the exact launch.
     </small>
   );
 }
@@ -69,10 +74,10 @@ function DockerPreflightNotice() {
 function builtInSummary(profile: Exclude<PermissionProfile, 'custom'>): string {
   switch (profile) {
     case 'plan-read-only':
-      return 'Provider read-only request; the exact launch remains approval-gated.';
+      return 'The agent is asked to only read and plan. It starts after you approve the exact launch.';
     case 'worktree-write':
-      return 'Dedicated managed worktree; changes require review before the primary branch.';
+      return 'The agent works in its own worktree. You review changes before they reach the main branch.';
     case 'docker-isolated':
-      return 'Non-root container, one worktree mount, network and resource controls.';
+      return 'Runs in Docker without admin rights, limited to one worktree, with network and resource limits.';
   }
 }

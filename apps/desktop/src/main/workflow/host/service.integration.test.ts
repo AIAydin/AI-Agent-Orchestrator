@@ -203,7 +203,7 @@ describe('durable workflow host', () => {
           attempt: 1,
           data: 'wrong node',
         }),
-      ).rejects.toThrow(/stale/u);
+      ).rejects.toThrow(/out of date/u);
       await expect(
         host.sendInput({
           executionId: prepared.execution.id,
@@ -211,7 +211,7 @@ describe('durable workflow host', () => {
           attempt: 2,
           data: 'stale attempt',
         }),
-      ).rejects.toThrow(/stale/u);
+      ).rejects.toThrow(/out of date/u);
       await expect(
         host.sendInput({
           executionId: prepared.execution.id,
@@ -1097,7 +1097,7 @@ describe('durable workflow host', () => {
           decision: 'changes-requested',
           decidedBy: 'local-user',
         }),
-      ).rejects.toThrow(/actionable feedback/u);
+      ).rejects.toThrow(/Say what should change/u);
 
       const reviewed = await host.recordHumanReview({
         executionId: initial.execution.id,

@@ -25,17 +25,17 @@ test('an existing non-Git folder can be initialized safely from the project UI',
     watchExternalRequests(page, externalRequests);
 
     await page
-      .getByRole('dialog', { name: /Ready to build without wiring config files/i })
+      .getByRole('dialog', { name: /Set up Forgeboard in a few quick steps/i })
       .getByRole('button', { name: 'Use safe defaults' })
       .click();
     await chooseRepository(electronApp, projectPath);
-    await page.getByRole('button', { name: /Open local repository/i }).click();
+    await page.getByRole('button', { name: /Open a project folder/i }).click();
 
     await expect(page.locator('.project-switcher')).toContainText('existing-project');
-    await expect(page.getByText('Not a Git repository')).toBeVisible();
-    const initialize = page.getByRole('button', { name: 'Initialize Git…' });
+    await expect(page.getByText('Git not set up yet')).toBeVisible();
+    const initialize = page.getByRole('button', { name: 'Set up Git…' });
     await expect(initialize).toBeVisible();
-    await expect(page.getByText('Existing files stay untouched and uncommitted.')).toBeVisible();
+    await expect(page.getByText('Your files stay exactly as they are.')).toBeVisible();
 
     await answerNativeConfirmation(electronApp, 0);
     await initialize.click();

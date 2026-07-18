@@ -15,7 +15,7 @@ describe('DataOperationGate', () => {
     await Promise.resolve();
     expect(mutationStarted).toBe(false);
     await expect(gate.run(() => 'late operation')).rejects.toThrow(
-      'Another local-data operation is in progress.',
+      'Another data change is already in progress. Wait for it to finish, then try again.',
     );
 
     operationRelease.resolve();
@@ -40,8 +40,12 @@ describe('DataOperationGate', () => {
     const operation = gate.run(async () => await operationRelease.promise);
     gate.beginShutdown();
 
-    await expect(gate.run(() => undefined)).rejects.toThrow('Forgeboard is shutting down.');
-    await expect(gate.beginMutation('delete')).rejects.toThrow('Forgeboard is shutting down.');
+    await expect(gate.run(() => undefined)).rejects.toThrow(
+      'Forgeboard is closing, so this cannot start right now.',
+    );
+    await expect(gate.beginMutation('delete')).rejects.toThrow(
+      'Forgeboard is closing, so this cannot start right now.',
+    );
 
     let quitStarted = false;
     const quit = gate.beginMutation('quit', { allowDuringShutdown: true }).then(() => {

@@ -22,17 +22,19 @@ export function LocalComments({ comments, onCreate }: LocalCommentsProps) {
   }
 
   return (
-    <section className="local-comments" aria-label="Private local comments">
+    <section className="local-comments" aria-label="Private comments">
       <header>
-        <strong>Private local comments</strong>
+        <strong>Private comments</strong>
         <small>{comments.length}</small>
       </header>
       <p className="local-comments-privacy">
-        Stored only in this project on this device. Joining or leaving a shared room never publishes
-        this text.
+        Saved only in this project on this device. Joining or leaving a shared room never shares
+        them.
       </p>
       {visible.length === 0 ? (
-        <p className="local-comments-empty">No private comments on this node.</p>
+        <p className="local-comments-empty">
+          No private comments yet. Add one below — only you can see it.
+        </p>
       ) : (
         <ol>
           {visible.map((comment) => (

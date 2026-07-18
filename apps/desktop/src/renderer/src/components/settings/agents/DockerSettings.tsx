@@ -23,13 +23,13 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
 
   return (
     <SettingsSection
-      title="Docker isolation"
-      description="Optional stronger isolation. Forgeboard mounts only the assigned worktree and uses a non-root container user."
+      title="Extra protection with Docker"
+      description="Optional extra protection. Docker gives each agent only its own project copy, without full access to your computer."
     >
       <label className="switch-row">
         <span>
           <strong>Enable Docker profiles</strong>
-          <small>Docker is optional and never required for the local demo.</small>
+          <small>Docker is optional — the local demo works without it.</small>
         </span>
         <input
           type="checkbox"
@@ -71,7 +71,8 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
       />
       {runtimeFieldsIncomplete && (
         <div className="inline-notice" role="status">
-          Choose an image and its absolute in-image agent executable before saving Docker isolation.
+          Choose a Docker image and the full path of the agent program inside it before saving these
+          settings.
         </div>
       )}
       <div className="two-column">
@@ -100,7 +101,7 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
         </label>
       </div>
       <label>
-        Container network
+        Network access in Docker
         <select
           name="docker-network"
           value={draft.dockerNetwork}
@@ -111,17 +112,16 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
             })
           }
         >
-          <option value="disabled">Disabled</option>
-          <option value="enabled">Enabled with launch disclosure</option>
+          <option value="disabled">Off</option>
+          <option value="enabled">On (shown in the review before each run)</option>
         </select>
       </label>
       <label className="switch-row warning-switch">
         <span>
-          <strong>Mount host CLI credentials (unsupported)</strong>
+          <strong>Share this computer's sign-in details with Docker (unsupported)</strong>
           <small>
-            Forgeboard never honors this preference or exposes host auth stores, sockets, or
-            keychains. A checked value came from legacy or imported settings and can only be turned
-            off.
+            Forgeboard never shares your passwords, sign-in tokens, or keychain with Docker. If this
+            is on, it came from old or imported settings — you can only turn it off.
           </small>
         </span>
         <input
@@ -140,9 +140,9 @@ export function DockerSettings({ draft, setDraft, busy, onError }: DockerSetting
       </label>
       {draft.dockerMountHostCredentials && (
         <p id="docker-host-credentials-help" className="recovery-guidance warning" role="status">
-          Host credential mounting is inactive and Docker launches fail closed while this legacy
-          value is checked. Uncheck it and save Settings, then authenticate inside the selected
-          image if the agent requires an account.
+          Sharing sign-in details never works, and Docker launches fail closed — every run is
+          blocked for safety — while this old setting is on. Turn it off and save Settings. If the
+          agent needs an account, sign in inside the Docker image instead.
         </p>
       )}
     </SettingsSection>

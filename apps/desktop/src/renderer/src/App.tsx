@@ -66,7 +66,11 @@ export function App() {
 
   useEffect(() => {
     void loadBootstrap().catch((cause: unknown) => {
-      setError(cause instanceof Error ? cause.message : 'Forgeboard could not start.');
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Forgeboard couldn't start. Try closing and reopening the app.",
+      );
     });
   }, [loadBootstrap]);
 
@@ -91,7 +95,9 @@ export function App() {
           await loadBootstrap();
         }
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'The project operation failed.');
+        setError(
+          cause instanceof Error ? cause.message : "The project action didn't work. Try again.",
+        );
       } finally {
         setBusy(false);
       }
@@ -109,7 +115,7 @@ export function App() {
       <main className="loading-screen" aria-live="polite">
         <div className="brand-mark large">F</div>
         <LoaderCircle className="spin" aria-hidden="true" />
-        <p>{error ?? 'Opening your local workshop…'}</p>
+        <p>{error ?? 'Opening Forgeboard…'}</p>
       </main>
     );
   }

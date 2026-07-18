@@ -47,7 +47,11 @@ export function AgentReadinessPanel({
       const refreshed = await checkReadiness(draft.request);
       if (refreshed !== null) onResult(refreshed);
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'Agent readiness could not be checked.');
+      onError(
+        cause instanceof Error
+          ? cause.message
+          : 'Forgeboard could not check this agent. Try again.',
+      );
     }
   }
 
@@ -64,10 +68,10 @@ export function AgentReadinessPanel({
           type="button"
           disabled={disabled || checking || checkReadiness === undefined || draft.request === null}
           onClick={() => void refresh()}
-          aria-label={`Refresh ${label} readiness`}
+          aria-label={`Check ${label} again`}
         >
           <RefreshCw className={checking ? 'spin' : ''} size={13} />
-          {checking ? 'Checking…' : 'Refresh readiness'}
+          {checking ? 'Checking…' : 'Check again'}
         </button>
       </header>
 
@@ -77,26 +81,26 @@ export function AgentReadinessPanel({
         <ReadinessResult result={result} />
       ) : launchReady ? (
         <p>
-          Detected and versioned when Forgeboard opened: <code>{agent?.version}</code>. Refresh to
-          revalidate the current executable without saving this draft.
+          Found when Forgeboard opened: version <code>{agent?.version}</code>. Select “Check again”
+          to re-check the current program — nothing is saved.
         </p>
       ) : (
         <p>
           {agent?.installed
-            ? 'The executable was located, but its version has not been validated.'
-            : 'No usable executable is currently detected. Browse to one or install the CLI, then refresh.'}
+            ? 'The program was found, but its version has not been checked yet.'
+            : 'No usable program was found. Use Browse to find it, or install the tool and then check again.'}
         </p>
       )}
       {!ready && <p>{agentDependencyGuidance(agent, draft.request?.agentId ?? 'custom')}</p>}
       {checkReadiness === undefined && (
         <p className="agent-readiness-unavailable" role="status">
-          Readiness refresh is unavailable in this application build. Only launch-time detection
-          evidence can be shown until the readiness bridge is available.
+          Re-checking is not available in this build of Forgeboard. Only what was found when the app
+          opened can be shown.
         </p>
       )}
       <small>
-        The check runs the adapter's bounded version and capability probes against the current UI
-        draft. It does not save the draft or launch an agent run.
+        This asks the agent for its version and capabilities using your current, unsaved settings.
+        Nothing is saved and no agent run starts.
       </small>
     </section>
   );
@@ -114,8 +118,8 @@ function ReadinessResult({ result }: { readonly result: AgentReadinessResult }) 
   return (
     <div className="agent-readiness-result">
       <p>
-        Validated <code>{result.version}</code> from{' '}
-        {result.source === 'override' ? 'the selected override' : result.source}.
+        Version <code>{result.version}</code> confirmed from{' '}
+        {result.source === 'override' ? 'the program you selected' : result.source}.
       </p>
       <code>{result.executable}</code>
       {result.warnings.map((warning) => (

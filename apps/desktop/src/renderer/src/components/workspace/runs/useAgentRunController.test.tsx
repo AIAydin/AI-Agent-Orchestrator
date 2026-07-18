@@ -124,9 +124,7 @@ describe('useAgentRunController persisted review boundary', () => {
 
     await act(async () => await hook.result.current.runs.prepareSelectedRun());
     expect(prepare).not.toHaveBeenCalled();
-    expect(onError).toHaveBeenCalledWith(
-      'Save the current canvas before reviewing this Agent run.',
-    );
+    expect(onError).toHaveBeenCalledWith('Save the canvas before reviewing this run.');
 
     flushCanvas.mockResolvedValueOnce(true);
     await act(async () => await hook.result.current.runs.prepareSelectedRun());
@@ -136,9 +134,7 @@ describe('useAgentRunController persisted review boundary', () => {
 
     expect(approve).not.toHaveBeenCalled();
     expect(hook.result.current.runs.disclosure).not.toBeNull();
-    expect(onError).toHaveBeenLastCalledWith(
-      'Save the current canvas before approving this Agent run.',
-    );
+    expect(onError).toHaveBeenLastCalledWith('Save the canvas before approving this run.');
   });
 
   it('commits a newly selected permission before flushing the review boundary', async () => {

@@ -15,12 +15,12 @@ describe('RejectedCommentActions', () => {
     const onDiscard = vi.fn().mockResolvedValue(false);
     const view = render(<RejectedCommentActions entry={oldEntry} onDiscard={onDiscard} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Discard local copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete saved copy' }));
     expect(
-      screen.getByText(/leave and rejoin the room before sharing more changes/iu),
+      screen.getByText(/leave and rejoin the shared canvas before sharing more changes/iu),
     ).toBeTruthy();
     view.rerender(<RejectedCommentActions entry={newerEntry} onDiscard={onDiscard} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm discard local copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this copy' }));
 
     await waitFor(() => expect(onDiscard).toHaveBeenCalledWith(oldEntry));
     expect(onDiscard).not.toHaveBeenCalledWith(newerEntry);

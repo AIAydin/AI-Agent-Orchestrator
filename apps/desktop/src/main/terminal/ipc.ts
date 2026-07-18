@@ -69,8 +69,8 @@ export class TerminalIpcService {
         await this.service.assertProjectAvailable(input.projectId);
         const parent = this.#requireWindow(event);
         const selection = await this.dialog.showOpenDialog(parent, {
-          title: 'Choose terminal executable',
-          buttonLabel: 'Choose executable',
+          title: 'Choose terminal program',
+          buttonLabel: 'Choose program',
           properties: ['openFile'],
         });
         this.#assertCurrent(event, parent);
@@ -78,7 +78,7 @@ export class TerminalIpcService {
         if (selection.canceled || selected === undefined) return null;
         const canonical = await realpath(selected);
         const details = await stat(canonical);
-        if (!details.isFile()) throw new Error('The selected terminal executable is not a file.');
+        if (!details.isFile()) throw new Error('The selected terminal program is not a file.');
         await access(canonical, process.platform === 'win32' ? constants.F_OK : constants.X_OK);
         this.#assertCurrent(event, parent);
         this.assertMutationAuthorized(event);
@@ -248,7 +248,7 @@ export class TerminalIpcService {
     try {
       this.#assertNotDisposed();
       if (this.#paused)
-        throw new Error('Terminal operations are paused for a local data operation.');
+        throw new Error('Terminal operations are paused while Forgeboard changes local data.');
       assertLiveMainFrame(event, 'Terminal operation');
       this.#ownerId(event.sender);
       const args = inputSchema.parse(rawArgs);

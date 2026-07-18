@@ -163,9 +163,9 @@ export function MonacoTextEditor({
       <div ref={containerRef} className="file-editor-monaco" data-testid="monaco-editor" />
       {loadFailed ? (
         <div className="file-editor-monaco-error" role="alert">
-          <p>The code editor could not load.</p>
+          <p>The editor couldn't load.</p>
           <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
-            Retry editor
+            Try again
           </button>
         </div>
       ) : null}

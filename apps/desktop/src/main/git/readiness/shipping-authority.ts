@@ -25,7 +25,7 @@ export class DeliveryReadinessShippingAuthority implements GitShippingReadinessA
     }
     const approval = exactHumanApproval(candidate);
     if (approval === undefined) {
-      throw new Error('Delivery readiness has no exact durable human approval.');
+      throw new Error('Delivery readiness has no current quality approval.');
     }
     const view = await this.readiness.revalidate({ approvalId: approval.approvalId, target });
     assertSameReadyEvidence(candidate, view);
@@ -48,7 +48,7 @@ export class DeliveryReadinessShippingAuthority implements GitShippingReadinessA
         binding.view.sourceFingerprint,
       )
     ) {
-      throw new Error('The shipping plan is not bound to exact human readiness evidence.');
+      throw new Error('The delivery plan is not tied to the current approved check results.');
     }
     const current = await this.readiness.revalidate({
       approvalId: binding.approvalId,
@@ -90,6 +90,6 @@ function assertTarget(view: GitDeliveryReadinessView, target: GitDeliveryReadine
     view.target.projectId !== target.projectId ||
     view.target.runId !== target.runId
   ) {
-    throw new Error('The shipping readiness binding belongs to another managed run.');
+    throw new Error('This readiness belongs to another agent run.');
   }
 }

@@ -461,7 +461,7 @@ describe('LocalStore', () => {
     expect(() => store.saveSettings(settings({ envAllowlist: ['NOT-VALID'] }))).toThrow();
     expect(() =>
       store.saveSettings(settings({ previewPortStart: 5200, previewPortEnd: 5200 })),
-    ).toThrow('Preview port end must be greater than preview port start.');
+    ).toThrow('Preview port end must be higher than preview port start.');
 
     closeStore(store);
     const reopened = openStore(databasePath);

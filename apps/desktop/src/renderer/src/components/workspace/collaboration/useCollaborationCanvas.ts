@@ -174,7 +174,7 @@ export function useCollaborationCanvas({
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Forgeboard could not checkpoint collaboration recovery state.',
+          'Forgeboard could not save a recovery copy of the shared canvas.',
         ),
       );
   }, []);
@@ -202,7 +202,7 @@ export function useCollaborationCanvas({
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Forgeboard could not read the room snapshot for a recovery checkpoint.',
+          'Forgeboard could not read the shared canvas to save a recovery copy.',
         ),
       );
   }, [checkpointSnapshot]);
@@ -223,7 +223,7 @@ export function useCollaborationCanvas({
             reportOnce(
               lastErrorRef,
               onErrorRef.current,
-              'Collaboration paused because restored local edits conflict with room changes made while this app was closed.',
+              'Sharing paused because changes made on this device while Forgeboard was closed clash with changes made by others in the shared canvas.',
             );
             return false;
           }
@@ -251,8 +251,8 @@ export function useCollaborationCanvas({
               lastErrorRef,
               onErrorRef.current,
               commentRecovery !== null && commentRecovery.additions.length > 0
-                ? 'Restored shared comments or graph edits were retained on this device but cannot be replayed by the current collaboration role.'
-                : 'Restored local graph edits were retained on this device but cannot be published by the current collaboration role.',
+                ? 'Comments and canvas changes made while offline are saved on this device, but your current role cannot share them.'
+                : 'Canvas changes made while offline are saved on this device, but your current role cannot share them.',
             );
           }
         }
@@ -286,9 +286,9 @@ export function useCollaborationCanvas({
             onErrorRef.current,
             reconnectingActivationRef.current
               ? reconnectDeliveryRejectedRef.current
-                ? 'Collaboration paused because offline metadata was not durably acknowledged after reconnect.'
-                : 'Collaboration paused because an offline edit conflicted with room changes during reconnect.'
-              : 'Collaboration paused because local and room metadata both changed since the last synchronized state.',
+                ? 'Sharing paused because the shared canvas did not confirm your offline changes after reconnecting.'
+                : 'Sharing paused because an offline change clashed with shared canvas changes while reconnecting.'
+              : 'Sharing paused because this device and the shared canvas both changed since they were last in sync.',
           );
           return false;
         }
@@ -491,7 +491,7 @@ export function useCollaborationCanvas({
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Collaboration paused because a durable delivery receipt changed identity during recovery.',
+          'Sharing paused because a saved delivery record did not match while restoring offline changes.',
         );
         return false;
       }
@@ -545,7 +545,7 @@ export function useCollaborationCanvas({
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Forgeboard could not update collaboration presence.',
+          'Forgeboard could not show your cursor and selection to others.',
         ),
       );
   }, [enabled]);
@@ -675,7 +675,7 @@ export function useCollaborationCanvas({
           reportOnce(
             lastErrorRef,
             onErrorRef.current,
-            'Collaboration paused because the reconnected room has no valid canvas snapshot.',
+            'Sharing paused because the reconnected shared canvas has no usable saved data.',
           );
         }
         let ready = false;
@@ -699,7 +699,7 @@ export function useCollaborationCanvas({
           reportOnce(
             lastErrorRef,
             onErrorRef.current,
-            'Forgeboard could not read the authenticated collaboration snapshot.',
+            'Forgeboard could not read the shared canvas data.',
           );
         }
       }
@@ -804,7 +804,7 @@ export function useCollaborationCanvas({
           reportOnce(
             lastErrorRef,
             onErrorRef.current,
-            'Forgeboard could not read collaboration status.',
+            'Forgeboard could not check whether sharing is connected.',
           );
         }
       });
@@ -882,7 +882,7 @@ export function useCollaborationCanvas({
           reportOnce(
             lastErrorRef,
             onErrorRef.current,
-            'Forgeboard could not recover durable collaboration metadata.',
+            'Forgeboard could not restore your offline shared changes.',
           );
         }
       })
@@ -919,7 +919,7 @@ export function useCollaborationCanvas({
           reportOnce(
             lastErrorRef,
             onErrorRef.current,
-            'Collaboration paused because this canvas cannot be represented by the safe metadata contract.',
+            'Sharing paused because this canvas could not be converted into the safe sharing format.',
           );
           return;
         }
@@ -942,7 +942,7 @@ export function useCollaborationCanvas({
           reportOnce(
             lastErrorRef,
             onErrorRef.current,
-            'Collaboration is waiting for too many delivery confirmations; reconnect before making more shared edits.',
+            'Too many shared changes are still waiting to be confirmed. Reconnect before making more changes.',
           );
           return;
         }
@@ -990,7 +990,7 @@ export function useCollaborationCanvas({
                 lastErrorRef,
                 onErrorRef.current,
                 result.ok
-                  ? 'Forgeboard could not queue collaboration metadata for delivery.'
+                  ? 'Forgeboard could not send your canvas changes to the shared canvas.'
                   : result.error.message,
               );
             }
@@ -1004,14 +1004,14 @@ export function useCollaborationCanvas({
             reportOnce(
               lastErrorRef,
               onErrorRef.current,
-              'Forgeboard could not publish collaboration metadata.',
+              'Forgeboard could not share your canvas changes.',
             );
           });
       } catch {
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Collaboration paused because the canvas metadata failed privacy validation.',
+          'Sharing paused because this canvas could not pass the privacy check.',
         );
       }
     }, debounceMs);
@@ -1051,7 +1051,7 @@ export function useCollaborationCanvas({
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Collaboration is waiting for too many delivery confirmations; reconnect before sharing another comment.',
+          'Too many shared changes are still waiting to be confirmed. Reconnect before sharing another comment.',
         );
         return Promise.resolve(null);
       }
@@ -1092,7 +1092,7 @@ export function useCollaborationCanvas({
               reportOnce(
                 lastErrorRef,
                 onErrorRef.current,
-                'Forgeboard could not queue the shared comment for delivery.',
+                'Forgeboard could not send your comment to the shared canvas.',
               );
               finish(null);
               return;
@@ -1121,7 +1121,7 @@ export function useCollaborationCanvas({
             reportOnce(
               lastErrorRef,
               onErrorRef.current,
-              'Forgeboard could not author the shared comment.',
+              'Forgeboard could not create your shared comment.',
             );
             finish(null);
           });
@@ -1190,7 +1190,7 @@ export function useCollaborationCanvas({
         reportOnce(
           lastErrorRef,
           onErrorRef.current,
-          'Forgeboard could not discard the exact retained collaboration comment.',
+          'Forgeboard could not delete the saved comment.',
         );
         return false;
       }
@@ -1347,15 +1347,15 @@ function deliveryRejectionMessage(
   duringReconnect: boolean,
 ): string {
   if (reason === 'not-authorized') {
-    return "The collaboration server rejected this role's metadata delivery.";
+    return 'The shared canvas refused your changes because your role cannot share them.';
   }
   if (reason === 'document-too-large') {
-    return 'The collaboration server rejected metadata that exceeds the room size limit.';
+    return 'Your changes are too large for the shared canvas size limit and were not applied.';
   }
   if (duringReconnect) {
-    return 'Collaboration paused because offline metadata was not durably acknowledged after reconnect.';
+    return 'Sharing paused because the shared canvas did not confirm your offline changes after reconnecting.';
   }
-  return 'The collaboration server did not durably acknowledge the latest metadata update.';
+  return 'The shared canvas did not confirm your latest changes.';
 }
 
 function renderableAwareness(

@@ -34,11 +34,11 @@ export function DeviceControls({
 }: DeviceControlsProps) {
   return (
     <fieldset className="preview-device-controls" disabled={readOnly}>
-      <legend>Device presentation</legend>
+      <legend>Preview device</legend>
       <label>
-        Primary viewport
+        Main device
         <select
-          aria-label="Primary device viewport"
+          aria-label="Main device"
           name={`node-${nodeId}-preview-device-viewport`}
           value={primaryPreset}
           onChange={(event) => onPrimaryPreset(event.target.value as PreviewPresetId)}
@@ -64,9 +64,9 @@ export function DeviceControls({
       </label>
       {sideBySide ? (
         <label>
-          Secondary viewport
+          Second device
           <select
-            aria-label="Secondary device viewport"
+            aria-label="Second device"
             name={`node-${nodeId}-preview-secondary-device-viewport`}
             value={secondaryPreset}
             onChange={(event) => onSecondaryPreset(event.target.value as PreviewPresetId)}
@@ -76,8 +76,8 @@ export function DeviceControls({
         </label>
       ) : null}
       <p className="preview-capability-note" role="note">
-        Forgeboard automatically enables Chromium touch emulation for phone and tablet surfaces.
-        Desktop and laptop surfaces keep ordinary pointer input.
+        Phone and tablet previews automatically act like a touchscreen. Desktop and laptop previews
+        use the mouse as usual.
       </p>
     </fieldset>
   );

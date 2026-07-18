@@ -208,7 +208,7 @@ export class AutomaticBackupCoordinator {
     const destination = settings.backupDirectory.trim();
     if (destination === '') {
       const attemptedAt = validDate(this.#now());
-      const error = new Error('No backup directory is selected.');
+      const error = new Error('No backup folder is selected.');
       this.#recordAttempt({ attemptedAt, outcome: 'failed', error });
       this.#recordAudit('automatic-create', 'failed', {
         trigger,

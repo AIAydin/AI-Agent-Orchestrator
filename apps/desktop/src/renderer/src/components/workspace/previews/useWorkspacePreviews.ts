@@ -52,7 +52,7 @@ export function useWorkspacePreviews({
         if (['ready', 'failed', 'stopped', 'killed'].includes(event.session.status)) {
           setEvents((items) =>
             [
-              `Preview ${event.session.status} for node ${event.nodeId.slice(0, 8)}.`,
+              `Preview for node ${event.nodeId.slice(0, 8)} is ${event.session.status}.`,
               ...items,
             ].slice(0, 80),
           );

@@ -225,7 +225,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   );
   const [past, setPast] = useState<Snapshot[]>([]);
   const [future, setFuture] = useState<Snapshot[]>([]);
-  const [events, setEvents] = useState<string[]>(['Project health scan completed locally.']);
+  const [events, setEvents] = useState<string[]>([
+    'Finished checking this project on this computer.',
+  ]);
   const loaded = useRef(false);
   const nodesRef = useRef<WorkshopNode[]>(nodes);
   const edgesRef = useRef<WorkshopEdge[]>(edges);
@@ -408,9 +410,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       setPast([]);
       setFuture([]);
       setEvents((items) =>
-        items[0] === 'Applied authenticated collaboration metadata.'
+        items[0] === 'Applied the latest shared canvas changes.'
           ? items
-          : ['Applied authenticated collaboration metadata.', ...items].slice(0, 80),
+          : ['Applied the latest shared canvas changes.', ...items].slice(0, 80),
       );
       return true;
     },
@@ -426,9 +428,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   collaborationGraphReadOnlyRef.current = collaborationCanvas.graphReadOnly;
   const reportCollaborationReadOnly = useCallback(() => {
     setEvents((items) =>
-      items[0] === 'This collaboration role cannot edit the shared graph.'
+      items[0] === 'Your role in this shared session is view-only, so you cannot change the canvas.'
         ? items
-        : ['This collaboration role cannot edit the shared graph.', ...items].slice(0, 80),
+        : [
+            'Your role in this shared session is view-only, so you cannot change the canvas.',
+            ...items,
+          ].slice(0, 80),
     );
   }, []);
   const { saveState, persistedUpdatedAt, flushCanvas } = useCanvasPersistence({
@@ -458,11 +463,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       if (updated) {
         await onProjectUpdated(updated);
         setEvents((items) =>
-          ['Initialized Git without staging existing files.', ...items].slice(0, 30),
+          ['Set up Git without changing any existing files.', ...items].slice(0, 30),
         );
       }
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'Git could not be initialized.');
+      onError(cause instanceof Error ? cause.message : 'Git could not be set up.');
     } finally {
       setInitializingGit(false);
     }
@@ -734,11 +739,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     async (targetNodeId: string, payload: WorkspaceContextDragPayload): Promise<void> => {
       if (collaborationGraphReadOnlyRef.current) {
         reportCollaborationReadOnly();
-        throw new Error('This collaboration role cannot edit the shared graph.');
+        throw new Error(
+          'Your role in this shared session is view-only, so you cannot change the canvas.',
+        );
       }
       const target = nodesRef.current.find((node) => node.id === targetNodeId);
       if (target === undefined || target.data.kind !== 'agent') {
-        throw new Error('Project files can only be attached to an Agent node.');
+        throw new Error('You can only add project files to an Agent node.');
       }
       if (lockedCanvasNodeIds(nodesRef.current).has(targetNodeId)) {
         throw new Error('Unlock the Agent node or its group before changing its context.');
@@ -754,7 +761,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       );
       if (collaborationGraphReadOnlyRef.current) {
         reportCollaborationReadOnly();
-        throw new Error('This collaboration role cannot edit the shared graph.');
+        throw new Error(
+          'Your role in this shared session is view-only, so you cannot change the canvas.',
+        );
       }
       const currentNodes = nodesRef.current;
       const currentEdges = edgesRef.current;
@@ -779,7 +788,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       setNodes(result.nodes);
       setEvents((items) =>
         [
-          `${result.createdFileNode ? 'Created a File node and attached' : 'Attached'} verified project file context.`,
+          `${result.createdFileNode ? 'Created a file node and added' : 'Added'} the project file to the agent.`,
           ...items,
         ].slice(0, 30),
       );
@@ -816,7 +825,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       recordSnapshot(currentNodes, edgesRef.current);
       nodesRef.current = result.nodes;
       setNodes(result.nodes);
-      setEvents((items) => ['Removed a project file from Agent context.', ...items].slice(0, 30));
+      setEvents((items) =>
+        ["Removed a project file from the agent's context.", ...items].slice(0, 30),
+      );
     },
     [onError, recordSnapshot, reportCollaborationReadOnly],
   );
@@ -862,7 +873,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       const comment = await collaborationCanvas.createComment(selectedNodeId, body);
       if (comment === null) return false;
       setCanvas((current) => appendSharedComment(current, selectedNodeId, comment));
-      setEvents((items) => ['Shared a collaboration comment.', ...items].slice(0, 80));
+      setEvents((items) => ['Shared a comment.', ...items].slice(0, 80));
       return true;
     },
     [collaborationCanvas.createComment, selectedNodeId],
@@ -876,7 +887,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       });
       if (next === null || next === pendingCanvas) return false;
       setCanvas(next);
-      setEvents((items) => ['Saved a private local comment.', ...items].slice(0, 80));
+      setEvents((items) => ['Saved a private comment on this computer.', ...items].slice(0, 80));
       return true;
     },
     [pendingCanvas, selectedNodeId],
@@ -1256,19 +1267,19 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     () => [
       {
         id: 'add-agent',
-        label: 'Add agent node',
+        label: 'Add an agent',
         section: 'Canvas',
         run: () => addNode('agent'),
       },
       {
         id: 'add-task',
-        label: 'Add task node',
+        label: 'Add a task',
         section: 'Canvas',
         run: () => addNode('task'),
       },
       {
         id: 'add-brief',
-        label: 'Add product brief',
+        label: 'Add a product brief',
         section: 'Canvas',
         run: () => addNode('brief'),
       },
@@ -1280,7 +1291,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       })),
       {
         id: 'fit',
-        label: 'Fit canvas to content',
+        label: 'Zoom to fit the canvas',
         section: 'View',
         shortcut: 'F',
         run: () =>
@@ -1293,7 +1304,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         ? [
             {
               id: 'run-workflow',
-              label: 'Run saved canvas workflow',
+              label: 'Run the saved canvas workflow',
               section: 'Workflow',
               run: () => {
                 if (!workflowStartBusy) void workflows.start({ kind: 'workflow' });
@@ -1308,7 +1319,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         : [
             {
               id: 'run-selected-workflow-node',
-              label: `Run ${selectedNode.data.title} with dependencies`,
+              label: `Run ${selectedNode.data.title} and everything it needs`,
               section: 'Workflow',
               run: () => {
                 if (!workflowStartBusy) {
@@ -1374,7 +1385,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         runSelectedReason={
           workflows.mutationsAuthorized
             ? selectedWorkflowEligibility.reason
-            : 'This collaboration role can inspect workflow history but cannot start execution.'
+            : 'Your role is view-only: you can see workflow history but cannot start runs.'
         }
         commandPaletteShortcut={commandPaletteShortcutLabel(settings.keyboardPreset)}
         onCloseProject={() => void closeProject()}
@@ -1493,7 +1504,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
                 items,
               ),
             );
-            setEvents((items) => ['Connected nodes with a context edge.', ...items].slice(0, 30));
+            setEvents((items) =>
+              ['Connected the nodes with a context link.', ...items].slice(0, 30),
+            );
           }}
           onNodeDragStart={record}
           onNodeDragStop={finishNodeDrag}

@@ -16,7 +16,7 @@ export function SafeSvgImage({ source, alt, className }: SafeSvgImageProps) {
     } catch (error) {
       return {
         ok: false as const,
-        message: error instanceof Error ? error.message : 'SVG could not be rendered safely.',
+        message: error instanceof Error ? error.message : 'This image could not be shown safely.',
       };
     }
   }, [source]);

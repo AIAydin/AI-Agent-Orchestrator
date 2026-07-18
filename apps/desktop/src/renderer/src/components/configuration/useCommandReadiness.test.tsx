@@ -23,7 +23,7 @@ describe('useCommandReadiness', () => {
       );
     render(<Harness check={check} />);
 
-    expect(await screen.findByText(/discarded stale command evidence/u)).toBeTruthy();
+    expect(await screen.findByText(/older version of the command/u)).toBeTruthy();
     expect(screen.getByTestId('blocking-count').textContent).toBe('1');
   });
 

@@ -87,7 +87,7 @@ export async function continuePlanWithNativeResponse(input: {
 }): Promise<NativeDialogRecord> {
   const index = (await nativeDialogs(input.app)).length;
   await queueNativeDialogResponse(input.app, input.response);
-  await input.plan.getByRole('button', { name: 'Continue to system confirmation' }).click();
+  await input.plan.getByRole('button', { name: 'Continue to confirmation' }).click();
   const record = await waitForNativeDialog(input.app, index);
   expectNativeCancelDefault(record, input.title, input.buttons);
   await expect(input.plan).toBeHidden();

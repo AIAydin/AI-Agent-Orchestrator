@@ -83,7 +83,7 @@ function UnifiedDiffTable({
 } & ReviewRowState) {
   return (
     <table className="git-unified-diff">
-      <caption className="git-visually-hidden">Unified diff for {path}</caption>
+      <caption className="git-visually-hidden">Changes in {path} (one column)</caption>
       <tbody>
         {hunk.lines.map((line, index) => {
           const oldAnchor = makeAnchor(review?.revision, hunk.id, path, line, 'old');
@@ -146,7 +146,7 @@ function SplitDiffTable({
 } & ReviewRowState) {
   return (
     <table className="git-split-diff">
-      <caption className="git-visually-hidden">Split diff for {path}</caption>
+      <caption className="git-visually-hidden">Changes in {path} (side by side)</caption>
       <tbody>
         {buildSplitRows(hunk.lines).map((row, index) => {
           const oldAnchor = makeAnchor(review?.revision, hunk.id, path, row.oldLine, 'old');

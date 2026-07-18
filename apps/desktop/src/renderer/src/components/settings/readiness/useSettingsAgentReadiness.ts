@@ -58,10 +58,12 @@ export function useSettingsAgentReadiness(
       setErrors((current) => withoutKey(current, fingerprint));
       try {
         const result = await checker(request);
-        if (result === null) throw new Error('Forgeboard did not return readiness evidence.');
+        if (result === null) {
+          throw new Error('Forgeboard did not get a result from the readiness check.');
+        }
         if (!agentReadinessResultMatchesRequest(result, request)) {
           throw new Error(
-            'Forgeboard discarded stale executable evidence. Refresh readiness again.',
+            'The last check was for different settings, so Forgeboard ignored it. Refresh readiness again.',
           );
         }
         if (
@@ -76,7 +78,7 @@ export function useSettingsAgentReadiness(
         const message =
           cause instanceof Error && cause.message.trim() !== ''
             ? cause.message
-            : 'Forgeboard could not validate this agent executable.';
+            : 'Forgeboard could not check this agent program.';
         setErrors((current) => ({ ...current, [fingerprint]: message }));
         throw cause;
       } finally {

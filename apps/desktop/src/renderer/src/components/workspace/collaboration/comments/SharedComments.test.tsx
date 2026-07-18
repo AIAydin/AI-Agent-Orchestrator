@@ -47,7 +47,7 @@ describe('SharedComments', () => {
       />,
     );
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.getByText(/can read comments but cannot add/u)).toBeTruthy();
+    expect(screen.getByText(/can read comments, but you cannot add/u)).toBeTruthy();
   });
 
   it('describes shared comments as optional when a solo user has collaboration off', () => {
@@ -60,7 +60,7 @@ describe('SharedComments', () => {
         onDiscardRejected={vi.fn().mockResolvedValue(false)}
       />,
     );
-    expect(screen.getByText(/Shared room comments are optional/u)).toBeTruthy();
+    expect(screen.getByText(/Shared comments are optional/u)).toBeTruthy();
     expect(screen.queryByText(/This role/u)).toBeNull();
   });
 
@@ -89,14 +89,14 @@ describe('SharedComments', () => {
     );
 
     expect(screen.getByText('Exact rejected text')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Restore to editor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy to comment box' }));
     expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Add a comment' }).value).toBe(
       'Exact rejected text',
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Discard local copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete saved copy' }));
     expect(onDiscardRejected).not.toHaveBeenCalled();
     expect(screen.getByText(/cannot be undone/u)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm discard local copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this copy' }));
     await waitFor(() => expect(onDiscardRejected).toHaveBeenCalledWith(entry));
   });
 });

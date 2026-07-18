@@ -176,7 +176,7 @@ describe('GitIpcService agent-worktree target', () => {
     expect((await service.review({ kind: 'primary', projectId: PROJECT_ID })).dirty).toBe(false);
     expect(showMessageBox.mock.calls[0]?.[1]).toMatchObject({ defaultId: 0, cancelId: 0 });
     expect(String(showMessageBox.mock.calls[1]?.[1]?.detail)).toContain(
-      `agent worktree for run ${RUN_ID.slice(0, 12)}`,
+      `agent workspace for run ${RUN_ID.slice(0, 12)}`,
     );
     expect(appendAudit).toHaveBeenCalledWith(
       'git',

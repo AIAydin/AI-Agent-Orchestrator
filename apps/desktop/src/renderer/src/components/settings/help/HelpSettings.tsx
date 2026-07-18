@@ -29,8 +29,9 @@ export function HelpSettings({
         <span className="eyebrow">Local guide</span>
         <h3 id="help-settings-title">Help & shortcuts</h3>
         <p>
-          Search practical, offline guidance for setting up, running, reviewing, and recovering
-          Forgeboard. These steps use the app UI and require no configuration-file edits.
+          Search step-by-step guides for setting up Forgeboard, running agents, reviewing their
+          work, and recovering when something goes wrong. Everything here works offline and only
+          uses the app — no file editing needed.
         </p>
       </header>
 
@@ -40,7 +41,7 @@ export function HelpSettings({
           <small>
             {keyboardPreset === activeKeyboardPreset
               ? `${presetLabel} · currently active`
-              : `${presetLabel} · unsaved; ${activePresetLabel} remains active`}
+              : `${presetLabel} · not saved yet; ${activePresetLabel} is still active`}
           </small>
         </span>
         <kbd aria-label={paletteShortcutLabel}>{paletteShortcut}</kbd>
@@ -97,10 +98,8 @@ export function HelpSettings({
         {articles.length === 0 && (
           <div className="help-empty">
             <Search size={18} aria-hidden="true" />
-            <strong>No matching local guide</strong>
-            <span>
-              Try a feature name such as agent, Git, Docker, preview, recovery, or privacy.
-            </span>
+            <strong>No guides match your search</strong>
+            <span>Try a word like agent, Git, Docker, preview, backup, or privacy.</span>
           </div>
         )}
       </div>

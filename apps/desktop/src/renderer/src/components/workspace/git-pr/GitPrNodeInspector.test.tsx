@@ -64,16 +64,16 @@ describe('GitPrNodeInspector', () => {
     expect(inspect).not.toHaveBeenCalled();
     expect(controller.checkGitHub).not.toHaveBeenCalled();
     const target = screen.getByRole<HTMLSelectElement>('combobox', {
-      name: 'Terminal agent run',
+      name: 'Finished agent run',
     });
     expect([...target.options].map((option) => option.text)).toEqual([
-      'Choose an owned agent worktree…',
+      'Choose a finished run…',
       'Implement remote delivery · Deterministic test agent · succeeded · forgeboard/remote-delivery',
       'Interrupted cleanup · Codex CLI · failed · cleanup interrupted · unavailable',
     ]);
     expect(target.options[2]).toHaveProperty('disabled', true);
     expect(screen.getByLabelText('Destination branch').getAttribute('aria-invalid')).toBe('true');
-    expect(screen.getByText('Enter the branch that should receive the selected run.')).toBeTruthy();
+    expect(screen.getByText('Enter the branch that should receive these changes.')).toBeTruthy();
 
     fireEvent.change(target, { target: { value: RUN_ID } });
     expect(screen.getByLabelText('Destination branch')).toHaveProperty(
@@ -89,10 +89,10 @@ describe('GitPrNodeInspector', () => {
     fireEvent.change(screen.getByLabelText('Pull request body'), {
       target: { value: 'Evidence-backed body' },
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Create as draft pull request' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Create as a draft pull request' }));
 
     expect(onRecord).toHaveBeenCalledTimes(6);
-    fireEvent.click(screen.getByRole('button', { name: 'Inspect exact Git state' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Check changes' }));
     expect(inspect).toHaveBeenCalledTimes(1);
     expect(controller.preparePush).not.toHaveBeenCalled();
     expect(controller.preparePullRequest).not.toHaveBeenCalled();
@@ -139,7 +139,7 @@ describe('GitPrNodeInspector', () => {
     });
     renderInspector({ controller, onOpenReadiness });
 
-    const exact = screen.getByRole('region', { name: 'Exact Git state' });
+    const exact = screen.getByRole('region', { name: 'Check results' });
     expectText(
       exact,
       'forgeboard/remote-delivery',
@@ -152,13 +152,13 @@ describe('GitPrNodeInspector', () => {
       'README.md',
       'All exact local checks passed.',
     );
-    expectText(exact, 'Current base OID', 'Current-base divergence');
+    expectText(exact, "Base branch's latest commit", 'Compared with base branch now');
     expectText(
-      screen.getByRole('region', { name: 'GitHub CLI and repository status' }),
+      screen.getByRole('region', { name: 'GitHub sign-in and repository status' }),
       'example/forgeboard',
     );
     expectText(
-      screen.getByRole('region', { name: 'CI for exact source HEAD' }),
+      screen.getByRole('region', { name: 'CI results for this commit' }),
       'completed · success',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Copy run URL' }));
@@ -167,13 +167,13 @@ describe('GitPrNodeInspector', () => {
         'https://github.com/example/forgeboard/actions/runs/42',
       ),
     );
-    expect(screen.getByText('URL copied to the clipboard.')).toBeTruthy();
+    expect(screen.getByText('Link copied to the clipboard.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Review push' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Open readiness checks & approval' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Check GitHub auth & repository' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open checks and approval' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Check GitHub sign-in and repository' }));
     fireEvent.click(screen.getByRole('button', { name: 'Review pull request' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Check CI for exact HEAD' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Check CI results for this commit' }));
     expect(controller.preparePush).toHaveBeenCalledTimes(1);
     expect(onOpenReadiness).toHaveBeenCalledWith(RUN_ID);
     expect(controller.checkGitHub).toHaveBeenCalledTimes(1);
@@ -194,23 +194,23 @@ describe('GitPrNodeInspector', () => {
       controller: createController({ pendingPlan: pushPlan, cancelPlan, confirmPlan }),
     });
 
-    let dialog = screen.getByRole('alertdialog', { name: 'Review exact branch push' });
+    let dialog = screen.getByRole('alertdialog', { name: 'Review the push' });
     expectText(
       dialog,
-      'Nothing remote has changed',
+      'Nothing has changed online yet',
       SOURCE_OID,
       '2',
       'Force push is never offered',
     );
     expectText(
-      within(dialog).getByRole('region', { name: 'Exact commits and changed files' }),
+      within(dialog).getByRole('region', { name: 'Commits and changed files' }),
       SOURCE_OID,
       'src/old.ts → src/new.ts',
       'README.md',
     );
     const goBack = within(dialog).getByRole('button', { name: 'Go back' });
     const continueButton = within(dialog).getByRole('button', {
-      name: 'Continue to system confirmation',
+      name: 'Continue to final confirmation',
     });
     expect(document.activeElement).toBe(goBack);
     fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
@@ -241,17 +241,15 @@ describe('GitPrNodeInspector', () => {
         })}
       />,
     );
-    dialog = screen.getByRole('alertdialog', { name: 'Review pull request snapshot' });
-    expect(within(dialog).getByText(/later branch movement can change/iu)).toBeTruthy();
+    dialog = screen.getByRole('alertdialog', { name: 'Review the pull request' });
+    expect(within(dialog).getByText(/commits pushed later can change/iu)).toBeTruthy();
     expectText(dialog, 'example/forgeboard', 'Ship remote delivery', 'Exact evidence', 'Draft');
     expectText(
-      within(dialog).getByRole('region', { name: 'Exact commits and changed files' }),
+      within(dialog).getByRole('region', { name: 'Commits and changed files' }),
       SOURCE_OID,
       'src/old.ts → src/new.ts',
     );
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Continue to system confirmation' }),
-    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue to final confirmation' }));
     expect(confirmPlan).toHaveBeenCalledTimes(1);
   });
 
@@ -283,23 +281,22 @@ describe('GitPrNodeInspector', () => {
     expect(screen.getByText(/Unlock this node/u)).toBeTruthy();
     expect(screen.getByLabelText('Remote').closest('fieldset')).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Review push' })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Open readiness checks & approval' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Open checks and approval' })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.getByRole('button', { name: 'Check GitHub auth & repository' })).toHaveProperty(
-      'disabled',
-      true,
-    );
+    expect(
+      screen.getByRole('button', { name: 'Check GitHub sign-in and repository' }),
+    ).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Review pull request' })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.getByRole('button', { name: 'Check CI for exact HEAD' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Check CI results for this commit' })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.getByRole('button', { name: 'Continue to system confirmation' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Continue to final confirmation' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -312,7 +309,7 @@ describe('GitPrNodeInspector', () => {
         controller={controller}
       />,
     );
-    expect(screen.getByText(/collaboration role can inspect/u)).toBeTruthy();
+    expect(screen.getByText(/role in this shared project lets you view/u)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Review push' })).toHaveProperty('disabled', true);
   });
 
@@ -343,15 +340,15 @@ describe('GitPrNodeInspector', () => {
       configuration: configuration({ pullRequestUrl: 'javascript:alert(1)' }),
     });
 
-    expect(screen.getByText('Missing')).toBeTruthy();
-    expect(screen.getByText(/Git push still works with the selected remote/u)).toBeTruthy();
+    expect(screen.getByText('Not installed')).toBeTruthy();
+    expect(screen.getByText(/Push still works without it/u)).toBeTruthy();
     expectText(
-      screen.getByRole('region', { name: 'CI for exact source HEAD' }),
-      'CI belongs to an earlier source HEAD',
+      screen.getByRole('region', { name: 'CI results for this commit' }),
+      'These results are for an earlier commit',
     );
     expectText(
       screen.getByRole('region', { name: 'Created pull request' }),
-      'invalid and will not be opened',
+      "isn't valid, so it can't be opened",
     );
     expect(screen.queryByRole('button', { name: 'Copy pull request URL' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Review pull request' })).toHaveProperty(
@@ -371,10 +368,10 @@ describe('GitPrNodeInspector', () => {
     });
 
     expect(
-      screen.getByRole<HTMLSelectElement>('combobox', { name: 'Terminal agent run' }).value,
+      screen.getByRole<HTMLSelectElement>('combobox', { name: 'Finished agent run' }).value,
     ).toBe(RUN_ID);
-    expect(screen.getByText('Saved run · loading local history…')).toBeTruthy();
-    expect(screen.queryByText(/outside the bounded recent-history picker/u)).toBeNull();
+    expect(screen.getByText('Saved run · loading run history…')).toBeTruthy();
+    expect(screen.queryByText(/not in the recent list/u)).toBeNull();
 
     view.rerender(
       <GitPrNodeInspector
@@ -387,11 +384,11 @@ describe('GitPrNodeInspector', () => {
         })}
       />,
     );
-    expect(screen.getByText('Saved run · local history unavailable')).toBeTruthy();
+    expect(screen.getByText('Saved run · run history unavailable')).toBeTruthy();
     expect(screen.getByRole('alert').textContent).toContain(
       'Local run history is temporarily unavailable.',
     );
-    expect(screen.queryByText(/Run an Agent node with a writable worktree first/u)).toBeNull();
+    expect(screen.queryByText(/No finished runs to publish yet/u)).toBeNull();
   });
 
   it('offers inspected remote names without overwriting a missing saved value', () => {
@@ -409,7 +406,7 @@ describe('GitPrNodeInspector', () => {
     ).toEqual(['origin', 'upstream']);
     expect(remote.value).toBe('saved-fork');
     expect(remote.getAttribute('aria-invalid')).toBe('true');
-    expect(screen.getByText(/Remote saved-fork was not discovered/u)).toBeTruthy();
+    expect(screen.getByText(/No remote named saved-fork was found/u)).toBeTruthy();
 
     view.rerender(
       <GitPrNodeInspector
@@ -418,7 +415,7 @@ describe('GitPrNodeInspector', () => {
         configuration={configuration({ remote: 'origin' })}
       />,
     );
-    expect(screen.getByText(/No Git remotes were discovered/u)).toBeTruthy();
+    expect(screen.getByText(/No remotes were found/u)).toBeTruthy();
   });
 
   it('explains invalid fields before review and keeps prior pull requests non-authoritative', () => {
@@ -463,7 +460,7 @@ describe('GitPrNodeInspector', () => {
     );
     const lastPullRequest = screen.getByRole('region', { name: 'Created pull request' });
     expect(lastPullRequest.textContent).toContain('Last created pull request');
-    expect(lastPullRequest.textContent).toContain('does not prove that the current fields');
+    expect(lastPullRequest.textContent).toContain('may have changed since');
   });
 });
 

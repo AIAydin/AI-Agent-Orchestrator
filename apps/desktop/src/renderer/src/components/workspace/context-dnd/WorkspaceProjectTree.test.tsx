@@ -25,9 +25,9 @@ describe('WorkspaceProjectTree', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('treeitem', { name: 'Open project folder src' }));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'Open folder src' }));
     const safe = await screen.findByRole('treeitem', {
-      name: 'Draggable project file src/index.ts',
+      name: 'File src/index.ts',
     });
     expect(safe.getAttribute('draggable')).toBe('true');
 
@@ -41,9 +41,9 @@ describe('WorkspaceProjectTree', () => {
     });
     expect(transfer.getData(WORKSPACE_CONTEXT_DRAG_MIME)).not.toContain('/tmp/project');
     expect(transfer.getData(WORKSPACE_CONTEXT_DRAG_MIME)).not.toContain('file bytes');
-    fireEvent.click(screen.getByRole('button', { name: 'Project tree directory .' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Go to folder .' }));
     const protectedEntry = screen.getByRole('treeitem', {
-      name: 'Protected project entry .env',
+      name: 'Protected file .env',
     });
     expect(protectedEntry.getAttribute('draggable')).toBe('false');
   });
@@ -57,24 +57,24 @@ describe('WorkspaceProjectTree', () => {
       />,
     );
     await waitFor(() => expect(tree).toHaveBeenCalledTimes(2));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search project file tree' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search project files' }), {
       target: { value: 'index' },
     });
     expect(
       await screen.findByRole('treeitem', {
-        name: 'Draggable project file src/index.ts',
+        name: 'File src/index.ts',
       }),
     ).toBeTruthy();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search project file tree' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search project files' }), {
       target: { value: 'env' },
     });
-    expect(screen.getByRole('treeitem', { name: 'Protected project entry .env' })).toBeTruthy();
+    expect(screen.getByRole('treeitem', { name: 'Protected file .env' })).toBeTruthy();
     expect(
       screen.queryByRole('treeitem', {
-        name: 'Draggable project file src/index.ts',
+        name: 'File src/index.ts',
       }),
     ).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh project file tree' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh project files' }));
     await waitFor(() => expect(tree).toHaveBeenCalledTimes(4));
   });
 });

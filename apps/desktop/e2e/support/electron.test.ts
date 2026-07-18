@@ -132,7 +132,7 @@ function harnessFixture(): {
 function reviewDialog(): Locator {
   return {
     getByLabel: (label: string) => {
-      if (label === 'Exact launch disclosure SHA-256') {
+      if (label === 'Security fingerprint (SHA-256)') {
         return { textContent: () => Promise.resolve(FINGERPRINT) };
       }
       if (label === 'Approval expires at') {
@@ -148,10 +148,10 @@ function nativeOptions(
 ): Record<string, unknown> {
   return {
     type: 'warning',
-    title: 'Launch agent process',
+    title: 'Launch agent',
     message: 'Launch test-agent for this node?',
     detail: [
-      `Disclosure SHA-256: ${overrides.fingerprint ?? FINGERPRINT}`,
+      `Security fingerprint (SHA-256): ${overrides.fingerprint ?? FINGERPRINT}`,
       `Approval expires at: ${overrides.expiresAt ?? EXPIRES_AT}`,
     ].join('\n'),
     buttons: ['Cancel', 'Launch agent'],

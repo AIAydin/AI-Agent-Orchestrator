@@ -37,8 +37,8 @@ test('Enter in Git connection text fields cannot submit Settings or create a rem
 
     const settings = await openGitConnectionsSettings(page);
     const remoteName = settings.getByLabel('Remote name');
-    const remoteUrl = settings.getByLabel('Network remote URL');
-    const addRemote = settings.getByRole('button', { name: 'Add network remote' });
+    const remoteUrl = settings.getByLabel('Remote URL');
+    const addRemote = settings.getByRole('button', { name: 'Add remote' });
     const saveSettings = settings.getByRole('button', { name: 'Save settings' });
     const reviewPlan = page.getByRole('alertdialog', { name: 'Review remote addition' });
     const guardedRemoteName = 'enter-guard';
@@ -108,15 +108,15 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
     await installNativeDialogHarness(electronApp);
 
     let settings = await openGitConnectionsSettings(page);
-    await expect(settings.getByLabel('Git connections project')).toContainText('forgeboard-demo');
+    await expect(settings.getByLabel('Project')).toContainText('forgeboard-demo');
 
     await test.step('network addition cancellation opens no connection and approval adds it', async () => {
       await settings.getByLabel('Remote name').fill('origin');
-      await settings.getByLabel('Network remote URL').fill(FIRST_NETWORK_URL);
-      await settings.getByRole('button', { name: 'Add network remote' }).click();
+      await settings.getByLabel('Remote URL').fill(FIRST_NETWORK_URL);
+      await settings.getByRole('button', { name: 'Add remote' }).click();
       let plan = page.getByRole('alertdialog', { name: 'Review remote addition' });
       await expect(plan).toContainText('SSH · github.invalid/forgeboard/connections');
-      await expect(plan).toContainText('Network access: none');
+      await expect(plan).toContainText('No internet access needed');
       const cancelled = await continuePlanWithNativeResponse({
         app: electronApp!,
         plan,
@@ -124,13 +124,13 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Add Git remote?',
         buttons: ['Cancel', 'Add remote'],
       });
-      expect(nativeDialogText(cancelled)).toContain('does not fetch, push, authenticate, or test');
-      await expect(settings).toContainText(
-        'System confirmation cancelled. Git configuration was not changed.',
+      expect(nativeDialogText(cancelled)).toContain(
+        'nothing is fetched, pushed, or sent over the network',
       );
+      await expect(settings).toContainText('Confirmation cancelled. No Git settings were changed.');
       expect(gitRemoteUrl(projectPath, 'origin')).toBeNull();
 
-      await settings.getByRole('button', { name: 'Add network remote' }).click();
+      await settings.getByRole('button', { name: 'Add remote' }).click();
       plan = page.getByRole('alertdialog', { name: 'Review remote addition' });
       await continuePlanWithNativeResponse({
         app: electronApp!,
@@ -144,11 +144,9 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
     });
 
     await test.step('simple remote replacement changes only the reviewed URL', async () => {
-      await settings.getByRole('button', { name: 'Replace origin with network remote' }).click();
-      await settings
-        .getByLabel('Replacement network remote URL for origin')
-        .fill(REPLACEMENT_NETWORK_URL);
-      await settings.getByRole('button', { name: 'Review remote replacement' }).click();
+      await settings.getByRole('button', { name: 'Replace origin with a new URL' }).click();
+      await settings.getByLabel('New URL for origin').fill(REPLACEMENT_NETWORK_URL);
+      await settings.getByRole('button', { name: 'Review replacement' }).click();
       const plan = page.getByRole('alertdialog', { name: 'Review remote replacement' });
       await expect(plan).toContainText('SSH · github.invalid/forgeboard/connections-replacement');
       await continuePlanWithNativeResponse({
@@ -165,17 +163,17 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
       await settings.getByLabel('Remote name').fill('local-backup');
       await selectNextNativePath(electronApp!, null);
       await settings
-        .getByRole('button', { name: 'Choose local Git repository', exact: true })
+        .getByRole('button', { name: 'Choose a folder on this computer', exact: true })
         .click();
-      await expect(settings).toContainText('Local repository selection cancelled.');
+      await expect(settings).toContainText('Folder selection cancelled. Nothing changed.');
       expect(gitRemoteUrl(projectPath, 'local-backup')).toBeNull();
 
       await selectNextNativePath(electronApp!, localRemotePath);
       await settings
-        .getByRole('button', { name: 'Choose local Git repository', exact: true })
+        .getByRole('button', { name: 'Choose a folder on this computer', exact: true })
         .click();
       const plan = page.getByRole('alertdialog', { name: 'Review remote addition' });
-      await expect(plan).toContainText('Local Git repository');
+      await expect(plan).toContainText('Folder on this computer');
       await expect(plan).not.toContainText(localRemotePath);
       await expect(page.locator('body')).not.toContainText(localRemotePath);
       const approved = await continuePlanWithNativeResponse({
@@ -196,7 +194,7 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
       await settings.getByRole('button', { name: 'Remove origin' }).click();
       const plan = page.getByRole('alertdialog', { name: 'Review remote removal' });
       await expect(plan).toContainText(TRACKING_REF);
-      await expect(plan).toContainText('Local branches, commits, other remotes');
+      await expect(plan).toContainText('Your own branches, commits, other remotes');
       await continuePlanWithNativeResponse({
         app: electronApp!,
         plan,
@@ -211,8 +209,8 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
 
     await test.step('custom GitHub CLI review is path-free, cancel-safe, and version validated', async () => {
       await selectNextNativePath(electronApp!, fakeGhExecutable);
-      await settings.getByRole('button', { name: 'Browse for GitHub CLI' }).click();
-      let plan = page.getByRole('alertdialog', { name: 'GitHub CLI configuration' });
+      await settings.getByRole('button', { name: 'Choose GitHub CLI file' }).click();
+      let plan = page.getByRole('alertdialog', { name: 'GitHub CLI setup' });
       await expect(plan).toContainText(basename(fakeGhExecutable));
       await expect(plan).not.toContainText(fakeGhExecutable);
       await plan.getByRole('button', { name: 'Go back' }).click();
@@ -220,19 +218,19 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
       expect(await readGhArguments(fakeGhLogPath)).toEqual([]);
 
       await selectNextNativePath(electronApp!, fakeGhExecutable);
-      await settings.getByRole('button', { name: 'Browse for GitHub CLI' }).click();
-      plan = page.getByRole('alertdialog', { name: 'GitHub CLI configuration' });
+      await settings.getByRole('button', { name: 'Choose GitHub CLI file' }).click();
+      plan = page.getByRole('alertdialog', { name: 'GitHub CLI setup' });
       const approved = await continuePlanWithNativeResponse({
         app: electronApp!,
         plan,
         response: 1,
-        title: 'Change GitHub CLI configuration?',
+        title: 'Change GitHub CLI setup?',
         buttons: ['Cancel', 'Use selected GitHub CLI'],
       });
       expect(nativeDialogText(approved)).toContain(fakeGhExecutable);
       expect(nativeDialogText(approved)).toContain(`${fakeGhExecutable} --version`);
-      await expect(settings.getByText('GitHub CLI version validated')).toBeVisible();
-      await expect(settings.locator('.git-connections-cli-status')).toContainText('custom');
+      await expect(settings.getByText('GitHub CLI ready')).toBeVisible();
+      await expect(settings.locator('.git-connections-cli-status')).toContainText('Chosen file');
       expect(await readGhArguments(fakeGhLogPath)).toEqual([['--version']]);
     });
 
@@ -248,31 +246,31 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
     settings = await openGitConnectionsSettings(page);
 
     await test.step('custom CLI identity persists across restart and automatic remains reviewed', async () => {
-      await expect(settings.getByText('GitHub CLI version validated')).toBeVisible();
-      await expect(settings.locator('.git-connections-cli-status')).toContainText('custom');
+      await expect(settings.getByText('GitHub CLI ready')).toBeVisible();
+      await expect(settings.locator('.git-connections-cli-status')).toContainText('Chosen file');
       await expect(settings.locator('.git-connections-cli-status')).toContainText('2.76.1');
       expect(await readGhArguments(fakeGhLogPath)).toEqual([['--version']]);
 
-      await settings.getByRole('button', { name: 'Use automatic GitHub CLI' }).click();
-      let plan = page.getByRole('alertdialog', { name: 'GitHub CLI configuration' });
-      await expect(plan).toContainText('Automatic discovery');
+      await settings.getByRole('button', { name: 'Find GitHub CLI automatically' }).click();
+      let plan = page.getByRole('alertdialog', { name: 'GitHub CLI setup' });
+      await expect(plan).toContainText('Found automatically');
       await expect(plan).not.toContainText(fakeGhExecutable);
       const dialogsBeforeCancel = (await nativeDialogs(electronApp!)).length;
       await plan.getByRole('button', { name: 'Go back' }).click();
       await expect(plan).toBeHidden();
       expect(await nativeDialogs(electronApp!)).toHaveLength(dialogsBeforeCancel);
-      await expect(settings.locator('.git-connections-cli-status')).toContainText('custom');
+      await expect(settings.locator('.git-connections-cli-status')).toContainText('Chosen file');
 
-      await settings.getByRole('button', { name: 'Use automatic GitHub CLI' }).click();
-      plan = page.getByRole('alertdialog', { name: 'GitHub CLI configuration' });
+      await settings.getByRole('button', { name: 'Find GitHub CLI automatically' }).click();
+      plan = page.getByRole('alertdialog', { name: 'GitHub CLI setup' });
       const automatic = await continuePlanWithNativeResponse({
         app: electronApp!,
         plan,
         response: 1,
-        title: 'Change GitHub CLI configuration?',
+        title: 'Change GitHub CLI setup?',
         buttons: ['Cancel', 'Use automatic GitHub CLI'],
       });
-      expect(nativeDialogText(automatic)).toContain('Source: Automatic desktop PATH discovery');
+      expect(nativeDialogText(automatic)).toContain('Source: found automatically on this computer');
       await expect(settings.locator('.git-connections-cli-status')).toContainText('automatic');
       expect(await readGhArguments(fakeGhLogPath)).toEqual([['--version']]);
     });

@@ -300,7 +300,7 @@ export class PreviewIpcService {
             reason: 'native-confirmation-expired-before-launch',
           });
         }
-        throw new Error('The preview launch approval expired. Review a fresh launch.');
+        throw new Error('The preview approval expired. Review the launch again.');
       }
       this.#assertCurrent(event, parent);
     };

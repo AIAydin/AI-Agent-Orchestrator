@@ -163,7 +163,7 @@ export function settleBlockedWorkflowNodes(
       nodeRuns[nodeId] = transitionNodeRun(nodeRun, {
         status: 'cancelled',
         occurredAt,
-        reason: `Workflow node was blocked by authoritative upstream state: ${readiness.reasons.join('; ')}`,
+        reason: `Blocked by an earlier step: ${readiness.reasons.join('; ')}`,
       });
       changed = true;
     }
@@ -190,7 +190,7 @@ export function markWaitingForApprovals(
           transitionNodeRun(nodeRun, {
             status: 'waiting-for-approval',
             occurredAt,
-            reason: 'A human decision is required before execution',
+            reason: 'Waiting for your decision before this step runs',
           }),
         ];
       }
@@ -208,7 +208,7 @@ function assertWorkflowNodeLaunchable(
   const readiness = evaluateNodeReadiness(runtime, nodeId);
   if (readiness.disposition !== 'ready') {
     throw new Error(
-      `Node ${nodeId} is not runnable: ${readiness.reasons.join('; ') || readiness.disposition}`,
+      `Node ${nodeId} cannot run: ${readiness.reasons.join('; ') || readiness.disposition}`,
     );
   }
   const futureEvidence = runtime.canvas.edges.flatMap((edge) => {
@@ -316,7 +316,7 @@ export function completeWorkflowNode(
   if (completion.status === 'succeeded' && node.type === 'review-gate') {
     const gate = reviewGateEvaluation(runtime, nodeId);
     if (gate.status !== 'passed') {
-      throw new Error(`Review gate ${nodeId} cannot succeed: ${gate.reasons.join('; ')}`);
+      throw new Error(`Review gate ${nodeId} cannot pass: ${gate.reasons.join('; ')}`);
     }
   }
   const directAgentReviews = runtime.canvas.edges.filter(
@@ -330,7 +330,7 @@ export function completeWorkflowNode(
     const awaitingAssessment = transitionNodeRun(current, {
       status: 'waiting-for-approval',
       occurredAt,
-      reason: 'Reviewer process completed and is awaiting current assessments',
+      reason: 'The reviewer finished and is waiting for its review to be recorded',
     });
     return replaceRunState(
       runtime,

@@ -244,7 +244,7 @@ describe('main-owned delivery readiness authority', () => {
         approvalId,
         target: { ...target, runId: OTHER_RUN_ID },
       }),
-    ).rejects.toThrow('another project or managed run');
+    ).rejects.toThrow('another project or agent run');
 
     process.env[ENVIRONMENT_NAME] = 'changed-value';
     await expect(fixture.service.revalidate({ approvalId, target })).rejects.toThrow(
@@ -256,7 +256,7 @@ describe('main-owned delivery readiness authority', () => {
     await git(fixture.ownership.worktreePath, ['add', '--', 'after-check.txt']);
     await git(fixture.ownership.worktreePath, ['commit', '-m', 'Drift after readiness']);
     await expect(fixture.service.revalidate({ approvalId, target })).rejects.toThrow(
-      'source changed',
+      'committed changes to deliver changed',
     );
     expect((await fixture.service.get({ target })).readiness).toBeNull();
   });
@@ -359,7 +359,7 @@ describe('main-owned delivery readiness authority', () => {
 
     authorize.resolve();
     await expect(rerun).resolves.toMatchObject({ requiredChecks: [{ state: 'passed' }] });
-    await expect(revalidation).rejects.toThrow('stale for the current check evidence');
+    await expect(revalidation).rejects.toThrow('out of date for the current check results');
   });
 
   it('cannot resume an authorization and write evidence after a privacy reset', async () => {
@@ -386,7 +386,7 @@ describe('main-owned delivery readiness authority', () => {
     await fixture.service.resetForPrivacy();
     authorize.resolve();
 
-    await expect(running).rejects.toThrow(/lifecycle|stopped|cancel/iu);
+    await expect(running).rejects.toThrow(/reset while the operation was running/iu);
     expect(
       fixture.readinessStore.getDeliveryReadiness(prepared.readinessId)?.requiredChecks[0],
     ).toMatchObject({ state: 'missing', executionId: null, outputDigest: null });
@@ -500,7 +500,7 @@ describe('main-owned delivery readiness authority', () => {
     expect(replacement.sourceFingerprint.sourceHead).toBe(first.sourceFingerprint.sourceHead);
     expect(replacement.readinessId).not.toBe(first.readinessId);
     await expect(fixture.service.revalidate({ approvalId, target })).rejects.toThrow(
-      'superseded by newer requirements',
+      'Newer check requirements replaced this readiness',
     );
     expect((await fixture.service.get({ target })).readiness?.readinessId).toBe(
       replacement.readinessId,

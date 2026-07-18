@@ -31,7 +31,7 @@ export function workflowNodeEligibility(
   allNodes: readonly WorkshopNode[] = [],
 ): WorkflowNodeEligibility {
   if (node.data.kind === 'agent' || node.data.kind === 'test' || node.data.kind === 'review-gate') {
-    return { runnable: true, reason: 'Run this node with its upstream dependencies' };
+    return { runnable: true, reason: 'Run this node and everything it depends on' };
   }
   if (
     node.data.kind === 'diff' &&
@@ -43,14 +43,14 @@ export function workflowNodeEligibility(
         edge.data.config.requireApproval,
     )
   ) {
-    return { runnable: true, reason: 'Run this bound human review with its source workflow' };
+    return { runnable: true, reason: 'Run this review together with its source workflow' };
   }
   if (node.data.kind === 'task') {
     const assigneeId = taskAssigneeId(node);
     if (assigneeId === undefined) {
       return {
         runnable: false,
-        reason: 'Choose an Agent assignee before running this Task.',
+        reason: 'Choose an agent for this task before running it.',
       };
     }
     if (
@@ -58,17 +58,17 @@ export function workflowNodeEligibility(
     ) {
       return {
         runnable: false,
-        reason: 'The configured Task assignee is missing or is not an Agent node.',
+        reason: 'The agent chosen for this task is missing or is no longer an agent node.',
       };
     }
     return {
       runnable: true,
-      reason: 'Run this Task with its configured Agent assignee and upstream dependencies',
+      reason: 'Run this task with its assigned agent and everything it depends on',
     };
   }
   return {
     runnable: false,
-    reason: `${node.data.title} is a canvas/context node and does not launch a process.`,
+    reason: `${node.data.title} only holds information on the canvas, so there is nothing to run.`,
   };
 }
 
@@ -85,7 +85,7 @@ export function workflowSelectionEligibility(
   edges: readonly WorkshopEdge[],
 ): WorkflowSelectionEligibility {
   if (selectedNodes.length === 0) {
-    return { runnable: false, reason: 'Select a runnable workflow node' };
+    return { runnable: false, reason: 'Select a node that can run' };
   }
   if (selectedNodes.length === 1 && selectedNodes[0]?.data.kind === 'group-frame') {
     const group = selectedNodes[0];
@@ -97,11 +97,11 @@ export function workflowSelectionEligibility(
     return runnableChildren.length === 0
       ? {
           runnable: false,
-          reason: `${group.data.title} does not contain any runnable workflow nodes.`,
+          reason: `${group.data.title} does not contain any nodes that can run.`,
         }
       : {
           runnable: true,
-          reason: `Run ${String(runnableChildren.length)} runnable node${runnableChildren.length === 1 ? '' : 's'} in this group`,
+          reason: `Run ${String(runnableChildren.length)} node${runnableChildren.length === 1 ? '' : 's'} in this group`,
           scope: { kind: 'group', groupId: group.id, includeUpstream: true },
         };
   }
@@ -115,12 +115,12 @@ export function workflowSelectionEligibility(
   return ids.length === 1
     ? {
         runnable: true,
-        reason: 'Run this node with its upstream dependencies',
+        reason: 'Run this node and everything it depends on',
         scope: { kind: 'node', nodeId: ids[0]!, includeUpstream: true },
       }
     : {
         runnable: true,
-        reason: `Run these ${String(ids.length)} selected nodes with their upstream dependencies`,
+        reason: `Run these ${String(ids.length)} selected nodes and everything they depend on`,
         scope: { kind: 'selection', nodeIds: ids, includeUpstream: true },
       };
 }

@@ -38,11 +38,11 @@ export async function resolveCustomHostPermission(
   const roots = await resolvePermissionRoots(settings, cwd);
   const allowedLaunchExecutables = await enforceHostLaunchAllowlist(settings, executable);
   const limitations = [
-    'Host cwd and root lists are disclosure policy, not an operating-system filesystem sandbox.',
-    'Host networking remains controlled by the selected provider and operating system.',
-    'Ignored/sensitive visibility and Forgeboard-managed action rules are explicit agent instructions; they do not constrain subprocesses spawned by the agent.',
-    'Allowing sensitive or ignored visibility never attaches a file automatically and never replaces exact per-file context approval.',
-    'The launch allowlist applies only to the exact top-level executable started by Forgeboard, not its descendants.',
+    'The working folder and the read and write folder lists are rules Forgeboard states to the agent, not limits your computer enforces.',
+    'Network access stays controlled by the provider you chose and by this computer.',
+    'Rules about ignored or sensitive files, and about actions Forgeboard manages, are instructions to the agent; they do not limit other programs the agent starts.',
+    'Allowing the agent to see sensitive or ignored files never shares a file on its own; you still approve each file shared as context.',
+    'The launch allowlist applies only to the exact program Forgeboard starts, not to anything that program starts.',
   ];
   const profile = customProfile(
     settings,
@@ -84,11 +84,11 @@ export async function resolveCustomDockerPermission(
     normalizedContainerExecutable,
   );
   const limitations = [
-    'Docker enforces only the whole assigned-worktree bind, its read/write mode, configured resource limits, and none/bridge network mode.',
-    'The launch allowlist names the exact in-container agent entrypoint. The separately disclosed outer executable is the configured Docker engine.',
-    'The launch allowlist does not constrain descendant processes started inside the container.',
-    'A whole-worktree bind exposes every file present in that worktree. Sensitive and ignored visibility must therefore be explicitly allowed for this profile.',
-    'Allowing sensitive or ignored visibility never attaches a file automatically and never replaces exact per-file context approval.',
+    'Docker enforces only the whole agent worktree shared with it, its read/write mode, the resource limits you set, and the network mode you chose.',
+    'The launch allowlist names the exact agent program inside the container. The separate program shown with it is the Docker engine you configured.',
+    'The launch allowlist does not limit other programs started inside the container.',
+    'Sharing the whole agent worktree shows every file in it, so this profile must explicitly allow seeing sensitive or ignored files.',
+    'Allowing the agent to see sensitive or ignored files never shares a file on its own; you still approve each file shared as context.',
   ];
   const profile = customProfile(
     settings,

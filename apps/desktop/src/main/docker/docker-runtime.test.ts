@@ -83,7 +83,7 @@ describe('main-owned Docker runtime', () => {
         image: 'agent;touch /tmp/escaped',
         containerExecutable: '/usr/local/bin/codex',
       }),
-    ).rejects.toThrow('CLI metacharacters');
+    ).rejects.toThrow('spaces or special characters');
     expect(await readFile(fixture.log, 'utf8')).toBe(
       'pull\nregistry.example/forgeboard-agent:1\n--END--\n',
     );
@@ -102,7 +102,7 @@ describe('main-owned Docker runtime', () => {
     );
 
     expect(readiness).toMatchObject({ available: false, status: 'agent-unavailable' });
-    expect(readiness.reason).toContain('timed out');
+    expect(readiness.reason).toContain('took too long');
     const argumentsLog = await readFile(fixture.log, 'utf8');
     expect(argumentsLog).toMatch(/rm\n--force\nforgeboard-readiness-[a-f0-9-]+/u);
   });

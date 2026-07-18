@@ -50,7 +50,7 @@ export function AgentsSettings({
               id={`agent-${agentId}-executable`}
               name={`agent-${agentId}-executable`}
               value={draft.agentExecutableOverrides[agentId] ?? ''}
-              placeholder={agent.executable ?? `Auto-detect ${agentId}`}
+              placeholder={agent.executable ?? `Find ${agentId} automatically`}
               onChange={(event) =>
                 setDraft({
                   ...draft,
@@ -87,7 +87,7 @@ export function AgentsSettings({
           <input
             name={`agent-${agentId}-default-model`}
             value={draft.agentDefaultModels[agentId] ?? ''}
-            placeholder="Use the provider CLI default"
+            placeholder="Leave blank for the tool's usual model"
             onChange={(event) =>
               setDraft({
                 ...draft,
@@ -150,7 +150,7 @@ export function AgentsSettings({
       </SettingsSection>
       <SettingsSection
         title="Installed tools"
-        description="Detection runs locally for bundled, custom, Gemini, and OpenCode tools."
+        description="Forgeboard checks for bundled, custom, Gemini, and OpenCode tools on this computer. It never handles their accounts or sign-in details."
       >
         <div className="agent-grid">
           {agents
@@ -169,9 +169,9 @@ export function AgentsSettings({
                     <strong>{agent.label}</strong>
                     <small>
                       {validatedNow
-                        ? `${version} · validated now`
+                        ? `${version} · checked just now`
                         : agent.installed
-                          ? (agent.version ?? 'Detected; version unavailable')
+                          ? (agent.version ?? 'Found; version unknown')
                           : 'Not found on this device'}
                     </small>
                     <p>{agent.providerDisclosure}</p>
@@ -185,13 +185,13 @@ export function AgentsSettings({
                   >
                     {validated
                       ? validatedNow
-                        ? 'Validated'
-                        : 'Detected'
+                        ? 'Checked'
+                        : 'Found'
                       : agent.installed && agent.version
-                        ? 'Detected'
+                        ? 'Found'
                         : agent.installed
-                          ? 'Needs check'
-                          : 'Not detected'}
+                          ? 'Check needed'
+                          : 'Not found'}
                   </span>
                   {isCodingAgent(agent.id) &&
                     agent.id !== 'custom' &&
@@ -206,7 +206,7 @@ export function AgentsSettings({
                               id={`agent-${agent.id}-executable`}
                               name={`agent-${agent.id}-executable`}
                               value={draft.agentExecutableOverrides[agent.id] ?? ''}
-                              placeholder={agent.executable ?? `Auto-detect ${agent.id}`}
+                              placeholder={agent.executable ?? `Find ${agent.id} automatically`}
                               onChange={(event) =>
                                 setDraft({
                                   ...draft,
@@ -245,7 +245,7 @@ export function AgentsSettings({
                           <input
                             name={`agent-${agent.id}-default-model`}
                             value={draft.agentDefaultModels[agent.id] ?? ''}
-                            placeholder="Use the provider CLI default"
+                            placeholder="Leave blank for the tool's usual model"
                             onChange={(event) =>
                               setDraft({
                                 ...draft,
@@ -267,7 +267,7 @@ export function AgentsSettings({
       <CustomAgentSettings draft={draft} setDraft={setDraft} busy={busy} perform={perform} />
       <SettingsSection
         title="Run defaults"
-        description="Every launch still shows an exact disclosure and permission review."
+        description="Forgeboard shows exactly what will run and asks for your approval before every run."
       >
         <label>
           Default agent
@@ -295,7 +295,7 @@ export function AgentsSettings({
             <option value="gemini">Gemini CLI</option>
             <option value="opencode">OpenCode</option>
             <option value="custom" disabled={!draft.customAgent.enabled}>
-              Custom CLI
+              Custom tool
             </option>
           </select>
           {(draft.defaultAgent === 'codex' || draft.defaultAgent === 'claude') &&
@@ -306,7 +306,7 @@ export function AgentsSettings({
               </small>
             )}
         </label>
-        <div className="agent-readiness-list" aria-label="Required agent readiness">
+        <div className="agent-readiness-list" aria-label="Setup checks for each agent">
           {readiness.entries
             .filter((entry) => entry.agentId !== 'codex' && entry.agentId !== 'claude')
             .map((entry) => (
@@ -362,9 +362,7 @@ export function AgentsSettings({
               Custom
             </option>
           </select>
-          <small>
-            Build the Custom profile in the Permissions centre. No configuration file is required.
-          </small>
+          <small>Set up the Custom profile in the Permissions centre. No config file needed.</small>
         </label>
         <EnvironmentAllowlistEditor
           name="process-environment-allowlist"
@@ -373,8 +371,8 @@ export function AgentsSettings({
         />
       </SettingsSection>
       <SettingsSection
-        title="Process launching"
-        description="Choose the direct executable used by new Terminal nodes. Forgeboard validates it without running it and never evaluates a shell command string."
+        title="How terminals start"
+        description="Choose the exact program new Terminal nodes use. Forgeboard checks it without running it and never builds a shell command on its own."
       >
         <div className="settings-form-field">
           <label htmlFor="terminal-shell">Default terminal executable</label>

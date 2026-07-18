@@ -25,7 +25,9 @@ export async function assertCompleteSourceHistory(
     { maxOutputBytes: 1_024, timeoutMs: 60_000 },
   );
   if (shallow.stdout.trim() !== 'false') {
-    throw new Error('Shallow repositories are unsupported for exact remote delivery.');
+    throw new Error(
+      'Shallow repositories (with only partial history) cannot be pushed with Forgeboard yet.',
+    );
   }
   await repositories.git.run(
     ['-C', repositoryPath, 'rev-list', '--objects', '--quiet', '--missing=error', sourceHead, '--'],
@@ -60,7 +62,7 @@ export async function assertNoLfsPointerHistory(
   const objectIds = parseObjectIdLines(result.stdout);
   if (objectIds.length > MAX_LFS_CANDIDATE_BLOBS) {
     throw new Error(
-      'This history has too many small objects to verify safely for exact remote delivery.',
+      'This history has too many small objects for Forgeboard to verify safely before pushing.',
     );
   }
   if (objectIds.length === 0) return;
@@ -87,7 +89,7 @@ export async function assertNoLfsPointerHistory(
     );
     if (batchContainsGitLfsPointer(objects.stdout, batch)) {
       throw new Error(
-        'Git LFS-backed history needs a separately disclosed LFS upload and is not supported by exact remote delivery yet.',
+        'This history uses Git LFS, which needs a separate reviewed upload. Forgeboard cannot push it yet.',
       );
     }
   }

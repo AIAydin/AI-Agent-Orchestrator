@@ -33,12 +33,12 @@ describe('Git diff review feedback', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Comment on old line 1' }));
     expect(
-      screen.getByText(/does not approve AI output, run an agent, or change Git/),
+      screen.getByText(/does not approve the AI's work, start an agent, or change your code/),
     ).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Feedback for old line 1'), {
+    fireEvent.change(screen.getByLabelText('Your feedback on old line 1'), {
       target: { value: 'Restore the deleted null guard.' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Record revision request' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request changes' }));
 
     expect(controller.create).toHaveBeenCalledWith(
       {
@@ -74,7 +74,7 @@ describe('Git diff review feedback', () => {
     expect(controller.update).toHaveBeenCalledWith(note, { status: 'resolved' });
     fireEvent.click(screen.getByRole('button', { name: 'Delete…' }));
     expect(controller.remove).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete it' }));
     expect(controller.remove).toHaveBeenCalledWith(note);
   });
 
@@ -96,8 +96,10 @@ describe('Git diff review feedback', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('1 note from an earlier diff'));
-    expect(screen.getByText(/preserved them without moving them to different lines/)).toBeTruthy();
+    fireEvent.click(screen.getByText('1 note from an earlier version of these changes'));
+    expect(
+      screen.getByText(/kept them here instead of moving them to different lines/),
+    ).toBeTruthy();
     expect(screen.getByText(/src\/deleted.ts · old line 1 · review/)).toBeTruthy();
     expect(screen.getByText('Preserve the original behavior.')).toBeTruthy();
   });

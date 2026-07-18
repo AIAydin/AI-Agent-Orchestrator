@@ -104,7 +104,7 @@ describe('useGitPrNodeController', () => {
       ready: false,
     });
     expect(result.current.inspection?.readiness).toContain(
-      'Delivery checks and human quality approval have not been prepared.',
+      "The required checks and a person's approval haven't been completed yet.",
     );
     expect(result.current.availableRemotes).toEqual(['origin']);
     expect(onError).not.toHaveBeenCalled();
@@ -188,7 +188,7 @@ describe('useGitPrNodeController', () => {
     act(() => result.current.preparePush());
     await waitFor(() => expect(result.current.pendingPlan?.kind).toBe('push'));
     act(() => result.current.confirmPlan());
-    await waitFor(() => expect(result.current.notice).toContain(`Pushed exact ${SOURCE_OID}`));
+    await waitFor(() => expect(result.current.notice).toContain(`Pushed commit ${SOURCE_OID}`));
     expect(operations.confirmPush).toHaveBeenCalledTimes(2);
 
     act(() => result.current.checkGitHub());
@@ -257,11 +257,7 @@ describe('useGitPrNodeController', () => {
     expect(result.current.pendingPlan).toBeNull();
     await waitFor(() => expect(operations.cancelPlan).toHaveBeenCalledWith({ planId: PLAN_ID }));
     expect(operations.cancelPlan).toHaveBeenCalledTimes(1);
-    await waitFor(() =>
-      expect(result.current.notice).toBe(
-        'Cancelled the prepared remote action. Nothing remote changed.',
-      ),
-    );
+    await waitFor(() => expect(result.current.notice).toBe('Cancelled. Nothing changed online.'));
     expect(operations.confirmPush).not.toHaveBeenCalled();
   });
 

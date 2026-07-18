@@ -111,7 +111,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     fireEvent.change(model, { target: { value: '' } });
     expect(onUpdateSelected).toHaveBeenCalledWith({ model: undefined });
 
-    fireEvent.change(screen.getByLabelText('Installed adapter'), {
+    fireEvent.change(screen.getByLabelText('Agent to run'), {
       target: { value: 'test-agent' },
     });
     expect(onUpdateSelected).toHaveBeenCalledWith({
@@ -135,8 +135,12 @@ describe('WorkspaceInspector Custom permissions', () => {
       name: 'Permission profile',
     });
     expect(profileSelect.value).toBe('custom');
-    expect(screen.getByText('Custom · host disclosure-only')).toBeTruthy();
-    expect(screen.getByText(/Primary-branch review always required/u)).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Custom · Use the access rules from Settings. Docker enforces its limits; rules for runs on this computer are stated to the agent, not enforced by the operating system.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(/review changes before they reach the main branch/u)).toBeTruthy();
     fireEvent.change(profileSelect, { target: { value: 'worktree-write' } });
     expect(onUpdateSelected).toHaveBeenCalledWith({
       permissionProfile: 'worktree-write',
@@ -166,8 +170,8 @@ describe('WorkspaceInspector Custom permissions', () => {
     );
     expect(unavailableProfile.value).toBe('custom');
     expect(customOption?.disabled).toBe(true);
-    expect(screen.getByRole('alert').textContent).toMatch(/not available in Docker/u);
-    expect(screen.getByText(/No in-image agent payload starts/u)).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/can't run in Docker/u);
+    expect(screen.getByText(/Nothing starts inside Docker/u)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Review & run' })).toHaveProperty('disabled', true);
   });
 
@@ -178,7 +182,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByText(/This node is locked/u)).toBeTruthy();
     expect(
       screen.getByRole<HTMLFieldSetElement>('group', {
-        name: 'Node configuration',
+        name: 'Node settings',
       }),
     ).toHaveProperty('disabled', true);
     expect(screen.getByLabelText<HTMLInputElement>('Title').matches(':disabled')).toBe(true);
@@ -188,7 +192,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Unlock' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', false);
-    expect(screen.getByLabelText('Installed adapter')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Agent to run')).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Review & run' })).toHaveProperty('disabled', true);
   });
 
@@ -218,15 +222,12 @@ describe('WorkspaceInspector Custom permissions', () => {
     inspectorProps.collaborationGraphReadOnly = true;
     render(<WorkspaceInspector {...inspectorProps} />);
 
-    expect(screen.getByText(/can inspect the shared node but cannot change it/u)).toBeTruthy();
-    expect(screen.getByRole('group', { name: 'Node configuration' })).toHaveProperty(
-      'disabled',
-      true,
-    );
+    expect(screen.getByText(/view-only/u)).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Node settings' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Lock' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', true);
-    expect(screen.getByText(/can read comments but cannot add/u)).toBeTruthy();
+    expect(screen.getByText(/You can read comments, but you cannot add/u)).toBeTruthy();
     const privateInput = screen.getByLabelText('Add a private comment');
     expect(privateInput).toHaveProperty('disabled', false);
     fireEvent.change(privateInput, {
@@ -242,7 +243,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     inspectorProps.collaborationGraphReadOnly = true;
     render(<WorkspaceInspector {...inspectorProps} />);
 
-    expect(screen.getByLabelText('Installed adapter')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Agent to run')).toHaveProperty('disabled', true);
     expect(screen.getByLabelText('Model (optional)')).toHaveProperty('disabled', true);
     expect(screen.getByRole('combobox', { name: 'Permission profile' })).toHaveProperty(
       'disabled',
@@ -293,7 +294,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     render(<WorkspaceInspector {...inspectorProps} />);
 
     await waitFor(() => expect(getPreview).toHaveBeenCalled());
-    expect(screen.getByRole('combobox', { name: 'Preview target' })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: 'Run the preview in' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -325,7 +326,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     inspectorProps.nodes = [selectedNode, { ...agentNode({}), id: 'member' }];
     render(<WorkspaceInspector {...inspectorProps} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Fit frame' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fit to members' }));
     fireEvent.click(screen.getByRole('button', { name: 'Arrange members' }));
 
     expect(inspectorProps.onFitGroupFrame).toHaveBeenCalledOnce();
@@ -344,7 +345,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     inspectorProps.agentRunActive = true;
     render(<WorkspaceInspector {...inspectorProps} />);
 
-    expect(screen.getByLabelText<HTMLSelectElement>('Installed adapter')).toHaveProperty(
+    expect(screen.getByLabelText<HTMLSelectElement>('Agent to run')).toHaveProperty(
       'disabled',
       true,
     );
@@ -375,7 +376,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     inspectorProps.agentRunActive = true;
     rerender(<WorkspaceInspector {...inspectorProps} />);
     expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', true);
-    expect(screen.getByLabelText('Agent input')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Message to the running agent')).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Terminate' })).toBeTruthy();
 
     inspectorProps.selectedNode = agentNode({
@@ -387,7 +388,7 @@ describe('WorkspaceInspector Custom permissions', () => {
     });
     rerender(<WorkspaceInspector {...inspectorProps} />);
     expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', false);
-    expect(screen.getByLabelText('Agent input')).toHaveProperty('disabled', false);
+    expect(screen.getByLabelText('Message to the running agent')).toHaveProperty('disabled', false);
 
     inspectorProps.agentRunActive = false;
     inspectorProps.selectedNode = agentNode({

@@ -518,7 +518,7 @@ describe('scoped workflow planning and typed edge behavior', () => {
     let runtime = runtimeFor(graph);
     expect(evaluateExecutableEdge(runtime, 'context-edge').disposition).toBe('waiting');
     expect(() => contextAttachmentsForNode(runtime, 'agent-1')).toThrow(
-      'has not been verified by the host',
+      'This context link has not been verified yet',
     );
     expect(() =>
       recordWorkflowContextResolution(
@@ -986,7 +986,7 @@ describe('gate execution, bounded revisions, resources, cancellation, and recove
     runtime = startWorkflowNode(runtime, 'agent-1', process(201), T1);
     runtime = completeWorkflowNode(runtime, 'agent-1', { status: 'succeeded' }, T2);
     expect(() => startWorkflowNode(runtime, 'test-1', process(209), T2)).toThrow(
-      'Waiting for required diff publication',
+      'Waiting for the required diff output',
     );
     runtime = publish(runtime, 'output-edge', 'diff-first');
     runtime = startWorkflowNode(runtime, 'reviewer-agent', process(207), T2);

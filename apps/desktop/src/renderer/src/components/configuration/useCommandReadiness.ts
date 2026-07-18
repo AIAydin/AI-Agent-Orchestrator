@@ -55,7 +55,7 @@ export function useCommandReadiness(
               : ({
                   phase: 'unavailable',
                   message:
-                    'Command validation is unavailable. Reopen Forgeboard before saving this command.',
+                    'Forgeboard can’t check this command right now. Reopen Forgeboard before saving it.',
                 } satisfies CommandReadinessStatus)
             : ({ phase: 'not-configured' } satisfies CommandReadinessStatus),
         ]),
@@ -79,7 +79,7 @@ export function useCommandReadiness(
                 [entry.id]: {
                   phase: 'unavailable',
                   message:
-                    'Forgeboard discarded stale command evidence. Validate the current executable and arguments again.',
+                    'This check belonged to an older version of the command. Check the current program and arguments again.',
                 },
               }));
               return;
@@ -98,7 +98,7 @@ export function useCommandReadiness(
                 message:
                   error instanceof Error && error.message.trim() !== ''
                     ? error.message
-                    : 'Forgeboard could not validate this command.',
+                    : 'Forgeboard could not check this command.',
               },
             }));
           },
@@ -120,9 +120,11 @@ export function useCommandReadiness(
       if (!status || status.phase === 'not-configured' || status.phase === 'ready') continue;
       if (status.phase === 'checking') {
         checking = true;
-        blockingIssues.push(`${entry.label} is still being validated without running it.`);
+        blockingIssues.push(`${entry.label} is still being checked. Nothing is being run.`);
       } else if (status.phase === 'blocked') {
-        blockingIssues.push(`${entry.label}: ${status.result.reason ?? 'Command is not ready.'}`);
+        blockingIssues.push(
+          `${entry.label}: ${status.result.reason ?? 'This command is not ready.'}`,
+        );
       } else {
         blockingIssues.push(`${entry.label}: ${status.message}`);
       }

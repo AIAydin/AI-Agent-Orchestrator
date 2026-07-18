@@ -31,13 +31,15 @@ describe('GroupFrameInspector', () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Frame purpose' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Group purpose' }), {
       target: { value: 'feature-area' },
     });
     fireEvent.change(screen.getByRole('combobox', { name: 'Member layout' }), {
       target: { value: 'grid' },
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: /Automatically fit frame to members/u }));
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Automatically fit the group to its members/u }),
+    );
     expect(screen.getByRole('checkbox', { name: /agent-1/u })).toHaveProperty('checked', true);
     fireEvent.click(screen.getByRole('checkbox', { name: /test-1/u }));
 
@@ -74,7 +76,7 @@ describe('GroupFrameInspector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Fit frame' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fit to members' }));
     fireEvent.click(screen.getByRole('button', { name: 'Arrange members' }));
 
     expect(onFit).toHaveBeenCalledTimes(1);
@@ -97,12 +99,15 @@ describe('GroupFrameInspector', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Fit frame' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Fit to members' })).toHaveProperty(
+      'disabled',
+      false,
+    );
     expect(screen.getByRole('button', { name: 'Arrange members' })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.getByText(/Freeform preserves current member positions/u)).toBeTruthy();
+    expect(screen.getByText(/Freeform keeps members where they are/u)).toBeTruthy();
 
     rerender(
       <GroupFrameInspector
@@ -114,7 +119,7 @@ describe('GroupFrameInspector', () => {
         onArrange={vi.fn()}
       />,
     );
-    expect(screen.getByRole('button', { name: 'Fit frame' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Fit to members' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Arrange members' })).toHaveProperty(
       'disabled',
       true,

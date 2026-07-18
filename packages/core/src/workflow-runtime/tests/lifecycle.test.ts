@@ -188,7 +188,7 @@ describe('workflow runtime launch lifecycle', () => {
         { failureCode: 'LAUNCH_FAILED', reason: 'Should not launch yet' },
         STARTED,
       ),
-    ).toThrow('is not runnable');
+    ).toThrow('cannot run');
 
     runtime = startWorkflowNode(runtime, 'source', INTERNAL_EXECUTION, STARTED);
     expect(() =>

@@ -20,16 +20,16 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     const missingExecutable = join(userDataDirectory, 'missing-custom-agent');
 
     const setup = page.getByRole('dialog');
-    await expect(setup).toHaveAccessibleName(/Ready to build without wiring config files/i);
+    await expect(setup).toHaveAccessibleName(/Set up Forgeboard in a few quick steps/i);
     await setup.getByRole('button', { name: /Set up Forgeboard/ }).click();
-    const customCli = setup.getByRole('radio', { name: /Custom CLI/ });
-    await setup.getByText('Custom CLI', { exact: true }).click();
+    const customCli = setup.getByRole('radio', { name: /Custom agent/ });
+    await setup.getByText('Custom agent', { exact: true }).click();
     await expect(customCli).toBeChecked();
 
     const executableField = setup.getByLabel(/^Executable\b/);
     await executableField.fill(missingExecutable);
     const refresh = setup.getByRole('button', {
-      name: /Refresh Custom CLI readiness/,
+      name: /Check Custom agent again/,
     });
     await refresh.click();
     await expect(setup.getByText('Selected executable needs attention')).toBeVisible();
@@ -85,19 +85,17 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
 
     await testCommandExecutable.fill(executable);
     await setup
-      .getByLabel(
-        'Test command arguments, one non-empty literal argument per line; empty lines ignored',
-      )
+      .getByLabel('Test command arguments, one argument per line; blank lines are ignored')
       .fill('-e\nprocess.stdout.write("READY")');
     await expect(setup.getByText(/Executable ready; the command was not run/u)).toBeVisible();
     await setup.getByRole('button', { name: /Continue/ }).click();
     await expect(setup.getByText('Your local workshop is ready')).toBeVisible();
-    await expect(setup).toContainText('Custom CLI');
+    await expect(setup).toContainText('Custom agent');
     const tour = setup.getByRole('region', { name: 'Getting started tour' });
     await expect(tour.getByRole('tab')).toHaveCount(4);
     await tour.getByRole('tab', { name: /Get help and control your data/u }).click();
     await expect(tour).toContainText('Settings → Data & privacy');
-    await expect(tour).toContainText('troubleshooting guides');
+    await expect(tour).toContainText('built-in guides');
     await setup.getByRole('button', { name: /Open Forgeboard/ }).click();
 
     await page.getByRole('button', { name: 'Settings' }).click();

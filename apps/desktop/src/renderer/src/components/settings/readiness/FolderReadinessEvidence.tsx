@@ -7,12 +7,12 @@ export function FolderReadinessEvidence({
 }) {
   if (status === undefined) return null;
   if (status.phase === 'checking') {
-    return <small role="status">Checking this folder without creating or changing it…</small>;
+    return <small role="status">Checking this folder — nothing will be created or changed…</small>;
   }
   if (status.phase === 'ready') {
     return (
       <small role="status">
-        Folder preflight is ready.
+        This folder is ready to use.
         {status.result.warning ? ` ${status.result.warning}` : ''}
       </small>
     );

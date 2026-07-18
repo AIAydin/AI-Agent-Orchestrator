@@ -23,8 +23,8 @@ describe('FileContextTargetPicker', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText('Target Agent'), { target: { value: 'agent-2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Attach saved disk file' }));
+    fireEvent.change(screen.getByLabelText('Attach to agent'), { target: { value: 'agent-2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Attach saved file' }));
 
     await waitFor(() =>
       expect(onAttach).toHaveBeenCalledWith('agent-2', {
@@ -35,7 +35,7 @@ describe('FileContextTargetPicker', () => {
         sourceNodeId: 'file-1',
       }),
     );
-    expect(await screen.findByText(/Attached the saved file/iu)).toBeTruthy();
+    expect(await screen.findByText(/agent can now use this saved file/iu)).toBeTruthy();
   });
 
   it('disables attachment for read-only roles and unavailable File nodes', () => {
@@ -48,9 +48,9 @@ describe('FileContextTargetPicker', () => {
         onAttach={vi.fn()}
       />,
     );
-    expect(
-      screen.getByRole('button', { name: 'Attach saved disk file' }).hasAttribute('disabled'),
-    ).toBe(true);
+    expect(screen.getByRole('button', { name: 'Attach saved file' }).hasAttribute('disabled')).toBe(
+      true,
+    );
 
     rerender(
       <FileContextTargetPicker
@@ -61,9 +61,9 @@ describe('FileContextTargetPicker', () => {
         onAttach={vi.fn()}
       />,
     );
-    expect(
-      screen.getByRole('button', { name: 'Attach saved disk file' }).hasAttribute('disabled'),
-    ).toBe(true);
+    expect(screen.getByRole('button', { name: 'Attach saved file' }).hasAttribute('disabled')).toBe(
+      true,
+    );
   });
 });
 

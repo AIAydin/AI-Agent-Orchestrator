@@ -343,12 +343,10 @@ export class WorkflowAgentExecutor implements WorkflowNodeExecutor {
       );
     }
     if (pending.configurationFingerprint !== agentConfigurationFingerprint(configuration)) {
-      throw new Error(
-        'The configured agent or task instruction changed. Review a fresh launch disclosure.',
-      );
+      throw new Error('The configured agent or task instruction changed. Review what will run.');
     }
     if (pending.contextFingerprint !== agentContextFingerprint(context)) {
-      throw new Error('The resolved agent context changed. Review a fresh launch disclosure.');
+      throw new Error('The resolved agent context changed. Review what will run.');
     }
     this.#removePreparation(pending);
   }

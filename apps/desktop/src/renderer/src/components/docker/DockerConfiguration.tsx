@@ -46,7 +46,9 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
     try {
       await action();
     } catch (error) {
-      props.onError(error instanceof Error ? error.message : 'The Docker operation failed.');
+      props.onError(
+        error instanceof Error ? error.message : 'The Docker action failed. Try again.',
+      );
     } finally {
       setBusy(null);
     }
@@ -62,7 +64,7 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
     await perform('check', async () => {
       const checked = unwrap(await window.forgeboard.docker.check(configuration));
       if (checked === null) {
-        setNotice('Docker readiness check cancelled. Nothing was run.');
+        setNotice('Check cancelled — nothing was run.');
         return;
       }
       acceptReadiness(checked);
@@ -76,8 +78,8 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
       if (result.readiness !== null) acceptReadiness(result.readiness);
       setNotice(
         result.outcome === 'cancelled'
-          ? 'Image pull cancelled. Nothing was downloaded.'
-          : 'Image pull finished and readiness was checked again.',
+          ? 'Download cancelled — nothing was downloaded.'
+          : 'Download finished, and the check ran again.',
       );
     });
   }
@@ -135,8 +137,8 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
       </div>
 
       <p className="docker-explanation">
-        The image must already contain this exact agent executable. Forgeboard never assumes a
-        general-purpose image includes your selected CLI and never pulls an image automatically.
+        The image must already contain this exact agent program. Forgeboard does not assume a
+        general image has your agent installed, and it never downloads an image without asking.
       </p>
 
       <div className="docker-readiness-actions">
@@ -155,23 +157,25 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
           disabled={props.disabled || configuration === null || busy !== null}
           onClick={() => void pull()}
         >
-          <Download size={14} /> {busy === 'pull' ? 'Pulling…' : 'Pull image…'}
+          <Download size={14} /> {busy === 'pull' ? 'Downloading…' : 'Pull image…'}
         </button>
-        <small>A native confirmation appears before any registry download.</small>
+        <small>You will be asked to confirm before anything is downloaded.</small>
       </div>
 
       {configuration === null && (
         <div className="docker-readiness missing" role="status">
           <AlertTriangle size={15} />
-          <span>Enter an image and its absolute agent executable path to check readiness.</span>
+          <span>
+            Enter an image and the full path of the agent program inside it, then run the check.
+          </span>
         </div>
       )}
       {configuration !== null && readiness === null && (
         <div className="docker-readiness missing" role="status">
           <AlertTriangle size={15} />
           <span>
-            <strong>Docker profile not verified</strong>
-            <small>Use Check Docker before relying on this profile.</small>
+            <strong>Docker profile not checked yet</strong>
+            <small>Run “Check Docker” before relying on this profile.</small>
           </span>
         </div>
       )}
@@ -207,11 +211,11 @@ function readinessInput(value: DockerSettings): DockerReadinessInput | null {
 
 function readinessLabel(readiness: DockerReadiness): string {
   return {
-    'executable-unavailable': 'Docker executable unavailable',
-    'daemon-unavailable': 'Docker daemon unavailable',
+    'executable-unavailable': 'Docker program not found',
+    'daemon-unavailable': 'Docker is not running',
     'image-missing': 'Image is not stored locally',
-    'image-incompatible': 'Image is incompatible',
-    'agent-unavailable': 'Agent executable unavailable in image',
+    'image-incompatible': 'Image does not work with this setup',
+    'agent-unavailable': 'Agent program not found in the image',
     ready: 'Docker profile ready',
   }[readiness.status];
 }

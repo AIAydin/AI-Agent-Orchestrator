@@ -37,20 +37,22 @@ test('a UI-configured Custom host profile persists and governs deterministic run
 
       await settings.getByRole('button', { name: 'Permissions', exact: true }).click();
       await settings.getByLabel('Default permission profile').selectOption('custom');
-      await settings.getByLabel('Runtime boundary').selectOption('host');
-      await settings.getByLabel('Filesystem policy').selectOption('assigned-worktree-read-only');
+      await settings.getByLabel('Where the agent runs').selectOption('host');
+      await settings.getByLabel('File access').selectOption('assigned-worktree-read-only');
       await settings.getByLabel('Ignored files').selectOption('deny');
       await settings.getByLabel('Sensitive files').selectOption('deny');
-      await settings.getByLabel('Top-level launch policy').selectOption('selected-agent-only');
+      await settings.getByLabel('Which programs can start it').selectOption('selected-agent-only');
       await settings.getByRole('checkbox', { name: /Ask the agent to allow tests/ }).check();
 
       await expect(
-        settings.getByText('Host policy is disclosure-only', { exact: true }),
+        settings.getByText('Limits are stated, not enforced', { exact: true }),
       ).toBeVisible();
       await expect(
-        settings.getByText('Review before the primary branch', { exact: true }),
+        settings.getByText('Review before the main branch', { exact: true }),
       ).toBeVisible();
-      await expect(settings.getByText('Host cwd is not a sandbox', { exact: true })).toBeVisible();
+      await expect(
+        settings.getByText('This computer is not a sandbox', { exact: true }),
+      ).toBeVisible();
       await expect(settings.getByRole('button', { name: /Save settings/ })).toBeEnabled();
       await settings.getByRole('button', { name: /Save settings/ }).click();
       await expect(settings).toBeHidden();
@@ -72,13 +74,11 @@ test('a UI-configured Custom host profile persists and governs deterministic run
       await settings.getByRole('button', { name: 'Permissions', exact: true }).click();
 
       await expect(settings.getByLabel('Default permission profile')).toHaveValue('custom');
-      await expect(settings.getByLabel('Runtime boundary')).toHaveValue('host');
-      await expect(settings.getByLabel('Filesystem policy')).toHaveValue(
-        'assigned-worktree-read-only',
-      );
+      await expect(settings.getByLabel('Where the agent runs')).toHaveValue('host');
+      await expect(settings.getByLabel('File access')).toHaveValue('assigned-worktree-read-only');
       await expect(settings.getByLabel('Ignored files')).toHaveValue('deny');
       await expect(settings.getByLabel('Sensitive files')).toHaveValue('deny');
-      await expect(settings.getByLabel('Top-level launch policy')).toHaveValue(
+      await expect(settings.getByLabel('Which programs can start it')).toHaveValue(
         'selected-agent-only',
       );
       await expect(
@@ -99,21 +99,21 @@ test('a UI-configured Custom host profile persists and governs deterministic run
     await expect(agentNode).toBeVisible();
     await agentNode.click();
     const runConfiguration = page.getByRole('region', {
-      name: 'Agent run configuration',
+      name: 'Agent run settings',
     });
     const permissionSelection = runConfiguration.getByLabel('Permission profile');
 
     await test.step('Custom is an ordinary selectable Agent-node profile', async () => {
-      await expect(runConfiguration.getByLabel('Installed adapter')).toHaveValue('test-agent');
+      await expect(runConfiguration.getByLabel('Agent to run')).toHaveValue('test-agent');
       await expect(permissionSelection).toHaveValue('custom');
       await permissionSelection.selectOption('plan-read-only');
       await permissionSelection.selectOption('custom');
-      await expect(runConfiguration.getByText('Custom · host disclosure-only')).toBeVisible();
       await expect(
-        runConfiguration.getByText('Assigned worktree · declared read-only'),
+        runConfiguration.getByText('Custom · runs on this computer (not enforced)'),
       ).toBeVisible();
+      await expect(runConfiguration.getByText('Assigned worktree · read-only')).toBeVisible();
       await expect(runConfiguration).toContainText(
-        'Ignored deny · sensitive deny · dev servers deny · tests allow',
+        'Ignored files not allowed · sensitive files not allowed · dev servers not allowed · tests allowed',
       );
     });
 
@@ -123,13 +123,11 @@ test('a UI-configured Custom host profile persists and governs deterministic run
     await test.step('exact approval discloses the full Custom policy and cancel starts no agent', async () => {
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
       const dialog = page.getByRole('dialog', {
-        name: 'Review the exact agent launch',
+        name: 'Review this run before it starts',
       });
       await expect(dialog).toBeVisible();
       await expect(
-        dialog.getByText(
-          'Forgeboard has prepared this run, but no approved agent run has started.',
-        ),
+        dialog.getByText("This run is ready. The agent won't start until you approve it."),
       ).toBeVisible();
       await expect(
         dialog.getByText('Local deterministic test process', { exact: true }),
@@ -138,17 +136,17 @@ test('a UI-configured Custom host profile persists and governs deterministic run
       await expect(dialog).toContainText(/packages[\\/]+test-agent[\\/]+dist[\\/]+cli\.js/);
       await expect(dialog).toContainText('custom-profile-worktrees');
       await expect(dialog.getByText(readOnlyPrompt, { exact: true })).toBeVisible();
-      await expect(dialog).toContainText('Context attachments');
+      await expect(dialog).toContainText('Attached context');
       await expect(dialog).toContainText('None');
-      await expect(dialog).toContainText('No context manifest');
+      await expect(dialog).toContainText('No context record');
 
       await assertReadOnlyCustomDisclosure(dialog);
 
-      await dialog.getByRole('button', { name: 'Cancel before launch' }).click();
+      await dialog.getByRole('button', { name: 'Cancel run' }).click();
       await expect(dialog).toBeHidden();
-      await expect(page.getByText('Cancelled the prepared run before launch.')).toBeVisible();
+      await expect(page.getByText('Cancelled before the agent started.')).toBeVisible();
       await expect(page.locator('.run-history')).toContainText(
-        'No runs yet. Forgeboard never fabricates agent output.',
+        'No runs yet. When this agent runs, its real output shows up here.',
       );
       await expect(page.locator('.run-history')).not.toContainText(
         'Forgeboard deterministic agent started.',
@@ -159,11 +157,11 @@ test('a UI-configured Custom host profile persists and governs deterministic run
     await test.step('approval honors the configured read-only behavior', async () => {
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
       const dialog = page.getByRole('dialog', {
-        name: 'Review the exact agent launch',
+        name: 'Review this run before it starts',
       });
       await assertReadOnlyCustomDisclosure(dialog);
       await approveNextNativeAgentLaunch(activeElectronApp, dialog, 'test-agent', async () => {
-        await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+        await dialog.getByRole('button', { name: 'Approve and start' }).click();
       });
 
       const history = page.locator('.run-history');
@@ -183,7 +181,7 @@ test('a UI-configured Custom host profile persists and governs deterministic run
       await page.getByRole('button', { name: 'Settings' }).click();
       const settings = page.locator('.settings-modal');
       await settings.getByRole('button', { name: 'Permissions', exact: true }).click();
-      await settings.getByLabel('Filesystem policy').selectOption('assigned-worktree-write');
+      await settings.getByLabel('File access').selectOption('assigned-worktree-write');
       await settings.getByRole('button', { name: /Save settings/ }).click();
       await expect(settings).toBeHidden();
 
@@ -194,11 +192,11 @@ test('a UI-configured Custom host profile persists and governs deterministic run
       await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
 
       const dialog = page.getByRole('dialog', {
-        name: 'Review the exact agent launch',
+        name: 'Review this run before it starts',
       });
       await expect(dialog.getByText(writePrompt, { exact: true })).toBeVisible();
       const permission = dialog.getByRole('region', {
-        name: 'Effective permission profile',
+        name: 'What this agent can do',
       });
       await expect(permission).toContainText('Custom host (read/write) · custom · disclosure-only');
       await expect(permission).toContainText('Assigned worktree · read and write');
@@ -206,7 +204,7 @@ test('a UI-configured Custom host profile persists and governs deterministic run
       await expect(permission).not.toContainText('Write: none');
       await expect(permission).toContainText('Network: provider-controlled');
       await approveNextNativeAgentLaunch(activeElectronApp, dialog, 'test-agent', async () => {
-        await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+        await dialog.getByRole('button', { name: 'Approve and start' }).click();
       });
 
       const history = page.locator('.run-history');
@@ -231,32 +229,34 @@ test('a UI-configured Custom host profile persists and governs deterministic run
 
 async function assertReadOnlyCustomDisclosure(dialog: Locator): Promise<void> {
   const permission = dialog.getByRole('region', {
-    name: 'Effective permission profile',
+    name: 'What this agent can do',
   });
   await expect(permission).toContainText(
     'Custom host (read-only intent) · custom · disclosure-only',
   );
   await expect(permission).toContainText('Write: none');
   await expect(permission).toContainText('Network: provider-controlled');
-  await expect(permission).toContainText('Host disclosure-only policy');
-  await expect(permission).toContainText('Assigned worktree · declared read-only');
-  await expect(permission).toContainText('Ignored deny · sensitive deny');
-  await expect(permission).toContainText('Selected agent only');
-  await expect(permission).toContainText('Dev servers deny · tests allow · advisory');
+  await expect(permission).toContainText('On this computer (limits stated, not enforced)');
+  await expect(permission).toContainText('Assigned worktree · read-only');
+  await expect(permission).toContainText('Ignored files not allowed · sensitive files not allowed');
+  await expect(permission).toContainText("Only the selected agent's program");
+  await expect(permission).toContainText(
+    'Dev servers not allowed · tests allowed · requested, not enforced',
+  );
   await expect(permission).toContainText('Review always required');
   await expect(permission).toContainText(
-    'Host cwd and root lists are disclosure policy, not an operating-system filesystem sandbox.',
+    'The working folder and the read and write folder lists are rules Forgeboard states to the agent, not limits your computer enforces.',
   );
   await expect(permission).toContainText(
-    'Host networking remains controlled by the selected provider and operating system.',
+    'Network access stays controlled by the provider you chose and by this computer.',
   );
   await expect(permission).toContainText(
-    'Ignored/sensitive visibility and Forgeboard-managed action rules are explicit agent instructions; they do not constrain subprocesses spawned by the agent.',
+    'Rules about ignored or sensitive files, and about actions Forgeboard manages, are instructions to the agent; they do not limit other programs the agent starts.',
   );
   await expect(permission).toContainText(
-    'Allowing sensitive or ignored visibility never attaches a file automatically and never replaces exact per-file context approval.',
+    'Allowing the agent to see sensitive or ignored files never shares a file on its own; you still approve each file shared as context.',
   );
   await expect(permission).toContainText(
-    'The launch allowlist applies only to the exact top-level executable started by Forgeboard, not its descendants.',
+    'The launch allowlist applies only to the exact program Forgeboard starts, not to anything that program starts.',
   );
 }

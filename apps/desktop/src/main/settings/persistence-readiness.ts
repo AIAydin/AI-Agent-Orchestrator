@@ -106,7 +106,7 @@ export class SettingsPersistenceReadinessVerifier {
     if (!folderReadinessMatches(result, request) || !result.ready) {
       throw new Error(
         result.reason ??
-          `The ${request.purpose === 'managed-worktrees' ? 'managed worktree folder' : 'backup destination'} is not ready.`,
+          `The ${request.purpose === 'managed-worktrees' ? 'managed worktree folder' : 'backup folder'} is not ready.`,
       );
     }
   }

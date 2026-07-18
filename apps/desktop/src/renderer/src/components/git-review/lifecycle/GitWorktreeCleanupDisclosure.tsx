@@ -66,55 +66,59 @@ export function GitWorktreeCleanupDisclosure({
           <span>
             <h3 id="git-cleanup-review-title">
               {plan.recovery
-                ? 'Review interrupted cleanup recovery'
-                : 'Review safe agent-worktree cleanup'}
+                ? 'Review the interrupted cleanup recovery'
+                : "Review safe cleanup of the agent's workspace"}
             </h3>
             <p id="git-cleanup-review-description">
               {plan.recovery
-                ? 'Forgeboard re-resolved the cleanup-pending run. Continuing opens a cancel-default system confirmation for this fresh recovery plan.'
-                : 'Nothing has been removed. Continuing opens a cancel-default system confirmation for this exact prepared plan.'}
+                ? 'Forgeboard picked up where an interrupted cleanup left off and prepared a fresh plan. If you continue, your computer will ask you to confirm — you can still cancel there.'
+                : 'Nothing has been removed yet. If you continue, your computer will ask you to confirm this exact plan — you can still cancel there.'}
             </p>
           </span>
         </header>
         <div className="git-disclosure-body">
           <p className="git-cleanup-policy">
             {plan.recovery
-              ? 'This recovery can continue only after Forgeboard revalidates the exact remaining managed worktree, clean state, and merge into its recorded base. The managed branch must be deleted; no force option exists.'
-              : 'Forgeboard permits cleanup only when this exact managed worktree is clean and its branch is merged into the recorded base. The managed branch must be deleted with the worktree; no force option exists.'}
+              ? "Recovery can continue only after Forgeboard re-checks that the agent's remaining workspace has no unsaved changes and that its branch is fully merged into the recorded base branch. The branch must be deleted — there is no way to force cleanup."
+              : "Forgeboard cleans up only when the agent's workspace has no unsaved changes and its branch is fully merged into the recorded base branch. The branch is always deleted along with the workspace — there is no way to force cleanup."}
           </p>
           <dl>
             <div className="wide">
-              <dt>Plan mode</dt>
-              <dd>{plan.recovery ? 'Interrupted cleanup recovery' : 'New safe cleanup'}</dd>
+              <dt>Mode</dt>
+              <dd>
+                {plan.recovery ? 'Recovery after an interrupted cleanup' : 'New safe cleanup'}
+              </dd>
             </div>
             <div className="wide">
-              <dt>Managed branch</dt>
+              <dt>Agent branch</dt>
               <dd>{displayEscapedText(plan.branch)}</dd>
             </div>
             <div className="wide">
-              <dt>Recorded base</dt>
+              <dt>Recorded base branch</dt>
               <dd>{displayEscapedText(plan.baseRef)}</dd>
             </div>
             <div>
-              <dt>Working tree</dt>
-              <dd>{plan.clean ? 'Clean — verified' : 'Not clean'}</dd>
+              <dt>Workspace</dt>
+              <dd>{plan.clean ? 'No unsaved changes — verified' : 'Has unsaved changes'}</dd>
             </div>
             <div>
-              <dt>Merged into recorded base</dt>
+              <dt>Merged into the base branch</dt>
               <dd>{plan.mergedIntoBase ? 'Yes — verified' : 'No'}</dd>
             </div>
             <div>
-              <dt>Relative dirty paths</dt>
+              <dt>Files with unsaved changes</dt>
               <dd>{plan.dirtyPathCount}</dd>
             </div>
             <div>
-              <dt>Managed branch deletion</dt>
+              <dt>Branch deletion</dt>
               <dd>Required</dd>
             </div>
           </dl>
           {plan.dirtyPathCount > 0 && (
             <section className="git-cleanup-dirty-paths" aria-labelledby="git-cleanup-paths-title">
-              <h4 id="git-cleanup-paths-title">Relative dirty paths ({plan.dirtyPathCount})</h4>
+              <h4 id="git-cleanup-paths-title">
+                Files with unsaved changes ({plan.dirtyPathCount})
+              </h4>
               <div>
                 {plan.dirtyPaths.map((path) => (
                   <code key={path}>{displayEscapedText(path)}</code>
@@ -122,7 +126,7 @@ export function GitWorktreeCleanupDisclosure({
               </div>
               {plan.dirtyPathsTruncated && (
                 <small>
-                  {plan.dirtyPathCount - plan.dirtyPaths.length} additional relative dirty paths are
+                  {plan.dirtyPathCount - plan.dirtyPaths.length} more files with unsaved changes are
                   not shown.
                 </small>
               )}
@@ -130,8 +134,8 @@ export function GitWorktreeCleanupDisclosure({
           )}
           {!eligible && (
             <p className="git-cleanup-ineligible" role="alert">
-              <TriangleAlert size={14} aria-hidden="true" /> This plan is not eligible for safe
-              cleanup. Go back and refresh the authoritative Git review.
+              <TriangleAlert size={14} aria-hidden="true" /> This plan no longer qualifies for a
+              safe cleanup. Go back and refresh the review.
             </p>
           )}
           <small>
@@ -155,7 +159,7 @@ export function GitWorktreeCleanupDisclosure({
             disabled={busy || !eligible}
             onClick={onConfirm}
           >
-            <Trash2 size={14} aria-hidden="true" /> Continue to “Clean up” system confirmation
+            <Trash2 size={14} aria-hidden="true" /> Continue to the “Clean up” confirmation
           </button>
         </footer>
       </section>

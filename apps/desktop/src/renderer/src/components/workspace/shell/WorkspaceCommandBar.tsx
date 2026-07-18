@@ -71,7 +71,7 @@ export function WorkspaceCommandBar({
         <span className="brand-mark tiny">F</span>
         <span>
           <strong>{project.name}</strong>
-          <small>{canvasName ?? 'Loading canvas'}</small>
+          <small>{canvasName ?? 'Loading canvas…'}</small>
         </span>
         <ChevronDown size={14} />
       </button>
@@ -94,7 +94,12 @@ export function WorkspaceCommandBar({
       >
         <Redo2 size={16} />
       </button>
-      <button className="icon-button" type="button" onClick={onFitCanvas} aria-label="Fit canvas">
+      <button
+        className="icon-button"
+        type="button"
+        onClick={onFitCanvas}
+        aria-label="Zoom to fit the canvas"
+      >
         <Maximize2 size={16} />
       </button>
       <button
@@ -103,8 +108,8 @@ export function WorkspaceCommandBar({
         disabled={workflowBusy || !canRunWorkflow}
         title={
           canRunWorkflow
-            ? 'Run every runnable node in the saved canvas workflow'
-            : 'Add an Agent, Test, Review gate, or bound human Diff/review node to run this canvas'
+            ? 'Run every node in the saved canvas workflow'
+            : 'Add an Agent, Test, Review gate, or Diff/review node before running this canvas'
         }
         onClick={onRunWorkflow}
       >
@@ -127,7 +132,11 @@ export function WorkspaceCommandBar({
       )}
       <span className={`autosave-state ${saveState}`}>
         <CircleDot size={12} />
-        {saveState === 'saved' ? 'Saved locally' : saveState}
+        {saveState === 'saved'
+          ? 'Saved locally'
+          : saveState === 'saving'
+            ? 'Saving…'
+            : 'Save failed'}
       </span>
       <div className="agent-activity">
         <span className="avatar-stack">
@@ -138,12 +147,12 @@ export function WorkspaceCommandBar({
               <span key={agent.id}>{agent.label[0]}</span>
             ))}
         </span>
-        <small>local tools</small>
+        <small>agents on this computer</small>
       </div>
       <button
         className="command-trigger"
         type="button"
-        title="Review the primary checkout"
+        title="See what changed in this project"
         onClick={onOpenGitReview}
       >
         <GitCompareArrows size={14} /> Changes

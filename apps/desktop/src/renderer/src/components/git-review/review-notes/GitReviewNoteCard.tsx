@@ -46,10 +46,10 @@ export function GitReviewNoteCard({
   return (
     <article
       className={`git-review-note ${note.kind} ${note.status}`}
-      aria-label={note.kind === 'revision-request' ? 'Revision request' : 'Line comment'}
+      aria-label={note.kind === 'revision-request' ? 'Change request' : 'Line comment'}
     >
       <header>
-        <strong>{note.kind === 'revision-request' ? 'Revision requested' : 'Local comment'}</strong>
+        <strong>{note.kind === 'revision-request' ? 'Changes requested' : 'Comment'}</strong>
         <span>{note.status === 'resolved' ? 'Resolved' : 'Open'}</span>
       </header>
       {showAnchor && (
@@ -134,7 +134,7 @@ export function GitReviewNoteCard({
                   disabled={actions.busy}
                   onClick={() => void actions.onDelete(note)}
                 >
-                  Confirm delete
+                  Yes, delete it
                 </button>
                 <button
                   type="button"

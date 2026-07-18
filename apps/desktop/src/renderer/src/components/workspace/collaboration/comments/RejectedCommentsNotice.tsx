@@ -20,15 +20,15 @@ export function RejectedCommentsNotice({ entries, onDiscard }: RejectedCommentsN
         <span>{entries.length}</span>
       </header>
       <p>
-        The room rejected these comments. Review or discard each exact local copy here, or restore
-        its text from the matching node inspector when that node is available.
+        These comments could not be shared. Delete a saved copy here, or copy its text back from the
+        item's details panel if that item is still on the canvas.
       </p>
       <ol>
         {visible.map((entry) => {
           const comment = entry.comment;
           return (
             <li key={`${entry.rejectedDeliveryId}:${comment.id}`}>
-              <small>Target: {comment.nodeId ?? 'unavailable'}</small>
+              <small>Canvas item: {comment.nodeId ?? 'no longer available'}</small>
               <p>{comment.body}</p>
               <RejectedCommentActions entry={entry} onDiscard={onDiscard} />
             </li>
@@ -36,7 +36,7 @@ export function RejectedCommentsNotice({ entries, onDiscard }: RejectedCommentsN
         })}
       </ol>
       {entries.length > visible.length && (
-        <small>Showing the newest {MAX_VISIBLE_REJECTED_COMMENTS} retained comments.</small>
+        <small>Showing the newest {MAX_VISIBLE_REJECTED_COMMENTS} saved comments.</small>
       )}
     </section>
   );

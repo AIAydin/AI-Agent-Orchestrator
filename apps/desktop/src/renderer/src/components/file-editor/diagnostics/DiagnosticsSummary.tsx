@@ -3,12 +3,15 @@ import './DiagnosticsSummary.css';
 
 export function DiagnosticsSummary({ state }: { readonly state: FileDiagnosticsState }) {
   if (state.availability === 'loading') {
-    return <span className="file-diagnostics-status">Diagnostics loading…</span>;
+    return <span className="file-diagnostics-status">Checking for problems…</span>;
   }
   if (state.availability === 'unavailable') {
     return (
-      <span className="file-diagnostics-status" title="No Monaco diagnostics provider is active.">
-        Diagnostics unavailable
+      <span
+        className="file-diagnostics-status"
+        title="This file type has no built-in problem checking."
+      >
+        Problem check unavailable
       </span>
     );
   }
@@ -16,7 +19,7 @@ export function DiagnosticsSummary({ state }: { readonly state: FileDiagnosticsS
   const errors = state.items.filter((item) => item.severity === 'error').length;
   const warnings = state.items.filter((item) => item.severity === 'warning').length;
   if (state.items.length === 0) {
-    return <span className="file-diagnostics-status">Problems 0</span>;
+    return <span className="file-diagnostics-status">No problems</span>;
   }
   return (
     <details className="file-diagnostics">

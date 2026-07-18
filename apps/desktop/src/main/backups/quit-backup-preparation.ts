@@ -14,7 +14,7 @@ export async function prepareReversibleQuitBackup(
     await preparation.pauseAdmissions();
     const outcome = await preparation.prepareBackup();
     if (outcome === 'missing-destination') {
-      throw new Error('Choose a backup directory in Settings before quitting.');
+      throw new Error('Choose a backup folder in Settings before quitting.');
     }
   } catch (error) {
     preparation.resumeAfterFailure();

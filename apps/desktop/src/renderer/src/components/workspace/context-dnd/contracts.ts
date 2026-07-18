@@ -28,7 +28,7 @@ export function writeWorkspaceContextDrag(
   const payload = WorkspaceContextDragPayloadSchema.parse(untrustedPayload);
   const serialized = JSON.stringify(payload);
   if (new TextEncoder().encode(serialized).byteLength > WORKSPACE_CONTEXT_DRAG_MAX_BYTES) {
-    throw new Error('The context drag payload is too large.');
+    throw new Error('The dragged file data is too large to attach.');
   }
   dataTransfer.setData(WORKSPACE_CONTEXT_DRAG_MIME, serialized);
   dataTransfer.effectAllowed = 'copy';

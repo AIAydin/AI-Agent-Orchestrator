@@ -44,7 +44,7 @@ const PLAN_ID = '20000000-0000-4000-8000-000000000001';
 const SESSION_ID = '30000000-0000-4000-8000-000000000001';
 const NOW = '2026-07-17T14:00:00.000Z';
 const roleDeniedMessage =
-  'This collaboration role cannot launch, type into, or reconfigure a local terminal.';
+  'Your collaboration role cannot start, type into, or change a local terminal.';
 
 type CollaborationRole = 'owner' | 'editor' | 'reviewer' | 'viewer';
 

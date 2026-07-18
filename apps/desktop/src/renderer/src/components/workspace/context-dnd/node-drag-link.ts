@@ -33,24 +33,24 @@ export function resolveFileNodeContextDrop(input: {
   );
   if (target === undefined) return null;
   if (input.source.data.locked) {
-    return { ok: false, message: 'Unlock the File node before linking it as context.' };
+    return { ok: false, message: 'Unlock the file before sharing it with an agent.' };
   }
   if (target.data.locked) {
-    return { ok: false, message: 'Unlock the Agent node before changing its context.' };
+    return { ok: false, message: 'Unlock the agent before changing its files.' };
   }
 
   const reference = input.source.data.file;
   if (reference === undefined) {
-    return { ok: false, message: 'Configure the File node before linking it as context.' };
+    return { ok: false, message: 'Set up the file before sharing it with an agent.' };
   }
   if (reference.projectId !== input.projectId) {
-    return { ok: false, message: 'The File node belongs to another project.' };
+    return { ok: false, message: 'This file belongs to another project.' };
   }
   if (reference.missing) {
-    return { ok: false, message: 'Choose a replacement for the missing File node first.' };
+    return { ok: false, message: 'This file is missing. Choose a replacement first.' };
   }
   if (reference.kind !== 'file') {
-    return { ok: false, message: 'Only ordinary File nodes can be Agent context.' };
+    return { ok: false, message: 'Only regular files can be shared with an agent.' };
   }
 
   return {

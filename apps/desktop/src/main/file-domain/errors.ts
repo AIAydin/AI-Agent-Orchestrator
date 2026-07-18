@@ -48,7 +48,7 @@ export function normalizeFileDomainError(cause: unknown): FileDomainError {
   if (code === 'ELOOP') {
     return new FileDomainError(
       'SYMLINK_BLOCKED',
-      'Forgeboard does not follow symbolic links in the embedded editor.',
+      'Forgeboard cannot open symbolic links (file shortcuts) in the editor.',
     );
   }
   return new FileDomainError('IO_ERROR', 'Forgeboard could not complete the local file operation.');

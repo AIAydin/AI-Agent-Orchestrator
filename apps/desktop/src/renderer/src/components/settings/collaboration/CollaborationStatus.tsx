@@ -21,14 +21,15 @@ export function CollaborationStatus({
         {connection?.status === 'connected' && connection.role !== undefined
           ? `Your role is ${connection.role}. `
           : ''}
-        Forgeboard sends allowlisted canvas fields: structure, titles, positions, task and review
-        status, comments, and presence. It does not inspect or redact secrets you type into shared
-        titles, edge labels, or comments. Prompt, file-content, local-path, environment-variable,
-        credential, and token fields are not selected automatically.
+        Forgeboard shares only these canvas details: layout, titles, positions, task and review
+        status, comments, and who is present. Prompts, file contents, local paths, environment
+        variables, credentials, and tokens are never selected automatically. Forgeboard does not
+        check shared titles, connection labels, or comments for secrets; sensitive information typed
+        into one of those shared fields is sent to the room.
       </p>
       {collaborators.length > 0 && (
-        <div aria-label="Room collaborators">
-          <strong>Room presence</strong>
+        <div aria-label="People in this room">
+          <strong>People in this room</strong>
           <ul>
             {collaborators.map(({ clientId, state }) => (
               <li key={clientId}>
@@ -48,13 +49,13 @@ function statusText(connection: CollaborationConnection | null): string {
     case 'connected':
       return `Connected to room ${connection.roomId}.`;
     case 'connecting':
-      return 'Waiting for authentication and the first secure sync.';
+      return 'Signing in and starting the first secure sync.';
     case 'reconnecting':
-      return 'Reconnecting to the approved collaboration room.';
+      return 'Reconnecting to the approved room.';
     case 'disconnecting':
-      return 'Leaving the collaboration room.';
+      return 'Leaving the room.';
     case 'error':
-      return connection.error?.message ?? 'The collaboration connection failed.';
+      return connection.error?.message ?? 'The collaboration connection failed. Try again.';
     case 'offline':
       return 'Collaboration is offline.';
   }

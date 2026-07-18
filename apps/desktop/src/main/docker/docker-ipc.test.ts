@@ -118,7 +118,7 @@ describe('DockerIpcService', () => {
       }),
     );
     expect(fixture.showMessageBox.mock.calls[0]?.[1].detail).toContain(
-      `SHA-256: ${identity.sha256}`,
+      `Executable fingerprint (SHA-256): ${identity.sha256}`,
     );
     await fixture.service.dispose();
   });
@@ -172,7 +172,7 @@ describe('DockerIpcService', () => {
         cancelId: 0,
       }),
     );
-    expect(fixture.showMessageBox.mock.calls[0]?.[1].detail).toContain('Daemon preflight');
+    expect(fixture.showMessageBox.mock.calls[0]?.[1].detail).toContain('Docker server check');
     await fixture.service.dispose();
   });
 

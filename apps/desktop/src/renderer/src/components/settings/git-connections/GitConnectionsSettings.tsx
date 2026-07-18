@@ -24,7 +24,7 @@ export function GitConnectionsSettings({
   return (
     <SettingsSection
       title="Git connections"
-      description="Manage repository remotes and the optional GitHub CLI entirely in the desktop UI. Confirmed changes apply immediately and are separate from Save settings."
+      description="Manage the places where each project stores its code (Git remotes) and the optional GitHub CLI tool, all from the desktop app. Changes you confirm apply right away — they do not use Save settings."
     >
       <div
         className="git-connections-settings"
@@ -39,16 +39,16 @@ export function GitConnectionsSettings({
         }}
       >
         <label className="git-connections-project">
-          Git connections project
+          Project
           <select
             name="git-connections-project"
-            aria-label="Git connections project"
+            aria-label="Project"
             value={controller.projectId}
             disabled={disabled || controller.availableProjects.length === 0}
             onChange={(event) => controller.setProjectId(event.target.value)}
           >
             {controller.availableProjects.length === 0 ? (
-              <option value="">No available Git projects</option>
+              <option value="">No Git projects available</option>
             ) : (
               controller.availableProjects.map((project, index) => (
                 <option key={project.id} value={project.id}>
@@ -60,8 +60,8 @@ export function GitConnectionsSettings({
           </select>
         </label>
         <p className="git-connections-immediate-note">
-          These controls do not use the Save settings button. Each change has its own review and
-          cancel-default native confirmation.
+          These changes do not use the Save settings button. Each one shows its own review, then a
+          confirmation from your computer with Cancel pre-selected.
         </p>
         {controller.notice === null ? null : (
           <p

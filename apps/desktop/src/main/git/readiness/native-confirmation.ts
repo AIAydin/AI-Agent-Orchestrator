@@ -7,25 +7,25 @@ import type { ExactCheckDisclosure } from '../../workflow/exact-check/contracts.
 export function deliveryCheckConfirmation(disclosure: ExactCheckDisclosure): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Run delivery check',
-    message: `Run the exact ${displayLiteral(disclosure.label)} delivery check?`,
+    title: 'Run delivery check?',
+    message: `Run the ${displayLiteral(disclosure.label)} check with this exact command?`,
     detail: [
-      `Executable: ${displayLiteral(disclosure.executable)}`,
-      `Arguments: ${JSON.stringify(disclosure.arguments)}`,
-      `Working directory: ${displayLiteral(disclosure.cwd)}`,
-      `Environment variable names: ${
+      `Program: ${displayLiteral(disclosure.executable)}`,
+      `Command arguments: ${JSON.stringify(disclosure.arguments)}`,
+      `Folder it runs in: ${displayLiteral(disclosure.cwd)}`,
+      `Environment variables it receives: ${
         disclosure.environmentVariableNames.length === 0
           ? '(none)'
           : disclosure.environmentVariableNames.map(displayLiteral).join(', ')
       }`,
-      `Exact launch fingerprint: ${disclosure.fingerprint}`,
-      `Authorization expires: ${disclosure.expiresAt}`,
+      `Fingerprint of this exact command (SHA-256): ${disclosure.fingerprint}`,
+      `This approval expires: ${disclosure.expiresAt}`,
       '',
-      'This command can execute untrusted repository code with your operating-system permissions. Its bounded raw output is retained as local evidence and may contain anything the command prints.',
+      'This command runs repository code with your computer permissions — only run checks you trust. Forgeboard keeps its output (up to a size limit) as local evidence; the output can contain anything the command prints.',
       '',
-      'Forgeboard will revalidate this exact executable, argument array, working directory, environment, managed run, worktree, source commit, and clean state immediately before launch.',
+      'Forgeboard checks again right before running that the program, arguments, folder, environment, run, workspace, and source commit are exactly as reviewed and that nothing changed.',
     ].join('\n'),
-    buttons: ['Cancel', 'Run exact check'],
+    buttons: ['Cancel', 'Run check'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -37,14 +37,14 @@ export function deliveryHumanApprovalConfirmation(
 ): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Approve delivery readiness',
-    message: 'Approve this exact source and deterministic check evidence for delivery?',
+    title: 'Approve quality for delivery?',
+    message: 'Approve these exact changes and their check results for delivery?',
     detail: [
-      `Source HEAD: ${readiness.sourceFingerprint.sourceHead}`,
-      `Source tree: ${readiness.sourceFingerprint.sourceTree}`,
-      `Managed worktree ID: ${readiness.sourceFingerprint.worktreeId}`,
-      `Managed run ID: ${readiness.sourceFingerprint.runId}`,
-      `Evidence fingerprint: ${readiness.evidenceFingerprint}`,
+      `Source commit: ${readiness.sourceFingerprint.sourceHead}`,
+      `Content fingerprint (Git tree): ${readiness.sourceFingerprint.sourceTree}`,
+      `Agent workspace ID: ${readiness.sourceFingerprint.worktreeId}`,
+      `Agent run ID: ${readiness.sourceFingerprint.runId}`,
+      `Check-results fingerprint (SHA-256): ${readiness.evidenceFingerprint}`,
       '',
       `Required checks (${String(readiness.requiredChecks.length)}):`,
       ...readiness.requiredChecks.map(
@@ -54,9 +54,9 @@ export function deliveryHumanApprovalConfirmation(
           }`,
       ),
       '',
-      'Approval is durable but applies only to this exact committed source, required-check configuration, and execution evidence. Any rerun or source, command, environment, executable, worktree, or run drift invalidates it.',
+      'This approval is saved and applies only to exactly these committed changes, this check setup, and these check results. Re-running a check, or any change to the code, commands, environment, program, workspace, or run, makes it no longer valid.',
     ].join('\n'),
-    buttons: ['Cancel', 'Approve readiness'],
+    buttons: ['Cancel', 'Approve quality'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,

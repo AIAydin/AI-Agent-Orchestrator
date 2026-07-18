@@ -69,7 +69,7 @@ export function ProjectContentSearch({
     } catch (cause) {
       if (requestVersionRef.current !== requestVersion) return;
       setStatus('error');
-      setMessage(fileBrowserError(cause, 'Forgeboard could not safely search this project.'));
+      setMessage(fileBrowserError(cause, "Forgeboard couldn't search this project. Try again."));
     }
   };
 
@@ -96,7 +96,9 @@ export function ProjectContentSearch({
     } catch (cause) {
       if (requestVersionRef.current !== requestVersion) return;
       setStatus('error');
-      setMessage(fileBrowserError(cause, 'The selected search match is no longer available.'));
+      setMessage(
+        fileBrowserError(cause, 'This match is no longer available. Try searching again.'),
+      );
     }
   };
 
@@ -110,7 +112,7 @@ export function ProjectContentSearch({
             name="project-content-search-query"
             value={query}
             aria-label="Search text in project files"
-            placeholder="Search safe text files…"
+            placeholder="Search file contents…"
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
@@ -129,7 +131,7 @@ export function ProjectContentSearch({
           <p role="status">
             {result.matches.length} matches · {result.scannedFiles} files scanned
             {result.skippedFiles > 0 ? ` · ${String(result.skippedFiles)} skipped` : ''}
-            {result.truncated ? ' · bounded result' : ''}
+            {result.truncated ? ' · results limited' : ''}
           </p>
           <ol>
             {result.matches.map((match, index) => (
@@ -151,7 +153,7 @@ export function ProjectContentSearch({
               </li>
             ))}
           </ol>
-          {result.matches.length === 0 ? <p>No safe text matches found.</p> : null}
+          {result.matches.length === 0 ? <p>No matches found.</p> : null}
         </div>
       ) : null}
     </section>

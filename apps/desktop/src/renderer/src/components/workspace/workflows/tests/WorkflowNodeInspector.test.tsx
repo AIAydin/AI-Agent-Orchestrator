@@ -97,7 +97,7 @@ describe('WorkflowNodeInspector', () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Agent assignee' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Assigned agent' }), {
       target: { value: agent.id },
     });
     expect(onUpdate).toHaveBeenCalledWith({ assigneeId: agent.id });
@@ -105,7 +105,7 @@ describe('WorkflowNodeInspector', () => {
       target: { value: 'urgent' },
     });
     expect(onUpdate).toHaveBeenCalledWith({ priority: 'urgent' });
-    fireEvent.change(screen.getByRole('textbox', { name: /Acceptance criteria/u }), {
+    fireEvent.change(screen.getByRole('textbox', { name: /Done when/u }), {
       target: { value: 'Preserve behavior.\nAdd focused tests.' },
     });
     const updated = onUpdate.mock.calls.at(-1)?.[0].acceptanceCriteria;
@@ -121,9 +121,9 @@ describe('WorkflowNodeInspector', () => {
     expect(updated?.[1]?.id).toMatch(/^[0-9a-f-]+$/u);
     fireEvent.click(screen.getByRole('checkbox', { name: 'src/task.ts' }));
     expect(onUpdate).toHaveBeenCalledWith({ relatedFiles: [file.data.file] });
-    expect(screen.getByText(/prompt metadata only/u)).toBeTruthy();
-    expect(screen.getByText('Custom · host disclosure-only')).toBeTruthy();
-    expect(screen.getByText(/inherits its assignee Agent profile/u)).toBeTruthy();
+    expect(screen.getByText(/reference only/u)).toBeTruthy();
+    expect(screen.getByText('Custom · runs on this computer (not enforced)')).toBeTruthy();
+    expect(screen.getByText(/uses its assigned agent's permissions/u)).toBeTruthy();
   });
 
   it('configures a test as an exact argument-array command from UI presets', () => {
@@ -164,7 +164,7 @@ describe('WorkflowNodeInspector', () => {
       runIds: [CUSTOM_CHECK_ID],
     });
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Check kind' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Kind of check' }), {
       target: { value: 'lint' },
     });
     expect(onUpdate).toHaveBeenCalledWith({ checkKind: 'lint', runIds: ['lint'] });
@@ -179,7 +179,7 @@ describe('WorkflowNodeInspector', () => {
         environmentNames: [],
       },
     });
-    expect(screen.getByText(/completely empty lines are ignored/u)).toBeTruthy();
+    expect(screen.getByText(/kept exactly as you type them/u)).toBeTruthy();
     expect(screen.getByText('test-1', { selector: 'code' })).toBeTruthy();
   });
 
@@ -210,7 +210,9 @@ describe('WorkflowNodeInspector', () => {
       />,
     );
 
-    expect(screen.getByRole('alert').textContent).toContain('Select both a test and lint producer');
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Select both a test check and a lint check',
+    );
     expect(screen.getByText('Not evaluated')).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: /test-1/u }));
     expect(onUpdate).toHaveBeenCalledWith({
@@ -224,7 +226,7 @@ describe('WorkflowNodeInspector', () => {
     expect(reviewerSelect.textContent).toContain('reviewer-1 · Test agent (deterministic fixture)');
     fireEvent.change(reviewerSelect, { target: { value: reviewer.id } });
     expect(onUpdate).toHaveBeenCalledWith({ reviewerAgentId: reviewer.id });
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Maximum iterations' }), {
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Maximum attempts' }), {
       target: { value: '9' },
     });
     expect(onUpdate).toHaveBeenCalledWith({

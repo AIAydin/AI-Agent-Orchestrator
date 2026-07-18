@@ -53,16 +53,16 @@ describe('SettingsRepairHistory', () => {
     const onNotice = vi.fn();
     render(<SettingsRepairHistory onError={vi.fn()} onNotice={onNotice} />);
 
-    expect(await screen.findByText('Settings recovery evidence')).toBeTruthy();
+    expect(await screen.findByText('Repaired settings')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(await screen.findByText(/relative\/worktrees/u)).toBeTruthy();
     expect(getRepair).toHaveBeenCalledWith(evidence.id);
 
     fireEvent.click(screen.getByRole('button', { name: 'Export original' }));
-    expect(await screen.findByText(/settings after safe repair/iu)).toBeTruthy();
+    expect(await screen.findByText(/after repair/iu)).toBeTruthy();
     expect(exportRepair).toHaveBeenCalledWith(evidence.id);
     expect(onNotice).toHaveBeenCalledWith(
-      'Recovery evidence exported to /tmp/recovery-evidence.json',
+      'Original settings exported to /tmp/recovery-evidence.json',
     );
   });
 

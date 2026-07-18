@@ -31,9 +31,9 @@ export function DirectJoinControls({
           onChange={(event) => setAccessToken(event.target.value)}
         />
         <small>
-          The field clears after every attempt. During an approved session, the token remains only
-          in volatile main-process memory for authentication and reconnect; it is never persisted,
-          emitted, or logged, and is cleared on leave, reset, or quit.
+          This field clears after every attempt. During an approved session, the token stays only in
+          memory — never saved, sent elsewhere, or logged — and is removed when you leave, reset, or
+          quit.
         </small>
       </label>
       <button

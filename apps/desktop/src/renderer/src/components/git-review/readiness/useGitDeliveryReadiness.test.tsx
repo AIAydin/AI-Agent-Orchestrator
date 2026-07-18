@@ -465,7 +465,7 @@ describe('useGitDeliveryReadiness', () => {
     });
     expect(result).toBeUndefined();
     expect(run).not.toHaveBeenCalled();
-    expect(hook.result.current.error).toContain('Save the current required-check selection');
+    expect(hook.result.current.error).toContain('Save the current selection of required checks');
   });
 
   it('does not refresh or publish a run response after target change or unmount', async () => {

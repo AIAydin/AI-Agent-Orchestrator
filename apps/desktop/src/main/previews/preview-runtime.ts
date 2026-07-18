@@ -418,7 +418,7 @@ export class PreviewRuntime {
     this.#privacyResetting = true;
     if (this.#attempts.size > 0 || this.#sessionsByNode.size > 0) {
       this.#privacyResetting = false;
-      throw new Error('Stop every development preview before merging local data.');
+      throw new Error('Stop every development preview before changing local data.');
     }
   }
 
@@ -503,7 +503,7 @@ export class PreviewRuntime {
   async #revalidatePlan(approvedPlan: PreviewLaunchPlan): Promise<PreviewLaunchPlan> {
     const current = await this.#resolveLaunchPlan(approvedPlan.input);
     if (current.fingerprint !== approvedPlan.fingerprint) {
-      throw new Error('The reviewed preview launch changed. Review a fresh launch.');
+      throw new Error('The reviewed preview launch changed. Review the launch again.');
     }
     return current;
   }

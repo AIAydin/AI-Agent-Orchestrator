@@ -92,8 +92,8 @@ export function WorkflowDecisionDialog(props: WorkflowDecisionDialogProps) {
           </div>
         </header>
         <p id="workflow-decision-warning" className="workflow-decision-warning">
-          This decision is bound to the current run, attempt, and evidence fingerprint. Forgeboard
-          will ask for native confirmation before changing durable workflow state.
+          This decision applies only to this run and this attempt. Forgeboard will ask you to
+          confirm once more before anything changes.
         </p>
         <DecisionBody {...props} />
         <footer>
@@ -171,7 +171,7 @@ function LaunchDecision({
           <dd>{request.nodeId}</dd>
         </div>
         <div>
-          <dt>Executor</dt>
+          <dt>Runs with</dt>
           <dd>{request.executorId}</dd>
         </div>
         <div>
@@ -179,14 +179,14 @@ function LaunchDecision({
           <dd>{request.attempt}</dd>
         </div>
         <div>
-          <dt>Expires</dt>
+          <dt>Approval expires</dt>
           <dd>
             <time dateTime={request.expiresAt}>{new Date(request.expiresAt).toLocaleString()}</time>
           </dd>
         </div>
       </dl>
       <details open>
-        <summary>Exact launch disclosure</summary>
+        <summary>Exactly what will run</summary>
         {agentDisclosure.success ? (
           <div className="workflow-agent-disclosure">
             <RunDisclosureWarnings disclosure={agentDisclosure.data} />
@@ -203,7 +203,7 @@ function LaunchDecision({
         onClick={() => onApprove(request)}
       >
         <Play size={14} aria-hidden="true" />
-        {busy ? 'Opening native confirmation…' : 'Continue to native launch approval'}
+        {busy ? 'Opening confirmation…' : 'Continue to approval'}
       </button>
     </div>
   );
@@ -230,7 +230,7 @@ function HumanApprovalDecision({
         onClick={() => onApprove(request)}
       >
         <CheckCircle2 size={14} aria-hidden="true" />
-        {busy ? 'Opening native confirmation…' : 'Continue to native approval'}
+        {busy ? 'Opening confirmation…' : 'Continue to approval'}
       </button>
     </div>
   );
@@ -265,7 +265,7 @@ function ReviewDecision({
           />
           <span>
             <strong>Approve current result</strong>
-            <small>Allow downstream workflow work to continue.</small>
+            <small>Let the workflow continue with this result.</small>
           </span>
         </label>
         <label>
@@ -278,12 +278,12 @@ function ReviewDecision({
           />
           <span>
             <strong>Request changes</strong>
-            <small>Send actionable feedback into the configured revision path.</small>
+            <small>Send feedback so the workflow can try again.</small>
           </span>
         </label>
       </fieldset>
       <label className="workflow-feedback-field">
-        Actionable feedback {needsFeedback ? '(required)' : '(optional)'}
+        Feedback {needsFeedback ? '(required)' : '(optional)'}
         <textarea
           name="workflow-review-feedback"
           rows={5}
@@ -291,7 +291,7 @@ function ReviewDecision({
           disabled={busy}
           maxLength={200_000}
           onChange={(event) => setFeedback(event.target.value)}
-          placeholder="Describe what is approved or what must change."
+          placeholder="Describe what's approved or what needs to change."
         />
       </label>
       <button
@@ -303,7 +303,7 @@ function ReviewDecision({
         }
       >
         <CheckCircle2 size={14} aria-hidden="true" />
-        {busy ? 'Opening native confirmation…' : 'Continue to native review confirmation'}
+        {busy ? 'Opening confirmation…' : 'Continue to approval'}
       </button>
     </div>
   );
@@ -325,9 +325,9 @@ function RevisionDecision({
       <div className="workflow-revision-warning">
         <AlertTriangle size={16} aria-hidden="true" />
         <p>
-          Loop <strong>{request.loopId}</strong> reached its configured limit after{' '}
-          <strong>{request.attemptsStarted}</strong> attempts. Choose whether to accept the current
-          result or cancel this workflow.
+          Loop <strong>{request.loopId}</strong> reached its limit after{' '}
+          <strong>{request.attemptsStarted}</strong> tries. Accept the current result, or cancel
+          this run.
         </p>
       </div>
       <BoundDecisionEvidence
@@ -342,7 +342,7 @@ function RevisionDecision({
           disabled={busy}
           onClick={() => onResolve(request, 'cancel')}
         >
-          Cancel workflow
+          Cancel run
         </button>
         <button
           className="button primary"
@@ -398,19 +398,19 @@ function BoundDecisionEvidence({
 }) {
   const runId = boundAgentRunId(evidence);
   return (
-    <section className="workflow-bound-evidence" aria-label="Exact decision evidence">
+    <section className="workflow-bound-evidence" aria-label="Decision details">
       {runId !== undefined && (
         <button className="button" type="button" onClick={() => onReviewChanges(runId)}>
           <GitCompareArrows size={14} aria-hidden="true" />
-          Review bound worktree changes
+          Review what changed
         </button>
       )}
       <details open>
-        <summary>Exact evidence bound to this decision</summary>
+        <summary>Details recorded for this decision</summary>
         <pre>{JSON.stringify(evidence, null, 2)}</pre>
       </details>
       <details>
-        <summary>Evidence binding identifier</summary>
+        <summary>Decision record ID</summary>
         <pre>{evidenceFingerprint}</pre>
       </details>
     </section>
@@ -450,29 +450,29 @@ function decisionDescriptor(target: WorkflowDecisionTarget): {
 } {
   if (target.kind === 'launch') {
     return {
-      eyebrow: 'Executable approval gate',
-      title: 'Review this workflow launch',
-      description: 'No process starts until the exact prepared executor request is approved.',
+      eyebrow: 'Approval needed',
+      title: 'Review what will run',
+      description: 'Nothing starts until you approve the exact command and its setup.',
     };
   }
   if (target.kind === 'revision') {
     return {
-      eyebrow: 'Revision escape decision',
-      title: 'The revision limit was reached',
-      description: 'This workflow cannot continue without an explicit human resolution.',
+      eyebrow: 'Retry limit',
+      title: 'The retry limit was reached',
+      description: "This run can't continue until you decide what to do.",
     };
   }
   if (target.request.targetType === 'human-review') {
     return {
-      eyebrow: 'Human review gate',
-      title: 'Review the current workflow result',
-      description: 'Approve this evidence or request changes with actionable feedback.',
+      eyebrow: 'Review needed',
+      title: 'Review the current result',
+      description: 'Approve the result, or ask for changes with feedback.',
     };
   }
   return {
-    eyebrow: 'Semantic approval gate',
-    title: 'Review this workflow decision',
-    description: 'Approve the evidence-bound connection or keep the workflow waiting.',
+    eyebrow: 'Approval needed',
+    title: 'Review this decision',
+    description: 'Approve this connection, or keep the workflow waiting.',
   };
 }
 

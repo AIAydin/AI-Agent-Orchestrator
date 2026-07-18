@@ -88,7 +88,7 @@ export function ConnectionFields({ settings, setSettings, disabled }: Connection
       <label className="switch-row">
         <span>
           <strong>Reconnect collaboration automatically</strong>
-          <small>Reconnects only this approved room; leaving disables the active session.</small>
+          <small>Reconnects only to this approved room. Leaving ends the active session.</small>
         </span>
         <input
           type="checkbox"

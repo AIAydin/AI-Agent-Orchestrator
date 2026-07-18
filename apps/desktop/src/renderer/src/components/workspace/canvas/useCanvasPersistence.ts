@@ -140,8 +140,10 @@ export function useCanvasPersistence({
 
           if (mountedRef.current) {
             setSaveState('error');
-            const detail = cause instanceof Error ? `: ${cause.message}` : '';
-            onErrorRef.current(`Could not save the canvas${detail}`);
+            const detail = cause instanceof Error ? `: ${cause.message.replace(/\.$/u, '')}` : '';
+            onErrorRef.current(
+              `Could not save the canvas${detail}. Your changes are still here; try saving again.`,
+            );
           }
           return false;
         }

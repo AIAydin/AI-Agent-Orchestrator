@@ -303,12 +303,12 @@ async function openApprovedFile(
   }
   if (findSensitivePath(relativePath) !== undefined) {
     throw new Error(
-      'An approved context file became sensitive after disclosure. Review a fresh launch.',
+      'An approved context file became sensitive after disclosure. Review what will run.',
     );
   }
   if (ignoreMatcher.evaluate(relativePath).ignored) {
     throw new Error(
-      'An approved context file became ignored after disclosure. Review a fresh launch.',
+      'An approved context file became ignored after disclosure. Review what will run.',
     );
   }
 
@@ -318,15 +318,11 @@ async function openApprovedFile(
     const opened = await handle.stat();
     const after = await lstat(resolved);
     if (!opened.isFile() || after.isSymbolicLink() || !sameFileIdentity(opened, after)) {
-      throw new Error(
-        'Selected context changed while Forgeboard opened it. Review a fresh launch.',
-      );
+      throw new Error('Selected context changed while Forgeboard opened it. Review what will run.');
     }
     const afterCanonical = await realpath(resolved);
     if (!pathsEqual(afterCanonical, canonicalPath)) {
-      throw new Error(
-        'Selected context changed while Forgeboard opened it. Review a fresh launch.',
-      );
+      throw new Error('Selected context changed while Forgeboard opened it. Review what will run.');
     }
     return {
       canonicalPath,
@@ -372,13 +368,11 @@ async function copyExactOpenedFile(
     }
     const finalIdentity = fileIdentity(await source.stat());
     if (!sameIdentityRecord(expectedIdentity, finalIdentity)) {
-      throw new Error(
-        'Selected context changed while Forgeboard copied it. Review a fresh launch.',
-      );
+      throw new Error('Selected context changed while Forgeboard copied it. Review what will run.');
     }
     if (position !== expectedIdentity.size || hash.digest('hex') !== expectedDigest) {
       throw new Error(
-        'The selected context file changed after disclosure and no longer matches its approved digest. Review a fresh launch.',
+        'The selected context file changed after disclosure and no longer matches its approved digest. Review what will run.',
       );
     }
     await destination.sync();

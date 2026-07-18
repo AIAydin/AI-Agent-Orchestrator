@@ -44,16 +44,16 @@ export function PreviewConsole({ session, browserConsole = null }: PreviewConsol
           {formatBytes(
             browserConsole?.retainedBytes ?? new TextEncoder().encode(combined).byteLength,
           )}{' '}
-          retained
+          kept
         </span>
       </summary>
       {truncated || browserConsole?.truncated ? (
         <p className="preview-console-truncated" role="status">
-          Older output is hidden in this bounded view.
+          Older output is hidden to keep this view small.
         </p>
       ) : null}
       <pre aria-label="Preview console output">
-        {rendered || 'No process or browser console output has been captured.'}
+        {rendered || 'Nothing from the server or the page has been logged yet.'}
       </pre>
     </details>
   );

@@ -147,7 +147,9 @@ export class PersistedAgentRunContextResolver implements AgentRunContextResolver
     }
     const agent = canvas.nodes.find((node) => node.id === input.nodeId);
     if (agent === undefined || agent.type !== 'agent') {
-      throw new Error('Agent runs require an exact persisted Agent node.');
+      throw new Error(
+        'Agent runs require an Agent node on the saved canvas. Save and review what will run.',
+      );
     }
     if (protectedNodeIds(canvas.nodes).has(agent.id)) {
       throw new Error('Unlock the Agent node or its containing group before reviewing a run.');
@@ -264,16 +266,16 @@ function assertPreparedConfiguration(
     agent.data.model?.trim() || settings.agentDefaultModels?.[adapterId]?.trim() || undefined;
   const permissionProfile = agent.data.permissionProfileId ?? settings.defaultPermissionProfile;
   if (prompt !== input.prompt) {
-    throw new Error('The saved Agent prompt changed. Save and review a fresh run.');
+    throw new Error('The saved Agent prompt changed. Save and review what will run.');
   }
   if (adapterId !== input.adapterId) {
-    throw new Error('The saved Agent adapter changed. Save and review a fresh run.');
+    throw new Error('The saved Agent adapter changed. Save and review what will run.');
   }
   if (model !== input.model) {
     throw new Error('The saved Agent model changed. Save and review a fresh run.');
   }
   if (permissionProfile !== input.permissionProfile) {
-    throw new Error('The saved Agent permission profile changed. Save and review a fresh run.');
+    throw new Error('The saved Agent permission profile changed. Save and review what will run.');
   }
 }
 

@@ -22,10 +22,10 @@ describe('GitBaseComparisonPanel', () => {
   it('renders committed hunks as read-only comparison evidence', () => {
     render(<GitBaseComparisonPanel comparison={comparison()} />);
 
-    expect(screen.getByText('Committed comparison')).toBeTruthy();
+    expect(screen.getByText('Committed (read-only)')).toBeTruthy();
     expect(screen.getByText('new committed line')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Stage hunk' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Discard hunk/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add to commit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Discard change/ })).toBeNull();
     expect(screen.getByText(BASE_COMMIT)).toBeTruthy();
     expect(screen.getAllByText(HEAD_COMMIT)).toHaveLength(2);
   });
@@ -44,8 +44,8 @@ describe('GitBaseComparisonPanel', () => {
       />,
     );
 
-    expect(screen.getByText('No committed changes vs base')).toBeTruthy();
-    expect(screen.getByText(/Staged or unstaged edits remain available/)).toBeTruthy();
+    expect(screen.getByText('No committed changes to compare')).toBeTruthy();
+    expect(screen.getByText(/not committed yet is in the other tab/)).toBeTruthy();
   });
 
   it('does not advertise unavailable whole-file actions for a read-only binary comparison', () => {
@@ -71,9 +71,9 @@ describe('GitBaseComparisonPanel', () => {
     );
 
     expect(
-      screen.getByText('Binary content cannot be shown in this read-only committed comparison.'),
+      screen.getByText("This file isn't text, so its committed changes can't be shown here."),
     ).toBeTruthy();
-    expect(screen.queryByText(/Use the whole-file action/)).toBeNull();
+    expect(screen.queryByText(/whole-file button/)).toBeNull();
   });
 
   it('discloses when the bounded commit identifier list is truncated', () => {
@@ -88,7 +88,7 @@ describe('GitBaseComparisonPanel', () => {
       />,
     );
 
-    expect(screen.getByText(/300 comparison commits · identifiers truncated/)).toBeTruthy();
+    expect(screen.getByText(/300 commits compared · not all shown/)).toBeTruthy();
     expect(screen.getAllByText(HEAD_COMMIT)).toHaveLength(2);
   });
 });
@@ -96,8 +96,8 @@ describe('GitBaseComparisonPanel', () => {
 describe('GitReviewModeTabs', () => {
   it('links panels and supports click, Arrow, Home, and End selection', () => {
     render(<TabHarness />);
-    const baseTab = screen.getByRole('tab', { name: 'Changes vs base' });
-    const workingTreeTab = screen.getByRole('tab', { name: 'Staged & unstaged' });
+    const baseTab = screen.getByRole('tab', { name: 'Committed changes' });
+    const workingTreeTab = screen.getByRole('tab', { name: 'Uncommitted changes' });
 
     expect(baseTab.getAttribute('aria-controls')).toBe(GIT_BASE_PANEL_ID);
     expect(baseTab.tabIndex).toBe(0);

@@ -659,9 +659,9 @@ describe('RunService Electron compatibility', () => {
     await expect(
       requiredHandler(IPC_CHANNELS.runsApprove)(invokeEvent(owner.owner), disclosure.runId),
     ).resolves.toMatchObject({ ok: true });
-    expect(shownMessage(showMessageBox).detail).toContain('Context manifest ID: manifest-1');
+    expect(shownMessage(showMessageBox).detail).toContain('Context record ID: manifest-1');
     expect(shownMessage(showMessageBox).detail).toContain(
-      `Context manifest SHA-256: ${'e'.repeat(64)}`,
+      `Context record checksum (SHA-256): ${'e'.repeat(64)}`,
     );
     await service.dispose();
   });
@@ -712,7 +712,7 @@ describe('RunService Electron compatibility', () => {
       .fn()
       .mockResolvedValueOnce(linkedContextResolution())
       .mockRejectedValueOnce(
-        new Error('The saved Agent prompt changed. Save and review a fresh run.'),
+        new Error('The saved Agent prompt changed. Save and review what will run.'),
       );
     const { service } = serviceHarness(runtime, { contextResolver: { resolve } });
     const owner = webContents(12);
@@ -750,7 +750,7 @@ describe('RunService Electron compatibility', () => {
         cancelId: 0,
       }),
     );
-    expect(shownMessage(showMessageBox).detail).toContain('Executable: /test-agent');
+    expect(shownMessage(showMessageBox).detail).toContain('Program: /test-agent');
     await service.dispose();
   });
 
@@ -827,7 +827,7 @@ describe('RunService Electron compatibility', () => {
     expect(showMessageBox).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        buttons: ['Cancel', 'Run Docker probes'],
+        buttons: ['Cancel', 'Check Docker'],
         defaultId: 0,
         cancelId: 0,
       }),
@@ -860,7 +860,7 @@ describe('RunService Electron compatibility', () => {
       expect(showMessageBox).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          buttons: ['Cancel', 'Run exact Git filter'],
+          buttons: ['Cancel', 'Run filter commands'],
           defaultId: 0,
           cancelId: 0,
         }),

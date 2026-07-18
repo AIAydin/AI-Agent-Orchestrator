@@ -11,24 +11,27 @@ export const PERMISSION_PROFILE_OPTIONS: readonly {
 }[] = [
   {
     value: 'plan-read-only',
-    label: 'Plan / read-only',
-    description: 'Ask the provider for a read-only plan in the primary checkout.',
+    label: 'Read and plan only',
+    description:
+      'Ask the provider to read and plan without writing. The launch review shows whether that request is enforced or advisory.',
   },
   {
     value: 'worktree-write',
-    label: 'Worktree write',
-    description: 'Give the agent a dedicated, reviewable Git worktree.',
+    label: 'Write in a worktree',
+    description:
+      'The agent works in its own copy of your project (a Git worktree). You review its changes before they reach your main branch.',
   },
   {
     value: 'docker-isolated',
     label: 'Docker isolated',
-    description: 'Use a non-root container with one assigned worktree mount.',
+    description:
+      'The agent runs inside Docker, limited to one worktree and kept away from the rest of your system.',
   },
   {
     value: 'custom',
     label: 'Custom',
     description:
-      'Use the filesystem, runtime, and Forgeboard action policy configured in Settings.',
+      'Use the access rules from Settings. Docker enforces its limits; rules for runs on this computer are stated to the agent, not enforced by the operating system.',
   },
 ] as const;
 
@@ -48,10 +51,10 @@ export function permissionProfileUnavailableReason(
     (profile === 'custom' && settings.customPermissionProfile.runtime === 'docker');
   if (!dockerRuntime) return null;
   if (adapterId === 'test-agent') {
-    return 'The bundled deterministic agent runs directly and is not available in Docker.';
+    return "The built-in test agent runs directly on this computer, so it can't run in Docker.";
   }
   if (!settings.dockerEnabled) {
-    return 'Enable and configure Docker in Settings before using this profile.';
+    return 'Turn on and set up Docker in Settings to use this profile.';
   }
   return null;
 }
@@ -74,7 +77,9 @@ export function customPermissionConfigurationIssues(settings: AppSettings): read
     settings.customPermissionProfile.runtime === 'docker' &&
     settings.defaultAgent === 'test-agent'
   ) {
-    issues.push('Choose a container-ready default agent before making Docker Custom the default.');
+    issues.push(
+      'Pick a default agent that can run in Docker before making Custom with Docker the default profile.',
+    );
   }
   return [...new Set(issues)];
 }
@@ -84,10 +89,18 @@ export function configuredFilesystemLabel(
 ): string {
   switch (filesystem) {
     case 'assigned-worktree-read-only':
-      return 'Assigned worktree · declared read-only';
+      return 'Assigned worktree · read-only';
     case 'assigned-worktree-write':
       return 'Assigned worktree · read and write';
     case 'explicit-paths':
-      return 'Explicit assigned-worktree-relative paths';
+      return 'Specific folders in the assigned worktree';
   }
+}
+
+export function accessPolicyWord(value: string): string {
+  return value === 'allow' ? 'allowed' : 'not allowed';
+}
+
+export function networkModeWord(value: string): string {
+  return value === 'enabled' ? 'on' : 'off';
 }

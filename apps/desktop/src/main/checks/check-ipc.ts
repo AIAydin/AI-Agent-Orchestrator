@@ -145,7 +145,7 @@ export class CheckIpcService {
     this.#paused = true;
     if (this.#plans.size > 0) {
       this.#paused = false;
-      throw new Error('Cancel every pending project-check approval before merging local data.');
+      throw new Error('Cancel every pending project-check approval before changing local data.');
     }
     try {
       this.#runtime.pauseForDataMutation();
@@ -262,7 +262,7 @@ export class CheckIpcService {
     }
     const ownerPlans = [...this.#plans.entries()].filter(([, pending]) => pending.owner === owner);
     if (ownerPlans.length >= MAX_PENDING_PLANS_PER_OWNER) {
-      throw new Error('Too many check approvals are pending for this window.');
+      throw new Error('Too many checks are waiting for approval in this window.');
     }
     this.#plans.set(plan.planId, { owner, ownerId: owner.id, plan });
   }
@@ -404,18 +404,18 @@ export class CheckIpcService {
 function confirmationOptions(plan: CheckPlanView): MessageBoxOptions {
   return {
     type: 'warning',
-    title: `Run ${plan.label}`,
+    title: `Run ${plan.label}?`,
     message: `Run the configured ${plan.label} check?`,
     detail: [
-      `Executable: ${plan.executable}`,
+      `Command: ${plan.executable}`,
       `Arguments: ${JSON.stringify(plan.arguments)}`,
-      `Working directory: ${plan.cwd}`,
-      `Environment variable names: ${plan.environmentVariableNames.join(', ') || '(none)'}`,
-      `Exact approval fingerprint: ${plan.approvalFingerprint}`,
+      `Folder it runs in: ${plan.cwd}`,
+      `Environment variables passed to it: ${plan.environmentVariableNames.join(', ') || '(none)'}`,
+      `Approval fingerprint: ${plan.approvalFingerprint}`,
       '',
-      'Project checks execute user-approved, potentially untrusted repository code with your user account privileges. Package-manager scripts may invoke a shell and lifecycle hooks. Review repository changes before running.',
+      "Project checks run code from this project on your computer, with your account's permissions. Package scripts can run other commands during install or build. Review recent project changes before running a check.",
       '',
-      'Forgeboard will launch this exact pre-disclosed process and argument array. No renderer-supplied command, working directory, environment value, or additional shell text is accepted. Bounded raw output is retained and exportable without redaction; do not run a check that prints secrets.',
+      'Forgeboard runs exactly the command and arguments listed above; nothing else can be substituted. Output is saved in full and can be exported unchanged, so do not run a check that prints passwords or other secrets.',
     ].join('\n'),
     buttons: ['Cancel', 'Run check'],
     checkboxLabel: 'Remember only this exact check for this project for 30 days',

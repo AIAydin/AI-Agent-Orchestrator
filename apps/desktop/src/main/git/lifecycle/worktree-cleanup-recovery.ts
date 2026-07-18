@@ -98,14 +98,14 @@ export class WorktreeCleanupRecoveryResolver implements WorktreeCleanupRecoveryA
     } catch (error) {
       throw new WorktreeCleanupRecoveryResolutionError(
         'RECOVERY_PRIMARY_REPOSITORY_MISMATCH',
-        'Reopen the project from its canonical Git repository root before recovering cleanup.',
+        'Reopen the project from its main repository folder before recovering cleanup.',
         { cause: error },
       );
     }
     if (primaryRepositoryRoot !== project.path) {
       throw new WorktreeCleanupRecoveryResolutionError(
         'RECOVERY_PRIMARY_REPOSITORY_MISMATCH',
-        'Reopen the project from its canonical Git repository root before recovering cleanup.',
+        'Reopen the project from its main repository folder before recovering cleanup.',
       );
     }
 
@@ -173,7 +173,7 @@ function completeRecoveryBinding(run: StoredRunRecord): WorktreeCleanupRecoveryB
   ) {
     throw new WorktreeCleanupRecoveryResolutionError(
       'RECOVERY_LEGACY_RUN_BINDING',
-      'This older run does not contain the durable ownership metadata required for safe cleanup recovery.',
+      'This older run is missing the saved workspace records Forgeboard needs for safe cleanup recovery.',
     );
   }
   return {

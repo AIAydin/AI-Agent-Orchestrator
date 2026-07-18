@@ -21,7 +21,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 
     await test.step('safe first-run defaults require no files or code editing', async () => {
       const setup = page.getByRole('dialog', {
-        name: /Ready to build without wiring config files/i,
+        name: /Set up Forgeboard in a few quick steps/i,
       });
       await expect(setup).toBeVisible();
       await expect(setup.getByText('No Forgeboard cloud')).toBeVisible();
@@ -37,9 +37,9 @@ test('a first-time user can configure and persist a local visual workshop', asyn
         page.getByRole('heading', { name: /Build software in a visual workshop/i }),
       ).toBeVisible();
       await expect(page.getByText('Your code stays on this device')).toBeVisible();
-      await expect(page.getByRole('button', { name: /Open local repository/i })).toBeVisible();
-      await expect(page.getByRole('button', { name: /Clone repository/i })).toBeVisible();
-      await expect(page.getByRole('button', { name: /Create empty project/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Open a project folder/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Clone a repository/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Create a new project/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /Explore the safe demo/i })).toBeVisible();
       await expect(page.getByText('No recent projects')).toBeVisible();
 
@@ -90,7 +90,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await expect(settings.getByRole('heading', { name: 'Settings' })).toBeVisible();
       await expect(
         settings.getByText(
-          'Configure available features here; unavailable capabilities are clearly labeled.',
+          'Change how Forgeboard works here. Unavailable features are clearly labeled.',
         ),
       ).toBeVisible();
 
@@ -102,7 +102,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await expect(settings.getByRole('heading', { name: 'Local extensions' })).toBeVisible();
       await expect(settings.getByText('Data-only by design')).toBeVisible();
       await expect(
-        settings.getByText('No trusted extensions active', { exact: true }),
+        settings.getByText('No extensions installed yet', { exact: true }),
       ).toBeVisible();
       await expect(settings.getByRole('button', { name: /Choose extension folder/ })).toBeVisible();
 
@@ -122,7 +122,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       ).toHaveCount(0);
 
       await settings.getByRole('button', { name: /Data & privacy/ }).click();
-      await settings.getByLabel('Backup directory').fill(join(userDataDirectory, 'backups'));
+      await settings.getByLabel('Backup folder').fill(join(userDataDirectory, 'backups'));
 
       await settings.getByRole('button', { name: /Save settings/ }).click();
       await expect(settings).toBeHidden();
@@ -146,7 +146,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await page.getByRole('button', { name: /Explore the safe demo/i }).click();
       await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
       await expect(page.locator('.canvas-title')).toContainText('0 nodes · 0 connections');
-      await expect(page.getByText('Context guard active')).toBeVisible();
+      await expect(page.getByText('Private file protection on')).toBeVisible();
     });
 
     await test.step('canvas nodes can be added, edited, locked, duplicated, and deleted', async () => {
@@ -201,7 +201,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
         .locator('.react-flow__handle-left');
       await connectHandles(page, source, target);
       await expect(page.locator('.canvas-title')).toContainText('2 nodes · 1 connections');
-      await expect(page.getByText('Connected nodes with a context edge.')).toBeVisible();
+      await expect(page.getByText('Connected the nodes with a context link.')).toBeVisible();
 
       await releasePlan.click();
       await inspector.getByRole('button', { name: 'Lock' }).click();
@@ -212,7 +212,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await page.keyboard.press(`${shortcutModifier}+K`);
       const palette = page.getByRole('dialog', { name: 'Command palette' });
       await expect(palette).toBeVisible();
-      await palette.getByPlaceholder('Search actions…').fill('Add agent node');
+      await palette.getByPlaceholder('Search actions…').fill('Add an agent');
       await page.keyboard.press('Enter');
       await expect(palette).toBeHidden();
       const agentNode = page.getByRole('article', { name: 'Agent: Agent' });
@@ -296,7 +296,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await expect(resetSetup).toHaveAttribute('role', 'dialog');
       await expect(resetSetup).toHaveAttribute('aria-modal', 'true');
       await expect(
-        resetSetup.getByRole('heading', { name: /Ready to build without wiring config files/i }),
+        resetSetup.getByRole('heading', { name: /Set up Forgeboard in a few quick steps/i }),
       ).toBeVisible();
       await page.waitForTimeout(2_500);
       await expect.poll(() => readRecentProjects(page)).toEqual({ ok: true, value: [] });

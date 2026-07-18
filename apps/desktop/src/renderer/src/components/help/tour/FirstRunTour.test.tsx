@@ -14,10 +14,8 @@ describe('FirstRunTour', () => {
     expect(screen.getByRole('heading', { name: 'Getting started tour', level: 2 })).toBeTruthy();
     expect(screen.getAllByRole('tab')).toHaveLength(4);
     expect(screen.getByRole('tabpanel').textContent).toContain('Step 1 of 4');
-    expect(screen.getByText(/contacts no service/u)).toBeTruthy();
-    expect(
-      screen.getByText(/changes no project, permission, command, or privacy setting/u),
-    ).toBeTruthy();
+    expect(screen.getByText(/contacts nothing/u)).toBeTruthy();
+    expect(screen.getByText(/changes none of your projects or settings/u)).toBeTruthy();
     expect(view.container.querySelectorAll('a, input, select, textarea')).toHaveLength(0);
   });
 
@@ -33,7 +31,7 @@ describe('FirstRunTour', () => {
     fireEvent.keyDown(tabs[1] as HTMLElement, { key: 'End' });
     expect(tabs[3]?.getAttribute('aria-current')).toBe('step');
     expect(screen.getByRole('tabpanel').textContent).toMatch(/Data & privacy/u);
-    expect(screen.getByRole('tabpanel').textContent).toMatch(/troubleshooting guides/u);
+    expect(screen.getByRole('tabpanel').textContent).toMatch(/troubleshooting/u);
 
     fireEvent.click(screen.getByRole('button', { name: 'Restart tour' }));
     expect(tabs[0]?.getAttribute('aria-selected')).toBe('true');

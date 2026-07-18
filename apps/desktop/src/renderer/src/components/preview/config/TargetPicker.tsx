@@ -27,9 +27,9 @@ export function TargetPicker({
   return (
     <div className="preview-target-picker">
       <label>
-        Preview target
+        Run the preview in
         <select
-          aria-label="Preview target"
+          aria-label="Run the preview in"
           name={`node-${nodeId}-preview-target`}
           value={selectedKey}
           disabled={readOnly || runtimeBusy}
@@ -41,7 +41,7 @@ export function TargetPicker({
           }}
         >
           {selected === undefined && target.kind === 'agent-run' ? (
-            <option value={selectedKey}>Unavailable agent worktree</option>
+            <option value={selectedKey}>Agent workspace no longer available</option>
           ) : null}
           {targets.map((option) => (
             <option
@@ -50,19 +50,19 @@ export function TargetPicker({
               disabled={!option.available}
             >
               {option.label} · {option.badge}
-              {option.available ? '' : ' · unavailable'}
+              {option.available ? '' : ' · not available'}
             </option>
           ))}
         </select>
       </label>
       <div className={`preview-target-badge ${unavailable ? 'unavailable' : ''}`}>
         {unavailable ? <AlertTriangle size={12} /> : <GitBranch size={12} />}
-        <span>{selected?.badge ?? 'Owned worktree unavailable'}</span>
+        <span>{selected?.badge ?? 'Agent workspace not available'}</span>
       </div>
       {unavailable ? (
         <p className="preview-target-recovery" role="status">
           {selected?.unavailableReason ??
-            'That owned agent worktree is no longer available. Choose the primary checkout or another available agent run.'}
+            "That agent's workspace is no longer available. Choose your main project folder (Primary checkout) or another agent run."}
         </p>
       ) : null}
     </div>

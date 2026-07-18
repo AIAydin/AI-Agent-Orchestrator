@@ -55,7 +55,7 @@ describe('ProjectFileBrowser', () => {
     expect(screen.getByText('Ignored by .gitignore.')).toBeTruthy();
     expect(screen.getByText('Symbolic links are blocked.')).toBeTruthy();
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Quick open project file' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Find a project file' }), {
       target: { value: 'index ts' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Inspect file src/index.ts' }));
@@ -67,7 +67,7 @@ describe('ProjectFileBrowser', () => {
       }),
     );
     const details = screen.getByRole('region', { name: 'Selected file details' });
-    expect(within(details).getByText('UTF-8 text')).toBeTruthy();
+    expect(within(details).getByText('Text file')).toBeTruthy();
     expect(within(details).getByText('Editable')).toBeTruthy();
     fireEvent.click(within(details).getByRole('button', { name: 'Open in editor' }));
     expect(onSelect).toHaveBeenCalledWith({
@@ -97,19 +97,20 @@ describe('ProjectFileBrowser', () => {
       />,
     );
 
-    await screen.findByText('Bounded results');
+    await screen.findByText('Showing a partial list');
     fireEvent.click(screen.getByRole('button', { name: 'Inspect file asset.bin' }));
     let details = await screen.findByRole('region', { name: 'Selected file details' });
-    await waitFor(() => expect(within(details).getByText('Binary file')).toBeTruthy());
+    await waitFor(() => expect(within(details).getByText('Not a text file')).toBeTruthy());
     expect(within(details).getByText('Read-only')).toBeTruthy();
     expect(
       within(details).getByText('Binary files cannot be shown or edited as text.'),
     ).toBeTruthy();
-    expect(within(details).getByRole('button', { name: 'Use read-only reference' })).toBeTruthy();
+    expect(within(details).getByRole('button', { name: 'Use this file (read-only)' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Inspect file archive.txt' }));
     details = screen.getByRole('region', { name: 'Selected file details' });
-    await waitFor(() => expect(within(details).getByText('Oversized file')).toBeTruthy());
+    await waitFor(() => expect(within(details).getByText('Too large to edit')).toBeTruthy());
+    expect(within(details).getByText('5.0 MiB')).toBeTruthy();
     expect(within(details).getByText('Files larger than 4 MiB are read-only.')).toBeTruthy();
   });
 
@@ -128,7 +129,7 @@ describe('ProjectFileBrowser', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Inspect file gone.ts' }));
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'Missing · The selected project file no longer exists.',
+      'Not found · The selected project file no longer exists.',
     );
   });
 

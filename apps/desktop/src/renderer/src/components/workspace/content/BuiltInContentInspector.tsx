@@ -32,7 +32,7 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
   const latestVersion = versions.at(-1);
 
   return (
-    <section className="content-node-inspector" aria-label="Product brief configuration">
+    <section className="content-node-inspector" aria-label="Product brief settings">
       <header>
         <div>
           <BookOpenCheck size={14} />
@@ -44,7 +44,7 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
         label="Requirements"
         value={markdown}
         readOnly={node.data.locked}
-        emptyLabel="Write the product requirements, constraints, and acceptance context."
+        emptyLabel="Write the product requirements, constraints, and how you'll know it's done."
         onBeginEdit={onRecord}
         onChange={(value) => onUpdate({ markdown: value })}
       />
@@ -110,9 +110,9 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
       </div>
 
       <ContentListHeader
-        title="Acceptance criteria"
+        title="Done when"
         count={criteria.length}
-        addLabel="Add acceptance criterion"
+        addLabel="Add a done condition"
         onAdd={() => {
           onRecord();
           onUpdate({
@@ -120,7 +120,7 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
               ...criteria,
               {
                 id: crypto.randomUUID(),
-                description: 'New acceptance criterion',
+                description: 'New done condition',
                 satisfied: false,
               },
             ],
@@ -128,14 +128,14 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
         }}
       />
       <div className="content-edit-list">
-        {criteria.length === 0 ? <p>No acceptance criteria yet.</p> : null}
+        {criteria.length === 0 ? <p>No done conditions yet.</p> : null}
         {criteria.map((criterion, index) => (
           <div className="content-edit-row" key={criterion.id}>
             <input
               type="checkbox"
               name={`brief-criterion-satisfied-${criterion.id}`}
               checked={criterion.satisfied}
-              aria-label={`Satisfy ${criterion.description}`}
+              aria-label={`Mark ${criterion.description} as done`}
               onFocus={onRecord}
               onChange={(event) =>
                 onUpdate({
@@ -151,7 +151,7 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
               name={`brief-criterion-description-${criterion.id}`}
               rows={2}
               value={criterion.description}
-              aria-label={`Acceptance criterion ${index + 1}`}
+              aria-label={`Done condition ${index + 1}`}
               onFocus={onRecord}
               onChange={(event) =>
                 onUpdate({
@@ -178,11 +178,11 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
 
       <section className="content-attachments" aria-label="Brief attachments">
         <header>
-          <strong>Explicit attachments</strong>
+          <strong>Attached items</strong>
           <span>{attachmentIds.size}</span>
         </header>
         {attachmentCandidates.length === 0 ? (
-          <p>Add File, Task, Diagram, or Note nodes to attach reusable context.</p>
+          <p>Add a file, task, diagram, or note to the canvas to attach it here.</p>
         ) : (
           attachmentCandidates.map((candidate) => (
             <label key={candidate.id}>
@@ -217,7 +217,9 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
         }}
       />
       <div className="content-edit-list">
-        {variables.length === 0 ? <p>No reusable variables yet.</p> : null}
+        {variables.length === 0 ? (
+          <p>No variables yet. Add one to reuse the same text in agent prompts.</p>
+        ) : null}
         {variables.map(([name, value], index) => (
           <div className="content-variable-row" key={name}>
             <input
@@ -286,7 +288,7 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
           <Save size={13} /> Save brief version
         </button>
         {versions.length === 0 ? (
-          <p>No saved versions. Canvas snapshots still protect autosaved edits.</p>
+          <p>No saved versions yet. Your edits are still saved automatically with the canvas.</p>
         ) : (
           <ol>
             {versions
@@ -325,7 +327,7 @@ function NoteImageInspector({ node, nodes, onRecord, onUpdate }: BuiltInContentI
     (candidate) => candidate.data.kind === 'file' && candidate.data.file?.kind === 'image',
   );
   return (
-    <section className="content-node-inspector" aria-label="Note and image configuration">
+    <section className="content-node-inspector" aria-label="Note and image settings">
       <header>
         <div>
           <ImagePlus size={14} />
@@ -337,17 +339,17 @@ function NoteImageInspector({ node, nodes, onRecord, onUpdate }: BuiltInContentI
         label="Note"
         value={node.data.markdown ?? ''}
         readOnly={node.data.locked}
-        emptyLabel="Write a local annotation or design note."
+        emptyLabel="Write a note that stays on this device."
         onBeginEdit={onRecord}
         onChange={(markdown) => onUpdate({ markdown })}
       />
-      <section className="content-attachments" aria-label="Local note images">
+      <section className="content-attachments" aria-label="Images on this device">
         <header>
-          <strong>Local image references</strong>
+          <strong>Images on this device</strong>
           <span>{images.length}</span>
         </header>
         {imageNodes.length === 0 ? (
-          <p>Add a File node that references a local image, then select it here.</p>
+          <p>Add an image file to the canvas, then select it here.</p>
         ) : (
           imageNodes.map((candidate) => {
             const reference = candidate.data.file;
@@ -393,7 +395,9 @@ function NoteImageInspector({ node, nodes, onRecord, onUpdate }: BuiltInContentI
             }
           />
           {image.missing ? (
-            <small className="missing-local-reference">Image is missing locally.</small>
+            <small className="missing-local-reference">
+              This image can't be found on this device.
+            </small>
           ) : null}
         </label>
       ))}

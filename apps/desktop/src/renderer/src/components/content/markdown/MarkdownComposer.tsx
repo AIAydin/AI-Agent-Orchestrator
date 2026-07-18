@@ -93,7 +93,7 @@ export function MarkdownComposer({
         )}
       </div>
       {readOnly ? (
-        <small className="markdown-read-only">Unlock this node to edit its source.</small>
+        <small className="markdown-read-only">Unlock this node to edit its text.</small>
       ) : null}
     </section>
   );

@@ -106,11 +106,11 @@ export function useFileEditor(
       .read({ projectId, relativePath })
       .then((next) => {
         if (requestVersionRef.current !== requestVersion) return;
-        applyDocument(next, 'Opened from disk');
+        applyDocument(next, 'Opened file');
       })
       .catch((cause: unknown) => {
         if (requestVersionRef.current !== requestVersion) return;
-        const failure = operationFailure(cause, 'The file could not be opened.');
+        const failure = operationFailure(cause, "Forgeboard couldn't open this file. Try again.");
         setStatus(failure.code === 'FILE_NOT_FOUND' ? 'missing' : 'error');
         setMessage({ kind: 'error', text: failure.message });
       });
@@ -155,11 +155,11 @@ export function useFileEditor(
         expectedSha256: document.sha256,
       });
       if (targetKeyRef.current !== operationTarget) return;
-      applyDocument(next, 'Saved to disk');
-      setMessage({ kind: 'success', text: 'Saved to disk.' });
+      applyDocument(next, 'Saved');
+      setMessage({ kind: 'success', text: 'File saved.' });
     } catch (cause) {
       if (targetKeyRef.current !== operationTarget) return;
-      const failure = operationFailure(cause, 'The file could not be saved.');
+      const failure = operationFailure(cause, "Forgeboard couldn't save this file. Try again.");
       if (failure.code === 'FILE_NOT_FOUND') setStatus('missing');
       setMessage({ kind: 'error', text: failure.message });
     } finally {
@@ -179,17 +179,20 @@ export function useFileEditor(
 
   const revert = useCallback(async () => {
     const operationTarget = targetKey;
-    if (dirty) addHistory(buffer, 'Unsaved before revert', null);
+    if (dirty) addHistory(buffer, 'Unsaved changes', null);
     setActivity('revert');
     setMessage(null);
     try {
       const next = await operations.revert({ projectId, relativePath });
       if (targetKeyRef.current !== operationTarget) return;
-      applyDocument(next, 'Reloaded from disk');
-      setMessage({ kind: 'success', text: 'Reloaded from disk.' });
+      applyDocument(next, 'Reloaded file');
+      setMessage({ kind: 'success', text: 'Reloaded the saved version.' });
     } catch (cause) {
       if (targetKeyRef.current !== operationTarget) return;
-      const failure = operationFailure(cause, 'The file could not be reloaded.');
+      const failure = operationFailure(
+        cause,
+        "Forgeboard couldn't reload the saved file. Try again.",
+      );
       if (failure.code === 'FILE_NOT_FOUND') setStatus('missing');
       setMessage({ kind: 'error', text: failure.message });
     } finally {
@@ -204,10 +207,13 @@ export function useFileEditor(
     try {
       await operations.reveal({ projectId, relativePath });
       if (targetKeyRef.current !== operationTarget) return;
-      setMessage({ kind: 'success', text: 'Revealed in the system file manager.' });
+      setMessage({ kind: 'success', text: 'The file is shown in your file manager.' });
     } catch (cause) {
       if (targetKeyRef.current !== operationTarget) return;
-      const failure = operationFailure(cause, 'The file could not be revealed.');
+      const failure = operationFailure(
+        cause,
+        "Forgeboard couldn't show this file in your file manager. Try again.",
+      );
       if (failure.code === 'FILE_NOT_FOUND') setStatus('missing');
       setMessage({ kind: 'error', text: failure.message });
     } finally {
@@ -222,10 +228,13 @@ export function useFileEditor(
     try {
       await operations.openExternal({ projectId, relativePath });
       if (targetKeyRef.current !== operationTarget) return;
-      setMessage({ kind: 'success', text: 'Opened the saved file in its default application.' });
+      setMessage({ kind: 'success', text: 'Opened the saved file in your default app.' });
     } catch (cause) {
       if (targetKeyRef.current !== operationTarget) return;
-      const failure = operationFailure(cause, 'The file could not be opened externally.');
+      const failure = operationFailure(
+        cause,
+        "Forgeboard couldn't open this file in another app. Try again.",
+      );
       if (failure.code === 'FILE_NOT_FOUND') setStatus('missing');
       setMessage({ kind: 'error', text: failure.message });
     } finally {

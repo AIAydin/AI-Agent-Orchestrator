@@ -57,7 +57,7 @@ export function mergeCollaborationCanvasSnapshot(
   if (snapshot.canvas.id !== document.id) {
     return {
       ok: false,
-      message: 'The collaboration room snapshot belongs to a different canvas.',
+      message: 'These shared changes belong to a different canvas.',
     };
   }
 
@@ -65,7 +65,7 @@ export function mergeCollaborationCanvasSnapshot(
   if (!local.ok) {
     return {
       ok: false,
-      message: 'The local canvas could not be migrated before collaboration was applied.',
+      message: 'This canvas could not be prepared before applying shared changes.',
     };
   }
 
@@ -123,7 +123,7 @@ export function mergeCollaborationCanvasSnapshot(
   if (!migrated.ok) {
     return {
       ok: false,
-      message: 'The collaboration metadata could not be represented by the local canvas.',
+      message: 'The shared changes could not be applied to this canvas.',
     };
   }
 
@@ -140,7 +140,7 @@ export function mergeCollaborationCanvasSnapshot(
   } catch {
     return {
       ok: false,
-      message: 'The collaboration metadata failed local canvas validation.',
+      message: 'The shared changes are not valid for this canvas.',
     };
   }
 }
@@ -443,7 +443,7 @@ function legacyNodeFromCollaboration(
       ? {
           readOnly: true,
           recoverableWarning:
-            'This collaborator shared file metadata only. Choose a local project file to link it.',
+            'The person who shared this sent file details only, not the file itself. Choose a file on this device to link it.',
         }
       : {}),
   };

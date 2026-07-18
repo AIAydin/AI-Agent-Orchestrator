@@ -31,14 +31,14 @@ type CheckId = AvailableCheck['checkId'];
 const STATE_EXPECTATIONS: ReadonlyArray<
   readonly [RequiredCheckState, string, 'Run' | 'Re-run', boolean, string]
 > = [
-  ['missing', 'Not run', 'Run', false, 'no execution for the current source binding'],
+  ['missing', 'Not run', 'Run', false, "hasn't run for the current changes"],
   ['queued', 'Queued', 'Re-run', true, 'waiting to start'],
-  ['running', 'Running', 'Re-run', true, 'running for the current source binding'],
-  ['passed', 'Passed', 'Re-run', false, 'passed for the current source binding'],
-  ['failed', 'Failed', 'Re-run', false, 'continues to block delivery'],
-  ['cancelled', 'Cancelled', 'Re-run', false, 'cancelled before it produced passing evidence'],
-  ['lost', 'Process lost', 'Re-run', false, 'can no longer verify the process'],
-  ['stale', 'Stale', 'Re-run', false, 'configuration changed after this check ran'],
+  ['running', 'Running', 'Re-run', true, 'running for the current changes'],
+  ['passed', 'Passed', 'Re-run', false, 'passed for the current changes'],
+  ['failed', 'Failed', 'Re-run', false, 'failed and blocks delivery'],
+  ['cancelled', 'Cancelled', 'Re-run', false, 'cancelled before it could pass'],
+  ['lost', 'Lost', 'Re-run', false, 'lost track of this check'],
+  ['stale', 'Outdated', 'Re-run', false, 'changed after this check ran'],
 ];
 
 afterEach(cleanup);
@@ -84,7 +84,7 @@ describe('GitDeliveryReadinessPanel', () => {
     fireEvent.click(run);
     expect(onRunCheck).toHaveBeenCalledWith(check.checkId);
 
-    const approve = screen.getByRole('button', { name: 'Approve reviewed quality' });
+    const approve = screen.getByRole('button', { name: 'Approve quality' });
     approve.focus();
     expect(document.activeElement).toBe(approve);
     fireEvent.click(approve);
@@ -114,11 +114,11 @@ describe('GitDeliveryReadinessPanel', () => {
       <GitDeliveryReadinessPanel {...commonProps} selectedCheckIds={[]} />,
     );
 
-    expect(screen.getByText(/Workflow-gate checks are locked/u)).toBeTruthy();
+    expect(screen.getByText(/Checks required by the workflow are locked/u)).toBeTruthy();
     expect(screen.queryByText(/no checks are required/iu)).toBeNull();
     expect(screen.queryByRole('button', { name: /^Run /u })).toBeNull();
-    expect(button('Bind workflow requirements').disabled).toBe(false);
-    expect(button('Approve reviewed quality').disabled).toBe(true);
+    expect(button('Save delivery requirements').disabled).toBe(false);
+    expect(button('Approve quality').disabled).toBe(true);
 
     expect(checkbox(mandatory.label).checked).toBe(true);
     expect(checkbox(mandatory.label).disabled).toBe(true);
@@ -131,7 +131,7 @@ describe('GitDeliveryReadinessPanel', () => {
     expect(checkbox(disabled.label).disabled).toBe(true);
 
     rerender(<GitDeliveryReadinessPanel {...commonProps} selectedCheckIds={[optional.checkId]} />);
-    const save = button('Bind workflow requirements');
+    const save = button('Save delivery requirements');
     expect(save.disabled).toBe(false);
     save.focus();
     expect(document.activeElement).toBe(save);
@@ -208,10 +208,10 @@ describe('GitDeliveryReadinessPanel', () => {
       />,
     );
 
-    expect(button('Bind workflow requirements').disabled).toBe(false);
+    expect(button('Save delivery requirements').disabled).toBe(false);
     expect(button(`Re-run ${first.label}`).disabled).toBe(true);
-    expect(button('Approve reviewed quality').disabled).toBe(true);
-    expect(screen.getByRole('alert').textContent).toContain('earlier evidence is not reused');
+    expect(button('Approve quality').disabled).toBe(true);
+    expect(screen.getByRole('alert').textContent).toContain("earlier results won't be reused");
   });
 
   it('explains when source drift invalidated the previously prepared evidence', () => {
@@ -235,7 +235,7 @@ describe('GitDeliveryReadinessPanel', () => {
     );
 
     expect(screen.getByText(staleReason).textContent).toContain(staleReason);
-    expect(button('Approve reviewed quality').disabled).toBe(true);
+    expect(button('Approve quality').disabled).toBe(true);
   });
 
   it('requires every prepared check to pass before enabling human quality approval', () => {
@@ -244,9 +244,11 @@ describe('GitDeliveryReadinessPanel', () => {
     const prepared = readiness({ requiredChecks: [failed] });
     renderPreparedPanel(prepared, { onApproveQuality });
 
-    const approve = button('Approve reviewed quality');
+    const approve = button('Approve quality');
     expect(approve.disabled).toBe(true);
-    expect(screen.getByText(/Every required check must pass for this exact binding/u)).toBeTruthy();
+    expect(
+      screen.getByText(/Every required check must pass for these exact changes/u),
+    ).toBeTruthy();
     fireEvent.click(approve);
     expect(onApproveQuality).not.toHaveBeenCalled();
   });
@@ -273,7 +275,7 @@ describe('GitDeliveryReadinessPanel', () => {
 
     expect(button(`Re-run ${queued.label}`).disabled).toBe(true);
     expect(button(`Run ${missing.label}`).disabled).toBe(true);
-    expect(button('Approve reviewed quality').disabled).toBe(true);
+    expect(button('Approve quality').disabled).toBe(true);
     expect(checkbox(queued.label).disabled).toBe(true);
 
     const passed = requiredCheck('passed', 62);
@@ -288,7 +290,7 @@ describe('GitDeliveryReadinessPanel', () => {
       />,
     );
     expect(button(`Re-run ${passed.label}`).disabled).toBe(true);
-    expect(button('Approve reviewed quality').disabled).toBe(true);
+    expect(button('Approve quality').disabled).toBe(true);
     expect(checkbox(passed.label).disabled).toBe(true);
   });
 
@@ -303,9 +305,9 @@ describe('GitDeliveryReadinessPanel', () => {
     renderPreparedPanel(prepared);
 
     expect(screen.getByText('Ready for delivery review')).toBeTruthy();
-    expect(screen.getByText(/Ada Reviewer approved this exact binding/u)).toBeTruthy();
+    expect(screen.getByText(/Ada Reviewer approved these exact changes/u)).toBeTruthy();
     expect(screen.getByText(CURRENT_HEAD.slice(0, 12))).toBeTruthy();
-    expect(button('Approval current').disabled).toBe(true);
+    expect(button('Approval up to date').disabled).toBe(true);
   });
 
   it('distinguishes a stale human approval and permits explicit approval of the current revision', () => {
@@ -323,12 +325,12 @@ describe('GitDeliveryReadinessPanel', () => {
     renderPreparedPanel(prepared, { onApproveQuality });
 
     expect(screen.getByRole('alert').textContent).toContain(
-      `Grace Reviewer approved ${PREVIOUS_HEAD.slice(0, 12)}, but the current source is ${CURRENT_HEAD.slice(0, 12)}`,
+      `Grace Reviewer approved version ${PREVIOUS_HEAD.slice(0, 12)}, but the current version is ${CURRENT_HEAD.slice(0, 12)}`,
     );
     expect(screen.getByRole('list', { name: 'Delivery blockers' }).textContent).toContain(
       'Human approval stale',
     );
-    fireEvent.click(button('Approve current evidence'));
+    fireEvent.click(button('Approve the current results'));
     expect(onApproveQuality).toHaveBeenCalledTimes(1);
   });
 
@@ -349,10 +351,10 @@ describe('GitDeliveryReadinessPanel', () => {
 
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toContain(
-      'Lin Reviewer approved this source before its required-check evidence changed',
+      'Lin Reviewer approved these changes, but the check results changed afterward',
     );
-    expect(alert.textContent).not.toContain('current source is');
-    fireEvent.click(button('Approve current evidence'));
+    expect(alert.textContent).not.toContain('current version is');
+    fireEvent.click(button('Approve the current results'));
     expect(onApproveQuality).toHaveBeenCalledTimes(1);
   });
 
@@ -375,18 +377,22 @@ describe('GitDeliveryReadinessPanel', () => {
 
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toContain(
-      'Tree Reviewer approved an earlier source binding, but its tree, worktree, run, or required-check configuration changed',
+      'Tree Reviewer approved an earlier version, but the code, workspace, run, or check setup changed since then',
     );
-    expect(screen.queryByText(/Tree Reviewer approved this exact binding/u)).toBeNull();
-    expect(button('Approve current evidence').disabled).toBe(false);
+    expect(screen.queryByText(/Tree Reviewer approved these exact changes/u)).toBeNull();
+    expect(button('Approve the current results').disabled).toBe(false);
   });
 
   it('gives the outer panel and quality panel independent accessible names', () => {
-    const prepared = readiness({ requiredChecks: [requiredCheck('passed', 90)] });
+    const prepared = readiness({
+      requiredChecks: [requiredCheck('passed', 90)],
+    });
     renderPreparedPanel(prepared);
 
     const delivery = screen.getByRole('region', { name: 'Delivery readiness' });
-    const quality = screen.getByRole('region', { name: 'Human quality approval' });
+    const quality = screen.getByRole('region', {
+      name: 'Human quality approval',
+    });
     expect(delivery.getAttribute('aria-labelledby')).not.toBe(
       quality.getAttribute('aria-labelledby'),
     );

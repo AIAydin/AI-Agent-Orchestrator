@@ -55,7 +55,7 @@ export function Welcome(props: WelcomeProps) {
       if (assessment) setRecovery(assessment);
     } catch (cause) {
       props.onError(
-        cause instanceof Error ? cause.message : 'The repository could not be located.',
+        cause instanceof Error ? cause.message : 'That folder could not be found. Try again.',
       );
     } finally {
       setRecoveryBusy(null);
@@ -75,7 +75,9 @@ export function Welcome(props: WelcomeProps) {
     } catch (cause) {
       setRecovery(null);
       props.onError(
-        cause instanceof Error ? cause.message : 'The repository could not be rebound safely.',
+        cause instanceof Error
+          ? cause.message
+          : 'The project could not be relinked safely. Nothing was changed.',
       );
     } finally {
       setRecoveryBusy(null);
@@ -112,8 +114,8 @@ export function Welcome(props: WelcomeProps) {
             <em>visual workshop.</em>
           </h1>
           <p>
-            Open any repository, arrange the work spatially, and run local coding-agent CLIs in
-            isolated Git worktrees—with every change held for your review.
+            Open any project folder, lay out the work visually, and run coding agents in separate
+            copies of your project — with every change held for your review.
           </p>
         </div>
 
@@ -128,7 +130,7 @@ export function Welcome(props: WelcomeProps) {
               <FolderOpen size={22} />
             </span>
             <span>
-              <strong>Open local repository</strong>
+              <strong>Open a project folder</strong>
               <small>Choose a folder already on this device</small>
             </span>
             <ArrowRight size={18} />
@@ -143,8 +145,8 @@ export function Welcome(props: WelcomeProps) {
               <Github size={22} />
             </span>
             <span>
-              <strong>Clone repository</strong>
-              <small>Review the remote and destination first</small>
+              <strong>Clone a repository</strong>
+              <small>Download a copy from GitHub or another Git host</small>
             </span>
             <ChevronRight size={18} />
           </button>
@@ -158,8 +160,8 @@ export function Welcome(props: WelcomeProps) {
               <Plus size={22} />
             </span>
             <span>
-              <strong>Create empty project</strong>
-              <small>Start a local folder and Git history</small>
+              <strong>Create a new project</strong>
+              <small>Start fresh with an empty folder on this device</small>
             </span>
             <ChevronRight size={18} />
           </button>
@@ -174,7 +176,7 @@ export function Welcome(props: WelcomeProps) {
             </span>
             <span>
               <strong>Explore the safe demo</strong>
-              <small>No model account or external request needed</small>
+              <small>No account or internet connection needed</small>
             </span>
             <ChevronRight size={18} />
           </button>
@@ -192,8 +194,8 @@ export function Welcome(props: WelcomeProps) {
             <div className="empty-recent">
               <FolderGit2 size={24} />
               <div>
-                <strong>No recent projects</strong>
-                <span>The repositories you open will stay listed here locally.</span>
+                <strong>No recent projects yet</strong>
+                <span>Project folders you open will be listed here.</span>
               </div>
             </div>
           ) : (
@@ -219,7 +221,7 @@ export function Welcome(props: WelcomeProps) {
                       aria-label={`Locate moved repository for ${project.name}`}
                     >
                       <FolderSearch size={14} />
-                      {recoveryBusy === project.id ? 'Inspecting…' : 'Locate'}
+                      {recoveryBusy === project.id ? 'Searching…' : 'Locate'}
                     </button>
                   </div>
                 ) : (
@@ -252,7 +254,7 @@ export function Welcome(props: WelcomeProps) {
           <div className="provider-status">
             <span className="status-dot" />
             <span>
-              {detected.length} optional tool{detected.length === 1 ? '' : 's'} detected
+              {detected.length} optional tool{detected.length === 1 ? '' : 's'} found
             </span>
             <span className="tool-list">
               {detected.slice(0, 4).map((agent) => (
@@ -263,7 +265,7 @@ export function Welcome(props: WelcomeProps) {
               ))}
             </span>
           </div>
-          <span>Solo mode · No Forgeboard cloud · No telemetry</span>
+          <span>Just you on this device · No Forgeboard cloud · No tracking</span>
         </footer>
       </section>
 
@@ -297,7 +299,8 @@ export function Welcome(props: WelcomeProps) {
               <div>
                 <h2 id="recovery-dialog-title">Confirm moved project</h2>
                 <p>
-                  Review the selected folder before Forgeboard changes this project’s saved path.
+                  Check the folder you picked before Forgeboard updates this project’s saved
+                  location.
                 </p>
               </div>
               <button
@@ -305,7 +308,7 @@ export function Welcome(props: WelcomeProps) {
                 type="button"
                 onClick={() => setRecovery(null)}
                 disabled={recoveryBusy !== null}
-                aria-label="Cancel project recovery"
+                aria-label="Close without changing anything"
               >
                 <X size={16} />
               </button>
@@ -313,41 +316,43 @@ export function Welcome(props: WelcomeProps) {
 
             <div className="recovery-comparison">
               <section>
-                <span>Missing project record</span>
+                <span>Previous location</span>
                 <strong>{recovery.original.name}</strong>
                 <code>{recovery.original.path}</code>
               </section>
               <ArrowRight size={17} aria-hidden="true" />
               <section>
-                <span>Selected candidate</span>
+                <span>Folder you picked</span>
                 <strong>{recovery.candidate.name}</strong>
                 <code>{recovery.candidate.path}</code>
               </section>
             </div>
 
-            <div className="recovery-identity" aria-label="Candidate repository identity">
-              <strong>Candidate identity</strong>
+            <div className="recovery-identity" aria-label="Details of the folder you picked">
+              <strong>What’s in this folder</strong>
               <dl>
                 <div>
-                  <dt>Repository</dt>
-                  <dd>{recovery.candidate.health.isGitRepository ? 'Git' : 'Plain folder'}</dd>
+                  <dt>Type</dt>
+                  <dd>
+                    {recovery.candidate.health.isGitRepository ? 'Git repository' : 'Plain folder'}
+                  </dd>
                 </div>
                 <div>
                   <dt>Branch</dt>
-                  <dd>{recovery.candidate.health.branch ?? 'None detected'}</dd>
+                  <dd>{recovery.candidate.health.branch ?? 'None found'}</dd>
                 </div>
                 <div>
-                  <dt>Package manager</dt>
+                  <dt>Package tool</dt>
                   <dd>{recovery.candidate.health.packageManager}</dd>
                 </div>
                 <div>
-                  <dt>Known remotes</dt>
+                  <dt>Online copies</dt>
                   <dd>
                     {recovery.candidate.health.remotes.length > 0
                       ? recovery.candidate.health.remotes
                           .map((remote) => `${remote.name}: ${remote.url}`)
                           .join(', ')
-                      : 'None detected'}
+                      : 'None found'}
                   </dd>
                 </div>
               </dl>
@@ -356,7 +361,7 @@ export function Welcome(props: WelcomeProps) {
             {recovery.warnings.length > 0 ? (
               <div className="recovery-warnings" role="alert">
                 <strong>
-                  <AlertTriangle size={14} /> Identity warning
+                  <AlertTriangle size={14} /> Warning
                 </strong>
                 <ul>
                   {recovery.warnings.map((warning) => (
@@ -366,13 +371,13 @@ export function Welcome(props: WelcomeProps) {
               </div>
             ) : (
               <div className="recovery-clear">
-                <ShieldCheck size={14} /> No repository identity warnings detected.
+                <ShieldCheck size={14} /> Nothing unusual found in this folder.
               </div>
             )}
 
             <p className="recovery-preservation-note">
-              Confirming keeps the existing project ID, canvas, snapshots, and run records. Only the
-              saved repository location and its refreshed identity details change.
+              Confirming keeps this project’s canvas, snapshots, and run records. Only the saved
+              folder location and its refreshed details change.
             </p>
 
             <footer>
@@ -390,7 +395,7 @@ export function Welcome(props: WelcomeProps) {
                 onClick={() => void confirmMovedProject()}
                 disabled={recoveryBusy !== null}
               >
-                {recoveryBusy !== null ? 'Confirming…' : 'Confirm and rebind'}
+                {recoveryBusy !== null ? 'Confirming…' : 'Confirm new location'}
               </button>
             </footer>
           </section>

@@ -547,7 +547,7 @@ describe('WorkflowAgentExecutor preparation', () => {
     const executor = workflowAgentExecutor(backend, resolver);
 
     await expect(executor.prepare(workflowContext(node, unresolvedRuntime))).rejects.toThrow(
-      'Context edge has not been verified by the host',
+      'This context link has not been verified yet',
     );
     expect(resolver).not.toHaveBeenCalled();
     expect(backend.prepareCalls).toEqual([]);
@@ -572,7 +572,7 @@ describe('WorkflowAgentExecutor preparation', () => {
       },
     };
     await expect(executor.prepare(workflowContext(node, staleRuntime))).rejects.toThrow(
-      'Context edge is stale for the current target attempt',
+      'This context link is out of date for the current attempt',
     );
     expect(resolver).not.toHaveBeenCalled();
   });

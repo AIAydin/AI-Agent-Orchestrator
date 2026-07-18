@@ -26,13 +26,13 @@ export async function readValidatedLocalDataImportFile(
   selectedPath: string,
 ): Promise<ValidatedLocalDataImportFile> {
   if (!isAbsolute(selectedPath) || selectedPath.includes('\0')) {
-    throw new Error('Forgeboard rejected the selected import file path.');
+    throw new Error('Forgeboard cannot use the selected file path.');
   }
   const fileName = safeFileName(selectedPath);
   try {
     const initialPathStats = await lstat(selectedPath);
     if (!initialPathStats.isFile() || initialPathStats.isSymbolicLink()) {
-      throw new Error('The selected import must be an ordinary file, not a link.');
+      throw new Error('The selected file must be a regular file, not a link or shortcut.');
     }
     assertBoundedSize(initialPathStats.size);
 
@@ -40,9 +40,11 @@ export async function readValidatedLocalDataImportFile(
     const handle = await open(selectedPath, constants.O_RDONLY | noFollow);
     try {
       const before = await handle.stat();
-      if (!before.isFile()) throw new Error('The selected import is not an ordinary file.');
+      if (!before.isFile()) throw new Error('The selected file is not a regular file.');
       if (!sameFile(initialPathStats, before)) {
-        throw new Error('The selected import changed before Forgeboard could read it.');
+        throw new Error(
+          'The selected file changed before Forgeboard could read it. Choose it again.',
+        );
       }
       assertBoundedSize(before.size);
 
@@ -55,7 +57,9 @@ export async function readValidatedLocalDataImportFile(
         !sameFile(after, finalPathStats) ||
         finalPathStats.isSymbolicLink()
       ) {
-        throw new Error('The selected import changed while Forgeboard was reading it.');
+        throw new Error(
+          'The selected file changed while Forgeboard was reading it. Choose it again.',
+        );
       }
       assertBoundedSize(bytes.byteLength);
 
@@ -72,8 +76,10 @@ export async function readValidatedLocalDataImportFile(
     }
   } catch (error) {
     if (error instanceof SafeImportFileError) throw error;
-    if (error instanceof Error && error.message.startsWith('The selected import')) throw error;
-    throw new SafeImportFileError('Forgeboard could not read the selected import file safely.');
+    if (error instanceof Error && error.message.startsWith('The selected file')) throw error;
+    throw new SafeImportFileError(
+      'Forgeboard could not read the selected file safely. Try exporting it again.',
+    );
   }
 }
 
@@ -97,17 +103,19 @@ function safeFileName(selectedPath: string): string {
       );
     })
   ) {
-    throw new SafeImportFileError('Forgeboard rejected the selected import file name.');
+    throw new SafeImportFileError(
+      'Forgeboard cannot use this file name. Rename the file and try again.',
+    );
   }
   return fileName;
 }
 
 function assertBoundedSize(sizeBytes: number): void {
   if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1) {
-    throw new SafeImportFileError('The selected import file is empty or has an invalid size.');
+    throw new SafeImportFileError('The selected file is empty.');
   }
   if (sizeBytes > MAX_LOCAL_DATA_IMPORT_BYTES) {
-    throw new SafeImportFileError('The selected import file exceeds the 16 MiB safety limit.');
+    throw new SafeImportFileError('The selected file is too large to import. The limit is 16 MiB.');
   }
 }
 
@@ -116,14 +124,14 @@ function parseLocalDataExport(bytes: Buffer): LocalDataExport {
   try {
     value = JSON.parse(bytes.toString('utf8')) as unknown;
   } catch {
-    throw new SafeImportFileError('The selected import file does not contain valid JSON.');
+    throw new SafeImportFileError(
+      'The selected file is not a readable Forgeboard export. It may be damaged.',
+    );
   }
   assertBoundedJsonComplexity(value);
   const parsed = LocalDataExportSchema.safeParse(value);
   if (!parsed.success) {
-    throw new SafeImportFileError(
-      'The selected file is not a supported Forgeboard local-data export.',
-    );
+    throw new SafeImportFileError('The selected file is not a Forgeboard data export.');
   }
   return parsed.data;
 }
@@ -136,7 +144,7 @@ function assertBoundedJsonComplexity(value: unknown): void {
     if (current === undefined) break;
     visited += 1;
     if (visited > MAX_JSON_VALUES || current.depth > MAX_JSON_DEPTH) {
-      throw new SafeImportFileError('The selected import file is too structurally complex.');
+      throw new SafeImportFileError('The selected file is too complex to import safely.');
     }
     if (Array.isArray(current.value)) {
       for (const item of current.value) pending.push({ value: item, depth: current.depth + 1 });

@@ -31,20 +31,20 @@ describe('TrustCenter', () => {
 
     render(<TrustCenter runIntegrityCheck={runIntegrityCheck} />);
 
-    await screen.findByText('Local integrity verified');
+    await screen.findByText('Local data verified');
     expect(runIntegrityCheck).toHaveBeenNthCalledWith(1, { mode: 'quick' });
     expect(screen.getByText('Pass')).toBeTruthy();
-    expect(screen.getByText(/Quick verification checked/)).toBeTruthy();
-    expect(screen.getByText(/append-only and hash-linked/)).toBeTruthy();
-    expect(screen.getByText(/Retention is checkpointed/)).toBeTruthy();
+    expect(screen.getByText(/Quick check finished/)).toBeTruthy();
+    expect(screen.getByText(/only ever added/)).toBeTruthy();
+    expect(screen.getByText(/When old entries expire/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Full verification' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run full check' }));
 
-    await screen.findByText('Local integrity needs attention');
+    await screen.findByText('Local data needs attention');
     expect(runIntegrityCheck).toHaveBeenNthCalledWith(2, { mode: 'full' });
     expect(screen.getByText('Fail')).toBeTruthy();
     expect(screen.getByText(SANITIZED_INTEGRITY_MESSAGES.audit)).toBeTruthy();
-    expect(screen.getByText(/Full verification checked/)).toBeTruthy();
+    expect(screen.getByText(/Full check finished/)).toBeTruthy();
   });
 
   it('does not surface transport exception details', async () => {
@@ -54,10 +54,8 @@ describe('TrustCenter', () => {
 
     render(<TrustCenter runIntegrityCheck={runIntegrityCheck} />);
 
-    await waitFor(() => expect(screen.getByText('Verification unavailable')).toBeTruthy());
-    expect(screen.getByRole('alert').textContent).toContain(
-      'Integrity verification could not be completed.',
-    );
+    await waitFor(() => expect(screen.getByText('Check unavailable')).toBeTruthy());
+    expect(screen.getByRole('alert').textContent).toContain('The check could not finish.');
     expect(document.body.textContent).not.toContain('/Users/private');
   });
 });

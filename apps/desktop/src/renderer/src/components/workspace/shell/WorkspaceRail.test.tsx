@@ -57,7 +57,9 @@ describe('WorkspaceRail accessibility', () => {
     expect(
       screen.getByRole('textbox', { name: 'Search node templates' }).getAttribute('name'),
     ).toBe('workspace-rail-search');
-    expect(screen.getByRole('img', { name: 'Repository has uncommitted changes' })).toBeTruthy();
+    expect(
+      screen.getByRole('img', { name: 'Project has changes not yet recorded in Git' }),
+    ).toBeTruthy();
 
     rerender(<WorkspaceRail {...props} tab="nodes" />);
     expect(screen.getByRole('button', { name: 'Nodes' }).getAttribute('aria-pressed')).toBe('true');
@@ -90,8 +92,8 @@ describe('WorkspaceRail accessibility', () => {
       />,
     );
 
-    expect(screen.getByText('Existing files stay untouched and uncommitted.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Initialize Git…' }));
+    expect(screen.getByText('Your files stay exactly as they are.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Set up Git…' }));
     expect(onInitializeGit).toHaveBeenCalledTimes(1);
   });
 });

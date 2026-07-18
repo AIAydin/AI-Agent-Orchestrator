@@ -14,24 +14,30 @@ describe('GitDiffViewer', () => {
   it('switches between unified and split layouts and reveals whitespace without changing content', () => {
     renderViewer();
 
-    expect(screen.getByRole('table', { name: 'Unified diff for src/example.ts' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Unified' }).getAttribute('aria-pressed')).toBe(
+    expect(
+      screen.getByRole('table', { name: 'Changes in src/example.ts (one column)' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'One column' }).getAttribute('aria-pressed')).toBe(
       'true',
     );
-    expect(screen.getByLabelText('1 additions and 1 deletions in src/example.ts')).toBeTruthy();
+    expect(screen.getByLabelText('1 line added and 1 line removed in src/example.ts')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Show whitespace characters' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show spaces and tabs' }));
     const unifiedCodes = [
       ...screen
-        .getByRole('table', { name: 'Unified diff for src/example.ts' })
+        .getByRole('table', { name: 'Changes in src/example.ts (one column)' })
         .querySelectorAll('code'),
     ];
     const unifiedOldLine = unifiedCodes.find((code) => code.textContent === '→\told·line·');
     expect(unifiedOldLine?.getAttribute('aria-label')).toBe('\told line ');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Split' }));
-    const splitTable = screen.getByRole('table', { name: 'Split diff for src/example.ts' });
-    expect(screen.getByRole('button', { name: 'Split' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Side by side' }));
+    const splitTable = screen.getByRole('table', {
+      name: 'Changes in src/example.ts (side by side)',
+    });
+    expect(screen.getByRole('button', { name: 'Side by side' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
     const splitCodes = [...splitTable.querySelectorAll('code')];
     const oldLine = splitCodes.find((code) => code.textContent === '→\told·line·');
     const newLine = splitCodes.find((code) => code.textContent === 'new·line·');
@@ -92,13 +98,15 @@ describe('GitDiffViewer', () => {
       />,
     );
 
-    expect(screen.getByRole('table', { name: 'Split diff for src/example.ts' })).toBeTruthy();
-    expect(screen.getByRole('checkbox', { name: 'Show whitespace characters' })).toHaveProperty(
+    expect(
+      screen.getByRole('table', { name: 'Changes in src/example.ts (side by side)' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Show spaces and tabs' })).toHaveProperty(
       'checked',
       true,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Unified' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Show whitespace characters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'One column' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show spaces and tabs' }));
 
     expect(onDisplayPreferencesChange).toHaveBeenNthCalledWith(1, {
       viewMode: 'unified',
@@ -122,9 +130,13 @@ describe('GitDiffViewer', () => {
       />,
     );
 
-    expect(screen.getByRole('table', { name: 'Split diff for src/example.ts' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Unified' }));
-    expect(screen.getByRole('table', { name: 'Unified diff for src/example.ts' })).toBeTruthy();
+    expect(
+      screen.getByRole('table', { name: 'Changes in src/example.ts (side by side)' }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'One column' }));
+    expect(
+      screen.getByRole('table', { name: 'Changes in src/example.ts (one column)' }),
+    ).toBeTruthy();
   });
 
   it('keeps the latest controlled preferences when persistence becomes read-only', async () => {
@@ -153,7 +165,9 @@ describe('GitDiffViewer', () => {
       />,
     );
     await waitFor(() =>
-      expect(screen.getByRole('table', { name: 'Unified diff for src/example.ts' })).toBeTruthy(),
+      expect(
+        screen.getByRole('table', { name: 'Changes in src/example.ts (one column)' }),
+      ).toBeTruthy(),
     );
 
     rendered.rerender(
@@ -166,13 +180,17 @@ describe('GitDiffViewer', () => {
         onPrepareDiscard={() => undefined}
       />,
     );
-    expect(screen.getByRole('table', { name: 'Unified diff for src/example.ts' })).toBeTruthy();
-    expect(screen.getByRole('checkbox', { name: 'Show whitespace characters' })).toHaveProperty(
+    expect(
+      screen.getByRole('table', { name: 'Changes in src/example.ts (one column)' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Show spaces and tabs' })).toHaveProperty(
       'checked',
       false,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Split' }));
-    expect(screen.getByRole('table', { name: 'Split diff for src/example.ts' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Side by side' }));
+    expect(
+      screen.getByRole('table', { name: 'Changes in src/example.ts (side by side)' }),
+    ).toBeTruthy();
   });
 });
 

@@ -768,7 +768,7 @@ describe('CollaborationClient', () => {
           createdAt: NOW,
         },
       ]),
-    ).toThrow(/authenticated collaborator/u);
+    ).toThrow(/signed-in collaborator/u);
   });
 
   it('rejects pre-auth metadata and queues editable metadata safely during reconnect', async () => {

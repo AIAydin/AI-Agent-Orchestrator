@@ -47,7 +47,7 @@ export function CustomPermissionProfileEditor({
       onError(
         cause instanceof Error
           ? cause.message
-          : 'The selected folder could not be made project-relative.',
+          : "That folder couldn't be used. Choose a folder inside the active project.",
       );
     }
   };
@@ -61,7 +61,9 @@ export function CustomPermissionProfileEditor({
         allowedExecutables: [...profile.allowedExecutables, selected],
       });
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'The executable could not be selected.');
+      onError(
+        cause instanceof Error ? cause.message : "That program couldn't be selected. Try again.",
+      );
     }
   };
 
@@ -69,7 +71,7 @@ export function CustomPermissionProfileEditor({
     <div className={compact ? 'custom-permission-editor compact' : 'custom-permission-editor'}>
       <div className="permission-runtime-grid">
         <label>
-          Runtime boundary
+          Where the agent runs
           <select
             name="custom-permission-runtime"
             value={profile.runtime}
@@ -97,19 +99,19 @@ export function CustomPermissionProfileEditor({
               }));
             }}
           >
-            <option value="host">Host process · disclosed policy</option>
+            <option value="host">On this computer · limits stated, not enforced</option>
             <option
               value="docker"
               disabled={
                 draft.defaultPermissionProfile === 'custom' && draft.defaultAgent === 'test-agent'
               }
             >
-              Docker · technical single-worktree boundary
+              In a Docker container · enforced, one worktree only
             </option>
           </select>
         </label>
         <label>
-          Filesystem policy
+          File access
           <select
             name="custom-permission-filesystem"
             value={profile.filesystem}
@@ -127,7 +129,7 @@ export function CustomPermissionProfileEditor({
             <option value="assigned-worktree-read-only">Assigned worktree · read-only</option>
             <option value="assigned-worktree-write">Assigned worktree · read and write</option>
             <option value="explicit-paths" disabled={dockerRuntime}>
-              Explicit assigned-worktree-relative paths
+              Specific folders in the assigned worktree
             </option>
           </select>
         </label>
@@ -157,7 +159,7 @@ export function CustomPermissionProfileEditor({
       )}
 
       <fieldset className="permission-policy-group">
-        <legend>Repository content visibility</legend>
+        <legend>What the agent can see in the project</legend>
         <div className="permission-runtime-grid">
           <label>
             Ignored files
@@ -173,11 +175,9 @@ export function CustomPermissionProfileEditor({
               }
             >
               <option value="deny">
-                {dockerRuntime
-                  ? 'Denied · incompatible with whole-worktree mount'
-                  : 'Request denied'}
+                {dockerRuntime ? 'Not allowed · Docker needs the whole worktree' : 'Not allowed'}
               </option>
-              <option value="allow">Expose matching worktree content to the process</option>
+              <option value="allow">Let the agent read these files in its worktree</option>
             </select>
           </label>
           <label>
@@ -194,27 +194,26 @@ export function CustomPermissionProfileEditor({
               }
             >
               <option value="deny">
-                {dockerRuntime
-                  ? 'Denied · incompatible with whole-worktree mount'
-                  : 'Request denied'}
+                {dockerRuntime ? 'Not allowed · Docker needs the whole worktree' : 'Not allowed'}
               </option>
-              <option value="allow">Expose matching worktree content to the process</option>
+              <option value="allow">Let the agent read these files in its worktree</option>
             </select>
           </label>
         </div>
         <p className="permission-caution">
           <AlertTriangle size={15} aria-hidden="true" />
-          “Expose” lets the process read matching content already present in its worktree; Docker
-          does not require a separate attachment approval for that direct read. Forgeboard still
-          never attaches ignored or sensitive files as context without exact per-file approval. On
-          the host these choices are disclosed requests, not an operating-system read barrier.
+          When allowed, the agent can open these files itself if they're already in its worktree;
+          Docker doesn't need a separate approval for that direct read. Forgeboard still never
+          attaches ignored or sensitive files to a prompt without your approval for each file. On
+          this computer these choices are requests to the agent, not a block enforced by the
+          operating system.
         </p>
       </fieldset>
 
       <fieldset className="permission-policy-group">
-        <legend>Agent launch executable</legend>
+        <legend>Starting the agent</legend>
         <label>
-          Top-level launch policy
+          Which programs can start it
           <select
             name="custom-permission-executable-policy"
             value={profile.executablePolicy}
@@ -228,8 +227,8 @@ export function CustomPermissionProfileEditor({
               });
             }}
           >
-            <option value="selected-agent-only">Only the selected agent executable</option>
-            <option value="allowlist">Exact executable allowlist</option>
+            <option value="selected-agent-only">Only the selected agent's program</option>
+            <option value="allowlist">Only the programs I list</option>
           </select>
         </label>
         {profile.executablePolicy === 'allowlist' && (
@@ -244,11 +243,14 @@ export function CustomPermissionProfileEditor({
       </fieldset>
 
       <fieldset className="permission-policy-group">
-        <legend>Requested agent actions (advisory)</legend>
+        <legend>Requests for the agent</legend>
         <label className="switch-row">
           <span>
             <strong>Ask the agent to allow development servers</strong>
-            <small>Included in the effective agent policy and launch disclosure.</small>
+            <small>
+              Local servers that preview the app while it's being built. Added to the agent's launch
+              instructions.
+            </small>
           </span>
           <input
             type="checkbox"
@@ -269,7 +271,7 @@ export function CustomPermissionProfileEditor({
         <label className="switch-row">
           <span>
             <strong>Ask the agent to allow tests</strong>
-            <small>Included in the effective agent policy and launch disclosure.</small>
+            <small>Added to the agent's launch instructions.</small>
           </span>
           <input
             type="checkbox"
@@ -288,18 +290,17 @@ export function CustomPermissionProfileEditor({
           />
         </label>
         <p>
-          These are advisory instructions for this agent launch. They do not technically prevent a
-          generic agent or its descendants from starting processes, and they do not gate separate
-          user-triggered Preview or Test nodes.
+          These are requests, not hard limits — an agent, or a program it starts, could still start
+          other processes. They don't affect Preview or Test nodes you run yourself.
         </p>
       </fieldset>
 
       {dockerRuntime && (
         <fieldset className="permission-policy-group">
-          <legend>Custom Docker controls</legend>
+          <legend>Docker limits</legend>
           <div className="permission-runtime-grid three">
             <label>
-              Container network
+              Network access
               <select
                 name="custom-permission-docker-network"
                 value={profile.docker.network}
@@ -314,8 +315,8 @@ export function CustomPermissionProfileEditor({
                   })
                 }
               >
-                <option value="disabled">Disabled</option>
-                <option value="enabled">Enabled after launch disclosure</option>
+                <option value="disabled">Off</option>
+                <option value="enabled">On, after you approve the launch</option>
               </select>
             </label>
             <label>
@@ -355,8 +356,9 @@ export function CustomPermissionProfileEditor({
             </label>
           </div>
           <p>
-            The container runs non-root, mounts only its assigned worktree, and never mounts host
-            CLI credentials. Docker engine, image, and in-image agent path stay in Agents & runtime.
+            The container runs without admin rights, can only see its assigned worktree, and never
+            receives your sign-in details from this computer. Set the Docker engine, image, and
+            agent path in Agents &amp; runtime.
           </p>
         </fieldset>
       )}
@@ -365,22 +367,24 @@ export function CustomPermissionProfileEditor({
         <div>
           <CheckCircle2 size={16} aria-hidden="true" />
           <span>
-            <strong>Review before the primary branch</strong>
-            <small>Always required; Custom cannot bypass Git review.</small>
+            <strong>Review before the main branch</strong>
+            <small>Always required — custom settings can't skip your review.</small>
           </span>
         </div>
         <div>
           <CheckCircle2 size={16} aria-hidden="true" />
           <span>
-            <strong>Host cwd is not a sandbox</strong>
-            <small>Always disclosed again before every host launch.</small>
+            <strong>This computer is not a sandbox</strong>
+            <small>
+              You'll see and approve the details again before every launch on this computer.
+            </small>
           </span>
         </div>
       </div>
 
       {issues.length > 0 && (
         <div className="permission-validation" role="alert">
-          <strong>Finish the Custom profile before saving</strong>
+          <strong>Finish setting up custom permissions before saving</strong>
           <ul>
             {issues.map((issue) => (
               <li key={issue}>{issue}</li>
@@ -402,12 +406,12 @@ function BoundaryExplanation({ docker }: { docker: boolean }) {
       )}
       <span>
         <strong>
-          {docker ? 'Docker-enforced outer boundary' : 'Host policy is disclosure-only'}
+          {docker ? 'Docker enforces these limits' : 'Limits are stated, not enforced'}
         </strong>
         <small>
           {docker
-            ? 'Docker enforces the whole-worktree mount mode, network mode, non-root user, CPU, and memory limits.'
-            : 'Every run still receives a managed worktree, including declared read-only runs, but cwd and path lists do not restrict the current user at the OS level.'}
+            ? 'Docker keeps the agent inside one worktree and controls its network access, user rights, CPU, and memory.'
+            : 'Every run gets its own worktree, even read-only runs. On this computer, folder lists tell the agent your intent — the operating system does not block it.'}
         </small>
       </span>
     </div>
@@ -423,7 +427,7 @@ function projectRelativePath(projectPath: string, selectedPath: string): string 
   if (comparableSelected === comparableProject) return '.';
   if (!comparableSelected.startsWith(`${comparableProject}/`)) {
     throw new Error(
-      'Choose a folder inside the active project. Its relative path will be applied to each assigned worktree.',
+      "Choose a folder inside the active project. The same location will be used inside each run's worktree.",
     );
   }
   return selected.slice(project.length + 1);

@@ -33,9 +33,9 @@ describe('WorkspaceWorkflowPanel', () => {
     );
 
     expect(screen.getByText('Implementation agent')).toBeTruthy();
-    expect(screen.getAllByText('waiting for approval')).toHaveLength(2);
+    expect(screen.getAllByText('Waiting for approval')).toHaveLength(3);
     expect(screen.getByText('Exact prepared launch is awaiting confirmation.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Review launch' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review what will run' }));
     expect(onReviewDecision).toHaveBeenCalledWith({
       kind: 'launch',
       request: current.approvals[0],
@@ -64,7 +64,7 @@ describe('WorkspaceWorkflowPanel', () => {
         onInterrupt={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel workflow' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel run' }));
     expect(onCancel).toHaveBeenCalledWith(current.id);
 
     view.rerender(
@@ -86,7 +86,7 @@ describe('WorkspaceWorkflowPanel', () => {
         onInterrupt={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('button', { name: 'Cancel workflow' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull();
   });
 
   it('keeps workflow evidence readable while disabling every decision and control for read-only roles', () => {
@@ -111,13 +111,13 @@ describe('WorkspaceWorkflowPanel', () => {
       />,
     );
 
-    expect(screen.getByRole('status').textContent).toMatch(/inspect workflow history/u);
+    expect(screen.getByRole('status').textContent).toMatch(/view workflow history/u);
     expect(screen.getByText('Implementation agent')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Cancel workflow' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Cancel run' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Review what will run' })).toHaveProperty(
       'disabled',
       true,
     );
-    expect(screen.getByRole('button', { name: 'Review launch' })).toHaveProperty('disabled', true);
   });
 
   it('opens the exact main-authorized current agent worktree', () => {
@@ -216,7 +216,7 @@ describe('WorkspaceWorkflowPanel', () => {
     expect(screen.getByLabelText('Live output for Implementation agent').textContent).toContain(
       'Ready for input',
     );
-    fireEvent.change(screen.getByLabelText('Send input to the live process'), {
+    fireEvent.change(screen.getByLabelText('Send input to the running program'), {
       target: { value: 'continue\n' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -228,7 +228,7 @@ describe('WorkspaceWorkflowPanel', () => {
         data: 'continue\n',
       }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     expect(onInterrupt).toHaveBeenCalledWith({
       executionId: current.id,
       nodeId: 'agent-node',

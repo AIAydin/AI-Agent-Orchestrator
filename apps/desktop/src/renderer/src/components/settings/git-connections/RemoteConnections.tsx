@@ -47,16 +47,17 @@ export function RemoteConnections({
     <section className="git-connections-card" aria-labelledby="git-connections-remotes-title">
       <header className="git-connections-card-header">
         <div>
-          <h4 id="git-connections-remotes-title">Repository remotes</h4>
+          <h4 id="git-connections-remotes-title">Project remotes</h4>
           <p>
-            Read and change local Git configuration only. These controls do not fetch, push,
-            authenticate, or test remote reachability.
+            A remote is a saved address for a place where this project's code is stored — for
+            example, a GitHub repository. These controls only edit Git settings on this computer;
+            they do not download, upload, or sign in.
           </p>
         </div>
         <button
           className="icon-button"
           type="button"
-          aria-label="Refresh Git connections"
+          aria-label="Refresh remotes"
           disabled={disabled || loading || !hasSelectedProject}
           onClick={() => void onRefresh()}
         >
@@ -66,20 +67,21 @@ export function RemoteConnections({
 
       {loading && connections === null ? (
         <p className="git-connections-empty" role="status">
-          Reading local Git configuration…
+          Loading remotes…
         </p>
       ) : connections === null ? (
         <p className="git-connections-empty" role="status">
           {hasSelectedProject
-            ? 'Git remote state is unavailable. Refresh to try again.'
-            : 'Choose an available Git project to inspect its remotes.'}
+            ? "This project's remotes could not be loaded. Use the refresh button to try again."
+            : 'Choose a project above to see its remotes.'}
         </p>
       ) : connections.remotes.length === 0 ? (
         <p className="git-connections-empty" role="status">
-          No remotes are configured for {connections.projectName}.
+          No remotes yet for {connections.projectName}. Add one below to save where its code is
+          stored.
         </p>
       ) : (
-        <div className="git-connections-remote-list" role="list" aria-label="Repository remotes">
+        <div className="git-connections-remote-list" role="list" aria-label="Project remotes">
           {connections.remotes.map((remote) => (
             <RemoteCard
               key={remote.name}
@@ -126,16 +128,16 @@ export function RemoteConnections({
             />
             {nameValid ? null : (
               <small id="git-connection-remote-name-error" className="git-connections-field-error">
-                Use 1–128 letters, numbers, dots, underscores, or hyphens; start with a letter or
-                number, with no consecutive dots, trailing dot, or .lock suffix.
+                Use 1–128 letters, numbers, dots, hyphens, or underscores. Start with a letter or
+                number, and avoid two dots in a row, a dot at the end, or a ".lock" ending.
               </small>
             )}
           </label>
           <label>
-            Network remote URL
+            Remote URL
             <input
               name="git-connection-network-url"
-              aria-label="Network remote URL"
+              aria-label="Remote URL"
               maxLength={2_048}
               placeholder="https://github.com/owner/repository.git"
               value={networkUrl}
@@ -145,8 +147,9 @@ export function RemoteConnections({
           </label>
         </div>
         <small>
-          Network URLs must be credential-free HTTPS or SSH. For a local destination, Forgeboard
-          keeps the selected filesystem path in the main process and native confirmation.
+          Use an HTTPS or SSH address without a password or token in it. To use a folder on this
+          computer instead, choose the folder button — its path stays private, and your computer
+          will ask you to confirm.
         </small>
         <div className="git-connections-actions">
           <button
@@ -155,7 +158,7 @@ export function RemoteConnections({
             disabled={unavailable || !nameValid || !urlValid}
             onClick={() => void onPrepareNetwork('add', remoteName, networkUrl)}
           >
-            <Plus size={14} aria-hidden="true" /> Add network remote
+            <Plus size={14} aria-hidden="true" /> Add remote
           </button>
           <button
             className="button"
@@ -163,7 +166,7 @@ export function RemoteConnections({
             disabled={unavailable || !nameValid}
             onClick={() => void onPrepareLocal('add', remoteName)}
           >
-            <FolderOpen size={14} aria-hidden="true" /> Choose local Git repository
+            <FolderOpen size={14} aria-hidden="true" /> Choose a folder on this computer
           </button>
         </div>
       </fieldset>
@@ -207,8 +210,8 @@ function RemoteCard({
         </span>
       </header>
       <dl>
-        <RemoteTarget label="Fetch" target={remote.fetch} />
-        <RemoteTarget label="Push" target={remote.push} />
+        <RemoteTarget label="Downloads from" target={remote.fetch} />
+        <RemoteTarget label="Uploads to" target={remote.push} />
       </dl>
       {remote.warning === null ? null : <p className="git-connections-warning">{remote.warning}</p>}
       {simple ? (
@@ -219,7 +222,7 @@ function RemoteCard({
             disabled={disabled}
             onClick={onBeginReplacement}
           >
-            <Repeat2 size={13} aria-hidden="true" /> Replace {remote.name} with network remote
+            <Repeat2 size={13} aria-hidden="true" /> Replace {remote.name} with a new URL
           </button>
           <button
             className="button ghost"
@@ -227,8 +230,8 @@ function RemoteCard({
             disabled={disabled}
             onClick={() => void onPrepareLocal()}
           >
-            <FolderOpen size={13} aria-hidden="true" /> Choose local Git repository to replace{' '}
-            {remote.name}
+            <FolderOpen size={13} aria-hidden="true" /> Replace {remote.name} with a folder on this
+            computer
           </button>
           <button
             className="button ghost git-connections-remove"
@@ -254,10 +257,10 @@ function RemoteCard({
       {replacing ? (
         <div className="git-connections-replacement">
           <label>
-            Replacement network remote URL for {remote.name}
+            New URL for {remote.name}
             <input
               name={`git-connection-replacement-url-${remote.name}`}
-              aria-label={`Replacement network remote URL for ${remote.name}`}
+              aria-label={`New URL for ${remote.name}`}
               maxLength={2_048}
               autoFocus
               value={replacementUrl}
@@ -272,7 +275,7 @@ function RemoteCard({
               disabled={disabled || !replacementUrlValid}
               onClick={() => void onPrepareNetwork()}
             >
-              Review remote replacement
+              Review replacement
             </button>
             <button
               className="button"
@@ -299,18 +302,18 @@ function RemoteTarget({
   return (
     <div>
       <dt>{label}</dt>
-      <dd>{target === null ? 'Not safely representable' : remoteTargetLabel(target)}</dd>
+      <dd>{target === null ? 'Kept private' : remoteTargetLabel(target)}</dd>
     </div>
   );
 }
 
 export function remoteTargetLabel(target: GitRemoteDescriptorView): string {
-  if (target.kind === 'local-filesystem') return 'Local Git repository';
+  if (target.kind === 'local-filesystem') return 'Folder on this computer';
   return `${target.transport.toUpperCase()} · ${target.endpoint}/${target.resource}`;
 }
 
 function managementLabel(management: GitConnectionRemoteView['management']): string {
-  if (management === 'managed-simple') return 'Managed';
+  if (management === 'managed-simple') return 'Editable';
   if (management === 'managed-complex') return 'Advanced';
   return 'Read only';
 }

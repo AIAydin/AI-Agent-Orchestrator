@@ -157,14 +157,15 @@ export function evaluateReviewGate(
 
   const reasons: string[] = [];
   if (missingCheckIds.length > 0)
-    reasons.push(`Missing deterministic checks: ${missingCheckIds.join(', ')}`);
+    reasons.push(`Required checks are missing: ${missingCheckIds.join(', ')}`);
   if (pendingCheckIds.length > 0)
-    reasons.push(`Deterministic checks are still running: ${pendingCheckIds.join(', ')}`);
+    reasons.push(`Required checks are still running: ${pendingCheckIds.join(', ')}`);
   if (failedCheckIds.length > 0)
-    reasons.push(`Deterministic checks failed: ${failedCheckIds.join(', ')}`);
-  if (reviewerStatus === 'pending') reasons.push('Reviewer-agent assessment is required');
+    reasons.push(`Required checks failed: ${failedCheckIds.join(', ')}`);
+  if (reviewerStatus === 'pending')
+    reasons.push('The reviewer agent still needs to finish its review');
   if (reviewerStatus === 'failed') reasons.push('Reviewer requested changes');
-  if (humanStatus === 'pending') reasons.push('Human approval is required');
+  if (humanStatus === 'pending') reasons.push('Your approval is required');
 
   const status =
     deterministicStatus === 'failed' || reviewerStatus === 'failed'

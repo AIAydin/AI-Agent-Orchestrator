@@ -87,7 +87,7 @@ export function useAgentRunController({
         updateNodeData(nodeId, { permissionProfile: selectedPermission });
       });
       if (!(await flushCanvas())) {
-        onError('Save the current canvas before reviewing this Agent run.');
+        onError('Save the canvas before reviewing this run.');
         return;
       }
       updateNodeData(nodeId, {
@@ -118,23 +118,21 @@ export function useAgentRunController({
       const next = unwrap(result);
       if (next === null) {
         updateNodeData(nodeId, { status: 'cancelled' });
-        setEvents((items) =>
-          ['Cancelled Docker preparation before any configured executable ran.', ...items].slice(
-            0,
-            80,
-          ),
-        );
+        setEvents((items) => ['Cancelled preparation before anything ran.', ...items].slice(0, 80));
         return;
       }
       updateNodeData(nodeId, { runId: next.runId, status: 'waiting' });
       setReviewedPrompt(prompt);
       setDisclosure(next);
       setEvents((items) =>
-        [`Prepared ${next.provider}; waiting for explicit launch approval.`, ...items].slice(0, 80),
+        [`${next.provider} is ready and waiting for your approval to start.`, ...items].slice(
+          0,
+          80,
+        ),
       );
     } catch (cause) {
       updateNodeData(nodeId, { status: 'failed' });
-      onError(cause instanceof Error ? cause.message : 'Could not prepare the agent run.');
+      onError(cause instanceof Error ? cause.message : 'Could not prepare this run. Try again.');
     } finally {
       setPreparingRun(false);
     }
@@ -251,7 +249,7 @@ export function useAgentRunController({
     setApprovingRun(true);
     try {
       if (!(await flushCanvas())) {
-        onError('Save the current canvas before approving this Agent run.');
+        onError('Save the canvas before approving this run.');
         return;
       }
       const launched = unwrap(await window.forgeboard.runs.approve(disclosure.runId));
@@ -259,18 +257,13 @@ export function useAgentRunController({
         updateNodeData(disclosure.nodeId, { status: 'cancelled' });
         setDisclosure(null);
         setReviewedPrompt(null);
-        setEvents((items) =>
-          [
-            'Cancelled the native launch confirmation before the agent process ran.',
-            ...items,
-          ].slice(0, 80),
-        );
+        setEvents((items) => ['Cancelled before the agent started.', ...items].slice(0, 80));
         return;
       }
       setActiveRunIds((current) => new Set(current).add(disclosure.runId));
       updateNodeData(disclosure.nodeId, { status: 'running' });
       setEvents((items) =>
-        [`Approved and launched ${disclosure.provider} in ${disclosure.cwd}.`, ...items].slice(
+        [`Approved and started ${disclosure.provider} in ${disclosure.cwd}.`, ...items].slice(
           0,
           80,
         ),
@@ -281,7 +274,9 @@ export function useAgentRunController({
       updateNodeData(disclosure.nodeId, { status: 'failed' });
       setDisclosure(null);
       setReviewedPrompt(null);
-      onError(cause instanceof Error ? cause.message : 'The approved agent could not launch.');
+      onError(
+        cause instanceof Error ? cause.message : 'The approved agent could not start. Try again.',
+      );
     } finally {
       setApprovingRun(false);
     }
@@ -294,9 +289,9 @@ export function useAgentRunController({
       updateNodeData(disclosure.nodeId, { status: 'cancelled' });
       setDisclosure(null);
       setReviewedPrompt(null);
-      setEvents((items) => ['Cancelled the prepared run before launch.', ...items].slice(0, 80));
+      setEvents((items) => ['Cancelled the run before it started.', ...items].slice(0, 80));
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'Could not cancel the prepared run.');
+      onError(cause instanceof Error ? cause.message : 'Could not cancel the run. Try again.');
     }
   }
 
@@ -310,7 +305,8 @@ export function useAgentRunController({
           : await window.forgeboard.runs.terminate(runId);
       unwrap(result);
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : `Could not ${action} this run.`);
+      const actionLabel = action === 'interrupt' ? 'interrupt' : 'stop';
+      onError(cause instanceof Error ? cause.message : `Could not ${actionLabel} this run.`);
     }
   }
 
@@ -320,9 +316,13 @@ export function useAgentRunController({
     try {
       unwrap(await window.forgeboard.runs.sendInput(runId, `${runInput}\n`));
       setRunInput('');
-      setEvents((items) => ['Sent interactive input to the local agent.', ...items].slice(0, 80));
+      setEvents((items) => ['Sent your input to the agent.', ...items].slice(0, 80));
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'Could not send agent input.');
+      onError(
+        cause instanceof Error
+          ? cause.message
+          : 'Could not send your input to the agent. Try again.',
+      );
     }
   }
 

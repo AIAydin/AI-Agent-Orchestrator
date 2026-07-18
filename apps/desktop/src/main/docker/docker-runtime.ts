@@ -52,7 +52,9 @@ export async function resolveDockerExecutable(configured: string): Promise<strin
     return canonical;
   }
   if (command.includes('/') || command.includes('\\')) {
-    throw new Error('Choose an absolute Docker executable or a command name such as docker.');
+    throw new Error(
+      'Choose the full path to the Docker executable or a command name such as docker.',
+    );
   }
 
   const pathEntries = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
@@ -163,7 +165,7 @@ export async function checkDockerReadiness(
   const version = safeText([probe.stdout, probe.stderr].filter(Boolean).join(' '), 2_048);
   if (probe.exitCode !== 0) {
     const detail =
-      probe.reason ?? (version || `The version probe exited with code ${String(probe.exitCode)}.`);
+      probe.reason ?? (version || `The version check exited with code ${String(probe.exitCode)}.`);
     return readinessResult(configuration, {
       executable,
       checkedAt,
@@ -174,7 +176,7 @@ export async function checkDockerReadiness(
       status: 'agent-unavailable',
       daemonVersion: runtime.daemonVersion,
       imageId: runtime.imageId,
-      reason: `The configured agent executable could not start in the constrained image: ${safeText(detail)}`,
+      reason: `The configured agent program could not start inside the image: ${safeText(detail)}`,
     });
   }
 
@@ -301,7 +303,7 @@ async function runBoundedCommand(
         stdout,
         stderr,
         timedOut: true,
-        reason: 'Docker command timed out.',
+        reason: 'The Docker command took too long and was stopped.',
       });
     }, timeoutMs);
     child.stdout.on('data', (chunk: Buffer) => {

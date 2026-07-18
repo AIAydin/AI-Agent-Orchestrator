@@ -179,7 +179,7 @@ function requeueRevisionNode(nodeRun: NodeRunState, occurredAt: string): NodeRun
     attempt: nodeRun.attempt + 1,
     queuedAt: occurredAt,
     resumable: nodeRun.resumable,
-    statusReason: 'Queued for bounded revision after actionable review feedback',
+    statusReason: 'Queued to try again after the review asked for changes',
   });
 }
 
@@ -376,7 +376,7 @@ export function resolveRevisionEscape(
             endedAt: resolution.decidedAt,
             resumable: nodeRun.resumable,
             ...(nodeRun.failureCode === undefined ? {} : { failureCode: nodeRun.failureCode }),
-            statusReason: `Human cancelled the exhausted revision loop after ${nodeRun.status}`,
+            statusReason: 'You cancelled the loop after it reached its limit',
           }),
         ];
       }),
@@ -413,8 +413,7 @@ export function resolveRevisionEscape(
             status: 'failed',
             occurredAt: resolution.decidedAt,
             failureCode: 'HUMAN_ACCEPTED_FAILED_GATE',
-            reason:
-              'Human accepted the exhausted loop; deterministic gate failure remained authoritative',
+            reason: 'You accepted the current result; the failed checks still stand',
           })
         : reviewRun;
     if (failedReviewer.status === 'succeeded') {
@@ -442,7 +441,7 @@ export function resolveRevisionEscape(
       ...(reviewRun.startedAt === undefined ? {} : { startedAt: reviewRun.startedAt }),
       endedAt: resolution.decidedAt,
       resumable: reviewRun.resumable,
-      statusReason: 'Human accepted the exhausted non-deterministic review loop',
+      statusReason: 'You accepted the current result, ending the loop',
     });
     acceptedRuntime = replaceRunState(
       runtime,

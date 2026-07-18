@@ -160,7 +160,7 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
       key: 'ArrowRight',
     });
     expect(onKeyboardMove).not.toHaveBeenCalled();
-    expect(screen.getByText(/cannot edit the shared graph/u)).toBeTruthy();
+    expect(screen.getByText(/cannot edit the shared canvas/u)).toBeTruthy();
   });
 
   it('reports a bounded completed viewport move for autosave but not for read-only roles', () => {
@@ -314,7 +314,7 @@ describe('WorkspaceCanvas node context menu', () => {
       name: 'Run with dependencies',
     });
     expect(taskRun.disabled).toBe(true);
-    expect(taskRun.title).toBe('Choose an Agent assignee before running this Task.');
+    expect(taskRun.title).toBe('Choose an agent for this task before running it.');
     expect(taskProps.onRunWorkflowScope).not.toHaveBeenCalled();
   });
 
@@ -530,7 +530,7 @@ describe('WorkspaceCanvas Agent context drops', () => {
       },
       dataTransfer: () => contextDataTransfer(),
       target: 'canvas-node-agent',
-      message: /cannot edit the shared graph/u,
+      message: /cannot edit the shared canvas/u,
     },
   ])('rejects a $label', async ({ configure, dataTransfer, target, message }) => {
     const canvasProps = props(vi.fn());

@@ -53,7 +53,7 @@ export function WorkflowNodeTerminal({
         {output === '' ? 'Waiting for live output…' : output}
       </pre>
       <label>
-        <span>Send input to the live process</span>
+        <span>Send input to the running program</span>
         <textarea
           name="workflow-node-input"
           value={input}
@@ -64,7 +64,7 @@ export function WorkflowNodeTerminal({
           onChange={(event) => setInput(event.target.value)}
         />
       </label>
-      <small>Input is sent only to this live attempt and is never written to workflow audit.</small>
+      <small>Input goes only to this attempt and is never saved in the workflow history.</small>
       <div>
         <button type="button" disabled={busy || input.length === 0} onClick={() => void send()}>
           <Send size={11} aria-hidden="true" /> Send
@@ -75,7 +75,7 @@ export function WorkflowNodeTerminal({
           disabled={busy}
           onClick={() => void onInterrupt({ executionId, nodeId, attempt })}
         >
-          <StopCircle size={11} aria-hidden="true" /> Interrupt
+          <StopCircle size={11} aria-hidden="true" /> Stop
         </button>
       </div>
     </section>

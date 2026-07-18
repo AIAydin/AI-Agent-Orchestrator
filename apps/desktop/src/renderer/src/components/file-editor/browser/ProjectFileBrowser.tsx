@@ -125,7 +125,7 @@ export function ProjectFileBrowser({
         parsedCode.success && parsedCode.data === 'FILE_NOT_FOUND' ? 'missing' : 'error',
       );
       setCandidateMessage(
-        fileBrowserError(cause, 'Forgeboard could not safely inspect this file.'),
+        fileBrowserError(cause, "Forgeboard couldn't check this file. Try again."),
       );
     }
   };
@@ -162,7 +162,7 @@ export function ProjectFileBrowser({
         setCandidate(placeholderFileEntry(revealRelativePath));
         setCandidateDocument(null);
         setCandidateStatus('missing');
-        setCandidateMessage('The file is no longer listed in its project folder.');
+        setCandidateMessage('This file is no longer in the project folder.');
       })
       .catch((cause: unknown) => {
         if (requestVersionRef.current !== requestVersion) return;
@@ -174,7 +174,9 @@ export function ProjectFileBrowser({
         setCandidateStatus(
           parsedCode.success && parsedCode.data === 'FILE_NOT_FOUND' ? 'missing' : 'error',
         );
-        setCandidateMessage(fileBrowserError(cause, 'Forgeboard could not reveal this file.'));
+        setCandidateMessage(
+          fileBrowserError(cause, "Forgeboard couldn't show this file. Try again."),
+        );
       });
   }, [browser.status, revealRelativePath]);
 
@@ -187,7 +189,7 @@ export function ProjectFileBrowser({
       <header className="project-file-browser-header">
         <div>
           <strong>Project files</strong>
-          <span>Project-relative paths only</span>
+          <span>Only files inside this project</span>
         </div>
         <div className="project-file-browser-header-actions">
           {onCancel !== undefined ? (
@@ -203,12 +205,12 @@ export function ProjectFileBrowser({
 
       <label className="project-file-search">
         <Search size={13} aria-hidden="true" />
-        <span className="sr-only">Quick open project file</span>
+        <span className="sr-only">Find a project file</span>
         <input
           name="project-file-quick-open"
           value={query}
-          placeholder="Quick open by project-relative path…"
-          aria-label="Quick open project file"
+          placeholder="Type a file name or path…"
+          aria-label="Find a project file"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key !== 'Enter' || firstQuickOpenFile === undefined) return;
@@ -231,7 +233,7 @@ export function ProjectFileBrowser({
         }
       />
 
-      <nav className="project-file-breadcrumbs" aria-label="Project file directory">
+      <nav className="project-file-breadcrumbs" aria-label="Folder path">
         {breadcrumbs.map((breadcrumb, index) => (
           <span key={breadcrumb.directory}>
             {index > 0 ? <ChevronRight size={11} aria-hidden="true" /> : null}
@@ -256,11 +258,11 @@ export function ProjectFileBrowser({
 
       <div className="project-file-browser-summary" role="status">
         <span>
-          {query.trim() === '' ? `${matches.length} entries` : `${matches.length} matches`}
+          {query.trim() === '' ? `${matches.length} items` : `${matches.length} matches`}
           {matches.length > shownEntries.length ? ` · showing ${shownEntries.length}` : ''}
         </span>
-        {browser.status === 'loading' ? <span>Indexing safe entries…</span> : null}
-        {browser.bounded ? <span>Bounded results</span> : null}
+        {browser.status === 'loading' ? <span>Scanning project files…</span> : null}
+        {browser.bounded ? <span>Showing a partial list</span> : null}
       </div>
 
       {browser.status === 'error' ? (
@@ -268,12 +270,12 @@ export function ProjectFileBrowser({
           <ShieldAlert size={14} />
           <span>{browser.error}</span>
           <button type="button" onClick={refreshBrowser}>
-            Retry
+            Try again
           </button>
         </div>
       ) : null}
 
-      <div className="project-file-list" role="list" aria-label="Project file results">
+      <div className="project-file-list" role="list" aria-label="Project files">
         {shownEntries.map((entry) => {
           const blocked = !entry.canOpen || entry.policy.status !== 'normal';
           const selected = candidate?.relativePath === entry.relativePath;
@@ -304,7 +306,9 @@ export function ProjectFileBrowser({
         })}
         {shownEntries.length === 0 && browser.status !== 'error' ? (
           <p className="project-file-empty">
-            {browser.status === 'loading' ? 'Loading project files…' : 'No matching entries.'}
+            {browser.status === 'loading'
+              ? 'Loading project files…'
+              : 'No matching files or folders.'}
           </p>
         ) : null}
       </div>
@@ -342,24 +346,24 @@ function CandidateDetails({
   if (entry === null) return null;
   const contentLabel =
     document?.contentKind === 'binary'
-      ? 'Binary file'
+      ? 'Not a text file'
       : document?.contentKind === 'too-large'
-        ? 'Oversized file'
+        ? 'Too large to edit'
         : document?.contentKind === 'text'
-          ? 'UTF-8 text'
+          ? 'Text file'
           : null;
   return (
     <section className="project-file-candidate" aria-label="Selected file details">
       <code>{entry.relativePath}</code>
-      {status === 'loading' ? <p role="status">Inspecting file safely…</p> : null}
+      {status === 'loading' ? <p role="status">Checking file…</p> : null}
       {status === 'missing' ? (
         <p className="project-file-candidate-error" role="alert">
-          Missing · {message}
+          Not found · {message}
         </p>
       ) : null}
       {status === 'error' ? (
         <p className="project-file-candidate-error" role="alert">
-          Unavailable · {message}
+          Couldn't open · {message}
         </p>
       ) : null}
       {status === 'ready' && document !== null ? (
@@ -370,14 +374,14 @@ function CandidateDetails({
             <span>{formatBytes(document.sizeBytes)}</span>
           </div>
           {document.readOnlyReason !== null ? <p>{document.readOnlyReason}</p> : null}
-          {assignmentDisabled ? <p>Unlock this node to change its file reference.</p> : null}
+          {assignmentDisabled ? <p>Unlock this node to choose a different file.</p> : null}
           <button
             type="button"
             className="button primary"
             disabled={assignmentDisabled}
             onClick={() => onSelect({ projectId, relativePath: entry.relativePath, document })}
           >
-            {document.readOnly ? 'Use read-only reference' : 'Open in editor'}
+            {document.readOnly ? 'Use this file (read-only)' : 'Open in editor'}
           </button>
         </>
       ) : null}

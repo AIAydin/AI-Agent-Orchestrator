@@ -61,15 +61,19 @@ describe('SafeMarkdown', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Docs' }));
     expect(open).toHaveBeenCalledWith('https://example.com/guide');
     expect(screen.queryByRole('button', { name: 'Attack' })).toBeNull();
-    expect(screen.getByText('Attack').getAttribute('title')).toBe('Unsafe link blocked');
-    expect(screen.getByText('Credentials').getAttribute('title')).toBe('Unsafe link blocked');
+    expect(screen.getByText('Attack').getAttribute('title')).toBe(
+      'This link was blocked for safety',
+    );
+    expect(screen.getByText('Credentials').getAttribute('title')).toBe(
+      'This link was blocked for safety',
+    );
   });
 
   it('does not expose a dead link control when no approved opener is available', () => {
     render(<SafeMarkdown markdown="[Docs](https://example.com/guide)" />);
 
     expect(screen.queryByRole('button', { name: 'Docs' })).toBeNull();
-    expect(screen.getByText('Docs').getAttribute('title')).toContain('unavailable');
+    expect(screen.getByText('Docs').getAttribute('title')).toContain('not available here');
   });
 
   it('parses headings, quotes, ordered lists, rules, and unterminated fences deterministically', () => {
@@ -96,7 +100,7 @@ describe('SafeMarkdown', () => {
     const manyLines = Array.from({ length: 5_100 }, (_, index) => `line ${index}`).join('\n\n');
     render(<SafeMarkdown markdown={manyLines} />);
 
-    expect(screen.getByRole('status').textContent).toContain('complete Markdown source');
+    expect(screen.getByRole('status').textContent).toContain('full text');
     expect(screen.queryByText('line 5099')).toBeNull();
   });
 });

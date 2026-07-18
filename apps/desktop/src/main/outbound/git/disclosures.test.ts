@@ -28,7 +28,7 @@ describe('remote Git outbound disclosures', () => {
     });
     const disclosure = gitPushDisclosure(pushInput(destination));
     expect(disclosure.destination.resource).toBe('/tmp/private/local-fixture.git');
-    expect(disclosure.warning).toMatch(/receive hooks.*operating-system user/iu);
+    expect(disclosure.warning).toMatch(/own scripts.*computer account/iu);
     expect(disclosure.details).toContainEqual({
       label: 'Force',
       value: 'Disabled',
@@ -208,7 +208,7 @@ describe('remote Git outbound disclosures', () => {
       githubCli: customGitHubCli(),
     });
     expect(disclosure.details).toContainEqual({
-      label: 'Exact pull request body',
+      label: 'Pull request body',
       value: body,
     });
   });
@@ -282,11 +282,11 @@ describe('remote Git outbound disclosures', () => {
     });
     expect(custom.details).toEqual(
       expect.arrayContaining([
-        { label: 'GitHub CLI source', value: 'Custom selection' },
+        { label: 'How GitHub CLI was found', value: 'Selected in Settings' },
         { label: 'GitHub CLI file', value: 'gh-custom' },
-        { label: 'GitHub CLI SHA-256', value: 'd'.repeat(64) },
+        { label: 'GitHub CLI fingerprint (SHA-256)', value: 'd'.repeat(64) },
         {
-          label: 'Exact GitHub CLI path',
+          label: 'GitHub CLI location',
           value: customGitHubCli().executablePath,
         },
       ]),
@@ -311,17 +311,15 @@ describe('remote Git outbound disclosures', () => {
     expect(unverified.details).toEqual(
       expect.arrayContaining([
         { label: 'GitHub CLI file', value: 'gh-auto' },
-        { label: 'GitHub CLI SHA-256', value: 'e'.repeat(64) },
-        { label: 'Exact GitHub CLI path', value: automaticExecutable },
+        { label: 'GitHub CLI fingerprint (SHA-256)', value: 'e'.repeat(64) },
+        { label: 'GitHub CLI location', value: automaticExecutable },
         {
-          label: 'GitHub CLI validation',
-          value: 'Detected; version validation pending',
+          label: 'GitHub CLI check',
+          value: 'Found; version check pending',
         },
       ]),
     );
-    expect(unverified.warning).toMatch(
-      /not yet validated.*--version.*credential-free.*remain blocked/iu,
-    );
+    expect(unverified.warning).toMatch(/not been checked.*--version.*sign-in.*stay blocked/iu);
 
     const missing = gitHubStatusDisclosure({
       projectName: 'Fixture',
@@ -338,12 +336,12 @@ describe('remote Git outbound disclosures', () => {
       },
     });
     expect(missing.details).toContainEqual({
-      label: 'Exact GitHub CLI path',
-      value: 'No executable is currently resolved',
+      label: 'GitHub CLI location',
+      value: 'None found',
     });
     expect(missing.details).toContainEqual({
-      label: 'GitHub CLI validation',
-      value: 'Executable not found',
+      label: 'GitHub CLI check',
+      value: 'Program not found',
     });
     expect(missing.warning).toMatch(/did not find GitHub CLI.*cannot contact GitHub/iu);
   });

@@ -6,26 +6,30 @@ import type { PendingGitShippingPlan } from './git-shipping-service.js';
 /** Exact, cancel-default native disclosure for a main-owned Git delivery plan. */
 export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOptions {
   const strategy =
-    plan.strategy === 'fast-forward-only' ? 'Fast-forward-only merge' : 'Ordered cherry-pick';
+    plan.strategy === 'fast-forward-only'
+      ? 'Move the primary branch forward'
+      : 'Copy the reviewed changes one by one';
   const action =
-    plan.strategy === 'fast-forward-only' ? 'Fast-forward primary' : 'Cherry-pick commits';
+    plan.strategy === 'fast-forward-only'
+      ? 'Move primary branch forward'
+      : 'Copy changes one by one';
   const qualityApproval = plan.readiness.approvals.find(
     (approval) => approval.approvalId === plan.readinessApprovalId,
   );
   return {
     type: 'warning',
-    title: 'Deliver reviewed agent commits',
-    message: `${strategy} into ${displayLiteral(plan.targetBranch)}?`,
+    title: 'Deliver reviewed agent commits?',
+    message: `Deliver the reviewed agent commits to ${displayLiteral(plan.targetBranch)}?`,
     detail: [
       `Project: ${displayLiteral(plan.projectName)}`,
-      `Source: managed agent branch ${displayLiteral(plan.sourceBranch)} (run ${plan.target.kind === 'agent-worktree' ? plan.target.runId : 'invalid'})`,
+      `Source: agent branch ${displayLiteral(plan.sourceBranch)} (from run ${plan.target.kind === 'agent-worktree' ? plan.target.runId : 'invalid'})`,
       `Target: primary branch ${displayLiteral(plan.targetBranch)}`,
       `Strategy: ${strategy}`,
-      `Git identity: ${displayLiteral(plan.identity.name)} <${displayLiteral(plan.identity.email)}>`,
-      `Identity source: name from ${identitySource(plan.identity.nameSource)}; email from ${identitySource(plan.identity.emailSource)}`,
-      `Reviewed base: ${displayLiteral(plan.baseRef)} @ ${plan.baseCommit}`,
+      `Git author for this delivery: ${displayLiteral(plan.identity.name)} <${displayLiteral(plan.identity.email)}>`,
+      `Author source: name from ${identitySource(plan.identity.nameSource)}; email from ${identitySource(plan.identity.emailSource)}`,
+      `Base branch and commit: ${displayLiteral(plan.baseRef)} @ ${plan.baseCommit}`,
       `Commit range: ${plan.baseCommit}..${plan.sourceHead}`,
-      `Primary HEAD: ${plan.targetHead}`,
+      `Current primary commit: ${plan.targetHead}`,
       '',
       `Commits (${String(plan.commits.length)}, oldest first):`,
       ...plan.commits.map((commit) => `• ${commit}`),
@@ -33,17 +37,17 @@ export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOp
       `Affected files (${String(plan.affectedPaths.length)}):`,
       ...plan.affectedPaths.map((path) => `• ${displayLiteral(path)}`),
       '',
-      `Required deterministic checks (${String(plan.readiness.requiredChecks.length)}):`,
+      `Required checks (${String(plan.readiness.requiredChecks.length)}):`,
       ...plan.readiness.requiredChecks.map(
         (check) =>
           `• ${displayLiteral(check.label)}: passed${check.endedAt === null ? '' : ` at ${check.endedAt}`}`,
       ),
-      `Human quality approval: ${qualityApproval === undefined ? 'missing' : `${displayLiteral(qualityApproval.actorLabel)} at ${qualityApproval.approvedAt}`}`,
-      `Readiness evidence: ${plan.readiness.evidenceFingerprint}`,
+      `Human quality approval: ${qualityApproval === undefined ? 'not recorded yet' : `${displayLiteral(qualityApproval.actorLabel)} at ${qualityApproval.approvedAt}`}`,
+      `Check-results fingerprint (SHA-256): ${plan.readiness.evidenceFingerprint}`,
       '',
-      'Forgeboard will refuse delivery if readiness evidence, the owned source, primary branch, primary HEAD, or either working tree changed after review.',
-      'This exact bound identity is supplied to Git. Fast-forward creates no commit; cherry-pick uses it as the committer identity.',
-      'No force, reset, clean, push, or automatic conflict resolution will run.',
+      'Forgeboard will refuse to deliver if the check results, the agent branch, the primary branch, its latest commit, or any files changed after your review.',
+      'Git records this exact author with the delivery. Moving the branch forward creates no new commit; copying changes one by one records it as who made each new commit.',
+      'Nothing is forced, reset, deleted, or pushed, and conflicts are never resolved automatically.',
     ].join('\n'),
     buttons: ['Cancel', action],
     defaultId: 0,
@@ -53,7 +57,7 @@ export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOp
 }
 
 function identitySource(source: PendingGitShippingPlan['identity']['nameSource']): string {
-  if (source === 'settings') return 'Forgeboard Settings';
-  if (source === 'git-config') return 'the primary checkout Git configuration';
-  return 'an unavailable source';
+  if (source === 'settings') return 'Forgeboard settings';
+  if (source === 'git-config') return "the primary checkout's Git settings";
+  return 'an unknown source';
 }

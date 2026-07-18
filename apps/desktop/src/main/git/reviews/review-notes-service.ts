@@ -212,7 +212,9 @@ function assertReviewTarget(input: GitTargetInput, target: GitReviewTargetView):
     (input.kind === 'agent-worktree' &&
       (resolved.kind !== 'agent-worktree' || input.runId !== resolved.runId))
   ) {
-    throw new Error('The review feedback target does not match the authoritative Git review.');
+    throw new Error(
+      'The feedback target does not match the current review. Refresh and try again.',
+    );
   }
 }
 

@@ -230,7 +230,7 @@ export class RecoveryIpcService {
     try {
       const snapshot = this.#findSnapshot(projectId, snapshotId);
       const current = this.store.loadCanvas(projectId);
-      if (current === undefined) throw new Error('No current canvas exists for this project.');
+      if (current === undefined) throw new Error('This project does not have a canvas yet.');
       const currentHash = canvasContentHash(current);
       const id = randomUUID();
       const expiresAtMs = this.#now() + this.#planTtlMs;
@@ -273,13 +273,13 @@ export class RecoveryIpcService {
     return await this.#withMutation(async () => {
       const plan = this.#takePlan(event, planId, 'snapshot-restore');
       try {
-        const parent = this.#requireLiveWindow(event, 'restore a canvas snapshot');
+        const parent = this.#requireLiveWindow(event, 'restore a snapshot');
         const decision = await this.dialog.showMessageBox(
           parent,
           snapshotRestoreConfirmation(plan.view),
         );
         this.#assertAvailable();
-        this.#assertCurrentWindow(event, parent, 'restore a canvas snapshot');
+        this.#assertCurrentWindow(event, parent, 'restore a snapshot');
         if (decision.response !== 1) {
           this.store.appendAudit('recovery', 'snapshot-restore', 'denied', {
             projectId: plan.projectId,
@@ -328,14 +328,14 @@ export class RecoveryIpcService {
     mode: RecoveryImportMode,
   ): Promise<RecoveryImportPlan | null> {
     this.#trackOwner(event);
-    const parent = this.#requireLiveWindow(event, 'choose a local-data import');
+    const parent = this.#requireLiveWindow(event, 'choose an export file');
     const selection = await this.dialog.showOpenDialog(parent, {
-      title: 'Import Forgeboard local data',
+      title: 'Import local data',
       properties: ['openFile'],
-      filters: [{ name: 'Forgeboard JSON export', extensions: ['json'] }],
+      filters: [{ name: 'Forgeboard export file', extensions: ['json'] }],
     });
     this.#assertAvailable();
-    this.#assertCurrentWindow(event, parent, 'choose a local-data import');
+    this.#assertCurrentWindow(event, parent, 'choose an export file');
     const selectedPath = selection.filePaths[0];
     if (selection.canceled || selectedPath === undefined) {
       this.store.appendAudit('recovery', 'local-data-import', 'denied', {
@@ -347,7 +347,7 @@ export class RecoveryIpcService {
     try {
       const file = await readValidatedLocalDataImportFile(selectedPath);
       this.#assertAvailable();
-      this.#assertCurrentWindow(event, parent, 'choose a local-data import');
+      this.#assertCurrentWindow(event, parent, 'choose an export file');
       this.store.preflightImportData(file.document, { replaceExisting: mode === 'replace' });
       const id = randomUUID();
       const expiresAtMs = this.#now() + this.#planTtlMs;
@@ -466,10 +466,11 @@ export class RecoveryIpcService {
         if (mutationError !== undefined) {
           throw mutationError instanceof Error
             ? mutationError
-            : new Error('The local-data import failed.');
+            : new Error('The import failed. Try again.');
         }
-        if (imported === undefined)
-          throw new Error('The local-data import did not return a result.');
+        if (imported === undefined) {
+          throw new Error('The import finished without a result. Try again.');
+        }
         return imported;
       } catch (error) {
         this.#auditFailure('local-data-import', auditBase, error);
@@ -490,10 +491,10 @@ export class RecoveryIpcService {
       .listCanvasSnapshots(projectId, MAX_SNAPSHOT_LOOKUP)
       .find((candidate) => candidate.id === snapshotId);
     if (snapshot === undefined || snapshot.projectId !== projectId) {
-      throw new Error('The selected canvas snapshot is no longer available for this project.');
+      throw new Error('This snapshot is no longer available for this project.');
     }
     if (snapshot.contentHash !== canvasContentHash(snapshot.document)) {
-      throw new Error('The selected canvas snapshot failed content verification.');
+      throw new Error('This snapshot could not be verified, so it cannot be restored safely.');
     }
     return snapshot;
   }
@@ -520,7 +521,7 @@ export class RecoveryIpcService {
     this.#discardExpiredPlans();
     const plan = this.#plans.get(planId);
     if (plan === undefined || plan.kind !== kind || plan.ownerId !== event.sender.id) {
-      throw new Error('The recovery plan is missing, expired, or belongs to another window.');
+      throw new Error('This confirmation is no longer valid. Start the restore or import again.');
     }
     this.#plans.delete(planId);
     return plan as Extract<PendingPlan, { kind: Kind }>;
@@ -551,7 +552,7 @@ export class RecoveryIpcService {
     this.#assertLiveSender(event);
     const parent = this.#resolveWindow(event);
     if (parent === null || parent.isDestroyed()) {
-      throw new Error(`A live Forgeboard window is required to ${action}.`);
+      throw new Error(`Forgeboard needs an open window to ${action}.`);
     }
     return parent;
   }
@@ -560,7 +561,7 @@ export class RecoveryIpcService {
     this.#assertLiveSender(event);
     const current = this.#resolveWindow(event);
     if (expected.isDestroyed() || current !== expected) {
-      throw new Error(`The originating Forgeboard window changed before it could ${action}.`);
+      throw new Error(`The Forgeboard window changed before it could ${action}. Try again.`);
     }
   }
 
@@ -569,13 +570,17 @@ export class RecoveryIpcService {
   }
 
   #assertAvailable(): void {
-    if (this.#disposed) throw new Error('The recovery service has been disposed.');
+    if (this.#disposed) {
+      throw new Error('Forgeboard is closing, so this recovery action cannot run.');
+    }
   }
 
   async #withMutation<T>(operation: () => T | Promise<T>): Promise<T> {
     this.#assertAvailable();
     if (this.#mutationInProgress) {
-      throw new Error('Another recovery operation is already awaiting confirmation.');
+      throw new Error(
+        'Another recovery action is already waiting for approval. Finish or cancel it first.',
+      );
     }
     this.#mutationInProgress = true;
     const mutation = Promise.resolve().then(operation);
@@ -641,7 +646,11 @@ export class RecoveryIpcService {
   ): Promise<IpcResult<Output>> {
     try {
       this.#assertAvailable();
-      if (this.#paused) throw new Error('Recovery operations are paused for a local-data change.');
+      if (this.#paused) {
+        throw new Error(
+          'Recovery actions are paused while Forgeboard finishes another data change.',
+        );
+      }
       this.#assertLiveSender(event);
       const args = inputSchema.parse(rawArgs);
       const value = outputSchema.parse(await operation(event, ...args));
@@ -656,10 +665,10 @@ export class RecoveryIpcService {
         error: {
           code: validation ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
           message: validation
-            ? 'Forgeboard rejected an invalid recovery request.'
+            ? 'Forgeboard could not understand this recovery request.'
             : error instanceof Error
               ? error.message
-              : 'The recovery operation failed.',
+              : 'The recovery action failed. Try again.',
         },
       };
       ipcResultSchema(outputSchema).parse(result);
@@ -732,16 +741,22 @@ function exportCounts(document: LocalDataExport): RecoveryImportCounts {
 }
 
 function snapshotRestoreConfirmation(plan: RecoverySnapshotRestorePlan): MessageBoxOptions {
+  const savedReason: Record<RecoverySnapshotSummary['reason'], string> = {
+    autosave: 'Saved automatically',
+    manual: 'Saved by you',
+    restore: 'Saved before an earlier restore',
+    import: 'Saved before a data import',
+  };
   return {
     type: 'warning',
-    title: 'Restore canvas snapshot',
+    title: 'Restore snapshot',
     message: `Restore “${plan.snapshot.canvasName}” from ${new Date(plan.snapshot.createdAt).toLocaleString()}?`,
     detail: [
-      `Snapshot: ${plan.snapshot.nodeCount} nodes and ${plan.snapshot.edgeCount} connections`,
-      `Reason: ${plan.snapshot.reason}`,
+      `This snapshot has ${plan.snapshot.nodeCount} nodes and ${plan.snapshot.edgeCount} connections.`,
+      savedReason[plan.snapshot.reason],
       '',
-      'Forgeboard will preserve the current canvas as a recovery checkpoint before replacing it when its content differs from this snapshot.',
-      'Any canvas changes made after this approval was prepared will cancel the restore.',
+      'If your current canvas differs, Forgeboard saves it as another snapshot first.',
+      'If the canvas changed since this restore was prepared, Forgeboard cancels the restore instead.',
     ].join('\n'),
     buttons: ['Cancel', 'Restore snapshot'],
     defaultId: 0,
@@ -753,26 +768,29 @@ function snapshotRestoreConfirmation(plan: RecoverySnapshotRestorePlan): Message
 function importConfirmation(plan: RecoveryImportPlan): MessageBoxOptions {
   const replaceWarning =
     plan.mode === 'replace'
-      ? 'Replace mode will stop active agent runs, checks, and previews, then replace current Forgeboard projects, canvases, run history, snapshots, settings, and audit history. Device-local backup and trusted-extension records stay in place.'
-      : 'Merge mode preserves current local settings and data, ignores settings in the import, and rejects every conflicting project, canvas, snapshot, run, or check identity. It will cancel without stopping active runs, checks, or previews.';
+      ? 'Running agents, checks, and previews will stop. Your current projects, canvases, runs, checks, snapshots, settings, and activity history will be replaced. Backups and trusted extensions are kept.'
+      : 'Your current data and settings stay in place, and settings in the file are ignored. If anything conflicts, or an agent, check, or preview is running, the whole import is cancelled — nothing is half-imported.';
   return {
     type: 'warning',
-    title: 'Import Forgeboard local data',
-    message: `${plan.mode === 'replace' ? 'Replace local data from' : 'Merge local data from'} ${plan.fileName}?`,
+    title: 'Import local data',
+    message: `${plan.mode === 'replace' ? 'Replace all current data with' : 'Add to current data with'} ${plan.fileName}?`,
     detail: [
       replaceWarning,
       '',
       `Projects: ${plan.counts.projects}`,
       `Canvases: ${plan.counts.canvases}`,
       `Agent runs: ${plan.counts.runs}`,
-      `Check executions: ${plan.counts.checkExecutions}`,
+      `Check runs: ${plan.counts.checkExecutions}`,
       `Snapshots: ${plan.counts.snapshots}`,
-      `Audit events: ${plan.counts.auditEvents}`,
-      `Settings in file: ${plan.includesSettings ? (plan.mode === 'merge' ? 'yes (current settings will be kept)' : 'yes') : 'no'}`,
+      `Activity records: ${plan.counts.auditEvents}`,
+      `Settings in file: ${plan.includesSettings ? (plan.mode === 'merge' ? 'included, but yours stay unchanged' : 'included') : 'not included'}`,
       '',
-      'Forgeboard will re-read and verify the exact selected file before making any change.',
+      'Forgeboard checks the exact file again right before anything changes.',
     ].join('\n'),
-    buttons: ['Cancel', plan.mode === 'replace' ? 'Replace local data' : 'Merge local data'],
+    buttons: [
+      'Cancel',
+      plan.mode === 'replace' ? 'Replace all current data' : 'Add to current data',
+    ],
     defaultId: 0,
     cancelId: 0,
     noLink: true,

@@ -82,7 +82,7 @@ describe('mergeCollaborationCanvasSnapshot', () => {
       kind: 'file',
       readOnly: true,
     });
-    expect(file?.data['recoverableWarning']).toMatch(/metadata only/u);
+    expect(file?.data['recoverableWarning']).toMatch(/details only/u);
     expect(file?.data).not.toHaveProperty('file');
     expect(JSON.stringify(file)).not.toContain('/Users/');
 
@@ -184,7 +184,7 @@ describe('mergeCollaborationCanvasSnapshot', () => {
     });
     expect(mergeCollaborationCanvasSnapshot(document(), foreign, { initial: true })).toEqual({
       ok: false,
-      message: 'The collaboration room snapshot belongs to a different canvas.',
+      message: 'These shared changes belong to a different canvas.',
     });
   });
 

@@ -160,7 +160,9 @@ export function PreviewNodePanel({
       })
       .catch((cause: unknown) => {
         if (!active) return;
-        setTargetFailure(errorMessage(cause, 'Could not list preview targets.'));
+        setTargetFailure(
+          errorMessage(cause, 'Could not load the list of places to run the preview.'),
+        );
       });
     return () => {
       active = false;
@@ -262,7 +264,8 @@ export function PreviewNodePanel({
 
       {targetFailure ? (
         <p className="preview-failure" role="alert">
-          {targetFailure} The primary checkout remains available; retry by reopening this node.
+          {targetFailure} Your main project folder (Primary checkout) is still available. Close and
+          reopen this node to try again.
         </p>
       ) : null}
 
@@ -296,16 +299,16 @@ export function PreviewNodePanel({
           type="button"
           disabled={readOnly || !ready || !operations}
           onClick={() => setSurfaceOpen(true)}
-          aria-label="Open preview surface"
+          aria-label="Open preview"
         >
-          <Maximize2 size={12} /> Open surface
+          <Maximize2 size={12} /> Open preview
         </button>
       </div>
 
       {!operations ? (
         <p className="preview-command-guidance" role="status">
-          Secure preview surfaces are unavailable in this build. The local server can still run;
-          install the current desktop release to inspect it inside Forgeboard.
+          This build cannot show the preview inside Forgeboard. The local server still runs; install
+          the latest Forgeboard desktop release to view it here.
         </p>
       ) : null}
       {session?.failure ? <p className="preview-failure">{session.failure}</p> : null}
@@ -313,14 +316,14 @@ export function PreviewNodePanel({
         <dl className="preview-process-details">
           <div>
             <dt>Port</dt>
-            <dd>{process.port ?? 'allocating'}</dd>
+            <dd>{process.port ?? 'automatic'}</dd>
           </div>
           <div>
-            <dt>PID</dt>
+            <dt>Process ID</dt>
             <dd>{process.pid ?? 'starting'}</dd>
           </div>
           <div>
-            <dt>Readiness</dt>
+            <dt>Status</dt>
             <dd>{process.status}</dd>
           </div>
         </dl>
@@ -330,8 +333,8 @@ export function PreviewNodePanel({
       <div className="preview-security-note">
         <ShieldCheck size={13} />
         <span>
-          The server binds to an allocated loopback port. Preview surfaces have no Node bridge,
-          popups, downloads, or unapproved external navigation.
+          The server only listens on this computer, on an automatically chosen port. The preview
+          blocks popups, downloads, and unapproved websites.
         </span>
       </div>
 

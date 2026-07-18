@@ -33,7 +33,7 @@ export function TrustCenter({
         setReport(await runIntegrityCheck({ mode }));
       } catch {
         setReport(null);
-        setError('Integrity verification could not be completed. Retry or restart Forgeboard.');
+        setError('The check could not finish. Try again, or restart Forgeboard.');
       } finally {
         setCheckingMode(null);
       }
@@ -48,21 +48,21 @@ export function TrustCenter({
   return (
     <SettingsSection
       title="Trust Center"
-      description="Verify the local database and the integrity evidence Forgeboard maintains around it."
+      description="Check that Forgeboard’s records on this device are complete and unchanged."
     >
-      <div className="trust-check-modes" aria-label="Integrity verification modes">
+      <div className="trust-check-modes" aria-label="Integrity check options">
         <div>
-          <strong>Quick verification</strong>
+          <strong>Quick check</strong>
           <small>
-            Runs automatically here. It checks SQLite structure plus Forgeboard schema, stored
-            records, relationships, and integrity ledgers.
+            Runs automatically on this page. Checks the local database and confirms your saved
+            records and history are intact.
           </small>
         </div>
         <div>
-          <strong>Full verification</strong>
+          <strong>Full check</strong>
           <small>
-            Runs SQLite&apos;s deeper page and index verification, then performs the same Forgeboard
-            logical checks. It can take longer on a large history.
+            Checks every page of the database in depth, then runs the same checks as the quick
+            check. It can take longer if you have a large history.
           </small>
         </div>
       </div>
@@ -94,13 +94,13 @@ export function TrustCenter({
 
         {error !== null && <p role="alert">{error}</p>}
         {report !== null && checkingMode === null && !report.ok && (
-          <ul aria-label="Sanitized integrity findings">
+          <ul aria-label="What the check found">
             {report.messages.map((message) => (
               <li key={message}>{message}</li>
             ))}
           </ul>
         )}
-        {report?.ok === true && checkingMode === null && <p>No integrity problems were found.</p>}
+        {report?.ok === true && checkingMode === null && <p>No problems were found.</p>}
 
         <div className="button-row">
           <button
@@ -118,22 +118,21 @@ export function TrustCenter({
             disabled={checkingMode !== null}
             onClick={() => void runCheck('full')}
           >
-            <ShieldCheck size={14} /> Full verification
+            <ShieldCheck size={14} /> Run full check
           </button>
         </div>
       </div>
 
       <div className="trust-audit-explanation">
-        <strong>Tamper-evident audit history</strong>
+        <strong>Activity history that reveals tampering</strong>
         <p>
-          During ordinary operation, audit events are append-only and hash-linked to the event
-          before them. Editing, removing, or reordering retained events breaks verification.
+          As you use Forgeboard, activity entries are only ever added, and each one is linked to the
+          one before it. If someone edits, deletes, or reorders saved entries, the check will fail.
         </p>
         <p>
-          Retention is checkpointed: before an expired audit prefix is removed, Forgeboard writes a
-          hash-linked checkpoint that preserves the verified boundary into the retained history.
-          Tamper-evident means unexpected changes can be detected; it does not prevent someone with
-          disk access from attempting them.
+          When old entries expire, Forgeboard first saves a linked summary so the remaining history
+          can still be verified. This means unexpected changes can be detected — it cannot stop
+          someone with access to your files from trying.
         </p>
       </div>
     </SettingsSection>
@@ -146,11 +145,11 @@ function statusLabel(
   error: string | null,
 ): string {
   if (checkingMode !== null) {
-    return checkingMode === 'quick' ? 'Running quick verification…' : 'Running full verification…';
+    return checkingMode === 'quick' ? 'Running quick check…' : 'Running full check…';
   }
-  if (error !== null) return 'Verification unavailable';
-  if (report === null) return 'Starting quick verification…';
-  return report.ok ? 'Local integrity verified' : 'Local integrity needs attention';
+  if (error !== null) return 'Check unavailable';
+  if (report === null) return 'Starting quick check…';
+  return report.ok ? 'Local data verified' : 'Local data needs attention';
 }
 
 function statusDetail(
@@ -158,12 +157,12 @@ function statusDetail(
   checkingMode: IntegrityCheckMode | null,
 ): React.ReactNode {
   if (checkingMode !== null) {
-    return checkingMode === 'quick' ? 'Quick mode is in progress.' : 'Full mode is in progress.';
+    return checkingMode === 'quick' ? 'The quick check is running.' : 'The full check is running.';
   }
-  if (report === null) return 'No completed verification is available yet.';
+  if (report === null) return 'No check has finished yet.';
   return (
     <>
-      {report.mode === 'quick' ? 'Quick verification' : 'Full verification'} checked{' '}
+      {report.mode === 'quick' ? 'Quick check' : 'Full check'} finished{' '}
       <time dateTime={report.checkedAt}>{formatCheckedAt(report.checkedAt)}</time>.
     </>
   );

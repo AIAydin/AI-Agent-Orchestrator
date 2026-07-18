@@ -118,7 +118,7 @@ describe('AgentsSettings readiness', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Refresh OpenAI Codex CLI readiness',
+        name: 'Check OpenAI Codex CLI again',
       }),
     );
     await screen.findByText('Selected executable is ready');
@@ -155,7 +155,7 @@ describe('AgentsSettings readiness', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Refresh OpenAI Codex CLI readiness',
+        name: 'Check OpenAI Codex CLI again',
       }),
     );
 

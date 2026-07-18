@@ -113,7 +113,9 @@ async function ensureNodePtySpawnHelper(): Promise<void> {
       if (!isMissing(error)) throw error;
     }
   }
-  throw new Error('The node-pty spawn helper is missing from this Forgeboard installation.');
+  throw new Error(
+    'Forgeboard cannot start terminals because a required component is missing. Reinstall Forgeboard.',
+  );
 }
 
 function isMissing(error: unknown): boolean {

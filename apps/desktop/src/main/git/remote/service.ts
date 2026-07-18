@@ -491,7 +491,7 @@ export class GitRemoteDeliveryService {
       );
       if (cached.snapshot.headOid !== source.sourceHead) {
         throw new Error(
-          'Push the exact reviewed source to this remote branch, then check GitHub again.',
+          'Push the reviewed commits to this remote branch, then check GitHub again.',
         );
       }
       const readiness = await this.readinessAuthority.bind(readinessTarget(source.target));
@@ -647,7 +647,7 @@ export class GitRemoteDeliveryService {
         githubRuntime.identityFingerprint,
       );
       if (cached.snapshot.headOid !== source.sourceHead) {
-        throw new Error('CI status is unavailable until the exact reviewed source is pushed.');
+        throw new Error('CI status is unavailable until the reviewed commits are pushed.');
       }
       const enginePlan = await this.#operations.planCiStatus(
         githubRuntime.runner,
@@ -806,7 +806,7 @@ export class GitRemoteDeliveryService {
         sourceHead,
       ))
     ) {
-      throw new Error('The managed branch no longer descends from its recorded base.');
+      throw new Error('The agent branch no longer includes its recorded base commit.');
     }
     const [comparison, divergenceBaseCommit, remoteRecords, readiness] = await Promise.all([
       this.#changes.compareRefs(
@@ -932,13 +932,13 @@ export class GitRemoteDeliveryService {
       const hook = await lstat(path.join(resolved.commonDirectory, 'hooks', 'pre-push'));
       if (hook.isSymbolicLink() || (hook.mode & 0o111) !== 0) {
         throw new Error(
-          'Disable the source repository pre-push hook before exact remote delivery.',
+          'This repository has a pre-push hook (a script that runs before pushing). Disable it, then prepare the push again.',
         );
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         if (error instanceof Error && /pre-push hook/iu.test(error.message)) throw error;
-        throw new Error('Forgeboard could not verify the source repository pre-push hook state.');
+        throw new Error("Forgeboard could not check the repository's pre-push hook state.");
       }
     }
     const configured = await this.repositories.git.run(
@@ -946,7 +946,7 @@ export class GitRemoteDeliveryService {
       { allowNonZeroExit: true, maxOutputBytes: 16 * 1_024 },
     );
     if (configured.exitCode !== 0 && configured.exitCode !== 1) {
-      throw new Error('Forgeboard could not verify the source repository hooks path.');
+      throw new Error('Forgeboard could not check where this repository stores hook scripts.');
     }
     const nonNeutralPaths = configured.stdout
       .split(/\r?\n/u)
@@ -954,7 +954,7 @@ export class GitRemoteDeliveryService {
       .filter((value) => value !== '' && value !== '/dev/null');
     if (nonNeutralPaths.length > 0) {
       throw new Error(
-        'Configured source hook paths are unsupported for exact remote delivery. Disable them first.',
+        'This repository points hook scripts to a custom folder, which Forgeboard push does not support. Disable that setting first.',
       );
     }
   }
@@ -1231,7 +1231,9 @@ export class GitRemoteDeliveryService {
           .replace(/\.git$/iu, '')
           .toLowerCase()
     ) {
-      throw new Error('GitHub returned status outside the exact selected remote identity.');
+      throw new Error(
+        'GitHub reported a state that does not match the selected remote. Check GitHub again.',
+      );
     }
     if (this.#githubStates.size >= MAX_CACHED_GITHUB_STATES) {
       const oldest = this.#githubStates.keys().next().value;
@@ -1356,11 +1358,13 @@ function readinessTarget(target: GitRemoteDeliveryTargetInput): GitDeliveryReadi
 async function assertNoLegacyGrafts(commonDirectory: string): Promise<void> {
   try {
     await lstat(path.join(commonDirectory, 'info', 'grafts'));
-    throw new Error('Remove the repository legacy graft configuration before remote delivery.');
+    throw new Error(
+      'This repository has a legacy grafts file that rewrites history. Remove it before pushing.',
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
     if (error instanceof Error && /legacy graft configuration/u.test(error.message)) throw error;
-    throw new Error('Forgeboard could not verify that repository legacy grafts are disabled.');
+    throw new Error("Forgeboard could not confirm the repository's legacy grafts file is removed.");
   }
 }
 
@@ -1380,7 +1384,7 @@ function assertReadinessSource(binding: GitShippingReadinessBinding, source: Sou
     view.sourceFingerprint.sourceHead !== source.sourceHead ||
     approval === undefined
   ) {
-    throw new Error('Exact passing delivery checks and current human approval are required.');
+    throw new Error('All required checks must pass and quality must be approved before pushing.');
   }
 }
 
@@ -1458,7 +1462,7 @@ function assertActionableChanges(
     pathCharacters > GIT_REMOTE_MAX_PATH_CHARACTERS ||
     new Set(commits).size !== commits.length
   ) {
-    throw new Error('The exact remote-delivery impact is too large or invalid to approve.');
+    throw new Error('This push is too large or invalid for Forgeboard to approve safely.');
   }
 }
 

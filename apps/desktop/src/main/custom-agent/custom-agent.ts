@@ -5,7 +5,7 @@ import type { CustomAgentConfiguration } from '../../shared/application/contract
 /** Build the data-only adapter manifest owned by the Settings UI. */
 export function customAgentManifest(configuration: CustomAgentConfiguration): AgentAdapterManifest {
   if (!configuration.enabled || configuration.executable.trim() === '') {
-    throw new Error('Configure and enable the custom CLI in Settings before using it.');
+    throw new Error('Configure and enable the custom agent in Settings before using it.');
   }
   const launchArguments = [
     ...configuration.launchArguments,

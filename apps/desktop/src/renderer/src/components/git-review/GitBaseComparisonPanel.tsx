@@ -44,41 +44,45 @@ export function GitBaseComparisonPanel({
       aria-labelledby={GIT_BASE_TAB_ID}
     >
       <header className="git-base-comparison-summary">
-        <ComparisonStat label="Immutable base" value={comparison.baseCommit} code />
-        <ComparisonStat label="Owned worktree HEAD" value={comparison.headCommit} code />
+        <ComparisonStat label="Starting point" value={comparison.baseCommit} code />
+        <ComparisonStat label="Agent's latest commit" value={comparison.headCommit} code />
         <ComparisonStat
-          label="Commit distance"
-          value={`${comparison.ahead} ahead · ${comparison.behind} behind`}
+          label="Compared to starting point"
+          value={commitDistance(comparison.ahead, comparison.behind)}
         />
         <ComparisonStat
-          label="Committed diff"
-          value={`${files.length} files · +${comparison.diff.additions} −${comparison.diff.deletions}`}
+          label="Committed changes"
+          value={`${files.length} ${files.length === 1 ? 'file' : 'files'} · +${comparison.diff.additions} −${comparison.diff.deletions}`}
         />
       </header>
       <details className="git-base-commit-list">
         <summary>
-          <GitCommitHorizontal size={13} aria-hidden="true" /> {comparison.commitCount} comparison
-          commit{comparison.commitCount === 1 ? '' : 's'}
-          {comparison.commitIdsTruncated ? ' · identifiers truncated' : ''}
+          <GitCommitHorizontal size={13} aria-hidden="true" /> {comparison.commitCount} commit
+          {comparison.commitCount === 1 ? '' : 's'} compared
+          {comparison.commitIdsTruncated ? ' · not all shown' : ''}
         </summary>
         <dl className="git-base-binding-list">
-          <dt>Immutable base</dt>
+          <dt>Starting point</dt>
           <dd>
             <code>{comparison.baseCommit}</code>
           </dd>
-          <dt>Owned HEAD</dt>
+          <dt>Agent's latest commit</dt>
           <dd>
             <code>{comparison.headCommit}</code>
           </dd>
         </dl>
         {comparison.commits.length === 0 ? (
-          <p>Base and worktree HEAD contain no commits unique to either side.</p>
+          <p>Both sides contain the same commits.</p>
         ) : (
           <ol>
             {comparison.commits.map((commit) => (
               <li key={`${commit.relation}:${commit.oid}`}>
                 <code>{commit.oid}</code>
-                <span>{commit.relation === 'ahead' ? 'Worktree-only' : 'Base-only'}</span>
+                <span>
+                  {commit.relation === 'ahead'
+                    ? 'Only in agent workspace'
+                    : 'Only at starting point'}
+                </span>
               </li>
             ))}
           </ol>
@@ -87,15 +91,15 @@ export function GitBaseComparisonPanel({
       {files.length === 0 ? (
         <div className="git-base-comparison-empty" role="status">
           <CheckCircle2 size={28} aria-hidden="true" />
-          <strong>No committed changes vs base</strong>
+          <strong>No committed changes to compare</strong>
           <p>
-            The owned worktree HEAD has no file difference from its persisted immutable base. Staged
-            or unstaged edits remain available in the other view.
+            The agent's latest commit matches its starting point. Anything not committed yet is in
+            the other tab.
           </p>
         </div>
       ) : (
         <div className="git-review-workspace git-base-comparison-workspace">
-          <nav className="git-file-sidebar" aria-label="Files changed vs base">
+          <nav className="git-file-sidebar" aria-label="Files changed since the starting point">
             <section className="git-file-group" aria-labelledby="git-base-files-heading">
               <header>
                 <h3 id="git-base-files-heading">Committed changes</h3>
@@ -190,6 +194,10 @@ function comparisonFiles(comparison: GitAgentBaseComparisonView): GitDiffDisplay
       return path === null ? [] : [{ area: 'base' as const, path, diff }];
     })
     .sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function commitDistance(ahead: number, behind: number): string {
+  return `${ahead} ${ahead === 1 ? 'commit' : 'commits'} ahead · ${behind} ${behind === 1 ? 'commit' : 'commits'} behind`;
 }
 
 function comparisonStatus(file: GitDiffDisplayFile): string {

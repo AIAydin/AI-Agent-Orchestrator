@@ -12,7 +12,7 @@ describe('LocalComments', () => {
     const onCreate = vi.fn(() => true);
     render(<LocalComments comments={[]} onCreate={onCreate} />);
 
-    expect(screen.getByText(/Joining or leaving a shared room never publishes/u)).toBeTruthy();
+    expect(screen.getByText(/Joining or leaving a shared room never shares/u)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Add a private comment'), {
       target: { value: 'Private implementation note' },
     });

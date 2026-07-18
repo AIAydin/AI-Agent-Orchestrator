@@ -28,12 +28,12 @@ interface ExtensionSettingsProps {
 }
 
 const PERMISSION_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  'agent.adapter.register': 'Register the declared CLI adapter with Forgeboard.',
-  'agent.process.launch': 'Make the adapter available to the normal approved launch flow.',
-  'agent.context.selected-read': 'Pass only context that you explicitly select for an agent run.',
-  'agent.provider.network': 'The declared provider may send approved context off this device.',
-  'canvas.node.register': 'Add the declared data-only node types to the local registry.',
-  'canvas.data.persist': 'Store values entered in the extension’s declared canvas fields.',
+  'agent.adapter.register': 'Connect an agent tool to Forgeboard.',
+  'agent.process.launch': 'Let you start this agent through the normal review-and-approve flow.',
+  'agent.context.selected-read': 'Send only the information you choose to an agent run.',
+  'agent.provider.network': 'The provider may send the approved information off this device.',
+  'canvas.node.register': 'Add new node types to the canvas. They store data only.',
+  'canvas.data.persist': 'Save what you type into the extension’s canvas fields on this device.',
 };
 
 export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps) {
@@ -72,7 +72,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
     try {
       await operation();
     } catch (cause) {
-      const message = errorMessage(cause, 'The extension operation failed.');
+      const message = errorMessage(cause, 'The extension action failed. Try again.');
       setError(message);
       onError(message);
     } finally {
@@ -134,8 +134,8 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
         <header>
           <h3>Local extensions</h3>
           <p>
-            Install declarative adapter and canvas packages with native file pickers. No source,
-            environment variable, or config-file editing is required.
+            Add extensions that connect agents or add items to the canvas. You install everything by
+            picking a folder or file — no code, environment variables, or config files to edit.
           </p>
         </header>
         <div className="settings-fields">
@@ -154,7 +154,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
               disabled={busy}
               onClick={() => void choose('manifest')}
             >
-              <FileJson size={15} /> Choose manifest
+              <FileJson size={15} /> Choose extension file
             </button>
             <button
               className="button ghost"
@@ -169,8 +169,8 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
             <ShieldCheck size={17} />
             <span>
               <strong>Data-only by design</strong>
-              Extension JavaScript, HTML, CSS, and Electron modules never run in the renderer. Every
-              install or update requires a fresh digest-bound review.
+              Extension code never runs inside Forgeboard. You review and approve every install or
+              update before anything changes.
             </span>
           </div>
           {error && (
@@ -184,19 +184,19 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
             </div>
           )}
           {discovery === null && !error ? (
-            <div className="extension-empty">Loading the local extension registry…</div>
+            <div className="extension-empty">Loading extensions…</div>
           ) : (
             discovery && (
               <>
                 <div className="extension-registry-path">
-                  <span>Managed registry</span>
+                  <span>Where extensions are stored</span>
                   <code>{discovery.registryPath}</code>
                 </div>
                 {discovery.installed.length === 0 ? (
                   <div className="extension-empty">
                     <PackagePlus size={21} />
-                    <strong>No trusted extensions active</strong>
-                    <span>Choose a downloaded extension folder to review it.</span>
+                    <strong>No extensions installed yet</strong>
+                    <span>Choose an extension folder you downloaded to review and install it.</span>
                   </div>
                 ) : (
                   <div className="extension-list">
@@ -221,19 +221,19 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                           <ExtensionContributionSummary extension={extension} />
                           <dl className="extension-record-grid">
                             <div>
-                              <dt>Manifest digest</dt>
+                              <dt>Manifest fingerprint</dt>
                               <dd>
                                 <code>{extension.record.manifestDigest}</code>
                               </dd>
                             </div>
                             <div>
-                              <dt>Complete snapshot digest</dt>
+                              <dt>Full package fingerprint</dt>
                               <dd>
                                 <code>{extension.record.snapshotDigest}</code>
                               </dd>
                             </div>
                             <div>
-                              <dt>Source selected during install</dt>
+                              <dt>Folder chosen at install</dt>
                               <dd>
                                 <code>{extension.record.sourcePath}</code>
                               </dd>
@@ -267,7 +267,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                               disabled={busy}
                               onClick={() => void choose('folder')}
                             >
-                              <Upload size={14} /> Select update
+                              <Upload size={14} /> Update from folder
                             </button>
                             <button
                               className="button ghost extension-remove-trigger"
@@ -292,9 +292,9 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                       <AlertTriangle size={15} /> Quarantined extensions
                     </h4>
                     <p>
-                      These snapshots or ledger entries are not active. Their adapters and canvas
-                      contributions are unavailable until a fresh install or update reaches an exact
-                      trusted match.
+                      These extensions were set aside because they no longer match what you
+                      approved. Their agent tools and canvas items stay turned off until you install
+                      or update them again.
                     </p>
                     {discovery.quarantined.map((entry) => (
                       <div key={`${entry.extensionId}:${entry.ledgerState}`}>
@@ -310,11 +310,11 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 {discovery.invalid.length > 0 && (
                   <section className="extension-invalid-list">
                     <h4>
-                      <AlertTriangle size={15} /> Invalid registry entries
+                      <AlertTriangle size={15} /> Entries that could not be loaded
                     </h4>
                     <p>
-                      These entries are quarantined and were not loaded. Inspect the reason below;
-                      Forgeboard continues safely without them.
+                      Forgeboard skipped these and keeps running safely without them. The reason is
+                      shown below each entry.
                     </p>
                     {discovery.invalid.map((entry) => (
                       <div key={entry.entryName}>
@@ -348,10 +348,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                     ? 'Review extension install'
                     : 'Review extension update'}
                 </h2>
-                <p>
-                  This approval applies only to the exact version, digest, and permissions shown
-                  below.
-                </p>
+                <p>This approval applies only to the exact version and permissions shown below.</p>
               </div>
               <button
                 className="icon-button"
@@ -382,19 +379,19 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
               )}
               <dl className="extension-plan-facts">
                 <div>
-                  <dt>SHA-256 manifest digest</dt>
+                  <dt>Manifest fingerprint (SHA-256)</dt>
                   <dd>
                     <code>{plan.manifestDigest}</code>
                   </dd>
                 </div>
                 <div>
-                  <dt>SHA-256 complete snapshot digest</dt>
+                  <dt>Full package fingerprint (SHA-256)</dt>
                   <dd>
                     <code>{plan.snapshotDigest}</code>
                   </dd>
                 </div>
                 <div>
-                  <dt>Selected package</dt>
+                  <dt>Selected folder or file</dt>
                   <dd>
                     <code>{plan.sourcePath}</code>
                   </dd>
@@ -419,16 +416,16 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 </div>
               </section>
               <section className="extension-review-section">
-                <h3>Contributions</h3>
+                <h3>What this extension adds</h3>
                 <PlanContributionSummary plan={plan} />
                 <details>
-                  <summary>Show exact contribution manifest</summary>
+                  <summary>Show full technical details</summary>
                   <pre>{plan.manifestJson}</pre>
                 </details>
               </section>
               {plan.documentationText !== undefined && (
                 <section className="extension-review-section">
-                  <h3>Package documentation</h3>
+                  <h3>Extension documentation</h3>
                   <pre className="extension-documentation">{plan.documentationText}</pre>
                 </section>
               )}
@@ -440,10 +437,10 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                   onChange={(event) => setReviewed(event.target.checked)}
                 />
                 <span>
-                  <strong>I reviewed this exact manifest and permission set</strong>
+                  <strong>I reviewed these exact details and permissions</strong>
                   <small>
-                    This only requests the trusted system confirmation. Repository text, package
-                    documentation, and this checkbox cannot grant approval.
+                    This checkbox alone does not install anything — your system confirmation is
+                    still required. Text inside the package cannot grant approval by itself.
                   </small>
                 </span>
               </label>
@@ -467,9 +464,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 onClick={() => void approve()}
               >
                 <ShieldCheck size={15} />
-                {plan.operation === 'install'
-                  ? 'Continue to system confirmation'
-                  : 'Confirm update with system dialog'}
+                {plan.operation === 'install' ? 'Continue to confirmation' : 'Confirm update'}
               </button>
             </footer>
           </section>
@@ -491,8 +486,8 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
               <div>
                 <h2 id="extension-remove-title">Remove {removeTarget.manifest.name}?</h2>
                 <p>
-                  This removes its local registry snapshot. It does not delete the downloaded source
-                  folder.
+                  This removes the extension from Forgeboard. The folder you originally downloaded
+                  stays on this device.
                 </p>
               </div>
             </header>
@@ -539,8 +534,8 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
 function ExtensionContributionSummary({ extension }: { extension: InstalledExtensionView }) {
   return (
     <div className="extension-contribution-chips">
-      <span>{extension.manifest.contributes.agentAdapters.length} agent adapters</span>
-      <span>{extension.manifest.contributes.canvasNodeTypes.length} canvas node types</span>
+      <span>{extension.manifest.contributes.agentAdapters.length} agent tools</span>
+      <span>{extension.manifest.contributes.canvasNodeTypes.length} canvas items</span>
       <span>{extension.record.grantedPermissions.length} permissions</span>
     </div>
   );
@@ -551,9 +546,9 @@ function PlanContributionSummary({ plan }: { plan: ExtensionInstallPlanView }) {
     <div className="extension-contribution-list">
       {plan.manifest.contributes.agentAdapters.map((adapter) => (
         <div key={adapter.id}>
-          <strong>Agent adapter · {adapter.name}</strong>
+          <strong>Agent tool · {adapter.name}</strong>
           <span>
-            <code>{adapter.id}</code> · provider {adapter.providerName} · executable{' '}
+            <code>{adapter.id}</code> · provider {adapter.providerName} · program{' '}
             <code>{adapter.executable}</code>
           </span>
           <small>{adapter.providerDisclosure}</small>
@@ -561,10 +556,10 @@ function PlanContributionSummary({ plan }: { plan: ExtensionInstallPlanView }) {
       ))}
       {plan.manifest.contributes.canvasNodeTypes.map((nodeType) => (
         <div key={nodeType.id}>
-          <strong>Canvas node · {nodeType.displayName}</strong>
+          <strong>Canvas item · {nodeType.displayName}</strong>
           <span>
             <code>{nodeType.id}</code> · {nodeType.category} · {nodeType.fields.length} fields ·{' '}
-            {nodeType.ports.length} ports
+            {nodeType.ports.length} connection points
           </span>
           <small>{nodeType.description}</small>
         </div>

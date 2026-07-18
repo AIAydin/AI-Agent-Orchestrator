@@ -122,8 +122,8 @@ export function expectExactTerminalNativeConfirmation(
 
   const detail = record.detail ?? '';
   expect(detail).toContain(`Project: ${expected.projectName}`);
-  expect(detail).toContain(`Executable: ${JSON.stringify(expected.executable)}`);
-  expect(detail).toContain(`Working directory: ${JSON.stringify(expected.cwd)}`);
+  expect(detail).toContain(`Program: ${JSON.stringify(expected.executable)}`);
+  expect(detail).toContain(`Folder to run in: ${JSON.stringify(expected.cwd)}`);
   expect(detail).toContain(
     `Environment variable names: ${expected.environmentVariableNames
       .map((name) => JSON.stringify(name))
@@ -133,6 +133,6 @@ export function expectExactTerminalNativeConfirmation(
   expected.arguments.forEach((argument, index) => {
     expect(detail).toContain(`${String(index + 1)}. ${JSON.stringify(argument)}`);
   });
-  expect(detail).toContain('local operating-system user (not sandboxed)');
-  expect(detail).toContain('single-use and expires at');
+  expect(detail).toContain('your user account on this computer (not sandboxed)');
+  expect(detail).toContain('You can use this approval only once, and it expires at');
 }

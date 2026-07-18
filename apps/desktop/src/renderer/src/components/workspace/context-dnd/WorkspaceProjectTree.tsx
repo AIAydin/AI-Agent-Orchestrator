@@ -57,30 +57,30 @@ export function WorkspaceProjectTree({
       <header>
         <div>
           <strong>Project files</strong>
-          <span>Drag or select safe files for Agent context</span>
+          <span>Drag or select files to share with an agent</span>
         </div>
-        <button type="button" aria-label="Refresh project file tree" onClick={browser.refresh}>
+        <button type="button" aria-label="Refresh project files" onClick={browser.refresh}>
           <RefreshCw size={13} aria-hidden="true" />
         </button>
       </header>
       <label className="workspace-project-tree-search">
         <Search size={12} aria-hidden="true" />
-        <span className="sr-only">Search project file tree</span>
+        <span className="sr-only">Search project files</span>
         <input
           name="workspace-project-file-search"
           value={query}
-          aria-label="Search project file tree"
+          aria-label="Search project files"
           placeholder="Find a project file"
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
-      <nav aria-label="Project tree directory">
+      <nav aria-label="Folder path">
         {breadcrumbs.map((breadcrumb, index) => (
           <span key={breadcrumb.directory}>
             {index > 0 ? <ChevronRight size={10} aria-hidden="true" /> : null}
             <button
               type="button"
-              aria-label={`Project tree directory ${breadcrumb.directory}`}
+              aria-label={`Go to folder ${breadcrumb.directory}`}
               disabled={breadcrumb.directory === directory}
               onClick={() => {
                 setDirectory(breadcrumb.directory);
@@ -115,18 +115,23 @@ export function WorkspaceProjectTree({
         ))}
         {entries.length === 0 ? (
           <p>
-            {browser.status === 'loading' ? 'Indexing safe project files…' : 'No matching files.'}
+            {browser.status === 'loading'
+              ? 'Loading project files…'
+              : 'No files match your search.'}
           </p>
         ) : null}
       </div>
       {selectedFile !== null && onAttach !== undefined ? (
-        <div className="workspace-project-tree-attach" aria-label="Attach selected project file">
+        <div
+          className="workspace-project-tree-attach"
+          aria-label="Attach the selected file to an agent"
+        >
           {agents.length === 0 ? (
-            <p>Add and unlock an Agent node to attach the selected file.</p>
+            <p>Add and unlock an agent on the canvas to attach files.</p>
           ) : (
             <>
               <label>
-                Target Agent
+                Attach to agent
                 <select
                   name="workspace-project-tree-agent-context-target"
                   value={targetNodeId}
@@ -153,18 +158,18 @@ export function WorkspaceProjectTree({
                     projectId,
                     relativePath: selectedFile.relativePath,
                   })
-                    .then(() => setAttachMessage('Attached the selected file to Agent context.'))
+                    .then(() => setAttachMessage('Attached — this agent can now use the file.'))
                     .catch((cause: unknown) =>
                       setAttachMessage(
                         cause instanceof Error
                           ? cause.message
-                          : 'The selected file could not be attached.',
+                          : "The selected file couldn't be attached. Try again.",
                       ),
                     )
                     .finally(() => setAttaching(false));
                 }}
               >
-                {attaching ? 'Verifying…' : 'Attach selected project file'}
+                {attaching ? 'Checking…' : 'Attach selected file'}
               </button>
             </>
           )}
@@ -174,8 +179,8 @@ export function WorkspaceProjectTree({
         </div>
       ) : null}
       <footer role="status">
-        <span>{browser.entries.length} indexed entries</span>
-        {browser.bounded ? <span>Bounded results</span> : null}
+        <span>{browser.entries.length} items</span>
+        {browser.bounded ? <span>Not all files shown</span> : null}
       </footer>
     </section>
   );
@@ -205,7 +210,7 @@ function ProjectTreeEntry({
         type="button"
         role="treeitem"
         disabled={!safe}
-        aria-label={`Open project folder ${entry.relativePath}`}
+        aria-label={`Open folder ${entry.relativePath}`}
         onClick={() => onOpenDirectory(entry.relativePath)}
       >
         <Folder size={13} aria-hidden="true" />
@@ -220,13 +225,13 @@ function ProjectTreeEntry({
       role="treeitem"
       disabled={!draggable}
       draggable={draggable}
-      aria-label={`${draggable ? 'Draggable project file' : 'Protected project entry'} ${entry.relativePath}`}
+      aria-label={`${draggable ? 'File' : 'Protected file'} ${entry.relativePath}`}
       aria-disabled={!draggable}
       aria-selected={selected}
       title={
         draggable
-          ? `Drag ${entry.relativePath} to an Agent's context attachments`
-          : (entry.policy.reason ?? 'This entry cannot be attached.')
+          ? `Drag ${entry.relativePath} onto an agent to share it`
+          : (entry.policy.reason ?? "This file can't be attached.")
       }
       onDragStart={(event) => {
         if (!draggable) {

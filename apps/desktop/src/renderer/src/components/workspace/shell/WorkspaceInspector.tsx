@@ -125,7 +125,7 @@ export function WorkspaceInspector(props: WorkspaceInspectorProps) {
     <aside className="inspector">
       <header>
         <div>
-          <span>Inspector</span>
+          <span>Details</span>
           <small>{inspectorLabel(selectedNode, selectedEdge)}</small>
         </div>
         {(selectedNode || selectedEdge) && (
@@ -172,7 +172,8 @@ function NodeInspector(
       {props.collaborationGraphReadOnly && (
         <p className="node-lock-notice" role="status">
           <Lock size={13} />
-          This collaboration role can inspect the shared node but cannot change it.
+          Your role in this shared session is view-only. You can look at this node, but not change
+          it.
         </p>
       )}
       {selectedNode.data.locked && (
@@ -186,7 +187,7 @@ function NodeInspector(
       <fieldset
         className="node-edit-fields"
         disabled={configurationReadOnly}
-        aria-label="Node configuration"
+        aria-label="Node settings"
       >
         <label>
           Title
@@ -423,9 +424,9 @@ function NodeInspector(
           disabled={props.selectedNodeLockedByGroup || props.collaborationGraphReadOnly}
           title={
             props.collaborationGraphReadOnly
-              ? 'This collaboration role cannot change node locks.'
+              ? 'A view-only role cannot change node locks.'
               : props.selectedNodeLockedByGroup
-                ? 'Unlock the containing group frame before changing this node lock.'
+                ? 'Unlock the group frame that contains this node before changing its lock.'
                 : undefined
           }
           onClick={() => {
@@ -612,8 +613,8 @@ function FileNodeEditor({
         </section>
       ) : (
         <p className="file-node-reference-guidance" role="status">
-          Choose an ordinary project file. Ignored, sensitive, and symbolic-link entries remain
-          blocked by the main process.
+          Choose a file from this project. For safety, ignored files, private files, and link files
+          cannot be selected.
         </p>
       )}
 
@@ -641,8 +642,7 @@ function FileNodeEditor({
 
       {reference?.kind === 'directory' ? (
         <p className="recovery-guidance warning" role="status">
-          This File node references a directory. Choose an ordinary project file to edit its
-          contents.
+          This file node points to a folder. Choose a file instead to edit its contents here.
         </p>
       ) : reference !== undefined ? (
         <div className="inspector-file-editor">
@@ -701,7 +701,7 @@ function CanvasInspector({
     <div className="inspector-empty">
       <LayoutGrid size={22} />
       <h3>Nothing selected</h3>
-      <p>Select a node or connection to configure its local behavior.</p>
+      <p>Select a node or connection to see its details and change its settings.</p>
       <dl>
         <div>
           <dt>Canvas</dt>
@@ -710,12 +710,14 @@ function CanvasInspector({
         <div>
           <dt>Grid</dt>
           <dd>
-            {settings.canvasSnapToGrid ? `${settings.canvasGridSize} px snap` : 'Free placement'}
+            {settings.canvasSnapToGrid
+              ? `Snap to ${settings.canvasGridSize} px grid`
+              : 'Free placement'}
           </dd>
         </div>
         <div>
           <dt>Storage</dt>
-          <dd>Local SQLite</dd>
+          <dd>On this computer</dd>
         </div>
       </dl>
     </div>

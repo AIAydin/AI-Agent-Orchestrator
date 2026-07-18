@@ -277,13 +277,13 @@ export function gitPushDisclosure(input: GitPushDisclosureInput): OutboundAction
     action: 'git-push',
     title: 'Push reviewed branch',
     summary: `Push ${input.sourceBranch} to ${input.destination.name}/${input.destinationBranch}?`,
-    confirmLabel: 'Push exact branch',
+    confirmLabel: 'Push branch',
     destination: outboundDestination(input.destination, 'git-remote'),
     details: impactDetails(input),
     warning:
       input.destination.kind === 'local-filesystem'
-        ? 'The selected local Git repository can run its receive hooks and Git configuration as your operating-system user. Forgeboard disables source-side hooks, helper transports, tag expansion, submodule recursion, push options, force, and lazy object fetching; it pushes only the exact approved source commit and branch ref.'
-        : 'Git may use your existing user or system Git credential and network configuration, including credential helpers, HTTP headers, cookies, client certificates, redirects, and proxies, plus your user SSH configuration and agent; those facilities are trusted for this action. Forgeboard rejects repository-owned credential, HTTP, and URL-rewrite settings and disables source-side hooks, helper transports, tag expansion, submodule recursion, push options, force, and lazy object fetching; it pushes only the exact approved source commit and branch ref.',
+        ? 'The local Git repository you picked can run its own scripts and Git settings as your computer account when it receives this push. Forgeboard sends only the reviewed commit and branch, blocks force pushes, and does not let the source repository run scripts, fetch extra content, or change what is sent.'
+        : "Git may use the sign-in details and network settings already saved on this computer, including credential helpers, certificates, proxies, and your SSH setup; Forgeboard trusts those for this push. Forgeboard ignores the repository's own sign-in and address-rewrite settings, sends only the reviewed commit and branch, blocks force pushes, and does not let the source repository run scripts, fetch extra content, or change what is sent.",
   };
 }
 
@@ -302,11 +302,11 @@ export function gitHubStatusDisclosure(
       { label: 'Remote', value: input.destination.name },
       { label: 'Base branch', value: input.baseBranch },
       { label: 'Head branch', value: input.headBranch },
-      { label: 'Approved source HEAD', value: input.sourceHead },
+      { label: 'Approved commit', value: input.sourceHead },
     ],
     warning: gitHubCliWarning(
       input.githubCli,
-      'Forgeboard rejects HTTP Unix-socket routing and does not read or store the token. This action reads authentication, repository, and exact base/head status and does not create or change GitHub data.',
+      'Forgeboard never reads or stores your GitHub token. This check only reads your sign-in, repository, and branch status; it does not create or change anything on GitHub.',
     ),
   };
 }
@@ -319,23 +319,23 @@ export function gitHubPullRequestDisclosure(
     action: 'github-pull-request',
     title: 'Create GitHub pull request',
     summary: `Open ${input.snapshot.headBranch} into ${input.snapshot.baseBranch} on ${input.snapshot.ownerRepository}?`,
-    confirmLabel: input.draft ? 'Create draft PR' : 'Create pull request',
+    confirmLabel: input.draft ? 'Create draft pull request' : 'Create pull request',
     destination: outboundDestination(input.destination, 'github'),
     details: [
       ...impactDetails(input),
       ...gitHubCliDetails(input.githubCli),
       { label: 'GitHub repository', value: input.snapshot.ownerRepository },
-      { label: 'Remote base HEAD', value: input.snapshot.baseOid },
+      { label: 'Remote base commit', value: input.snapshot.baseOid },
       {
-        label: 'Remote source HEAD',
+        label: 'Remote source commit',
         value: input.snapshot.headOid ?? 'missing',
       },
       { label: 'Title', value: input.title },
       {
-        label: 'Exact pull request body',
+        label: 'Pull request body',
         value: input.body === '' ? '(empty)' : input.body,
       },
-      { label: 'Body SHA-256', value: input.bodySha256 },
+      { label: 'Body fingerprint (SHA-256)', value: input.bodySha256 },
       { label: 'Body characters', value: String(input.bodyCharacters) },
       {
         label: 'Mode',
@@ -344,7 +344,7 @@ export function gitHubPullRequestDisclosure(
     ],
     warning: gitHubCliWarning(
       input.githubCli,
-      'Forgeboard rejects HTTP Unix-socket routing and sends the exact reviewed title and body only after revalidating human approval, deterministic checks, local source, remote base, and remote source HEAD immediately before the request. GitHub pull requests follow a branch name: concurrent or later movement of that branch can change the pull request contents. Repository visibility and settings are never changed.',
+      'Forgeboard sends the title and body exactly as shown, after checking your approval and both branches again right before sending. A pull request follows its branch: if the branch changes later, the pull request changes with it. Forgeboard never changes repository visibility or settings.',
     ),
   };
 }
@@ -352,9 +352,9 @@ export function gitHubPullRequestDisclosure(
 export function gitHubCiDisclosure(input: GitHubCiDisclosureInput): OutboundActionDisclosure {
   return {
     action: 'github-ci-status',
-    title: 'Refresh GitHub CI status',
-    summary: `Read CI for ${input.snapshot.ownerRepository}:${input.snapshot.headBranch}?`,
-    confirmLabel: 'Refresh CI',
+    title: 'Check GitHub CI results',
+    summary: `Read CI results for ${input.snapshot.ownerRepository}:${input.snapshot.headBranch}?`,
+    confirmLabel: 'Check CI results',
     destination: outboundDestination(input.destination, 'github'),
     details: [
       { label: 'Project', value: input.projectName },
@@ -362,11 +362,11 @@ export function gitHubCiDisclosure(input: GitHubCiDisclosureInput): OutboundActi
       { label: 'GitHub repository', value: input.snapshot.ownerRepository },
       { label: 'Base branch', value: input.snapshot.baseBranch },
       { label: 'Head branch', value: input.snapshot.headBranch },
-      { label: 'Exact source HEAD', value: input.sourceHead },
+      { label: 'Reviewed commit', value: input.sourceHead },
     ],
     warning: gitHubCliWarning(
       input.githubCli,
-      'Forgeboard rejects HTTP Unix-socket routing. This action reads up to 20 recent workflow runs. Forgeboard displays as current only runs whose branch and head SHA exactly match the approved source HEAD.',
+      'This reads up to 20 recent workflow runs from GitHub. Forgeboard shows a run as current only when its branch and commit exactly match the reviewed commit.',
     ),
   };
 }
@@ -376,25 +376,28 @@ function gitHubCliDetails(cli: GitHubCliDisclosure) {
   const detected = cli.executablePath !== null;
   return [
     {
-      label: 'GitHub CLI source',
-      value: cli.source === 'automatic' ? 'Automatic desktop PATH discovery' : 'Custom selection',
+      label: 'How GitHub CLI was found',
+      value:
+        cli.source === 'automatic'
+          ? 'Found automatically on this computer'
+          : 'Selected in Settings',
     },
     {
       label: 'GitHub CLI file',
-      value: cli.filename ?? 'Not found on the desktop PATH',
+      value: cli.filename ?? 'Not found on this computer',
     },
-    { label: 'GitHub CLI SHA-256', value: cli.sha256 ?? 'Unavailable' },
+    { label: 'GitHub CLI fingerprint (SHA-256)', value: cli.sha256 ?? 'Unavailable' },
     {
-      label: 'Exact GitHub CLI path',
-      value: cli.executablePath ?? 'No executable is currently resolved',
+      label: 'GitHub CLI location',
+      value: cli.executablePath ?? 'None found',
     },
     {
-      label: 'GitHub CLI validation',
+      label: 'GitHub CLI check',
       value: cli.available
-        ? 'Version validated'
+        ? 'Version checked'
         : detected
-          ? 'Detected; version validation pending'
-          : 'Executable not found',
+          ? 'Found; version check pending'
+          : 'Program not found',
     },
   ];
 }
@@ -434,15 +437,15 @@ function assertResolvedGitHubCliDisclosure(cli: GitHubCliDisclosure): void {
 function gitHubCliWarning(cli: GitHubCliDisclosure, action: string): string {
   if (!cli.available) {
     if (cli.executablePath !== null) {
-      return `The automatically discovered GitHub CLI shown above was detected but its version is not yet validated. After this approval, Forgeboard first runs only that exact path and SHA-256 with the literal --version argument in a credential-free environment. Authentication and GitHub API commands remain blocked unless that probe exits successfully and returns a valid GitHub CLI version. ${action}`;
+      return `The GitHub CLI shown above was found automatically, but its version has not been checked yet. If you approve, Forgeboard first runs only that exact program with the --version argument and no sign-in details. Sign-in and GitHub requests stay blocked unless that check succeeds. ${action}`;
     }
-    return `Automatic discovery did not find GitHub CLI on the desktop process PATH. Confirming this check preserves that exact unavailable state; Forgeboard cannot contact GitHub through gh unless a new executable is detected and reviewed. ${action}`;
+    return `Forgeboard did not find GitHub CLI on this computer. Approving keeps it that way; Forgeboard cannot contact GitHub through gh unless a new program is found and reviewed. ${action}`;
   }
   const selection =
     cli.source === 'automatic'
-      ? 'The automatically discovered GitHub CLI shown above'
+      ? 'The GitHub CLI found automatically and shown above'
       : 'The custom GitHub CLI selected in Settings and shown above';
-  return `${selection} is trusted local code and may use its existing authenticated account and user network configuration. Forgeboard binds this action to its exact path and SHA-256 and verifies the binding again before every command. ${action}`;
+  return `${selection} is trusted code on this computer and may use the GitHub account already signed in and your network settings. Forgeboard ties this action to that exact program and fingerprint, and checks them again before every command. ${action}`;
 }
 
 function impactDetails(input: GitPushDisclosureInput) {

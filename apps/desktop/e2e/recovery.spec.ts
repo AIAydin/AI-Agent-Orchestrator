@@ -21,7 +21,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
     watchExternalRequests(page, externalRequests);
 
     await page
-      .getByRole('dialog', { name: /Ready to build without wiring config files/i })
+      .getByRole('dialog', { name: /Set up Forgeboard in a few quick steps/i })
       .getByRole('button', { name: 'Use safe defaults' })
       .click();
     await page.getByRole('button', { name: /Explore the safe demo/i }).click();
@@ -34,8 +34,8 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
 
     await test.step('automatic backup behavior and destination are configured in Settings', async () => {
       const settings = await openDataSettings(page);
-      await settings.getByLabel('Backup directory').fill(backupDirectory);
-      await settings.getByLabel('Automatic backup interval (hours)').fill('1');
+      await settings.getByLabel('Backup folder').fill(backupDirectory);
+      await settings.getByLabel('Back up automatically every (hours)').fill('1');
       await settings.getByLabel('Backups to keep').fill('2');
       await settings.getByRole('button', { name: 'Save settings' }).click();
       await expect(settings).toBeHidden();
@@ -44,7 +44,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
     await test.step('a manual canvas checkpoint is created without editing configuration', async () => {
       const settings = await openDataSettings(page);
       await settings.getByRole('button', { name: 'Create snapshot' }).click();
-      await expect(settings.getByText('Recovery snapshot created for Workshop.')).toBeVisible();
+      await expect(settings.getByText('Snapshot created for Workshop.')).toBeVisible();
       await settings.getByRole('button', { name: 'Close settings' }).click();
     });
 
@@ -63,9 +63,9 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
       });
       await expect(manualSnapshot.first()).toBeVisible();
       await manualSnapshot.first().getByRole('button', { name: 'Review restore' }).click();
-      const disclosure = settings.getByRole('region', { name: 'Snapshot restore disclosure' });
-      await expect(disclosure).toContainText('Restore this exact snapshot?');
-      await disclosure.getByRole('button', { name: 'Continue to native approval' }).click();
+      const disclosure = settings.getByRole('region', { name: 'Confirm snapshot restore' });
+      await expect(disclosure).toContainText('Restore this snapshot?');
+      await disclosure.getByRole('button', { name: 'Continue to confirmation' }).click();
       await expect(settings).toBeHidden();
 
       await openOnlyRecentProject(page);
@@ -78,7 +78,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
     await test.step('portable data exports and replace-imports through native file selection', async () => {
       await chooseExportPath(app, exportPath);
       let settings = await openDataSettings(page);
-      await settings.getByRole('button', { name: 'Export portable local data' }).click();
+      await settings.getByRole('button', { name: 'Export all local data' }).click();
       await expect(settings.getByText(`Local data exported to ${exportPath}`)).toBeVisible();
       await access(exportPath);
       await settings.getByRole('button', { name: 'Close settings' }).click();
@@ -90,12 +90,12 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
 
       await chooseImportPath(app, exportPath);
       settings = await openDataSettings(page);
-      await settings.getByLabel('Import behavior').selectOption('replace');
-      await settings.getByRole('button', { name: 'Choose data export' }).click();
-      const disclosure = settings.getByRole('region', { name: 'Local data import disclosure' });
-      await expect(disclosure).toContainText('Replace local data');
+      await settings.getByLabel('How to import').selectOption('replace');
+      await settings.getByRole('button', { name: 'Choose export file' }).click();
+      const disclosure = settings.getByRole('region', { name: 'Confirm local data import' });
+      await expect(disclosure).toContainText('Replace all current data');
       await expect(disclosure).toContainText('forgeboard-local-data.json');
-      await disclosure.getByRole('button', { name: 'Continue to native approval' }).click();
+      await disclosure.getByRole('button', { name: 'Continue to confirmation' }).click();
       await expect(settings).toBeHidden();
 
       await openOnlyRecentProject(page);

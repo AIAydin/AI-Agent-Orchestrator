@@ -128,14 +128,14 @@ export function WorkspaceActivityDrawer({
             <CheckCircle2 size={14} aria-hidden="true" /> Checks
           </DrawerTabButton>
           <DrawerTabButton tab="audit" activeTab={tab} onSelect={setTab}>
-            <ShieldCheck size={14} aria-hidden="true" /> Audit
+            <ShieldCheck size={14} aria-hidden="true" /> History
           </DrawerTabButton>
         </div>
         <button
           className="icon-button"
           type="button"
           onClick={onClose}
-          aria-label="Close activity drawer"
+          aria-label="Close activity panel"
         >
           <PanelBottomClose size={16} aria-hidden="true" />
         </button>
@@ -268,13 +268,13 @@ function ChangesPanel({
     >
       <header className="drawer-panel-summary">
         <div>
-          <strong>Run-reported file changes</strong>
-          <small>Persisted on the agent node from its latest run summary.</small>
+          <strong>Files changed by runs</strong>
+          <small>Each agent saves the files it changed during its latest run.</small>
         </div>
         <div className="drawer-panel-actions">
           <span>{reports.reduce((total, report) => total + report.files.length, 0)} files</span>
           <button type="button" onClick={() => onOpenGitReview()}>
-            Review primary checkout
+            Review project changes
           </button>
         </div>
       </header>
@@ -305,7 +305,7 @@ function ChangesPanel({
                 {reviewRunId !== null && (
                   <div className="drawer-panel-actions">
                     <button type="button" onClick={() => onOpenGitReview(reviewRunId)}>
-                      Review this agent worktree
+                      Review this agent’s changes
                     </button>
                   </div>
                 )}
@@ -314,7 +314,7 @@ function ChangesPanel({
           })}
         </div>
       ) : (
-        <DrawerEmpty>No completed run has reported file changes.</DrawerEmpty>
+        <DrawerEmpty>Files an agent changes show up here. Run an agent to see them.</DrawerEmpty>
       )}
     </div>
   );
@@ -340,17 +340,17 @@ function AuditPanel({
     >
       <header className="drawer-panel-summary">
         <div>
-          <strong>Local audit log</strong>
-          <small>Newest first. Secret-bearing metadata is not exposed to this view.</small>
+          <strong>App history</strong>
+          <small>Newest first. Secrets are never shown here.</small>
         </div>
         <button type="button" onClick={onRefresh}>
           Refresh
         </button>
       </header>
       {state === 'loading' && !events.length ? (
-        <DrawerEmpty>Loading local audit events…</DrawerEmpty>
+        <DrawerEmpty>Loading history…</DrawerEmpty>
       ) : state === 'error' ? (
-        <DrawerEmpty>Forgeboard could not read the local audit log.</DrawerEmpty>
+        <DrawerEmpty>Forgeboard could not load the history.</DrawerEmpty>
       ) : events.length ? (
         <div className="audit-event-list">
           {events.map((event) => (
@@ -363,7 +363,7 @@ function AuditPanel({
           ))}
         </div>
       ) : (
-        <DrawerEmpty>No local audit events have been recorded yet.</DrawerEmpty>
+        <DrawerEmpty>Nothing has been recorded yet.</DrawerEmpty>
       )}
     </div>
   );

@@ -134,7 +134,7 @@ export class GitTargetResolver {
     if (primaryRepositoryRoot !== project.path) {
       throw new GitTargetResolutionError(
         'PRIMARY_REPOSITORY_MISMATCH',
-        'Reopen the project from its canonical Git repository root before reviewing agent changes.',
+        'Reopen the project from its main repository folder before reviewing agent changes.',
       );
     }
 
@@ -193,7 +193,7 @@ export class GitTargetResolver {
     } catch (error) {
       throw new GitTargetResolutionError(
         'OWNERSHIP_UNAVAILABLE',
-        'The managed worktree ownership record is unavailable or invalid.',
+        "Forgeboard's ownership record for this agent worktree is missing or invalid.",
         { cause: error },
       );
     }
@@ -205,7 +205,7 @@ export class GitTargetResolver {
     } catch (error) {
       throw new GitTargetResolutionError(
         'OWNERSHIP_MISMATCH',
-        'The managed worktree no longer matches its ownership record.',
+        "This agent worktree no longer matches Forgeboard's record for it.",
         { cause: error },
       );
     }
@@ -231,7 +231,7 @@ export class GitTargetResolver {
     if (state.status.branch !== ownership.branch || state.status.headOid !== state.branchOid) {
       throw new GitTargetResolutionError(
         'OWNERSHIP_MISMATCH',
-        'The selected worktree is no longer checked out on its owned branch.',
+        'This agent worktree is no longer on its own branch.',
       );
     }
 
@@ -255,7 +255,7 @@ export class GitTargetResolver {
     ) {
       throw new GitTargetResolutionError(
         'OWNERSHIP_MISMATCH',
-        'The selected agent worktree no longer matches its persisted repository binding.',
+        'This agent worktree no longer matches its saved repository records.',
       );
     }
     if (primaryCommon !== worktreeCommon) {
@@ -296,7 +296,7 @@ function completeBinding(run: StoredRunRecord): CompleteRunBinding {
   ) {
     throw new GitTargetResolutionError(
       'LEGACY_RUN_BINDING',
-      'This older run does not contain the durable worktree ownership metadata required for safe review.',
+      'This older run is missing the saved workspace records Forgeboard needs for a safe review.',
     );
   }
   return {
@@ -314,12 +314,12 @@ function completeBinding(run: StoredRunRecord): CompleteRunBinding {
 
 function assertOwnershipBinding(binding: CompleteRunBinding, ownership: WorktreeOwnership): void {
   const fields: ReadonlyArray<readonly [string, string | null, string | null]> = [
-    ['worktree id', binding.worktreeId, ownership.id],
+    ['worktree ID', binding.worktreeId, ownership.id],
     ['primary repository', binding.repositoryRoot, ownership.repositoryRoot],
-    ['managed root', binding.managedRoot, ownership.managedRoot],
-    ['worktree path', binding.worktreePath, ownership.worktreePath],
+    ['workspace root folder', binding.managedRoot, ownership.managedRoot],
+    ['workspace folder', binding.worktreePath, ownership.worktreePath],
     ['branch', binding.branch, ownership.branch],
-    ['base ref', binding.baseRef, ownership.baseRef],
+    ['base branch', binding.baseRef, ownership.baseRef],
     ['base commit', binding.baseCommit, ownership.baseCommit],
     ['agent', binding.agentId, ownership.agentId],
     ['task', binding.taskId, ownership.taskId],
@@ -328,7 +328,7 @@ function assertOwnershipBinding(binding: CompleteRunBinding, ownership: Worktree
   if (mismatch !== undefined) {
     throw new GitTargetResolutionError(
       'OWNERSHIP_MISMATCH',
-      `The persisted run does not match the managed worktree ${mismatch[0]} binding.`,
+      `The saved run does not match this agent worktree's ${mismatch[0]}.`,
     );
   }
 }

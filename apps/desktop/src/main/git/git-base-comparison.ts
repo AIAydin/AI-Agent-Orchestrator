@@ -26,7 +26,9 @@ export async function createAgentBaseComparison(
     repositories.resolveRef(input.repositoryRoot, input.headCommit),
   ]);
   if (baseCommit !== input.baseCommit || headCommit !== input.headCommit) {
-    throw new Error('The agent comparison commit binding changed before Git comparison.');
+    throw new Error(
+      'The commits being compared changed before the comparison ran. Refresh and try again.',
+    );
   }
 
   const [aheadBehind, aheadResult, behindResult, diffResult] = await Promise.all([

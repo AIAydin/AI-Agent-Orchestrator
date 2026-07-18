@@ -112,12 +112,15 @@ export async function resolveCheckExecutable(
 
 export function boundedEnvironment(names: readonly string[]): BoundedEnvironment {
   if (names.length > MAX_ENVIRONMENT_NAMES) {
-    throw new Error(`At most ${String(MAX_ENVIRONMENT_NAMES)} environment names may be allowed.`);
+    throw new Error(
+      `Too many environment variable names are allowed. Keep at most ${String(MAX_ENVIRONMENT_NAMES)}.`,
+    );
   }
   const values: Record<string, string> = {};
   let retainedBytes = 0;
   for (const name of [...new Set(names)].sort()) {
-    if (!ENVIRONMENT_NAME.test(name)) throw new Error(`Invalid environment name: ${name}`);
+    if (!ENVIRONMENT_NAME.test(name))
+      throw new Error(`The environment variable name "${name}" is not valid.`);
     const value = process.env[name];
     if (value === undefined || value.includes('\0')) continue;
     const valueBytes = Buffer.byteLength(value, 'utf8');
@@ -126,7 +129,7 @@ export function boundedEnvironment(names: readonly string[]): BoundedEnvironment
     }
     retainedBytes += Buffer.byteLength(name, 'utf8') + valueBytes;
     if (retainedBytes > MAX_ENVIRONMENT_BYTES) {
-      throw new Error('The allowlisted check environment is too large.');
+      throw new Error('The allowed check environment variables are too large together.');
     }
     values[name] = value;
   }
@@ -416,7 +419,7 @@ async function terminateProcessTree(
   if (process.platform === 'win32') {
     await taskkillTree(child.pid);
     if (!(await exitsWithin(exited, forceStopMs))) {
-      throw new Error('The Windows check process tree did not stop after forced termination.');
+      throw new Error('Forgeboard could not stop the Windows check process.');
     }
     return;
   }
@@ -424,7 +427,7 @@ async function terminateProcessTree(
   if (await exitsWithin(exited, gracefulStopMs)) return;
   signalChildTree(child, 'SIGKILL');
   if (!(await exitsWithin(exited, forceStopMs))) {
-    throw new Error('The check process tree did not stop after forced termination.');
+    throw new Error('Forgeboard could not stop the check process.');
   }
 }
 

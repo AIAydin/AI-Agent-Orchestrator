@@ -49,7 +49,7 @@ export async function approveNextNativeAgentLaunch(
   options: { pollTimeoutMs?: number } = {},
 ): Promise<void> {
   const disclosureFingerprint =
-    (await reviewDialog.getByLabel('Exact launch disclosure SHA-256').textContent())?.trim() ?? '';
+    (await reviewDialog.getByLabel('Security fingerprint (SHA-256)').textContent())?.trim() ?? '';
   expect(disclosureFingerprint).toMatch(/^[0-9a-f]{64}$/u);
   const expiresAt =
     (await reviewDialog.getByLabel('Approval expires at').getAttribute('datetime')) ?? '';
@@ -108,9 +108,7 @@ export async function approveNextNativeAgentLaunch(
         const detailLines = typeof options?.detail === 'string' ? options.detail.split('\n') : [];
         const errors = [
           options?.type === 'warning' ? undefined : 'type must be warning',
-          options?.title === 'Launch agent process'
-            ? undefined
-            : 'title must identify the agent launch',
+          options?.title === 'Launch agent' ? undefined : 'title must identify the agent launch',
           options?.message === `Launch ${binding.adapterId} for this node?`
             ? undefined
             : `message must identify ${binding.adapterId}`,
@@ -120,7 +118,7 @@ export async function approveNextNativeAgentLaunch(
           options?.defaultId === 0 ? undefined : 'Cancel must be the default action',
           options?.cancelId === 0 ? undefined : 'Cancel must be the escape action',
           options?.noLink === true ? undefined : 'native links must be disabled',
-          detailLines.includes(`Disclosure SHA-256: ${binding.disclosureFingerprint}`)
+          detailLines.includes(`Security fingerprint (SHA-256): ${binding.disclosureFingerprint}`)
             ? undefined
             : 'detail must contain the exact reviewed disclosure fingerprint',
           detailLines.includes(`Approval expires at: ${binding.expiresAt}`)

@@ -120,7 +120,7 @@ describe('workflow evidence bridge persistence', () => {
       expect(completed.runtime.run.nodeRuns['gate-1']).toMatchObject({
         status: 'failed',
         failureCode: 'REVIEW_GATE_FAILED',
-        statusReason: 'Deterministic checks failed: test',
+        statusReason: 'Required checks failed: test',
       });
       expect(completed.runtime.evidence.gateChecks['gate-1']).toEqual([
         expect.objectContaining({ id: 'test', status: 'failed', producerNodeId: 'test-1' }),

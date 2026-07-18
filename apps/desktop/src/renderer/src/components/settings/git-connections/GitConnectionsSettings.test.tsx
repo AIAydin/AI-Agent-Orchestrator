@@ -91,7 +91,7 @@ describe('GitConnectionsSettings', () => {
     const other = project(OTHER_ID, 'Other repository', '/private/other-repository');
     renderSettings({ projects: [other, active], activeProject: active });
 
-    const selector = screen.getByRole('combobox', { name: 'Git connections project' });
+    const selector = screen.getByRole('combobox', { name: 'Project' });
     const options = within(selector).getAllByRole('option');
     expect(options.map((option) => option.textContent)).toEqual([
       'Active repository · active',
@@ -102,25 +102,23 @@ describe('GitConnectionsSettings', () => {
       (await screen.findAllByText('HTTPS · github.com/forgeboard/example')).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText('/private/active-repository')).toBeNull();
-    expect(screen.getByRole('list', { name: 'Repository remotes' })).toBeTruthy();
-    expect(screen.getByRole('group', { name: 'GitHub CLI source' })).toBeTruthy();
+    expect(screen.getByRole('list', { name: 'Project remotes' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'How Forgeboard finds GitHub CLI' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Git connections' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh remotes' }));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
-    expect(
-      await screen.findByText('Refreshed local Git configuration for Active repository.'),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Replace origin with network remote' }));
-    fireEvent.change(screen.getByLabelText('Replacement network remote URL for origin'), {
+    expect(await screen.findByText('Remotes updated for Active repository.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Replace origin with a new URL' }));
+    fireEvent.change(screen.getByLabelText('New URL for origin'), {
       target: { value: 'https://github.com/forgeboard/project-a-draft.git' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh GitHub CLI status' }));
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('Refreshed local GitHub CLI status.')).toBeTruthy();
+    expect(await screen.findByText('GitHub CLI status updated.')).toBeTruthy();
     fireEvent.change(selector, { target: { value: OTHER_ID } });
     await waitFor(() => expect(list).toHaveBeenCalledWith({ projectId: OTHER_ID }));
-    expect(screen.queryByLabelText('Replacement network remote URL for origin')).toBeNull();
-    expect(screen.queryByText('Refreshed local GitHub CLI status.')).toBeNull();
+    expect(screen.queryByLabelText('New URL for origin')).toBeNull();
+    expect(screen.queryByText('GitHub CLI status updated.')).toBeNull();
   });
 
   it('shows the remote-name rule and disables remote refresh when no project is selected', async () => {
@@ -135,10 +133,10 @@ describe('GitConnectionsSettings', () => {
     list.mockClear();
 
     renderSettings({ projects: [], activeProject: null });
-    await screen.findByText('Choose an available Git project to inspect its remotes.');
-    expect(
-      screen.getByRole('button', { name: 'Refresh Git connections' }).hasAttribute('disabled'),
-    ).toBe(true);
+    await screen.findByText('Choose a project above to see its remotes.');
+    expect(screen.getByRole('button', { name: 'Refresh remotes' }).hasAttribute('disabled')).toBe(
+      true,
+    );
     expect(list).not.toHaveBeenCalled();
   });
 
@@ -152,8 +150,12 @@ describe('GitConnectionsSettings', () => {
     expect((await screen.findByRole('alert')).textContent).toContain(
       'Temporary local Git read failure.',
     );
-    expect(screen.getByText('Git remote state is unavailable. Refresh to try again.')).toBeTruthy();
-    const refreshButton = screen.getByRole('button', { name: 'Refresh Git connections' });
+    expect(
+      screen.getByText(
+        "This project's remotes could not be loaded. Use the refresh button to try again.",
+      ),
+    ).toBeTruthy();
+    const refreshButton = screen.getByRole('button', { name: 'Refresh remotes' });
     expect(refreshButton.hasAttribute('disabled')).toBe(false);
 
     fireEvent.click(refreshButton);
@@ -169,11 +171,11 @@ describe('GitConnectionsSettings', () => {
     await screen.findByText('origin');
 
     list.mockImplementationOnce(() => remoteRead.promise);
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Git connections' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh remotes' }));
     await waitFor(() =>
       expect(
         screen
-          .getByRole('button', { name: 'Choose local Git repository' })
+          .getByRole('button', { name: 'Choose a folder on this computer' })
           .hasAttribute('disabled'),
       ).toBe(true),
     );
@@ -184,7 +186,7 @@ describe('GitConnectionsSettings', () => {
     await waitFor(() =>
       expect(
         screen
-          .getByRole('button', { name: 'Choose local Git repository' })
+          .getByRole('button', { name: 'Choose a folder on this computer' })
           .hasAttribute('disabled'),
       ).toBe(false),
     );
@@ -193,16 +195,20 @@ describe('GitConnectionsSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh GitHub CLI status' }));
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: 'Use automatic GitHub CLI' }).hasAttribute('disabled'),
+        screen
+          .getByRole('button', { name: 'Find GitHub CLI automatically' })
+          .hasAttribute('disabled'),
       ).toBe(true),
     );
     expect(
-      screen.getByRole('button', { name: 'Browse for GitHub CLI' }).hasAttribute('disabled'),
+      screen.getByRole('button', { name: 'Choose GitHub CLI file' }).hasAttribute('disabled'),
     ).toBe(true);
     cliRead.resolve({ ok: true, value: readyCliStatus() });
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: 'Use automatic GitHub CLI' }).hasAttribute('disabled'),
+        screen
+          .getByRole('button', { name: 'Find GitHub CLI automatically' })
+          .hasAttribute('disabled'),
       ).toBe(false),
     );
   });
@@ -213,10 +219,10 @@ describe('GitConnectionsSettings', () => {
     const view = renderSettings();
     await screen.findByText('origin');
     fireEvent.change(screen.getByLabelText('Remote name'), { target: { value: 'backup' } });
-    fireEvent.change(screen.getByLabelText('Network remote URL'), {
+    fireEvent.change(screen.getByLabelText('Remote URL'), {
       target: { value: 'https://github.com/forgeboard/backup.git' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add network remote' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add remote' }));
     await waitFor(() => expect(prepareNetwork).toHaveBeenCalledTimes(1));
 
     view.unmount();
@@ -230,7 +236,7 @@ describe('GitConnectionsSettings', () => {
     chooseGitHubCli.mockImplementationOnce(() => prepared.promise);
     const view = renderSettings();
     await screen.findByText('origin');
-    fireEvent.click(screen.getByRole('button', { name: 'Browse for GitHub CLI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose GitHub CLI file' }));
     await waitFor(() => expect(chooseGitHubCli).toHaveBeenCalledTimes(1));
 
     view.unmount();
@@ -249,10 +255,10 @@ describe('GitConnectionsSettings', () => {
     await screen.findByText('origin');
 
     fireEvent.change(screen.getByLabelText('Remote name'), { target: { value: 'backup' } });
-    fireEvent.change(screen.getByLabelText('Network remote URL'), {
+    fireEvent.change(screen.getByLabelText('Remote URL'), {
       target: { value: 'https://github.com/forgeboard/backup.git' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add network remote' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add remote' }));
 
     const dialog = await screen.findByRole('alertdialog', { name: 'Review remote addition' });
     expect(prepareNetwork).toHaveBeenCalledWith({
@@ -262,22 +268,18 @@ describe('GitConnectionsSettings', () => {
       remoteName: 'backup',
       url: 'https://github.com/forgeboard/backup.git',
     });
-    expect(within(dialog).getByText('Network access: none')).toBeTruthy();
+    expect(within(dialog).getByText('No internet access needed')).toBeTruthy();
     await waitFor(() =>
       expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Go back' })),
     );
-    expect(
-      screen.getByRole('button', { name: 'Refresh Git connections' }).hasAttribute('disabled'),
-    ).toBe(true);
+    expect(screen.getByRole('button', { name: 'Refresh remotes' }).hasAttribute('disabled')).toBe(
+      true,
+    );
     expect(
       screen.getByRole('button', { name: 'Refresh GitHub CLI status' }).hasAttribute('disabled'),
     ).toBe(true);
-    expect(
-      screen.getByRole('combobox', { name: 'Git connections project' }).hasAttribute('disabled'),
-    ).toBe(true);
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Continue to system confirmation' }),
-    );
+    expect(screen.getByRole('combobox', { name: 'Project' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue to confirmation' }));
 
     await waitFor(() => expect(confirm).toHaveBeenCalledWith({ planId: PLAN_ID }));
     expect(await screen.findByRole('button', { name: 'Remove backup' })).toBeTruthy();
@@ -299,21 +301,19 @@ describe('GitConnectionsSettings', () => {
     await screen.findByText('origin');
 
     fireEvent.change(screen.getByLabelText('Remote name'), { target: { value: 'backup' } });
-    fireEvent.change(screen.getByLabelText('Network remote URL'), {
+    fireEvent.change(screen.getByLabelText('Remote URL'), {
       target: { value: 'https://github.com/forgeboard/backup.git' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add network remote' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add remote' }));
     const dialog = await screen.findByRole('alertdialog', { name: 'Review remote addition' });
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Continue to system confirmation' }),
-    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue to confirmation' }));
 
     expect(await screen.findByText('recovered-after-error')).toBeTruthy();
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     expect(list).toHaveBeenNthCalledWith(2, { projectId: ACTIVE_ID });
     expect(screen.getByRole('alert').textContent).toMatch(/outcome is uncertain/iu);
     expect(screen.getByRole('alert').textContent).toMatch(
-      /refreshed the selected project's current Git configuration/iu,
+      /refreshed the selected project's remotes/iu,
     );
     expect(screen.queryByText('Added remote backup.')).toBeNull();
   });
@@ -323,13 +323,11 @@ describe('GitConnectionsSettings', () => {
     confirmGitHubCli.mockRejectedValue(new Error('Confirmation response was interrupted.'));
     refresh.mockResolvedValue({ ok: true, value: unavailableCliStatus() });
     renderSettings();
-    expect(await screen.findByText('GitHub CLI version validated')).toBeTruthy();
+    expect(await screen.findByText('GitHub CLI ready')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Use automatic GitHub CLI' }));
-    const dialog = await screen.findByRole('alertdialog', { name: 'GitHub CLI configuration' });
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Continue to system confirmation' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Find GitHub CLI automatically' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'GitHub CLI setup' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue to confirmation' }));
 
     expect(await screen.findByText('GitHub CLI not found')).toBeTruthy();
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
@@ -337,7 +335,7 @@ describe('GitConnectionsSettings', () => {
     expect(screen.getByRole('alert').textContent).toMatch(
       /refreshed the current GitHub CLI status/iu,
     );
-    expect(screen.queryByText('GitHub CLI source updated.')).toBeNull();
+    expect(screen.queryByText('GitHub CLI selection saved.')).toBeNull();
   });
 
   it('does not recovery-refresh either current state when native confirmation is cancelled', async () => {
@@ -349,26 +347,22 @@ describe('GitConnectionsSettings', () => {
     await screen.findByText('origin');
 
     fireEvent.change(screen.getByLabelText('Remote name'), { target: { value: 'backup' } });
-    fireEvent.change(screen.getByLabelText('Network remote URL'), {
+    fireEvent.change(screen.getByLabelText('Remote URL'), {
       target: { value: 'https://github.com/forgeboard/backup.git' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add network remote' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add remote' }));
     let dialog = await screen.findByRole('alertdialog', { name: 'Review remote addition' });
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Continue to system confirmation' }),
-    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue to confirmation' }));
     expect(
-      await screen.findByText(/System confirmation cancelled. Git configuration/u),
+      await screen.findByText(/Confirmation cancelled. No Git settings were changed/u),
     ).toBeTruthy();
     expect(list).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Use automatic GitHub CLI' }));
-    dialog = await screen.findByRole('alertdialog', { name: 'GitHub CLI configuration' });
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Continue to system confirmation' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Find GitHub CLI automatically' }));
+    dialog = await screen.findByRole('alertdialog', { name: 'GitHub CLI setup' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue to confirmation' }));
     expect(
-      await screen.findByText(/System confirmation cancelled. GitHub CLI configuration/u),
+      await screen.findByText(/Confirmation cancelled. GitHub CLI setup was not changed/u),
     ).toBeTruthy();
     expect(refresh).not.toHaveBeenCalled();
   });
@@ -398,7 +392,7 @@ describe('GitConnectionsSettings', () => {
     expect(inputEnter.defaultPrevented).toBe(true);
     expect(onSubmit).not.toHaveBeenCalled();
 
-    const refreshButton = screen.getByRole('button', { name: 'Refresh Git connections' });
+    const refreshButton = screen.getByRole('button', { name: 'Refresh remotes' });
     const buttonEnter = createEvent.keyDown(refreshButton, {
       key: 'Enter',
       code: 'Enter',
@@ -416,7 +410,7 @@ describe('GitConnectionsSettings', () => {
     await screen.findByText('origin');
 
     fireEvent.change(screen.getByLabelText('Remote name'), { target: { value: 'local-backup' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Choose local Git repository' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a folder on this computer' }));
     await waitFor(() =>
       expect(prepareLocal).toHaveBeenCalledWith({
         projectId: ACTIVE_ID,
@@ -425,12 +419,12 @@ describe('GitConnectionsSettings', () => {
         remoteName: 'local-backup',
       }),
     );
-    expect(await screen.findByText('Local repository selection cancelled.')).toBeTruthy();
+    expect(await screen.findByText('Folder selection cancelled. Nothing changed.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove advanced' }));
     const dialog = await screen.findByRole('alertdialog', { name: 'Review remote removal' });
     expect(within(dialog).getByText('refs/remotes/advanced/main')).toBeTruthy();
-    expect(within(dialog).getByText(/Local branches, commits, other remotes/u)).toBeTruthy();
+    expect(within(dialog).getByText(/Your own branches, commits, other remotes/u)).toBeTruthy();
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(cancelPlan).toHaveBeenCalledWith({ planId: PLAN_ID }));
     expect(confirm).not.toHaveBeenCalled();
@@ -442,14 +436,12 @@ describe('GitConnectionsSettings', () => {
     renderSettings();
     await screen.findByText('origin');
 
-    expect(
-      screen.queryByRole('button', { name: 'Replace advanced with network remote' }),
-    ).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Replace origin with network remote' }));
-    fireEvent.change(screen.getByLabelText('Replacement network remote URL for origin'), {
+    expect(screen.queryByRole('button', { name: 'Replace advanced with a new URL' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Replace origin with a new URL' }));
+    fireEvent.change(screen.getByLabelText('New URL for origin'), {
       target: { value: 'git@github.com:forgeboard/replacement.git' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Review remote replacement' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review replacement' }));
 
     const dialog = await screen.findByRole('alertdialog', { name: 'Review remote replacement' });
     expect(prepareNetwork).toHaveBeenCalledWith({
@@ -466,19 +458,19 @@ describe('GitConnectionsSettings', () => {
     prepareNetwork.mockRejectedValueOnce(new Error('Repository inspection failed.'));
     renderSettings();
     await screen.findByText('origin');
-    fireEvent.click(screen.getByRole('button', { name: 'Replace origin with network remote' }));
-    const replacement = screen.getByLabelText('Replacement network remote URL for origin');
+    fireEvent.click(screen.getByRole('button', { name: 'Replace origin with a new URL' }));
+    const replacement = screen.getByLabelText('New URL for origin');
     fireEvent.change(replacement, {
       target: { value: 'git@github.com:forgeboard/retry-this.git' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review remote replacement' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review replacement' }));
 
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
       'Repository inspection failed.',
     );
-    expect(screen.getByLabelText('Replacement network remote URL for origin')).toHaveProperty(
+    expect(screen.getByLabelText('New URL for origin')).toHaveProperty(
       'value',
       'git@github.com:forgeboard/retry-this.git',
     );
@@ -489,21 +481,19 @@ describe('GitConnectionsSettings', () => {
     useAutomaticGitHubCli.mockResolvedValue({ ok: true, value: automaticCliPlan() });
     confirmGitHubCli.mockResolvedValue({ ok: true, value: unavailableCliStatus() });
     renderSettings();
-    expect(await screen.findByText('GitHub CLI version validated')).toBeTruthy();
+    expect(await screen.findByText('GitHub CLI ready')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Browse for GitHub CLI' }));
-    let dialog = await screen.findByRole('alertdialog', { name: 'GitHub CLI configuration' });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose GitHub CLI file' }));
+    let dialog = await screen.findByRole('alertdialog', { name: 'GitHub CLI setup' });
     expect(within(dialog).getByText('custom-gh')).toBeTruthy();
     expect(within(dialog).getByText(/does not sign in, contact GitHub/u)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Go back' }));
     await waitFor(() => expect(cancelPlan).toHaveBeenCalledWith({ planId: PLAN_ID }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Use automatic GitHub CLI' }));
-    dialog = await screen.findByRole('alertdialog', { name: 'GitHub CLI configuration' });
-    expect(within(dialog).getByText('Not currently discovered')).toBeTruthy();
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Continue to system confirmation' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Find GitHub CLI automatically' }));
+    dialog = await screen.findByRole('alertdialog', { name: 'GitHub CLI setup' });
+    expect(within(dialog).getByText('None found yet')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue to confirmation' }));
     await waitFor(() => expect(confirmGitHubCli).toHaveBeenCalledWith({ planId: PLAN_ID }));
     expect(await screen.findByText('GitHub CLI not found')).toBeTruthy();
     expect(screen.queryByText(/authenticated successfully/iu)).toBeNull();

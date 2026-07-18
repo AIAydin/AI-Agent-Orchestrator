@@ -274,12 +274,12 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
   return (
     <SettingsSection
       title="Self-hosted collaboration"
-      description="Join an authenticated room explicitly. Identity and connection settings can be saved; access tokens and invite links are never persisted."
+      description="Work with others in real time through a server your team runs. Join a room only when you choose to; access tokens and invite links are never saved."
     >
       <label className="switch-row">
         <span>
           <strong>Enable collaboration</strong>
-          <small>A connection starts only when you select a join action and approve it.</small>
+          <small>A connection starts only when you choose a join action and approve it.</small>
         </span>
         <input
           type="checkbox"
@@ -370,9 +370,9 @@ function clearSession(
 }
 
 function unavailable(setMessage: Dispatch<SetStateAction<string | null>>): void {
-  setMessage('Collaboration is unavailable in this desktop build.');
+  setMessage('Collaboration is not available in this build of Forgeboard.');
 }
 
 function validationFailure(): string {
-  return 'Forgeboard could not validate the collaboration response.';
+  return "Forgeboard could not understand the collaboration server's response. Try again.";
 }

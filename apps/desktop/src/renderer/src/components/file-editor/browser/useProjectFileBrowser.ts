@@ -110,7 +110,9 @@ export function useProjectFileBrowser(
         if (!active) return;
         setResults(scanned);
         setBounded(wasBounded);
-        setError(fileBrowserError(cause, 'Forgeboard could not safely list this project.'));
+        setError(
+          fileBrowserError(cause, "Forgeboard couldn't load this project's files. Try again."),
+        );
         setStatus('error');
       }
     })();

@@ -41,17 +41,17 @@ export function FileContextTargetPicker({
   }, [agents, targetNodeId]);
 
   return (
-    <section className="file-context-target-picker" aria-label="Attach file to Agent context">
+    <section className="file-context-target-picker" aria-label="Share this file with an agent">
       <header>
         <Link2 size={14} aria-hidden="true" />
-        <h3>Use as Agent context</h3>
+        <h3>Share with an agent</h3>
       </header>
       {agents.length === 0 ? (
-        <p>Add and unlock an Agent node to attach this saved file.</p>
+        <p>Add and unlock an agent on the canvas to share this file.</p>
       ) : (
         <div>
           <label>
-            Target Agent
+            Attach to agent
             <select
               name="file-node-agent-context-target"
               value={targetNodeId}
@@ -79,16 +79,18 @@ export function FileContextTargetPicker({
                 relativePath: reference.relativePath,
                 sourceNodeId: source.id,
               })
-                .then(() => setMessage('Attached the saved file to Agent context.'))
+                .then(() => setMessage('Attached — the agent can now use this saved file.'))
                 .catch((cause: unknown) =>
                   setMessage(
-                    cause instanceof Error ? cause.message : 'The file could not be attached.',
+                    cause instanceof Error
+                      ? cause.message
+                      : "The file couldn't be attached. Try again.",
                   ),
                 )
                 .finally(() => setPending(false));
             }}
           >
-            {pending ? 'Verifying…' : 'Attach saved disk file'}
+            {pending ? 'Checking…' : 'Attach saved file'}
           </button>
         </div>
       )}

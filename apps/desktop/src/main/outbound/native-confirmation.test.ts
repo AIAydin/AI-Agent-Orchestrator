@@ -32,7 +32,7 @@ describe('native outbound confirmation', () => {
       cancelId: 0,
       noLink: true,
     });
-    expect(options.detail).toContain('Endpoint: github.com');
+    expect(options.detail).toContain('Address: github.com');
     expect(options.detail).toContain('/tmp/project\\nshown-literally');
   });
 

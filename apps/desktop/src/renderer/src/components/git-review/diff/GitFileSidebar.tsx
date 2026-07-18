@@ -19,9 +19,9 @@ interface GitFileSidebarProps {
 }
 
 const groupLabels: Readonly<Record<GitReviewArea, string>> = {
-  staged: 'Staged changes',
-  unstaged: 'Unstaged changes',
-  untracked: 'Untracked files',
+  staged: 'Ready to commit',
+  unstaged: 'Not ready to commit',
+  untracked: 'New files',
 };
 
 export function GitFileSidebar({
@@ -79,7 +79,16 @@ function GitFileGroup({
         <ul>
           {visibleFiles.map((file) => {
             const active = selection !== null && selectionKey(selection) === selectionKey(file);
-            const action = area === 'staged' ? 'Unstage' : 'Stage';
+            const action =
+              area === 'staged'
+                ? {
+                    aria: `Remove ${file.path} from commit`,
+                    title: 'Remove whole file from commit',
+                  }
+                : {
+                    aria: `Add ${file.path} to commit`,
+                    title: 'Add whole file to commit',
+                  };
             const stats = fileDiffStats(file);
             return (
               <li key={selectionKey(file)}>
@@ -102,8 +111,8 @@ function GitFileGroup({
                   className="git-file-action"
                   type="button"
                   disabled={busy}
-                  aria-label={`${action} ${file.path}`}
-                  title={`${action} whole file`}
+                  aria-label={action.aria}
+                  title={action.title}
                   onClick={() =>
                     area === 'staged' ? onUnstagePath(file.path) : onStagePath(file.path)
                   }

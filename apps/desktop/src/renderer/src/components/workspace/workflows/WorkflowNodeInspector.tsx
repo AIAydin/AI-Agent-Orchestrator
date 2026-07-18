@@ -43,19 +43,19 @@ function TaskNodeInspector({
       <header>
         <div>
           <ListChecks size={14} />
-          <h3>Executable task</h3>
+          <h3>Task</h3>
         </div>
-        <span>Agent-backed</span>
+        <span>Runs with an agent</span>
       </header>
       <label>
-        Agent assignee
+        Assigned agent
         <select
           name={`node-${node.id}-task-assignee`}
           value={node.data.assigneeId ?? ''}
           onFocus={onRecord}
           onChange={(event) => onUpdate({ assigneeId: event.target.value })}
         >
-          <option value="">Choose an Agent node…</option>
+          <option value="">Choose an agent…</option>
           {agents.map((agent) => (
             <option key={agent.id} value={agent.id}>
               {agent.data.title}
@@ -65,7 +65,7 @@ function TaskNodeInspector({
       </label>
       {agents.length === 0 && (
         <p className="workflow-config-warning" role="alert">
-          Add and configure an Agent node before this Task can run.
+          Add an agent to the canvas and configure it before this task can run.
         </p>
       )}
       {assignedAgent !== undefined && (
@@ -76,9 +76,9 @@ function TaskNodeInspector({
             adapterId={assignedAgent.data.adapterId ?? settings.defaultAgent}
           />
           <p>
-            This Task inherits its assignee Agent profile. Change the boundary on{' '}
-            <strong>{assignedAgent.data.title}</strong>; the exact effective profile is disclosed
-            again before the Task launches.
+            This task uses its assigned agent&apos;s permissions. Change them on{' '}
+            <strong>{assignedAgent.data.title}</strong>. You will see the exact permissions again
+            before the task starts.
           </p>
         </div>
       )}
@@ -121,7 +121,7 @@ function TaskNodeInspector({
         </label>
       </div>
       <label>
-        Acceptance criteria · one per line
+        Done when · one per line
         <textarea
           name={`node-${node.id}-task-criteria`}
           rows={5}
@@ -135,7 +135,7 @@ function TaskNodeInspector({
       </label>
       {fileNodes.length > 0 && (
         <fieldset className="workflow-check-producers">
-          <legend>Related file metadata</legend>
+          <legend>Related files</legend>
           {fileNodes.map((fileNode) => {
             const file = fileNode.data.file!;
             const key = `${file.projectId}:${file.relativePath}`;
@@ -160,8 +160,9 @@ function TaskNodeInspector({
         </fieldset>
       )}
       <p>
-        Related paths are prompt metadata only. Add explicit Context connections when the assigned
-        agent should receive file contents; every launch still requires exact disclosure approval.
+        Related files are reference only — the agent can&apos;t read their contents. Add a Context
+        connection if the agent should receive a file&apos;s contents. You still approve the exact
+        setup before anything starts.
       </p>
     </section>
   );
@@ -220,7 +221,7 @@ function ReviewGateInspector({
         />
         <span>
           <strong>Require human approval</strong>
-          <small>A deterministic or AI pass cannot bypass this decision.</small>
+          <small>Automated checks and AI results can&apos;t skip this approval.</small>
         </span>
       </label>
       <div className="workflow-gate-requirements">
@@ -247,10 +248,10 @@ function ReviewGateInspector({
       </div>
       <fieldset className="workflow-check-producers">
         <legend>
-          <ListChecks size={13} /> Required check producers
+          <ListChecks size={13} /> Required checks
         </legend>
         {testNodes.length === 0 ? (
-          <p>Add a Test node, configure its exact command, then select it here.</p>
+          <p>Add a test node to the canvas, set its command, then select it here.</p>
         ) : (
           testNodes.map((candidate) => {
             const producerId = checkProducerId(candidate);
@@ -280,10 +281,10 @@ function ReviewGateInspector({
       {(missingTestEvidence || missingLintEvidence) && (
         <p className="workflow-config-warning" role="alert">
           {missingTestEvidence && missingLintEvidence
-            ? 'Select both a test and lint producer before this gate can run.'
+            ? 'Select both a test check and a lint check before this gate can run.'
             : missingTestEvidence
-              ? 'Select a producer whose check kind is Test before this gate can run.'
-              : 'Select a producer whose check kind is Lint before this gate can run.'}
+              ? 'Select a check whose kind is Test before this gate can run.'
+              : 'Select a check whose kind is Lint before this gate can run.'}
         </p>
       )}
       <label>
@@ -305,15 +306,15 @@ function ReviewGateInspector({
           ))}
         </select>
         <small>
-          Choose a configured Agent node. Forgeboard supplies the exact reviewed output and
-          authoritative structured-review protocol when the workflow runs.
+          Choose an Agent node that is set up. Forgeboard gives it the exact output to review and
+          the required review format when the workflow runs.
         </small>
       </label>
       {selectedReviewer !== undefined &&
         (selectedReviewer.data.adapterId ?? settings.defaultAgent) === 'test-agent' && (
           <p className="workflow-config-warning" role="status">
-            Test agent is a deterministic demo fixture, not a real AI review, and cannot authorize
-            Git delivery. Choose Codex or Claude Code for delivery evidence.
+            Test agent is a predictable demo, not a real AI review, and cannot approve Git delivery.
+            Choose Codex or Claude Code when the review must count toward delivery.
           </p>
         )}
       {agentNodes.length === 0 && (
@@ -332,8 +333,9 @@ function ReviewGateInspector({
         selectedReviewer === undefined && (
           <div className="workflow-config-warning" role="alert">
             <p>
-              This gate references unavailable or unsupported reviewer agent{' '}
-              <code>{node.data.reviewerAgentId}</code> and cannot advance until it is removed.
+              This imported gate points to reviewer agent <code>{node.data.reviewerAgentId}</code>,
+              which is unavailable or unsupported. The gate can&apos;t continue until you remove the
+              requirement.
             </p>
             <button
               type="button"
@@ -349,7 +351,7 @@ function ReviewGateInspector({
         )}
       <div className="workflow-retry-grid">
         <label>
-          Maximum iterations
+          Maximum attempts
           <input
             type="number"
             name={`node-${node.id}-maximum-iterations`}
@@ -368,7 +370,7 @@ function ReviewGateInspector({
           />
         </label>
         <label>
-          Retry backoff · ms
+          Wait between retries · ms
           <input
             type="number"
             name={`node-${node.id}-retry-backoff`}
@@ -388,11 +390,11 @@ function ReviewGateInspector({
         </label>
       </div>
       <p>
-        Failing deterministic checks remain authoritative. A reviewer agent may add structured
-        findings, but it cannot turn a failing check green.
+        A failed automated check always counts as failed. A reviewer agent can add notes, but it
+        can&apos;t make a failed check pass.
       </p>
       <span className="workflow-gate-summary">
-        <CheckCircle2 size={13} /> {required.size} required producer{required.size === 1 ? '' : 's'}
+        <CheckCircle2 size={13} /> {required.size} required check{required.size === 1 ? '' : 's'}
       </span>
     </section>
   );
@@ -481,7 +483,7 @@ function gateLabel(state: WorkshopNode['data']['gateState']): string {
     pending: 'Pending',
     passed: 'Passed',
     failed: 'Failed',
-    'waiting-for-human': 'Waiting for human',
+    'waiting-for-human': 'Waiting for you',
   }[state ?? 'pending'];
 }
 

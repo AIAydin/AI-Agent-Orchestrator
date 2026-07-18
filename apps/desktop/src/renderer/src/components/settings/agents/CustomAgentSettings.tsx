@@ -5,13 +5,15 @@ import { SettingsSection, type AsyncSettingsProps } from '../shared.js';
 export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsProps) {
   return (
     <SettingsSection
-      title="Custom CLI"
-      description="Build a local adapter through bounded UI fields. No manifest or config-file editing is required."
+      title="Custom tool"
+      description="Run your own command-line tool as an agent by filling in these fields. No config files to edit."
     >
       <label className="switch-row">
         <span>
-          <strong>Enable custom CLI</strong>
-          <small>Every launch still requires exact command and permission approval.</small>
+          <strong>Enable a custom tool</strong>
+          <small>
+            Forgeboard still shows the exact command and asks for approval before every run.
+          </small>
         </span>
         <input
           type="checkbox"
@@ -43,7 +45,7 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
           />
         </label>
         <label>
-          Provider name
+          Company or service name
           <input
             name="custom-agent-provider-name"
             value={draft.customAgent.providerName}
@@ -57,13 +59,13 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
         </label>
       </div>
       <div className="settings-form-field">
-        <label htmlFor="custom-agent-executable">Executable</label>
+        <label htmlFor="custom-agent-executable">Program file</label>
         <span className="path-picker">
           <input
             id="custom-agent-executable"
             name="custom-agent-executable"
             value={draft.customAgent.executable}
-            placeholder="Choose the custom CLI executable"
+            placeholder="Pick the program to run"
             onChange={(event) =>
               setDraft({
                 ...draft,
@@ -90,7 +92,7 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
         </span>
       </div>
       <label>
-        Provider disclosure
+        Privacy note
         <textarea
           name="custom-agent-provider-disclosure"
           rows={3}
@@ -105,8 +107,8 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
       </label>
       <label className="switch-row">
         <span>
-          <strong>May send selected context off device</strong>
-          <small>Shown in privacy and every launch disclosure.</small>
+          <strong>May send selected files and code off this computer</strong>
+          <small>Shown in Privacy settings and before every run.</small>
         </span>
         <input
           type="checkbox"
@@ -122,7 +124,7 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
       </label>
       <div className="settings-grid two-column">
         <label>
-          Prompt delivery
+          Send the prompt as
           <select
             name="custom-agent-prompt-delivery"
             value={draft.customAgent.promptTransport}
@@ -136,12 +138,12 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
               })
             }
           >
-            <option value="argument">Final argument</option>
-            <option value="stdin">Standard input</option>
+            <option value="argument">The last command argument</option>
+            <option value="stdin">Standard input (typed in)</option>
           </select>
         </label>
         <label>
-          Runtime
+          How it runs
           <select
             name="custom-agent-runtime"
             value={draft.customAgent.runtime}
@@ -155,8 +157,8 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
               })
             }
           >
-            <option value="pty">Interactive terminal (PTY)</option>
-            <option value="pipes">Standard pipes</option>
+            <option value="pty">Interactive terminal</option>
+            <option value="pipes">Plain input/output (pipes)</option>
           </select>
         </label>
         <label>
@@ -178,12 +180,12 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
             <option value="text">Plain text</option>
             <option value="json-lines">JSON Lines</option>
           </select>
-          <small>Choose JSON Lines only when the CLI emits one JSON object per line.</small>
+          <small>Choose JSON Lines only if the tool prints one JSON object per line.</small>
         </label>
       </div>
       <label>
         Launch arguments
-        <small>Before the prompt. {LITERAL_ARGUMENT_HELP}</small>
+        <small>Added before the prompt. {LITERAL_ARGUMENT_HELP}</small>
         <textarea
           name="custom-agent-launch-arguments"
           rows={4}
@@ -201,7 +203,7 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
         />
       </label>
       <label>
-        Version arguments <small>{LITERAL_ARGUMENT_HELP}</small>
+        Version-check arguments <small>{LITERAL_ARGUMENT_HELP}</small>
         <textarea
           name="custom-agent-version-arguments"
           rows={2}

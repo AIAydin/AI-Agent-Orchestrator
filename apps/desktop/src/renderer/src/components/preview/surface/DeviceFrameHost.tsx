@@ -71,7 +71,7 @@ export const DeviceFrameHost = forwardRef<DeviceFrameHandle, DeviceFrameHostProp
         <figcaption>
           {preset.label} · {viewport.width} × {viewport.height}
           {controller.surface?.touchEmulation ? (
-            <span className="preview-touch-badge">Touch emulation active</span>
+            <span className="preview-touch-badge">Touchscreen mode on</span>
           ) : null}
         </figcaption>
         <div className="preview-device-shell">
@@ -80,20 +80,20 @@ export const DeviceFrameHost = forwardRef<DeviceFrameHandle, DeviceFrameHostProp
             className="preview-device-host"
             data-status={controller.surface?.status ?? 'connecting'}
             style={{ width: viewport.width, height: viewport.height }}
-            aria-label={`${preset.label} secure preview surface`}
+            aria-label={`${preset.label} preview`}
           >
             {!controller.surface || controller.failure ? (
               <div className="preview-surface-fallback">
                 {controller.failure ? (
                   <>
-                    <strong>Preview surface unavailable</strong>
+                    <strong>Preview unavailable</strong>
                     <span>{controller.failure}</span>
                     <button type="button" disabled={readOnly} onClick={controller.retry}>
-                      Retry surface
+                      Try again
                     </button>
                   </>
                 ) : (
-                  <span>Connecting secure surface…</span>
+                  <span>Opening preview…</span>
                 )}
               </div>
             ) : null}

@@ -483,7 +483,9 @@ export class GitIpcService {
         throw new Error('Stage at least one change before preparing a commit.');
       }
       if (!identity.ready) {
-        throw new Error('Set a Git identity in Settings or configure user.name and user.email.');
+        throw new Error(
+          'Set a Git author name and email in Settings, or configure them for the primary checkout, before committing.',
+        );
       }
       const plan: PendingCommitPlan = {
         kind: 'commit',
@@ -827,7 +829,9 @@ export class GitIpcService {
         status.branch !== target.comparisonBinding.branch ||
         status.headOid !== target.comparisonBinding.headCommit
       ) {
-        throw new Error('The owned agent worktree branch or HEAD changed during Git review.');
+        throw new Error(
+          'The agent worktree branch or its latest commit changed during the review.',
+        );
       }
       await this.#assertComparisonTargetCurrent(target);
     }
@@ -914,7 +918,7 @@ export class GitIpcService {
       const resolved = await this.#targets.resolve(input);
       const headCommit = resolved.state.branchOid;
       if (headCommit === null) {
-        throw new Error('The authoritative agent worktree has no current branch commit.');
+        throw new Error('The agent worktree has no current branch commit.');
       }
       const view = GitReviewTargetViewSchema.parse({
         kind: 'agent-worktree',
@@ -944,14 +948,14 @@ export class GitIpcService {
       throw new Error('The selected project is no longer available.');
     }
     if (!project.health.isGitRepository) {
-      throw new Error('Initialize Git for this project before reviewing changes.');
+      throw new Error('Set up Git for this project before reviewing changes.');
     }
     const repositoryRoot = await this.repositories.resolveRepositoryRoot(project.path);
     if (
       repositoryRoot !== project.path ||
       this.store.getProjectByPath(repositoryRoot)?.id !== input.projectId
     ) {
-      throw new Error('Reopen this project from its canonical Git repository root.');
+      throw new Error('Reopen this project from its main repository folder.');
     }
     return { view: input, repositoryRoot };
   }
@@ -974,7 +978,7 @@ export class GitIpcService {
       currentStatus.branch !== binding.branch ||
       currentStatus.headOid !== binding.headCommit
     ) {
-      throw new Error('The authoritative agent worktree changed during base comparison.');
+      throw new Error('The agent worktree changed during the base comparison.');
     }
   }
 
@@ -1245,19 +1249,19 @@ function discardPlanView(plan: PendingDiscardPlan): GitDiscardPlanView {
 function commitConfirmation(plan: PendingCommitPlan): MessageBoxOptions {
   return {
     type: 'question',
-    title: 'Commit staged changes',
-    message: `Commit ${String(plan.stagedPaths.length)} staged path${plan.stagedPaths.length === 1 ? '' : 's'}?`,
+    title: 'Commit staged changes?',
+    message: `Commit ${String(plan.stagedPaths.length)} staged file${plan.stagedPaths.length === 1 ? '' : 's'}?`,
     detail: [
-      `Target: ${targetDisclosure(plan.target)}`,
-      `Branch: ${plan.branch === null ? 'detached HEAD' : displayBoundedLiteral(plan.branch, 4_096)}`,
-      `Identity: ${displayBoundedLiteral(plan.identity.name, 512)} <${displayBoundedLiteral(plan.identity.email, 512)}>`,
-      `Message: ${displayBoundedLiteral(plan.message, 2_048)}`,
-      `Diff: +${String(plan.additions)} / -${String(plan.deletions)}`,
+      `Where: ${targetDisclosure(plan.target)}`,
+      `Branch: ${plan.branch === null ? 'no branch checked out' : displayBoundedLiteral(plan.branch, 4_096)}`,
+      `Commit author: ${displayBoundedLiteral(plan.identity.name, 512)} <${displayBoundedLiteral(plan.identity.email, 512)}>`,
+      `Commit message: ${displayBoundedLiteral(plan.message, 2_048)}`,
+      `Changes: +${String(plan.additions)} / -${String(plan.deletions)}`,
       '',
       ...boundedPathDisclosure(plan.stagedPaths),
       '',
-      'Forgeboard will commit only the exact staged snapshot reviewed in this plan. If HEAD or staged content changed, the commit is refused.',
-      'Repository hooks and commit signing are disabled for this Forgeboard commit.',
+      'Forgeboard commits only the exact staged snapshot you reviewed. If the latest commit on the branch or the staged content changed, the commit is refused.',
+      'Repository hooks (custom scripts) and commit signing are skipped for this commit.',
     ].join('\n'),
     buttons: ['Cancel', 'Commit'],
     defaultId: 0,
@@ -1269,16 +1273,16 @@ function commitConfirmation(plan: PendingCommitPlan): MessageBoxOptions {
 function discardConfirmation(plan: PendingDiscardPlan): MessageBoxOptions {
   return {
     type: 'warning',
-    title: 'Discard working-tree changes',
-    message: `Permanently discard ${String(plan.hunkIds.length)} selected hunk${plan.hunkIds.length === 1 ? '' : 's'}?`,
+    title: 'Discard uncommitted changes?',
+    message: `Permanently discard ${String(plan.hunkIds.length)} selected change block${plan.hunkIds.length === 1 ? '' : 's'}?`,
     detail: [
-      `Target: ${targetDisclosure(plan.target)}`,
-      `Branch: ${plan.branch === null ? 'detached HEAD' : displayBoundedLiteral(plan.branch, 4_096)}`,
-      `Diff removed: +${String(plan.additions)} / -${String(plan.deletions)}`,
+      `Where: ${targetDisclosure(plan.target)}`,
+      `Branch: ${plan.branch === null ? 'no branch checked out' : displayBoundedLiteral(plan.branch, 4_096)}`,
+      `Changes removed: +${String(plan.additions)} / -${String(plan.deletions)}`,
       '',
       ...boundedPathDisclosure(plan.paths),
       '',
-      'This changes files in the working tree and cannot be undone by Forgeboard. The operation is bound to the exact reviewed hunk content and will fail if it changed.',
+      'This rewrites files in your workspace and cannot be undone by Forgeboard. It applies only to the exact change blocks you reviewed and fails if anything changed.',
     ].join('\n'),
     buttons: ['Cancel', 'Discard selected changes'],
     defaultId: 0,
@@ -1333,5 +1337,5 @@ function auditInputTargetMetadata(target: GitTargetInput): Record<string, unknow
 function targetDisclosure(target: GitReviewTargetView): string {
   return target.kind === 'primary'
     ? 'primary checkout'
-    : `agent worktree for run ${target.runId.slice(0, 12)} (base ${target.baseCommit.slice(0, 12)})`;
+    : `agent workspace for run ${target.runId.slice(0, 12)} (base ${target.baseCommit.slice(0, 12)})`;
 }
