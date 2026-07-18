@@ -42,6 +42,7 @@ jobs:
           scripts/release/artifacts.test.mjs
           scripts/release/checksums.test.mjs
           scripts/release/metadata.test.mjs
+          scripts/release/publication.test.mjs
           scripts/release/signing.test.mjs
           scripts/startup/start-from-source.test.mjs
       - run: pnpm verify
@@ -60,18 +61,26 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [[ -z "${CSC_LINK//[[:space:]]/}" ]]; then
+          signing_count=0
+          notarization_count=0
+          [[ -n "${CSC_LINK//[[:space:]]/}" ]] && signing_count=$((signing_count + 1))
+          [[ -n "${CSC_KEY_PASSWORD//[[:space:]]/}" ]] && signing_count=$((signing_count + 1))
+          [[ -n "${APPLE_ID//[[:space:]]/}" ]] && notarization_count=$((notarization_count + 1))
+          [[ -n "${APPLE_APP_SPECIFIC_PASSWORD//[[:space:]]/}" ]] && notarization_count=$((notarization_count + 1))
+          [[ -n "${APPLE_TEAM_ID//[[:space:]]/}" ]] && notarization_count=$((notarization_count + 1))
+          if (( signing_count == 1 || (notarization_count > 0 && notarization_count < 3) )); then
+            echo "macOS signing and notarization secrets must be configured as complete groups." >&2
+            exit 1
+          fi
+          if (( notarization_count == 3 && signing_count != 2 )); then
+            echo "macOS notarization credentials require the complete signing secret group." >&2
+            exit 1
+          fi
+          if (( signing_count == 0 )); then
             unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
             export CSC_IDENTITY_AUTO_DISCOVERY=false
-          else
-            if [[ -z "${CSC_KEY_PASSWORD//[[:space:]]/}" ]]; then
-              unset CSC_KEY_PASSWORD
-            fi
-            if [[ -z "${APPLE_ID//[[:space:]]/}" || \
-                  -z "${APPLE_APP_SPECIFIC_PASSWORD//[[:space:]]/}" || \
-                  -z "${APPLE_TEAM_ID//[[:space:]]/}" ]]; then
-              unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
-            fi
+          elif (( notarization_count == 0 )); then
+            unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
           fi
           pnpm package
           node scripts/release/artifacts.mjs apps/desktop/release
@@ -82,12 +91,15 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) {
+          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)
+          if ($hasCertificate -ne $hasPassword) {
+            throw 'Windows signing certificate and password secrets must be configured together.'
+          }
+          if (-not $hasCertificate) {
             Remove-Item Env:WIN_CSC_LINK -ErrorAction SilentlyContinue
             Remove-Item Env:WIN_CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
             $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
-          } elseif ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
-            Remove-Item Env:WIN_CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
           }
           pnpm package
           node scripts/release/artifacts.mjs apps/desktop/release
@@ -152,14 +164,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          release_args=(--verify-tag --title "Forgeboard ${GITHUB_REF_NAME}")
           notes_file="docs/releases/${GITHUB_REF_NAME}.md"
-          if [[ -f "$notes_file" ]]; then
-            release_args+=(--notes-file "$notes_file")
-          else
-            release_args+=(--generate-notes)
-          fi
+          test -f "$notes_file"
+          publication_dir="${RUNNER_TEMP}/forgeboard-publication"
+          node scripts/release/publication.mjs artifacts "$notes_file" "$publication_dir" "$GITHUB_SHA"
+          release_title="$(cat "$publication_dir/title.txt")"
+          release_args=(--verify-tag --title "$release_title" --notes-file "$publication_dir/notes.md")
           if [[ "$GITHUB_REF_NAME" == v0.* || "$GITHUB_REF_NAME" == *-* ]]; then
             release_args+=(--prerelease --latest=false)
           fi
+          git fetch --force --no-tags origin \
+            "refs/tags/${GITHUB_REF_NAME}:refs/tags/forgeboard-publication-check"
+          test "$(git rev-list -n 1 refs/tags/forgeboard-publication-check)" = "$GITHUB_SHA"
           gh release create "${GITHUB_REF_NAME}" artifacts/* "${release_args[@]}"

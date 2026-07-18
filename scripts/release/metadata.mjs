@@ -105,12 +105,6 @@ function validateReleaseNotes(releaseNotes, version) {
     releaseNotes.includes(`Forgeboard v${version}`),
     `Release notes must identify Forgeboard v${version}.`,
   );
-  if (String(version).startsWith('0.')) {
-    assert(
-      releaseNotes.includes('unsigned development prerelease'),
-      'Pre-1.0 release notes must disclose the unsigned development status.',
-    );
-  }
 }
 
 function validateDesktopPackageMetadata(desktopPackage) {

@@ -28,6 +28,7 @@ jobs:
           scripts/release/artifacts.test.mjs
           scripts/release/checksums.test.mjs
           scripts/release/metadata.test.mjs
+          scripts/release/publication.test.mjs
           scripts/release/signing.test.mjs
           scripts/startup/start-from-source.test.mjs
       - run: pnpm check:structure
