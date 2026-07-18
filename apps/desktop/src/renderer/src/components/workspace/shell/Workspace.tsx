@@ -70,6 +70,7 @@ import {
 } from '../canvas/interactions/groups/group-workspace-state.js';
 import { useCanvasGraphInteractions } from '../canvas/interactions/workspace/useCanvasGraphInteractions.js';
 import { WorkspaceCommandBar } from './WorkspaceCommandBar.js';
+import { useProjectStatus } from './status/useProjectStatus.js';
 import { applyNodeDataPatch } from './node-data-patch.js';
 import { WorkflowDecisionDialog } from '../workflows/WorkflowDecisionDialog.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
@@ -97,6 +98,7 @@ import type {
 import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
 import { useAgentRunController } from '../runs/useAgentRunController.js';
 import { useAgentStatusReconciliation } from '../runs/useAgentStatusReconciliation.js';
+import { useAgentWorktreeRecord } from '../runs/useAgentWorktreeAvailability.js';
 import { effectiveNodeModel } from '../runs/agent-node/model-selection.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
 import { useDurableCanvasHistory } from '../canvas/history/useDurableCanvasHistory.js';
@@ -124,6 +126,7 @@ import {
   workflowCanvasNodeStatus,
   workflowCanvasReviewGateState,
 } from '../workflows/workflow-node-status.js';
+import { workflowEdgeRuntimePresentation } from '../workflows/workflow-edge-presentation.js';
 import {
   appendLocalComment,
   appendSharedComment,
@@ -142,22 +145,6 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
     );
   },
 );
-
-function workflowEdgeColor(
-  disposition: WorkflowExecutionView['edges'][number]['disposition'],
-): string {
-  switch (disposition) {
-    case 'satisfied':
-      return 'var(--green)';
-    case 'waiting':
-    case 'waiting-for-approval':
-      return 'var(--yellow)';
-    case 'blocked':
-      return 'var(--red)';
-    case 'inactive':
-      return 'var(--text-faint)';
-  }
-}
 
 function workflowDecisionIsCurrent(
   target: WorkflowDecisionTarget,
@@ -242,6 +229,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   nodesRef.current = nodes;
   edgesRef.current = edges;
 
+  const projectStatus = useProjectStatus(project);
+
   useEffect(() => {
     loaded.current = false;
     const loadWorkspace = async () => {
@@ -306,6 +295,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
               ...(update.changedFiles === undefined ? {} : { changedFiles: update.changedFiles }),
               ...(update.branch === undefined ? {} : { branch: update.branch }),
               ...(update.worktreeId === undefined ? {} : { worktreeId: update.worktreeId }),
+              ...(update.worktreeRecordedActive === undefined
+                ? {}
+                : { worktreeRecordedActive: update.worktreeRecordedActive }),
               ...(update.interactiveInputSupported === undefined
                 ? {}
                 : {
@@ -979,6 +971,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     updateNodeData,
     onError,
   });
+  useAgentWorktreeRecord({ projectId: project.id, nodes, updateNodeData });
   const readCurrentGraph = useCallback(
     () => ({ nodes: nodesRef.current, edges: edgesRef.current }),
     [],
@@ -1108,16 +1101,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       edges.map((edge) => {
         const runtime = workflowEdgeStates.get(edge.id);
         if (runtime === undefined) return edge;
+        const presentation = workflowEdgeRuntimePresentation(
+          runtime,
+          edge.data?.edgeType,
+          edge.className,
+        );
         return {
           ...edge,
-          animated: runtime.disposition === 'waiting' || runtime.status === 'running',
-          className: `${edge.className ?? ''} workflow-edge-runtime ${runtime.status}`.trim(),
-          label: `${edge.data?.edgeType ?? runtime.type} · ${runtime.status.replaceAll('-', ' ')} · ${runtime.disposition.replaceAll('-', ' ')}`,
+          ...presentation,
           style: {
             ...edge.style,
-            stroke: workflowEdgeColor(runtime.disposition),
-            strokeWidth: runtime.disposition === 'inactive' ? 1 : 2,
-            opacity: runtime.disposition === 'inactive' ? 0.45 : 1,
+            ...presentation.style,
           },
         };
       }),
@@ -1468,7 +1462,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   return (
     <main className="workspace-shell">
       <WorkspaceCommandBar
-        project={project}
+        project={projectStatus.project}
+        projectStatusAvailable={projectStatus.available}
         canvasName={canvas?.name}
         agents={agents}
         saveState={saveState}
@@ -1487,6 +1482,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             : 'Your role is view-only: you can see workflow history but cannot start runs.'
         }
         commandPaletteShortcut={commandPaletteShortcutLabel(settings.keyboardPreset)}
+        collaborationEnabled={settings.collaborationEnabled}
+        sharingStatus={collaborationCanvas.connectionStatus}
         onCloseProject={() => void closeProject()}
         onUndo={undo}
         onRedo={redo}
@@ -1704,7 +1701,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onDuplicateSelected={duplicateSelected}
           onDeleteSelected={deleteSelected}
           onRunInputChange={runs.setRunInput}
-          onSendRunInput={() => void runs.sendRunInput()}
+          onSendRunInput={(explicitInput) => void runs.sendRunInput(explicitInput)}
           onControlRun={(action) => void runs.controlRun(action)}
           onPrepareRun={() => {
             if (selectedPermissionUnavailableReason !== null) {

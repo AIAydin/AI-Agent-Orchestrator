@@ -226,9 +226,6 @@ export class OutboundActionGate {
         });
         return { outcome: 'denied' };
       }
-      const value = await input.execute(EXECUTION_PERMIT);
-      this.audit.appendAudit('external-send', plan.disclosure.action, 'allowed', audit);
-      return { outcome: 'allowed', value };
     } catch (error) {
       this.audit.appendAudit('external-send', plan.disclosure.action, 'failed', {
         ...audit,
@@ -240,28 +237,84 @@ export class OutboundActionGate {
       });
       throw error;
     }
+    // Persist the exact authorization before the irreversible external effect. If the audit sink
+    // fails, execution never receives the gate-issued permit.
+    this.audit.appendAudit('external-send', plan.disclosure.action, 'allowed', {
+      ...audit,
+      phase: 'authorized-before-execution',
+    });
+    try {
+      return { outcome: 'allowed', value: await input.execute(EXECUTION_PERMIT) };
+    } catch (error) {
+      this.audit.appendAudit('external-send', plan.disclosure.action, 'failed', {
+        ...audit,
+        failureKind: 'outbound-action-failed',
+        errorKind: safeErrorKind(error),
+      });
+      throw error;
+    }
   }
 
   public discardOwner(ownerId: string): void {
     assertOwnerId(ownerId);
+    let auditFailure: unknown;
     for (const [id, plan] of this.#plans) {
-      if (plan.ownerId === ownerId) this.#plans.delete(id);
+      if (plan.ownerId !== ownerId) continue;
+      try {
+        this.#auditPlanDenial(plan, 'owner-closed');
+      } catch (error) {
+        auditFailure ??= error;
+      }
+      this.#plans.delete(id);
+    }
+    if (auditFailure !== undefined) {
+      throw auditFailure instanceof Error
+        ? auditFailure
+        : new Error('Outbound owner-revocation audit failed.');
     }
   }
 
   /** Idempotently releases one plan without revealing another owner's plan state. */
   public cancel(ownerId: string, planId: string): void {
     assertOwnerId(ownerId);
-    this.#discardExpiredPlans();
     const plan = this.#plans.get(planId);
-    if (plan?.ownerId === ownerId) this.#plans.delete(planId);
+    if (plan === undefined) {
+      this.#discardExpiredPlans();
+      this.#auditUnknownPlan(ownerId, planId, 'cancel-plan-not-found');
+      return;
+    }
+    if (plan.ownerId !== ownerId) {
+      this.#auditPlanDenial(plan, 'cancel-owner-mismatch', ownerId);
+      return;
+    }
+    this.#auditPlanDenial(
+      plan,
+      plan.expiresAtMs <= this.#now().getTime()
+        ? 'approval-expired-before-cancel'
+        : 'renderer-plan-cancelled',
+    );
+    this.#plans.delete(planId);
   }
 
   #takePlan(ownerId: string, planId: string): PendingOutboundPlan {
     assertOwnerId(ownerId);
-    this.#discardExpiredPlans();
     const plan = this.#plans.get(planId);
-    if (plan === undefined || plan.ownerId !== ownerId) {
+    if (plan === undefined) {
+      this.#discardExpiredPlans();
+      this.#auditUnknownPlan(ownerId, planId, 'consume-plan-not-found');
+      throw new Error(
+        'The outbound approval is missing, expired, already used, or belongs to another owner.',
+      );
+    }
+    if (plan.ownerId !== ownerId) {
+      this.#auditPlanDenial(plan, 'consume-owner-mismatch', ownerId);
+      throw new Error(
+        'The outbound approval is missing, expired, already used, or belongs to another owner.',
+      );
+    }
+    if (plan.expiresAtMs <= this.#now().getTime()) {
+      this.#auditPlanDenial(plan, 'approval-expired-before-confirmation');
+      this.#plans.delete(planId);
       throw new Error(
         'The outbound approval is missing, expired, already used, or belongs to another owner.',
       );
@@ -273,7 +326,9 @@ export class OutboundActionGate {
   #discardExpiredPlans(): void {
     const now = this.#now().getTime();
     for (const [id, plan] of this.#plans) {
-      if (plan.expiresAtMs <= now) this.#plans.delete(id);
+      if (plan.expiresAtMs > now) continue;
+      this.#auditPlanDenial(plan, 'approval-expired-unused');
+      this.#plans.delete(id);
     }
   }
 
@@ -284,13 +339,33 @@ export class OutboundActionGate {
     const ownerPlans = byExpiry.filter((plan) => plan.ownerId === ownerId);
     while (ownerPlans.length >= MAX_PENDING_PLANS_PER_OWNER) {
       const oldest = ownerPlans.shift();
-      if (oldest !== undefined) this.#plans.delete(oldest.id);
+      if (oldest !== undefined) {
+        this.#auditPlanDenial(oldest, 'owner-plan-capacity-evicted');
+        this.#plans.delete(oldest.id);
+      }
     }
     while (this.#plans.size >= MAX_PENDING_PLANS) {
       const oldest = byExpiry.shift();
       if (oldest === undefined) break;
+      this.#auditPlanDenial(oldest, 'global-plan-capacity-evicted');
       this.#plans.delete(oldest.id);
     }
+  }
+
+  #auditPlanDenial(plan: PendingOutboundPlan, reason: string, requesterOwnerId?: string): void {
+    this.audit.appendAudit('external-send', plan.disclosure.action, 'denied', {
+      ...auditMetadata(plan),
+      reason,
+      ...(requesterOwnerId === undefined ? {} : { requesterOwnerSha256: sha256(requesterOwnerId) }),
+    });
+  }
+
+  #auditUnknownPlan(ownerId: string, planId: string, reason: string): void {
+    this.audit.appendAudit('external-send', 'approval-plan', 'denied', {
+      ownerSha256: sha256(ownerId),
+      planIdSha256: sha256(planId),
+      reason,
+    });
   }
 }
 
@@ -322,9 +397,13 @@ function auditMetadata(plan: PendingOutboundPlan): Record<string, unknown> {
     destinationSha256: createHash('sha256')
       .update(JSON.stringify(plan.disclosure.destination))
       .digest('hex'),
-    ownerSha256: createHash('sha256').update(plan.ownerId).digest('hex'),
+    ownerSha256: sha256(plan.ownerId),
     approvalMode: 'single-use',
   };
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function assertOwnerId(ownerId: string): void {

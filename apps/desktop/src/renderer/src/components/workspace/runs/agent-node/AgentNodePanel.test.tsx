@@ -108,11 +108,37 @@ describe('AgentNodePanel configuration and usage', () => {
     expect(metric('Output tokens')).toBe('300');
     expect(metric('Total tokens')).toBe('1,500');
   });
+
+  it('offers only real input/interrupt controls and explains pause versus reviewed resume', () => {
+    const onSendRunInput = vi.fn();
+    renderPanel(
+      agentNode({
+        status: 'running',
+        interactiveInputSupported: true,
+        interruptSupported: true,
+        pauseSupported: false,
+      }),
+      { running: true, onSendRunInput },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send “continue”' }));
+    expect(onSendRunInput).toHaveBeenCalledWith('continue');
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Pause unavailable' }).disabled,
+    ).toBe(true);
+    expect(screen.getByText(/cannot pause an Agent process/iu)).toBeTruthy();
+    expect(screen.getByText(/always launches a freshly reviewed continuation/iu)).toBeTruthy();
+  });
 });
 
 function renderPanel(
   selectedNode: WorkshopNode,
-  overrides: { readonly onRecord?: () => void; readonly onUpdateSelected?: () => void } = {},
+  overrides: {
+    readonly onRecord?: () => void;
+    readonly onUpdateSelected?: () => void;
+    readonly onSendRunInput?: (explicitInput?: string) => void;
+    readonly running?: boolean;
+  } = {},
 ) {
   return render(
     <AgentNodePanel
@@ -123,13 +149,13 @@ function renderPanel(
       runnableAgents={[codex, testAgent]}
       settings={settings}
       runInput=""
-      running={false}
+      running={overrides.running ?? false}
       preparingRun={false}
       configurationReadOnly={false}
       onRecord={overrides.onRecord ?? vi.fn()}
       onUpdateSelected={overrides.onUpdateSelected ?? vi.fn()}
       onRunInputChange={vi.fn()}
-      onSendRunInput={vi.fn()}
+      onSendRunInput={overrides.onSendRunInput ?? vi.fn()}
       onControlRun={vi.fn()}
       onPrepareRun={vi.fn()}
     />,

@@ -111,6 +111,7 @@ interface RunEventUpdate {
   changedFiles?: string[];
   branch?: string | undefined;
   worktreeId?: string | undefined;
+  worktreeRecordedActive?: boolean;
   interactiveInputSupported?: boolean;
   pauseSupported?: boolean;
   interruptSupported?: boolean;
@@ -155,7 +156,9 @@ export function summarizeRunEvent(event: RunEventEnvelope): RunEventUpdate {
       activity: `Run ${summary}.`,
       changedFiles,
       ...(typeof payload?.branch === 'string' ? { branch: payload.branch } : {}),
-      ...(typeof payload?.worktreeId === 'string' ? { worktreeId: payload.worktreeId } : {}),
+      ...(typeof payload?.worktreeId === 'string'
+        ? { worktreeId: payload.worktreeId, worktreeRecordedActive: true }
+        : {}),
       ...(typeof capabilities?.interactiveInput === 'boolean'
         ? { interactiveInputSupported: capabilities.interactiveInput }
         : {}),
@@ -196,7 +199,7 @@ export function summarizeRunEvent(event: RunEventEnvelope): RunEventUpdate {
       phase === 'starting' || phase === 'running'
         ? 'running'
         : phase === 'interrupting' || phase === 'terminating'
-          ? 'waiting'
+          ? 'cancelling'
           : undefined;
     return {
       ...(status ? { status } : {}),
@@ -220,7 +223,7 @@ export function summarizeRunEvent(event: RunEventEnvelope): RunEventUpdate {
       return { activity: `Agent wrote ${message.path}.` };
     }
     if (message?.type === 'input-requested' && typeof message.prompt === 'string') {
-      return { status: 'waiting', activity: `Agent requested input: ${message.prompt}` };
+      return { status: 'running', activity: `Agent requested input: ${message.prompt}` };
     }
     return {};
   }

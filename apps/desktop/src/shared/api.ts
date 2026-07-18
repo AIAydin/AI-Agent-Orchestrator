@@ -298,6 +298,7 @@ export interface ForgeboardApi {
   };
   projects: {
     recent(): Promise<IpcResult<Project[]>>;
+    refresh(projectId: string): Promise<IpcResult<Project>>;
     pick(): Promise<IpcResult<Project | null>>;
     pickParent(): Promise<IpcResult<string | null>>;
     pickExecutable(): Promise<IpcResult<string | null>>;

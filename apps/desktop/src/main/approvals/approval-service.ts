@@ -26,6 +26,12 @@ import {
 import type { TransactionalAuditEvent } from '../storage.js';
 
 export interface ApprovalStore {
+  appendAudit(
+    category: string,
+    action: string,
+    outcome: 'allowed' | 'denied' | 'failed',
+    metadata: Record<string, unknown>,
+  ): void;
   saveApprovalWithAudit(record: ApprovalRecord, audit: TransactionalAuditEvent): ApprovalRecord;
   getApproval(approvalId: string): ApprovalRecord | undefined;
   listApprovals(input: {
@@ -86,8 +92,12 @@ export class ApprovalService {
     const input = ApprovalAuthorizationInputSchema.parse(inputValue);
     const now = this.#validNow();
     const record = this.store.getApproval(input.approvalId);
-    if (record === undefined) throw new Error('The scoped approval does not exist.');
+    if (record === undefined) {
+      this.#denyAuthorization(input, now, 'approval-not-found');
+      throw new Error('The scoped approval does not exist.');
+    }
     if (!isApprovalActive(record, input.scope, now)) {
+      this.#denyAuthorization(input, now, inactiveReasonCode(record, input.scope, now));
       throw new Error(this.#inactiveReason(record, input.scope, now));
     }
     return this.store.consumeApprovalWithAudit(
@@ -112,11 +122,17 @@ export class ApprovalService {
     const now = this.#validNow();
     const current = this.store.getApproval(input.approvalId);
     if (current === undefined || current.scope.projectId !== input.projectId) {
+      this.#denyRevocation(input, now, 'approval-not-found-or-cross-project');
       throw new Error('The scoped approval does not exist for this project.');
     }
-    if (current.decision !== 'approved')
+    if (current.decision !== 'approved') {
+      this.#denyRevocation(input, now, 'denied-decision');
       throw new Error('A denied decision is not an active grant.');
-    if (current.revokedAt !== undefined) throw new Error('The scoped approval is already revoked.');
+    }
+    if (current.revokedAt !== undefined) {
+      this.#denyRevocation(input, now, 'already-revoked');
+      throw new Error('The scoped approval is already revoked.');
+    }
     return this.#view(
       this.store.revokeApprovalWithAudit(
         current.id,
@@ -167,6 +183,45 @@ export class ApprovalService {
     const status = approvalStatus(record, now);
     return `The scoped approval is ${status} and cannot authorize this action.`;
   }
+
+  #denyAuthorization(input: ApprovalAuthorizationInput, occurredAt: Date, reason: string): void {
+    this.store.appendAudit('permission', 'saved-approval-use', 'denied', {
+      approvalId: input.approvalId,
+      projectId: input.scope.projectId,
+      action: input.scope.action,
+      resourceFingerprint: input.scope.resourceFingerprint,
+      ...(input.scope.agentId === undefined ? {} : { agentId: input.scope.agentId }),
+      ...(input.scope.runId === undefined ? {} : { runId: input.scope.runId }),
+      occurredAt: occurredAt.toISOString(),
+      reason,
+    });
+  }
+
+  #denyRevocation(input: ApprovalRevocationInput, occurredAt: Date, reason: string): void {
+    this.store.appendAudit('permission', 'saved-approval-revoke', 'denied', {
+      approvalId: input.approvalId,
+      projectId: input.projectId,
+      occurredAt: occurredAt.toISOString(),
+      reason,
+    });
+  }
+}
+
+function inactiveReasonCode(
+  record: ApprovalRecord,
+  expectedScope: ApprovalRecord['scope'],
+  now: Date,
+): string {
+  if (
+    record.scope.projectId !== expectedScope.projectId ||
+    record.scope.action !== expectedScope.action ||
+    record.scope.resourceFingerprint !== expectedScope.resourceFingerprint ||
+    record.scope.agentId !== expectedScope.agentId ||
+    record.scope.runId !== expectedScope.runId
+  ) {
+    return 'scope-mismatch';
+  }
+  return approvalStatus(record, now);
 }
 
 function approvalAudit(

@@ -1,0 +1,80 @@
+.workspace-status-indicators {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.workspace-status-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 190px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-soft);
+  font-size: 8px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-status-chip.sharing-connected {
+  color: var(--success);
+}
+
+.workspace-status-chip.sharing-error,
+.workspace-status-chip.dirty {
+  color: var(--warning);
+}
+
+.workspace-provider-status {
+  position: relative;
+}
+
+.workspace-provider-status > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.workspace-provider-status > summary::-webkit-details-marker {
+  display: none;
+}
+
+.workspace-provider-status[open] > summary {
+  color: var(--accent);
+}
+
+.workspace-provider-disclosure {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 7px);
+  right: 0;
+  width: min(360px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.workspace-provider-disclosure p {
+  margin: 0;
+}
+
+.workspace-provider-disclosure p + p {
+  margin-top: 7px;
+}
+
+@media (max-width: 1180px) {
+  .workspace-status-chip {
+    max-width: 150px;
+  }
+}

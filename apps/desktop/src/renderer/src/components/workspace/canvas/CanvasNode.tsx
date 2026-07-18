@@ -40,7 +40,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   kind: NodeKind;
   title: string;
   description: string;
-  status: 'idle' | 'waiting' | RunStatus;
+  status: 'idle' | RunStatus;
   locked: boolean;
   collapsed: boolean;
   color: string;
@@ -89,6 +89,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   reviewTarget?: { kind: 'primary' } | { kind: 'agent-run'; runId: string };
   deliveryTarget?: { kind: 'agent-run'; runId: string } | undefined;
   worktreeId?: string | undefined;
+  worktreeRecordedActive?: boolean | undefined;
   branch?: string | undefined;
   interactiveInputSupported?: boolean | undefined;
   pauseSupported?: boolean | undefined;
@@ -434,6 +435,16 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
               {permissionProfileLabel(data.permissionProfile)}
             </span>
           )}
+          {data.kind === 'agent' &&
+            (data.branch !== undefined ||
+              (data.worktreeId !== undefined && data.worktreeRecordedActive === true)) && (
+              <span className="node-worktree-badges" aria-label="Agent Git workspace">
+                {data.branch !== undefined && <span>Branch · {data.branch}</span>}
+                {data.worktreeId !== undefined && data.worktreeRecordedActive === true && (
+                  <span>Worktree assigned</span>
+                )}
+              </span>
+            )}
           {data.kind === 'extension' && data.extensionAvailability !== 'active' && (
             <span className="extension-node-state">
               {data.extensionAvailability === 'quarantined' ? 'Quarantined' : 'Unavailable'}

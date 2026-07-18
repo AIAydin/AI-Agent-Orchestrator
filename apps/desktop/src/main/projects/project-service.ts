@@ -118,6 +118,17 @@ export class ProjectService {
     return this.store.listProjects();
   }
 
+  async refreshProject(projectId: string, authority?: ProjectRequestAuthority): Promise<Project> {
+    const project = this.store.getProject(projectId);
+    if (!project) throw new Error('This project is no longer in your recent projects.');
+    const canonicalPath = await realpath(resolve(project.path));
+    const info = await stat(canonicalPath);
+    if (!info.isDirectory()) throw new Error('This project folder is no longer available.');
+    const health = await scanRepository(canonicalPath, this.repositories);
+    authority?.assertCurrent();
+    return this.store.saveProject({ ...project, path: canonicalPath, missing: false, health });
+  }
+
   async selectMovedProject(
     projectId: string,
     authority?: ProjectRequestAuthority,

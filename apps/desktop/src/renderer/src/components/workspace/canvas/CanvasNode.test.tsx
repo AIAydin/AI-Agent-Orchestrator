@@ -159,6 +159,20 @@ describe('CanvasNode presentation interactions', () => {
     const readOnlyNodes = [target];
     expect(setCanvasNodeCollapsed(readOnlyNodes, target.id, true, true)).toBe(readOnlyNodes);
   });
+
+  it('shows explicit branch and active-record badges for an assigned Agent run', () => {
+    renderNode(
+      nodeData({
+        branch: 'forgeboard/agent/search',
+        worktreeId: 'worktree-1',
+        worktreeRecordedActive: true,
+      }),
+    );
+
+    const workspace = screen.getByLabelText('Agent Git workspace');
+    expect(workspace.textContent).toContain('Branch · forgeboard/agent/search');
+    expect(workspace.textContent).toContain('Worktree assigned');
+  });
 });
 
 function renderNode(

@@ -12,9 +12,14 @@ import {
 } from 'lucide-react';
 
 import type { AgentDetection, Project } from '../../../../../shared/application/contracts.js';
+import {
+  WorkspaceStatusIndicators,
+  type WorkspaceSharingStatus,
+} from './status/WorkspaceStatusIndicators.js';
 
 interface WorkspaceCommandBarProps {
   project: Project;
+  projectStatusAvailable: boolean;
   canvasName: string | undefined;
   agents: AgentDetection[];
   saveState: 'saved' | 'saving' | 'error';
@@ -27,6 +32,8 @@ interface WorkspaceCommandBarProps {
   canRunSelected: boolean;
   runSelectedReason: string;
   commandPaletteShortcut: string;
+  collaborationEnabled: boolean;
+  sharingStatus: WorkspaceSharingStatus;
   onCloseProject: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -41,6 +48,7 @@ interface WorkspaceCommandBarProps {
 
 export function WorkspaceCommandBar({
   project,
+  projectStatusAvailable,
   canvasName,
   agents,
   saveState,
@@ -53,6 +61,8 @@ export function WorkspaceCommandBar({
   canRunSelected,
   runSelectedReason,
   commandPaletteShortcut,
+  collaborationEnabled,
+  sharingStatus,
   onCloseProject,
   onUndo,
   onRedo,
@@ -130,6 +140,13 @@ export function WorkspaceCommandBar({
           Workflow · {workflowStatus.replaceAll('-', ' ')}
         </span>
       )}
+      <WorkspaceStatusIndicators
+        project={project}
+        projectStatusAvailable={projectStatusAvailable}
+        agents={agents}
+        collaborationEnabled={collaborationEnabled}
+        sharingStatus={sharingStatus}
+      />
       <span className={`autosave-state ${saveState}`}>
         <CircleDot size={12} />
         {saveState === 'saved'

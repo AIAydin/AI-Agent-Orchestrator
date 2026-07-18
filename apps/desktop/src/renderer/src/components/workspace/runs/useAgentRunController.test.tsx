@@ -15,6 +15,7 @@ const retry = vi.fn();
 const approve = vi.fn();
 const terminate = vi.fn();
 const interrupt = vi.fn();
+const sendInput = vi.fn();
 const onError = vi.fn();
 const updateNodeData = vi.fn();
 
@@ -26,6 +27,7 @@ beforeEach(() => {
     approve,
     terminate,
     interrupt,
+    sendInput,
     onError,
     updateNodeData,
   ]) {
@@ -37,6 +39,7 @@ beforeEach(() => {
   approve.mockResolvedValue({ ok: true, value: true });
   terminate.mockResolvedValue({ ok: true, value: true });
   interrupt.mockResolvedValue({ ok: true, value: true });
+  sendInput.mockResolvedValue({ ok: true, value: true });
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -47,7 +50,7 @@ beforeEach(() => {
         approve,
         terminate,
         interrupt,
-        sendInput: vi.fn(),
+        sendInput,
       },
     },
   });
@@ -263,26 +266,38 @@ describe('useAgentRunController persisted review boundary', () => {
     const hook = renderStatefulController();
 
     await act(async () => await hook.result.current.runs.prepareSelectedRun());
-    expect(hook.result.current.node.data.status).toBe('waiting');
+    expect(hook.result.current.node.data.status).toBe('waiting-for-approval');
     expect(hook.result.current.runs.selectedRunActive).toBe(false);
 
     await act(async () => await hook.result.current.runs.approvePreparedRun());
     expect(hook.result.current.node.data.status).toBe('running');
     expect(hook.result.current.runs.selectedRunActive).toBe(true);
 
-    act(() => hook.result.current.setStatus('waiting'));
+    act(() => hook.result.current.setStatus('cancelling'));
     expect(hook.result.current.runs.selectedRunActive).toBe(true);
 
     await act(async () => await hook.result.current.runs.controlRun('interrupt'));
     expect(interrupt).toHaveBeenCalledWith(disclosure().runId);
-    expect(hook.result.current.node.data.status).toBe('waiting');
+    expect(hook.result.current.node.data.status).toBe('cancelling');
     expect(hook.result.current.runs.selectedRunActive).toBe(true);
 
     act(() => hook.result.current.setStatus('failed'));
     expect(hook.result.current.runs.selectedRunActive).toBe(false);
 
-    act(() => hook.result.current.setStatus('waiting'));
+    act(() => hook.result.current.setStatus('cancelling'));
     expect(hook.result.current.runs.selectedRunActive).toBe(false);
+  });
+
+  it('sends continue as literal input without presenting it as process resume', async () => {
+    const node = agentNode();
+    node.data.runId = disclosure().runId;
+    node.data.status = 'running';
+    const hook = renderStatefulController(node);
+
+    await act(async () => await hook.result.current.runs.sendRunInput('continue'));
+
+    expect(sendInput).toHaveBeenCalledWith(disclosure().runId, 'continue\n');
+    expect(hook.result.current.events[0]).toContain('literal "continue" input');
   });
 
   it('does not treat a persisted running status as a live process after renderer restart', () => {

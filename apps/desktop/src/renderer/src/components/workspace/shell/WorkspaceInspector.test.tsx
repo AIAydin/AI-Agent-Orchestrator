@@ -365,7 +365,7 @@ describe('WorkspaceInspector Custom permissions', () => {
   it('shows live controls only for a runtime-confirmed active Agent run', () => {
     const preparedNode = agentNode({
       runId: '80000000-0000-4000-8000-000000000001',
-      status: 'waiting',
+      status: 'waiting-for-approval',
     });
     const inspectorProps = props(settings(), preparedNode);
     const { rerender } = render(<WorkspaceInspector {...inspectorProps} />);

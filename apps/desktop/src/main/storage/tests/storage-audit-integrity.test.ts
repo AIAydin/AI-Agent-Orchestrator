@@ -7,7 +7,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppSettings } from '../../../shared/application/contracts.js';
 import { LocalStore } from '../../storage.js';
-import { MIGRATIONS, openDatabase } from '../database.js';
+import { MIGRATIONS, migrate, openDatabase } from '../database.js';
+import {
+  appendChainedAudit,
+  initializeAuditIntegrity,
+  pruneAuditPrefix,
+} from '../security/audit-integrity.js';
 
 const roots: string[] = [];
 const stores = new Set<LocalStore>();
@@ -37,7 +42,7 @@ function closeStore(store: LocalStore): void {
 }
 
 describe('tamper-evident audit storage', () => {
-  it('redacts before hashing, chains events, and blocks row updates', () => {
+  it('redacts before hashing, chains events, and blocks row updates and deletes', () => {
     const store = openStore();
     store.appendAudit('security', 'first', 'allowed', {
       token: 'sk-live-secret',
@@ -66,6 +71,9 @@ describe('tamper-evident audit storage', () => {
     expect(() =>
       connection.prepare('UPDATE audit_events SET action = ? WHERE sequence = 1').run('tampered'),
     ).toThrow('immutable');
+    expect(() => connection.prepare('DELETE FROM audit_events WHERE sequence = 1').run()).toThrow(
+      'append-only',
+    );
     expect(() =>
       connection
         .prepare(
@@ -78,14 +86,70 @@ describe('tamper-evident audit storage', () => {
     expect(store.checkIntegrity()).toMatchObject({ ok: true });
   });
 
-  it('detects uncheckpointed deletion during startup verification', () => {
+  it('does not expose the production-owned database connection to an exact deletion sequence', () => {
+    const store = openStore();
+    store.appendAudit('security', 'protected', 'allowed', {});
+    const reflected = store as unknown as Record<string, unknown>;
+    const reflectedReadiness = reflected.deliveryReadiness as Record<string, unknown>;
+
+    expect(reflected.database).toBeUndefined();
+    expect(Object.values(reflected).some((value) => value instanceof DatabaseSync)).toBe(false);
+    expect(Object.values(reflectedReadiness).some((value) => value instanceof DatabaseSync)).toBe(
+      false,
+    );
+    expect(store.listAuditEvents(10)).toHaveLength(1);
+  });
+
+  it('rolls back controlled deletion authority and restores protection after retention fails', () => {
+    const database = openDatabase(temporaryPath());
+    migrate(database);
+    initializeAuditIntegrity(database);
+    appendChainedAudit(
+      database,
+      '2024-01-01T00:00:00.000Z',
+      'security',
+      'retained-after-failure',
+      'allowed',
+      {},
+    );
+    database.exec(`
+      CREATE TRIGGER fail_controlled_audit_delete
+      BEFORE DELETE ON audit_events
+      BEGIN
+        SELECT RAISE(ABORT, 'forced controlled deletion failure');
+      END;
+    `);
+
+    expect(() =>
+      pruneAuditPrefix(database, '2026-01-01T00:00:00.000Z', new Date('2026-01-01T00:00:00.000Z')),
+    ).toThrow('forced controlled deletion failure');
+    expect(
+      database
+        .prepare("SELECT name FROM sqlite_schema WHERE type = 'trigger' AND name = ?")
+        .get('audit_events_no_delete'),
+    ).toBeDefined();
+    expect(
+      (database.prepare('SELECT count(*) AS count FROM audit_events').get() as { count: number })
+        .count,
+    ).toBe(1);
+    database.exec('DROP TRIGGER fail_controlled_audit_delete;');
+    expect(() => database.prepare('DELETE FROM audit_events').run()).toThrow('append-only');
+    database.close();
+  });
+
+  it('detects an external exact trigger drop-delete-recreate during startup verification', () => {
     const databasePath = temporaryPath();
     const store = openStore(databasePath);
     store.appendAudit('security', 'first', 'allowed', {});
     store.appendAudit('security', 'second', 'allowed', {});
     store.appendAudit('security', 'third', 'allowed', {});
     const connection = new DatabaseSync(databasePath);
+    const deleteTrigger = connection
+      .prepare("SELECT sql FROM sqlite_schema WHERE type = 'trigger' AND name = ?")
+      .get('audit_events_no_delete') as { sql: string };
+    connection.prepare('DROP TRIGGER audit_events_no_delete').run();
     connection.prepare('DELETE FROM audit_events WHERE sequence = 2').run();
+    connection.exec(`${deleteTrigger.sql};`);
     expect(store.checkIntegrity().ok).toBe(false);
     connection.close();
     closeStore(store);
@@ -146,6 +210,9 @@ describe('tamper-evident audit storage', () => {
         .prepare('UPDATE audit_chain_checkpoints SET event_count = 2 WHERE checkpoint_sequence = 1')
         .run(),
     ).toThrow('immutable');
+    expect(() =>
+      connection.prepare('DELETE FROM audit_chain_checkpoints WHERE checkpoint_sequence = 1').run(),
+    ).toThrow('append-only');
     connection.close();
   });
 

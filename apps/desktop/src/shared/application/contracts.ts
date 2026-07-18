@@ -1075,6 +1075,7 @@ export const IPC_CHANNELS = Object.freeze({
   approvalsList: 'approvals:list',
   approvalsRevoke: 'approvals:revoke',
   projectsRecent: 'projects:recent',
+  projectsRefresh: 'projects:refresh',
   projectsPick: 'projects:pick',
   projectsPickParent: 'projects:pick-parent',
   projectsPickExecutable: 'projects:pick-executable',

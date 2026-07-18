@@ -97,6 +97,26 @@ describe('summarizeRunEvent Agent metadata', () => {
     );
     expect(update).not.toHaveProperty('tokenUsage');
   });
+
+  it('projects real process transitions into canonical lifecycle states', () => {
+    expect(
+      summarizeRunEvent(event('agent-event', { type: 'lifecycle', phase: 'running' })),
+    ).toEqual({
+      status: 'running',
+      activity: 'Agent running.',
+    });
+    expect(
+      summarizeRunEvent(event('agent-event', { type: 'lifecycle', phase: 'interrupting' })),
+    ).toEqual({ status: 'cancelling', activity: 'Agent interrupting.' });
+    expect(
+      summarizeRunEvent(
+        event('agent-event', {
+          type: 'message',
+          payload: { type: 'input-requested', prompt: 'Proceed?' },
+        }),
+      ),
+    ).toEqual({ status: 'running', activity: 'Agent requested input: Proceed?' });
+  });
 });
 
 function event(kind: RunEventEnvelope['kind'], payload: unknown): RunEventEnvelope {

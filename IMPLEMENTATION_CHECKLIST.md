@@ -116,7 +116,7 @@ not be reclassified as future work.
 
 - [x] Context, Execute, Output, Review, Revision, and Dependency edges have tested semantics.
 - [x] Cycle validation and explicit bounded loop configuration with escape hatch.
-- [ ] Run node/selection/group/workflow controls and all lifecycle states on nodes and edges.
+- [x] Run node/selection/group/workflow controls and all lifecycle states on nodes and edges.
 - [x] Persistent run recovery never presents dead child processes as alive.
 - [x] Human and deterministic quality gates govern merge/push regardless of AI-review outcome.
 
@@ -161,7 +161,7 @@ not be reclassified as future work.
 - [x] Drag/drop from tree/templates and node-to-agent context linking.
 - [x] Templates: single agent, parallel implementations, implement/review loop, bug investigation,
       and multi-screen product build.
-- [ ] Notifications, autosave/offline indicators, provider disclosure, and branch/worktree badges.
+- [x] Notifications, autosave/offline indicators, provider disclosure, and branch/worktree badges.
 
 ## Automated verification
 
@@ -1489,3 +1489,41 @@ unchecked when only a subset of their required behavior has proof.
   test proved distinct worktrees, content, processes, ports, restart/stop, duplicate-race rejection,
   and complete cleanup. The full repository suite passed 2,462 unit and 314 integration tests, along
   with formatting, lint, strict typecheck, all production builds, and the 1,255-file structure gate.
+- 2026-07-18: workspace status is now visible without opening configuration: the command bar
+  distinguishes local-only solo mode from connected, reconnecting, offline, disconnecting, and
+  errored collaboration, repeats the approved-context third-party provider boundary, and shows the
+  refreshed current Git branch plus dirty state. Agent nodes display assigned branches and show an
+  `Worktree assigned` badge only while the main-owned durable run record remains active and owned;
+  completed cleanup clears stale branch/worktree claims. Provider disclosures use a
+  keyboard-accessible visible disclosure instead of title-only text, autosave retains explicit
+  saved/saving/failed states, and the bounded local notification panel has an honest empty state.
+  Missing or moved folders visibly become `Git status unavailable`, and generation-safe polling
+  prevents late responses from a prior project from overwriting the current status. Thirty-two focused
+  status, project-health, canvas-node, and durable-worktree tests passed with desktop strict
+  typecheck, focused zero-warning lint, and the 1,265-file structure gate.
+- 2026-07-18: node, selection, group, and whole-workflow run controls were re-audited against the
+  current eligibility and command paths. Node and edge runtime projections now preserve every
+  canonical lifecycle state: queued, running, waiting for approval, paused, cancelling, succeeded,
+  failed, cancelled, and lost. Dependency, execute, output, and review evaluation no longer collapse
+  cancellation or loss into generic failure, or active waiting states into queued. Agent controls
+  distinguish literal interactive `continue` input from provider-session Resume, which always
+  launches a newly reviewed continuation of an interrupted attempt. Pause remains visibly
+  unavailable because adapter API v1 has no portable same-process pause/continue primitive, so the
+  broader Agent-node checklist item remains open rather than claiming fake support. One hundred two
+  focused runtime and renderer tests passed, together with core and desktop strict typechecks,
+  focused zero-warning lint, and the 1,261-file structure gate.
+- 2026-07-18: retained audit events and chain checkpoints now reject ordinary update and delete
+  statements through canonical SQLite triggers. Only the private LocalStore connection can reach
+  the module-owned retention/privacy-reset path; those operations drop and restore only the delete
+  triggers inside the existing savepoint, and rollback tests prove rows, checkpoints, triggers, and
+  authority recover together after a forced failure. Selective trigger/drop/delete tampering from a
+  separate connection is detected live and after restart. Missing, mismatched, expired, cancelled,
+  evicted, and owner-revoked saved/outbound approvals now record redacted denial evidence, while an
+  outbound allowed event must persist before the permit-bearing external effect can run. Seventy-five
+  focused security tests passed, but the two broad security checklist items remain open pending an
+  exhaustive consumer/event coverage audit.
+- 2026-07-18: the complete repository checkpoint passed the 1,265-file structure gate, formatting,
+  zero-warning lint, every workspace strict typecheck, 2,490 unit tests, 315 integration tests, and
+  all production builds. A fresh unsigned macOS arm64 unpacked app rebuilt against Electron 36.5.0,
+  and the packaged first-run/safe-default/demo/real-agent smoke passed after the zero-configuration
+  first-run heading was restored. The production dependency audit reported no known vulnerabilities.

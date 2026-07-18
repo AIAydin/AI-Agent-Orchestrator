@@ -1,4 +1,4 @@
-import { Bot, History, Pause, ShieldCheck, Square, Trash2 } from 'lucide-react';
+import { Bot, FastForward, History, Pause, ShieldCheck, Square, Trash2 } from 'lucide-react';
 
 import type {
   AgentDetection,
@@ -35,7 +35,7 @@ export interface AgentNodePanelProps extends AgentAttemptActionCallbacks {
   readonly onRecord: () => void;
   readonly onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
   readonly onRunInputChange: (value: string) => void;
-  readonly onSendRunInput: () => void;
+  readonly onSendRunInput: (explicitInput?: string) => void;
   readonly onControlRun: (action: 'interrupt' | 'terminate') => void;
   readonly onPrepareRun: () => void;
 }
@@ -60,7 +60,6 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
   const modelSelectionSupported = selectedAgent?.capabilities?.modelSelection === true;
   const interactiveInputSupported = selectedNode.data.interactiveInputSupported === true;
   const interruptSupported = selectedNode.data.interruptSupported === true;
-  const pauseSupported = selectedNode.data.pauseSupported === true;
   const refreshKey = `${selectedNode.data.runId ?? ''}:${selectedNode.data.status ?? ''}:${selectedNode.data.transcriptUpdatedAt ?? ''}`;
   const selectedModel =
     effectiveNodeModel(
@@ -231,7 +230,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
                     ? undefined
                     : 'This running session does not expose interactive input.')
                 }
-                onClick={props.onSendRunInput}
+                onClick={() => props.onSendRunInput()}
               >
                 Send
               </button>
@@ -251,12 +250,21 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             </button>
             <button
               type="button"
-              disabled
+              disabled={!interactiveInputSupported || props.configurationReadOnly}
               title={
-                pauseSupported
-                  ? 'Forgeboard same-process pause control is unavailable in this build.'
-                  : 'Same-process pause is unavailable for this running session.'
+                mutationUnavailableReason ??
+                (interactiveInputSupported
+                  ? 'Sends the literal word “continue” as ordinary input. It does not unpause the process.'
+                  : 'This running session does not expose interactive input.')
               }
+              onClick={() => props.onSendRunInput('continue')}
+            >
+              <FastForward size={12} /> Send “continue”
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Adapter API v1 cannot pause and later continue the same local process."
             >
               <Pause size={12} /> Pause unavailable
             </button>
@@ -289,6 +297,11 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
         <p>
           Nothing starts from this button alone. Forgeboard first shows the exact command, folder,
           files, and permissions for your approval.
+        </p>
+        <p className="agent-control-disclosure">
+          Pause, input, and resume are different controls. Forgeboard cannot pause an Agent process.
+          “Send continue” is literal interactive input. Resume is available only from an interrupted
+          attempt with a provider session, and always launches a freshly reviewed continuation.
         </p>
       </section>
       <section

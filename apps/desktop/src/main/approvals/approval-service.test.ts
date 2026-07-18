@@ -152,6 +152,56 @@ describe('ApprovalService', () => {
     expect(() => service.authorize({ approvalId: created.record.id, scope: scope() })).toThrow(
       'consumed',
     );
+    expect(
+      store
+        .listAuditEvents(20)
+        .filter((event) => event.action === 'saved-approval-use' && event.outcome === 'denied'),
+    ).toHaveLength(2);
+  });
+
+  it('audits missing, cross-scope, and cross-project approval authority denials', () => {
+    const databasePath = join(temporaryRoot(), 'forgeboard.sqlite3');
+    const store = openStore(databasePath);
+    store.saveProject(project());
+    const service = new ApprovalService(store, () => NOW);
+    const active = service.create({ ...createInput(), singleUse: false });
+    const denied = service.create({ ...createInput(), decision: 'denied' });
+
+    expect(() => service.authorize({ approvalId: DECIDER_ID, scope: scope() })).toThrow(
+      'does not exist',
+    );
+    expect(() =>
+      service.authorize({
+        approvalId: active.record.id,
+        scope: scope({ action: 'external-send' }),
+      }),
+    ).toThrow('exact project');
+    expect(() =>
+      service.revoke({
+        approvalId: active.record.id,
+        projectId: '10000000-0000-4000-8000-000000000099',
+      }),
+    ).toThrow('does not exist for this project');
+    expect(() => service.revoke({ approvalId: denied.record.id, projectId: PROJECT_ID })).toThrow(
+      'not an active grant',
+    );
+
+    const connection = new DatabaseSync(databasePath);
+    const rows = connection
+      .prepare(
+        `SELECT action, outcome, metadata_json FROM audit_events
+         WHERE category = 'permission' AND outcome = 'denied' ORDER BY sequence`,
+      )
+      .all() as Array<{ action: string; outcome: string; metadata_json: string }>;
+    connection.close();
+    expect(rows.map((row): unknown => JSON.parse(row.metadata_json) as unknown)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ reason: 'approval-not-found' }),
+        expect.objectContaining({ reason: 'scope-mismatch' }),
+        expect.objectContaining({ reason: 'approval-not-found-or-cross-project' }),
+        expect.objectContaining({ reason: 'denied-decision' }),
+      ]),
+    );
   });
 
   it('reports denied, expired, and revoked records without treating them as grants', () => {

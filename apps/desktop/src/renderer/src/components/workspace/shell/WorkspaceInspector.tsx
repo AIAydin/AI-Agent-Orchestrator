@@ -91,7 +91,7 @@ interface WorkspaceInspectorProps {
   onDuplicateSelected: () => void;
   onDeleteSelected: () => void;
   onRunInputChange: (value: string) => void;
-  onSendRunInput: () => void;
+  onSendRunInput: (explicitInput?: string) => void;
   onControlRun: (action: 'interrupt' | 'terminate') => void;
   onPrepareRun: () => void;
   onRetryAgentAttempt: (attempt: RunHistorySummary) => void;

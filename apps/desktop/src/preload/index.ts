@@ -170,6 +170,7 @@ const api: ForgeboardApi = {
   },
   projects: {
     recent: () => ipcRenderer.invoke(IPC_CHANNELS.projectsRecent),
+    refresh: (projectId) => invokeValidated(IPC_CHANNELS.projectsRefresh, ProjectSchema, projectId),
     pick: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPick),
     pickParent: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickParent),
     pickExecutable: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickExecutable),

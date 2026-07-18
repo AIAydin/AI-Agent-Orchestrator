@@ -324,6 +324,20 @@
   font-size: 7px;
   text-transform: capitalize;
 }
+.node-worktree-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+.node-worktree-badges > span {
+  padding: 3px 5px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 38%, var(--border-subtle));
+  border-radius: 999px;
+  color: var(--text-soft);
+  font-size: 7px;
+  font-weight: 700;
+}
 .node-handle {
   width: 8px !important;
   height: 8px !important;

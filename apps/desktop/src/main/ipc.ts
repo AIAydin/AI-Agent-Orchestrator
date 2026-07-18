@@ -624,6 +624,16 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       ),
   );
   handleWithEvent(
+    IPC_CHANNELS.projectsRefresh,
+    z.tuple([z.string().uuid()]),
+    async (event, projectId) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.refreshProject(projectId, authority)),
+      ),
+  );
+  handleWithEvent(
     IPC_CHANNELS.projectsPick,
     z.tuple([]),
     async (event) =>

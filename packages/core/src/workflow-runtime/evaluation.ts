@@ -1,4 +1,4 @@
-import type { CanvasEdge, CanvasNode } from '../model/domain.js';
+import type { CanvasEdge, CanvasNode, RunStatus } from '../model/domain.js';
 import { isTerminalRunStatus } from '../workflow/model.js';
 
 import {
@@ -65,7 +65,7 @@ export function evaluateExecutableEdge(
         edgeId: edge.id,
         type: edge.type,
         disposition: 'blocked',
-        status: 'failed',
+        status: blockedEdgeStatus(sourceStatus),
         reason: 'The verified context is out of date for the current attempt',
       };
     }
@@ -92,7 +92,7 @@ export function evaluateExecutableEdge(
         edgeId: edge.id,
         type: edge.type,
         disposition: 'blocked',
-        status: 'failed',
+        status: blockedEdgeStatus(sourceStatus),
         reason: `The required earlier task ended as ${sourceStatus}`,
       };
     }
@@ -100,7 +100,7 @@ export function evaluateExecutableEdge(
       edgeId: edge.id,
       type: edge.type,
       disposition: 'waiting',
-      status: sourceStatus === 'running' ? 'running' : 'queued',
+      status: waitingEdgeStatus(sourceStatus),
       reason: 'The required earlier task has not succeeded',
     };
   }
@@ -123,7 +123,7 @@ export function evaluateExecutableEdge(
         edgeId: edge.id,
         type: edge.type,
         disposition: blocked ? 'blocked' : 'waiting',
-        status: blocked ? 'failed' : sourceStatus === 'running' ? 'running' : 'queued',
+        status: blocked ? blockedEdgeStatus(sourceStatus) : waitingEdgeStatus(sourceStatus),
         reason: blocked
           ? `This step runs only after success, but the earlier step ended as ${sourceStatus}`
           : edge.config.trigger === 'on-success'
@@ -153,7 +153,7 @@ export function evaluateExecutableEdge(
           edgeId: edge.id,
           type: edge.type,
           disposition: 'blocked',
-          status: 'failed',
+          status: gateRunStatus === undefined ? 'failed' : blockedEdgeStatus(gateRunStatus),
           reason: gate.reasons.join('; ') || 'Review gate failed',
           gate,
         };
@@ -176,7 +176,7 @@ export function evaluateExecutableEdge(
           edgeId: edge.id,
           type: edge.type,
           disposition: 'waiting',
-          status: gateRunStatus === 'running' ? 'running' : 'queued',
+          status: gateRunStatus === undefined ? 'queued' : waitingEdgeStatus(gateRunStatus),
           reason: gate.reasons.join('; ') || 'Review gate has not completed',
           gate,
         };
@@ -214,7 +214,7 @@ export function evaluateExecutableEdge(
         edgeId: edge.id,
         type: edge.type,
         disposition: edge.config.required ? 'blocked' : 'satisfied',
-        status: edge.config.required ? 'failed' : 'succeeded',
+        status: edge.config.required ? blockedEdgeStatus(sourceStatus) : 'succeeded',
         reason: edge.config.required
           ? `The required output was not shared before the earlier step ended as ${sourceStatus}`
           : 'No optional output was shared',
@@ -233,7 +233,7 @@ export function evaluateExecutableEdge(
       edgeId: edge.id,
       type: edge.type,
       disposition: 'waiting',
-      status: sourceStatus === 'running' ? 'running' : 'queued',
+      status: waitingEdgeStatus(sourceStatus),
       reason: `Waiting for the required ${edge.config.outputKind} output`,
     };
   }
@@ -244,7 +244,7 @@ export function evaluateExecutableEdge(
         edgeId: edge.id,
         type: edge.type,
         disposition: blocked ? 'blocked' : 'waiting',
-        status: blocked ? 'failed' : sourceStatus === 'running' ? 'running' : 'queued',
+        status: blocked ? blockedEdgeStatus(sourceStatus) : waitingEdgeStatus(sourceStatus),
         reason: blocked
           ? `The step under review ended as ${sourceStatus}`
           : 'The review waits for the earlier step to succeed',
@@ -324,7 +324,7 @@ export function evaluateExecutableEdge(
           edgeId: edge.id,
           type: edge.type,
           disposition: 'blocked',
-          status: 'failed',
+          status: blockedEdgeStatus(reviewerRun.status),
           reason: `The reviewer agent ended as ${reviewerRun.status} without approving`,
         };
       }
@@ -423,6 +423,18 @@ export function evaluateExecutableEdge(
     status: 'queued',
     reason: 'This step runs only after a failed review',
   };
+}
+
+/** Preserve real lifecycle evidence while an edge waits; completed success has no pending state. */
+function waitingEdgeStatus(sourceStatus: RunStatus): RunStatus {
+  return isTerminalRunStatus(sourceStatus) ? 'queued' : sourceStatus;
+}
+
+/** A blocked edge retains failed/cancelled/lost evidence; success is never itself a block reason. */
+function blockedEdgeStatus(sourceStatus: RunStatus): RunStatus {
+  return sourceStatus === 'failed' || sourceStatus === 'cancelled' || sourceStatus === 'lost'
+    ? sourceStatus
+    : 'failed';
 }
 
 export function contextAttachmentsForNode(

@@ -120,8 +120,11 @@ primary checkout or an available application-owned agent worktree, enter a liter
 a detected package script, and set readiness/navigation paths and device controls without editing a
 manifest. The running page is displayed in a main-owned sandboxed loopback-only surface with browser
 console capture, navigation/history/reload, native-reviewed screenshots, and confirmed external
-opening. Mobile frames use Chromium touch emulation; side-by-side frames share the same selected
-target, while separate target-bound nodes can run competing worktrees concurrently.
+opening. Mobile frames use Chromium touch emulation. A normal side-by-side device view can show one
+target at two viewport sizes; **Compare agent worktrees** instead binds two distinct opaque completed
+run IDs to independently owned sessions, ports, device presets, controls, and secured native
+surfaces. Schema, renderer, and main-process launch reservations reject selecting or concurrently
+launching the same worktree on both sides.
 
 Canvas pan, zoom, selection, grouping, guides, locking, duplication, keyboard movement, and private
 node comments work in the default solo product and autosave locally. Viewport position and zoom are
@@ -336,13 +339,17 @@ file.
 ```bash
 corepack pnpm verify
 corepack pnpm test:e2e
+corepack pnpm dev:collab
 corepack pnpm package
 corepack pnpm smoke:packaged
+corepack pnpm smoke:installer
 ```
 
 `verify` includes the 2,000-line structure gate, formatting, lint, strict typechecking, unit and
 integration tests, and production builds. Packaging commands do not by themselves prove that every
-platform installer has been generated and installed successfully.
+platform installer has been generated and installed successfully. `dev:collab` starts the optional
+localhost collaboration service; its health and production deployment configuration are documented
+in [Optional self-hosted collaboration](docs/COLLABORATION.md).
 
 See [Architecture](docs/design/ARCHITECTURE.md), [Security](.github/SECURITY.md),
 [Privacy](docs/policies/PRIVACY.md),

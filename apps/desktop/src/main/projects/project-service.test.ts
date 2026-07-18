@@ -179,6 +179,26 @@ describe('ProjectService moved-project recovery', () => {
     expect((await repositories.git.run(['--version'])).executable).toContain('dugite');
   });
 
+  it('refreshes persisted Git health by opaque project id without reopening the project', async () => {
+    const root = temporaryRoot();
+    const parent = join(root, 'projects');
+    mkdirSync(parent);
+    const store = openStore(root);
+    const repositories = createBundledGitRepositoryService();
+    const service = new ProjectService({} as App, {} as Dialog, store, repositories);
+    const created = await service.create(parent, 'health-refresh', true);
+
+    writeFileSync(join(created.path, 'uncommitted.txt'), 'visible status change\n');
+    const refreshed = await service.refreshProject(created.id);
+
+    expect(refreshed).toMatchObject({
+      id: created.id,
+      path: created.path,
+      health: { isGitRepository: true, branch: 'main', dirty: true },
+    });
+    expect(store.getProject(created.id)?.health.dirty).toBe(true);
+  });
+
   it('initializes an existing folder only after native approval and preserves every file', async () => {
     const root = temporaryRoot();
     const repositoryPath = join(root, 'existing-project');

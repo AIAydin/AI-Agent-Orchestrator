@@ -18,6 +18,7 @@ export function WorkspaceNotifications({
       {events.slice(0, 6).map((event, index) => (
         <p key={`${event}-${index}`}>{event}</p>
       ))}
+      {events.length === 0 && <p role="status">No local notifications yet.</p>}
     </section>
   );
 }

@@ -240,7 +240,7 @@ export function SetupWizard(props: SetupWizardProps) {
                 <Sparkles size={30} />
               </div>
               <span className="eyebrow">A private workshop on your computer</span>
-              <h1 id="setup-title">Set up Forgeboard in a few quick steps</h1>
+              <h1 id="setup-title">Ready to build without wiring config files?</h1>
               <p>
                 Forgeboard works right away with a built-in demo that runs entirely on this
                 computer. This short setup can also connect a coding agent you have installed, pick

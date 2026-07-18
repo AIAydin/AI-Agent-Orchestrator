@@ -14,7 +14,6 @@ interface AgentStatusReconciliationInput {
 const ACTIVE_CANVAS_STATUSES = new Set([
   'queued',
   'running',
-  'waiting',
   'waiting-for-approval',
   'paused',
   'cancelling',
@@ -92,8 +91,13 @@ export function useAgentStatusReconciliation({
           ) {
             return;
           }
-          if (attempt === null || isTerminalAttempt(attempt)) {
-            updateNodeData(nodeId, reconcileAgentStatus(attempt ?? undefined));
+          const reconciled = reconcileAgentStatus(attempt ?? undefined);
+          if (
+            attempt === null ||
+            isTerminalAttempt(attempt) ||
+            reconciled.status !== requestedStatus
+          ) {
+            updateNodeData(nodeId, reconciled);
             settledRef.current.add(fingerprint);
             return;
           }
@@ -145,7 +149,7 @@ export function reconcileAgentStatus(
       lastRunSummary: 'Lost · the recorded Agent process is no longer available',
     };
   }
-  if (attempt.status === 'prepared') return { status: 'waiting' };
+  if (attempt.status === 'prepared') return { status: 'waiting-for-approval' };
   if (attempt.status === 'running') return { status: 'running' };
   if (attempt.status === 'succeeded') return { status: 'succeeded' };
   if (attempt.status === 'interrupted' || attempt.status === 'terminated') {

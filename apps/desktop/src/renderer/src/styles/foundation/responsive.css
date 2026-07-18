@@ -2,8 +2,7 @@
   .workspace-grid {
     grid-template-columns: 205px minmax(0, 1fr) 235px;
   }
-  .agent-activity,
-  .autosave-state {
+  .agent-activity {
     display: none;
   }
 }
