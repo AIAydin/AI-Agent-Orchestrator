@@ -149,7 +149,7 @@ not be reclassified as future work.
 
 ## Settings, extensions, and polish
 
-- [ ] All appearance, agent, Git, terminal, preview, Docker, storage, collaboration, and update
+- [x] All appearance, agent, Git, terminal, preview, Docker, storage, collaboration, and update
       settings listed in the build goal.
 - [ ] Every ordinary setting and integration can be configured, validated, tested, reset, exported,
       and imported through the UI without editing a file.
@@ -1298,3 +1298,20 @@ unchecked when only a subset of their required behavior has proof.
   deleted node, proving identity-bound canvas and history preservation through relocation, while the
   journey records zero external requests. The focused Electron journey passed alongside
   `git diff --check` and the 1,182-file structure gate.
+- 2026-07-18: malformed replace-import failure now has a full offline Electron regression. A named
+  canvas node is flushed before the UI selects damaged JSON through the exact native import chooser;
+  parsing fails before an in-app disclosure or native destructive confirmation can appear, and a
+  full relaunch proves the original project and node are unchanged. The focused journey passed with
+  zero external requests and the 1,183-file structure gate. This closes only the malformed-import
+  failure category; the broad failure-E2E checkbox remains open for its other listed cases.
+- 2026-07-18: every persisted application setting now has an exported compile-time mapping to its
+  Settings tab, real accessible control or safe clear-only action, and validation/readiness class.
+  The manifest covers all 57 keys: 54 active Settings controls, first-run completion through the UI,
+  and the two inactive legacy preferences that can only be cleared. A real SettingsPanel regression
+  renders conditional Docker, collaboration, backup, and legacy states and resolves every mapped
+  control through the accessibility surface; the exhaustive inventory and complete 34-test
+  SettingsPanel suite passed. Together with the existing save/restart/reset/export/import Electron
+  journey, this closes the listed persisted-settings surface. The broader every-integration lifecycle
+  checkbox remains open because OAuth sessions, collaboration tokens, extension authority, Git
+  remotes, and similar device/project bindings intentionally require separate portability rules and
+  direct action evidence rather than being copied into the settings document.

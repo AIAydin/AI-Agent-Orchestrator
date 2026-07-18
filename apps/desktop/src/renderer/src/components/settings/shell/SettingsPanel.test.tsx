@@ -22,6 +22,10 @@ import type {
   FolderReadinessRequest,
   FolderReadinessResult,
 } from '../../../../../shared/settings/folder-readiness.js';
+import {
+  SETTINGS_UI_MANIFEST,
+  type SettingsUiTarget,
+} from '../../../../../shared/settings/ui-coverage/manifest.js';
 import { SettingsPanel } from './SettingsPanel.js';
 
 const savedSettings = settings({ theme: 'system', density: 'comfortable' });
@@ -285,6 +289,55 @@ describe('SettingsPanel draft transactions', () => {
 
     fireEvent.click(agentsTab);
     expect(agentsTab.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('renders the exhaustive persisted-settings manifest through real accessible controls', () => {
+    const codex: AgentDetection = {
+      id: 'codex',
+      label: 'OpenAI Codex CLI',
+      installed: true,
+      executable: '/tmp/codex',
+      version: '1.0.0',
+      providerDisclosure: 'Provider fixture.',
+    };
+    render(
+      <SettingsPanel
+        {...props({
+          agents: [...agents, codex],
+          settings: settings({
+            automaticUpdateDownloads: true,
+            backupsEnabled: true,
+            collaborationEnabled: true,
+            dockerMountHostCredentials: true,
+          }),
+        })}
+      />,
+    );
+
+    const entries = Object.entries(SETTINGS_UI_MANIFEST);
+    expect(entries).toHaveLength(57);
+    expect(entries.filter(([, entry]) => entry.kind === 'first-run')).toHaveLength(1);
+    for (const tab of [
+      'Appearance',
+      'Agents & runtime',
+      'Permissions',
+      'Git & previews',
+      'Checks',
+      'Connectivity',
+      'Data & privacy',
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name: tab }));
+      for (const [key, entry] of entries) {
+        if (entry.kind === 'first-run' || entry.tab !== tab) continue;
+        expect(
+          findManifestTarget(entry.target),
+          `Missing Settings control for ${key}`,
+        ).toBeTruthy();
+        expect(entry.validation).toMatch(
+          /^(schema|agent-readiness|command-readiness|folder-readiness|permission-policy|docker-completeness)$/u,
+        );
+      }
+    }
   });
 
   it('keeps searchable help and active shortcuts available inside the app', () => {
@@ -1353,4 +1406,22 @@ function settings(overrides: Partial<AppSettings>): AppSettings {
     collaborationUrl: 'ws://127.0.0.1:1234',
     ...overrides,
   });
+}
+
+function findManifestTarget(target: SettingsUiTarget): HTMLElement {
+  if (target.kind === 'button') return screen.getByRole('button', { name: target.name });
+  if (target.kind === 'group-label') {
+    return within(screen.getByRole('group', { name: target.group })).getByLabelText(target.name);
+  }
+  const accessibleControls = screen.queryAllByLabelText<HTMLElement>(target.name);
+  const controls =
+    accessibleControls.length > 0
+      ? accessibleControls
+      : [...document.querySelectorAll<HTMLLabelElement>('label')]
+          .filter((candidate) => candidate.textContent?.includes(target.name))
+          .map((candidate) => candidate.control)
+          .filter((candidate): candidate is HTMLElement => candidate instanceof HTMLElement);
+  const control = controls[target.occurrence ?? 0];
+  if (!control) throw new Error(`Missing accessible control ${target.name}.`);
+  return control;
 }
