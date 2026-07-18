@@ -85,6 +85,7 @@ import { createTerminalApi } from './terminal/index.js';
 import { createPreviewSurfaceApi } from './preview/surface/index.js';
 import { createProviderConnectionsApi } from './provider-connections/index.js';
 import { createUpdatesApi } from './updates/bridge.js';
+import { createDiagramApi } from './diagram/bridge.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -96,6 +97,7 @@ async function invokeValidated<Schema extends z.ZodTypeAny>(
 }
 
 const api: ForgeboardApi = {
+  diagram: createDiagramApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
   app: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appInfo),
     onCloseRequested: (listener) => {

@@ -101,6 +101,7 @@ import type {
   UpdateCheckInput,
   UpdateCheckResult,
 } from './updates/contracts.js';
+import type { DiagramSvgExportInput, DiagramSvgExportResult } from './diagram/contracts.js';
 import type {
   GitCommitPlanInput,
   GitCommitPlanView,
@@ -566,5 +567,8 @@ export interface ForgeboardApi {
     confirmImport(
       input: RecoveryPlanConfirmationInput,
     ): Promise<IpcResult<RecoveryImportCounts | null>>;
+  };
+  diagram: {
+    exportSvg(input: DiagramSvgExportInput): Promise<IpcResult<DiagramSvgExportResult>>;
   };
 }

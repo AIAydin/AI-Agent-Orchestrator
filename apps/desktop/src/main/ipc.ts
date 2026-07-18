@@ -38,6 +38,7 @@ import { CommandReadinessService } from './command-readiness/service.js';
 import { CollaborationIpcService } from './collaboration/ipc.js';
 import { detectAgents, ProjectService } from './projects/project-service.js';
 import { DockerIpcService } from './docker/docker-ipc.js';
+import { DiagramExportService } from './diagram/export-service.js';
 import { ExtensionIpcService } from './extensions/extension-ipc.js';
 import { FileIpcService } from './file-domain/ipc.js';
 import { ProjectFileService } from './file-domain/service.js';
@@ -254,6 +255,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   const projectFiles = new ProjectFileService(store);
   const files = new FileIpcService(projectFiles, shell, runDataOperation);
   const outbound = new OutboundActionGate(store);
+  const diagramExports = new DiagramExportService(dialog);
   const updates = new UpdateIpcService(dialog, shell, store, () => app.getVersion(), outbound);
   const collaboration = new CollaborationIpcService(dialog, outbound, {
     store,
@@ -604,14 +606,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     async (event, input) =>
       await runDataOperation(() => {
         requireIpcWindowAuthority(event, 'Saved approval revocation').assertCurrent();
-        const revoked = ApprovalViewSchema.parse(approvals.revoke(input));
-        store.appendAudit('permission', 'saved-approval-revoke', 'allowed', {
-          approvalId: revoked.record.id,
-          projectId: revoked.record.scope.projectId,
-          action: revoked.record.scope.action,
-          resourceFingerprint: revoked.record.scope.resourceFingerprint,
-        });
-        return revoked;
+        return ApprovalViewSchema.parse(approvals.revoke(input));
       }),
   );
   handleWithEvent(
@@ -949,6 +944,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   );
 
   settings.registerIpcHandlers();
+  diagramExports.registerIpcHandler();
   updates.registerIpcHandlers();
   folderReadiness.registerIpcHandler();
   readiness.registerIpcHandler();
@@ -1003,6 +999,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     dispose: async () => {
       dataOperations.beginShutdown();
       settings.dispose();
+      diagramExports.dispose();
       updates.dispose();
       folderReadiness.dispose();
       await files.dispose();

@@ -106,7 +106,7 @@ not be reclassified as future work.
 - [x] Test node with cancel, streaming, parsed summary, history, and artifacts.
 - [x] Review gate node with human/deterministic/agent checks and bounded retries.
 - [x] Git/PR node with commits, divergence, remote, readiness, CI, and approved actions.
-- [ ] Mermaid diagram node with synchronized source/render/export.
+- [x] Mermaid diagram node with synchronized source/render/export.
 - [ ] Excalidraw-compatible whiteboard/mockup node with annotations/export/context.
 - [ ] Note/image node with safe local references.
 - [x] Group/frame node with real containment behavior.
@@ -159,7 +159,7 @@ not be reclassified as future work.
 - [ ] Documented validated extension API for local agent adapters and canvas node types, with
       explicit install/permissions and no renderer execution.
 - [x] Drag/drop from tree/templates and node-to-agent context linking.
-- [ ] Templates: single agent, parallel implementations, implement/review loop, bug investigation,
+- [x] Templates: single agent, parallel implementations, implement/review loop, bug investigation,
       and multi-screen product build.
 - [ ] Notifications, autosave/offline indicators, provider disclosure, and branch/worktree badges.
 
@@ -1384,3 +1384,34 @@ unchecked when only a subset of their required behavior has proof.
   `git diff --check`, and the 1,207-file structure gate also passed. This closes the final ordinary
   integration-lifecycle gap while retaining explicit never-export policies for secret-, device-,
   and project-bound authority.
+- 2026-07-18: Mermaid Diagram nodes now provide UI-only Edit, Split, and Preview modes backed by
+  the existing persisted `mermaidSource`, with stale asynchronous renders discarded as source
+  changes. Mermaid runs with strict security, HTML labels disabled, and security-sensitive options
+  locked against init directives; generated output is rebuilt through the inert SVG sanitizer and
+  shown only as an encoded image, never injected into the Forgeboard DOM. External links, active
+  markup, foreign HTML, event attributes, remote paint resources, and unsafe XML are removed or
+  rejected. SVG export uses a cancel-default native save dialog, returns no path to the renderer,
+  and is structurally revalidated against the same bounded inert subset in main before a private
+  file write. Twenty-eight focused shared-contract, preload, renderer, sanitizer, malicious-directive,
+  main-policy, and export tests passed, as did desktop typecheck, focused zero-warning lint, the
+  production build, `git diff --check`, and the 1,226-file structure gate. This closes the Mermaid
+  Diagram node item; the broad rich-editor item remains open for Excalidraw editing.
+- 2026-07-18: the project rail and command palette gained five validated first-party workflow
+  templates: single agent, parallel implementations, a bounded implement/review loop, bug
+  investigation, and a multi-screen product build. Each catalog entry creates one collision-free,
+  UUID-owned graph mutation and one undo checkpoint; insertion is blocked by read-only collaboration
+  authority and flows through the existing canonical canvas migration, autosave, history, and reload
+  paths. Template construction rejects malformed topology or persistence data and plans every
+  immediately runnable graph; preview nodes remain honest UI-configurable drafts rather than gaining
+  fabricated worktree authority. Twelve focused catalog, graph, placement, and rail tests passed.
+  A dedicated Electron journey proved all five UI entries, three-node bounded-loop insertion,
+  one-step undo/redo, durable process-restart reload, and zero unintended external requests. Desktop
+  strict typecheck, the production build, and focused zero-warning lint also passed.
+- 2026-07-18: saved-approval grant, use, and revoke transitions now own their canonical redacted
+  `permission` audit event inside the same SQLite transaction. A failed audit insert rolls back a
+  new grant, single-use consumption, and revocation; reusable authorization also fails closed when
+  its required use event cannot commit. Caller-side duplicate audit writes were removed, and the
+  service emits exact project/action/resource scope without approval reasons or actor identity.
+  Fifty-six focused approval, check IPC, workflow-template, Mermaid, SVG-policy, preload, and export
+  tests passed, including forced audit-trigger failures that prove authority and audit-chain state
+  remain unchanged together. The broader exhaustive security-event coverage item remains open.

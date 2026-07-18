@@ -1,4 +1,4 @@
-import { ChevronRight, Files, GitBranch, Layers3, Puzzle, Search } from 'lucide-react';
+import { ChevronRight, Files, GitBranch, Layers3, Puzzle, Search, Workflow } from 'lucide-react';
 
 import type { Project } from '../../../../../shared/application/contracts.js';
 import type { ProjectFileBrowserOperations } from '../../file-editor/browser/useProjectFileBrowser.js';
@@ -6,12 +6,14 @@ import { NODE_DEFINITIONS, type NodeKind, type WorkshopNode } from '../canvas/Ca
 import { WorkspaceProjectTree } from '../context-dnd/WorkspaceProjectTree.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import type { ExtensionTemplate } from '../model/types.js';
+import type { WorkflowTemplate } from '../workflows/templates/catalog.js';
 
 interface WorkspaceRailProps {
   project: Project;
   tab: 'project' | 'nodes';
   search: string;
   templates: NodeKind[];
+  workflowTemplates: readonly WorkflowTemplate[];
   extensionTemplates: ExtensionTemplate[];
   nodes: WorkshopNode[];
   fileOperations: ProjectFileBrowserOperations;
@@ -20,6 +22,7 @@ interface WorkspaceRailProps {
   onTabChange: (tab: 'project' | 'nodes') => void;
   onSearchChange: (value: string) => void;
   onAddNode: (kind: NodeKind) => void;
+  onAddWorkflowTemplate: (template: WorkflowTemplate) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
   onSelectNode: (node: WorkshopNode) => void;
@@ -34,6 +37,7 @@ export function WorkspaceRail({
   tab,
   search,
   templates,
+  workflowTemplates,
   extensionTemplates,
   nodes,
   fileOperations,
@@ -42,6 +46,7 @@ export function WorkspaceRail({
   onTabChange,
   onSearchChange,
   onAddNode,
+  onAddWorkflowTemplate,
   onAddExtensionNode,
   onInitializeGit,
   onSelectNode,
@@ -89,9 +94,12 @@ export function WorkspaceRail({
           <ProjectTemplates
             project={project}
             templates={templates}
+            workflowTemplates={workflowTemplates}
             extensionTemplates={extensionTemplates}
             initializingGit={initializingGit}
+            readOnly={collaborationGraphReadOnly}
             onAddNode={onAddNode}
+            onAddWorkflowTemplate={onAddWorkflowTemplate}
             onAddExtensionNode={onAddExtensionNode}
             onInitializeGit={onInitializeGit}
           />
@@ -109,9 +117,12 @@ export function WorkspaceRail({
 interface ProjectTemplatesProps {
   project: Project;
   templates: NodeKind[];
+  workflowTemplates: readonly WorkflowTemplate[];
   extensionTemplates: ExtensionTemplate[];
   initializingGit: boolean;
+  readOnly: boolean;
   onAddNode: (kind: NodeKind) => void;
+  onAddWorkflowTemplate: (template: WorkflowTemplate) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
 }
@@ -119,9 +130,12 @@ interface ProjectTemplatesProps {
 function ProjectTemplates({
   project,
   templates,
+  workflowTemplates,
   extensionTemplates,
   initializingGit,
+  readOnly,
   onAddNode,
+  onAddWorkflowTemplate,
   onAddExtensionNode,
   onInitializeGit,
 }: ProjectTemplatesProps) {
@@ -161,6 +175,31 @@ function ProjectTemplates({
             ))}
           </div>
         )}
+      </section>
+      <section className="template-section" aria-labelledby="workflow-template-heading">
+        <header>
+          <h2 id="workflow-template-heading">Workflow templates</h2>
+          <span>{workflowTemplates.length}</span>
+        </header>
+        <div className="template-list">
+          {workflowTemplates.map((template) => (
+            <button
+              type="button"
+              key={template.id}
+              disabled={readOnly}
+              onClick={() => onAddWorkflowTemplate(template)}
+            >
+              <span style={{ color: '#d4a85b' }}>
+                <Workflow size={15} />
+              </span>
+              <span>
+                <strong>{template.name}</strong>
+                <small>{template.description}</small>
+              </span>
+              <ChevronRight size={13} />
+            </button>
+          ))}
+        </div>
       </section>
       <section className="template-section">
         <header>

@@ -108,6 +108,9 @@ import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
 import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
+import { buildWorkflowTemplate } from '../workflows/templates/builder.js';
+import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from '../workflows/templates/catalog.js';
+import { collisionFreeTemplateOrigin } from '../workflows/templates/placement.js';
 import { useDiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 import { useDiffReviewSession } from '../diff-review/useDiffReviewSession.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
@@ -725,6 +728,49 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     [collaborationCanvas.graphReadOnly, nodes.length, record, reportCollaborationReadOnly],
   );
 
+  const addWorkflowTemplate = useCallback(
+    (template: WorkflowTemplate) => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return;
+      }
+      try {
+        const origin = collisionFreeTemplateOrigin(template, nodesRef.current, { x: 220, y: 150 });
+        const built = buildWorkflowTemplate(template.id, settings, origin);
+        const selected = built.nodes[0];
+        if (selected === undefined) throw new Error('The workflow template contains no nodes.');
+        record();
+        pendingNodeSelection.current = selected.id;
+        setNodes((items) => [
+          ...items.map((node) => ({ ...node, selected: false })),
+          ...built.nodes.map((node, index) => ({ ...node, selected: index === 0 })),
+        ]);
+        setEdges((items) => [
+          ...items.map((edge) => ({ ...edge, selected: false })),
+          ...built.edges,
+        ]);
+        setSelectedNodeId(selected.id);
+        setSelectedEdgeId(null);
+        window.setTimeout(() => {
+          if (pendingNodeSelection.current === selected.id) pendingNodeSelection.current = null;
+        }, 250);
+        setEvents((items) =>
+          [
+            `Added ${built.template.name} workflow with ${built.nodes.length} nodes.`,
+            ...items,
+          ].slice(0, 30),
+        );
+      } catch (cause) {
+        onError(
+          cause instanceof Error
+            ? cause.message
+            : 'Forgeboard could not add the workflow template.',
+        );
+      }
+    },
+    [collaborationCanvas.graphReadOnly, onError, record, reportCollaborationReadOnly, settings],
+  );
+
   const attachProjectFileContext = useCallback(
     async (targetNodeId: string, payload: WorkspaceContextDragPayload): Promise<void> => {
       if (collaborationGraphReadOnlyRef.current) {
@@ -1122,6 +1168,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const filteredTemplates = NODE_KINDS.filter((kind) =>
     NODE_DEFINITIONS[kind].label.toLowerCase().includes(searchTerm),
   );
+  const filteredWorkflowTemplates = WORKFLOW_TEMPLATES.filter((template) =>
+    `${template.name} ${template.description}`.toLowerCase().includes(searchTerm),
+  );
   const filteredExtensionTemplates = extensionTemplates.filter(({ extension, definition }) =>
     `${definition.displayName} ${definition.description} ${extension.manifest.name}`
       .toLowerCase()
@@ -1279,6 +1328,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         section: `Extension · ${template.extension.manifest.name}`,
         run: () => addExtensionNode(template),
       })),
+      ...WORKFLOW_TEMPLATES.map((template) => ({
+        id: `add-workflow-template-${template.id}`,
+        label: `Add ${template.name} workflow`,
+        section: 'Workflow templates',
+        run: () => addWorkflowTemplate(template),
+      })),
       {
         id: 'fit',
         label: 'Zoom to fit the canvas',
@@ -1341,6 +1396,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     [
       addExtensionNode,
       addNode,
+      addWorkflowTemplate,
       canRunWorkflow,
       closeProject,
       extensionTemplates,
@@ -1409,6 +1465,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           tab={railTab}
           search={search}
           templates={filteredTemplates}
+          workflowTemplates={filteredWorkflowTemplates}
           extensionTemplates={filteredExtensionTemplates}
           nodes={railTab === 'nodes' ? filteredNodes : nodes}
           fileOperations={window.forgeboard.files}
@@ -1417,6 +1474,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onTabChange={setRailTab}
           onSearchChange={setSearch}
           onAddNode={addNode}
+          onAddWorkflowTemplate={addWorkflowTemplate}
           onAddExtensionNode={addExtensionNode}
           onInitializeGit={() => void initializeGit()}
           onAttachAgentContext={attachProjectFileContext}

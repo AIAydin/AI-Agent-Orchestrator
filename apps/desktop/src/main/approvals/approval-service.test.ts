@@ -200,4 +200,89 @@ describe('ApprovalService', () => {
     store.importData(emptyExport, { replaceExisting: true, importedAt: NOW });
     expect(store.getApproval(created.record.id)).toBeUndefined();
   });
+
+  it('rolls back grant, use, and revoke authority when their audit insert fails', () => {
+    const databasePath = join(temporaryRoot(), 'forgeboard.sqlite3');
+    const store = openStore(databasePath);
+    store.saveProject(project());
+    const service = new ApprovalService(store, () => NOW);
+    const connection = new DatabaseSync(databasePath);
+    const failAudit = () =>
+      connection.exec(`
+        CREATE TRIGGER fail_saved_approval_audit
+        BEFORE INSERT ON audit_events
+        WHEN NEW.category = 'permission'
+        BEGIN
+          SELECT RAISE(ABORT, 'saved approval audit rejected');
+        END;
+      `);
+    const allowAudit = () => connection.exec('DROP TRIGGER fail_saved_approval_audit');
+
+    failAudit();
+    expect(() => service.create({ ...createInput(), singleUse: false })).toThrow(
+      'saved approval audit rejected',
+    );
+    expect(service.list({ projectId: PROJECT_ID, includeInactive: true })).toEqual([]);
+
+    allowAudit();
+    const reusable = service.create({ ...createInput(), singleUse: false });
+    const singleUse = service.create(createInput());
+    const auditCount = store.listAuditEvents(200).length;
+    failAudit();
+
+    expect(() => service.authorize({ approvalId: reusable.record.id, scope: scope() })).toThrow(
+      'saved approval audit rejected',
+    );
+    expect(() => service.authorize({ approvalId: singleUse.record.id, scope: scope() })).toThrow(
+      'saved approval audit rejected',
+    );
+    expect(store.getApproval(singleUse.record.id)?.consumedAt).toBeUndefined();
+    expect(() => service.revoke({ approvalId: reusable.record.id, projectId: PROJECT_ID })).toThrow(
+      'saved approval audit rejected',
+    );
+    expect(store.getApproval(reusable.record.id)?.revokedAt).toBeUndefined();
+    expect(store.listAuditEvents(200)).toHaveLength(auditCount);
+
+    allowAudit();
+    connection.close();
+  });
+
+  it('records one canonical redacted audit event for each saved-approval transition', () => {
+    const databasePath = join(temporaryRoot(), 'forgeboard.sqlite3');
+    const store = openStore(databasePath);
+    store.saveProject(project());
+    const service = new ApprovalService(store, () => NOW);
+    const created = service.create({ ...createInput(), singleUse: false });
+    service.authorize({ approvalId: created.record.id, scope: scope() });
+    service.revoke({ approvalId: created.record.id, projectId: PROJECT_ID });
+
+    expect(
+      store
+        .listAuditEvents(10)
+        .filter((event) => event.category === 'permission')
+        .map((event) => event.action),
+    ).toEqual(['saved-approval-revoke', 'saved-approval-use', 'saved-approval-grant']);
+    const connection = new DatabaseSync(databasePath);
+    const rows = connection
+      .prepare(
+        `SELECT metadata_json FROM audit_events
+         WHERE category = 'permission' ORDER BY sequence`,
+      )
+      .all() as Array<{ metadata_json: string }>;
+    connection.close();
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      const metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
+      expect(metadata).toMatchObject({
+        approvalId: created.record.id,
+        projectId: PROJECT_ID,
+        action: 'git-push',
+        resourceFingerprint: 'a'.repeat(64),
+        agentId: AGENT_ID,
+        runId: RUN_ID,
+      });
+      expect(metadata).not.toHaveProperty('reason');
+      expect(metadata).not.toHaveProperty('decidedBy');
+    }
+  });
 });

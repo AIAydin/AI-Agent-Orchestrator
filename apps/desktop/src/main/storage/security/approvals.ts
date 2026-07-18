@@ -7,7 +7,9 @@ import {
   type ApprovalRecord,
 } from '@forgeboard/core';
 
+import { transaction, type TransactionalAuditEvent } from '../database.js';
 import { parseJson } from '../values.js';
+import { writeAudit } from '../writes.js';
 
 interface ApprovalRow {
   readonly id: string;
@@ -52,6 +54,18 @@ export function saveApproval(database: DatabaseSync, recordValue: ApprovalRecord
       JSON.stringify(record),
     );
   return record;
+}
+
+export function saveApprovalWithAudit(
+  database: DatabaseSync,
+  recordValue: ApprovalRecord,
+  audit: TransactionalAuditEvent,
+): ApprovalRecord {
+  return transaction(database, () => {
+    const record = saveApproval(database, recordValue);
+    appendTransactionalAudit(database, audit);
+    return record;
+  });
 }
 
 export function getApproval(
@@ -142,6 +156,20 @@ export function consumeApproval(
   return next;
 }
 
+export function consumeApprovalWithAudit(
+  database: DatabaseSync,
+  approvalId: string,
+  expectedScope: ApprovalRecord['scope'],
+  consumedAt: Date,
+  audit: TransactionalAuditEvent,
+): ApprovalRecord {
+  return transaction(database, () => {
+    const record = consumeApproval(database, approvalId, expectedScope, consumedAt);
+    appendTransactionalAudit(database, audit);
+    return record;
+  });
+}
+
 export function revokeApproval(
   database: DatabaseSync,
   approvalId: string,
@@ -161,6 +189,30 @@ export function revokeApproval(
     .run(nextRevokedAt, JSON.stringify(next), approvalId, JSON.stringify(current));
   if (result.changes !== 1) throw new Error('The scoped approval changed before it was revoked.');
   return next;
+}
+
+export function revokeApprovalWithAudit(
+  database: DatabaseSync,
+  approvalId: string,
+  revokedAt: Date,
+  audit: TransactionalAuditEvent,
+): ApprovalRecord {
+  return transaction(database, () => {
+    const record = revokeApproval(database, approvalId, revokedAt);
+    appendTransactionalAudit(database, audit);
+    return record;
+  });
+}
+
+function appendTransactionalAudit(database: DatabaseSync, audit: TransactionalAuditEvent): void {
+  writeAudit(
+    database,
+    (audit.occurredAt ?? new Date()).toISOString(),
+    audit.category,
+    audit.action,
+    audit.outcome,
+    audit.metadata,
+  );
 }
 
 export function approvalIntegrityMessages(database: DatabaseSync): string[] {

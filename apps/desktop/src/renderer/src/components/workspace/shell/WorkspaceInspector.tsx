@@ -16,6 +16,7 @@ import { TypedEdgeInspector } from '../canvas/TypedEdgeInspector.js';
 import { canEditEdge } from '../canvas/interactions/lock-protection.js';
 import { GroupFrameInspector } from '../canvas/GroupFrameInspector.js';
 import { BuiltInContentInspector } from '../content/BuiltInContentInspector.js';
+import { MermaidDiagramInspector } from '../content/diagram/MermaidDiagramInspector.js';
 import {
   FileEditorWorkspace,
   ProjectFileBrowser,
@@ -257,6 +258,14 @@ function NodeInspector(
           <BuiltInContentInspector
             node={selectedNode}
             nodes={props.nodes}
+            onRecord={onRecord}
+            onUpdate={onUpdateSelected}
+          />
+        )}
+        {selectedNode.data.kind === 'diagram' && (
+          <MermaidDiagramInspector
+            node={selectedNode}
+            readOnly={configurationReadOnly}
             onRecord={onRecord}
             onUpdate={onUpdateSelected}
           />

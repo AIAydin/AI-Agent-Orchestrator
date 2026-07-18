@@ -265,11 +265,15 @@ describe('CollaborationIpcService ownership and approval', () => {
       ok: true,
       value: { invites: [], nextCursor: null, hasMore: false },
     });
-    expect(invites.listHistory).toHaveBeenCalledWith(
-      expect.objectContaining({ ownerId: 'web-contents:1' }),
-      expect.objectContaining({ roomId: 'launch-room', role: 'owner' }),
-      { limit: 25 },
-    );
+    expect(invites.listHistory).toHaveBeenCalledOnce();
+    const [authority, connection, input] = invites.listHistory.mock.calls[0] as unknown as [
+      { readonly ownerId: string },
+      CollaborationConnection,
+      { readonly limit: number },
+    ];
+    expect(authority.ownerId).toMatch(/^web-contents:1:/u);
+    expect(connection).toMatchObject({ roomId: 'launch-room', role: 'owner' });
+    expect(input).toEqual({ limit: 25 });
   });
 
   it('settles an in-flight invite effect before leaving and clearing its volatile authority', async () => {

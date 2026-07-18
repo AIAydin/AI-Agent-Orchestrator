@@ -49,6 +49,19 @@ describe('sanitizeSvg', () => {
     expect(uses[1]?.getAttribute('href')).toBeNull();
   });
 
+  it('keeps inert local Mermaid arrow markers without allowing external marker resources', () => {
+    const sanitized = sanitizeSvg(`
+      <svg xmlns="http://www.w3.org/2000/svg">
+        <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0 0L10 3" /></marker></defs>
+        <path id="edge" d="M0 0L10 10" marker-end="url(#arrow)" marker-start="url(https://evil.example/a.svg#arrow)" />
+      </svg>
+    `);
+    const document = new DOMParser().parseFromString(sanitized, 'image/svg+xml');
+    expect(document.querySelector('marker')).not.toBeNull();
+    expect(document.querySelector('#edge')?.getAttribute('marker-end')).toBe('url(#arrow)');
+    expect(document.querySelector('#edge')?.getAttribute('marker-start')).toBeNull();
+  });
+
   it('rebuilds safe content in the SVG namespace and drops foreign-namespace lookalikes', () => {
     const sanitized = sanitizeSvg(`
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">

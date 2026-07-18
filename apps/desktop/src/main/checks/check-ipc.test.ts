@@ -242,11 +242,11 @@ describe('CheckIpcService', () => {
     });
     expect(fixture.showMessageBox).not.toHaveBeenCalled();
     expect(fixture.startRuntime).toHaveBeenCalledWith(33, PLAN.planId, expect.any(Function));
-    expect(fixture.appendAudit).toHaveBeenCalledWith(
+    expect(fixture.appendAudit).not.toHaveBeenCalledWith(
       'permission',
       'saved-approval-use',
       'allowed',
-      expect.objectContaining({ resourceFingerprint: PLAN.approvalFingerprint }),
+      expect.anything(),
     );
     await fixture.service.dispose();
   });
@@ -345,11 +345,11 @@ describe('CheckIpcService', () => {
         singleUse: false,
       }),
     );
-    expect(fixture.appendAudit).toHaveBeenCalledWith(
+    expect(fixture.appendAudit).not.toHaveBeenCalledWith(
       'permission',
       'saved-approval-grant',
       'allowed',
-      expect.objectContaining({ resourceFingerprint: PLAN.approvalFingerprint }),
+      expect.anything(),
     );
     await fixture.service.dispose();
   });

@@ -1,4 +1,5 @@
-const MAX_SVG_CHARACTERS = 2_000_000;
+import { DOMParser } from '@xmldom/xmldom';
+
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
 const ALLOWED_ELEMENTS = new Set([
@@ -106,80 +107,50 @@ const FRAGMENT_ATTRIBUTES = new Set([
 ]);
 const PAINT_ATTRIBUTES = new Set(['fill', 'stroke']);
 
-/**
- * Sanitizes imported/generated SVG as inert image data.
- *
- * The result is intended for an `<img>` data URL, never `innerHTML`. Active elements, event/style
- * attributes, remote resources, links, scripts, animation, and foreign HTML are removed.
- */
-export function sanitizeSvg(source: string): string {
-  if (source.length === 0 || source.length > MAX_SVG_CHARACTERS) {
-    throw new Error('This SVG image is empty or too large (over 2,000,000 characters).');
-  }
-  if (/<!\s*(?:doctype|entity)/iu.test(source)) {
-    throw new Error(
-      'This SVG uses document declarations or entities, which are not allowed for safety.',
-    );
+interface XmlNode {
+  readonly nodeType: number;
+  readonly nextSibling: XmlNode | null;
+}
+
+interface XmlElement extends XmlNode {
+  readonly namespaceURI: string | null;
+  readonly localName: string;
+  readonly attributes: {
+    readonly length: number;
+    item(index: number): { readonly name: string; readonly value: string } | null;
+  };
+  readonly firstChild: XmlNode | null;
+}
+
+/** Revalidates renderer-generated SVG before the main process writes it to a user-selected path. */
+export function assertSafeDiagramSvg(source: string): void {
+  if (/<!\s*(?:doctype|entity)|<\?xml/iu.test(source)) {
+    throw new Error('The diagram export contains unsupported XML declarations.');
   }
   const document = new DOMParser().parseFromString(source, 'image/svg+xml');
+  const root = document.documentElement;
   if (
-    document.querySelector('parsererror') !== null ||
-    document.documentElement.localName !== 'svg'
+    document === undefined ||
+    document.getElementsByTagName('parsererror').length > 0 ||
+    root === null ||
+    root.localName !== 'svg'
   ) {
-    throw new Error('This file is not a valid SVG image.');
+    throw new Error('The diagram export is not valid SVG.');
   }
-  const sourceNamespace = document.documentElement.namespaceURI;
-  if (sourceNamespace !== null && sourceNamespace !== SVG_NAMESPACE) {
-    throw new Error('This SVG uses an unsupported XML namespace.');
+  if (root.namespaceURI !== SVG_NAMESPACE) {
+    throw new Error('The diagram export uses an unsupported XML namespace.');
   }
-
-  // Build a new namespace-correct document instead of returning nodes from the untrusted parse.
-  // This prevents an allowed local name in a foreign namespace from crossing the trust boundary.
-  const safeDocument = document.implementation.createDocument(SVG_NAMESPACE, 'svg', null);
-  copyAllowedAttributes(document.documentElement, safeDocument.documentElement);
-  copyAllowedChildren(
-    document.documentElement,
-    safeDocument.documentElement,
-    safeDocument,
-    sourceNamespace,
-  );
-  return new XMLSerializer().serializeToString(safeDocument.documentElement);
+  visit(root as unknown as XmlElement);
 }
 
-export function svgDataUrl(source: string): string {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sanitizeSvg(source))}`;
-}
-
-function copyAllowedChildren(
-  source: Element,
-  target: Element,
-  safeDocument: XMLDocument,
-  sourceNamespace: string | null,
-): void {
-  for (const child of [...source.childNodes]) {
-    if (child.nodeType === 3) {
-      target.append(safeDocument.createTextNode(child.nodeValue ?? ''));
-      continue;
-    }
-    if (
-      child.nodeType !== 1 ||
-      !(child instanceof Element) ||
-      child.namespaceURI !== sourceNamespace ||
-      !ALLOWED_ELEMENTS.has(child.localName)
-    ) {
-      continue;
-    }
-    const safeChild = safeDocument.createElementNS(SVG_NAMESPACE, child.localName);
-    copyAllowedAttributes(child, safeChild);
-    copyAllowedChildren(child, safeChild, safeDocument, sourceNamespace);
-    target.append(safeChild);
+function visit(element: XmlElement): void {
+  if (element.namespaceURI !== SVG_NAMESPACE || !ALLOWED_ELEMENTS.has(element.localName)) {
+    throw new Error(`The diagram export contains an unsupported <${element.localName}> element.`);
   }
-}
-
-function copyAllowedAttributes(source: Element, target: Element): void {
-  for (const attribute of [...source.attributes]) {
+  for (let index = 0; index < element.attributes.length; index += 1) {
+    const attribute = element.attributes.item(index);
+    if (attribute === null) continue;
     const name = attribute.name.toLowerCase();
-    if (name === 'xmlns') continue;
     if (
       name.startsWith('on') ||
       name === 'style' ||
@@ -187,14 +158,20 @@ function copyAllowedAttributes(source: Element, target: Element): void {
       (!ALLOWED_ATTRIBUTES.has(name) && !name.startsWith('aria-')) ||
       !safeAttributeValue(name, attribute.value)
     ) {
-      continue;
+      throw new Error(`The diagram export contains an unsafe ${attribute.name} attribute.`);
     }
-    target.setAttribute(attribute.name, attribute.value);
+  }
+  for (let child = element.firstChild; child !== null; child = child.nextSibling) {
+    if (child.nodeType === 1) visit(child as XmlElement);
+    else if (child.nodeType !== 3) {
+      throw new Error('The diagram export contains unsupported XML content.');
+    }
   }
 }
 
 function safeAttributeValue(name: string, value: string): boolean {
   if (value.length > 100_000 || containsControlCharacter(value)) return false;
+  if (name === 'xmlns') return value === SVG_NAMESPACE;
   if (name === 'href') return /^#[A-Za-z_][A-Za-z0-9_.:-]*$/u.test(value);
   if (FRAGMENT_ATTRIBUTES.has(name)) return safeFragmentPaint(value);
   if (PAINT_ATTRIBUTES.has(name) && /url\s*\(/iu.test(value)) return safeFragmentPaint(value);

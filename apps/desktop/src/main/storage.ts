@@ -48,12 +48,12 @@ import {
   type TrustedExtensionState,
 } from './storage-schemas.js';
 import {
-  consumeApproval as consumeDatabaseApproval,
+  consumeApprovalWithAudit as consumeDatabaseApprovalWithAudit,
   findApprovalsByScope as findDatabaseApprovalsByScope,
   getApproval as getDatabaseApproval,
   listApprovals as listDatabaseApprovals,
-  revokeApproval as revokeDatabaseApproval,
-  saveApproval as saveDatabaseApproval,
+  revokeApprovalWithAudit as revokeDatabaseApprovalWithAudit,
+  saveApprovalWithAudit as saveDatabaseApprovalWithAudit,
 } from './storage/security/approvals.js';
 import { initializeAuditIntegrity } from './storage/security/audit-integrity.js';
 import {
@@ -694,8 +694,8 @@ export class LocalStore implements DeliveryReadinessStore {
     return listDatabaseAuditEvents(this.database, limit);
   }
 
-  saveApproval(record: ApprovalRecord): ApprovalRecord {
-    const saved = saveDatabaseApproval(this.database, record);
+  saveApprovalWithAudit(record: ApprovalRecord, audit: TransactionalAuditEvent): ApprovalRecord {
+    const saved = saveDatabaseApprovalWithAudit(this.database, record, audit);
     this.notifyDurableChange();
     return saved;
   }
@@ -716,18 +716,29 @@ export class LocalStore implements DeliveryReadinessStore {
     return findDatabaseApprovalsByScope(this.database, scope);
   }
 
-  consumeApproval(
+  consumeApprovalWithAudit(
     approvalId: string,
     expectedScope: ApprovalRecord['scope'],
     consumedAt: Date,
+    audit: TransactionalAuditEvent,
   ): ApprovalRecord {
-    const consumed = consumeDatabaseApproval(this.database, approvalId, expectedScope, consumedAt);
+    const consumed = consumeDatabaseApprovalWithAudit(
+      this.database,
+      approvalId,
+      expectedScope,
+      consumedAt,
+      audit,
+    );
     this.notifyDurableChange();
     return consumed;
   }
 
-  revokeApproval(approvalId: string, revokedAt: Date): ApprovalRecord {
-    const revoked = revokeDatabaseApproval(this.database, approvalId, revokedAt);
+  revokeApprovalWithAudit(
+    approvalId: string,
+    revokedAt: Date,
+    audit: TransactionalAuditEvent,
+  ): ApprovalRecord {
+    const revoked = revokeDatabaseApprovalWithAudit(this.database, approvalId, revokedAt, audit);
     this.notifyDurableChange();
     return revoked;
   }
