@@ -13,25 +13,25 @@ allowBuilds:
   '@forgeboard/windows-durable-fs': true
 
 catalog:
-  '@hocuspocus/provider': 3.4.4
-  '@hocuspocus/server': 3.4.4
-  '@playwright/test': 1.53.2
-  '@tailwindcss/vite': 4.1.11
-  '@tanstack/react-query': 5.81.5
-  '@testing-library/jest-dom': 6.6.3
-  '@testing-library/react': 16.3.0
+  '@hocuspocus/provider': 4.4.0
+  '@hocuspocus/server': 4.4.0
+  '@playwright/test': 1.61.1
+  '@tailwindcss/vite': 4.3.3
+  '@tanstack/react-query': 5.101.2
+  '@testing-library/jest-dom': 6.9.1
+  '@testing-library/react': 16.3.2
   '@types/react': 19.1.8
   '@types/react-dom': 19.1.6
-  '@vitejs/plugin-react': 4.6.0
-  '@xterm/addon-fit': 0.10.0
-  '@xterm/xterm': 5.5.0
-  '@xyflow/react': 12.8.2
-  electron: 36.5.0
+  '@vitejs/plugin-react': 6.0.3
+  '@xterm/addon-fit': 0.11.0
+  '@xterm/xterm': 6.0.0
+  '@xyflow/react': 12.11.2
+  electron: 43.1.1
   electron-builder: 26.15.3
-  electron-vite: 3.1.0
+  electron-vite: 5.0.0
   express: 5.1.0
-  jsdom: 26.1.0
-  lucide-react: 0.525.0
+  jsdom: 29.1.1
+  lucide-react: 1.25.0
   monaco-editor: 0.52.2
   node-pty: 1.1.0
   react: 19.1.0
@@ -39,7 +39,7 @@ catalog:
   tailwindcss: 4.1.11
   tsup: 8.5.0
   vite: 6.3.5
-  vitest: 3.2.4
+  vitest: 4.1.10
   yjs: 13.6.27
   zod: 3.25.67
   zustand: 5.0.6
