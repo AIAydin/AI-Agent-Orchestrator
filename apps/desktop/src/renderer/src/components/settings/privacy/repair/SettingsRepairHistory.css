@@ -8,7 +8,7 @@
   border-radius: 8px;
   background: color-mix(in srgb, var(--amber) 10%, transparent);
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   line-height: 1.45;
 }
 
@@ -42,7 +42,7 @@
 
 .settings-repair-list article span {
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 
@@ -62,7 +62,7 @@
   padding: 9px 10px;
   cursor: pointer;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   font-weight: 650;
 }
 
@@ -74,7 +74,7 @@
   border-top: 1px solid var(--line);
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

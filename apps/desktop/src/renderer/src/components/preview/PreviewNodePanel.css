@@ -27,7 +27,7 @@
 .preview-node-panel h3 {
   margin: 0;
   color: var(--text);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .preview-runtime-state {
@@ -36,7 +36,7 @@
   background: var(--surface-raised);
   color: var(--text-faint);
   text-transform: uppercase;
-  font-size: 7px;
+  font-size: var(--text-2xs);
   font-weight: 750;
 }
 
@@ -66,7 +66,7 @@
   border-radius: 6px;
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .preview-actions .primary {
@@ -80,7 +80,7 @@
   border-radius: 6px;
   background: color-mix(in srgb, var(--red) 10%, var(--surface));
   color: var(--red);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 
@@ -100,14 +100,14 @@
 
 .preview-process-details dt {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 
 .preview-process-details dd {
   margin: 3px 0 0;
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .preview-security-note {
@@ -115,7 +115,7 @@
   gap: 6px;
   margin-top: 9px;
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   line-height: 1.45;
 }
 

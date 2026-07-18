@@ -1,6 +1,6 @@
 @media (max-width: 1180px) {
   .workspace-grid {
-    grid-template-columns: 205px minmax(0, 1fr) 235px;
+    grid-template-columns: 230px minmax(0, 1fr) 280px;
   }
   .agent-activity,
   .autosave-state {
@@ -43,13 +43,13 @@
     grid-template-columns: 1fr;
   }
   .settings-layout {
-    grid-template-columns: 155px 1fr;
+    grid-template-columns: 180px 1fr;
   }
   .settings-content {
     padding-inline: 20px;
   }
   .workspace-grid {
-    grid-template-columns: 185px minmax(0, 1fr);
+    grid-template-columns: 210px minmax(0, 1fr);
     grid-template-areas: 'rail canvas' 'rail activity';
   }
   .inspector {
@@ -58,7 +58,7 @@
     right: 0;
     top: 48px;
     bottom: 0;
-    width: 270px;
+    width: 320px;
     box-shadow: -10px 0 30px rgb(0 0 0 / 18%);
   }
 }

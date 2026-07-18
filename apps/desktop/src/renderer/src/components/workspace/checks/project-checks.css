@@ -37,7 +37,7 @@
   border-radius: 5px;
   background: var(--surface-raised);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .project-check-actions button:disabled {
@@ -66,7 +66,7 @@
 
 .project-check-result > small {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 
 .project-check-test-summary {
@@ -81,7 +81,7 @@
   border-radius: 999px;
   background: var(--surface-raised);
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 
 .project-check-test-summary .passed {
@@ -123,7 +123,7 @@
   border-radius: 6px;
   background: color-mix(in srgb, var(--red) 9%, var(--surface-subtle));
   color: var(--text);
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
   line-height: 1.5;
 }
@@ -153,14 +153,14 @@
 .check-disclosure-grid dt {
   margin-bottom: 4px;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
 }
 
 .check-disclosure-grid dd {
   margin: 0;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }

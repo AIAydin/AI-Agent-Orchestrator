@@ -34,7 +34,7 @@
   padding: 3px 8px;
   color: var(--text-faint);
   background: var(--surface-raised);
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.035em;
   text-transform: uppercase;
@@ -74,7 +74,7 @@
 .terminal-arguments > legend {
   padding: 0 5px;
   color: var(--text);
-  font-size: 0.74rem;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -87,7 +87,7 @@
   gap: 6px;
   min-width: 0;
   color: var(--text-soft);
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
@@ -100,7 +100,7 @@
 .terminal-configuration small,
 .terminal-arguments small {
   color: var(--text-faint);
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
   font-weight: 450;
   line-height: 1.45;
 }
@@ -160,7 +160,7 @@
   border-radius: 8px;
   color: var(--red);
   background: color-mix(in srgb, var(--red) 7%, var(--surface-raised));
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -217,7 +217,7 @@
 
 .terminal-search-notice {
   color: #aeb8c2;
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
 }
 
 .terminal-surface-frame {
@@ -261,7 +261,7 @@
 .terminal-empty-state span {
   max-width: 280px;
   color: #7f8b97;
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -275,7 +275,7 @@
   color: #f29a91;
   text-align: center;
   background: #11151af2;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -307,7 +307,7 @@
 .terminal-session-evidence dt,
 .terminal-launch-disclosure dt {
   color: var(--text-faint);
-  font-size: 0.64rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.045em;
   text-transform: uppercase;
@@ -319,7 +319,7 @@
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--text);
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -333,7 +333,7 @@
   padding: 9px;
   color: var(--text-soft);
   background: var(--surface-raised);
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -409,7 +409,7 @@
 .terminal-launch-boundary {
   margin: 0;
   color: var(--text-soft);
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 

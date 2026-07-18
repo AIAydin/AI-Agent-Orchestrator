@@ -5,7 +5,7 @@
 .command-builder-guidance {
   grid-column: 1 / -1;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -15,7 +15,7 @@
   align-items: flex-start;
   gap: 5px;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 620;
   line-height: 1.45;
 }
@@ -44,7 +44,7 @@
 
 .environment-editor > small {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -56,6 +56,6 @@
 .environment-editor.compact {
   margin-top: 12px;
   color: var(--text);
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }

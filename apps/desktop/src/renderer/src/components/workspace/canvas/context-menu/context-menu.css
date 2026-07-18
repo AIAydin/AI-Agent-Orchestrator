@@ -21,7 +21,7 @@
   border-radius: 5px;
   background: transparent;
   color: var(--text);
-  font-size: 9px;
+  font-size: var(--text-sm);
   text-align: left;
 }
 

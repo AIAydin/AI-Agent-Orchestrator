@@ -12,7 +12,7 @@
 
 .first-run-tour > header > span {
   color: var(--accent);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -22,14 +22,14 @@
 .first-run-tour > header h4 {
   margin: 4px 0 5px;
   color: var(--text);
-  font-size: 16px;
+  font-size: 19px;
   letter-spacing: -0.02em;
 }
 
 .first-run-tour > header p {
   margin: 0;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -61,12 +61,12 @@
   border-radius: 50%;
   background: var(--surface-subtle);
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .first-run-tour-tabs > button > small {
   overflow: hidden;
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -106,7 +106,7 @@
 
 .first-run-tour-panel small {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 650;
   text-transform: uppercase;
 }
@@ -115,13 +115,13 @@
 .first-run-tour-panel h5 {
   margin: 4px 0;
   color: var(--text);
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .first-run-tour-panel p,
 .first-run-tour-panel ol {
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -147,7 +147,7 @@
 .first-run-tour > footer .button {
   min-height: 30px;
   padding: 6px 10px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 @media (max-width: 760px) {

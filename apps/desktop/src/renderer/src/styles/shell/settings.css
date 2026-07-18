@@ -3,7 +3,7 @@
   padding: 30px;
 }
 .settings-modal {
-  width: min(960px, 100%);
+  width: min(1040px, 100%);
   height: min(760px, 100%);
   display: grid;
   grid-template-rows: 65px 1fr 60px;
@@ -31,17 +31,17 @@
   margin: 0;
 }
 .settings-header h2 {
-  font-size: 14px;
+  font-size: var(--text-2xl);
 }
 .settings-header p {
   margin-top: 3px;
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .settings-layout {
   min-height: 0;
   display: grid;
-  grid-template-columns: 190px 1fr;
+  grid-template-columns: 215px 1fr;
 }
 .settings-layout > nav {
   padding: 14px 10px;
@@ -60,7 +60,7 @@
   background: transparent;
   color: var(--text-soft);
   text-align: left;
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 .settings-layout > nav button:hover,
 .settings-layout > nav button.active {
@@ -86,12 +86,12 @@
 }
 .settings-section > header h3 {
   margin: 0 0 5px;
-  font-size: 14px;
+  font-size: var(--text-2xl);
 }
 .settings-section > header p {
   margin: 0;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--text-lg);
   line-height: 1.5;
 }
 .settings-fields {
@@ -108,7 +108,7 @@
   justify-content: space-between;
   margin-bottom: 15px;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--text-lg);
   font-weight: 650;
 }
 .segmented-field > div {
@@ -126,7 +126,7 @@
   background: transparent;
   text-transform: capitalize;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 .segmented-field button.selected {
   background: var(--surface-raised);
@@ -185,16 +185,16 @@
   gap: 3px;
 }
 .agent-setting strong {
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 .agent-setting small {
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .agent-setting p {
   margin: 3px 0 0;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 .status-chip {
@@ -202,7 +202,7 @@
   border-radius: 999px;
   background: var(--surface-subtle);
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -231,7 +231,7 @@
   flex-direction: column;
   gap: 5px;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 .agent-override-field > label,
@@ -251,7 +251,7 @@
 .command-editor legend {
   padding: 0 5px;
   color: var(--text);
-  font-size: 10px;
+  font-size: var(--text-md);
   font-weight: 700;
 }
 .command-editor textarea {
@@ -286,11 +286,11 @@
   gap: 4px;
 }
 .privacy-integrations strong {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .privacy-integrations small {
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 .two-column {
@@ -303,7 +303,7 @@
   flex-direction: column;
   gap: 7px;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--text-lg);
   font-weight: 650;
 }
 .info-path {
@@ -329,11 +329,11 @@
   gap: 4px;
 }
 .info-path strong {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .info-path code {
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 .button-row {
@@ -342,13 +342,13 @@
   gap: 7px;
 }
 .button-row .button {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .settings-empty-state,
 .recovery-guidance {
   margin: 0;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 .recovery-guidance {
@@ -384,7 +384,7 @@
 }
 .backup-health small {
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -401,7 +401,7 @@
   flex-direction: column;
   gap: 6px;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   font-weight: 650;
 }
 .recovery-snapshot-list {
@@ -426,12 +426,12 @@
   gap: 3px;
 }
 .recovery-snapshot-row strong {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .recovery-snapshot-row span,
 .recovery-snapshot-row code {
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .recovery-disclosure {
   margin-top: 12px;
@@ -442,12 +442,12 @@
 }
 .recovery-disclosure h4 {
   margin: 0 0 6px;
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 .recovery-disclosure p {
   margin: 0 0 9px;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 .recovery-disclosure dl {
@@ -464,13 +464,13 @@
 }
 .recovery-disclosure dt {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
 }
 .recovery-disclosure dd {
   margin: 0;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 .recovery-counts {
@@ -480,7 +480,7 @@
   margin: 0 0 10px;
   padding-left: 18px;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .danger-zone {
   padding: 14px;
@@ -494,7 +494,7 @@
   gap: 7px;
   margin-bottom: 10px;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .inline-notice {
   max-width: 660px;
@@ -503,7 +503,7 @@
   border-radius: 8px;
   background: var(--green-soft);
   color: var(--green);
-  font-size: 10px;
+  font-size: var(--text-md);
   overflow-wrap: anywhere;
 }
 .settings-footer {
@@ -516,7 +516,7 @@
 }
 .settings-footer > span {
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .settings-footer > div {
   display: flex;

@@ -29,20 +29,20 @@
 }
 
 .git-worktree-cleanup-panel strong {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .git-worktree-cleanup-panel small {
   max-width: 760px;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
 .git-cleanup-policy {
   margin: 0 0 12px;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 
@@ -53,7 +53,7 @@
 .git-cleanup-dirty-paths h4 {
   margin: 0 0 5px;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .git-cleanup-dirty-paths > div {
@@ -67,14 +67,14 @@
 .git-cleanup-dirty-paths code {
   overflow-wrap: anywhere;
   color: var(--text);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .git-cleanup-dirty-paths small {
   display: block;
   margin-top: 5px;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .git-cleanup-ineligible {
@@ -86,7 +86,7 @@
   border-radius: 6px;
   color: var(--red);
   background: var(--red-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 @media (max-width: 780px) {

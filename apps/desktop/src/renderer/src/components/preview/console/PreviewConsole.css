@@ -11,7 +11,7 @@
   padding: 7px;
   cursor: pointer;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .preview-console pre {
@@ -22,7 +22,7 @@
   border-top: 1px solid var(--line);
   color: var(--text-soft);
   white-space: pre-wrap;
-  font-size: 7px;
+  font-size: var(--text-2xs);
   line-height: 1.45;
 }
 
@@ -30,5 +30,5 @@
   margin: 0;
   padding: 6px 8px 0;
   color: var(--amber);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }

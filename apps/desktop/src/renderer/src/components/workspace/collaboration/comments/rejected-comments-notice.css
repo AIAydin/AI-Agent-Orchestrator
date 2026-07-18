@@ -17,7 +17,7 @@
 .rejected-comments-notice small {
   margin: 0;
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .rejected-comments-notice ol {

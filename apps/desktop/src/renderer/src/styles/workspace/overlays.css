@@ -25,7 +25,7 @@
   flex: 1;
   border: 0;
   background: transparent;
-  font-size: 12px;
+  font-size: var(--text-xl);
 }
 .palette-results {
   max-height: 330px;
@@ -63,11 +63,11 @@
   gap: 2px;
 }
 .palette-results strong {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .palette-results small {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .enter-icon {
   color: var(--text-faint);
@@ -90,7 +90,7 @@
   padding: 0 11px;
   border-top: 1px solid var(--line);
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .command-palette > footer span {
   display: flex;
@@ -117,12 +117,12 @@
 }
 .toast span {
   line-height: 1.4;
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .toast button {
   border: 0;
   background: transparent;
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }

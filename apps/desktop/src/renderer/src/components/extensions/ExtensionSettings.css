@@ -9,7 +9,7 @@
 }
 
 .extension-actions .button {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .extension-safety-note {
@@ -22,7 +22,7 @@
   border-radius: 8px;
   background: var(--green-soft);
   color: var(--green);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -38,7 +38,7 @@
 
 .extension-safety-note strong {
   color: var(--text);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .extension-message {
@@ -49,7 +49,7 @@
   padding: 10px 11px;
   border: 1px solid;
   border-radius: 8px;
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -75,7 +75,7 @@
   gap: 5px;
   margin: 15px 0 9px;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -86,7 +86,7 @@
   border-radius: 6px;
   background: var(--surface-subtle);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-transform: none;
   letter-spacing: normal;
   overflow-wrap: anywhere;
@@ -105,13 +105,13 @@
   border-radius: 9px;
   background: var(--surface-subtle);
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
   text-align: center;
 }
 
 .extension-empty strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .extension-list {
@@ -151,19 +151,19 @@
 }
 
 .extension-card > header strong {
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .extension-card > header small {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
 }
 
 .extension-card > p {
   margin: 10px 0;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -179,7 +179,7 @@
   border-radius: 999px;
   background: var(--surface-subtle);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .extension-record-grid,
@@ -202,7 +202,7 @@
 .extension-record-grid dt,
 .extension-plan-facts dt {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   font-weight: 750;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -213,13 +213,13 @@
   min-width: 0;
   margin: 0;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
 }
 
 .extension-record-grid code,
 .extension-plan-facts code {
-  font-size: 8px;
+  font-size: var(--text-xs);
   word-break: break-all;
 }
 
@@ -232,7 +232,7 @@
   border: 0;
   background: transparent;
   color: var(--accent);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .extension-documentation {
@@ -245,7 +245,7 @@
   background: var(--surface-subtle);
   color: var(--text-soft);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -263,7 +263,7 @@
 .extension-card > footer .button {
   min-height: 30px;
   padding: 0 10px;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .extension-remove-trigger {
@@ -284,13 +284,13 @@
   gap: 7px;
   margin: 0;
   color: var(--red);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .extension-invalid-list > p {
   margin: 6px 0 10px;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -302,12 +302,12 @@
 }
 
 .extension-invalid-list strong {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .extension-invalid-list span {
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -347,14 +347,14 @@
 
 .extension-review-dialog h2,
 .extension-remove-dialog h2 {
-  font-size: 15px;
+  font-size: 18px;
 }
 
 .extension-review-dialog > header p,
 .extension-remove-dialog > header p {
   margin-top: 4px;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -369,18 +369,18 @@
 }
 
 .extension-plan-title > strong {
-  font-size: 14px;
+  font-size: var(--text-2xl);
 }
 
 .extension-plan-title > span {
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .extension-plan-title > p {
   margin-top: 4px;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 
@@ -391,7 +391,7 @@
   border-radius: 7px;
   background: var(--accent-soft);
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .extension-plan-facts {
@@ -406,7 +406,7 @@
 
 .extension-review-section h3 {
   margin: 0 0 9px;
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .extension-permission-list,
@@ -440,14 +440,14 @@
 .extension-permission-list code,
 .extension-contribution-list code {
   color: var(--text);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .extension-permission-list small,
 .extension-contribution-list small,
 .extension-contribution-list span {
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 
@@ -459,7 +459,7 @@
 }
 
 .extension-contribution-list strong {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .extension-review-section details {
@@ -468,7 +468,7 @@
 
 .extension-review-section summary {
   color: var(--accent);
-  font-size: 9px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -480,7 +480,7 @@
   border-radius: 7px;
   background: var(--surface-subtle);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   white-space: pre;
 }
@@ -512,12 +512,12 @@
 
 .extension-review-confirmation strong {
   color: var(--text);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .extension-review-confirmation small {
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 
@@ -555,7 +555,7 @@
   gap: 8px;
   padding: 18px 20px;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .extension-remove-dialog > label input {

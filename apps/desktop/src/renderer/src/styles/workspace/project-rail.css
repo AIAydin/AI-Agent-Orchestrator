@@ -23,7 +23,7 @@
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .rail-tabs button.active {
   border-color: var(--accent);
@@ -43,7 +43,7 @@
   flex: 1;
   border: 0;
   background: transparent;
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .repository-summary {
   padding: 12px 11px;
@@ -59,7 +59,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .clean-dot,
 .dirty-dot {
@@ -79,7 +79,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .repository-summary > div {
   display: flex;
@@ -92,7 +92,7 @@
   border-radius: 4px;
   background: var(--surface-subtle);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .repository-summary > .repository-initialize {
   display: grid;
@@ -106,7 +106,7 @@
 .repository-initialize small {
   margin: 0;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 .repository-initialize button {
@@ -119,7 +119,7 @@
   border-radius: 6px;
   background: var(--surface-raised);
   color: var(--text);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .repository-initialize button:hover:not(:disabled) {
   border-color: var(--accent);
@@ -141,11 +141,11 @@
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .template-section header span {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .template-list {
   overflow-y: auto;
@@ -182,11 +182,11 @@
   gap: 2px;
 }
 .template-list strong {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .template-list small {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -206,12 +206,12 @@
 }
 .rail-node-section h2 {
   margin: 0;
-  font-size: 8px;
+  font-size: var(--text-xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 .rail-node-section header > span {
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .rail-node-list {
   min-height: 0;
@@ -246,12 +246,12 @@
   white-space: nowrap;
 }
 .rail-node-list strong {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .rail-node-list small,
 .rail-node-list > p {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 .rail-node-list > p {
   margin: 18px 8px;
@@ -280,7 +280,7 @@
   border-radius: 50%;
   background: var(--green-soft);
   color: var(--green);
-  font-size: 10px;
+  font-size: var(--text-md);
   font-weight: 800;
 }
 .rail-safety > span.warning {
@@ -293,9 +293,9 @@
   gap: 2px;
 }
 .rail-safety strong {
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .rail-safety small {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }

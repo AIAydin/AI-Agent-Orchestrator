@@ -12,7 +12,7 @@
 .preview-device-controls legend {
   padding: 0 4px;
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -22,7 +22,7 @@
   flex-direction: column;
   gap: 4px;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 650;
 }
 
@@ -36,7 +36,7 @@
   border-radius: 6px;
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .preview-checkbox-option {
@@ -49,6 +49,6 @@
   grid-column: 1 / -1;
   margin: 0;
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   line-height: 1.45;
 }

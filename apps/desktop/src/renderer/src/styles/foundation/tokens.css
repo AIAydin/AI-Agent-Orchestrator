@@ -21,6 +21,14 @@
   --yellow: #b47c2f;
   --shadow: 0 18px 60px rgb(27 32 29 / 12%);
   --minimap-mask: rgb(243 244 242 / 78%);
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-xl: 15px;
+  --text-2xl: 17px;
+  --text-3xl: 20px;
   font-family:
     Inter,
     ui-sans-serif,

@@ -25,14 +25,14 @@
 
 .git-delivery-readiness strong {
   color: var(--text);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .git-delivery-readiness small,
 .git-delivery-readiness p {
   margin: 0;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -46,7 +46,7 @@
   border-radius: 999px;
   color: var(--text-soft);
   background: var(--surface-raised);
-  font-size: 8px;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
@@ -94,7 +94,7 @@
 .git-delivery-requirements legend {
   padding: 0 4px;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
@@ -120,7 +120,7 @@
   border-radius: 6px;
   color: var(--text);
   background: var(--surface);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .git-delivery-workflow-selector select:focus-visible {
@@ -221,7 +221,7 @@
 
 .git-delivery-check-state {
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -235,7 +235,7 @@
 .git-delivery-quality .button {
   min-height: 28px;
   padding: 4px 8px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .git-delivery-quality {
@@ -264,7 +264,7 @@
 
 .git-delivery-quality-binding code {
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .git-delivery-quality-message {
@@ -288,7 +288,7 @@
   margin: 0;
   padding: 0;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   list-style-position: inside;
 }
 

@@ -42,7 +42,7 @@
 .provider-browser-note,
 .provider-privacy-note {
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -76,7 +76,7 @@
 .provider-connection-advanced summary {
   width: fit-content;
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--text-md);
   font-weight: 650;
 }
 

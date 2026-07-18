@@ -32,7 +32,7 @@
 }
 
 .project-file-browser-header strong {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .project-file-browser-header span,
@@ -40,7 +40,7 @@
 .project-file-row small,
 .project-file-candidate p {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 
@@ -61,7 +61,7 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .project-file-search {
@@ -83,7 +83,7 @@
   border: 0;
   outline: 0;
   background: transparent;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .project-file-breadcrumbs {
@@ -123,7 +123,7 @@
   border: 1px solid color-mix(in srgb, var(--red) 42%, var(--line));
   border-radius: 7px;
   color: var(--red);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .project-file-list {
@@ -175,7 +175,7 @@
   flex: 1;
   overflow: hidden;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -186,7 +186,7 @@
   border-radius: 999px;
   background: var(--surface-raised);
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   font-style: normal;
 }
 
@@ -208,7 +208,7 @@
   margin: 0;
   place-items: center;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .project-file-candidate {
@@ -223,7 +223,7 @@
 .project-file-candidate code {
   overflow: hidden;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -231,7 +231,7 @@
 .project-file-candidate-state {
   flex-wrap: wrap;
   gap: 6px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .project-file-candidate-state span {

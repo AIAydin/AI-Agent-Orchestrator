@@ -29,7 +29,7 @@
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .activity-tabs button.active {
   border-color: var(--accent);
@@ -49,7 +49,7 @@
   gap: 7px;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .event-stream span,
 .event-stream small {
@@ -78,12 +78,12 @@
 }
 .drawer-panel-summary strong {
   color: var(--text);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .drawer-panel-summary small,
 .drawer-panel-summary > span {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .drawer-panel-summary > button {
   padding: 4px 7px;
@@ -91,7 +91,7 @@
   border-radius: 5px;
   background: var(--surface-raised);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .drawer-panel-summary .drawer-panel-actions {
   flex: 0 0 auto;
@@ -103,12 +103,12 @@
   border-radius: 5px;
   background: var(--accent-soft);
   color: var(--text);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .drawer-empty {
   margin: 14px 0;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-align: center;
 }
 .change-report-list,
@@ -133,7 +133,7 @@
   gap: 8px;
   margin-bottom: 5px;
   color: var(--text);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .change-report-list ul {
   max-height: 70px;
@@ -149,7 +149,7 @@
   gap: 5px;
   padding: 2px 0;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .change-report-list code,
 .check-command-list code {
@@ -167,7 +167,7 @@
   border-radius: 999px;
   background: var(--surface-raised);
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   text-transform: capitalize;
 }
 .drawer-status.succeeded,
@@ -191,7 +191,7 @@
 .check-command-list article > small {
   display: block;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 .audit-event-list {
@@ -205,7 +205,7 @@
   gap: 9px;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .audit-event-list time {
   color: var(--text-faint);
@@ -227,5 +227,5 @@
   background: var(--surface-raised);
   color: var(--text-soft);
   box-shadow: 0 3px 10px rgb(0 0 0 / 10%);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }

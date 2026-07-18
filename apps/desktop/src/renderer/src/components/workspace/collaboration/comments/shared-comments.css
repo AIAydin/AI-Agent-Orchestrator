@@ -33,7 +33,7 @@
 .shared-comments-empty,
 .shared-comments form small {
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .shared-comments li p {
@@ -64,7 +64,7 @@
 .shared-comments-rejected > p {
   margin: 0;
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .shared-comments-rejected button {

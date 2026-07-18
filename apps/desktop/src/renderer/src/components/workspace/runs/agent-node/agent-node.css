@@ -21,13 +21,13 @@
 }
 
 .agent-live-output h4 {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .agent-live-output p,
 .agent-live-output strong {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -39,7 +39,7 @@
   border-radius: 5px;
   background: var(--surface-raised);
   color: var(--text-soft);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -53,13 +53,13 @@
 
 .agent-live-output dt {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 
 .agent-live-output dd {
   margin: 2px 0 0;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
 }
 
@@ -92,14 +92,14 @@
 }
 
 .agent-attempt-history h4 {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .agent-attempt-history > p,
 .agent-history-error,
 .agent-attempt-lineage {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -121,13 +121,13 @@
 }
 
 .agent-attempt-history article > header strong {
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .agent-attempt-history time,
 .agent-attempt-status {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 
 .agent-attempt-status {
@@ -150,20 +150,20 @@
 
 .agent-attempt-history dt {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 
 .agent-attempt-history dd {
   overflow-wrap: anywhere;
   margin: 2px 0 0;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .agent-attempt-history details summary {
   cursor: pointer;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .agent-attempt-history pre {
@@ -174,7 +174,7 @@
   border-radius: 5px;
   background: var(--surface-raised);
   color: var(--text-soft);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -190,7 +190,7 @@
   border-radius: 6px;
   background: var(--surface-raised);
   color: var(--text-soft);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 
 .agent-attempt-actions button:disabled {

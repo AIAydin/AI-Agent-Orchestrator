@@ -21,7 +21,7 @@
 .docker-explanation {
   margin: 0;
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--text-xl);
   line-height: 1.55;
 }
 

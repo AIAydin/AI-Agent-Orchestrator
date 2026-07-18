@@ -17,7 +17,7 @@
 .git-file-group h3 {
   margin: 0;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
 }
 .git-file-group header > span {
@@ -26,13 +26,13 @@
   border-radius: 999px;
   background: var(--surface-subtle);
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-align: center;
 }
 .git-file-group > p {
   margin: 2px 6px 8px;
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .git-file-group ul {
   display: grid;
@@ -78,7 +78,7 @@
 }
 .git-file-select small {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .git-file-select:hover,
 .git-file-select.active,
@@ -100,7 +100,7 @@
   gap: 5px;
   margin: 7px 5px 1px;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .git-file-pagination button {
   width: 23px;

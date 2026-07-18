@@ -20,12 +20,12 @@
 }
 
 .file-context-target-picker h3 {
-  font-size: 0.78rem;
+  font-size: var(--text-md);
 }
 
 .file-context-target-picker p {
   color: var(--text-soft);
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -45,7 +45,7 @@
   min-width: 0;
   gap: 5px;
   color: var(--text-soft);
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
 }
 
 .file-context-target-picker select,

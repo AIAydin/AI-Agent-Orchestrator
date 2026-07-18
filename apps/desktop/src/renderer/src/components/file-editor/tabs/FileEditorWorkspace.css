@@ -65,7 +65,7 @@
 
 .file-editor-tab [role='tab'] em {
   color: var(--yellow);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-style: normal;
 }
 

@@ -10,7 +10,7 @@
 .check-settings-project-heading strong {
   display: block;
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .check-settings-project-summary p,
@@ -18,7 +18,7 @@
 .check-settings-empty {
   margin: 5px 0 0;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 
@@ -37,7 +37,7 @@
   display: block;
   margin-top: 3px;
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .check-settings-project-heading .button,
@@ -45,7 +45,7 @@
 .check-settings-adopt,
 .check-settings-remove {
   min-height: 31px;
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .check-settings-command-list,
@@ -75,13 +75,13 @@
 
 .check-settings-detected-row strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .check-settings-detected-row span,
 .check-settings-detection-note {
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -140,7 +140,7 @@
   flex-direction: column;
   gap: 6px;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   font-weight: 650;
 }
 

@@ -41,18 +41,18 @@
 }
 
 .agent-context-drop-zone h3 {
-  font-size: 0.78rem;
+  font-size: var(--text-md);
 }
 
 .agent-context-drop-zone > header > span {
   color: var(--text-soft);
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
 }
 
 .agent-context-drop-zone p,
 .agent-context-drop-zone small {
   color: var(--text-soft);
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -94,7 +94,7 @@
 .agent-context-drop-zone li strong,
 .agent-context-drop-zone li code {
   overflow: hidden;
-  font-size: 0.67rem;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -35,7 +35,7 @@
 
 .agent-readiness > header > span {
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .agent-readiness.ready > header > span {
@@ -49,14 +49,14 @@
   border-radius: 6px;
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .agent-readiness p,
 .agent-readiness small {
   margin: 0;
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.5;
 }
 
@@ -68,7 +68,7 @@
   max-width: 100%;
   overflow-wrap: anywhere;
   color: var(--text);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .agent-readiness-result {
@@ -90,5 +90,5 @@
 .agent-readiness-list h4 {
   margin: 12px 0 -6px;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }

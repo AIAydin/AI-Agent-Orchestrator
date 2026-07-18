@@ -25,14 +25,14 @@
 }
 
 .workspace-project-tree > header strong {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
 }
 
 .workspace-project-tree > header span,
 .workspace-project-tree footer,
 .workspace-project-tree-list > p {
   color: var(--text-faint);
-  font-size: 0.62rem;
+  font-size: var(--text-xs);
 }
 
 .workspace-project-tree > header button {
@@ -59,7 +59,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  font-size: 0.68rem;
+  font-size: var(--text-sm);
 }
 
 .workspace-project-tree > nav {
@@ -78,7 +78,7 @@
   border: 0;
   background: transparent;
   color: var(--text-soft);
-  font-size: 0.62rem;
+  font-size: var(--text-xs);
 }
 
 .workspace-project-tree-list {
@@ -115,14 +115,14 @@
 
 .workspace-project-tree-list span {
   overflow: hidden;
-  font-size: 0.66rem;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .workspace-project-tree-list em {
   color: var(--text-faint);
-  font-size: 0.57rem;
+  font-size: var(--text-2xs);
   font-style: normal;
 }
 
@@ -136,7 +136,7 @@
   align-items: flex-start;
   gap: 6px;
   color: var(--red);
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
 }
 
 .workspace-project-tree-attach {
@@ -152,20 +152,20 @@
   display: grid;
   gap: 4px;
   color: var(--text-soft);
-  font-size: 0.62rem;
+  font-size: var(--text-xs);
 }
 
 .workspace-project-tree-attach select,
 .workspace-project-tree-attach button {
   min-width: 0;
   min-height: 30px;
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
 }
 
 .workspace-project-tree-attach p {
   margin: 0;
   color: var(--text-soft);
-  font-size: 0.62rem;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 

@@ -50,12 +50,12 @@
 }
 
 .preview-surface > header strong {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .preview-surface > header small {
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 
 .preview-surface > header button {
@@ -83,7 +83,7 @@
   padding: 5px 10px;
   border-bottom: 1px solid var(--line);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .preview-surface > header form {
@@ -101,7 +101,7 @@
   border: 0;
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-sm);
   outline: none;
 }
 
@@ -130,7 +130,7 @@
   margin-bottom: 7px;
   color: var(--text-soft);
   text-align: center;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .preview-touch-badge {
@@ -140,7 +140,7 @@
   border: 1px solid color-mix(in srgb, var(--green) 42%, var(--line));
   border-radius: 999px;
   color: var(--green);
-  font-size: 7px;
+  font-size: var(--text-2xs);
 }
 
 .preview-device-shell {
@@ -171,7 +171,7 @@
   padding: 20px;
   color: var(--text-soft);
   text-align: center;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .preview-surface-fallback button {

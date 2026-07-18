@@ -63,7 +63,7 @@
 .test-node-history small,
 .test-node-history time {
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
 }
 
 .test-node-state.succeeded {

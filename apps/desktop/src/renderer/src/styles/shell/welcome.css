@@ -53,7 +53,7 @@
   color: var(--accent-strong);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-size: 10px;
+  font-size: var(--text-md);
   font-weight: 750;
 }
 .welcome-copy h1 {
@@ -72,7 +72,7 @@
   max-width: 620px;
   margin: 19px auto 0;
   color: var(--text-soft);
-  font-size: 14px;
+  font-size: var(--text-2xl);
   line-height: 1.65;
 }
 .start-grid {
@@ -129,7 +129,7 @@
   gap: 5px;
 }
 .start-card strong {
-  font-size: 13px;
+  font-size: 16px;
 }
 .start-card small {
   color: var(--text-soft);
@@ -158,7 +158,7 @@
 .section-heading h2 {
   margin: 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--text-xl);
 }
 .section-heading > span {
   min-width: 22px;
@@ -166,7 +166,7 @@
   text-align: center;
   border-radius: 999px;
   background: var(--surface-subtle);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .empty-recent {
   min-height: 66px;
@@ -185,10 +185,10 @@
 }
 .empty-recent strong {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--text-xl);
 }
 .empty-recent span {
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 .recent-list {
   border: 1px solid var(--line);
@@ -231,7 +231,7 @@
   border-radius: 6px;
   background: color-mix(in srgb, var(--red) 10%, transparent);
   color: var(--red);
-  font-size: 10px;
+  font-size: var(--text-md);
   font-weight: 700;
 }
 .locate-project-button {
@@ -244,7 +244,7 @@
   border-radius: 7px;
   background: var(--surface-raised);
   color: var(--text);
-  font-size: 10px;
+  font-size: var(--text-md);
   font-weight: 700;
 }
 .locate-project-button:hover {
@@ -281,16 +281,19 @@
   border-radius: 6px;
   background: var(--surface-subtle);
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .welcome-footer {
   margin-top: 24px;
   padding-top: 15px;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
+  gap: 8px 24px;
   border-top: 1px solid var(--line);
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .provider-status,
 .tool-list,
@@ -298,6 +301,13 @@
   display: flex;
   align-items: center;
   gap: 7px;
+}
+.provider-status,
+.tool-list {
+  flex-wrap: wrap;
+}
+.tool-list span {
+  white-space: nowrap;
 }
 .status-dot {
   width: 6px;

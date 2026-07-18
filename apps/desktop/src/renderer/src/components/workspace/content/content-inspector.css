@@ -27,7 +27,7 @@
 .content-list-header span,
 .content-attachments header span {
   color: var(--text-muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .content-list-header {
@@ -51,7 +51,7 @@
 .content-attachments > p,
 .brief-versions > p {
   color: var(--text-muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.5;
 }
 

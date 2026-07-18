@@ -38,7 +38,7 @@
   overflow: hidden;
   color: var(--text-soft);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--text-xl);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -49,7 +49,7 @@
   color: var(--text-soft);
   background: var(--surface-raised);
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .file-editor-state-ready {
@@ -104,7 +104,7 @@
 .file-editor-message {
   padding: 7px 12px;
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--text-xl);
 }
 
 .file-editor-message-error {
@@ -171,7 +171,7 @@
   color: var(--text-faint);
   background: var(--surface-subtle);
   border-top: 1px solid var(--line);
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .file-editor-footer code {

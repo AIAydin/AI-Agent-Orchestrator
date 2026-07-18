@@ -17,13 +17,13 @@
 }
 
 .git-shipping-panel strong {
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 
 .git-shipping-panel small,
 .git-shipping-panel label {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .git-shipping-panel select {
@@ -36,7 +36,7 @@
   align-items: center;
   gap: 5px;
   margin: 0;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .git-shipping-result.success {
@@ -50,7 +50,7 @@
 .git-disclosure-body h4 {
   margin: 10px 0 5px;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 @media (max-width: 900px) {

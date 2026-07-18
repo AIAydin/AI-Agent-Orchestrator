@@ -1,6 +1,6 @@
 .safe-markdown {
   color: var(--text-primary, #e7e9ef);
-  font-size: 0.88rem;
+  font-size: var(--text-lg);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -116,12 +116,13 @@
 .markdown-composer-header {
   align-items: center;
   display: flex;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
   justify-content: space-between;
 }
 
 .markdown-composer-header > label {
-  font-size: 0.78rem;
+  font-size: var(--text-md);
   font-weight: 650;
 }
 
@@ -141,7 +142,7 @@
   color: var(--text-muted, #a8adba);
   display: inline-flex;
   font: inherit;
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   gap: 0.25rem;
   padding: 0.28rem 0.42rem;
 }

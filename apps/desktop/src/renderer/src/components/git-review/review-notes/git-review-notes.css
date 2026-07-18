@@ -56,19 +56,19 @@
 }
 .git-review-note > header strong {
   color: var(--text);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .git-review-note > header span,
 .git-review-note-anchor {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .git-review-note > p,
 .git-review-note-composer > p,
 .git-stale-review-notes > p {
   margin: 0;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.45;
   white-space: pre-wrap;
 }
@@ -82,7 +82,7 @@
   border-radius: 4px;
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .git-review-note button:hover:not(:disabled),
 .git-review-note-composer button:hover:not(:disabled) {
@@ -100,7 +100,7 @@
 .git-review-note-editor > span,
 .git-review-note-composer label > span {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -135,7 +135,7 @@
   align-items: center;
   color: var(--text-soft);
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 .git-stale-review-notes > p {
   display: flex;
@@ -149,5 +149,5 @@
   border-bottom: 1px solid var(--line);
   color: var(--red);
   background: var(--red-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }

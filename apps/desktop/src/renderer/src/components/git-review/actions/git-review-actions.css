@@ -9,7 +9,7 @@
 .git-commit-panel label {
   grid-column: 1 / -1;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 .git-commit-panel textarea {
@@ -29,7 +29,7 @@
 }
 .git-commit-panel footer small {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-align: right;
 }
 .git-disclosure-backdrop {
@@ -63,12 +63,12 @@
 .git-action-disclosure h3 {
   margin: 0 0 4px;
   color: var(--text);
-  font-size: 15px;
+  font-size: 18px;
 }
 .git-action-disclosure p {
   margin: 0;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 .git-disclosure-body {
@@ -94,14 +94,14 @@
 .git-disclosure-body dt {
   margin-bottom: 4px;
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   font-weight: 750;
   text-transform: uppercase;
 }
 .git-disclosure-body dd {
   margin: 0;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 .git-disclosure-message {
@@ -116,14 +116,14 @@
 }
 .git-disclosure-paths code {
   overflow-wrap: anywhere;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .git-disclosure-body > small,
 .git-disclosure-paths small {
   display: block;
   margin-top: 8px;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .git-action-disclosure > footer {
   display: flex;

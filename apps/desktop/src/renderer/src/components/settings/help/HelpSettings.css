@@ -4,14 +4,14 @@
 
 .help-settings > header h3 {
   margin: 5px 0;
-  font-size: 17px;
+  font-size: var(--text-3xl);
 }
 
 .help-settings > header p {
   max-width: 590px;
   margin: 0;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--text-lg);
   line-height: 1.55;
 }
 
@@ -34,13 +34,13 @@
 }
 
 .help-shortcut strong {
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .help-shortcut small,
 .help-result-count {
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .help-shortcut kbd {
@@ -50,7 +50,7 @@
   border-radius: 6px;
   background: var(--surface-raised);
   color: var(--text);
-  font-size: 9px;
+  font-size: var(--text-sm);
   white-space: nowrap;
 }
 
@@ -65,7 +65,7 @@
   padding: 10px 12px;
   color: var(--text-soft);
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
@@ -159,12 +159,12 @@
 
 .help-articles summary strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .help-articles summary small {
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -172,7 +172,7 @@
   margin: 0;
   padding: 0 18px 14px 56px;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   line-height: 1.55;
 }
 
@@ -195,12 +195,12 @@
 
 .help-empty strong {
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 
 .help-empty span {
   max-width: 390px;
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 

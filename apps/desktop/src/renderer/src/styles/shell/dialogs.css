@@ -37,14 +37,14 @@
 }
 .project-dialog h2 {
   margin: 1px 0 5px;
-  font-size: 17px;
+  font-size: var(--text-3xl);
   letter-spacing: -0.02em;
 }
 .project-dialog p {
   margin: 0;
   color: var(--text-soft);
   line-height: 1.45;
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 .project-dialog > label,
 .project-dialog > .project-form-field,
@@ -55,7 +55,7 @@
   gap: 7px;
   margin: 0 0 15px;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--text-lg);
   font-weight: 650;
 }
 .project-form-field > label,
@@ -93,7 +93,7 @@
   border-left: 0;
   border-radius: 0 7px 7px 0;
   background: var(--surface-subtle);
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 .check-row {
   flex-direction: row !important;
@@ -131,7 +131,7 @@
   border-radius: 8px;
   background: var(--accent-soft);
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   overflow-wrap: anywhere;
 }
 .impact-box strong {
@@ -169,7 +169,7 @@
 .recovery-comparison span,
 .recovery-identity dt {
   color: var(--text-faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -177,7 +177,7 @@
 .recovery-comparison code {
   overflow: hidden;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -190,7 +190,7 @@
 .recovery-identity > strong {
   display: block;
   margin-bottom: 9px;
-  font-size: 11px;
+  font-size: var(--text-lg);
 }
 .recovery-identity dl {
   display: grid;
@@ -205,14 +205,14 @@
   margin: 3px 0 0;
   overflow-wrap: anywhere;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .recovery-warnings,
 .recovery-clear {
   margin-top: 12px;
   padding: 11px 12px;
   border-radius: 8px;
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .recovery-warnings {
   border: 1px solid color-mix(in srgb, var(--red) 45%, var(--line));
@@ -257,16 +257,16 @@
 }
 .run-approval-dialog .eyebrow {
   margin-bottom: 5px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .run-approval-dialog h2 {
   margin: 0 0 4px;
-  font-size: 17px;
+  font-size: var(--text-3xl);
 }
 .run-approval-dialog header p {
   margin: 0;
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: var(--text-md);
 }
 .run-disclosure-scroll {
   min-height: 0;
@@ -280,7 +280,7 @@
   border-radius: 7px;
   background: color-mix(in srgb, var(--yellow) 13%, var(--surface));
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 .run-disclosure-grid {
@@ -302,7 +302,7 @@
 .run-disclosure-grid dt {
   margin-bottom: 5px;
   color: var(--text-faint);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   font-weight: 750;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -310,13 +310,13 @@
 .run-disclosure-grid dd {
   margin: 0;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .run-disclosure-grid code {
   color: var(--text);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 .run-disclosure-grid .prompt-preview {
   max-height: 110px;

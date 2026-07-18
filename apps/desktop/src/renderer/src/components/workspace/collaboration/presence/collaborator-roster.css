@@ -17,7 +17,7 @@
   border: 2px solid var(--surface);
   border-radius: 50%;
   color: white;
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 800;
 }
 
