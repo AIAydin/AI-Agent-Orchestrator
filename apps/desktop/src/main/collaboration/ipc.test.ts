@@ -245,6 +245,33 @@ describe('CollaborationIpcService ownership and approval', () => {
     expect(invites.create).toHaveBeenCalledOnce();
   });
 
+  it('lists a strict owner-reviewed invite page without exposing credentials', async () => {
+    const client = fakeClient('owner');
+    const invites = fakeInviteOperations();
+    const service = new CollaborationIpcService(
+      { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      { client, invites },
+    );
+    service.registerIpcHandlers();
+    const owner = renderer(1);
+    electron.fromWebContents.mockReturnValue(owner.parent);
+    await invoke('join', owner.event, {
+      ...joinInput('owner-token'),
+      managementBaseUrl: 'https://collaboration.example.test/control/',
+    });
+
+    await expect(invoke('listInvites', owner.event, { limit: 25 })).resolves.toEqual({
+      ok: true,
+      value: { invites: [], nextCursor: null, hasMore: false },
+    });
+    expect(invites.listHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId: 'web-contents:1' }),
+      expect.objectContaining({ roomId: 'launch-room', role: 'owner' }),
+      { limit: 25 },
+    );
+  });
+
   it('settles an in-flight invite effect before leaving and clearing its volatile authority', async () => {
     const client = fakeClient('owner');
     const invites = fakeInviteOperations();
@@ -1507,7 +1534,7 @@ function invoke(
   operation:
     | 'join'
     | 'joinInvite'
-    | 'listSessionInvites'
+    | 'listInvites'
     | 'createInvite'
     | 'copyInviteLink'
     | 'revokeInvite'
@@ -1751,10 +1778,10 @@ function fakeInviteOperations() {
     establishDirect: vi.fn(),
     clear: vi.fn(),
     dispose: vi.fn(),
-    list: vi.fn(() => []),
+    listHistory: vi.fn(() => Promise.resolve({ invites: [], nextCursor: null, hasMore: false })),
     create: vi.fn<() => Promise<CollaborationInviteSafeView | null>>(() => Promise.resolve(null)),
     copy: vi.fn(() => Promise.resolve(false)),
-    revoke: vi.fn(() => Promise.resolve(false)),
+    revoke: vi.fn(() => Promise.resolve(null)),
     redeemAndJoin: vi.fn(),
   };
 }

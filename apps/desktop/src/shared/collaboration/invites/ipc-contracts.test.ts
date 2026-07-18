@@ -11,13 +11,13 @@ describe('collaboration invite IPC contracts', () => {
   it('defines stable distinct invite channels', () => {
     expect({
       joinInvite: COLLABORATION_IPC_CHANNELS.joinInvite,
-      listSessionInvites: COLLABORATION_IPC_CHANNELS.listSessionInvites,
+      listInvites: COLLABORATION_IPC_CHANNELS.listInvites,
       createInvite: COLLABORATION_IPC_CHANNELS.createInvite,
       copyInviteLink: COLLABORATION_IPC_CHANNELS.copyInviteLink,
       revokeInvite: COLLABORATION_IPC_CHANNELS.revokeInvite,
     }).toEqual({
       joinInvite: 'collaboration:join-invite',
-      listSessionInvites: 'collaboration:list-session-invites',
+      listInvites: 'collaboration:list-invites',
       createInvite: 'collaboration:create-invite',
       copyInviteLink: 'collaboration:copy-invite-link',
       revokeInvite: 'collaboration:revoke-invite',
@@ -62,7 +62,10 @@ describe('collaboration invite IPC contracts', () => {
       { ...base, accessToken: 'must-not-cross' },
       { ...base, managementBaseUrl: 'http://collab.example' },
       { ...base, inviteLink: 'forgeboard://collaboration/invite' },
-      { ...base, inviteLink: 'forgeboard://collaboration/invite#token=x&other=y' },
+      {
+        ...base,
+        inviteLink: 'forgeboard://collaboration/invite#token=x&other=y',
+      },
     ]) {
       expect(CollaborationJoinInviteInputSchema.safeParse(input).success).toBe(false);
     }

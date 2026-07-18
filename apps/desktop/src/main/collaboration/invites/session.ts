@@ -1,4 +1,5 @@
 import {
+  CollaborationInviteHistoryPageSchema,
   CollaborationInviteIdSchema,
   CollaborationInviteSchema,
   CollaborationInviteRedeemResponseSchema,
@@ -6,12 +7,16 @@ import {
   CollaborationManagementUrlSchema,
   CollaborationServerUrlSchema,
   type CollaborationInvite,
+  type CollaborationInviteHistoryPage,
   type CollaborationInviteRedeemResponse,
   type CollaborationInviteSafeView,
   type CollaborationInviteSessionBinding,
 } from '../../../shared/collaboration/index.js';
 import {
+  CollaborationInviteListResponseSchema,
   CollaborationManagementOwnerAccessResponseSchema,
+  type CollaborationInviteListResponse,
+  type CollaborationManagementInvite,
   type CollaborationManagementOwnerAccessResponse,
 } from '@forgeboard/core/collaboration-management';
 import { z } from 'zod';
@@ -41,6 +46,7 @@ export class CollaborationInviteSessionAuthority {
   #binding: CollaborationInviteSessionBinding | null = null;
   #generation = 0;
   readonly #createdInvites = new Map<string, CollaborationInvite>();
+  readonly #listedInvites = new Map<string, CollaborationManagementInvite>();
   readonly #now: () => Date;
 
   public constructor(now: () => Date = () => new Date()) {
@@ -197,8 +203,12 @@ export class CollaborationInviteSessionAuthority {
   ): CollaborationInviteSessionBinding {
     const binding = this.assertCurrent(lease);
     const inviteId = CollaborationInviteIdSchema.parse(rawInviteId);
-    if (!this.#createdInvites.has(inviteId)) {
-      throw new Error('This invite was not created by the current Forgeboard room session.');
+    const listed = this.#listedInvites.get(inviteId);
+    if (
+      (listed !== undefined && listed.status !== 'active') ||
+      (listed === undefined && !this.#createdInvites.has(inviteId))
+    ) {
+      throw new Error('Refresh invite history before revoking this invite.');
     }
     return binding;
   }
@@ -206,6 +216,24 @@ export class CollaborationInviteSessionAuthority {
   public recordRevokedInvite(lease: CollaborationInviteSessionLease, rawInviteId: string): void {
     this.assertCurrent(lease);
     this.#createdInvites.delete(CollaborationInviteIdSchema.parse(rawInviteId));
+    this.#listedInvites.delete(CollaborationInviteIdSchema.parse(rawInviteId));
+  }
+
+  public recordListedPage(
+    lease: CollaborationInviteSessionLease,
+    rawPage: CollaborationInviteListResponse,
+  ): CollaborationInviteHistoryPage {
+    this.assertCurrent(lease);
+    const page = CollaborationInviteListResponseSchema.parse(rawPage);
+    this.#listedInvites.clear();
+    for (const invite of page.invites) this.#listedInvites.set(invite.id, invite);
+    return CollaborationInviteHistoryPageSchema.parse({
+      ...page,
+      invites: page.invites.map((invite) => ({
+        ...invite,
+        copyAvailable: invite.status === 'active' && this.#createdInvites.has(invite.id),
+      })),
+    });
   }
 
   public createdInviteViews(lease: CollaborationInviteSessionLease): CollaborationInviteSafeView[] {
@@ -248,6 +276,7 @@ export class CollaborationInviteSessionAuthority {
   public clear(): void {
     this.#binding = null;
     this.#createdInvites.clear();
+    this.#listedInvites.clear();
     this.#generation += 1;
   }
 

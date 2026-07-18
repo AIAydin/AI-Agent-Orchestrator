@@ -6,6 +6,9 @@ import { z, ZodError } from 'zod';
 import {
   CollaborationAuditListQuerySchema,
   CollaborationAuditListResponseSchema,
+  CollaborationInviteListQuerySchema,
+  CollaborationInviteListResponseSchema,
+  CollaborationInviteRevokeResponseSchema,
   CollaborationManagementIdempotencyKeySchema,
   CollaborationManagementMembershipSchema,
   CollaborationManagementOwnerAccessReplaySchema,
@@ -25,6 +28,7 @@ import { FixedWindowRateLimiter } from './rate-limit.js';
 import type { CollaborationStore, IdempotencyRecord, Membership } from './store.js';
 import {
   IdempotencyConflictError,
+  InviteLimitReachedError,
   InviteNotRedeemableError,
   RoomAlreadyExistsError,
 } from './store.js';
@@ -38,6 +42,8 @@ import {
   SubjectIdSchema,
   type AccessClaims,
 } from './types.js';
+import { decodeInviteCursor, encodeInviteCursor } from './invites/cursor.js';
+import { inviteHistoryView } from './invites/view.js';
 
 const CreateInviteSchema = z
   .object({
@@ -178,7 +184,12 @@ export class CollaborationHttpApi {
             category: 'room',
             action: 'room.created',
             outcome: 'allowed',
-            details: { roomId: owner.roomId, actorId: owner.subject, role: owner.role, ipHash },
+            details: {
+              roomId: owner.roomId,
+              actorId: owner.subject,
+              role: owner.role,
+              ipHash,
+            },
           });
           return {
             status: 201,
@@ -214,7 +225,12 @@ export class CollaborationHttpApi {
               category: 'authorization',
               action: 'owner.token_refreshed',
               outcome: 'allowed',
-              details: { roomId, actorId: owner.membership.subject, role: 'owner', ipHash },
+              details: {
+                roomId,
+                actorId: owner.membership.subject,
+                role: 'owner',
+                ipHash,
+              },
             });
             return {
               status: 200,
@@ -254,7 +270,12 @@ export class CollaborationHttpApi {
             category: 'authorization',
             action: 'owner.token_recovered',
             outcome: 'allowed',
-            details: { roomId, actorId: rotated.subject, role: 'owner', ipHash },
+            details: {
+              roomId,
+              actorId: rotated.subject,
+              role: 'owner',
+              ipHash,
+            },
           });
           return {
             status: 200,
@@ -278,25 +299,30 @@ export class CollaborationHttpApi {
       ) {
         throw new InviteNotRedeemableError('The invite is not active.');
       }
-      const membership = this.store.redeemInvite(inviteClaims.jti, body.subject, body.displayName);
+      const membership = this.store.redeemInviteWithAudit(
+        inviteClaims.jti,
+        body.subject,
+        body.displayName,
+        this.tokens.fingerprint('invite-signing-authority'),
+        (membership) => ({
+          category: 'invite',
+          action: 'invite.redeemed',
+          outcome: 'allowed',
+          details: {
+            roomId: membership.roomId,
+            actorId: membership.subject,
+            inviteId: inviteClaims.jti,
+            role: membership.role,
+            ipHash,
+          },
+        }),
+      );
       const access = this.tokens.createAccessToken({
         roomId: membership.roomId,
         subject: membership.subject,
         role: membership.role,
         tokenVersion: membership.tokenVersion,
         expiresInSeconds: this.config.accessTtlSeconds,
-      });
-      this.store.appendAudit({
-        category: 'invite',
-        action: 'invite.redeemed',
-        outcome: 'allowed',
-        details: {
-          roomId: membership.roomId,
-          actorId: membership.subject,
-          inviteId: inviteClaims.jti,
-          role: membership.role,
-          ipHash,
-        },
       });
       writeJson(response, 200, {
         room: { id: membership.roomId },
@@ -308,6 +334,36 @@ export class CollaborationHttpApi {
     }
 
     const roomInviteMatch = /^\/v1\/rooms\/([^/]+)\/invites$/.exec(url.pathname);
+    if (request.method === 'GET' && roomInviteMatch?.[1]) {
+      const roomId = RoomIdSchema.parse(decodePathSegment(roomInviteMatch[1]));
+      this.authenticateOwner(request, roomId);
+      const rawQuery = exactQuery(url, ['after', 'limit']);
+      const query = CollaborationInviteListQuerySchema.parse(rawQuery);
+      let after;
+      try {
+        after = decodeInviteCursor(query.after);
+      } catch {
+        throw new HttpError(400, 'invalid_cursor', 'Invite cursor is invalid.');
+      }
+      const page = this.store.listInvites(roomId, after, query.limit);
+      const invites = page.invites.map((invite) =>
+        inviteHistoryView(invite, this.tokens.fingerprint('invite-signing-authority')),
+      );
+      const last = page.invites.at(-1);
+      writeJson(
+        response,
+        200,
+        CollaborationInviteListResponseSchema.parse({
+          invites,
+          nextCursor:
+            page.hasMore && last !== undefined
+              ? encodeInviteCursor({ createdAt: last.createdAt, id: last.id })
+              : null,
+          hasMore: page.hasMore,
+        }),
+      );
+      return;
+    }
     if (request.method === 'POST' && roomInviteMatch?.[1]) {
       const roomId = RoomIdSchema.parse(decodePathSegment(roomInviteMatch[1]));
       const owner = this.authenticateOwner(request, roomId);
@@ -326,30 +382,33 @@ export class CollaborationHttpApi {
         maxUses: body.maxUses,
         expiresInSeconds: body.expiresInSeconds,
       });
-      this.store.createInvite({
-        id: signed.claims.jti,
-        roomId,
-        role: body.role,
-        createdBy: owner.membership.subject,
-        expiresAt: new Date(signed.claims.exp * 1_000),
-        maxUses: body.maxUses,
-      });
+      this.store.createInviteWithAudit(
+        {
+          id: signed.claims.jti,
+          roomId,
+          role: body.role,
+          createdBy: owner.membership.subject,
+          expiresAt: new Date(signed.claims.exp * 1_000),
+          maxUses: body.maxUses,
+          signingAuthority: this.tokens.fingerprint('invite-signing-authority'),
+        },
+        {
+          category: 'invite',
+          action: 'invite.created',
+          outcome: 'allowed',
+          details: {
+            roomId,
+            actorId: owner.membership.subject,
+            inviteId: signed.claims.jti,
+            role: body.role,
+            expiresAt: new Date(signed.claims.exp * 1_000).toISOString(),
+            maxUses: body.maxUses,
+            ipHash,
+          },
+        },
+      );
       const inviteUrl = new URL(this.config.publicInviteUrl);
       inviteUrl.hash = `token=${encodeURIComponent(signed.token)}`;
-      this.store.appendAudit({
-        category: 'invite',
-        action: 'invite.created',
-        outcome: 'allowed',
-        details: {
-          roomId,
-          actorId: owner.membership.subject,
-          inviteId: signed.claims.jti,
-          role: body.role,
-          expiresAt: new Date(signed.claims.exp * 1_000).toISOString(),
-          maxUses: body.maxUses,
-          ipHash,
-        },
-      });
       writeJson(response, 201, {
         invite: {
           id: signed.claims.jti,
@@ -369,16 +428,26 @@ export class CollaborationHttpApi {
       const roomId = RoomIdSchema.parse(decodePathSegment(revokeInviteMatch[1]));
       const inviteId = decodePathSegment(revokeInviteMatch[2]);
       const owner = this.authenticateOwner(request, roomId);
-      const revoked = this.store.revokeInvite(inviteId, roomId);
-      if (!revoked) throw new HttpError(404, 'invite_not_found', 'Active invite not found.');
-      this.store.appendAudit({
+      const signingAuthority = this.tokens.fingerprint('invite-signing-authority');
+      const revoked = this.store.revokeInviteWithAudit(inviteId, roomId, signingAuthority, {
         category: 'invite',
         action: 'invite.revoked',
         outcome: 'allowed',
-        details: { roomId, actorId: owner.membership.subject, inviteId, ipHash },
+        details: {
+          roomId,
+          actorId: owner.membership.subject,
+          inviteId,
+          ipHash,
+        },
       });
-      response.writeHead(204);
-      response.end();
+      if (!revoked) throw new HttpError(404, 'invite_not_found', 'Active invite not found.');
+      writeJson(
+        response,
+        200,
+        CollaborationInviteRevokeResponseSchema.parse({
+          invite: inviteHistoryView(revoked, signingAuthority),
+        }),
+      );
       return;
     }
 
@@ -489,7 +558,12 @@ export class CollaborationHttpApi {
               category: 'membership',
               action: 'membership.revoked',
               outcome: 'allowed',
-              details: { roomId, actorId: owner.membership.subject, targetId, ipHash },
+              details: {
+                roomId,
+                actorId: owner.membership.subject,
+                targetId,
+                ipHash,
+              },
             });
             return { status: 204, response: null };
           },
@@ -800,6 +874,9 @@ function normalizeHttpError(error: unknown): HttpError {
   }
   if (error instanceof InviteNotRedeemableError) {
     return new HttpError(410, 'invite_unavailable', error.message);
+  }
+  if (error instanceof InviteLimitReachedError) {
+    return new HttpError(409, 'invite_limit_reached', error.message);
   }
   return new HttpError(500, 'internal_error', 'The request could not be completed.');
 }

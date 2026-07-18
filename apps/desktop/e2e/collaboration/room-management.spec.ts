@@ -60,8 +60,8 @@ test('room creation, member administration, audit, and renewal work entirely thr
         confirmLabel: 'Create and connect',
         secrets: [server!.adminToken],
       });
-      expect(dialog.detail).toContain(`Endpoint: ${server!.httpUrl}/`);
-      expect(dialog.detail).toContain('Resource: management-e2e-room');
+      expect(dialog.detail).toContain(`Address: ${server!.httpUrl}/`);
+      expect(dialog.detail).toContain('Item: management-e2e-room');
       await expect(collaborationStatus(ownerSettings)).toContainText('Your role is owner', {
         timeout: 20_000,
       });
@@ -81,6 +81,13 @@ test('room creation, member administration, audit, and renewal work entirely thr
       expectCancelDefaultDialog(dialog, {
         title: 'Create collaboration invite?',
         confirmLabel: 'Create invite',
+      });
+      dialogIndex = await queueCollaborationDialog(owner.app, 1);
+      await ownerSettings.getByRole('button', { name: 'Refresh invites' }).click();
+      dialog = await waitForCollaborationDialog(owner.app, dialogIndex);
+      expectCancelDefaultDialog(dialog, {
+        title: 'Load collaboration invite history?',
+        confirmLabel: 'Load invites',
       });
       const editorInvite = sessionInvite(ownerSettings, 'editor');
       await expect(editorInvite).toBeVisible();
@@ -141,7 +148,9 @@ test('room creation, member administration, audit, and renewal work entirely thr
       await ownerSettings.getByLabel('Role for Editor E2E (editor-e2e)').selectOption('viewer');
       dialogIndex = await queueCollaborationDialog(owner.app, 1);
       await ownerSettings
-        .getByRole('button', { name: 'Review role change for Editor E2E (editor-e2e)' })
+        .getByRole('button', {
+          name: 'Review role change for Editor E2E (editor-e2e)',
+        })
         .click();
       dialog = await waitForCollaborationDialog(owner.app, dialogIndex);
       expectCancelDefaultDialog(dialog, {
@@ -178,7 +187,9 @@ test('room creation, member administration, audit, and renewal work entirely thr
         confirmLabel: 'Load audit history',
         secrets: [server!.adminToken, inviteLink],
       });
-      const audit = ownerSettings.getByRole('list', { name: 'Room audit events' });
+      const audit = ownerSettings.getByRole('list', {
+        name: 'Room audit events',
+      });
       await expect(audit.getByText(/room.created/u)).toBeVisible();
       await expect(audit.getByText(/invite.redeemed/u)).toBeVisible();
       await expect(audit.getByText(/membership.role_changed/u)).toBeVisible();
@@ -276,7 +287,7 @@ async function configureIdentity(
 
 function sessionInvite(settings: Locator, role: 'editor'): Locator {
   return settings
-    .getByRole('list', { name: 'Session invites' })
+    .getByRole('list', { name: 'Room invite history' })
     .getByRole('listitem')
     .filter({ hasText: new RegExp(`^${role} \\u00b7`, 'u') });
 }

@@ -77,7 +77,10 @@ import type {
   CollaborationRoomMemberRevokeInput,
   CollaborationRoomMemberUpdateInput,
   CollaborationInviteCreateInput,
+  CollaborationInviteHistoryPage,
+  CollaborationInviteHistoryView,
   CollaborationInviteIdInput,
+  CollaborationInviteListInput,
   CollaborationInviteSafeView,
   CollaborationMetadataSnapshot,
   CollaborationPublishInput,
@@ -342,12 +345,16 @@ export interface ForgeboardApi {
     listRoomAudit(
       input: CollaborationRoomAuditListInput,
     ): Promise<IpcResult<CollaborationRoomAuditPage>>;
-    listSessionInvites(): Promise<IpcResult<CollaborationInviteSafeView[]>>;
+    listInvites(
+      input: CollaborationInviteListInput,
+    ): Promise<IpcResult<CollaborationInviteHistoryPage>>;
     createInvite(
       input: CollaborationInviteCreateInput,
     ): Promise<IpcResult<CollaborationInviteSafeView | null>>;
     copyInviteLink(input: CollaborationInviteIdInput): Promise<IpcResult<boolean>>;
-    revokeInvite(input: CollaborationInviteIdInput): Promise<IpcResult<boolean>>;
+    revokeInvite(
+      input: CollaborationInviteIdInput,
+    ): Promise<IpcResult<CollaborationInviteHistoryView | null>>;
     leave(): Promise<IpcResult<CollaborationConnection | null>>;
     publish(
       input: CollaborationPublishInput,

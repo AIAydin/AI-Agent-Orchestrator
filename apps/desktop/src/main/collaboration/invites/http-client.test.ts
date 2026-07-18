@@ -48,6 +48,13 @@ class CollaborationInviteHttpClient {
     return withPermit((permit) => this.#client.createInvite(permit, currentSession, input));
   }
 
+  public listInvites(
+    currentSession: CollaborationInviteSessionBinding,
+    query: { readonly after?: string; readonly limit?: number } = {},
+  ) {
+    return withPermit((permit) => this.#client.listInvites(permit, currentSession, query));
+  }
+
   public redeemInvite(managementBaseUrl: string, input: CollaborationInviteRedeemInput) {
     return withPermit((permit) => this.#client.redeemInvite(permit, managementBaseUrl, input));
   }
@@ -115,6 +122,22 @@ function redeemResponse() {
   };
 }
 
+function revokeResponse() {
+  return {
+    invite: {
+      id: '95c8589e-b738-4506-9ea9-7578f062f294',
+      roomId: 'room-1',
+      role: 'reviewer',
+      createdAt: '2026-07-18T11:00:00.000Z',
+      expiresAt: '2026-07-18T12:00:00.000Z',
+      maxUses: 2,
+      useCount: 0,
+      revokedAt: '2026-07-18T11:30:00.000Z',
+      status: 'revoked',
+    },
+  };
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -129,6 +152,48 @@ function resolvedRequest(response: Response) {
 }
 
 describe('CollaborationInviteHttpClient', () => {
+  it('lists an exact bounded token-free page with owner bearer authority', async () => {
+    const page = {
+      invites: [
+        {
+          id: '95c8589e-b738-4506-9ea9-7578f062f294',
+          roomId: 'room-1',
+          role: 'reviewer',
+          createdAt: '2026-07-18T11:00:00.000Z',
+          expiresAt: '2026-07-18T12:00:00.000Z',
+          maxUses: 2,
+          useCount: 1,
+          revokedAt: null,
+          status: 'active',
+        },
+      ],
+      nextCursor: 'next_cursor',
+      hasMore: true,
+    } as const;
+    const request = resolvedRequest(jsonResponse(page));
+    const client = new CollaborationInviteHttpClient({ request });
+
+    await expect(
+      client.listInvites(session(), { after: 'current_cursor', limit: 25 }),
+    ).resolves.toEqual(page);
+    const [url, init] = request.mock.calls[0] ?? [];
+    expect(url).toBeInstanceOf(URL);
+    if (!(url instanceof URL)) throw new Error('Expected an invite request URL.');
+    expect(url.href).toBe(
+      'https://api.example/forgeboard/v1/rooms/room-1/invites?after=current_cursor&limit=25',
+    );
+    expect(init?.method).toBe('GET');
+    expect(new Headers(init?.headers).get('authorization')).toBe(`Bearer ${ACCESS_TOKEN}`);
+    expect(JSON.stringify(page)).not.toMatch(/token|url|signing/iu);
+
+    const hostile = new CollaborationInviteHttpClient({
+      request: resolvedRequest(jsonResponse({ ...page, token: INVITE_TOKEN })),
+    });
+    await expect(hostile.listInvites(session())).rejects.toMatchObject({
+      code: 'invalid-response',
+    });
+  });
+
   it('creates an invite at the explicit reverse-proxy base with exact bearer authority', async () => {
     const request = resolvedRequest(jsonResponse(inviteResponse(), 201));
     const client = new CollaborationInviteHttpClient({ request });
@@ -202,12 +267,12 @@ describe('CollaborationInviteHttpClient', () => {
     ).rejects.toMatchObject({ code: 'invalid-response' });
   });
 
-  it('revokes only through the exact explicit base and requires an empty 204', async () => {
-    const request = resolvedRequest(new Response(null, { status: 204 }));
+  it('revokes only through the exact explicit base and returns exact token-free authority', async () => {
+    const request = resolvedRequest(jsonResponse(revokeResponse()));
     const client = new CollaborationInviteHttpClient({ request });
     await expect(
       client.revokeInvite(session(), '95c8589e-b738-4506-9ea9-7578f062f294'),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(revokeResponse().invite);
     const [url, init] = request.mock.calls[0] ?? [];
     expect(url).toBeInstanceOf(URL);
     if (!(url instanceof URL)) throw new Error('Expected an invite request URL.');
@@ -234,7 +299,7 @@ describe('CollaborationInviteHttpClient', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('requires JSON, exact response schemas, and a body-free revocation', async () => {
+  it('requires JSON and exact response schemas', async () => {
     const cases: Array<() => Promise<unknown>> = [];
     const plain = new CollaborationInviteHttpClient({
       request: resolvedRequest(new Response('{}', { status: 201 })),
@@ -394,10 +459,16 @@ describe('CollaborationInviteHttpClient', () => {
     const request = resolvedRequest(
       new Response(JSON.stringify({ error: { code: 'bad', message: 'x'.repeat(200) } }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json', 'Content-Length': '256' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': '256',
+        },
       }),
     );
-    const client = new CollaborationInviteHttpClient({ request, maxResponseBytes: 64 });
+    const client = new CollaborationInviteHttpClient({
+      request,
+      maxResponseBytes: 64,
+    });
     await expect(
       client.redeemInvite('https://api.example', {
         token: INVITE_TOKEN,
@@ -410,7 +481,9 @@ describe('CollaborationInviteHttpClient', () => {
   it('uses bounded generic errors for network failure and timeout', async () => {
     const failedRequest = vi.fn<typeof fetch>();
     failedRequest.mockRejectedValue(new Error(`network included ${INVITE_TOKEN}`));
-    const failed = new CollaborationInviteHttpClient({ request: failedRequest });
+    const failed = new CollaborationInviteHttpClient({
+      request: failedRequest,
+    });
     await expect(
       failed.redeemInvite('https://api.example', {
         token: INVITE_TOKEN,

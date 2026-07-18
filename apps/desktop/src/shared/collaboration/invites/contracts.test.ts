@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CollaborationInviteCreateInputSchema,
+  CollaborationInviteHistoryPageSchema,
+  CollaborationInviteHistoryViewSchema,
   CollaborationInviteLinkSchema,
   CollaborationManagementUrlSchema,
   CollaborationInviteRedeemResponseSchema,
@@ -141,5 +143,45 @@ describe('collaboration invite contracts', () => {
         unexpected: true,
       }).success,
     ).toBe(false);
+  });
+
+  it('preserves core invite and pagination invariants at the desktop boundary', () => {
+    const invite = {
+      id: '95c8589e-b738-4506-9ea9-7578f062f294',
+      roomId: 'room-1',
+      role: 'reviewer' as const,
+      createdAt: '2026-07-18T11:00:00.000Z',
+      expiresAt: '2026-07-18T12:00:00.000Z',
+      maxUses: 2,
+      useCount: 0,
+      revokedAt: null,
+      status: 'active' as const,
+      copyAvailable: true,
+    };
+    expect(CollaborationInviteHistoryViewSchema.parse(invite)).toEqual(invite);
+
+    for (const hostile of [
+      { ...invite, status: 'revoked' },
+      { ...invite, revokedAt: invite.expiresAt },
+      { ...invite, useCount: 3 },
+      { ...invite, status: 'expired', copyAvailable: true },
+      { ...invite, status: 'exhausted', useCount: 2, copyAvailable: true },
+      { ...invite, status: 'invalidated', copyAvailable: true },
+      { ...invite, token: 'must-not-cross' },
+      { ...invite, url: 'forgeboard://collaboration/invite#token=secret' },
+      { ...invite, signingAuthority: 'must-not-cross' },
+    ]) {
+      expect(CollaborationInviteHistoryViewSchema.safeParse(hostile).success).toBe(false);
+    }
+
+    const page = { invites: [invite], nextCursor: null, hasMore: false };
+    expect(CollaborationInviteHistoryPageSchema.parse(page)).toEqual(page);
+    for (const hostile of [
+      { ...page, hasMore: true },
+      { ...page, nextCursor: 'Y3Vyc29y' },
+      { invites: [], nextCursor: 'Y3Vyc29y', hasMore: true },
+    ]) {
+      expect(CollaborationInviteHistoryPageSchema.safeParse(hostile).success).toBe(false);
+    }
   });
 });

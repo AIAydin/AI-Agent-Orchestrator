@@ -6,6 +6,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 import {
   CollaborationAuditListResponseSchema,
+  CollaborationInviteListResponseSchema,
+  CollaborationInviteRevokeResponseSchema,
   CollaborationManagementOwnerAccessResponseSchema,
   CollaborationMemberListResponseSchema,
   CollaborationMemberMutationResponseSchema,
@@ -27,6 +29,59 @@ afterEach(async () => {
 });
 
 describe('collaboration management HTTP API', () => {
+  it('lists durable token-free invite history with owner-only keyset pagination', async () => {
+    const fixture = await startService();
+    const owner = CollaborationManagementOwnerAccessResponseSchema.parse(
+      (await bootstrap(fixture.address, randomUUID())).body,
+    );
+    const firstCreated = await createInvite(fixture.address, owner.accessToken, 'editor', 2);
+    await createInvite(fixture.address, owner.accessToken, 'viewer', 1);
+
+    const firstPage = CollaborationInviteListResponseSchema.parse(
+      (await listInvites(fixture.address, owner.accessToken, '?limit=1')).body,
+    );
+    expect(firstPage).toMatchObject({ hasMore: true });
+    expect(firstPage.invites).toHaveLength(1);
+    expect(JSON.stringify(firstPage)).not.toMatch(/token|url|signing/iu);
+    const secondPage = CollaborationInviteListResponseSchema.parse(
+      (
+        await listInvites(
+          fixture.address,
+          owner.accessToken,
+          `?limit=1&after=${String(firstPage.nextCursor)}`,
+        )
+      ).body,
+    );
+    expect(secondPage.invites).toHaveLength(1);
+    expect(secondPage.invites[0]?.id).not.toBe(firstPage.invites[0]?.id);
+
+    expect((await listInvites(fixture.address, owner.accessToken, '?limit=1&limit=2')).status).toBe(
+      400,
+    );
+    expect((await listInvites(fixture.address, owner.accessToken, '?unknown=1')).status).toBe(400);
+    expect((await listInvites(fixture.address, owner.accessToken, '?after=***')).status).toBe(400);
+    const editorToken = await redeemInvite(fixture.address, firstCreated.token, 'history-editor');
+    expect((await listInvites(fixture.address, editorToken)).status).toBe(403);
+
+    const revoked = await requestJson(
+      fixture.address,
+      `/v1/rooms/${ROOM_ID}/invites/${firstCreated.id}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${owner.accessToken}` },
+      },
+    );
+    expect(revoked.status).toBe(200);
+    expect(CollaborationInviteRevokeResponseSchema.parse(revoked.body).invite).toMatchObject({
+      id: firstCreated.id,
+      status: 'revoked',
+    });
+    const history = CollaborationInviteListResponseSchema.parse(
+      (await listInvites(fixture.address, owner.accessToken)).body,
+    );
+    expect(history.invites.find((invite) => invite.id === firstCreated.id)?.status).toBe('revoked');
+  });
+
   it('replays bootstrap without storing raw credentials and prunes expired replay rows', async () => {
     const fixture = await startService();
     const key = randomUUID();
@@ -236,7 +291,10 @@ describe('collaboration management HTTP API', () => {
         current.tokenVersion,
         updateKey,
       ),
-    ).toMatchObject({ status: 409, body: { error: { code: 'idempotency_conflict' } } });
+    ).toMatchObject({
+      status: 409,
+      body: { error: { code: 'idempotency_conflict' } },
+    });
     const sameRole = await updateMember(
       fixture.address,
       owner.accessToken,
@@ -256,7 +314,10 @@ describe('collaboration management HTTP API', () => {
         'reviewer',
         current.tokenVersion,
       ),
-    ).toMatchObject({ status: 409, body: { error: { code: 'membership_conflict' } } });
+    ).toMatchObject({
+      status: 409,
+      body: { error: { code: 'membership_conflict' } },
+    });
 
     const staleDelete = await deleteMember(
       fixture.address,
@@ -408,7 +469,10 @@ async function bootstrapRoom(address: StartedCollaborationService, roomId: strin
   return await requestJson(address, '/v1/rooms', {
     method: 'POST',
     headers: managementHeaders(ADMIN_TOKEN, key),
-    body: JSON.stringify({ roomId, owner: { id: OWNER_ID, displayName: 'Owner' } }),
+    body: JSON.stringify({
+      roomId,
+      owner: { id: OWNER_ID, displayName: 'Owner' },
+    }),
   });
 }
 
@@ -432,6 +496,44 @@ async function createMember(
   return CollaborationManagementOwnerAccessResponseSchema.shape.accessToken.parse(
     (redeemed.body as { accessToken?: unknown }).accessToken,
   );
+}
+
+async function createInvite(
+  address: StartedCollaborationService,
+  ownerToken: string,
+  role: 'editor' | 'reviewer' | 'viewer',
+  maxUses: number,
+): Promise<{ id: string; token: string }> {
+  const response = await requestJson(address, `/v1/rooms/${ROOM_ID}/invites`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${ownerToken}` },
+    body: JSON.stringify({ role, expiresInSeconds: 600, maxUses }),
+  });
+  const invite = (response.body as { invite?: { id?: unknown; token?: unknown } }).invite;
+  if (typeof invite?.id !== 'string' || typeof invite.token !== 'string') {
+    throw new Error('Invite response is incomplete.');
+  }
+  return { id: invite.id, token: invite.token };
+}
+
+async function redeemInvite(
+  address: StartedCollaborationService,
+  token: string,
+  subject: string,
+): Promise<string> {
+  const redeemed = await requestJson(address, '/v1/invites/redeem', {
+    method: 'POST',
+    body: JSON.stringify({ token, subject, displayName: subject }),
+  });
+  return CollaborationManagementOwnerAccessResponseSchema.shape.accessToken.parse(
+    (redeemed.body as { accessToken?: unknown }).accessToken,
+  );
+}
+
+async function listInvites(address: StartedCollaborationService, token: string, query = '') {
+  return await requestJson(address, `/v1/rooms/${ROOM_ID}/invites${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 async function listMembers(address: StartedCollaborationService, token: string, query = '') {
@@ -464,7 +566,10 @@ async function deleteMember(
 ) {
   return await requestJson(address, `/v1/rooms/${ROOM_ID}/members/${subject}`, {
     method: 'DELETE',
-    headers: { ...managementHeaders(token, key), 'If-Match': `"${String(expectedTokenVersion)}"` },
+    headers: {
+      ...managementHeaders(token, key),
+      'If-Match': `"${String(expectedTokenVersion)}"`,
+    },
   });
 }
 
@@ -479,7 +584,10 @@ async function requestJson(
 ): Promise<{ status: number; body: unknown }> {
   const response = await fetch(`${address.httpUrl}${path}`, {
     ...init,
-    headers: { ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
+    headers: {
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+    },
   });
   return {
     status: response.status,

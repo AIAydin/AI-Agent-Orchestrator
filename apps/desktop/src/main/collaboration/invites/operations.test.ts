@@ -22,11 +22,12 @@ describe('CollaborationInviteOperations', () => {
       { showMessageBox: vi.fn() },
       new OutboundActionGate({ appendAudit: vi.fn() }),
     );
-    operations.establishDirect(
-      { ...directJoinInput(), accessToken: 'opaque-access-token' },
-      ownerConnection(),
-    );
-    expect(operations.list(ownerConnection())).toEqual([]);
+    expect(() =>
+      operations.establishDirect(
+        { ...directJoinInput(), accessToken: 'opaque-access-token' },
+        ownerConnection(),
+      ),
+    ).not.toThrow();
   });
 
   it('creates, lists, natively copies, and revokes only current owner-session invites', async () => {
@@ -34,7 +35,7 @@ describe('CollaborationInviteOperations', () => {
     const http = {
       createInvite: vi.fn().mockResolvedValue(invite),
       redeemInvite: vi.fn(),
-      revokeInvite: vi.fn().mockResolvedValue(undefined),
+      revokeInvite: vi.fn().mockResolvedValue(revokedInvite()),
     };
     const clipboard = { writeText: vi.fn() };
     const dialog = {
@@ -68,7 +69,6 @@ describe('CollaborationInviteOperations', () => {
       expiresAt: '2099-12-31T23:59:59.000Z',
       maxUses: 2,
     });
-    expect(JSON.stringify(operations.list(connection))).not.toContain(INVITE_TOKEN);
     expect(http.createInvite).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ accessToken: ACCESS_TOKEN, role: 'owner' }),
@@ -80,13 +80,63 @@ describe('CollaborationInviteOperations', () => {
     await expect(operations.copy(authority, connection, INVITE_ID)).resolves.toBe(true);
     expect(clipboard.writeText).toHaveBeenCalledExactlyOnceWith(INVITE_LINK);
 
-    await expect(operations.revoke(authority, connection, INVITE_ID)).resolves.toBe(false);
+    await expect(operations.revoke(authority, connection, INVITE_ID)).resolves.toBeNull();
     expect(http.revokeInvite).not.toHaveBeenCalled();
-    await expect(operations.revoke(authority, connection, INVITE_ID)).resolves.toBe(true);
+    await expect(operations.revoke(authority, connection, INVITE_ID)).resolves.toEqual({
+      ...revokedInvite(),
+      copyAvailable: false,
+    });
     expect(http.revokeInvite).toHaveBeenCalledOnce();
-    expect(operations.list(connection)).toEqual([]);
     expect(JSON.stringify(dialog.showMessageBox.mock.calls)).not.toContain(INVITE_TOKEN);
     expect(JSON.stringify(audit.appendAudit.mock.calls)).not.toContain(INVITE_TOKEN);
+  });
+
+  it('loads token-free history and revokes a listed prior-session invite without copy authority', async () => {
+    const page = {
+      invites: [
+        {
+          id: INVITE_ID,
+          roomId: 'room-1',
+          role: 'viewer' as const,
+          createdAt: '2099-01-01T00:00:00.000Z',
+          expiresAt: '2099-12-31T23:59:59.000Z',
+          maxUses: 2,
+          useCount: 0,
+          revokedAt: null,
+          status: 'active' as const,
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    };
+    const http = {
+      createInvite: vi.fn(),
+      listInvites: vi.fn().mockResolvedValue(page),
+      redeemInvite: vi.fn(),
+      revokeInvite: vi.fn().mockResolvedValue(revokedInvite()),
+    };
+    const operations = new CollaborationInviteOperations(
+      { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
+      new OutboundActionGate({ appendAudit: vi.fn() }),
+      { http, clipboard: { writeText: vi.fn() } },
+    );
+    const connection = ownerConnection();
+    operations.establishDirect(directJoinInput(), connection);
+
+    await expect(
+      operations.listHistory(nativeAuthority(), connection, { limit: 50 }),
+    ).resolves.toEqual({
+      ...page,
+      invites: [{ ...page.invites[0], copyAvailable: false }],
+    });
+    await expect(operations.copy(nativeAuthority(), connection, INVITE_ID)).rejects.toThrow(
+      'not available',
+    );
+    await expect(operations.revoke(nativeAuthority(), connection, INVITE_ID)).resolves.toEqual({
+      ...revokedInvite(),
+      copyAvailable: false,
+    });
+    expect(http.revokeInvite).toHaveBeenCalledOnce();
   });
 
   it('binds redemption approval to the exact invite fingerprint before any HTTP request', async () => {
@@ -185,7 +235,11 @@ describe('CollaborationInviteOperations', () => {
       createInvite: vi.fn(),
       redeemInvite: vi.fn().mockResolvedValue({
         room: { id: 'room-1' },
-        membership: { subject: 'member-1', displayName: 'Member', role: 'viewer' },
+        membership: {
+          subject: 'member-1',
+          displayName: 'Member',
+          role: 'viewer',
+        },
         accessToken: ACCESS_TOKEN,
         expiresAt: '2099-12-31T23:59:59.000Z',
       }),
@@ -199,7 +253,11 @@ describe('CollaborationInviteOperations', () => {
     const fail = () =>
       Promise.resolve({
         ok: false as const,
-        error: { code: 'network-failed' as const, message: 'Retry.', retryable: true },
+        error: {
+          code: 'network-failed' as const,
+          message: 'Retry.',
+          retryable: true,
+        },
       });
 
     await operations.redeemAndJoin(nativeAuthority(), joinInviteInput(INVITE_LINK), fail);
@@ -259,7 +317,7 @@ describe('CollaborationInviteOperations', () => {
         return Promise.resolve(createdInvite());
       }),
       redeemInvite: vi.fn(),
-      revokeInvite: vi.fn().mockResolvedValue(undefined),
+      revokeInvite: vi.fn().mockResolvedValue(revokedInvite()),
     };
     const operations = new CollaborationInviteOperations(
       { showMessageBox: vi.fn().mockResolvedValue({ response: 1 }) },
@@ -396,6 +454,20 @@ function createdInvite(): CollaborationInvite {
     maxUses: 2,
     token: INVITE_TOKEN,
     url: INVITE_LINK,
+  };
+}
+
+function revokedInvite() {
+  return {
+    id: INVITE_ID,
+    roomId: 'room-1',
+    role: 'reviewer' as const,
+    createdAt: '2099-01-01T00:00:00.000Z',
+    expiresAt: '2099-12-31T23:59:59.000Z',
+    maxUses: 2,
+    useCount: 0,
+    revokedAt: '2099-01-02T00:00:00.000Z',
+    status: 'revoked' as const,
   };
 }
 

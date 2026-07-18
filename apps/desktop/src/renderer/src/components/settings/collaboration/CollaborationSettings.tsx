@@ -5,7 +5,7 @@ import type {
   CollaborationAwarenessEntry,
   CollaborationConnection,
   CollaborationInviteCreateInput,
-  CollaborationInviteSafeView,
+  CollaborationInviteHistoryPage,
 } from '../../../../../shared/collaboration/index.js';
 import { SettingsSection } from '../shared.js';
 import { CollaborationStatus } from './CollaborationStatus.js';
@@ -27,11 +27,15 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
   const [accessToken, setAccessToken] = useState('');
   const [connection, setConnection] = useState<CollaborationConnection | null>(null);
   const [collaborators, setCollaborators] = useState<CollaborationAwarenessEntry[]>([]);
-  const [sessionInvites, setSessionInvites] = useState<CollaborationInviteSafeView[]>([]);
+  const [invitePage, setInvitePage] = useState<CollaborationInviteHistoryPage | null>(null);
+  const [inviteCursors, setInviteCursors] = useState<(string | null)[]>([null]);
+  const [invitePageIndex, setInvitePageIndex] = useState(0);
   const [operationBusy, setOperationBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [inviteClearSignal, setInviteClearSignal] = useState(0);
   const operationLock = useRef(false);
+  const connectionIdRef = useRef(connection?.connectionId ?? null);
+  connectionIdRef.current = connection?.connectionId ?? null;
   const ownerAccess = useOwnerRoomAccess({
     beginOperation,
     endOperation,
@@ -63,7 +67,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
         if (event.connection.status === 'connected') {
           setMessage(`Connected to room ${event.connection.roomId}.`);
         } else if (event.connection.status === 'offline') {
-          clearSession(setCollaborators, setSessionInvites);
+          clearSession(setCollaborators, setInvitePage);
           setInviteClearSignal((current) => current + 1);
           setMessage('Collaboration is offline.');
           ownerAccess.clearExpiry();
@@ -81,32 +85,12 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
   }, []);
 
   useEffect(() => {
-    const collaboration = window.forgeboard.collaboration;
     if (connection?.status === 'connected') {
       setInviteClearSignal((current) => current + 1);
     }
-    if (
-      connection?.status !== 'connected' ||
-      connection.role !== 'owner' ||
-      connection.managementBaseUrl === undefined
-    ) {
-      setSessionInvites([]);
-      return;
-    }
-    let active = true;
-    void collaboration
-      ?.listSessionInvites()
-      .then((result) => {
-        if (!active) return;
-        if (result.ok) setSessionInvites(result.value);
-        else setMessage(result.error.message);
-      })
-      .catch(() => {
-        if (active) setMessage('Forgeboard could not load session invites.');
-      });
-    return () => {
-      active = false;
-    };
+    setInvitePage(null);
+    setInviteCursors([null]);
+    setInvitePageIndex(0);
   }, [
     connection?.connectionId,
     connection?.managementBaseUrl,
@@ -188,7 +172,9 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
         return false;
       }
       setConnection(null);
-      clearSession(setCollaborators, setSessionInvites);
+      clearSession(setCollaborators, setInvitePage);
+      setInviteCursors([null]);
+      setInvitePageIndex(0);
       setAccessToken('');
       setInviteClearSignal((current) => current + 1);
       setMessage('Left the collaboration room.');
@@ -212,12 +198,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
       const result = await collaboration.createInvite(input);
       if (!result.ok) return setMessage(result.error.message);
       if (result.value === null) return setMessage('Invite creation was cancelled.');
-      const invite = result.value;
-      setSessionInvites((current) => [
-        ...current.filter((currentInvite) => currentInvite.id !== invite.id),
-        invite,
-      ]);
-      setMessage('Invite created. Use Copy to share it securely.');
+      setMessage('Invite created. Refresh invite history to review and copy it securely.');
     });
   }
 
@@ -238,10 +219,59 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
     await manageInvite(async (collaboration) => {
       const result = await collaboration.revokeInvite({ inviteId });
       if (!result.ok) return setMessage(result.error.message);
-      if (!result.value) return setMessage('Invite revocation was cancelled.');
-      setSessionInvites((current) => current.filter((invite) => invite.id !== inviteId));
+      if (result.value === null) return setMessage('Invite revocation was cancelled.');
+      setInvitePage((current) =>
+        current === null
+          ? null
+          : {
+              ...current,
+              invites: current.invites.map((invite) =>
+                invite.id === inviteId ? result.value! : invite,
+              ),
+            },
+      );
       setMessage('Invite revoked.');
     });
+  }
+
+  async function loadInvitePage(
+    after: string | null,
+  ): Promise<CollaborationInviteHistoryPage | null> {
+    const expectedConnectionId = connectionIdRef.current;
+    let page: CollaborationInviteHistoryPage | null = null;
+    await manageInvite(async (collaboration) => {
+      const result = await collaboration.listInvites({
+        ...(after === null ? {} : { after }),
+        limit: 50,
+      });
+      if (connectionIdRef.current !== expectedConnectionId) return;
+      if (!result.ok) return setMessage(result.error.message);
+      page = result.value;
+      setInvitePage(result.value);
+      setMessage('Invite history loaded.');
+    });
+    return page;
+  }
+
+  async function refreshInvites(): Promise<void> {
+    if ((await loadInvitePage(null)) === null) return;
+    setInviteCursors([null]);
+    setInvitePageIndex(0);
+  }
+
+  async function nextInvites(): Promise<void> {
+    const cursor = invitePage?.nextCursor;
+    if (cursor === null || cursor === undefined || (await loadInvitePage(cursor)) === null) return;
+    setInviteCursors((current) => [...current.slice(0, invitePageIndex + 1), cursor]);
+    setInvitePageIndex((current) => current + 1);
+  }
+
+  async function previousInvites(): Promise<void> {
+    if (invitePageIndex === 0) return;
+    const previousIndex = invitePageIndex - 1;
+    const cursor = inviteCursors[previousIndex] ?? null;
+    if ((await loadInvitePage(cursor)) === null) return;
+    setInvitePageIndex(previousIndex);
   }
 
   async function manageInvite(
@@ -332,11 +362,15 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
         connection.managementBaseUrl !== undefined && (
           <>
             <InviteManagementControls
-              invites={sessionInvites}
+              page={invitePage}
               busy={controlsBusy}
               onCreate={createInvite}
               onCopy={copyInvite}
               onRevoke={revokeInvite}
+              onRefresh={refreshInvites}
+              onPrevious={previousInvites}
+              onNext={nextInvites}
+              canPrevious={invitePageIndex > 0}
             />
             <RoomAdministrationControls
               ownerSubject={connection.subject}
@@ -363,10 +397,10 @@ function applyJoinResult(
 
 function clearSession(
   setCollaborators: Dispatch<SetStateAction<CollaborationAwarenessEntry[]>>,
-  setInvites: Dispatch<SetStateAction<CollaborationInviteSafeView[]>>,
+  setInvites: Dispatch<SetStateAction<CollaborationInviteHistoryPage | null>>,
 ): void {
   setCollaborators([]);
-  setInvites([]);
+  setInvites(null);
 }
 
 function unavailable(setMessage: Dispatch<SetStateAction<string | null>>): void {

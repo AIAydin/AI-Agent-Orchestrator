@@ -87,14 +87,21 @@ export const INTEGRATION_UI_MANIFEST = {
   codexConnection: {
     route: 'Settings > Agents & runtime',
     controls: [
-      button('Connect with OpenAI', { within: 'Codex CLI', state: 'disconnected' }),
+      button('Connect with OpenAI', {
+        within: 'Codex CLI',
+        state: 'disconnected',
+      }),
       button('Refresh', { within: 'Codex CLI' }),
       button('Cancel sign-in', {
         within: 'Codex CLI',
         state: 'connecting',
         conditional: true,
       }),
-      button('Disconnect', { within: 'Codex CLI', state: 'connected', conditional: true }),
+      button('Disconnect', {
+        within: 'Codex CLI',
+        state: 'connected',
+        conditional: true,
+      }),
     ],
     readiness: 'provider-oauth',
     stateScope: 'secret-bound',
@@ -110,14 +117,21 @@ export const INTEGRATION_UI_MANIFEST = {
   claudeConnection: {
     route: 'Settings > Agents & runtime',
     controls: [
-      button('Connect with Anthropic', { within: 'Claude Code', state: 'disconnected' }),
+      button('Connect with Anthropic', {
+        within: 'Claude Code',
+        state: 'disconnected',
+      }),
       button('Refresh', { within: 'Claude Code' }),
       button('Reconnect', {
         within: 'Claude Code',
         state: 'needs-refresh',
         conditional: true,
       }),
-      button('Disconnect', { within: 'Claude Code', state: 'connected', conditional: true }),
+      button('Disconnect', {
+        within: 'Claude Code',
+        state: 'connected',
+        conditional: true,
+      }),
     ],
     readiness: 'provider-oauth',
     stateScope: 'secret-bound',
@@ -240,6 +254,9 @@ export const INTEGRATION_UI_MANIFEST = {
     route: 'Settings > Connectivity',
     controls: [
       button('Create invite', { conditional: true }),
+      button('Refresh invites', { conditional: true }),
+      button('Previous', { conditional: true }),
+      button('Next', { conditional: true }),
       button('Copy', { conditional: true }),
       button('Revoke', { conditional: true }),
     ],
@@ -250,10 +267,11 @@ export const INTEGRATION_UI_MANIFEST = {
       source:
         'apps/desktop/src/renderer/src/components/settings/collaboration/InviteManagementControls.tsx',
       test: COLLAB_INVITE_TEST,
-      testTitle: 'creates, copies, and revokes only safe session invite rows with exact inputs',
+      testTitle:
+        'creates, pages durable invite history, copies only current-session links, and revokes exact rows',
     },
     limitation:
-      'Only safe current-session rows reach the renderer; raw invite authority is not portable, and there is no durable server-wide invite history.',
+      'The server persists and pages token-free invite metadata. Raw links remain volatile main-process authority, so Copy is available only for invites created in the current app session; links, credentials, and session authority are never exported.',
   },
   collaborationRoomAdministration: {
     route: 'Settings > Connectivity',
@@ -300,7 +318,10 @@ export const INTEGRATION_UI_MANIFEST = {
     controls: [
       button('Check for updates'),
       button('Cancel check', { state: 'checking', conditional: true }),
-      button('Review release on GitHub', { state: 'available', conditional: true }),
+      button('Review release on GitHub', {
+        state: 'available',
+        conditional: true,
+      }),
     ],
     readiness: 'update-review',
     stateScope: 'external-evidence',

@@ -101,7 +101,9 @@ describe('CollaborationInviteSessionAuthority', () => {
     );
     authority.recordCreatedInvite(lease, invite());
 
-    const renewedToken = ownerAccessToken({ exp: timestamp('2026-07-19T12:00:00.000Z') });
+    const renewedToken = ownerAccessToken({
+      exp: timestamp('2026-07-19T12:00:00.000Z'),
+    });
     const renewed = authority.renewOwnerAccess(lease, {
       ...ownerAccessResponse(),
       accessToken: renewedToken,
@@ -165,7 +167,9 @@ describe('CollaborationInviteSessionAuthority', () => {
       { ...response, accessToken: ownerAccessToken({ ver: 1 }) },
       {
         ...response,
-        accessToken: ownerAccessToken({ exp: timestamp('2026-07-19T12:00:00.000Z') }),
+        accessToken: ownerAccessToken({
+          exp: timestamp('2026-07-19T12:00:00.000Z'),
+        }),
       },
       { ...response, accessToken: 'not-a-jwt' },
     ];
@@ -217,7 +221,7 @@ describe('CollaborationInviteSessionAuthority', () => {
     expect(authority.inviteLinkForCopy(lease, invite().id)).toBe(invite().url);
     expect(authority.authorizeRevoke(lease, invite().id)).toEqual(binding());
     expect(() => authority.authorizeRevoke(lease, 'b2e65f4c-52b0-4645-a907-1aab06b1b933')).toThrow(
-      'not created',
+      'Refresh invite history',
     );
     expect(() =>
       authority.recordCreatedInvite(
@@ -230,6 +234,91 @@ describe('CollaborationInviteSessionAuthority', () => {
     ).toThrow('does not match');
     authority.recordRevokedInvite(lease, invite().id);
     expect(authority.createdInviteCount).toBe(0);
+  });
+
+  it('authorizes listed historical revocation without recreating volatile copy authority', () => {
+    const authority = new CollaborationInviteSessionAuthority(() => NOW);
+    authority.establish(binding());
+    const lease = authority.ownerLease(
+      'wss://collab.example/ws',
+      'https://collab.example/control',
+      'room-1',
+    );
+    const historicalId = 'b2e65f4c-52b0-4645-a907-1aab06b1b933';
+    const page = authority.recordListedPage(lease, {
+      invites: [
+        {
+          id: historicalId,
+          roomId: 'room-1',
+          role: 'viewer',
+          createdAt: '2026-07-18T10:00:00.000Z',
+          expiresAt: '2026-07-18T12:00:00.000Z',
+          maxUses: 2,
+          useCount: 0,
+          revokedAt: null,
+          status: 'active',
+        },
+      ],
+      nextCursor: null,
+      hasMore: false,
+    });
+
+    expect(page.invites[0]).toMatchObject({
+      id: historicalId,
+      copyAvailable: false,
+    });
+    expect(authority.authorizeRevoke(lease, historicalId)).toEqual(binding());
+    expect(() => authority.inviteLinkForCopy(lease, historicalId)).toThrow('not created');
+  });
+
+  it('withholds current-session copy authority from every terminal server status', () => {
+    const authority = new CollaborationInviteSessionAuthority(() => NOW);
+    authority.establish(binding());
+    const lease = authority.ownerLease(
+      'wss://collab.example/ws',
+      'https://collab.example/control',
+      'room-1',
+    );
+    authority.recordCreatedInvite(lease, invite());
+
+    const base = {
+      id: invite().id,
+      roomId: 'room-1',
+      role: 'editor' as const,
+      createdAt: '2026-07-17T10:00:00.000Z',
+      expiresAt: invite().expiresAt,
+      maxUses: 1,
+      useCount: 0,
+      revokedAt: null,
+    };
+    const cases = [
+      { ...base, status: 'active' as const, expected: true },
+      { ...base, status: 'expired' as const, expected: false },
+      { ...base, status: 'exhausted' as const, useCount: 1, expected: false },
+      {
+        ...base,
+        status: 'revoked' as const,
+        revokedAt: '2026-07-17T11:00:00.000Z',
+        expected: false,
+      },
+      { ...base, status: 'invalidated' as const, expected: false },
+    ];
+
+    for (const { expected, ...history } of cases) {
+      const page = authority.recordListedPage(lease, {
+        invites: [history],
+        nextCursor: null,
+        hasMore: false,
+      });
+      expect(page.invites[0]?.copyAvailable, history.status).toBe(expected);
+      if (history.status === 'active') {
+        expect(authority.authorizeRevoke(lease, history.id)).toEqual(binding());
+      } else {
+        expect(() => authority.authorizeRevoke(lease, history.id), history.status).toThrow(
+          'Refresh invite history',
+        );
+      }
+    }
   });
 
   it('invalidates stale leases and clears credentials and invite IDs on every lifecycle boundary', () => {

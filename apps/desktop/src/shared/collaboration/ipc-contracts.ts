@@ -4,6 +4,7 @@ import { CollaborationAwarenessUpdateInputSchema } from './awareness.js';
 import {
   CollaborationInviteCreateInputSchema,
   CollaborationInviteIdSchema,
+  CollaborationInviteListInputSchema,
   CollaborationInviteLinkSchema,
 } from './invites/contracts.js';
 import { CollaborationDurablePublishInputSchema } from './sync/contracts.js';
@@ -27,7 +28,7 @@ export const COLLABORATION_IPC_CHANNELS = Object.freeze({
   updateRoomMember: 'collaboration:update-room-member',
   revokeRoomMember: 'collaboration:revoke-room-member',
   listRoomAudit: 'collaboration:list-room-audit',
-  listSessionInvites: 'collaboration:list-session-invites',
+  listInvites: 'collaboration:list-invites',
   createInvite: 'collaboration:create-invite',
   copyInviteLink: 'collaboration:copy-invite-link',
   revokeInvite: 'collaboration:revoke-invite',
@@ -55,6 +56,7 @@ export const CollaborationJoinInviteInputSchema = z
 export type CollaborationJoinInviteInput = z.infer<typeof CollaborationJoinInviteInputSchema>;
 
 export { CollaborationInviteCreateInputSchema };
+export { CollaborationInviteListInputSchema };
 
 export const CollaborationInviteIdInputSchema = z
   .object({ inviteId: CollaborationInviteIdSchema })

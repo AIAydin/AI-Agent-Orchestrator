@@ -64,10 +64,17 @@ export interface InviteRecord {
   roomId: string;
   role: InviteRole;
   createdBy: string;
+  createdAt: string;
   expiresAt: string;
   maxUses: number;
   useCount: number;
   revokedAt?: string;
+  signingAuthority: string | null;
+}
+
+export interface InvitePage {
+  invites: InviteRecord[];
+  hasMore: boolean;
 }
 
 export interface AuditEvent {
@@ -95,10 +102,12 @@ interface InviteRow {
   room_id: string;
   role: string;
   created_by: string;
+  created_at: string;
   expires_at: string;
   max_uses: number;
   use_count: number;
   revoked_at: string | null;
+  signing_authority: string | null;
 }
 
 interface DocumentRow {
@@ -126,6 +135,7 @@ interface AuditRow {
 
 export class RoomAlreadyExistsError extends Error {}
 export class InviteNotRedeemableError extends Error {}
+export class InviteLimitReachedError extends Error {}
 export class IdempotencyConflictError extends Error {}
 
 export interface IdempotencyRecord {
@@ -379,38 +389,80 @@ export class CollaborationStore {
       .run(MAX_IDEMPOTENCY_RECORDS);
   }
 
-  createInvite(input: {
+  createInviteWithAudit(
+    input: {
+      id: string;
+      roomId: string;
+      role: InviteRole;
+      createdBy: string;
+      expiresAt: Date;
+      maxUses: number;
+      signingAuthority: string;
+      now?: Date;
+    },
+    audit: AuditEventInput,
+  ): InviteRecord {
+    return this.transaction(() => {
+      const invite = this.createInvite(input);
+      this.appendAudit({
+        ...audit,
+        ...(input.now === undefined && audit.occurredAt === undefined
+          ? {}
+          : { occurredAt: input.now ?? audit.occurredAt }),
+      });
+      return invite;
+    });
+  }
+
+  private createInvite(input: {
     id: string;
     roomId: string;
     role: InviteRole;
     createdBy: string;
     expiresAt: Date;
     maxUses: number;
+    signingAuthority: string;
     now?: Date;
   }): InviteRecord {
+    const createdAt = (input.now ?? new Date()).toISOString();
+    const signingAuthority = z.string().min(1).max(128).parse(input.signingAuthority);
+    const active = this.database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM invites
+         WHERE room_id = ? AND revoked_at IS NULL AND expires_at > ? AND use_count < max_uses
+           AND signing_authority = ?`,
+      )
+      .get(RoomIdSchema.parse(input.roomId), createdAt, signingAuthority) as unknown as CountRow;
+    if (active.count >= 100) {
+      throw new InviteLimitReachedError('This room has reached its active invite limit.');
+    }
     const record: InviteRecord = {
-      id: input.id,
+      id: z.string().uuid().parse(input.id),
       roomId: RoomIdSchema.parse(input.roomId),
       role: InviteRoleSchema.parse(input.role),
       createdBy: SubjectIdSchema.parse(input.createdBy),
+      createdAt,
       expiresAt: input.expiresAt.toISOString(),
       maxUses: input.maxUses,
       useCount: 0,
+      signingAuthority,
     };
     this.database
       .prepare(
         `INSERT INTO invites(
-           id, room_id, role, created_by, created_at, expires_at, max_uses, use_count, revoked_at
-         ) VALUES(?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
+           id, room_id, role, created_by, created_at, expires_at, max_uses, use_count, revoked_at,
+           signing_authority
+         ) VALUES(?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)`,
       )
       .run(
         record.id,
         record.roomId,
         record.role,
         record.createdBy,
-        (input.now ?? new Date()).toISOString(),
+        record.createdAt,
         record.expiresAt,
         record.maxUses,
+        record.signingAuthority,
       );
     return record;
   }
@@ -418,17 +470,63 @@ export class CollaborationStore {
   getInvite(inviteId: string): InviteRecord | undefined {
     const row = this.database
       .prepare(
-        `SELECT id, room_id, role, created_by, expires_at, max_uses, use_count, revoked_at
+        `SELECT id, room_id, role, created_by, created_at, expires_at, max_uses, use_count,
+                revoked_at, signing_authority
          FROM invites WHERE id = ?`,
       )
       .get(inviteId) as InviteRow | undefined;
     return row ? mapInvite(row) : undefined;
   }
 
-  redeemInvite(
+  listInvites(
+    roomId: string,
+    after: { readonly createdAt: string; readonly id: string } | undefined,
+    limit: number,
+  ): InvitePage {
+    const boundedLimit = Math.min(Math.max(limit, 1), 100);
+    const rows = this.database
+      .prepare(
+        `SELECT id, room_id, role, created_by, created_at, expires_at, max_uses, use_count,
+                revoked_at, signing_authority
+         FROM invites
+         WHERE room_id = ?
+           AND (? IS NULL OR created_at < ? OR (created_at = ? AND id < ?))
+         ORDER BY created_at DESC, id DESC LIMIT ?`,
+      )
+      .all(
+        RoomIdSchema.parse(roomId),
+        after?.createdAt ?? null,
+        after?.createdAt ?? null,
+        after?.createdAt ?? null,
+        after?.id ?? null,
+        boundedLimit + 1,
+      ) as unknown as InviteRow[];
+    return {
+      invites: rows.slice(0, boundedLimit).map(mapInvite),
+      hasMore: rows.length > boundedLimit,
+    };
+  }
+
+  redeemInviteWithAudit(
     inviteId: string,
     subject: string,
     displayName: string,
+    signingAuthority: string,
+    audit: (membership: Membership) => AuditEventInput,
+    now = new Date(),
+  ): Membership {
+    return this.transaction(() => {
+      const membership = this.redeemInvite(inviteId, subject, displayName, signingAuthority, now);
+      this.appendAudit({ ...audit(membership), occurredAt: now });
+      return membership;
+    });
+  }
+
+  private redeemInvite(
+    inviteId: string,
+    subject: string,
+    displayName: string,
+    signingAuthority: string,
     now = new Date(),
   ): Membership {
     const parsedSubject = SubjectIdSchema.parse(subject);
@@ -437,6 +535,7 @@ export class CollaborationStore {
       const invite = this.getInvite(inviteId);
       if (
         !invite ||
+        invite.signingAuthority !== z.string().min(1).max(128).parse(signingAuthority) ||
         invite.revokedAt ||
         invite.useCount >= invite.maxUses ||
         new Date(invite.expiresAt).getTime() <= now.getTime()
@@ -479,14 +578,38 @@ export class CollaborationStore {
     });
   }
 
-  revokeInvite(inviteId: string, roomId: string, now = new Date()): boolean {
+  revokeInviteWithAudit(
+    inviteId: string,
+    roomId: string,
+    signingAuthority: string,
+    audit: AuditEventInput,
+    now = new Date(),
+  ): InviteRecord | undefined {
+    return this.transaction(() => {
+      const revoked = this.revokeInvite(inviteId, roomId, signingAuthority, now);
+      if (revoked) this.appendAudit({ ...audit, occurredAt: now });
+      return revoked;
+    });
+  }
+
+  private revokeInvite(
+    inviteId: string,
+    roomId: string,
+    signingAuthority: string,
+    now = new Date(),
+  ): InviteRecord | undefined {
+    const parsedInviteId = z.string().uuid().parse(inviteId);
+    const parsedRoomId = RoomIdSchema.parse(roomId);
+    const parsedAuthority = z.string().min(1).max(128).parse(signingAuthority);
+    const timestamp = now.toISOString();
     const result = this.database
       .prepare(
         `UPDATE invites SET revoked_at = ?
-         WHERE id = ? AND room_id = ? AND revoked_at IS NULL`,
+         WHERE id = ? AND room_id = ? AND revoked_at IS NULL AND expires_at > ?
+           AND use_count < max_uses AND signing_authority = ?`,
       )
-      .run(now.toISOString(), inviteId, RoomIdSchema.parse(roomId));
-    return result.changes === 1;
+      .run(timestamp, parsedInviteId, parsedRoomId, timestamp, parsedAuthority);
+    return result.changes === 1 ? this.getInvite(parsedInviteId) : undefined;
   }
 
   updateMembershipRole(
@@ -631,7 +754,8 @@ export class CollaborationStore {
         expires_at TEXT NOT NULL,
         max_uses INTEGER NOT NULL CHECK(max_uses BETWEEN 1 AND 100),
         use_count INTEGER NOT NULL DEFAULT 0,
-        revoked_at TEXT
+        revoked_at TEXT,
+        signing_authority TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_invites_room ON invites(room_id);
       CREATE TABLE IF NOT EXISTS documents (
@@ -668,6 +792,12 @@ export class CollaborationStore {
         SELECT RAISE(ABORT, 'audit events are append-only');
       END;
     `);
+    const inviteColumns = this.database.prepare('PRAGMA table_info(invites)').all() as unknown as {
+      name: string;
+    }[];
+    if (!inviteColumns.some((column) => column.name === 'signing_authority')) {
+      this.database.exec('ALTER TABLE invites ADD COLUMN signing_authority TEXT;');
+    }
   }
 
   private assertIntegrity(): void {
@@ -741,10 +871,12 @@ function mapInvite(row: InviteRow): InviteRecord {
     roomId: row.room_id,
     role: InviteRoleSchema.parse(row.role),
     createdBy: row.created_by,
+    createdAt: row.created_at,
     expiresAt: row.expires_at,
     maxUses: row.max_uses,
     useCount: row.use_count,
     ...(row.revoked_at ? { revokedAt: row.revoked_at } : {}),
+    signingAuthority: row.signing_authority,
   };
 }
 

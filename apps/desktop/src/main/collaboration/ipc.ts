@@ -22,7 +22,10 @@ import {
   CollaborationJoinInviteInputSchema,
   CollaborationJoinResultSchema,
   CollaborationInviteCreateInputSchema,
+  CollaborationInviteHistoryPageSchema,
+  CollaborationInviteHistoryViewSchema,
   CollaborationInviteIdInputSchema,
+  CollaborationInviteListInputSchema,
   CollaborationInviteSafeViewSchema,
   CollaborationMetadataSnapshotSchema,
   CollaborationOwnerRecoverJoinInputSchema,
@@ -51,6 +54,8 @@ import {
   type CollaborationEvent,
   type CollaborationJoinInput,
   type CollaborationInviteSafeView,
+  type CollaborationInviteHistoryPage,
+  type CollaborationInviteHistoryView,
   type CollaborationJoinResult,
   type CollaborationMetadataSnapshot,
   type CollaborationOwnerSessionView,
@@ -117,7 +122,7 @@ export interface CollaborationIpcServiceOptions {
     | 'establishDirect'
     | 'clear'
     | 'dispose'
-    | 'list'
+    | 'listHistory'
     | 'create'
     | 'copy'
     | 'revoke'
@@ -224,8 +229,8 @@ export class CollaborationIpcService {
     this.#handle(COLLABORATION_IPC_CHANNELS.listRoomAudit, (event, rawArgs) =>
       this.#listRoomAudit(event, rawArgs),
     );
-    this.#handle(COLLABORATION_IPC_CHANNELS.listSessionInvites, (event, rawArgs) =>
-      this.#listSessionInvites(event, rawArgs),
+    this.#handle(COLLABORATION_IPC_CHANNELS.listInvites, (event, rawArgs) =>
+      this.#listInvites(event, rawArgs),
     );
     this.#handle(COLLABORATION_IPC_CHANNELS.createInvite, (event, rawArgs) =>
       this.#createInvite(event, rawArgs),
@@ -735,20 +740,22 @@ export class CollaborationIpcService {
     }
   }
 
-  #listSessionInvites(
+  async #listInvites(
     event: IpcMainInvokeEvent,
     rawArgs: unknown[],
-  ): IpcResult<CollaborationInviteSafeView[]> {
+  ): Promise<IpcResult<CollaborationInviteHistoryPage>> {
     try {
-      this.#assertAvailable();
-      z.tuple([]).parse(rawArgs);
-      const { connection } = this.#inviteAuthority(event, 'Collaboration invite list');
-      return {
-        ok: true,
-        value: CollaborationInviteSafeViewSchema.array()
-          .max(100)
-          .parse(this.#invites.list(connection)),
-      };
+      return await this.#withInviteOperation(async () => {
+        this.#assertAvailable();
+        const [input] = z.tuple([CollaborationInviteListInputSchema]).parse(rawArgs);
+        const authority = this.#inviteAuthority(event, 'Collaboration invite history');
+        const value = await this.#invites.listHistory(authority, authority.connection, input);
+        authority.assertCurrent();
+        return {
+          ok: true,
+          value: CollaborationInviteHistoryPageSchema.parse(value),
+        };
+      });
     } catch (error) {
       return ipcFailure(error, 'Forgeboard could not list collaboration invites.');
     }
@@ -815,7 +822,10 @@ export class CollaborationIpcService {
     }
   }
 
-  async #revokeInvite(event: IpcMainInvokeEvent, rawArgs: unknown[]): Promise<IpcResult<boolean>> {
+  async #revokeInvite(
+    event: IpcMainInvokeEvent,
+    rawArgs: unknown[],
+  ): Promise<IpcResult<CollaborationInviteHistoryView | null>> {
     try {
       return await this.#withInviteOperation(
         async () => await this.#revokeInviteOperation(event, rawArgs),
@@ -828,14 +838,17 @@ export class CollaborationIpcService {
   async #revokeInviteOperation(
     event: IpcMainInvokeEvent,
     rawArgs: unknown[],
-  ): Promise<IpcResult<boolean>> {
+  ): Promise<IpcResult<CollaborationInviteHistoryView | null>> {
     try {
       this.#assertAvailable();
       const [input] = z.tuple([CollaborationInviteIdInputSchema]).parse(rawArgs);
       const authority = this.#inviteAuthority(event, 'Collaboration invite revocation');
       const value = await this.#invites.revoke(authority, authority.connection, input.inviteId);
       authority.assertCurrent();
-      return { ok: true, value };
+      return {
+        ok: true,
+        value: CollaborationInviteHistoryViewSchema.nullable().parse(value),
+      };
     } catch (error) {
       return ipcFailure(error, 'Forgeboard could not revoke the collaboration invite.');
     }

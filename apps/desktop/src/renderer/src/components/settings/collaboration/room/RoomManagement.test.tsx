@@ -62,7 +62,10 @@ describe('collaboration room management settings', () => {
     const api = installApi();
     api.recoverOwnerAndJoin.mockResolvedValue({
       ok: false,
-      error: { code: 'owner_not_found', message: 'Active room owner not found.' },
+      error: {
+        code: 'owner_not_found',
+        message: 'Active room owner not found.',
+      },
     });
     render(<Harness />);
 
@@ -88,19 +91,35 @@ describe('collaboration room management settings', () => {
     api.listRoomMembers
       .mockResolvedValueOnce({
         ok: true,
-        value: { members: [owner, editor], nextCursor: 'ZWRpdG9yLTE', hasMore: true },
+        value: {
+          members: [owner, editor],
+          nextCursor: 'ZWRpdG9yLTE',
+          hasMore: true,
+        },
       })
       .mockResolvedValueOnce({
         ok: true,
-        value: { members: [reviewer, viewer], nextCursor: null, hasMore: false },
+        value: {
+          members: [reviewer, viewer],
+          nextCursor: null,
+          hasMore: false,
+        },
       })
       .mockResolvedValueOnce({
         ok: true,
-        value: { members: [owner, reviewer, viewer], nextCursor: null, hasMore: false },
+        value: {
+          members: [owner, reviewer, viewer],
+          nextCursor: null,
+          hasMore: false,
+        },
       })
       .mockResolvedValueOnce({
         ok: true,
-        value: { members: [owner, reviewer, viewer], nextCursor: null, hasMore: false },
+        value: {
+          members: [owner, reviewer, viewer],
+          nextCursor: null,
+          hasMore: false,
+        },
       });
     api.updateRoomMember.mockResolvedValue({
       ok: false,
@@ -126,7 +145,9 @@ describe('collaboration room management settings', () => {
     expect(role.value).toBe('reviewer');
     fireEvent.change(role, { target: { value: 'viewer' } });
     fireEvent.click(
-      screen.getByRole('button', { name: 'Review role change for Editor One (editor-1)' }),
+      screen.getByRole('button', {
+        name: 'Review role change for Editor One (editor-1)',
+      }),
     );
 
     await waitFor(() =>
@@ -160,7 +181,10 @@ describe('collaboration room management settings', () => {
     const first = auditEvent(1, 'room.created');
     const second = auditEvent(2, 'membership.role_changed');
     const api = installApi({ current: ownerConnection() });
-    api.refreshOwnerSession.mockResolvedValue({ ok: true, value: ownerSession() });
+    api.refreshOwnerSession.mockResolvedValue({
+      ok: true,
+      value: ownerSession(),
+    });
     api.listRoomAudit
       .mockResolvedValueOnce({
         ok: true,
@@ -189,7 +213,9 @@ describe('collaboration room management settings', () => {
     ]);
 
     cleanup();
-    const viewerApi = installApi({ current: { ...ownerConnection(), role: 'viewer' } });
+    const viewerApi = installApi({
+      current: { ...ownerConnection(), role: 'viewer' },
+    });
     render(<Harness />);
     await screen.findByText(/Your role is viewer/u);
     expect(screen.queryByRole('heading', { name: 'Room administration' })).toBeNull();
@@ -210,7 +236,6 @@ function installApi(options: { current?: CollaborationConnection | null } = {}) 
     updateRoomMember: vi.fn(),
     revokeRoomMember: vi.fn(),
     listRoomAudit: vi.fn(),
-    listSessionInvites: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
     createInvite: vi.fn(),
     copyInviteLink: vi.fn(),
     revokeInvite: vi.fn(),
@@ -245,7 +270,11 @@ function ownerConnection(): CollaborationConnection {
 }
 
 function ownerSession() {
-  return { connection: ownerConnection(), expiresAt: '2026-07-18T20:00:00.000Z', tokenVersion: 0 };
+  return {
+    connection: ownerConnection(),
+    expiresAt: '2026-07-18T20:00:00.000Z',
+    tokenVersion: 0,
+  };
 }
 
 function member(

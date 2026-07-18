@@ -15,7 +15,8 @@ In development, a missing signing key creates an ephemeral key and prints a warn
 The desktop client configures and controls ordinary room and invite sessions without source,
 environment, or manifest edits. Its UI supports room creation, owner recovery and renewal,
 paginated membership and audit access, version-safe role changes and revocation, invite redemption,
-and current-session owner invite creation, copy, and revocation. Deployment environment variables
+owner invite creation, paginated durable invite-history review, restart-safe revocation, and
+current-session-only link copy. Deployment environment variables
 remain only for operators of this optional service; ordinary desktop users do not edit them.
 
 ## Desktop connection and recovery
@@ -49,13 +50,15 @@ revoke a non-owner membership. Each network read or effect has a fresh cancel-de
 and stale member versions force a refresh instead of replaying an outdated action.
 
 For invites, the owner chooses editor, reviewer, or viewer access, a bounded lifetime, and a
-maximum-use count. Create and revoke each require a fresh cancel-default native review. The UI lists
-only token-free metadata for invites created during the current owner session: role, expiration,
-and maximum uses. **Copy** requires a separate native review and writes the link from protected
-main-process memory directly to the system clipboard; the raw link does not cross back through
-preload or render in the page. Leaving, resetting privacy data, quitting, or changing the owning
-session clears all volatile room-management authority, invite records, and credentials. This UI
-does not claim to list every durable invite already present on the server.
+maximum-use count. Create, list, and revoke each require a fresh cancel-default native review.
+**Refresh invites**, **Previous**, and **Next** perform explicit owner-reviewed network reads of
+bounded, cursor-paginated durable history. Rows contain only token-free metadata: role, creation and
+expiry times, use count, and active, expired, exhausted, revoked, or invalidated status. After
+reconnecting or recovering owner access, an owner can refresh and revoke a listed prior-session row.
+**Copy** appears only while that exact link remains in protected current-process memory; its separate
+native review writes the link directly to the system clipboard, and the raw link never crosses
+preload or renders in the page. Leaving, resetting privacy data, quitting, or changing the owning
+session clears credentials, loaded pages, and volatile links, but does not delete server history.
 
 Authenticated roles are enforced in both the desktop and server. Owners and editors can publish
 graph metadata. Reviewers can add their own node comments through a separate main-owned operation
@@ -110,7 +113,7 @@ Titles and comments are intentionally human-authored text. A structural allowlis
 
 Every WebSocket authenticates with a signed access token whose room, subject, role, version, issue time, expiration, and unique ID are validated. Authorization is then checked against the current SQLite membership record. Changing or revoking a membership increments its token version, invalidating previously issued tokens. A token for one room cannot open another room.
 
-Invite tokens are HMAC-SHA256 signed, time-limited, room- and role-scoped, usage-limited, and recorded by unique ID. Redemption checks both the signature and the live invite record. Revoking the record immediately prevents later redemption; invite token values are never written to the audit log. Invite links put the token in the URL fragment so it is not sent in ordinary HTTP request paths or proxy access logs.
+Invite tokens are HMAC-SHA256 signed, time-limited, room- and role-scoped, usage-limited, and recorded by unique ID. Redemption checks both the signature and the live invite record. Each durable row also records a non-secret signing-authority binding; legacy rows without one and rows created under a different signing key are reported as invalidated rather than active. Revoking the record immediately prevents later redemption; invite token values are never written to the audit log. Invite links put the token in the URL fragment so it is not sent in ordinary HTTP request paths or proxy access logs.
 
 Relevant management endpoints are:
 
@@ -118,6 +121,7 @@ Relevant management endpoints are:
 - `POST /v1/rooms/:roomId/owner-tokens/refresh` — renew a valid owner session without invalidating its other current tokens
 - `POST /v1/rooms/:roomId/owner-tokens/recover` — administrator-authorized recovery that rotates the owner token version and invalidates every prior owner token
 - `GET /v1/rooms/:roomId/members` — owner reads active, versioned memberships with bounded cursor pagination
+- `GET /v1/rooms/:roomId/invites` — owner reads bounded cursor-paginated token-free invite history
 - `POST /v1/rooms/:roomId/invites` — owner creates an editor, reviewer, or viewer invite
 - `POST /v1/invites/redeem` — redeem a live invite for an expiring access token
 - `DELETE /v1/rooms/:roomId/invites/:inviteId` — owner revokes an invite
@@ -134,6 +138,9 @@ second mutation or audit event, while reuse for different input and stale member
 conflicts. Replay records retain token-free response metadata and signed access claims—not raw
 credentials—and are pruned after seven days and to at most 10,000 rows. An expired replay result
 requires a new idempotency key.
+
+Invite creation, redemption, and revocation each commit with their matching audit append in one
+SQLite transaction. If the audit insert fails, the invite or membership mutation rolls back too.
 
 Production always requires the server administrator token for room creation and owner recovery. If
 no administrator token is configured in development or test mode, those two operations are allowed
@@ -164,7 +171,12 @@ compromised token stops authorizing HTTP and WebSocket operations.
 | `FORGEBOARD_COLLAB_MAX_MESSAGE_BYTES`        | `1048576`                                  | Maximum 16 MiB                                                      |
 | `FORGEBOARD_COLLAB_MAX_DOCUMENT_BYTES`       | `8388608`                                  | Maximum 64 MiB                                                      |
 
-Changing the signing key invalidates outstanding invite and access tokens. Rotate it deliberately and notify collaborators. Multiple server replicas require a shared persistence and rate-limit design; this SQLite deployment is intentionally a reliable single-instance option.
+Changing the signing key invalidates outstanding invite and access tokens. Persisted invite history
+remains visible, but rows signed by another or unknown authority are shown as invalidated. An owner
+must recover or otherwise reconnect with a newly issued owner credential under the new key before
+listing or revoking. Rotate the key deliberately and notify collaborators. Multiple server replicas
+require a shared persistence and rate-limit design; this SQLite deployment is intentionally a
+reliable single-instance option.
 
 ## Container deployment
 
@@ -213,7 +225,7 @@ Do not terminate TLS on an untrusted hop. Restrict inbound traffic to the proxy,
 
 ## Persistence, backups, and recovery
 
-SQLite uses WAL mode, foreign keys, a busy timeout, startup integrity checking, and mode `0600` for a file-backed database. Yjs documents, memberships, invites, and the metadata-only audit trail are durable. Audit rows have database triggers preventing update/delete and a SHA-256 hash chain verified at startup. Audit details use a second allowlist and contain identifiers, roles, byte counts, pseudonymous IP hashes, and denial reasons—not request bodies, tokens, comment bodies, or synchronized values.
+SQLite uses WAL mode, foreign keys, a busy timeout, startup integrity checking, and mode `0600` for a file-backed database. Yjs documents, memberships, token-free invite history, and the metadata-only audit trail are durable when the database is preserved through restart or restore. Invite-link copy authority never survives a desktop restart, and restored invites remain redeemable only when the original signing key is also restored. Audit rows have database triggers preventing update/delete and a SHA-256 hash chain verified at startup. Audit details use a second allowlist and contain identifiers, roles, byte counts, pseudonymous IP hashes, and denial reasons—not request bodies, tokens, comment bodies, or synchronized values.
 
 For a consistent online backup with the SQLite CLI:
 

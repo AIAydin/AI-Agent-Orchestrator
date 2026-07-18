@@ -14,6 +14,21 @@ const safeInvite = {
   maxUses: 1,
 };
 
+const inviteHistoryPage = {
+  invites: [
+    {
+      ...safeInvite,
+      createdAt: '2026-07-18T11:00:00.000Z',
+      useCount: 0,
+      revokedAt: null,
+      status: 'active' as const,
+      copyAvailable: true,
+    },
+  ],
+  nextCursor: null,
+  hasMore: false,
+};
+
 const connected = {
   connectionId: 'd9a16a79-a358-4f2d-8987-f6687291f33f',
   serverUrl: 'wss://collab.example/ws',
@@ -44,7 +59,12 @@ const ownerSession = {
 function bridge(invoke = vi.fn()) {
   const on = vi.fn();
   const remove = vi.fn();
-  return { api: createCollaborationApi(invoke, on, remove), invoke, on, remove };
+  return {
+    api: createCollaborationApi(invoke, on, remove),
+    invoke,
+    on,
+    remove,
+  };
 }
 
 describe('createCollaborationApi invite bridge', () => {
@@ -67,7 +87,10 @@ describe('createCollaborationApi invite bridge', () => {
             value: { members: [member], nextCursor: null, hasMore: false },
           });
         case COLLABORATION_IPC_CHANNELS.updateRoomMember:
-          return Promise.resolve({ ok: true, value: { membership: member, changed: true } });
+          return Promise.resolve({
+            ok: true,
+            value: { membership: member, changed: true },
+          });
         case COLLABORATION_IPC_CHANNELS.listRoomAudit:
           return Promise.resolve({
             ok: true,
@@ -97,14 +120,20 @@ describe('createCollaborationApi invite bridge', () => {
       ok: true,
       value: ownerSession,
     });
-    await expect(api.refreshOwnerSession()).resolves.toEqual({ ok: true, value: ownerSession });
+    await expect(api.refreshOwnerSession()).resolves.toEqual({
+      ok: true,
+      value: ownerSession,
+    });
     await api.listRoomMembers({ limit: 100 });
     await api.updateRoomMember({
       subject: member.subject,
       role: 'viewer',
       expectedTokenVersion: 3,
     });
-    await api.revokeRoomMember({ subject: member.subject, expectedTokenVersion: 3 });
+    await api.revokeRoomMember({
+      subject: member.subject,
+      expectedTokenVersion: 3,
+    });
     await api.listRoomAudit({ after: 0, limit: 100 });
 
     expect(invoke.mock.calls).toContainEqual([
@@ -141,10 +170,20 @@ describe('createCollaborationApi invite bridge', () => {
       switch (channel) {
         case COLLABORATION_IPC_CHANNELS.joinInvite:
           return Promise.resolve({ ok: true, connection: connected });
-        case COLLABORATION_IPC_CHANNELS.listSessionInvites:
-          return Promise.resolve({ ok: true, value: [safeInvite] });
+        case COLLABORATION_IPC_CHANNELS.listInvites:
+          return Promise.resolve({ ok: true, value: inviteHistoryPage });
         case COLLABORATION_IPC_CHANNELS.createInvite:
           return Promise.resolve({ ok: true, value: safeInvite });
+        case COLLABORATION_IPC_CHANNELS.revokeInvite:
+          return Promise.resolve({
+            ok: true,
+            value: {
+              ...inviteHistoryPage.invites[0],
+              revokedAt: '2026-07-18T11:30:00.000Z',
+              status: 'revoked',
+              copyAvailable: false,
+            },
+          });
         default:
           return Promise.resolve({ ok: true, value: true });
       }
@@ -161,7 +200,10 @@ describe('createCollaborationApi invite bridge', () => {
         reconnect: true,
       }),
     ).resolves.toEqual({ ok: true, connection: connected });
-    await expect(api.listSessionInvites()).resolves.toEqual({ ok: true, value: [safeInvite] });
+    await expect(api.listInvites({ limit: 25 })).resolves.toEqual({
+      ok: true,
+      value: inviteHistoryPage,
+    });
     await expect(
       api.createInvite({ role: 'reviewer', expiresInSeconds: 900, maxUses: 1 }),
     ).resolves.toEqual({ ok: true, value: safeInvite });
@@ -171,7 +213,12 @@ describe('createCollaborationApi invite bridge', () => {
     });
     await expect(api.revokeInvite({ inviteId: INVITE_ID })).resolves.toEqual({
       ok: true,
-      value: true,
+      value: {
+        ...inviteHistoryPage.invites[0],
+        revokedAt: '2026-07-18T11:30:00.000Z',
+        status: 'revoked',
+        copyAvailable: false,
+      },
     });
 
     expect(invoke.mock.calls).toEqual([
@@ -187,7 +234,7 @@ describe('createCollaborationApi invite bridge', () => {
           reconnect: true,
         },
       ],
-      [COLLABORATION_IPC_CHANNELS.listSessionInvites],
+      [COLLABORATION_IPC_CHANNELS.listInvites, { limit: 25 }],
       [
         COLLABORATION_IPC_CHANNELS.createInvite,
         { role: 'reviewer', expiresInSeconds: 900, maxUses: 1 },
@@ -245,7 +292,10 @@ describe('createCollaborationApi invite bridge', () => {
       } as never),
     ).rejects.toBeTruthy();
     await expect(
-      api.copyInviteLink({ inviteId: INVITE_ID, inviteLink: INVITE_LINK } as never),
+      api.copyInviteLink({
+        inviteId: INVITE_ID,
+        inviteLink: INVITE_LINK,
+      } as never),
     ).rejects.toBeTruthy();
     await expect(api.revokeInvite({ inviteId: '../secret' })).rejects.toBeTruthy();
     await expect(
@@ -264,18 +314,65 @@ describe('createCollaborationApi invite bridge', () => {
   });
 
   it('rejects any renderer-facing invite response containing a token or link', async () => {
-    for (const channel of [
-      COLLABORATION_IPC_CHANNELS.listSessionInvites,
-      COLLABORATION_IPC_CHANNELS.createInvite,
-    ]) {
-      const value = { ...safeInvite, token: 'must-not-return', url: INVITE_LINK };
-      const result = channel === COLLABORATION_IPC_CHANNELS.listSessionInvites ? [value] : value;
-      const { api } = bridge(vi.fn().mockResolvedValue({ ok: true, value: result }));
-      const operation =
-        channel === COLLABORATION_IPC_CHANNELS.listSessionInvites
-          ? api.listSessionInvites()
-          : api.createInvite({ role: 'reviewer', expiresInSeconds: 900, maxUses: 1 });
-      await expect(operation).rejects.toBeTruthy();
+    const unsafeInvite = {
+      ...safeInvite,
+      token: 'must-not-return',
+      url: INVITE_LINK,
+    };
+    const unsafeCreate = bridge(vi.fn().mockResolvedValue({ ok: true, value: unsafeInvite })).api;
+    await expect(
+      unsafeCreate.createInvite({
+        role: 'reviewer',
+        expiresInSeconds: 900,
+        maxUses: 1,
+      }),
+    ).rejects.toBeTruthy();
+    const { api } = bridge(
+      vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          ...inviteHistoryPage,
+          invites: [{ ...inviteHistoryPage.invites[0], token: 'must-not-return' }],
+        },
+      }),
+    );
+    await expect(api.listInvites({ limit: 50 })).rejects.toBeTruthy();
+  });
+
+  it('rejects hostile invite history invariants and terminal copy authority', async () => {
+    const active = inviteHistoryPage.invites[0];
+    const hostilePages = [
+      {
+        ...inviteHistoryPage,
+        invites: [{ ...active, status: 'revoked' }],
+      },
+      {
+        ...inviteHistoryPage,
+        invites: [{ ...active, status: 'expired', copyAvailable: true }],
+      },
+      {
+        ...inviteHistoryPage,
+        invites: [{ ...active, status: 'exhausted', useCount: 1, copyAvailable: true }],
+      },
+      {
+        ...inviteHistoryPage,
+        invites: [{ ...active, status: 'invalidated', copyAvailable: true }],
+      },
+      { ...inviteHistoryPage, hasMore: true },
+      { ...inviteHistoryPage, nextCursor: 'Y3Vyc29y' },
+      {
+        ...inviteHistoryPage,
+        invites: [{ ...active, signingAuthority: 'must-not-return' }],
+      },
+      {
+        ...inviteHistoryPage,
+        invites: [{ ...active, url: INVITE_LINK }],
+      },
+    ];
+
+    for (const value of hostilePages) {
+      const { api } = bridge(vi.fn().mockResolvedValue({ ok: true, value }));
+      await expect(api.listInvites({ limit: 50 })).rejects.toBeTruthy();
     }
   });
 

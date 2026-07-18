@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
 import {
+  CollaborationInviteListQuerySchema,
+  CollaborationInviteListResponseSchema,
+  CollaborationInviteRevokeResponseSchema,
+  type CollaborationInviteListResponse,
+  type CollaborationManagementInvite,
+} from '@forgeboard/core/collaboration-management';
+
+import {
   CollaborationInviteCreateInputSchema,
   CollaborationInviteCreateResponseSchema,
   CollaborationInviteIdSchema,
@@ -110,6 +118,44 @@ export class CollaborationInviteHttpClient {
     return parsed.data.invite;
   }
 
+  public async listInvites(
+    permit: OutboundExecutionPermit,
+    rawSession: CollaborationInviteSessionBinding,
+    rawQuery: { readonly after?: string; readonly limit?: number } = {},
+  ): Promise<CollaborationInviteListResponse> {
+    assertOutboundExecutionPermit(permit);
+    const session = CollaborationInviteSessionBindingSchema.parse(rawSession);
+    if (session.role !== 'owner') {
+      throw new CollaborationInviteHttpError(
+        'request-rejected',
+        'Only the connected room owner can list collaboration invites.',
+      );
+    }
+    const query = CollaborationInviteListQuerySchema.parse({
+      ...(rawQuery.after === undefined ? {} : { after: rawQuery.after }),
+      ...(rawQuery.limit === undefined ? {} : { limit: String(rawQuery.limit) }),
+    });
+    const url = managementUrl(
+      session.managementBaseUrl,
+      `v1/rooms/${encodeURIComponent(session.roomId)}/invites`,
+    );
+    if (query.after !== undefined) url.searchParams.set('after', query.after);
+    url.searchParams.set('limit', String(query.limit));
+    const response = await this.#jsonRequest(
+      url,
+      { method: 'GET', accessToken: session.accessToken },
+      200,
+    );
+    const parsed = CollaborationInviteListResponseSchema.safeParse(response);
+    if (!parsed.success) {
+      throw new CollaborationInviteHttpError(
+        'invalid-response',
+        'The collaboration server returned an invalid invite history response.',
+      );
+    }
+    return parsed.data;
+  }
+
   public async redeemInvite(
     permit: OutboundExecutionPermit,
     rawManagementBaseUrl: string,
@@ -150,7 +196,7 @@ export class CollaborationInviteHttpClient {
     permit: OutboundExecutionPermit,
     rawSession: CollaborationInviteSessionBinding,
     rawInviteId: string,
-  ): Promise<void> {
+  ): Promise<CollaborationManagementInvite> {
     assertOutboundExecutionPermit(permit);
     const session = CollaborationInviteSessionBindingSchema.parse(rawSession);
     const inviteId = CollaborationInviteIdSchema.parse(rawInviteId);
@@ -160,13 +206,27 @@ export class CollaborationInviteHttpClient {
         'Only the connected room owner can revoke collaboration invites.',
       );
     }
-    await this.#emptyRequest(
-      managementUrl(
-        session.managementBaseUrl,
-        `v1/rooms/${encodeURIComponent(session.roomId)}/invites/${encodeURIComponent(inviteId)}`,
+    const response = CollaborationInviteRevokeResponseSchema.parse(
+      await this.#jsonRequest(
+        managementUrl(
+          session.managementBaseUrl,
+          `v1/rooms/${encodeURIComponent(session.roomId)}/invites/${encodeURIComponent(inviteId)}`,
+        ),
+        { method: 'DELETE', accessToken: session.accessToken },
+        200,
       ),
-      { method: 'DELETE', accessToken: session.accessToken },
     );
+    if (
+      response.invite.id !== inviteId ||
+      response.invite.roomId !== session.roomId ||
+      response.invite.status !== 'revoked'
+    ) {
+      throw new CollaborationInviteHttpError(
+        'invalid-response',
+        'The collaboration server returned a mismatched revoked invite.',
+      );
+    }
+    return response.invite;
   }
 
   async #jsonRequest(url: URL, input: RequestOptions, expectedStatus: number): Promise<unknown> {
@@ -192,25 +252,6 @@ export class CollaborationInviteHttpClient {
       throw new CollaborationInviteHttpError(
         'invalid-response',
         'The collaboration server returned an invalid invite response.',
-      );
-    }
-  }
-
-  async #emptyRequest(url: URL, input: RequestOptions): Promise<void> {
-    const response = await this.#send(url, input);
-    if (!response.ok) throw await this.#rejection(response);
-    if (response.status !== 204) {
-      throw new CollaborationInviteHttpError(
-        'invalid-response',
-        'The collaboration server returned an invalid invite revocation response.',
-      );
-    }
-    assertIdentityEncoding(response);
-    const bytes = await readBoundedBody(response, this.#maxResponseBytes);
-    if (bytes.byteLength !== 0) {
-      throw new CollaborationInviteHttpError(
-        'invalid-response',
-        'The collaboration server returned an invalid invite revocation response.',
       );
     }
   }
@@ -276,7 +317,7 @@ export class CollaborationInviteHttpClient {
 }
 
 interface RequestOptions {
-  readonly method: 'DELETE' | 'POST';
+  readonly method: 'DELETE' | 'GET' | 'POST';
   readonly accessToken?: string;
   readonly body?: unknown;
 }

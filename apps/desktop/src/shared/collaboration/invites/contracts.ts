@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
 import {
+  CollaborationInviteListResponseSchema,
+  CollaborationInviteListResponseFieldsSchema,
+  CollaborationManagementCursorSchema,
+  CollaborationManagementInviteSchema,
+  CollaborationManagementInviteFieldsSchema,
+} from '@forgeboard/core/collaboration-management';
+
+import {
   CollaborationAccessTokenSchema,
   CollaborationDisplayNameSchema,
   CollaborationManagementUrlSchema,
@@ -123,6 +131,75 @@ export const CollaborationInviteSafeViewSchema = z
   })
   .strict();
 export type CollaborationInviteSafeView = z.infer<typeof CollaborationInviteSafeViewSchema>;
+
+export const CollaborationInviteHistoryViewSchema = z
+  .object({
+    ...CollaborationManagementInviteFieldsSchema.shape,
+    copyAvailable: z.boolean(),
+  })
+  .strict()
+  .superRefine((invite, context) => {
+    if (!CollaborationManagementInviteSchema.safeParse(coreInviteProjection(invite)).success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invite history must preserve the server invite invariants.',
+      });
+    }
+    if (invite.copyAvailable && invite.status !== 'active') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['copyAvailable'],
+        message: 'Only an active invite can retain current-session copy authority.',
+      });
+    }
+  });
+export type CollaborationInviteHistoryView = z.infer<typeof CollaborationInviteHistoryViewSchema>;
+
+export const CollaborationInviteListInputSchema = z
+  .object({
+    after: CollaborationManagementCursorSchema.optional(),
+    limit: z.number().int().min(1).max(100).default(50),
+  })
+  .strict();
+export type CollaborationInviteListInput = z.infer<typeof CollaborationInviteListInputSchema>;
+
+export const CollaborationInviteHistoryPageSchema = z
+  .object({
+    ...CollaborationInviteListResponseFieldsSchema.shape,
+    invites: z.array(CollaborationInviteHistoryViewSchema).max(100),
+  })
+  .strict()
+  .superRefine((page, context) => {
+    const corePage = {
+      ...page,
+      invites: page.invites.map(coreInviteProjection),
+    };
+    if (!CollaborationInviteListResponseSchema.safeParse(corePage).success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invite history pages must preserve the server pagination invariants.',
+      });
+    }
+  });
+export type CollaborationInviteHistoryPage = z.infer<typeof CollaborationInviteHistoryPageSchema>;
+
+function coreInviteProjection(
+  invite: z.infer<typeof CollaborationManagementInviteFieldsSchema> & {
+    readonly copyAvailable: boolean;
+  },
+) {
+  return {
+    id: invite.id,
+    roomId: invite.roomId,
+    role: invite.role,
+    createdAt: invite.createdAt,
+    expiresAt: invite.expiresAt,
+    maxUses: invite.maxUses,
+    useCount: invite.useCount,
+    revokedAt: invite.revokedAt,
+    status: invite.status,
+  };
+}
 
 export const CollaborationInviteCreateResponseSchema = z
   .object({ invite: CollaborationInviteSchema })

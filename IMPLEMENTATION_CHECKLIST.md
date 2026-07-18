@@ -137,8 +137,9 @@ not be reclassified as future work.
 - [x] Offline/reconnect, shared graph, cursors, selection, presence, comments, and avatars.
 - [x] Owner/editor/reviewer/viewer authorization.
 - [x] Signed expiring invites, revocation, room authorization, rate limits, TLS, and audit trail.
-- [x] UI invite redemption plus owner-only current-session invite creation, native clipboard copy,
-      and revocation without exposing raw invite links or access tokens to the renderer.
+- [x] UI invite redemption plus owner-only creation, paginated durable token-free history,
+      restart-safe revocation, and native clipboard copy only for current-session links, without
+      exposing raw invite links or access tokens to the renderer.
 - [x] UI room creation, owner recovery/renewal, paginated membership administration, and room audit
       access with volatile administrator input, main-only owner credentials, native reviews,
       idempotency, and version conflicts.
@@ -151,8 +152,10 @@ not be reclassified as future work.
 
 - [x] All appearance, agent, Git, terminal, preview, Docker, storage, collaboration, and update
       settings listed in the build goal.
-- [ ] Every ordinary setting and integration can be configured, validated, tested, reset, exported,
-      and imported through the UI without editing a file.
+- [x] Every ordinary setting and integration can be configured, validated, tested, and reset through
+      the UI without editing a file; portable non-secret settings can be exported/imported, while
+      secret-, device-, and project-bound authority follows the manifest's safe reconnect/reset and
+      never-export policy.
 - [ ] Documented validated extension API for local agent adapters and canvas node types, with
       explicit install/permissions and no renderer execution.
 - [x] Drag/drop from tree/templates and node-to-agent context linking.
@@ -1366,3 +1369,18 @@ unchecked when only a subset of their required behavior has proof.
   `git diff --check`, and the 1,202-file structure gate passed. This closes the Git-identity
   integration-action gap; the broad lifecycle checkbox remains open only for durable server-wide
   collaboration invite history.
+- 2026-07-18: owner-reviewed Refresh, Previous, and Next actions now page durable, room-isolated,
+  token-free collaboration invite history with stable keyset cursors. Active, expired, exhausted,
+  revoked, and signing-authority-invalidated rows remain visible across server restarts; legacy or
+  rotated-key rows cannot redeem, consume the current-key active quota, expose Copy, or authorize
+  revocation. Create, redeem, and active-invite revoke commit atomically with their audit event, and
+  forced audit failures roll back every mutation. Owner-only HTTP responses and strict preload IPC
+  reject token, link, signing-authority, state-invariant, and pagination leaks. Prior-session active
+  rows can be revoked after explicit refresh, while Copy remains available only for an active link
+  still held in current-process main authority; the renderer applies the server's exact revoked row
+  instead of inventing a timestamp. The complete 2,380-test unit suite and 313-test integration
+  suite passed, as did the focused invite-redemption and room-management Electron journeys. All
+  workspace typechecks, production builds, zero-warning lint, repository formatting,
+  `git diff --check`, and the 1,207-file structure gate also passed. This closes the final ordinary
+  integration-lifecycle gap while retaining explicit never-export policies for secret-, device-,
+  and project-bound authority.
