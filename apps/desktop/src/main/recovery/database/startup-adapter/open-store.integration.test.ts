@@ -11,6 +11,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import type { Dialog } from 'electron';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -117,6 +118,51 @@ describe('startup database recovery composition', () => {
       code: 'ENOENT',
     });
     expect(missingDialog.showOpenDialog).not.toHaveBeenCalled();
+  });
+
+  it('upgrades the exact legacy audit delete-trigger gap without offering destructive recovery', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'forgeboard-trigger-upgrade-')));
+    roots.push(root);
+    const userDataPath = join(root, 'user-data');
+    const databasePath = join(userDataPath, 'forgeboard.sqlite');
+    await mkdir(userDataPath, { mode: 0o700 });
+    const original = new LocalStore(databasePath, {
+      legacySettingsDefaults: defaultSettings(root),
+    });
+    original.appendAudit('recovery', 'legacy-trigger-upgrade-proof', 'allowed', {});
+    original.close();
+    const legacy = new DatabaseSync(databasePath);
+    legacy.exec('DROP TRIGGER audit_events_no_delete; DROP TRIGGER audit_checkpoints_no_delete;');
+    legacy.close();
+    const dialog = {
+      showMessageBox: vi.fn(),
+      showOpenDialog: vi.fn(),
+    } as unknown as Pick<Dialog, 'showMessageBox' | 'showOpenDialog'>;
+
+    const upgraded = await openLocalStoreWithStartupDatabaseRecovery({
+      databasePath,
+      dialog,
+      userDataPath,
+      dependencies: { createDefaultSettings: () => defaultSettings(root) },
+    });
+
+    expect(upgraded).not.toBeNull();
+    expect(upgraded?.checkIntegrity('full')).toMatchObject({ ok: true, mode: 'full' });
+    expect(upgraded?.listAuditEvents(20).map((event) => event.action)).toContain(
+      'legacy-trigger-upgrade-proof',
+    );
+    upgraded?.close();
+    expect(dialog.showMessageBox).not.toHaveBeenCalled();
+    expect(dialog.showOpenDialog).not.toHaveBeenCalled();
+    const inspected = new DatabaseSync(databasePath, { readOnly: true });
+    const triggerCount = inspected
+      .prepare(
+        `SELECT count(*) AS count FROM sqlite_schema
+         WHERE type = 'trigger' AND name IN (?, ?)`,
+      )
+      .get('audit_events_no_delete', 'audit_checkpoints_no_delete') as { count: number };
+    expect(triggerCount.count).toBe(2);
+    inspected.close();
   });
 
   it('recovers a corrupt primary from a real verified backup without leaving private staging', async () => {

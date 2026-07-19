@@ -55,7 +55,10 @@ import {
   revokeApprovalWithAudit as revokeDatabaseApprovalWithAudit,
   saveApprovalWithAudit as saveDatabaseApprovalWithAudit,
 } from './storage/security/approvals.js';
-import { initializeAuditIntegrity } from './storage/security/audit-integrity.js';
+import {
+  initializeAuditIntegrity,
+  upgradeLegacyAuditDeleteTriggers,
+} from './storage/security/audit-integrity.js';
 import {
   getSettingsRepair as getDatabaseSettingsRepair,
   listSettingsRepairs as listDatabaseSettingsRepairs,
@@ -296,6 +299,7 @@ export class LocalStore implements DeliveryReadinessStore {
     options: {
       legacySettingsDefaults?: AppSettings;
       expectedDatabaseIdentity?: ExpectedDatabaseIdentity;
+      requiresAuditDeleteTriggerUpgrade?: boolean;
     } = {},
   ) {
     this.databasePath = databasePath;
@@ -308,6 +312,9 @@ export class LocalStore implements DeliveryReadinessStore {
         }
       ).user_version;
       migrate(this.#database);
+      if (options.requiresAuditDeleteTriggerUpgrade === true) {
+        upgradeLegacyAuditDeleteTriggers(this.#database);
+      }
       initializeAuditIntegrity(this.#database);
       if (options.legacySettingsDefaults !== undefined) {
         repairLegacyStoredSettings(

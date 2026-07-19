@@ -16,6 +16,7 @@ export type ForgeboardDatabaseProvenanceResult =
       readonly schemaVersion: number;
       readonly currentSchemaVersion: number;
       readonly requiresMigration: boolean;
+      readonly requiresAuditDeleteTriggerUpgrade?: true;
     }
   | {
       readonly ok: false;
@@ -37,6 +38,10 @@ interface MigrationVersionRow {
 
 const CURRENT_SCHEMA_VERSION = MIGRATIONS.length;
 const expectedSchemaByVersion = new Map<number, ReadonlyMap<string, string>>();
+const LEGACY_MISSING_AUDIT_DELETE_TRIGGERS = [
+  'trigger:audit_events_no_delete',
+  'trigger:audit_checkpoints_no_delete',
+] as const;
 
 const MESSAGES = {
   newer: 'This database was created by a newer Forgeboard version. Update Forgeboard to open it.',
@@ -74,13 +79,20 @@ export function inspectForgeboardDatabaseProvenance(
 
     const expectedSchema = expectedSchemaForVersion(schemaVersion);
     if (hasUnknownSchemaObjects(actualSchema, expectedSchema)) return failure('foreign');
-    if (!schemasMatch(actualSchema, expectedSchema)) return failure('corrupt');
+    const requiresAuditDeleteTriggerUpgrade = needsAuditDeleteTriggerUpgrade(
+      actualSchema,
+      expectedSchema,
+    );
+    if (!schemasMatch(actualSchema, expectedSchema) && !requiresAuditDeleteTriggerUpgrade) {
+      return failure('corrupt');
+    }
 
     return {
       ok: true,
       schemaVersion,
       currentSchemaVersion: CURRENT_SCHEMA_VERSION,
       requiresMigration: schemaVersion < CURRENT_SCHEMA_VERSION,
+      ...(requiresAuditDeleteTriggerUpgrade ? { requiresAuditDeleteTriggerUpgrade: true } : {}),
     };
   } catch {
     return failure('corrupt');
@@ -211,6 +223,22 @@ function schemasMatch(
     actual.size === expected.size &&
     [...expected].every(([key, identity]) => actual.get(key) === identity)
   );
+}
+
+function needsAuditDeleteTriggerUpgrade(
+  actual: ReadonlyMap<string, string>,
+  expected: ReadonlyMap<string, string>,
+): boolean {
+  if (actual.size !== expected.size - LEGACY_MISSING_AUDIT_DELETE_TRIGGERS.length) {
+    return false;
+  }
+  if (LEGACY_MISSING_AUDIT_DELETE_TRIGGERS.some((key) => !expected.has(key) || actual.has(key))) {
+    return false;
+  }
+  if ([...actual].some(([key, identity]) => expected.get(key) !== identity)) {
+    return false;
+  }
+  return true;
 }
 
 function schemaIdentity(row: SchemaObjectRow): string {

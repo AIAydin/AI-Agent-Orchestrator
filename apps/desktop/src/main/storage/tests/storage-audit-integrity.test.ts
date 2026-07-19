@@ -169,6 +169,58 @@ describe('tamper-evident audit storage', () => {
     expect(() => openStore(databasePath)).toThrow(/trigger|missing|changed/iu);
   });
 
+  it('upgrades only the exact legacy pair of missing audit delete guards', () => {
+    const databasePath = temporaryPath();
+    const original = openStore(databasePath);
+    original.appendAudit('security', 'preserved-through-trigger-upgrade', 'allowed', {});
+    closeStore(original);
+    const legacy = new DatabaseSync(databasePath);
+    legacy.exec('DROP TRIGGER audit_events_no_delete; DROP TRIGGER audit_checkpoints_no_delete;');
+    legacy.close();
+
+    const upgraded = new LocalStore(databasePath, {
+      requiresAuditDeleteTriggerUpgrade: true,
+    });
+    stores.add(upgraded);
+
+    expect(upgraded.listAuditEvents(10).map((event) => event.action)).toContain(
+      'preserved-through-trigger-upgrade',
+    );
+    expect(upgraded.checkIntegrity()).toMatchObject({ ok: true });
+    const protectedConnection = new DatabaseSync(databasePath);
+    expect(() => protectedConnection.prepare('DELETE FROM audit_events').run()).toThrow(
+      'append-only',
+    );
+    protectedConnection.close();
+  });
+
+  it('rejects the legacy upgrade when only one delete guard is missing', () => {
+    const databasePath = temporaryPath();
+    closeStore(openStore(databasePath));
+    const changed = new DatabaseSync(databasePath);
+    changed.exec('DROP TRIGGER audit_events_no_delete;');
+    changed.close();
+
+    expect(() => new LocalStore(databasePath, { requiresAuditDeleteTriggerUpgrade: true })).toThrow(
+      'unexpected database state',
+    );
+  });
+
+  it('rejects the legacy upgrade when the audit chain is not intact', () => {
+    const databasePath = temporaryPath();
+    const original = openStore(databasePath);
+    original.appendAudit('security', 'must-remain-intact', 'allowed', {});
+    closeStore(original);
+    const changed = new DatabaseSync(databasePath);
+    changed.exec('DROP TRIGGER audit_events_no_delete; DROP TRIGGER audit_checkpoints_no_delete;');
+    changed.prepare('UPDATE audit_chain_state SET last_sequence = 99 WHERE singleton = 1').run();
+    changed.close();
+
+    expect(() => new LocalStore(databasePath, { requiresAuditDeleteTriggerUpgrade: true })).toThrow(
+      'unexpected database state',
+    );
+  });
+
   it('prunes only a verified leading prefix and anchors retained events to a checkpoint', () => {
     vi.useFakeTimers();
     const store = openStore();

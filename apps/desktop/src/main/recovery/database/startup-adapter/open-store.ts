@@ -51,6 +51,7 @@ export interface StartupDatabaseRecoveryDependencies {
     databasePath: string,
     defaults: AppSettings,
     expectedIdentity?: ExpectedDatabaseIdentity,
+    requiresAuditDeleteTriggerUpgrade?: boolean,
   ) => LocalStore;
   readonly createDefaultSettings?: () => AppSettings;
   readonly getUserId?: () => number | undefined;
@@ -95,10 +96,14 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
       databasePath: string,
       legacySettingsDefaults: AppSettings,
       expectedDatabaseIdentity?: ExpectedDatabaseIdentity,
+      requiresAuditDeleteTriggerUpgrade?: boolean,
     ) =>
       new LocalStore(databasePath, {
         legacySettingsDefaults,
         ...(expectedDatabaseIdentity === undefined ? {} : { expectedDatabaseIdentity }),
+        ...(requiresAuditDeleteTriggerUpgrade === true
+          ? { requiresAuditDeleteTriggerUpgrade: true }
+          : {}),
       }));
   const stageBackup = dependencies.stageBackup ?? stageValidatedSelectedBackup;
   const restoreDatabase = dependencies.restoreDatabase ?? restoreDatabaseAtomically;
@@ -191,16 +196,23 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
     const exists = await databaseFileExists(preparedDatabasePath);
     if (!exists && marker === 'initialized') throw new StartupDatabaseMissingError();
     let expectedIdentity: ExpectedDatabaseIdentity | undefined;
+    let requiresAuditDeleteTriggerUpgrade = false;
     if (exists) {
       const beforeProvenance = stableDatabaseIdentity(preparedDatabasePath);
       const provenance = inspectProvenance(preparedDatabasePath);
       if (!provenance.ok) throw new StartupDatabaseOpenError(provenance.reason);
+      requiresAuditDeleteTriggerUpgrade = provenance.requiresAuditDeleteTriggerUpgrade === true;
       expectedIdentity = stableDatabaseIdentity(preparedDatabasePath);
       if (!sameFilesystemIdentity(beforeProvenance, expectedIdentity)) {
         throw new Error('The local database changed during provenance inspection.');
       }
     }
-    const opened = createStore(preparedDatabasePath, defaults, expectedIdentity);
+    const opened = createStore(
+      preparedDatabasePath,
+      defaults,
+      expectedIdentity,
+      requiresAuditDeleteTriggerUpgrade,
+    );
     try {
       if (cleanupReport.failedCount > 0 && !cleanupWarningRecorded) {
         opened.appendAudit('recovery', 'staging-cleanup', 'failed', {

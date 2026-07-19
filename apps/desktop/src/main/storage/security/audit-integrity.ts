@@ -126,6 +126,34 @@ export function initializeAuditIntegrity(database: DatabaseSync, now = new Date(
   registerControlledAuditDeletion(database);
 }
 
+/**
+ * Upgrades the brief legacy state that predates the two controlled-delete guards.
+ *
+ * The startup provenance boundary must opt into this repair only after proving that every other
+ * schema object is exact. Revalidate the audit chain and the precise two-trigger gap again on the
+ * writable connection so the compatibility path cannot mask arbitrary trigger or data tampering.
+ */
+export function upgradeLegacyAuditDeleteTriggers(database: DatabaseSync): void {
+  const expectedMessages = CONTROLLED_DELETE_TRIGGERS.map(
+    ([name]) => `Required audit trigger ${name} is missing or changed.`,
+  );
+  const before = auditIntegrityMessages(database);
+  if (
+    before.length !== expectedMessages.length ||
+    !expectedMessages.every((message, index) => before[index] === message)
+  ) {
+    throw new Error('Legacy audit delete-trigger upgrade rejected an unexpected database state.');
+  }
+
+  withSavepoint(database, () => {
+    for (const [, sql] of CONTROLLED_DELETE_TRIGGERS) database.exec(`${sql};`);
+    const after = auditIntegrityMessages(database);
+    if (after.length > 0) {
+      throw new Error(`Legacy audit delete-trigger upgrade failed: ${after.join('; ')}`);
+    }
+  });
+}
+
 export function appendChainedAudit(
   database: DatabaseSync,
   occurredAtValue: string,

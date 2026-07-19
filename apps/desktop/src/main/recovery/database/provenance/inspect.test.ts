@@ -55,6 +55,54 @@ describe('Forgeboard database provenance inspection', () => {
     });
   });
 
+  it('recognizes the exact legacy schema missing both audit delete-protection triggers', async () => {
+    const path = await forgeboardDatabase(MIGRATIONS.length);
+    const database = new DatabaseSync(path);
+    database.exec('DROP TRIGGER audit_events_no_delete; DROP TRIGGER audit_checkpoints_no_delete;');
+    database.close();
+
+    expect(inspectForgeboardDatabaseProvenance(path)).toEqual({
+      ok: true,
+      schemaVersion: MIGRATIONS.length,
+      currentSchemaVersion: MIGRATIONS.length,
+      requiresMigration: false,
+      requiresAuditDeleteTriggerUpgrade: true,
+    });
+  });
+
+  it('rejects a schema missing only one audit delete-protection trigger', async () => {
+    const path = await forgeboardDatabase(MIGRATIONS.length);
+    const database = new DatabaseSync(path);
+    database.exec('DROP TRIGGER audit_events_no_delete;');
+    database.close();
+
+    expect(inspectForgeboardDatabaseProvenance(path)).toMatchObject({
+      ok: false,
+      reason: 'corrupt',
+    });
+  });
+
+  it('rejects another changed trigger even when both legacy delete triggers are missing', async () => {
+    const path = await forgeboardDatabase(MIGRATIONS.length);
+    const database = new DatabaseSync(path);
+    database.exec(`
+      DROP TRIGGER audit_events_no_delete;
+      DROP TRIGGER audit_checkpoints_no_delete;
+      DROP TRIGGER audit_events_no_update;
+      CREATE TRIGGER audit_events_no_update
+      BEFORE UPDATE ON audit_events
+      BEGIN
+        SELECT RAISE(ABORT, 'changed trigger');
+      END;
+    `);
+    database.close();
+
+    expect(inspectForgeboardDatabaseProvenance(path)).toMatchObject({
+      ok: false,
+      reason: 'corrupt',
+    });
+  });
+
   it('rejects an arbitrary foreign database that has no Forgeboard anchors', async () => {
     const path = await databaseFixture();
     const database = new DatabaseSync(path);

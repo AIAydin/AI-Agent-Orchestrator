@@ -1210,6 +1210,16 @@ unchecked when only a subset of their required behavior has proof.
   smoke passed, and the startup/product and adversarial security audits returned GO. The broad
   database-failure Electron E2E checklist item remains open pending its dedicated visible chooser,
   rejection, cancellation, rollback, and interrupted-recovery journey.
+- 2026-07-19: startup provenance now recognizes only the exact historical audit schema that is
+  missing both controlled-delete triggers while every other normalized schema object, migration
+  ledger entry, and SQLite integrity check remains exact. The writable startup connection rechecks
+  the complete audit chain and that precise two-trigger gap before installing both guards inside a
+  savepoint; one missing trigger, any other schema drift, or any audit-chain damage still fails
+  closed. The real startup adapter regression proves the local database opens without offering
+  destructive recovery, preserves audit evidence, and restores both append-only protections. The
+  focused provenance, audit-integrity, and startup-composition suites passed all 36 tests. This is a
+  narrow development-schema compatibility repair and does not close the broader visible recovery
+  E2E checklist item.
 - 2026-07-17: every authoritative node context menu now includes **Run with dependencies** using the
   same workflow eligibility and scope resolution as the toolbar. The action targets the exact
   context-clicked Agent, runnable Task, Test, Review Gate, human Diff, or Group even when another
