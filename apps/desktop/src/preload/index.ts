@@ -41,7 +41,16 @@ import {
 import {
   GitShippingPlanViewSchema,
   GitShippingResultViewSchema,
+  GitConflictRecoveryPlanViewSchema,
+  GitConflictRecoveryResultViewSchema,
+  GitConflictRecoveryStateViewSchema,
 } from '../shared/git/shipping-contracts.js';
+import {
+  GIT_CONFLICT_RESOLUTION_IPC_CHANNELS,
+  GitConflictInspectionViewSchema,
+  GitConflictResolutionPlanViewSchema,
+  GitConflictResolutionResultViewSchema,
+} from '../shared/git/conflict-resolution/contracts.js';
 import { IntegrityCheckResultSchema } from '../shared/integrity/contracts.js';
 import { PREVIEW_TARGET_IPC_CHANNELS, PreviewTargetListSchema } from '../shared/preview/targets.js';
 import {
@@ -175,6 +184,7 @@ const api: ForgeboardApi = {
     pick: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPick),
     pickParent: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickParent),
     pickExecutable: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickExecutable),
+    pickExternalApplication: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickExternalApplication),
     pickReferences: (input) =>
       invokeValidated(
         IPC_CHANNELS.projectsPickReferences,
@@ -217,6 +227,8 @@ const api: ForgeboardApi = {
     ...createRunContinuationApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     approve: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsApprove, runId),
     sendInput: (runId, data) => ipcRenderer.invoke(IPC_CHANNELS.runsInput, runId, data),
+    pause: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsPause, runId),
+    continue: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsContinue, runId),
     interrupt: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsInterrupt, runId),
     terminate: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsTerminate, runId),
     onEvent: (listener) => {
@@ -403,6 +415,42 @@ const api: ForgeboardApi = {
       invokeValidated(
         IPC_CHANNELS.gitConfirmShipping,
         GitShippingResultViewSchema.nullable(),
+        input,
+      ),
+    conflictRecoveryState: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.gitConflictRecoveryState,
+        GitConflictRecoveryStateViewSchema.nullable(),
+        input,
+      ),
+    prepareConflictRecovery: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.gitPrepareConflictRecovery,
+        GitConflictRecoveryPlanViewSchema,
+        input,
+      ),
+    confirmConflictRecovery: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.gitConfirmConflictRecovery,
+        GitConflictRecoveryResultViewSchema.nullable(),
+        input,
+      ),
+    inspectConflicts: (input) =>
+      invokeValidated(
+        GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.inspect,
+        GitConflictInspectionViewSchema,
+        input,
+      ),
+    prepareConflictFile: (input) =>
+      invokeValidated(
+        GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.prepare,
+        GitConflictResolutionPlanViewSchema,
+        input,
+      ),
+    confirmConflictFile: (input) =>
+      invokeValidated(
+        GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.confirm,
+        GitConflictResolutionResultViewSchema.nullable(),
         input,
       ),
     comparison: createGitAgentComparisonApi((channel, ...args) =>

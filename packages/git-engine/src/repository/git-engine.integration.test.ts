@@ -1226,8 +1226,22 @@ describe('parallel worktree change lifecycle', () => {
     expect(await readFile(path.join(fixture.repository, 'README.md'), 'utf8')).toBe('# main\n');
 
     await beginMerge();
-    await writeFile(path.join(fixture.repository, 'README.md'), '# resolved\n');
-    await runGit(fixture.repository, ['add', '--', 'README.md']);
+    const reviewedResolution = '# reviewed resolution\n';
+    const racedWorktreeContent = '# changed after authority hook\n';
+    await changes.stageExactContent(
+      fixture.repository,
+      'README.md',
+      Buffer.from(reviewedResolution),
+      {
+        beforeApply: async () => {
+          await writeFile(path.join(fixture.repository, 'README.md'), racedWorktreeContent);
+        },
+      },
+    );
+    expect(await runGit(fixture.repository, ['show', ':README.md'])).toBe(reviewedResolution);
+    expect(await readFile(path.join(fixture.repository, 'README.md'), 'utf8')).toBe(
+      racedWorktreeContent,
+    );
     const continueState = await changes.continuationState(fixture.repository);
     expect(continueState.canContinue).toBe(true);
     const continueApproval: ContinueGitOperationApproval = {
@@ -1243,6 +1257,77 @@ describe('parallel worktree change lifecycle', () => {
       'completed',
     );
     expect((await changes.continuationState(fixture.repository)).operation).toBeNull();
-    expect(await readFile(path.join(fixture.repository, 'README.md'), 'utf8')).toBe('# resolved\n');
+    expect(await runGit(fixture.repository, ['show', 'HEAD:README.md'])).toBe(reviewedResolution);
+    expect(await readFile(path.join(fixture.repository, 'README.md'), 'utf8')).toBe(
+      racedWorktreeContent,
+    );
+  });
+
+  it('keeps squash conflicts recoverable and commits one parent only after exact continuation', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const changes = new ChangeService(new RepositoryService());
+    await runGit(fixture.repository, ['checkout', '-b', 'squash-topic']);
+    await writeFile(path.join(fixture.repository, 'README.md'), '# squash topic\n');
+    await runGit(fixture.repository, ['add', '--', 'README.md']);
+    await runGit(fixture.repository, ['commit', '-m', 'Squash topic']);
+    const topicOid = (await runGit(fixture.repository, ['rev-parse', 'HEAD'])).trim();
+    await runGit(fixture.repository, ['checkout', 'main']);
+    await writeFile(path.join(fixture.repository, 'README.md'), '# squash main\n');
+    await runGit(fixture.repository, ['add', '--', 'README.md']);
+    await runGit(fixture.repository, ['commit', '-m', 'Squash main']);
+    const primaryHead = (await runGit(fixture.repository, ['rev-parse', 'HEAD'])).trim();
+
+    const beginSquash = async () => {
+      const snapshot = await changes.approvalSnapshot(fixture.repository);
+      return await changes.merge(fixture.repository, {
+        action: 'merge',
+        ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+        sourceRef: 'squash-topic',
+        expectedSourceOid: topicOid,
+        targetBranch: 'main',
+        strategy: 'squash',
+      });
+    };
+    expect((await beginSquash()).state).toBe('conflicted');
+    const abortState = await changes.continuationState(fixture.repository);
+    expect(abortState).toMatchObject({
+      operation: 'squash',
+      canAbort: true,
+      canContinue: false,
+    });
+    await changes.abortOperation(fixture.repository, {
+      action: 'abort-git-operation',
+      ...approvalBase(abortState.repositoryRoot, abortState.expectedHead),
+      operation: 'squash',
+      conflictedPaths: abortState.conflictedPaths,
+      stagedPaths: abortState.stagedPaths,
+      stagedPatchSha256: abortState.stagedPatchSha256,
+      unstagedPatchSha256: abortState.unstagedPatchSha256,
+    });
+    expect((await changes.continuationState(fixture.repository)).operation).toBeNull();
+
+    expect((await beginSquash()).state).toBe('conflicted');
+    await writeFile(path.join(fixture.repository, 'README.md'), '# resolved squash\n');
+    await runGit(fixture.repository, ['add', '--', 'README.md']);
+    const continueState = await changes.continuationState(fixture.repository);
+    expect(continueState).toMatchObject({
+      operation: 'squash',
+      canContinue: true,
+    });
+    const completed = await changes.continueOperation(fixture.repository, {
+      action: 'continue-git-operation',
+      ...approvalBase(continueState.repositoryRoot, continueState.expectedHead),
+      operation: 'squash',
+      conflictedPaths: continueState.conflictedPaths,
+      stagedPaths: continueState.stagedPaths,
+      stagedPatchSha256: continueState.stagedPatchSha256,
+      unstagedPatchSha256: continueState.unstagedPatchSha256,
+    });
+    expect(completed.state).toBe('completed');
+    expect(await runGit(fixture.repository, ['show', '-s', '--format=%P', 'HEAD'])).toBe(
+      `${primaryHead}\n`,
+    );
+    expect((await changes.continuationState(fixture.repository)).operation).toBeNull();
   });
 });

@@ -26,6 +26,7 @@ export type StoredCheckExecutionRecord = CheckExecutionView;
 export const StoredRunStatusSchema = z.enum([
   'prepared',
   'running',
+  'paused',
   'succeeded',
   'failed',
   'interrupted',

@@ -177,6 +177,23 @@ describe('ExtensionManager', () => {
     expect(trustStore.operations).not.toContain('revoke:example.notes');
   });
 
+  it('fails closed before staging trust or copying files when the install audit cannot persist', async () => {
+    const root = await temporaryRoot();
+    const source = join(root, 'downloaded-extension');
+    const service = new LocalExtensionService(join(root, 'user-data', 'extensions'));
+    const trustStore = new FakeExtensionTrustStore();
+    const manager = new ExtensionManager(service, trustStore);
+    await writeExtension(source, '1.0.0');
+    const plan = await manager.plan(source, 4);
+    trustStore.failAllowedInstallAudit = true;
+
+    await expect(manager.approve(plan.planId, 4)).rejects.toThrow('install audit unavailable');
+
+    expect(trustStore.operations).not.toContain('stage:example.notes');
+    expect(trustStore.getTrustedExtension('example.notes')).toBeUndefined();
+    expect((await service.discover()).installed).toEqual([]);
+  });
+
   it('rejects same-version and downgrade plans before replacing active trust', async () => {
     const root = await temporaryRoot();
     const source = join(root, 'downloaded-extension');
@@ -346,12 +363,31 @@ describe('ExtensionManager', () => {
     expect(trustStore.listTrustedExtensions()).toEqual([]);
     expect((await service.discover()).installed).toEqual([]);
   });
+
+  it('fails closed before revoking trust or purging files when the privacy audit cannot persist', async () => {
+    const root = await temporaryRoot();
+    const source = join(root, 'downloaded-extension');
+    const service = new LocalExtensionService(join(root, 'user-data', 'extensions'));
+    const trustStore = new FakeExtensionTrustStore();
+    const manager = new ExtensionManager(service, trustStore);
+    await writeExtension(source, '1.0.0');
+    const plan = await manager.plan(source, 1);
+    await manager.approve(plan.planId, 1);
+    trustStore.failAllowedPrivacyAudit = true;
+
+    await expect(manager.purgeAll()).rejects.toThrow('privacy audit unavailable');
+
+    expect(trustStore.getTrustedExtension('example.notes')?.state).toBe('active');
+    expect((await service.discover()).installed).toHaveLength(1);
+  });
 });
 
 class FakeExtensionTrustStore implements ExtensionTrustStore {
   readonly records = new Map<string, TrustedExtensionLedgerRecord>();
   readonly operations: string[] = [];
   readonly eventOrder: string[] = [];
+  failAllowedInstallAudit = false;
+  failAllowedPrivacyAudit = false;
   failAllowedRemovalAudit = false;
 
   public constructor(private readonly audits: { action: string; outcome: string }[] = []) {}
@@ -361,6 +397,12 @@ class FakeExtensionTrustStore implements ExtensionTrustStore {
     action: string,
     outcome: 'allowed' | 'denied' | 'failed',
   ): void {
+    if (this.failAllowedInstallAudit && action === 'install' && outcome === 'allowed') {
+      throw new Error('install audit unavailable');
+    }
+    if (this.failAllowedPrivacyAudit && action === 'privacy-purge' && outcome === 'allowed') {
+      throw new Error('privacy audit unavailable');
+    }
     if (this.failAllowedRemovalAudit && action === 'remove' && outcome === 'allowed') {
       throw new Error('removal audit unavailable');
     }

@@ -121,7 +121,18 @@ import type {
   GitShippingPlanInput,
   GitShippingPlanView,
   GitShippingResultView,
+  GitConflictRecoveryPlanView,
+  GitConflictRecoveryPrepareInput,
+  GitConflictRecoveryResultView,
+  GitConflictRecoveryStateView,
 } from './git/shipping-contracts.js';
+import type {
+  GitConflictInspectionInput,
+  GitConflictInspectionView,
+  GitConflictResolutionPlanView,
+  GitConflictResolutionPrepareInput,
+  GitConflictResolutionResultView,
+} from './git/conflict-resolution/contracts.js';
 import type { GitIdentityCheckInput, GitIdentityCheckResult } from './git/identity/contracts.js';
 import type {
   GitDeliveryReadinessApproveInput,
@@ -313,6 +324,7 @@ export interface ForgeboardApi {
     pick(): Promise<IpcResult<Project | null>>;
     pickParent(): Promise<IpcResult<string | null>>;
     pickExecutable(): Promise<IpcResult<string | null>>;
+    pickExternalApplication(): Promise<IpcResult<string | null>>;
     pickReferences(input: LocalReferenceSelectionInput): Promise<IpcResult<string[]>>;
     locateMoved(
       input: LocateProjectRecoveryInput,
@@ -405,6 +417,8 @@ export interface ForgeboardApi {
     retry(input: PrepareRunContinuationInput): Promise<IpcResult<RunApprovalView | null>>;
     approve(runId: string): Promise<IpcResult<boolean>>;
     sendInput(runId: string, data: string): Promise<IpcResult<boolean>>;
+    pause(runId: string): Promise<IpcResult<boolean>>;
+    continue(runId: string): Promise<IpcResult<boolean>>;
     interrupt(runId: string): Promise<IpcResult<boolean>>;
     terminate(runId: string): Promise<IpcResult<boolean>>;
     onEvent(listener: (event: RunEventEnvelope) => void): () => void;
@@ -495,6 +509,24 @@ export interface ForgeboardApi {
     confirmShipping(
       input: GitPlanConfirmationInput,
     ): Promise<IpcResult<GitShippingResultView | null>>;
+    conflictRecoveryState(
+      input: GitTargetInput,
+    ): Promise<IpcResult<GitConflictRecoveryStateView | null>>;
+    prepareConflictRecovery(
+      input: GitConflictRecoveryPrepareInput,
+    ): Promise<IpcResult<GitConflictRecoveryPlanView>>;
+    confirmConflictRecovery(
+      input: GitPlanConfirmationInput,
+    ): Promise<IpcResult<GitConflictRecoveryResultView | null>>;
+    inspectConflicts(
+      input: GitConflictInspectionInput,
+    ): Promise<IpcResult<GitConflictInspectionView>>;
+    prepareConflictFile(
+      input: GitConflictResolutionPrepareInput,
+    ): Promise<IpcResult<GitConflictResolutionPlanView>>;
+    confirmConflictFile(
+      input: GitPlanConfirmationInput,
+    ): Promise<IpcResult<GitConflictResolutionResultView | null>>;
     comparison: {
       compareAgents(input: GitAgentComparisonInput): Promise<IpcResult<GitAgentComparisonView>>;
     };

@@ -48,10 +48,28 @@ import {
   GitShippingPlanInputSchema,
   GitShippingPlanViewSchema,
   GitShippingResultViewSchema,
+  GitConflictRecoveryPlanViewSchema,
+  GitConflictRecoveryPrepareInputSchema,
+  GitConflictRecoveryResultViewSchema,
+  GitConflictRecoveryStateViewSchema,
   type GitShippingPlanInput,
   type GitShippingPlanView,
   type GitShippingResultView,
+  type GitConflictRecoveryPlanView,
+  type GitConflictRecoveryPrepareInput,
+  type GitConflictRecoveryResultView,
+  type GitConflictRecoveryStateView,
 } from '../../shared/git/shipping-contracts.js';
+import {
+  GIT_CONFLICT_RESOLUTION_IPC_CHANNELS,
+  GitConflictInspectionInputSchema,
+  GitConflictInspectionViewSchema,
+  GitConflictResolutionPlanViewSchema,
+  GitConflictResolutionPrepareInputSchema,
+  GitConflictResolutionResultViewSchema,
+  type GitConflictInspectionInput,
+  type GitConflictResolutionPrepareInput,
+} from '../../shared/git/conflict-resolution/contracts.js';
 import {
   GIT_AGENT_COMPARISON_IPC_CHANNELS,
   GitAgentComparisonInputSchema,
@@ -103,19 +121,23 @@ import {
 import { worktreeMetadataConfirmation } from './lifecycle/worktree-metadata-confirmation.js';
 import { reconcileFailedWorktreeMetadataEffect } from './lifecycle/metadata-intent-recovery.js';
 import {
-  GitShippingService,
-  type GitShippingReadinessAuthority,
-  type PendingGitShippingPlan,
-} from './shipping/git-shipping-service.js';
-import { shippingConfirmation } from './shipping/native-confirmation.js';
-import { GitReviewNotesService } from './reviews/review-notes-service.js';
-import { reviewNoteDeleteConfirmation } from './reviews/native-confirmation.js';
+  launchExternalApplication,
+  openGitWorkspaceExternal,
+  type ExternalApplicationIdentity,
+} from './lifecycle/external-application.js';
+import type { GitShippingReadinessAuthority } from './shipping/git-shipping-service.js';
 import {
-  commitConfirmation,
-  discardConfirmation,
-  externalOpenConfirmation,
-} from './reviews/native-action-confirmations.js';
-import { normalizeGitIdentityValue, repositoryGitIdentity } from './identity/values.js';
+  denyShippingWithoutReadiness,
+  GitShippingIpcController,
+} from './shipping/ipc-controller.js';
+import { GitReviewNotesService } from './reviews/review-notes-service.js';
+import {
+  GitReviewTargetService,
+  type GitReviewTarget as GitTarget,
+} from './reviews/review-target-service.js';
+import { reviewNoteDeleteConfirmation } from './reviews/native-confirmation.js';
+import { commitConfirmation, discardConfirmation } from './reviews/native-action-confirmations.js';
+import { normalizeGitIdentityValue, readRepositoryGitIdentity } from './identity/values.js';
 import { GitAgentComparisonService } from './comparison/service.js';
 import {
   auditInputTargetMetadata,
@@ -126,19 +148,6 @@ import {
 
 const PLAN_TTL_MS = 5 * 60_000;
 const MAX_PENDING_PLANS_PER_OWNER = 32;
-const denyShippingWithoutReadiness: GitShippingReadinessAuthority = {
-  bind: () =>
-    Promise.reject(
-      new Error(
-        'Run at least one required delivery check and record human quality approval before delivery.',
-      ),
-    ),
-  revalidate: () =>
-    Promise.reject(
-      new Error('The delivery readiness authority is unavailable. Prepare a new delivery review.'),
-    ),
-};
-
 interface PendingPlanBase {
   readonly id: string;
   readonly ownerId: number;
@@ -191,24 +200,7 @@ interface PendingArchivePlan extends PendingPlanBase {
 
 export type PendingWorktreeMetadataPlan = PendingRenamePlan | PendingArchivePlan;
 
-type PendingPlan =
-  | PendingCommitPlan
-  | PendingDiscardPlan
-  | PendingGitShippingPlan
-  | PendingWorktreeMetadataPlan;
-
-interface GitTarget {
-  readonly view: GitReviewTargetView;
-  readonly repositoryRoot: string;
-  readonly comparisonBinding?: {
-    readonly projectId: string;
-    readonly runId: string;
-    readonly worktreeId: string;
-    readonly branch: string;
-    readonly baseCommit: string;
-    readonly headCommit: string;
-  };
-}
+type PendingPlan = PendingCommitPlan | PendingDiscardPlan | PendingWorktreeMetadataPlan;
 
 type WindowResolver = (event: IpcMainInvokeEvent) => BrowserWindow | null;
 
@@ -216,6 +208,10 @@ export interface GitIpcServiceOptions {
   readonly withCleanupAdmission?: WorktreeCleanupAdmission;
   readonly shippingReadiness?: GitShippingReadinessAuthority;
   readonly openExternalPath?: (path: string) => Promise<string>;
+  readonly launchExternalApplication?: (
+    application: ExternalApplicationIdentity,
+    workspacePath: string,
+  ) => Promise<void>;
 }
 
 export class GitIpcService {
@@ -225,12 +221,17 @@ export class GitIpcService {
   readonly #trackedOwners = new Set<number>();
   readonly #operationParents = new WeakMap<IpcMainInvokeEvent, BrowserWindow>();
   readonly #targets: GitTargetResolver;
-  readonly #shipping: GitShippingService;
+  readonly #reviewTargets: GitReviewTargetService;
+  readonly #shippingIpc: GitShippingIpcController;
   readonly #reviewNotes: GitReviewNotesService;
   readonly #cleanup: WorktreeCleanupService;
   readonly #comparison: GitAgentComparisonService;
   readonly #worktrees: WorktreeService;
   readonly #openExternalPath: (path: string) => Promise<string>;
+  readonly #launchExternalApplication: (
+    application: ExternalApplicationIdentity,
+    workspacePath: string,
+  ) => Promise<void>;
   #disposed = false;
   #disposePromise: Promise<void> | null = null;
   #privacyResetting = false;
@@ -263,12 +264,19 @@ export class GitIpcService {
   ) {
     this.#changes = new ChangeService(repositories);
     this.#targets = new GitTargetResolver(store, repositories, getSettings);
-    this.#shipping = new GitShippingService(
-      this.#targets,
+    this.#reviewTargets = new GitReviewTargetService(store, repositories, this.#targets);
+    this.#shippingIpc = new GitShippingIpcController({
+      dialog: this.dialog,
+      targets: this.#targets,
       repositories,
-      this.#changes,
-      options.shippingReadiness ?? denyShippingWithoutReadiness,
-    );
+      changes: this.#changes,
+      readiness: options.shippingReadiness ?? denyShippingWithoutReadiness,
+      resolveIdentity: async (repositoryRoot) => await this.#resolveIdentity(repositoryRoot),
+      resolveTarget: async (input) => await this.#resolveTarget(input),
+      review: async (target) => await this.#reviewUnlocked(target),
+      audit: (action, outcome, metadata) =>
+        this.store.appendAudit('git', action, outcome, metadata),
+    });
     this.#reviewNotes = new GitReviewNotesService(store);
     this.#cleanup = new WorktreeCleanupService(this.dialog, store, this.#targets, repositories, {
       ...(options.withCleanupAdmission === undefined
@@ -278,6 +286,8 @@ export class GitIpcService {
     this.#comparison = new GitAgentComparisonService(this.#targets, repositories);
     this.#worktrees = new WorktreeService(repositories);
     this.#openExternalPath = options.openExternalPath ?? unavailableExternalOpen;
+    this.#launchExternalApplication =
+      options.launchExternalApplication ?? launchExternalApplication;
   }
 
   public registerIpcHandlers(): void {
@@ -379,6 +389,60 @@ export class GitIpcService {
       z.tuple([GitPlanConfirmationInputSchema]),
       GitShippingResultViewSchema.nullable(),
       (event, input) => this.confirmShipping(event, input.planId),
+    );
+    this.#handle(
+      IPC_CHANNELS.gitConflictRecoveryState,
+      z.tuple([GitTargetInputSchema]),
+      GitConflictRecoveryStateViewSchema.nullable(),
+      (_event, input) => this.conflictRecoveryState(input),
+    );
+    this.#handle(
+      IPC_CHANNELS.gitPrepareConflictRecovery,
+      z.tuple([GitConflictRecoveryPrepareInputSchema]),
+      GitConflictRecoveryPlanViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.prepareConflictRecovery(event.sender.id, input);
+      },
+    );
+    this.#handle(
+      IPC_CHANNELS.gitConfirmConflictRecovery,
+      z.tuple([GitPlanConfirmationInputSchema]),
+      GitConflictRecoveryResultViewSchema.nullable(),
+      (event, input) => this.confirmConflictRecovery(event, input.planId),
+    );
+    this.#handle(
+      GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.inspect,
+      z.tuple([GitConflictInspectionInputSchema]),
+      GitConflictInspectionViewSchema,
+      (_event, input) =>
+        this.#withOperation(async () => await this.#shippingIpc.inspectConflicts(input)),
+    );
+    this.#handle(
+      GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.prepare,
+      z.tuple([GitConflictResolutionPrepareInputSchema]),
+      GitConflictResolutionPlanViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.#withOperation(
+          async () => await this.#shippingIpc.prepareConflictFile(event.sender.id, input),
+        );
+      },
+    );
+    this.#handle(
+      GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.confirm,
+      z.tuple([GitPlanConfirmationInputSchema]),
+      GitConflictResolutionResultViewSchema.nullable(),
+      (event, input) =>
+        this.#withOperation(async () => {
+          const parent = this.#requireLiveWindow(event);
+          return await this.#shippingIpc.confirmConflictFile({
+            ownerId: event.sender.id,
+            planId: input.planId,
+            parent,
+            assertCurrent: () => this.#assertLiveSender(event),
+          });
+        }),
     );
     this.#handle(
       GIT_LIFECYCLE_IPC_CHANNELS.openExternal,
@@ -495,6 +559,7 @@ export class GitIpcService {
       this.#registeredChannels.length = 0;
       this.#plans.clear();
       this.#cleanup.clearPlans();
+      this.#shippingIpc.clear();
       this.#trackedOwners.clear();
     }
     this.#disposePromise ??= this.#operationTail.then(async () => await this.#cleanup.dispose());
@@ -506,6 +571,7 @@ export class GitIpcService {
     this.#privacyResetting = true;
     this.#plans.clear();
     this.#cleanup.clearPlans();
+    this.#shippingIpc.clear();
     await this.#operationTail;
   }
 
@@ -513,6 +579,7 @@ export class GitIpcService {
     if (this.#disposed) throw new Error('The Git review service has been disposed.');
     this.#privacyResetting = true;
     this.#cleanup.clearPlans();
+    this.#shippingIpc.clear();
     await this.#operationTail;
   }
 
@@ -698,36 +765,32 @@ export class GitIpcService {
     ownerId: number,
     input: GitShippingPlanInput,
   ): Promise<GitShippingPlanView> {
-    return this.#withOperation(async () => {
-      try {
-        if (input.target.kind !== 'agent-worktree') {
-          throw new Error(
-            'Only a managed agent worktree can be delivered to the primary checkout.',
-          );
-        }
-        const plan = await this.#shipping.prepare({
-          id: randomUUID(),
-          ownerId,
-          expiresAtMs: Date.now() + PLAN_TTL_MS,
-          input,
-          resolveIdentity: async (primaryRepositoryRoot) =>
-            await this.#resolveIdentity(primaryRepositoryRoot),
-        });
-        const view = this.#shipping.view(plan);
-        this.#storePlan(plan);
-        return view;
-      } catch (error) {
-        this.store.appendAudit('git', 'ship-agent-commits', 'failed', {
-          projectId: input.target.projectId,
-          targetKind: input.target.kind,
-          ...(input.target.kind === 'agent-worktree' ? { runId: input.target.runId } : {}),
-          strategy: input.strategy,
-          stage: 'prepare',
-          reason: error instanceof Error ? error.message.slice(0, 4_096) : 'unknown failure',
-        });
-        throw error;
-      }
-    });
+    return this.#withOperation(async () => await this.#shippingIpc.prepareShipping(ownerId, input));
+  }
+
+  public prepareConflictRecovery(
+    ownerId: number,
+    input: GitConflictRecoveryPrepareInput,
+  ): Promise<GitConflictRecoveryPlanView> {
+    return this.#withOperation(
+      async () => await this.#shippingIpc.prepareConflictRecovery(ownerId, input),
+    );
+  }
+
+  public conflictRecoveryState(
+    input: GitTargetInput,
+  ): Promise<GitConflictRecoveryStateView | null> {
+    return this.#withOperation(async () => await this.#shippingIpc.conflictRecoveryState(input));
+  }
+
+  public inspectConflicts(input: GitConflictInspectionInput) {
+    return this.#withOperation(async () => await this.#shippingIpc.inspectConflicts(input));
+  }
+
+  public prepareConflictFile(ownerId: number, input: GitConflictResolutionPrepareInput) {
+    return this.#withOperation(
+      async () => await this.#shippingIpc.prepareConflictFile(ownerId, input),
+    );
   }
 
   public prepareCleanup(
@@ -1042,43 +1105,25 @@ export class GitIpcService {
       const target = await this.#resolveTarget(input);
       const status = await this.repositories.status(target.repositoryRoot);
       const parent = this.#requireLiveWindow(event);
-      const decision = await this.dialog.showMessageBox(
-        parent,
-        externalOpenConfirmation(target.view, status.branch),
-      );
-      this.#assertLiveSender(event);
-      if (decision.response !== 1) {
-        this.store.appendAudit('git', 'open-workspace-external', 'denied', {
-          ...auditTargetMetadata(target.view),
-          reason: 'native-confirmation-cancelled',
-        });
-        return {
-          opened: false,
-          targetKind: target.view.kind,
-          branch: status.branch,
-        };
-      }
       try {
-        const current = await this.#resolveTarget(input);
-        if (
-          current.repositoryRoot !== target.repositoryRoot ||
-          JSON.stringify(current.view) !== JSON.stringify(target.view)
-        ) {
-          throw new Error('The selected workspace changed after review. Open it again.');
-        }
-        this.#requireLiveWindow(event);
-        this.store.appendAudit('git', 'open-workspace-external', 'allowed', {
-          ...auditTargetMetadata(current.view),
-          application: 'system-registered',
+        return await openGitWorkspaceExternal({
+          target,
+          branch: status.branch,
+          configuredApplication: this.getSettings().externalEditorExecutable,
+          confirm: async (options) => {
+            const decision = await this.dialog.showMessageBox(parent, options);
+            this.#assertLiveSender(event);
+            return decision.response === 1;
+          },
+          resolveCurrent: async () => await this.#resolveTarget(input),
+          getConfiguredApplication: () => this.getSettings().externalEditorExecutable,
+          assertCurrent: () => void this.#requireLiveWindow(event),
+          appendAudit: (...args) => this.store.appendAudit(...args),
+          openSystem: this.#openExternalPath,
+          launchSelected: this.#launchExternalApplication,
+          getBranch: async (workspacePath) =>
+            (await this.repositories.status(workspacePath)).branch,
         });
-        const error = await this.#openExternalPath(current.repositoryRoot);
-        if (error !== '') throw new Error('The system could not open the selected workspace.');
-        const currentStatus = await this.repositories.status(current.repositoryRoot);
-        return {
-          opened: true,
-          targetKind: current.view.kind,
-          branch: currentStatus.branch,
-        };
       } catch (error) {
         this.#auditFailure('open-workspace-external', target.view, error);
         throw error;
@@ -1199,68 +1244,40 @@ export class GitIpcService {
     planId: string,
   ): Promise<GitShippingResultView | null> {
     return this.#withOperation(async () => {
-      const plan = this.#takePlan(event, planId, 'ship-agent-commits');
-      try {
-        await this.#shipping.assertCurrent(plan);
-        const parent = this.#requireLiveWindow(event);
-        const decision = await this.dialog.showMessageBox(parent, shippingConfirmation(plan));
-        this.#assertLiveSender(event);
-        if (decision.response !== 1) {
-          this.store.appendAudit('git', 'ship-agent-commits', 'denied', {
-            ...auditTargetMetadata(plan.target),
-            strategy: plan.strategy,
-            reason: 'native-confirmation-cancelled',
-            commitCount: plan.commits.length,
-            affectedPathCount: plan.affectedPaths.length,
-          });
-          return null;
-        }
-        const result = await this.#shipping.apply(plan, () => {
-          this.#assertLiveSender(event);
-          this.store.appendAudit('git', 'ship-agent-commits', 'allowed', {
-            ...auditTargetMetadata(plan.target),
-            strategy: plan.strategy,
-            commitCount: plan.commits.length,
-            affectedPathCount: plan.affectedPaths.length,
-            headBefore: plan.targetHead,
-            sourceHead: plan.sourceHead,
-            phase: 'authorized-before-apply',
-          });
-        });
-        const review = await this.#reviewUnlocked(
-          await this.#resolveTarget({
-            kind: 'primary',
-            projectId: plan.target.projectId,
-          }),
-        );
-        const conflictedPaths = result.status.entries
-          .filter((entry) => entry.kind === 'unmerged')
-          .map((entry) => entry.path)
-          .sort();
-        if (result.state === 'conflicted') {
-          this.store.appendAudit('git', 'ship-agent-commits', 'failed', {
-            ...auditTargetMetadata(plan.target),
-            strategy: plan.strategy,
-            commitCount: plan.commits.length,
-            affectedPathCount: plan.affectedPaths.length,
-            conflictedPathCount: conflictedPaths.length,
-            headBefore: result.headBefore,
-            headAfter: result.headAfter,
-            reason: 'git-conflicts',
-          });
-        }
-        return {
-          state: result.state,
-          strategy: plan.strategy,
-          headBefore: result.headBefore,
-          headAfter: result.headAfter,
-          conflictedPaths,
-          review,
-        };
-      } catch (error) {
-        this.#auditFailure('ship-agent-commits', plan.target, error);
-        throw error;
-      }
+      const parent = this.#requireLiveWindow(event);
+      return this.#shippingIpc.confirmShipping({
+        ownerId: event.sender.id,
+        planId,
+        parent,
+        assertCurrent: () => this.#assertLiveSender(event),
+      });
+    });
+  }
+
+  public confirmConflictRecovery(
+    event: IpcMainInvokeEvent,
+    planId: string,
+  ): Promise<GitConflictRecoveryResultView | null> {
+    return this.#withOperation(async () => {
+      const parent = this.#requireLiveWindow(event);
+      return await this.#shippingIpc.confirmConflictRecovery({
+        ownerId: event.sender.id,
+        planId,
+        parent,
+        assertCurrent: () => this.#assertLiveSender(event),
+      });
+    });
+  }
+
+  public confirmConflictFile(event: IpcMainInvokeEvent, planId: string) {
+    return this.#withOperation(async () => {
+      const parent = this.#requireLiveWindow(event);
+      return await this.#shippingIpc.confirmConflictFile({
+        ownerId: event.sender.id,
+        planId,
+        parent,
+        assertCurrent: () => this.#assertLiveSender(event),
+      });
     });
   }
 
@@ -1351,7 +1368,7 @@ export class GitIpcService {
           'The agent worktree branch or its latest commit changed during the review.',
         );
       }
-      await this.#assertComparisonTargetCurrent(target);
+      await this.#reviewTargets.assertComparisonCurrent(target);
     }
     const project = this.store.getProject(target.view.projectId);
     if (target.view.kind === 'primary' && project !== undefined) {
@@ -1407,99 +1424,19 @@ export class GitIpcService {
         ready: configuredName !== '' && configuredEmail !== '',
       });
     }
-    const [gitName, gitEmail] = await Promise.all([
-      this.#readGitConfig(repositoryRoot, 'user.name'),
-      this.#readGitConfig(repositoryRoot, 'user.email'),
-    ]);
-    return repositoryGitIdentity(gitName, gitEmail);
-  }
-
-  async #readGitConfig(repositoryRoot: string, key: string): Promise<string> {
-    const result = await this.repositories.git.run(['-C', repositoryRoot, 'config', '--get', key], {
-      allowNonZeroExit: true,
-      maxOutputBytes: 4_096,
-    });
-    return result.exitCode === 0 ? result.stdout.trim() : '';
+    return await readRepositoryGitIdentity(this.repositories, repositoryRoot);
   }
 
   async #resolveTarget(input: GitTargetInput): Promise<GitTarget> {
     this.#assertAvailable();
-    if (input.kind === 'agent-worktree') {
-      const resolved = await this.#targets.resolve(input);
-      const headCommit = resolved.state.branchOid;
-      if (headCommit === null) {
-        throw new Error('The agent worktree has no current branch commit.');
-      }
-      const view = GitReviewTargetViewSchema.parse({
-        kind: 'agent-worktree',
-        projectId: input.projectId,
-        runId: input.runId,
-        nodeId: resolved.run.nodeId,
-        worktreeId: resolved.ownership.id,
-        agentId: resolved.ownership.agentId,
-        baseRef: resolved.ownership.baseRef,
-        baseCommit: resolved.ownership.baseCommit,
-      });
-      return {
-        view,
-        repositoryRoot: resolved.worktreeRepositoryPath,
-        comparisonBinding: {
-          projectId: input.projectId,
-          runId: input.runId,
-          worktreeId: resolved.ownership.id,
-          branch: resolved.ownership.branch,
-          baseCommit: resolved.ownership.baseCommit,
-          headCommit,
-        },
-      };
-    }
-    const project = this.store.getProject(input.projectId);
-    if (project === undefined || project.missing) {
-      throw new Error('The selected project is no longer available.');
-    }
-    if (!project.health.isGitRepository) {
-      throw new Error('Set up Git for this project before reviewing changes.');
-    }
-    const repositoryRoot = await this.repositories.resolveRepositoryRoot(project.path);
-    if (
-      repositoryRoot !== project.path ||
-      this.store.getProjectByPath(repositoryRoot)?.id !== input.projectId
-    ) {
-      throw new Error('Reopen this project from its main repository folder.');
-    }
-    return { view: input, repositoryRoot };
-  }
-
-  async #assertComparisonTargetCurrent(target: GitTarget): Promise<void> {
-    const binding = target.comparisonBinding;
-    if (binding === undefined) return;
-    const current = await this.#targets.resolve({
-      projectId: binding.projectId,
-      runId: binding.runId,
-    });
-    const currentStatus = current.state.status;
-    if (
-      current.worktreeRepositoryPath !== target.repositoryRoot ||
-      current.ownership.id !== binding.worktreeId ||
-      current.ownership.branch !== binding.branch ||
-      current.ownership.baseCommit !== binding.baseCommit ||
-      current.state.branchOid !== binding.headCommit ||
-      currentStatus === null ||
-      currentStatus.branch !== binding.branch ||
-      currentStatus.headOid !== binding.headCommit
-    ) {
-      throw new Error('The agent worktree changed during the base comparison.');
-    }
+    return await this.#reviewTargets.resolve(input);
   }
 
   async #assertPlanTarget(plan: PendingCommitPlan | PendingDiscardPlan): Promise<void> {
-    const target = await this.#resolveTarget(targetInput(plan.target));
-    if (
-      target.repositoryRoot !== plan.repositoryRoot ||
-      JSON.stringify(target.view) !== JSON.stringify(plan.target)
-    ) {
-      throw new Error('The project repository changed after Git review. Prepare a new plan.');
-    }
+    await this.#reviewTargets.assertPlanCurrent(targetInput(plan.target), {
+      view: plan.target,
+      repositoryRoot: plan.repositoryRoot,
+    });
   }
 
   #storePlan(plan: PendingPlan): void {
@@ -1557,6 +1494,7 @@ export class GitIpcService {
         if (plan.ownerId === ownerId) this.#plans.delete(id);
       }
       this.#cleanup.discardOwner(ownerId);
+      this.#shippingIpc.clearOwner(ownerId);
     });
   }
 

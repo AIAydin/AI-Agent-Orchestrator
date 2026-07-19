@@ -89,6 +89,13 @@ describe('GitDeliveryReadinessPanel', () => {
     expect(document.activeElement).toBe(approve);
     fireEvent.click(approve);
     expect(onApproveQuality).toHaveBeenCalledTimes(1);
+
+    const fingerprint = screen.getByLabelText(
+      `Quality source fingerprint: ${prepared.sourceFingerprint.digest}`,
+    );
+    const tooltip = screen.getByRole('tooltip', { name: prepared.sourceFingerprint.digest });
+    expect(fingerprint.getAttribute('title')).toBeNull();
+    expect(fingerprint.getAttribute('aria-describedby')).toBe(tooltip.id);
   });
 
   it('locks workflow-derived checks and permits only configured optional extras', () => {

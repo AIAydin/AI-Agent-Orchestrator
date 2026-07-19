@@ -21,7 +21,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
     watchExternalRequests(page, externalRequests);
 
     await page
-      .getByRole('dialog', { name: /Set up Forgeboard in a few quick steps/i })
+      .getByRole('dialog', { name: 'Ready to build without wiring config files?' })
       .getByRole('button', { name: 'Use safe defaults' })
       .click();
     await page.getByRole('button', { name: /Explore the safe demo/i }).click();

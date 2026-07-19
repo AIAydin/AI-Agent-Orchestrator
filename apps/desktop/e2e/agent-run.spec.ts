@@ -58,7 +58,7 @@ test('the deterministic agent requires approval and reports its real local work'
     await runConfiguration.getByLabel('Prompt').fill(writablePrompt);
 
     await test.step('preflight reveals the exact launch and cancellation starts no process', async () => {
-      await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
+      await runConfiguration.getByRole('button', { name: 'Review and run Agent' }).click();
       const dialog = page.getByRole('dialog', {
         name: 'Review this run before it starts',
       });
@@ -90,7 +90,7 @@ test('the deterministic agent requires approval and reports its real local work'
     });
 
     await test.step('approval streams real output and reports the changed worktree file', async () => {
-      await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
+      await runConfiguration.getByRole('button', { name: 'Review and run Agent' }).click();
       const dialog = page.getByRole('dialog', {
         name: 'Review this run before it starts',
       });
@@ -118,7 +118,7 @@ test('the deterministic agent requires approval and reports its real local work'
       await runConfiguration
         .getByLabel('Prompt')
         .fill('Produce the deterministic read-only plan without writing files.');
-      await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
+      await runConfiguration.getByRole('button', { name: 'Review and run Agent' }).click();
       const dialog = page.getByRole('dialog', {
         name: 'Review this run before it starts',
       });

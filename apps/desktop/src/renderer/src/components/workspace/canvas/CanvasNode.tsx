@@ -10,6 +10,7 @@ import { CANVAS_NODE_MINIMUM_DIMENSIONS } from '../../../../../shared/canvas/nod
 import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
 import { useCanvasNodeInteractions } from './interactions/CanvasNodeInteractionContext.js';
+import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
 import { useNodeTypeRegistry } from '../node-registry/NodeRegistryContext.js';
 import type { NodeKind } from '../node-registry/registry.js';
@@ -240,15 +241,14 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         </span>
         <span className="node-kind">{definition.label}</span>
         {data.collapsed && <strong className="collapsed-node-title">{data.title}</strong>}
-        <span className={`run-status ${data.status}`} title={data.status} />
+        <span
+          className={`run-status ${data.status}`}
+          role="status"
+          aria-label={`Status: ${data.status}`}
+        />
         {data.locked && <Lock size={12} aria-label="Locked" />}
-        <button
-          className="node-collapse-button nodrag"
-          type="button"
-          aria-label={`${data.collapsed ? 'Expand' : 'Collapse'} ${data.title}`}
-          aria-expanded={!data.collapsed}
-          disabled={!canChangePresentation}
-          title={
+        <WorkspaceTooltip
+          content={
             interactions.readOnly
               ? 'Your collaboration role cannot change this node.'
               : data.locked
@@ -257,13 +257,21 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
                   ? 'Expand node'
                   : 'Collapse node'
           }
-          onClick={(event) => {
-            event.stopPropagation();
-            interactions.setCollapsed(id, !data.collapsed);
-          }}
         >
-          <ChevronDown className="collapse-glyph" size={13} aria-hidden="true" />
-        </button>
+          <button
+            className="node-collapse-button nodrag"
+            type="button"
+            aria-label={`${data.collapsed ? 'Expand' : 'Collapse'} ${data.title}`}
+            aria-expanded={!data.collapsed}
+            disabled={!canChangePresentation}
+            onClick={(event) => {
+              event.stopPropagation();
+              interactions.setCollapsed(id, !data.collapsed);
+            }}
+          >
+            <ChevronDown className="collapse-glyph" size={13} aria-hidden="true" />
+          </button>
+        </WorkspaceTooltip>
       </header>
       {definition.behaviors.collapsible && !data.collapsed && (
         <div className="node-body">

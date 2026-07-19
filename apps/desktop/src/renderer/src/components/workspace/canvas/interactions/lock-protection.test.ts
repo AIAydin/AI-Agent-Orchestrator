@@ -8,6 +8,7 @@ import {
   canEditEdge,
   filterLockedEdgeChanges,
   filterLockedNodeChanges,
+  lockedCanvasNodeIds,
   removalProtectedCanvasNodeIds,
 } from './lock-protection.js';
 
@@ -123,6 +124,23 @@ describe('canvas lock protection', () => {
     expect(
       filterLockedNodeChanges([{ type: 'remove', id: 'frame' }], [frame, lockedMember], []),
     ).toEqual([]);
+  });
+
+  it('inherits an ancestor frame lock through nested frames and protects every owner deletion', () => {
+    const leaf = node('leaf', false);
+    const inner: WorkshopNode = {
+      ...node('inner', false),
+      data: { ...node('inner', false).data, kind: 'group-frame', childNodeIds: ['leaf'] },
+    };
+    const outer: WorkshopNode = {
+      ...node('outer', true),
+      data: { ...node('outer', true).data, kind: 'group-frame', childNodeIds: ['inner'] },
+    };
+
+    expect(lockedCanvasNodeIds([outer, inner, leaf])).toEqual(new Set(['outer', 'inner', 'leaf']));
+    expect(removalProtectedCanvasNodeIds([outer, inner, leaf], [])).toEqual(
+      new Set(['outer', 'inner', 'leaf']),
+    );
   });
 });
 

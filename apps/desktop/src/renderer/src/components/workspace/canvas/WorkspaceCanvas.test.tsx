@@ -259,7 +259,9 @@ describe('WorkspaceCanvas node context menu', () => {
       name: 'Run with dependencies',
     });
     expect(run.disabled).toBe(true);
-    expect(run.title).toMatch(/cannot edit the shared graph/u);
+    expect(
+      document.getElementById(run.getAttribute('aria-describedby') ?? '')?.textContent,
+    ).toMatch(/cannot edit the shared graph/u);
   });
 
   it('runs the exact context target with upstream dependencies regardless of prior selection', () => {
@@ -314,7 +316,11 @@ describe('WorkspaceCanvas node context menu', () => {
       name: 'Run with dependencies',
     });
     expect(taskRun.disabled).toBe(true);
-    expect(taskRun.title).toBe('Choose an agent for this task before running it.');
+    expect(taskRun.getAttribute('aria-describedby')).toBe(
+      screen.getByRole('tooltip', {
+        name: 'Choose an agent for this task before running it.',
+      }).id,
+    );
     expect(taskProps.onRunWorkflowScope).not.toHaveBeenCalled();
   });
 
@@ -330,7 +336,11 @@ describe('WorkspaceCanvas node context menu', () => {
       name: 'Run with dependencies',
     });
     expect(run.disabled).toBe(true);
-    expect(run.title).toBe('Another workflow action is already in progress.');
+    expect(run.getAttribute('aria-describedby')).toBe(
+      screen.getByRole('tooltip', {
+        name: 'Another workflow action is already in progress.',
+      }).id,
+    );
     fireEvent.click(run);
     expect(canvasProps.onRunWorkflowScope).not.toHaveBeenCalled();
   });
@@ -344,10 +354,14 @@ describe('WorkspaceCanvas node context menu', () => {
     vi.spyOn(canvasRegion(view.container), 'getBoundingClientRect').mockReturnValue(canvasBounds());
     fireEvent.contextMenu(screen.getByTestId('react-flow'));
 
-    const run = screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Run with dependencies' });
+    const run = screen.getByRole<HTMLButtonElement>('menuitem', {
+      name: 'Run with dependencies',
+    });
     expect(run.disabled).toBe(true);
-    expect(run.title).toBe(
-      'This collaboration role can inspect workflow history but cannot start execution.',
+    expect(run.getAttribute('aria-describedby')).toBe(
+      screen.getByRole('tooltip', {
+        name: 'This collaboration role can inspect workflow history but cannot start execution.',
+      }).id,
     );
     fireEvent.click(run);
     expect(canvasProps.onRunWorkflowScope).not.toHaveBeenCalled();

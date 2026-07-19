@@ -26,6 +26,7 @@ describe('Git worktree cleanup contracts', () => {
       opened: true,
       targetKind: 'agent-worktree',
       branch: 'forgeboard/task',
+      application: 'selected',
     };
     expect(GitWorkspaceExternalOpenResultSchema.parse(result)).toEqual(result);
     expect(

@@ -218,6 +218,14 @@ export class ExtensionManager {
     let registryMutated = false;
     try {
       previousLedger = await this.#validatePendingOperation(pending);
+      this.trustStore.appendAudit('extension', operation, 'allowed', {
+        extensionId: plan.manifest.id,
+        version: plan.manifest.version,
+        manifestDigest: plan.manifestDigest,
+        snapshotDigest: plan.snapshotDigest,
+        grantedPermissions: plan.requestedPermissions,
+        operationId,
+      });
       this.trustStore.stageTrustedExtension({
         schemaVersion: plan.manifest.schemaVersion,
         extensionId: plan.manifest.id,
@@ -248,14 +256,6 @@ export class ExtensionManager {
       }
       this.trustStore.activateTrustedExtension(plan.manifest.id, operationId, this.now());
       this.#discardPlansForExtension(plan.manifest.id);
-      this.trustStore.appendAudit('extension', operation, 'allowed', {
-        extensionId: plan.manifest.id,
-        version: plan.manifest.version,
-        manifestDigest: plan.manifestDigest,
-        snapshotDigest: plan.snapshotDigest,
-        grantedPermissions: plan.requestedPermissions,
-        operationId,
-      });
       return await this.list();
     } catch (error) {
       let surfacedError = error;
@@ -425,6 +425,9 @@ export class ExtensionManager {
     this.#plans.clear();
     this.#removalPlans.clear();
     const ledgers = this.trustStore.listTrustedExtensions();
+    this.trustStore.appendAudit('extension', 'privacy-purge', 'allowed', {
+      ledgerCount: ledgers.length,
+    });
     const revocations = ledgers.map((ledger) => {
       if (ledger.state === 'revoked') return ledger;
       return this.trustStore.revokeTrustedExtension(ledger.extensionId, randomUUID(), this.now());
@@ -433,9 +436,6 @@ export class ExtensionManager {
     for (const ledger of revocations) {
       this.trustStore.purgeTrustedExtension(ledger.extensionId, ledger.operationId);
     }
-    this.trustStore.appendAudit('extension', 'privacy-purge', 'allowed', {
-      ledgerCount: ledgers.length,
-    });
   }
 
   public discardOwner(ownerId: number): void {

@@ -149,6 +149,12 @@ test('release workflow keeps build permissions read-only and tag-gates publicati
     /publish:\n {4}if: startsWith\(github\.ref, 'refs\/tags\/'\)[\s\S]*?permissions:\n {6}contents: write/u,
   );
   assert.match(workflow, /node scripts\/release\/artifacts\.mjs artifacts --all/u);
+  assert.match(workflow, /node scripts\/release\/checksums\.mjs artifacts --verify-all/u);
+  assert.ok(
+    workflow.indexOf('node scripts/release/checksums.mjs artifacts --verify-all') <
+      workflow.indexOf('node scripts/release/download-sources.mjs artifacts'),
+    'Uploaded platform checksums must be verified before publication creates new checksums.',
+  );
   assert.match(
     workflow,
     /node scripts\/release\/publication\.mjs artifacts "\$notes_file" "\$publication_dir" "\$GITHUB_SHA"/u,

@@ -18,12 +18,28 @@ import { uniqueSorted } from './utils.js';
 
 function groupNodeIds(canvas: Canvas, groupId: string): readonly string[] {
   const group = canvas.groups.find((candidate) => candidate.id === groupId);
-  if (group !== undefined) return uniqueSorted(group.nodeIds);
   const frame = canvas.nodes.find(
     (candidate): candidate is Extract<CanvasNode, { type: 'group-frame' }> =>
       candidate.id === groupId && candidate.type === 'group-frame',
   );
-  if (frame !== undefined) return uniqueSorted(frame.data.childNodeIds);
+  const initial = group?.nodeIds ?? frame?.data.childNodeIds;
+  if (initial !== undefined) {
+    const result = new Set<string>();
+    const visiting = new Set<string>();
+    const visit = (nodeId: string): void => {
+      if (result.has(nodeId) || visiting.has(nodeId)) return;
+      visiting.add(nodeId);
+      result.add(nodeId);
+      const nested = canvas.nodes.find(
+        (candidate): candidate is Extract<CanvasNode, { type: 'group-frame' }> =>
+          candidate.id === nodeId && candidate.type === 'group-frame',
+      );
+      for (const childId of nested?.data.childNodeIds ?? []) visit(childId);
+      visiting.delete(nodeId);
+    };
+    for (const nodeId of initial) visit(nodeId);
+    return uniqueSorted([...result]);
+  }
   throw new WorkflowValidationError([
     { code: 'INVALID_GROUP', message: 'Run group does not exist', entityIds: [groupId] },
   ]);

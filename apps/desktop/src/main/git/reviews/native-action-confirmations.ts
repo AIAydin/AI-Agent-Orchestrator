@@ -52,6 +52,11 @@ export function discardConfirmation(plan: PendingDiscardPlan): MessageBoxOptions
 export function externalOpenConfirmation(
   target: GitReviewTargetView,
   branch: string | null,
+  application: {
+    readonly kind: 'executable' | 'macos-app-bundle';
+    readonly applicationPath: string;
+    readonly workspacePath: string;
+  } | null,
 ): MessageBoxOptions {
   return {
     type: 'warning',
@@ -60,8 +65,24 @@ export function externalOpenConfirmation(
     detail: [
       `Where: ${targetDisclosure(target)}`,
       `Branch: ${branch === null ? 'no branch checked out' : displayBoundedLiteral(branch, 4_096)}`,
+      ...(application === null
+        ? ['Application: operating-system default']
+        : application.kind === 'macos-app-bundle'
+          ? [
+              `macOS application bundle: ${displayBoundedLiteral(application.applicationPath, 32_768)}`,
+              'Launcher: /usr/bin/open -a (no shell)',
+              `Literal workspace: ${displayBoundedLiteral(application.workspacePath, 32_768)}`,
+            ]
+          : [
+              `Executable: ${displayBoundedLiteral(application.applicationPath, 32_768)}`,
+              `Literal argument: ${displayBoundedLiteral(application.workspacePath, 32_768)}`,
+            ]),
       '',
-      'Your operating system chooses the registered application. It runs outside Forgeboard’s sandbox and may read or change any file in this workspace.',
+      application === null
+        ? 'Your operating system chooses the registered application. It runs outside Forgeboard’s sandbox and may read or change any file in this workspace.'
+        : application.kind === 'macos-app-bundle'
+          ? 'macOS Launch Services opens the reviewed application bundle outside Forgeboard’s sandbox. The application may read or change any file in this workspace. The exact bundle path and workspace are passed to /usr/bin/open without a shell.'
+          : 'The selected executable runs directly, outside Forgeboard’s sandbox, and may read or change any file in this workspace. No shell or additional arguments are used.',
       'Forgeboard passes only the main-owned workspace path after revalidating the selected project or agent run. The path is never accepted from the renderer.',
     ].join('\n'),
     buttons: ['Cancel', 'Open externally'],

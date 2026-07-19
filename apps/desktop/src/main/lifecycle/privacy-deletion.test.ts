@@ -22,6 +22,7 @@ describe('performPrivacyDeletion', () => {
       'pause-backups',
       'list-missing',
       'confirm:1',
+      'authorize-deletion',
       'reset-services',
       'delete:missing-1',
     ]);
@@ -35,6 +36,20 @@ describe('performPrivacyDeletion', () => {
 
     expect(fixture.confirmForgetMissingBackups).not.toHaveBeenCalled();
     expect(fixture.deleteData).toHaveBeenCalledWith([]);
+  });
+
+  it('fails closed before service reset when the final authorization audit cannot persist', async () => {
+    const fixture = createFixture(0, false);
+    fixture.coordinator.authorizeDeletion = () => {
+      fixture.order.push('authorize-deletion');
+      throw new Error('audit unavailable');
+    };
+
+    await expect(performPrivacyDeletion(fixture.coordinator)).rejects.toThrow('audit unavailable');
+
+    expect(fixture.order).toEqual(['pause-backups', 'list-missing', 'authorize-deletion']);
+    expect(fixture.resetDataServices).not.toHaveBeenCalled();
+    expect(fixture.deleteData).not.toHaveBeenCalled();
   });
 
   it('fails closed before resetting services when authority changes during backup inspection', async () => {
@@ -87,6 +102,9 @@ function createFixture(missingBackupCount: number, confirmMissing: boolean) {
         );
       },
       confirmForgetMissingBackups,
+      authorizeDeletion: () => {
+        order.push('authorize-deletion');
+      },
       resetDataServices,
       deleteData,
     },

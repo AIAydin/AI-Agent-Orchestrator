@@ -317,6 +317,7 @@ function retentionSettings(): AppSettings {
     gitIdentityName: '',
     gitIdentityEmail: '',
     gitRemote: 'origin',
+    externalEditorExecutable: '',
     terminalShell: '/bin/sh',
     envAllowlist: ['PATH'],
     developmentCommand: { executable: '', arguments: [] },

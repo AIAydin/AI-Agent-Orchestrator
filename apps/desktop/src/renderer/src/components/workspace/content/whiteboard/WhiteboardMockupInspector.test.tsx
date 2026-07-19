@@ -10,7 +10,10 @@ import { WhiteboardMockupInspector } from './WhiteboardMockupInspector.js';
 const exportSvg = vi.fn();
 
 beforeEach(() => {
-  exportSvg.mockResolvedValue({ ok: true, value: { fileName: 'Checkout.svg' } });
+  exportSvg.mockResolvedValue({
+    ok: true,
+    value: { fileName: 'Checkout.svg' },
+  });
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: { whiteboard: { exportSvg } },
@@ -58,7 +61,10 @@ describe('WhiteboardMockupInspector', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Export SVG image' }));
     await waitFor(() => expect(exportSvg).toHaveBeenCalledTimes(1));
-    const input = exportSvg.mock.calls[0]?.[0] as { fileName: string; svg: string };
+    const input = exportSvg.mock.calls[0]?.[0] as {
+      fileName: string;
+      svg: string;
+    };
     expect(input.fileName).toBe('Checkout.svg');
     expect(input.svg).toContain('<rect');
     expect(input.svg).not.toContain('<script');
@@ -72,16 +78,32 @@ describe('WhiteboardMockupInspector', () => {
   it('enforces node and collaboration read-only authority without disabling safe export', () => {
     const onUpdate = vi.fn();
     const onAttachContext = vi.fn();
-    renderInspector({ node: whiteboardNode(true), readOnly: true, onUpdate, onAttachContext });
+    renderInspector({
+      node: whiteboardNode(true),
+      readOnly: true,
+      onUpdate,
+      onAttachContext,
+    });
 
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Add rectangle' }).disabled).toBe(
       true,
     );
+    const addRectangleStatus = screen.getByRole('group', {
+      name: 'Add rectangle unavailable',
+    });
+    const addRectangleTooltip = screen.getByRole('tooltip', {
+      name: 'Add rectangle unavailable while editing is locked',
+    });
+    expect(addRectangleStatus.getAttribute('aria-describedby')).toBe(addRectangleTooltip.id);
     expect(
-      screen.getByRole<HTMLButtonElement>('button', { name: 'Attach specification' }).disabled,
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: 'Attach specification',
+      }).disabled,
     ).toBe(true);
     expect(
-      screen.getByRole<HTMLButtonElement>('button', { name: 'Export SVG image' }).disabled,
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: 'Export SVG image',
+      }).disabled,
     ).toBe(false);
     expect(onUpdate).not.toHaveBeenCalled();
     expect(onAttachContext).not.toHaveBeenCalled();

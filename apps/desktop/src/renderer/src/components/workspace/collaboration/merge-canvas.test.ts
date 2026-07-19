@@ -352,6 +352,50 @@ describe('mergeCollaborationCanvasSnapshot', () => {
     ).toMatchObject({ groupId: 'group-1' });
   });
 
+  it('preserves nested frame ownership from collaboration metadata', () => {
+    const shared = snapshot();
+    const inner = shared.nodes['group-1'];
+    if (inner === undefined) throw new Error('Missing shared group fixture.');
+    const nested = CollaborationMetadataSnapshotSchema.parse({
+      ...shared,
+      nodes: {
+        ...shared.nodes,
+        'group-1': { ...inner, groupId: 'outer-group' },
+        'outer-group': {
+          id: 'outer-group',
+          type: 'group-frame',
+          title: 'Outer group',
+          position: { x: 20, y: 20 },
+          size: { width: 800, height: 600 },
+        },
+      },
+      groups: {
+        ...shared.groups,
+        'outer-group': {
+          id: 'outer-group',
+          title: 'Outer group',
+          position: { x: 20, y: 20 },
+          size: { width: 800, height: 600 },
+          color: '#778899',
+          purpose: 'feature-area',
+          layout: 'freeform',
+          autoFit: false,
+        },
+      },
+    });
+
+    const result = mergeCollaborationCanvasSnapshot(document(), nested, { initial: false });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.document.canonical?.nodes.find(({ id }) => id === 'group-1')).toMatchObject({
+      groupId: 'outer-group',
+    });
+    expect(result.document.canonical?.nodes.find(({ id }) => id === 'outer-group')).toMatchObject({
+      data: { childNodeIds: ['group-1'] },
+    });
+  });
+
   it('accepts older group metadata and clears unsupported stale frame settings to safe defaults', () => {
     const shared = snapshot();
     const group = shared.groups['group-1'];

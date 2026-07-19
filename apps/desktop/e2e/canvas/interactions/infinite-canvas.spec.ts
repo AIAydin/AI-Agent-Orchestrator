@@ -85,7 +85,7 @@ test('infinite-canvas interactions persist locally without outbound requests', a
       await expect
         .poll(async () => (await readRenderedViewport(page)).zoom)
         .toBeGreaterThan(beforeZoom.zoom);
-      await page.getByRole('button', { name: 'Fit canvas' }).click();
+      await page.getByRole('button', { name: 'Zoom to fit the canvas' }).click();
       await expect(
         page.getByRole('article', {
           name: 'Product brief: Canvas Alpha',
@@ -201,9 +201,9 @@ test('infinite-canvas interactions persist locally without outbound requests', a
     const privateComment = 'Private canvas note retained only on this device.';
     await test.step('a private node comment is created entirely in the local UI', async () => {
       const comments = inspector.getByRole('region', {
-        name: 'Private local comments',
+        name: 'Private comments',
       });
-      await expect(comments.getByText(/Stored only in this project on this device/)).toBeVisible();
+      await expect(comments.getByText(/Saved only in this project on this device/)).toBeVisible();
       await comments.getByLabel('Add a private comment').fill(privateComment);
       await comments.getByRole('button', { name: 'Save locally' }).click();
       await expect(comments.getByText(privateComment, { exact: true })).toBeVisible();
@@ -273,9 +273,7 @@ test('infinite-canvas interactions persist locally without outbound requests', a
           has: page.locator('strong').getByText('Canvas Beta', { exact: true }),
         })
         .click();
-      const comments = page
-        .locator('.inspector')
-        .getByRole('region', { name: 'Private local comments' });
+      const comments = page.locator('.inspector').getByRole('region', { name: 'Private comments' });
       await expect(comments.getByText(privateComment, { exact: true })).toBeVisible();
       await expect(comments.locator('header small')).toHaveText('1');
     });

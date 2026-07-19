@@ -175,7 +175,7 @@ describe('AgentAttemptHistory', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Review changes' }).disabled).toBe(
       true,
     );
-    expect(screen.getByRole('button', { name: 'Retry review' }).title).toContain(
+    expect(describedText(screen.getByRole('button', { name: 'Retry review' }))).toContain(
       'newer resumed attempt',
     );
   });
@@ -201,7 +201,7 @@ describe('AgentAttemptHistory', () => {
       name: 'Retry review',
     });
     expect(retryButton.disabled).toBe(true);
-    expect(retryButton.title).toContain('failed, interrupted, terminated, or lost');
+    expect(describedText(retryButton)).toContain('failed, interrupted, terminated, or lost');
   });
 
   it('reports load failures and retries from an accessible action', async () => {
@@ -294,6 +294,12 @@ describe('AgentAttemptHistory', () => {
     await waitFor(() => expect(listRuns).toHaveBeenCalledTimes(2));
   });
 });
+
+function describedText(element: HTMLElement): string | null {
+  return (
+    document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ?? null
+  );
+}
 
 function runSummary(): RunHistorySummary {
   return {

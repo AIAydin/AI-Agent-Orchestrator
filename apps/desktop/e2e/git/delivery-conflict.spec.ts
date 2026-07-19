@@ -47,7 +47,7 @@ test('a real conflicted agent worktree is blocked before Git delivery review', a
     await runConfiguration
       .getByLabel('Prompt')
       .fill('Create the deterministic file used to exercise delivery conflict handling.');
-    await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
+    await runConfiguration.getByRole('button', { name: 'Review and run Agent' }).click();
     const disclosure = page.getByRole('dialog', { name: 'Review this run before it starts' });
     await approveNextNativeAgentLaunch(session.app, disclosure, 'test-agent', async () => {
       await disclosure.getByRole('button', { name: 'Approve and start' }).click();

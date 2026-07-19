@@ -18,6 +18,7 @@ import {
 import type { LocalStore } from '../storage.js';
 import { planLegacySettingsRepair } from '../storage/settings-repair/plan.js';
 import { assertLiveMainFrame } from '../security/ipc-authority.js';
+import { performAuditedLocalEffect } from '../lifecycle/audit/local-effect.js';
 
 const SettingsImportSchema = z
   .object({
@@ -51,7 +52,7 @@ export class SettingsIpcService {
   #disposed = false;
 
   public constructor(
-    private readonly dialog: Pick<Dialog, 'showOpenDialog' | 'showSaveDialog'>,
+    private readonly dialog: Pick<Dialog, 'showMessageBox' | 'showOpenDialog' | 'showSaveDialog'>,
     private readonly store: SettingsStore,
     private readonly createDefaultSettings: () => AppSettings,
     private readonly verifyUpdate: SettingsUpdateVerifier,
@@ -78,13 +79,39 @@ export class SettingsIpcService {
         );
         await this.verifyUpdate(current, next);
         assertLiveMainFrame(event, 'Settings update');
-        const saved = this.store.saveSettings(next);
-        const retention = this.store.applyRetention(saved);
+        const reductions = retentionReductions(current, next);
+        if (reductions.length > 0) {
+          const parent = requireSettingsParent(event);
+          const decision = await this.dialog.showMessageBox(parent, {
+            type: 'warning',
+            title: 'Delete older local history?',
+            message: 'These retention changes can permanently delete older local history.',
+            detail: `${reductions.join('\n')}\n\nThis applies immediately when Settings are saved and cannot be undone unless the data exists in a backup.`,
+            buttons: ['Cancel', 'Save and delete older data'],
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true,
+          });
+          assertSettingsParent(event, parent);
+          if (decision.response !== 1) {
+            this.store.appendAudit('settings', 'retention-update', 'denied', {
+              reason: 'native-confirmation-cancelled',
+              reductions,
+            });
+            return current;
+          }
+        }
         this.store.appendAudit('settings', 'update', 'allowed', {
-          keys: Object.keys(saved),
-          envNames: saved.envAllowlist,
-          retention,
+          keys: Object.keys(next),
+          envNames: next.envAllowlist,
+          retentionPolicy: {
+            transcriptDays: next.transcriptRetentionDays,
+            auditDays: next.auditRetentionDays,
+            snapshotCount: next.snapshotRetentionCount,
+          },
         });
+        const saved = this.store.saveSettings(next);
+        this.store.applyRetention(saved);
         this.onSettingsSaved(saved);
         return saved;
       },
@@ -106,14 +133,22 @@ export class SettingsIpcService {
       assertSettingsParent(event, parent);
       if (selection.canceled || !selection.filePath) return null;
       const settings = this.store.getSettings(this.createDefaultSettings());
-      await writeFile(
-        selection.filePath,
-        `${JSON.stringify({ format: 'forgeboard-settings', version: 1, settings }, null, 2)}\n`,
-        { mode: 0o600 },
-      );
-      assertSettingsParent(event, parent);
-      this.store.appendAudit('export', 'settings', 'allowed', {
-        fileName: 'forgeboard-settings.json',
+      await performAuditedLocalEffect({
+        assertCurrent: () => assertSettingsParent(event, parent),
+        auditAllowed: () =>
+          this.store.appendAudit('export', 'settings', 'allowed', {
+            fileName: 'forgeboard-settings.json',
+          }),
+        effect: async () =>
+          await writeFile(
+            selection.filePath,
+            `${JSON.stringify({ format: 'forgeboard-settings', version: 1, settings }, null, 2)}\n`,
+            { mode: 0o600 },
+          ),
+        auditFailed: () =>
+          this.store.appendAudit('export', 'settings', 'failed', {
+            reason: 'private-file-write-or-authority-failed',
+          }),
       });
       return selection.filePath;
     });
@@ -181,11 +216,20 @@ export class SettingsIpcService {
           version: 1,
           repair: evidence,
         });
-        await writeFile(selection.filePath, `${JSON.stringify(exported, null, 2)}\n`, {
-          mode: 0o600,
+        await performAuditedLocalEffect({
+          assertCurrent: () => assertSettingsParent(event, parent),
+          auditAllowed: () =>
+            this.store.appendAudit('export', 'settings-repair-evidence', 'allowed', { repairId }),
+          effect: async () =>
+            await writeFile(selection.filePath, `${JSON.stringify(exported, null, 2)}\n`, {
+              mode: 0o600,
+            }),
+          auditFailed: () =>
+            this.store.appendAudit('export', 'settings-repair-evidence', 'failed', {
+              repairId,
+              reason: 'private-file-write-or-authority-failed',
+            }),
         });
-        assertSettingsParent(event, parent);
-        this.store.appendAudit('export', 'settings-repair-evidence', 'allowed', { repairId });
         return selection.filePath;
       },
     );
@@ -240,6 +284,26 @@ export class SettingsIpcService {
       }
     });
   }
+}
+
+function retentionReductions(current: AppSettings, next: AppSettings): string[] {
+  const reductions: string[] = [];
+  if (next.transcriptRetentionDays < current.transcriptRetentionDays) {
+    reductions.push(
+      `Transcripts and completed run/check history: ${String(current.transcriptRetentionDays)} to ${String(next.transcriptRetentionDays)} days`,
+    );
+  }
+  if (next.auditRetentionDays < current.auditRetentionDays) {
+    reductions.push(
+      `Activity history: ${String(current.auditRetentionDays)} to ${String(next.auditRetentionDays)} days`,
+    );
+  }
+  if (next.snapshotRetentionCount < current.snapshotRetentionCount) {
+    reductions.push(
+      `Canvas snapshots per canvas: ${String(current.snapshotRetentionCount)} to ${String(next.snapshotRetentionCount)}`,
+    );
+  }
+  return reductions;
 }
 
 function requireSettingsParent(event: IpcMainInvokeEvent): BrowserWindow {

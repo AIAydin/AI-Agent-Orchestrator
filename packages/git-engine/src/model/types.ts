@@ -335,7 +335,7 @@ export interface RestoreArchivedWorktreeApproval extends ApprovalBase<'restore-a
   readonly dirtyPaths: readonly string[];
 }
 
-export type InProgressGitOperation = 'merge' | 'rebase' | 'cherry-pick';
+export type InProgressGitOperation = 'merge' | 'rebase' | 'cherry-pick' | 'squash';
 
 export interface GitContinuationState {
   readonly repositoryRoot: string;

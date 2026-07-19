@@ -2,6 +2,7 @@ import { ArrowRight, Circle, Diamond, Download, Link2, Square, Trash2, Type } fr
 import { useEffect, useMemo, useState } from 'react';
 
 import type { WorkshopNode } from '../../canvas/CanvasNode.js';
+import { WorkspaceTooltip } from '../../shell/tooltips/WorkspaceTooltip.js';
 import {
   createWhiteboardElement,
   parseWhiteboardDocument,
@@ -461,9 +462,11 @@ function ToolButton({
   readonly onClick: () => void;
 }) {
   return (
-    <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick}>
-      {icon}
-    </button>
+    <WorkspaceTooltip content={disabled ? `${label} unavailable while editing is locked` : label}>
+      <button type="button" aria-label={label} disabled={disabled} onClick={onClick}>
+        {icon}
+      </button>
+    </WorkspaceTooltip>
   );
 }
 

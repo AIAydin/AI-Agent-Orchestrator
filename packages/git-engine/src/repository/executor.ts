@@ -256,6 +256,17 @@ export class GitExecutor {
     };
   }
 
+  /** Writes one fully specified stage-zero index entry without consulting worktree content. */
+  public async runExactIndexUpdate(
+    args: readonly string[],
+    input: string,
+    options: Omit<GitCommandOptions, 'input'> = {},
+  ): Promise<GitCommandResult> {
+    assertArguments(args);
+    assertExactIndexUpdate(args, input);
+    return await this.#runInternal(args, { ...options, input });
+  }
+
   /**
    * Runs a command that may consult Git content drivers only after passive config/attribute
    * inspection proves that no external delegate can be invoked.
@@ -618,6 +629,28 @@ function assertUnguardedCommandIsSafe(args: readonly string[]): void {
     (args.includes('--hard') || args.includes('--merge') || args.includes('--keep'))
   ) {
     throw guardRequired('reset checkout');
+  }
+}
+
+function assertExactIndexUpdate(args: readonly string[], input: string): void {
+  if (
+    args.length !== 5 ||
+    args[0] !== '-C' ||
+    args[1] === '' ||
+    args[2] !== 'update-index' ||
+    args[3] !== '-z' ||
+    args[4] !== '--index-info'
+  ) {
+    throw new GitEngineError(
+      'INVALID_ARGUMENT',
+      'Exact index updates require one NUL-framed stage-zero index entry.',
+    );
+  }
+  if (!/^(?:100644|100755) (?:[a-f0-9]{40}|[a-f0-9]{64})\t[^\0]+\0$/u.test(input)) {
+    throw new GitEngineError(
+      'INVALID_ARGUMENT',
+      'Exact index updates require one ordinary-file path and one validated blob.',
+    );
   }
 }
 

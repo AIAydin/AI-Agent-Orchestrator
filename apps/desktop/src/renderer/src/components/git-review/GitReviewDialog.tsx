@@ -11,6 +11,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { unwrap } from '../../lib/ipc.js';
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 import type { CheckId } from '../../../../shared/checks/contracts.js';
 import type {
@@ -22,6 +23,7 @@ import type {
   GitShippingPlanView,
   GitShippingResultView,
   GitShippingStrategy,
+  GitConflictRecoveryStateView,
 } from '../../../../shared/git/shipping-contracts.js';
 import type {
   GitWorktreeArchivePlanView,
@@ -63,6 +65,7 @@ import {
 import { useGitReview } from './useGitReview.js';
 import { GitShippingDisclosure } from './shipping/GitShippingDisclosure.js';
 import { GitShippingPanel } from './shipping/GitShippingPanel.js';
+import { GitConflictRecoveryPanel } from './shipping/GitConflictRecoveryPanel.js';
 
 export interface GitReviewDialogProps {
   target: GitTargetInput;
@@ -103,7 +106,11 @@ export function GitReviewDialog({
   );
   const deliveryReadiness = useGitDeliveryReadiness(
     target.kind === 'agent-worktree'
-      ? { kind: 'agent-worktree', projectId: target.projectId, runId: target.runId }
+      ? {
+          kind: 'agent-worktree',
+          projectId: target.projectId,
+          runId: target.runId,
+        }
       : null,
   );
   const reviewNotes = useGitReviewNotes(target, controller.review?.refreshedAt ?? null, onError);
@@ -112,6 +119,7 @@ export function GitReviewDialog({
   const [commitPlan, setCommitPlan] = useState<GitCommitPlanView | null>(null);
   const [shippingPlan, setShippingPlan] = useState<GitShippingPlanView | null>(null);
   const [shippingResult, setShippingResult] = useState<GitShippingResultView | null>(null);
+  const [recoveryState, setRecoveryState] = useState<GitConflictRecoveryStateView | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<GitWorktreeCleanupPlanView | null>(null);
   const [renamePlan, setRenamePlan] = useState<GitWorktreeRenamePlanView | null>(null);
   const [archivePlan, setArchivePlan] = useState<GitWorktreeArchivePlanView | null>(null);
@@ -189,6 +197,41 @@ export function GitReviewDialog({
   useEffect(() => {
     setReviewMode(target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree');
   }, [target.kind, target.projectId, target.kind === 'agent-worktree' ? target.runId : null]);
+
+  useEffect(() => {
+    let current = true;
+    const candidates: GitTargetInput[] = [
+      { kind: 'primary', projectId: target.projectId },
+      ...(target.kind === 'agent-worktree' ? [target] : []),
+    ];
+    void (async () => {
+      try {
+        for (const candidate of candidates) {
+          const state = unwrap(await window.forgeboard.git.conflictRecoveryState(candidate));
+          if (state !== null) {
+            if (current) setRecoveryState(state);
+            return;
+          }
+        }
+        if (current) setRecoveryState(null);
+      } catch (cause) {
+        if (!current) return;
+        const message =
+          cause instanceof Error
+            ? cause.message
+            : 'Could not inspect the current Git recovery state.';
+        onError?.(message);
+      }
+    })();
+    return () => {
+      current = false;
+    };
+  }, [
+    onError,
+    target.kind,
+    target.projectId,
+    target.kind === 'agent-worktree' ? target.runId : null,
+  ]);
 
   const prepareDiscard = (hunkId: string) => {
     setNotice(null);
@@ -283,7 +326,7 @@ export function GitReviewDialog({
       setNotice(
         gitReviewNotice(
           result.opened
-            ? `Opened the ${result.targetKind === 'primary' ? 'main project' : 'agent workspace'} externally${result.branch === null ? '' : ` on ${result.branch}`}.`
+            ? `Opened the ${result.targetKind === 'primary' ? 'main project' : 'agent workspace'} in ${result.application === 'selected' ? 'your selected application' : 'the system default'}${result.branch === null ? '' : ` on ${result.branch}`}.`
             : 'External open cancelled. No application was launched.',
           result.opened ? 'success' : 'neutral',
         ),
@@ -321,6 +364,27 @@ export function GitReviewDialog({
       }
     });
   };
+
+  const finishConflictRecovery = () => {
+    setShippingResult(null);
+    setRecoveryState(null);
+    setNotice(
+      gitReviewNotice(
+        'Git conflict recovery completed. The affected workspace was refreshed.',
+        'success',
+      ),
+    );
+    void controller.refresh();
+  };
+
+  const immediateRecovery =
+    shippingResult?.state === 'conflicted' && shippingResult.conflictTarget !== null
+      ? {
+          target: shippingResult.conflictTarget,
+          conflictedPaths: shippingResult.conflictedPaths,
+        }
+      : null;
+  const activeRecovery = immediateRecovery ?? recoveryState;
 
   const prepareCleanup = () => {
     setNotice(null);
@@ -385,7 +449,10 @@ export function GitReviewDialog({
     void runMetadataAction(async () => {
       setRenamePlan(
         unwrap(
-          await window.forgeboard.git.lifecycle.prepareRename({ ...lifecycleTarget, newBranch }),
+          await window.forgeboard.git.lifecycle.prepareRename({
+            ...lifecycleTarget,
+            newBranch,
+          }),
         ),
       );
     });
@@ -394,7 +461,9 @@ export function GitReviewDialog({
     if (renamePlan === null) return;
     void runMetadataAction(async () => {
       const result = unwrap(
-        await window.forgeboard.git.lifecycle.confirmRename({ planId: renamePlan.planId }),
+        await window.forgeboard.git.lifecycle.confirmRename({
+          planId: renamePlan.planId,
+        }),
       );
       setRenamePlan(null);
       setNotice(
@@ -418,7 +487,9 @@ export function GitReviewDialog({
     if (archivePlan === null) return;
     void runMetadataAction(async () => {
       const result = unwrap(
-        await window.forgeboard.git.lifecycle.confirmArchive({ planId: archivePlan.planId }),
+        await window.forgeboard.git.lifecycle.confirmArchive({
+          planId: archivePlan.planId,
+        }),
       );
       setArchivePlan(null);
       if (result === null) {
@@ -467,24 +538,30 @@ export function GitReviewDialog({
           >
             <ExternalLink size={14} aria-hidden="true" /> Open externally…
           </button>
-          <button
-            className="icon-button"
-            type="button"
-            disabled={busy}
-            aria-label="Refresh Git changes"
-            onClick={refreshReview}
+          <WorkspaceTooltip
+            content={busy ? 'Wait for the current Git action' : 'Refresh Git changes'}
           >
-            <RefreshCw className={busy ? 'spin' : ''} size={16} />
-          </button>
-          <button
-            ref={closeButton}
-            className="icon-button"
-            type="button"
-            aria-label="Close Git review"
-            onClick={onClose}
-          >
-            <X size={17} />
-          </button>
+            <button
+              className="icon-button"
+              type="button"
+              disabled={busy}
+              aria-label="Refresh Git changes"
+              onClick={refreshReview}
+            >
+              <RefreshCw className={busy ? 'spin' : ''} size={16} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
+          <WorkspaceTooltip content="Close Git review">
+            <button
+              ref={closeButton}
+              className="icon-button"
+              type="button"
+              aria-label="Close Git review"
+              onClick={onClose}
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
         </header>
 
         {controller.loading ? (
@@ -513,6 +590,13 @@ export function GitReviewDialog({
                 </button>
               )}
             </GitReviewState>
+            {activeRecovery !== null && (
+              <GitConflictRecoveryPanel
+                target={activeRecovery.target}
+                conflictedPaths={activeRecovery.conflictedPaths}
+                onRecovered={finishConflictRecovery}
+              />
+            )}
             {target.kind === 'agent-worktree' && (
               <section className="git-cleanup-recovery" aria-label="Agent cleanup recovery">
                 {(cleanupController.error !== null ||
@@ -583,6 +667,13 @@ export function GitReviewDialog({
               <p className="git-conflict-banner" role="alert">
                 <TriangleAlert size={14} /> Fix the conflicting files before creating a commit.
               </p>
+            )}
+            {activeRecovery !== null && (
+              <GitConflictRecoveryPanel
+                target={activeRecovery.target}
+                conflictedPaths={activeRecovery.conflictedPaths}
+                onRecovered={finishConflictRecovery}
+              />
             )}
             {(actionError !== null || notice !== null || busy) && (
               <div
@@ -749,12 +840,18 @@ export function GitReviewDialog({
                             onPrevious: () => {
                               const previous = reviewFiles[selectedFileIndex - 1];
                               if (previous !== undefined)
-                                setSelection({ area: previous.area, path: previous.path });
+                                setSelection({
+                                  area: previous.area,
+                                  path: previous.path,
+                                });
                             },
                             onNext: () => {
                               const next = reviewFiles[selectedFileIndex + 1];
                               if (next !== undefined)
-                                setSelection({ area: next.area, path: next.path });
+                                setSelection({
+                                  area: next.area,
+                                  path: next.path,
+                                });
                             },
                           },
                         })}

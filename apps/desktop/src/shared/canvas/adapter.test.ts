@@ -271,7 +271,7 @@ describe('canonical desktop canvas adapter', () => {
     expect(initial.ok).toBe(true);
     if (!initial.ok) return;
     expect(initial.canvas.nodes.find((candidate) => candidate.id === 'frame-a')).toMatchObject({
-      data: { childNodeIds: ['child-1'] },
+      data: { childNodeIds: ['child-1', 'frame-b'] },
     });
     expect(initial.canvas.nodes.find((candidate) => candidate.id === 'frame-b')).toMatchObject({
       data: { childNodeIds: ['child-2'] },
@@ -282,8 +282,11 @@ describe('canonical desktop canvas adapter', () => {
     expect(initial.canvas.nodes.find((candidate) => candidate.id === 'child-2')?.groupId).toBe(
       'frame-b',
     );
+    expect(initial.canvas.nodes.find((candidate) => candidate.id === 'frame-b')?.groupId).toBe(
+      'frame-a',
+    );
     expect(initial.canvas.groups).toMatchObject([
-      { id: 'frame-a', nodeIds: ['child-1'], locked: false },
+      { id: 'frame-a', nodeIds: ['child-1', 'frame-b'], locked: false },
       { id: 'frame-b', nodeIds: ['child-2'], locked: false },
     ]);
 
@@ -370,9 +373,12 @@ describe('canonical desktop canvas adapter', () => {
         migrated.canvas.nodes.find((candidate) => candidate.id === 'a-containing'),
       ).toMatchObject({
         size: { width: 360, height: 240 },
-        data: { childNodeIds: ['child'] },
+        data: { childNodeIds: ['child', 'large-containing'] },
       });
-      for (const frameId of ['outside-first', 'large-containing', 'z-containing']) {
+      expect(
+        migrated.canvas.nodes.find((candidate) => candidate.id === 'large-containing'),
+      ).toMatchObject({ groupId: 'a-containing', data: { childNodeIds: [] } });
+      for (const frameId of ['outside-first', 'z-containing']) {
         expect(migrated.canvas.nodes.find((candidate) => candidate.id === frameId)).toMatchObject({
           data: { childNodeIds: [] },
         });
@@ -382,12 +388,49 @@ describe('canonical desktop canvas adapter', () => {
           .map((group) => ({ id: group.id, nodeIds: group.nodeIds }))
           .sort((left, right) => left.id.localeCompare(right.id)),
       ).toEqual([
-        { id: 'a-containing', nodeIds: ['child'] },
+        { id: 'a-containing', nodeIds: ['child', 'large-containing'] },
         { id: 'large-containing', nodeIds: [] },
         { id: 'outside-first', nodeIds: [] },
         { id: 'z-containing', nodeIds: [] },
       ]);
     }
+  });
+
+  it('round-trips nested frames and deterministically cuts imported membership cycles', () => {
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('outer', 'group-frame', { childNodeIds: ['inner'] }),
+          node('inner', 'group-frame', { childNodeIds: ['outer', 'leaf'] }),
+          node('leaf', 'task'),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.canvas.nodes.find(({ id }) => id === 'outer')).not.toHaveProperty('groupId');
+    expect(migrated.canvas.nodes.find(({ id }) => id === 'inner')).toMatchObject({
+      groupId: 'outer',
+      data: { childNodeIds: ['leaf'] },
+    });
+    expect(migrated.canvas.nodes.find(({ id }) => id === 'leaf')).toMatchObject({
+      groupId: 'inner',
+    });
+
+    const surface = legacySurfaceFromCanonical(migrated.canvas);
+    const roundTrip = canonicalCanvasFromLegacy({
+      ...surface,
+      canonical: migrated.canvas,
+      updatedAt: T2,
+    });
+    expect(roundTrip.ok).toBe(true);
+    if (!roundTrip.ok) return;
+    expect(roundTrip.canvas.groups.map(({ id, nodeIds }) => ({ id, nodeIds }))).toEqual([
+      { id: 'outer', nodeIds: ['inner'] },
+      { id: 'inner', nodeIds: ['leaf'] },
+    ]);
   });
 
   it('maps every built-in draft plus declarative extension nodes', () => {

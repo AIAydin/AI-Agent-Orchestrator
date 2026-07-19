@@ -48,6 +48,18 @@ The workflow rejects version/tag mismatches and validates installed Dugite metad
 [`third_party/dugite-sources.json`](../third_party/dugite-sources.json). A Dugite upgrade must update
 that ledger and all corresponding immutable source commits in the same reviewed change.
 
+## Current publication blockers
+
+As verified on 2026-07-19, the official repository is private, has no tags or published Releases,
+and its latest four-platform workflow attempt failed before any runner step started because of the
+repository account's billing or spending-limit restriction. That account restriction must be
+resolved before hosted installer proof or publication is possible. After it is resolved, the
+remaining release evidence is a successful native install-and-launch smoke on every hosted target,
+including Windows, Linux, and both macOS architectures, followed by a tag-gated publication whose
+assets and checksums are independently verified. Production signing also remains optional external
+maintainer setup: do not claim macOS signing/notarization or Windows Authenticode until the generated
+artifacts themselves pass the workflow's post-package verification.
+
 ## Optional signing credentials
 
 Signing is a maintainer/repository concern and never an end-user setup step. Configure the following

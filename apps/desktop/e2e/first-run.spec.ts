@@ -21,7 +21,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 
     await test.step('safe first-run defaults require no files or code editing', async () => {
       const setup = page.getByRole('dialog', {
-        name: /Set up Forgeboard in a few quick steps/i,
+        name: 'Ready to build without wiring config files?',
       });
       await expect(setup).toBeVisible();
       await expect(setup.getByText('No Forgeboard cloud')).toBeVisible();
@@ -283,6 +283,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
         .poll(async () => await readdir(join(userDataDirectory, 'backups')))
         .toHaveLength(2);
       await settings.getByLabel(/Type DELETE ALL LOCAL DATA/).fill('DELETE ALL LOCAL DATA');
+      await approveNextPrivacyDeletion(electronApp!);
       await settings.getByRole('button', { name: 'Delete local data' }).click();
 
       await expect
@@ -296,7 +297,9 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await expect(resetSetup).toHaveAttribute('role', 'dialog');
       await expect(resetSetup).toHaveAttribute('aria-modal', 'true');
       await expect(
-        resetSetup.getByRole('heading', { name: /Set up Forgeboard in a few quick steps/i }),
+        resetSetup.getByRole('heading', {
+          name: 'Ready to build without wiring config files?',
+        }),
       ).toBeVisible();
       await page.waitForTimeout(2_500);
       await expect.poll(() => readRecentProjects(page)).toEqual({ ok: true, value: [] });
@@ -440,6 +443,40 @@ function readDeletedSetupState(page: Page): Promise<{
       settingsReset: settings.ok && settings.value.onboardingCompleted === false,
       setupVisible,
     };
+  });
+}
+
+async function approveNextPrivacyDeletion(electronApp: ElectronApplication): Promise<void> {
+  await electronApp.evaluate(({ dialog }) => {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(dialog, 'showMessageBox');
+    const interceptor = (...args: unknown[]) => {
+      if (originalDescriptor === undefined) {
+        Reflect.deleteProperty(dialog, 'showMessageBox');
+      } else {
+        Object.defineProperty(dialog, 'showMessageBox', originalDescriptor);
+      }
+      const options = args.at(-1) as
+        | {
+            buttons?: unknown;
+            cancelId?: unknown;
+            defaultId?: unknown;
+            title?: unknown;
+          }
+        | undefined;
+      if (
+        options?.title !== 'Delete all local Forgeboard data?' ||
+        JSON.stringify(options.buttons) !== JSON.stringify(['Cancel', 'Delete all local data']) ||
+        options.defaultId !== 0 ||
+        options.cancelId !== 0
+      ) {
+        throw new Error('Unexpected native privacy-deletion confirmation.');
+      }
+      return Promise.resolve({ response: 1, checkboxChecked: false });
+    };
+    Object.defineProperty(dialog, 'showMessageBox', {
+      configurable: true,
+      value: interceptor,
+    });
   });
 }
 

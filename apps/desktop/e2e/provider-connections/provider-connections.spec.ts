@@ -91,11 +91,11 @@ test('Codex connects through provider OAuth UI, refreshes after restart, and nev
     await expect(agentContinue).toBeEnabled();
     await agentContinue.click();
     await expect(
-      setup.getByRole('heading', { name: /Set the default permission boundary/i }),
+      setup.getByRole('heading', { name: /Choose what agents can do by default/i }),
     ).toBeVisible();
     await setup.getByRole('button', { name: 'Continue' }).click();
     await expect(
-      setup.getByRole('heading', { name: /Optional project commands, built safely in the UI/i }),
+      setup.getByRole('heading', { name: /Set project commands \(optional\)/i }),
     ).toBeVisible();
     await setup.getByRole('button', { name: 'Continue' }).click();
     await expect(
@@ -172,9 +172,9 @@ test('Codex connects through provider OAuth UI, refreshes after restart, and nev
     await expectNoFixtureSecrets(page);
     await settings.getByRole('button', { name: 'Close settings' }).click();
     await page.getByRole('button', { name: /Explore the safe demo/i }).click();
-    const auditTab = page.getByRole('tab', { name: 'Audit' });
+    const auditTab = page.getByRole('tab', { name: 'History' });
     await auditTab.click();
-    const auditPanel = page.getByRole('tabpanel', { name: 'Audit' });
+    const auditPanel = page.getByRole('tabpanel', { name: 'History' });
     await expect(auditPanel.getByText('provider-connection').first()).toBeVisible();
     await expect(auditPanel.getByText('connect').first()).toBeVisible();
     await expectNoFixtureSecrets(page);

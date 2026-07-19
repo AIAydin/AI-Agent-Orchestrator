@@ -53,7 +53,7 @@ async function openFreshDemo(
   const session = await launchDesktop(userDataDirectory);
   watchExternalRequests(session.page, externalRequests);
   const setup = session.page.getByRole('dialog', {
-    name: /Set up Forgeboard in a few quick steps/i,
+    name: /Ready to build without wiring config files/i,
   });
   await expect(setup).toBeVisible();
   await setup.getByRole('button', { name: 'Use safe defaults' }).click();

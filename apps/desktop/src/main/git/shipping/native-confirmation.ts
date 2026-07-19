@@ -53,12 +53,17 @@ export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOp
 function strategyLabel(strategy: PendingGitShippingPlan['strategy']): string {
   if (strategy === 'fast-forward-only') return 'Move the primary branch forward';
   if (strategy === 'merge-commit') return 'Create a merge commit on the primary branch';
+  if (strategy === 'squash') return 'Combine the reviewed changes into one primary commit';
+  if (strategy === 'rebase')
+    return 'Replay the agent commits, then move the primary branch forward';
   return 'Copy the reviewed changes one by one';
 }
 
 function strategyAction(strategy: PendingGitShippingPlan['strategy']): string {
   if (strategy === 'fast-forward-only') return 'Move primary branch forward';
   if (strategy === 'merge-commit') return 'Create merge commit';
+  if (strategy === 'squash') return 'Create squash commit';
+  if (strategy === 'rebase') return 'Rebase and deliver';
   return 'Copy changes one by one';
 }
 
@@ -68,6 +73,12 @@ function deliveryIdentityEffect(plan: PendingGitShippingPlan): string {
   }
   if (plan.strategy === 'merge-commit') {
     return 'Git records this exact author on the new merge commit; the existing agent commit authors remain unchanged.';
+  }
+  if (plan.strategy === 'squash') {
+    return 'Git records this exact author on the one new squashed commit; the agent commits remain unchanged.';
+  }
+  if (plan.strategy === 'rebase') {
+    return 'Git replays the agent commits onto the reviewed primary commit, preserving their authors, then moves the primary branch forward.';
   }
   return 'Git records this exact author on each new commit copied to the primary branch.';
 }

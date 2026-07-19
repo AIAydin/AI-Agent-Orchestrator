@@ -75,6 +75,14 @@ File nodes reference policy-approved project-relative files. Ignored, sensitive,
 oversized, missing, and outside-root content fails closed. Project files can be opened in the built-in
 editor; an explicit external handoff uses the operating system's registered application.
 
+For whole-workspace handoff, open **Settings → Git & previews → External application** and choose an
+exact application executable. On macOS, the chooser also accepts a normal `.app` bundle, so you do
+not have to find its internal `Contents/MacOS` binary. **Use system default** resets the selection.
+From **Changes**, **Open externally…** shows the exact executable or application bundle and literal
+workspace in a native confirmation before anything launches. Forgeboard revalidates the reviewed
+identity after approval. Executables receive the workspace as their sole argument; macOS bundles are
+opened through `/usr/bin/open -a` with exact argument-array values. Neither path uses a shell.
+
 ## Run an Agent node
 
 1. Add and select an **Agent** node.
@@ -88,9 +96,12 @@ editor; an explicit external handoff uses the operating system's registered appl
 
 Writable agents run in an application-owned Git worktree, not the primary checkout. Live controls
 are capability-dependent. **Send “continue”** sends literal input; it does not unpause a process.
-Forgeboard currently cannot pause and later continue the same portable agent process. **Resume
-review** is available only for a supported interrupted provider session and always launches a newly
-reviewed continuation. **Retry review** starts an eligible failed attempt in a fresh worktree.
+**Pause process** and **Continue process** suspend and continue the exact same process tree only for
+a verified host process group on macOS or Linux. The controls remain unavailable on Windows, for
+Docker runs, extension-provided sessions, or whenever Forgeboard cannot verify process-group
+ownership. **Resume review** is available only for a supported interrupted provider session and
+always launches a newly reviewed continuation. **Retry review** starts an eligible failed attempt in
+a fresh worktree.
 
 Attempt history retains lineage, terminal status, bounded output, provider-redacted metadata, and
 token or cost information only when the adapter reports it. Forgeboard does not invent missing usage
@@ -134,9 +145,13 @@ run.
    commit dialog.
 4. For a managed run, complete selected delivery checks and record the required human quality
    approval against that exact clean committed state.
-5. Deliver by fast-forward when possible. When both histories advanced, either create one merge
-   commit that preserves both histories or copy reviewed commits one by one with cherry-pick.
-   Forgeboard stops honestly on conflicts and does not resolve them automatically.
+5. Deliver by fast-forward when possible. When both histories advanced, create one merge commit,
+   combine the reviewed range into one squash commit, rebase the managed branch onto the exact
+   reviewed primary commit, or copy reviewed commits one by one with cherry-pick. Forgeboard leaves
+   authentic conflict state in the affected workspace. For bounded text files, compare Git base,
+   ours, and theirs, edit the merged result inline, and separately review applying and staging that
+   exact content. Forgeboard offers exact reviewed Continue and Abort controls after every conflict
+   is staged; binary, oversized, ignored, and sensitive files stay outside the inline editor.
 6. After a fully merged, clean managed branch is reverified, use reviewed cleanup to remove its
    worktree and branch.
 

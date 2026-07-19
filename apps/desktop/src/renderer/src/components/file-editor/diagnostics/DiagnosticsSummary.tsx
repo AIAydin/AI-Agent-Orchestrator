@@ -3,13 +3,18 @@ import './DiagnosticsSummary.css';
 
 export function DiagnosticsSummary({ state }: { readonly state: FileDiagnosticsState }) {
   if (state.availability === 'loading') {
-    return <span className="file-diagnostics-status">Checking for problems…</span>;
+    return (
+      <span className="file-diagnostics-status" role="status">
+        Checking for problems…
+      </span>
+    );
   }
   if (state.availability === 'unavailable') {
     return (
       <span
         className="file-diagnostics-status"
-        title="This file type has no built-in problem checking."
+        role="status"
+        aria-label="Problem check unavailable: this file type has no built-in problem checking"
       >
         Problem check unavailable
       </span>
@@ -19,7 +24,11 @@ export function DiagnosticsSummary({ state }: { readonly state: FileDiagnosticsS
   const errors = state.items.filter((item) => item.severity === 'error').length;
   const warnings = state.items.filter((item) => item.severity === 'warning').length;
   if (state.items.length === 0) {
-    return <span className="file-diagnostics-status">No problems</span>;
+    return (
+      <span className="file-diagnostics-status" role="status">
+        No problems
+      </span>
+    );
   }
   return (
     <details className="file-diagnostics">

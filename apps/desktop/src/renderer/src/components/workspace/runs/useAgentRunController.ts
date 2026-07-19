@@ -293,17 +293,14 @@ export function useAgentRunController({
     }
   }
 
-  async function controlRun(action: 'interrupt' | 'terminate') {
+  async function controlRun(action: 'pause' | 'continue' | 'interrupt' | 'terminate') {
     const runId = selectedNode?.data.runId;
     if (!runId || !selectedNode) return;
     try {
-      const result =
-        action === 'interrupt'
-          ? await window.forgeboard.runs.interrupt(runId)
-          : await window.forgeboard.runs.terminate(runId);
+      const result = await window.forgeboard.runs[action](runId);
       unwrap(result);
     } catch (cause) {
-      const actionLabel = action === 'interrupt' ? 'interrupt' : 'stop';
+      const actionLabel = action === 'terminate' ? 'stop' : action;
       onError(cause instanceof Error ? cause.message : `Could not ${actionLabel} this run.`);
     }
   }

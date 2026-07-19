@@ -195,11 +195,13 @@ export function summarizeRunEvent(event: RunEventEnvelope): RunEventUpdate {
   if (type === 'lifecycle') {
     const phase = typeof payload?.phase === 'string' ? payload.phase : 'updated';
     const status =
-      phase === 'starting' || phase === 'running'
-        ? 'running'
-        : phase === 'interrupting' || phase === 'terminating'
-          ? 'cancelling'
-          : undefined;
+      phase === 'paused'
+        ? 'paused'
+        : phase === 'starting' || phase === 'running' || phase === 'continuing'
+          ? 'running'
+          : phase === 'interrupting' || phase === 'terminating'
+            ? 'cancelling'
+            : undefined;
     return {
       ...(status ? { status } : {}),
       activity: `Agent ${phase}.`,

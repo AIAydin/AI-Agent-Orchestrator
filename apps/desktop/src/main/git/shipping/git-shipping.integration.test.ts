@@ -177,7 +177,9 @@ describe('managed agent commit delivery', () => {
       'git',
       'ship-agent-commits',
       'failed',
-      expect.objectContaining({ reason: 'required Git shipping audit unavailable' }),
+      expect.objectContaining({
+        reason: 'required Git shipping audit unavailable',
+      }),
     );
     await harness.service.dispose();
   });
@@ -358,6 +360,7 @@ describe('managed agent commit delivery', () => {
         phase: 'authorized-before-apply',
       }),
     );
+
     await harness.service.dispose();
   });
 
@@ -371,7 +374,7 @@ describe('managed agent commit delivery', () => {
     await git(fixture.repository, ['add', '--', 'README.md']);
     await git(fixture.repository, ['commit', '-m', 'Primary merge conflict']);
     const primaryHead = await git(fixture.repository, ['rev-parse', 'HEAD']);
-    const harness = createHarness(fixture, [1]);
+    const harness = createHarness(fixture, [1, 1, 1, 1, 1, 1]);
     const event = liveEvent(113);
 
     const plan = await harness.service.prepareShipping(event.sender.id, {
@@ -416,6 +419,159 @@ describe('managed agent commit delivery', () => {
         conflictedPathCount: 1,
       }),
     );
+    const blockedAbort = await harness.service.prepareConflictRecovery(event.sender.id, {
+      target: { kind: 'primary', projectId: PROJECT_ID },
+      action: 'abort',
+    });
+    harness.appendAudit.mockImplementationOnce(() => {
+      throw new Error('required recovery audit unavailable');
+    });
+    await expect(
+      harness.service.confirmConflictRecovery(event, blockedAbort.planId),
+    ).rejects.toThrow('required recovery audit unavailable');
+    expect(await git(fixture.repository, ['rev-parse', '--verify', 'MERGE_HEAD'])).toBe(sourceHead);
+
+    const abortPlan = await harness.service.prepareConflictRecovery(event.sender.id, {
+      target: { kind: 'primary', projectId: PROJECT_ID },
+      action: 'abort',
+    });
+    expect(abortPlan).toMatchObject({
+      operation: 'merge',
+      action: 'abort',
+      canContinue: false,
+    });
+    await expect(
+      harness.service.confirmConflictRecovery(event, abortPlan.planId),
+    ).resolves.toMatchObject({
+      state: 'completed',
+      conflictedPaths: [],
+      review: { conflicted: false },
+    });
+    expect(await git(fixture.repository, ['rev-parse', 'HEAD'])).toBe(primaryHead);
+    expect(await git(fixture.repository, ['status', '--porcelain'])).toBe('');
+
+    const retryPlan = await harness.service.prepareShipping(event.sender.id, {
+      target: agentTarget(),
+      strategy: 'merge-commit',
+    });
+    await harness.service.confirmShipping(event, retryPlan.planId);
+    const inspection = await harness.service.inspectConflicts({
+      target: { kind: 'primary', projectId: PROJECT_ID },
+    });
+    expect(inspection.files[0]).toMatchObject({
+      path: 'README.md',
+      ours: '# primary merge\n',
+      theirs: '# agent merge\n',
+    });
+    const filePlan = await harness.service.prepareConflictFile(event.sender.id, {
+      target: { kind: 'primary', projectId: PROJECT_ID },
+      path: 'README.md',
+      expectedSha256: inspection.files[0]?.currentSha256 ?? '',
+      content: '# visually resolved\n',
+    });
+    await expect(
+      harness.service.confirmConflictFile(event, filePlan.planId),
+    ).resolves.toMatchObject({
+      stagedPath: 'README.md',
+      inspection: null,
+    });
+    const continuePlan = await harness.service.prepareConflictRecovery(event.sender.id, {
+      target: { kind: 'primary', projectId: PROJECT_ID },
+      action: 'continue',
+    });
+    expect(continuePlan).toMatchObject({
+      operation: 'merge',
+      action: 'continue',
+      canContinue: true,
+    });
+    await expect(
+      harness.service.confirmConflictRecovery(event, continuePlan.planId),
+    ).resolves.toMatchObject({
+      state: 'completed',
+      conflictedPaths: [],
+      review: { conflicted: false },
+    });
+    expect(await readFile(path.join(fixture.repository, 'README.md'), 'utf8')).toBe(
+      '# visually resolved\n',
+    );
+    expect(harness.appendAudit).toHaveBeenCalledWith(
+      'git',
+      'continue-git-operation',
+      'allowed',
+      expect.objectContaining({
+        operation: 'merge',
+        phase: 'authorized-before-apply',
+      }),
+    );
+    await harness.service.dispose();
+  });
+
+  it('creates one identity-bound squash commit from the exact reviewed range', async () => {
+    const fixture = await createFixture();
+    await commitAgentFile(fixture.worktreePath, 'one.txt', 'one\n', 'Agent one');
+    await commitAgentFile(fixture.worktreePath, 'two.txt', 'two\n', 'Agent two');
+    await writeFile(path.join(fixture.repository, 'primary.txt'), 'primary\n');
+    await git(fixture.repository, ['add', '--', 'primary.txt']);
+    await git(fixture.repository, ['commit', '-m', 'Advance primary']);
+    const primaryHead = await git(fixture.repository, ['rev-parse', 'HEAD']);
+    const harness = createHarness(fixture, [1]);
+    const event = liveEvent(211);
+
+    const plan = await harness.service.prepareShipping(event.sender.id, {
+      target: agentTarget(),
+      strategy: 'squash',
+    });
+    const result = await harness.service.confirmShipping(event, plan.planId);
+
+    expect(result).toMatchObject({
+      state: 'completed',
+      strategy: 'squash',
+      headBefore: primaryHead,
+    });
+    const head = await git(fixture.repository, ['rev-parse', 'HEAD']);
+    expect(await git(fixture.repository, ['show', '-s', '--format=%P', head])).toBe(primaryHead);
+    expect(await git(fixture.repository, ['show', '-s', '--format=%an%x00%ae', head])).toBe(
+      'Forgeboard UI\0ui@forgeboard.invalid',
+    );
+    expect(await readFile(path.join(fixture.repository, 'one.txt'), 'utf8')).toBe('one\n');
+    expect(await readFile(path.join(fixture.repository, 'two.txt'), 'utf8')).toBe('two\n');
+    expect((await new RepositoryService().status(fixture.repository)).dirty).toBe(false);
+    await harness.service.dispose();
+  });
+
+  it('rebases the managed branch onto the exact primary commit and then fast-forwards delivery', async () => {
+    const fixture = await createFixture();
+    const originalAgentHead = await commitAgentFile(
+      fixture.worktreePath,
+      'agent.txt',
+      'agent\n',
+      'Agent change',
+    );
+    await writeFile(path.join(fixture.repository, 'primary.txt'), 'primary\n');
+    await git(fixture.repository, ['add', '--', 'primary.txt']);
+    await git(fixture.repository, ['commit', '-m', 'Advance primary']);
+    const primaryHead = await git(fixture.repository, ['rev-parse', 'HEAD']);
+    const harness = createHarness(fixture, [1]);
+    const event = liveEvent(212);
+
+    const plan = await harness.service.prepareShipping(event.sender.id, {
+      target: agentTarget(),
+      strategy: 'rebase',
+    });
+    const result = await harness.service.confirmShipping(event, plan.planId);
+
+    expect(result).toMatchObject({
+      state: 'completed',
+      strategy: 'rebase',
+      headBefore: primaryHead,
+    });
+    const deliveredHead = await git(fixture.repository, ['rev-parse', 'HEAD']);
+    expect(deliveredHead).toBe(await git(fixture.worktreePath, ['rev-parse', 'HEAD']));
+    expect(deliveredHead).not.toBe(originalAgentHead);
+    expect(await git(fixture.repository, ['show', '-s', '--format=%P', deliveredHead])).toBe(
+      primaryHead,
+    );
+    expect(await readFile(path.join(fixture.repository, 'agent.txt'), 'utf8')).toBe('agent\n');
     await harness.service.dispose();
   });
 

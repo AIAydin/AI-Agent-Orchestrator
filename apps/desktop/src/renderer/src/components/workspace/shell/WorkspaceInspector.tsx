@@ -11,6 +11,7 @@ import type {
 } from '../../../../../shared/application/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
+import { WorkspaceTooltip } from './tooltips/WorkspaceTooltip.js';
 import { DeclarativeExtensionInspector } from '../../extensions/DeclarativeExtensionInspector.js';
 import { PreviewNodePanel } from '../../preview/PreviewNodePanel.js';
 import { TypedEdgeInspector } from '../canvas/TypedEdgeInspector.js';
@@ -95,7 +96,7 @@ interface WorkspaceInspectorProps {
   onDeleteSelected: () => void;
   onRunInputChange: (value: string) => void;
   onSendRunInput: (explicitInput?: string) => void;
-  onControlRun: (action: 'interrupt' | 'terminate') => void;
+  onControlRun: (action: 'pause' | 'continue' | 'interrupt' | 'terminate') => void;
   onPrepareRun: () => void;
   onRetryAgentAttempt: (attempt: RunHistorySummary) => void;
   onResumeAgentAttempt: (attempt: RunHistorySummary) => void;
@@ -141,14 +142,16 @@ export function WorkspaceInspector(props: WorkspaceInspectorProps) {
           </small>
         </div>
         {(selectedNode || selectedEdge) && (
-          <button
-            className="icon-button"
-            type="button"
-            onClick={props.onClearSelection}
-            aria-label="Clear selection"
-          >
-            <X size={15} />
-          </button>
+          <WorkspaceTooltip content="Clear the selected canvas item">
+            <button
+              className="icon-button"
+              type="button"
+              onClick={props.onClearSelection}
+              aria-label="Clear selection"
+            >
+              <X size={15} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
         )}
       </header>
       {selectedNode ? (
@@ -453,24 +456,30 @@ function NodeInspector(
         onDiscardRejected={props.onDiscardRejectedComment}
       />
       <div className="inspector-actions">
-        <button
-          type="button"
-          disabled={props.selectedNodeLockedByGroup || props.collaborationGraphReadOnly}
-          title={
+        <WorkspaceTooltip
+          content={
             props.collaborationGraphReadOnly
               ? 'A view-only role cannot change node locks.'
               : props.selectedNodeLockedByGroup
                 ? 'Unlock the group frame that contains this node before changing its lock.'
-                : undefined
+                : selectedNode.data.locked
+                  ? 'Unlock this node'
+                  : 'Lock this node'
           }
-          onClick={() => {
-            onRecord();
-            onUpdateSelected({ locked: !selectedNode.data.locked });
-          }}
         >
-          {selectedNode.data.locked ? <Unlock size={14} /> : <Lock size={14} />}
-          {selectedNode.data.locked ? 'Unlock' : 'Lock'}
-        </button>
+          <button
+            type="button"
+            aria-label={selectedNode.data.locked ? 'Unlock' : 'Lock'}
+            disabled={props.selectedNodeLockedByGroup || props.collaborationGraphReadOnly}
+            onClick={() => {
+              onRecord();
+              onUpdateSelected({ locked: !selectedNode.data.locked });
+            }}
+          >
+            {selectedNode.data.locked ? <Unlock size={14} /> : <Lock size={14} />}
+            {selectedNode.data.locked ? 'Unlock' : 'Lock'}
+          </button>
+        </WorkspaceTooltip>
         <button
           type="button"
           disabled={props.collaborationGraphReadOnly}
@@ -479,20 +488,26 @@ function NodeInspector(
           <Copy size={14} />
           Duplicate
         </button>
-        <button
-          type="button"
-          className="danger-text"
-          disabled={configurationReadOnly || props.selectedNodeDeletionProtected}
-          title={
+        <WorkspaceTooltip
+          content={
             props.selectedNodeDeletionProtected && !configurationReadOnly
               ? 'Unlock protected members or connected locked nodes before deleting this node.'
-              : undefined
+              : configurationReadOnly
+                ? 'A view-only role cannot delete this node.'
+                : 'Delete this node'
           }
-          onClick={props.onDeleteSelected}
         >
-          <Trash2 size={14} />
-          Delete
-        </button>
+          <button
+            type="button"
+            className="danger-text"
+            aria-label="Delete"
+            disabled={configurationReadOnly || props.selectedNodeDeletionProtected}
+            onClick={props.onDeleteSelected}
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
+        </WorkspaceTooltip>
       </div>
     </div>
   );

@@ -23,6 +23,7 @@ import type {
 import { settingsDraftValidationIssues } from '../../../../../shared/settings/draft-validation.js';
 import { unwrap } from '../../../lib/ipc.js';
 import { ExtensionSettings } from '../../extensions/ExtensionSettings.js';
+import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 import { AgentsSettings } from '../agents/AgentsSettings.js';
 import { AppearanceSettings } from '../AppearanceSettings.js';
 import { CheckSettings } from '../CheckSettings.js';
@@ -169,19 +170,20 @@ export function SettingsPanel(props: SettingsPanelProps) {
     }
   }
 
+  const saveBlockedReason =
+    permissionIssues[0] ??
+    environmentIssues[0] ??
+    draftIssues[0] ??
+    dockerIssue ??
+    folderReadiness.blockingIssues[0] ??
+    agentReadiness.blockingIssues[0] ??
+    commandReadiness.blockingIssues[0] ??
+    undefined;
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    const validationIssue =
-      permissionIssues[0] ??
-      environmentIssues[0] ??
-      draftIssues[0] ??
-      dockerIssue ??
-      folderReadiness.blockingIssues[0] ??
-      agentReadiness.blockingIssues[0] ??
-      commandReadiness.blockingIssues[0] ??
-      undefined;
-    if (validationIssue !== undefined) {
-      setNotice(`Settings were not saved: ${validationIssue}`);
+    if (saveBlockedReason !== undefined) {
+      setNotice(`Settings were not saved: ${saveBlockedReason}`);
       return;
     }
     await perform(async () => {
@@ -209,16 +211,20 @@ export function SettingsPanel(props: SettingsPanelProps) {
               <p>Change how Forgeboard works here. Unavailable features are clearly labeled.</p>
             </div>
           </div>
-          <button
-            ref={closeButton}
-            className="icon-button"
-            type="button"
-            disabled={busy}
-            onClick={props.onClose}
-            aria-label="Close settings"
+          <WorkspaceTooltip
+            content={busy ? 'Wait for settings to finish saving' : 'Close settings'}
           >
-            <X size={18} aria-hidden="true" />
-          </button>
+            <button
+              ref={closeButton}
+              className="icon-button"
+              type="button"
+              disabled={busy}
+              onClick={props.onClose}
+              aria-label="Close settings"
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
         </header>
 
         <div className="settings-layout">
@@ -451,48 +457,27 @@ export function SettingsPanel(props: SettingsPanelProps) {
             >
               <RotateCcw size={15} /> Restore defaults
             </button>
-            <button
-              className="button primary"
-              type="submit"
-              disabled={
-                busy ||
-                dockerIssue !== undefined ||
-                permissionIssues.length > 0 ||
-                environmentIssues.length > 0 ||
-                draftIssues.length > 0 ||
-                folderReadiness.blockingIssues.length > 0 ||
-                agentReadiness.blockingIssues.length > 0 ||
-                commandReadiness.blockingIssues.length > 0
-              }
-              title={
-                permissionIssues[0] ??
-                environmentIssues[0] ??
-                draftIssues[0] ??
-                dockerIssue ??
-                folderReadiness.blockingIssues[0] ??
-                agentReadiness.blockingIssues[0] ??
-                commandReadiness.blockingIssues[0]
-              }
-              aria-describedby={
-                permissionIssues.length > 0
-                  ? 'settings-permission-validation'
-                  : environmentIssues.length > 0
-                    ? 'settings-environment-validation'
-                    : draftIssues.length > 0
-                      ? 'settings-draft-validation'
-                      : dockerIssue !== undefined
-                        ? 'settings-docker-validation'
-                        : folderReadiness.blockingIssues.length > 0
-                          ? 'settings-folder-validation'
-                          : agentReadiness.blockingIssues.length > 0
-                            ? 'settings-agent-validation'
-                            : commandReadiness.blockingIssues.length > 0
-                              ? 'settings-command-validation'
-                              : undefined
-              }
+            <WorkspaceTooltip
+              content={saveBlockedReason ?? (busy ? 'Settings are being saved' : 'Save settings')}
             >
-              <Save size={15} /> Save settings
-            </button>
+              <button
+                className="button primary"
+                type="submit"
+                aria-label="Save settings"
+                disabled={
+                  busy ||
+                  dockerIssue !== undefined ||
+                  permissionIssues.length > 0 ||
+                  environmentIssues.length > 0 ||
+                  draftIssues.length > 0 ||
+                  folderReadiness.blockingIssues.length > 0 ||
+                  agentReadiness.blockingIssues.length > 0 ||
+                  commandReadiness.blockingIssues.length > 0
+                }
+              >
+                <Save size={15} /> Save settings
+              </button>
+            </WorkspaceTooltip>
           </div>
         </footer>
       </form>

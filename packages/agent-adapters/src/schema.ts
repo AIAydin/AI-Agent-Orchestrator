@@ -361,10 +361,13 @@ export const AgentSessionCapabilitiesSchema = AgentCapabilitiesSchema.pick({
   interactiveInput: true,
   interrupt: true,
   terminate: true,
-  pause: true,
   resume: true,
 })
-  .extend({ source: z.enum(['manifest', 'probe']) })
+  .extend({
+    /** True only when the concrete runtime can suspend and continue this exact process tree. */
+    pause: z.boolean(),
+    source: z.enum(['manifest', 'probe']),
+  })
   .strict();
 export type AgentSessionCapabilities = z.infer<typeof AgentSessionCapabilitiesSchema>;
 
@@ -660,7 +663,17 @@ const EventBaseSchema = z.object({
 
 export const AgentLifecycleEventSchema = EventBaseSchema.extend({
   type: z.literal('lifecycle'),
-  phase: z.enum(['starting', 'running', 'input-sent', 'interrupting', 'terminating', 'exited']),
+  phase: z.enum([
+    'starting',
+    'running',
+    'input-sent',
+    'pausing',
+    'paused',
+    'continuing',
+    'interrupting',
+    'terminating',
+    'exited',
+  ]),
   detail: z.string().optional(),
 }).strict();
 

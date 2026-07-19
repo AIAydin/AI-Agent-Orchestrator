@@ -108,7 +108,9 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
     await installNativeDialogHarness(electronApp);
 
     let settings = await openGitConnectionsSettings(page);
-    await expect(settings.getByLabel('Project')).toContainText('forgeboard-demo');
+    await expect(settings.getByRole('combobox', { name: 'Project', exact: true })).toContainText(
+      'forgeboard-demo',
+    );
 
     await test.step('network addition cancellation opens no connection and approval adds it', async () => {
       await settings.getByLabel('Remote name').fill('origin');
@@ -271,7 +273,7 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         buttons: ['Cancel', 'Use automatic GitHub CLI'],
       });
       expect(nativeDialogText(automatic)).toContain('Source: found automatically on this computer');
-      await expect(settings.locator('.git-connections-cli-status')).toContainText('automatic');
+      await expect(settings.locator('.git-connections-cli-status')).toContainText('Automatic');
       expect(await readGhArguments(fakeGhLogPath)).toEqual([['--version']]);
     });
 

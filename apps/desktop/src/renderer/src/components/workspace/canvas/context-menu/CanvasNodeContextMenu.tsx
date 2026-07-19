@@ -1,7 +1,8 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, Copy, Eye, Lock, Play, Trash2, Unlock } from 'lucide-react';
 
 import type { WorkshopNode } from '../CanvasNode.js';
+import { WorkspaceTooltip } from '../../shell/tooltips/WorkspaceTooltip.js';
 import './context-menu.css';
 
 export interface CanvasNodeContextMenuPosition {
@@ -162,16 +163,13 @@ function MenuItem({
   readonly onRun: () => void;
   readonly onClose: () => void;
 }) {
-  const reasonId = useId();
-  return (
+  const item = (
     <button
       type="button"
       role="menuitem"
       aria-label={label}
       className={danger ? 'danger-text' : undefined}
       disabled={disabled}
-      title={disabled ? reason : undefined}
-      aria-describedby={disabled && reason ? reasonId : undefined}
       onClick={() => {
         onRun();
         onClose();
@@ -179,13 +177,9 @@ function MenuItem({
     >
       {children}
       <span>{label}</span>
-      {disabled && reason ? (
-        <span id={reasonId} className="sr-only">
-          {reason}
-        </span>
-      ) : null}
     </button>
   );
+  return disabled && reason ? <WorkspaceTooltip content={reason}>{item}</WorkspaceTooltip> : item;
 }
 
 function handleMenuKey(event: React.KeyboardEvent<HTMLDivElement>, onClose: () => void): void {

@@ -1,15 +1,31 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const arguments_ = process.argv.slice(2);
+const oauthStatePath = fileURLToPath(new URL('./fake-codex-reviewer.oauth', import.meta.url));
 if (arguments_.includes('--version')) {
   process.stdout.write('codex-cli 1.2.3\n');
   process.exit(0);
 }
 if (arguments_.includes('--help')) {
-  process.stdout.write('codex resume --model\n');
+  process.stdout.write('codex resume --model --sandbox read-only workspace-write\n');
+  process.exit(0);
+}
+if (arguments_[0] === 'login' && arguments_[1] === 'status') {
+  process.stdout.write(existsSync(oauthStatePath) ? 'Logged in with OpenAI\n' : 'Not logged in\n');
+  process.exit(existsSync(oauthStatePath) ? 0 : 1);
+}
+if (arguments_[0] === 'login') {
+  writeFileSync(oauthStatePath, 'connected\n', { mode: 0o600 });
+  process.stdout.write('OpenAI sign-in complete\n');
+  process.exit(0);
+}
+if (arguments_[0] === 'logout') {
+  rmSync(oauthStatePath, { force: true });
+  process.stdout.write('OpenAI sign-out complete\n');
   process.exit(0);
 }
 

@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -111,6 +111,18 @@ async function allEvents(events: AsyncIterable<AgentEvent>): Promise<AgentEvent[
   const result: AgentEvent[] = [];
   for await (const event of events) result.push(event);
   return result;
+}
+
+async function waitForFileGrowth(filePath: string, minimumLength: number): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      if ((await readFile(filePath, 'utf8')).length >= minimumLength) return;
+    } catch {
+      // The child may not have created the marker yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for the child process marker to grow.');
 }
 
 describe('adapter manifests', () => {
@@ -309,7 +321,7 @@ describe('launch preparation and execution', () => {
       interactiveInput: true,
       interrupt: true,
       terminate: true,
-      pause: false,
+      pause: process.platform !== 'win32',
       resume: false,
       source: 'manifest',
     });
@@ -346,6 +358,90 @@ describe('launch preparation and execution', () => {
     ).toThrow(/pause/u);
   });
 
+  it.runIf(process.platform !== 'win32')(
+    'suspends and continues the exact host process group without restarting it',
+    async () => {
+      const cwd = await temporaryDirectory();
+      const marker = path.join(cwd, 'ticks.txt');
+      const descendantMarker = path.join(cwd, 'descendant-ticks.txt');
+      const manifest = nodeManifest({
+        invocation: {
+          runtime: 'pipes',
+          launchArguments: [
+            '-e',
+            'const fs=require("node:fs"),{spawn}=require("node:child_process");const [marker,descendant]=process.argv.slice(1);setInterval(()=>fs.appendFileSync(marker,"x"),20);spawn(process.execPath,["-e",`const fs=require("node:fs");setInterval(()=>fs.appendFileSync(${JSON.stringify(descendant)},"x"),20)`],{stdio:"ignore"})',
+            marker,
+            descendantMarker,
+            '{extraArgs}',
+            '{prompt}',
+          ],
+          promptTransport: 'argument',
+          modelArguments: [],
+          context: { strategy: 'prompt-references' },
+          permissionArguments: { custom: [] },
+          output: 'text',
+        },
+      });
+      const adapter = new CliAgentAdapter(manifest);
+      const session = await adapter.launch(
+        adapter.prepareLaunch({ prompt: 'tick', cwd, permissionProfile: permission(cwd) }),
+      );
+      expect(session.capabilities.pause).toBe(true);
+      expect(typeof session.pause).toBe('function');
+      expect(typeof session.continue).toBe('function');
+      const originalPid = session.pid;
+
+      await waitForFileGrowth(marker, 1);
+      await waitForFileGrowth(descendantMarker, 1);
+      session.pause?.();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const pausedLength = (await readFile(marker, 'utf8')).length;
+      const pausedDescendantLength = (await readFile(descendantMarker, 'utf8')).length;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect((await readFile(marker, 'utf8')).length).toBe(pausedLength);
+      expect((await readFile(descendantMarker, 'utf8')).length).toBe(pausedDescendantLength);
+
+      session.continue?.();
+      await waitForFileGrowth(marker, pausedLength + 1);
+      await waitForFileGrowth(descendantMarker, pausedDescendantLength + 1);
+      expect(session.pid).toBe(originalPid);
+      session.pause?.();
+      session.terminate();
+      await session.result;
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
+    'continues a paused process group before delivering a real interrupt',
+    async () => {
+      const cwd = await temporaryDirectory();
+      const manifest = nodeManifest({
+        invocation: {
+          runtime: 'pipes',
+          launchArguments: [
+            '-e',
+            'process.on("SIGINT",()=>process.exit(0));setInterval(()=>{},1000)',
+            '{extraArgs}',
+            '{prompt}',
+          ],
+          promptTransport: 'argument',
+          modelArguments: [],
+          context: { strategy: 'prompt-references' },
+          permissionArguments: { custom: [] },
+          output: 'text',
+        },
+      });
+      const adapter = new CliAgentAdapter(manifest);
+      const session = await adapter.launch(
+        adapter.prepareLaunch({ prompt: 'wait', cwd, permissionProfile: permission(cwd) }),
+      );
+
+      session.pause?.();
+      session.interrupt();
+      await expect(session.result).resolves.toMatchObject({ status: 'interrupted' });
+    },
+  );
+
   it('preserves ANSI styling semantics from a real pseudo-terminal stream', async () => {
     const cwd = await temporaryDirectory();
     const manifest = nodeManifest({
@@ -368,6 +464,7 @@ describe('launch preparation and execution', () => {
       prepareAgentLaunch(manifest, { prompt: 'ansi', cwd, permissionProfile: permission(cwd) }),
     );
     const eventsPromise = allEvents(session.events);
+    expect(session.capabilities.pause).toBe(process.platform !== 'win32');
     await expect(session.result).resolves.toMatchObject({ status: 'succeeded' });
     const events = await eventsPromise;
     const output = events

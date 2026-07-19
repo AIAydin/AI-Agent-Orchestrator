@@ -71,7 +71,7 @@ test('the primary local-agent path and appearance controls work with only the ke
       await page.keyboard.type('Create the deterministic keyboard-only workflow output.');
       await pressFocused(
         page,
-        runConfiguration.getByRole('button', { name: 'Review & run' }),
+        runConfiguration.getByRole('button', { name: 'Review and run Agent' }),
         'Enter',
       );
 
@@ -144,6 +144,11 @@ test('the primary local-agent path and appearance controls work with only the ke
 });
 
 async function runPaletteCommand(page: Page, command: string): Promise<void> {
+  // Electron can finish a native focus transition after the first window becomes visible. Ensure
+  // Playwright's keyboard event targets the application window; the product path remains entirely
+  // keyboard-operated.
+  await page.bringToFront();
+  await expect.poll(async () => await page.evaluate(() => document.hasFocus())).toBe(true);
   await page.keyboard.press(`${shortcutModifier}+K`);
   const palette = page.getByRole('dialog', { name: 'Command palette' });
   await expect(palette).toBeVisible();

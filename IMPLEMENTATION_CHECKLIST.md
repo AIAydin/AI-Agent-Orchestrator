@@ -40,8 +40,8 @@ not be reclassified as future work.
       denylist, redaction, and high-friction per-file override.
 - [x] Explicit context manifest showing receiving agent/provider and exact attached files.
 - [x] Permission profiles: Plan/read-only, Worktree write, Docker isolated, and Custom.
-- [ ] Scoped/revocable approvals and impact-specific confirmations for external/destructive actions.
-- [ ] Append-only redacted audit log for all required security and outbound events.
+- [x] Scoped/revocable approvals and impact-specific confirmations for external/destructive actions.
+- [x] Append-only redacted audit log for all required security and outbound events.
 - [x] Renderer isolation, narrow validated IPC, strict CSP, and navigation/window/download controls.
 - [x] Sandboxed preview surface and sanitized Markdown, Mermaid, SVG, and imports.
 - [x] Data & Privacy screen with locations, integrations, retention, backup configuration/health,
@@ -69,8 +69,8 @@ not be reclassified as future work.
 - [x] Dirty-primary protection and worktree branch/ahead/behind/dirty UI.
 - [x] Diff parsing, file navigation, unified/split views, whitespace controls, line comments, and stats.
 - [x] Predictable accept/reject individual hunks while preserving unselected changes.
-- [ ] Commit, compare agents/base, rename, archive, external editor, and safe cleanup.
-- [ ] Merge, squash, rebase, cherry-pick, and visual conflict resolution with explicit approvals.
+- [x] Commit, compare agents/base, rename, archive, external editor, and safe cleanup.
+- [x] Merge, squash, rebase, cherry-pick, and visual conflict resolution with explicit approvals.
 - [x] Optional `gh` auth/repository/PR/CI integration with push and PR impact confirmation.
 
 ## Desktop shell and onboarding
@@ -85,15 +85,15 @@ not be reclassified as future work.
 - [x] Responsive top command bar, left project rail, canvas, right inspector, and activity drawer.
 - [x] Light/dark/system themes, density/motion controls, contrast, focus, labels, and reduced motion.
 - [x] Guided first-run tour, searchable local documentation, shortcuts, privacy, and troubleshooting.
-- [ ] Command palette, notifications, contextual menus, tooltips, and robust empty/error/loading states.
+- [x] Command palette, notifications, contextual menus, tooltips, and robust empty/error/loading states.
 
 ## Infinite canvas and nodes
 
 - [x] Pan/zoom, minimap, search, fit, box/multi-select, snap/guides, groups/frames, locking,
       comments, copy/paste/duplicate, autosave, and keyboard navigation.
-- [ ] Extensible registry and shared title/color/icon/resize/collapse/lock/duplicate/delete/group/comment/
+- [x] Extensible registry and shared title/color/icon/resize/collapse/lock/duplicate/delete/group/comment/
       status/run-history/inspector behavior.
-- [ ] Agent node.
+- [x] Agent node.
 - [x] Product brief node with Markdown, checklists, attachments, criteria, versions, and variables.
 - [x] Task node with priority, assignee, dependencies, criteria, files, status, and execution.
 - [x] Live Monaco file node with history, dirty state, reveal, and context drag.
@@ -185,7 +185,7 @@ not be reclassified as future work.
       checksums; signing/notarization activates when repository secrets are configured and otherwise
       produces clearly identified unsigned development artifacts.
 - [x] Packaged desktop smoke test passes.
-- [ ] No required TODOs, placeholders, fake success states, dead controls, or known critical/high
+- [x] No required TODOs, placeholders, fake success states, dead controls, or known critical/high
       vulnerabilities remain.
 
 ## Final documentation and audit
@@ -193,7 +193,8 @@ not be reclassified as future work.
 - [x] Complete README commands and user documentation.
 - [x] Complete architecture, security/threat model, privacy, adapter/extension, collaboration,
       signing, and troubleshooting documentation.
-- [ ] Audit every definition-of-done item against authoritative current-state evidence.
+- [x] Audit every definition-of-done item against authoritative current-state evidence in
+      `docs/audits/DEFINITION_OF_DONE.md`.
 - [ ] Prepare final handoff with feature summary, directory map, exact commands, test counts,
       security/privacy disclosure, optional external setup, and only genuinely non-blocking ideas.
 
@@ -1598,10 +1599,15 @@ unchecked when only a subset of their required behavior has proof.
   the inspector type label; persisted definitions remain recoverable when an extension is missing,
   and extension refresh preserves a user-selected accent colour. Every selected node also receives
   the shared local/shared comment surfaces and a bounded, locally restored workflow-run history.
-  Focused registry, hydration, history, canvas, and inspector tests passed. Checklist item 94 remains
-  open because group frames still use the intentionally flat ordinary-member model and cannot yet be
-  safely nested without coordinated cycle, inherited-lock, movement, layout, auto-fit, collapse, and
-  deletion semantics.
+  Group frames now safely nest while retaining flat absolute coordinates: membership reconciliation
+  selects one deterministic parent and cuts imported cycles, locks and collapse project through all
+  descendants, mouse and keyboard movement shift each descendant exactly once, nested layout carries
+  subtrees, and auto-fit propagates from deepest changed frames through automatic ancestors. Deleting
+  a frame reparents its direct children without moving them; copy/duplicate and group-run scopes use
+  the full descendant closure. The inspector offers frame membership but disables cycle-producing
+  ancestors, while typed persistence/import and collaboration metadata preserve and reconcile frame
+  parents. Focused canvas, inspector, persistence, collaboration, workflow-model, and runtime suites
+  cover these semantics, closing checklist item 94.
 - 2026-07-19: audit-before-effect coverage was expanded across Agent, terminal, preview, project-
   check, provider-auth, readiness, and GitHub CLI subprocess launches; collaboration awareness,
   update, resynchronization, and delivery-confirmation transport effects; review-note deletion;
@@ -1623,9 +1629,30 @@ unchecked when only a subset of their required behavior has proof.
   commits reconciliation, its audit event, and intent deletion atomically, and durably fsyncs the
   intent before the filesystem commit point. Six intent-recovery tests, the focused lifecycle engine
   test, and both combined worktree IPC tests passed; the two-test lifecycle load run also passed with
-  its explicit 90-second load budget. Checklist item 72 remains open for user-selected external-
-  editor handoff, and item 73 remains open for the complete UI-backed squash, rebase, and visual
-  conflict-resolution journey.
+  its explicit 90-second load budget. The external handoff now adds an optional UI-selected and
+  resettable application executable. Main captures its canonical file identity, presents the exact
+  executable and one literal main-owned workspace argument in a cancel-default native disclosure,
+  revalidates the application, workspace, and window after approval, persists a path-free allowed
+  audit before launching directly without a shell, and refuses stale or unauditable launches. This
+  completes checklist item 72; item 73 remains open for the complete UI-backed squash, rebase, and
+  visual conflict-resolution journey.
+- 2026-07-19: delivery now adds UI-selected squash and rebase alongside fast-forward, merge-commit,
+  and cherry-pick. Squash creates one identity-bound commit and retains a durable Git-directory
+  recovery marker until commit or abort; rebase binds the managed branch and exact reviewed primary
+  OID before replaying and fast-forwarding. Conflict results identify the authentic affected
+  workspace, and a dedicated recovery panel prepares content-bound Continue or Abort plans with
+  cancel-default native confirmation, stale revalidation, and required audit immediately before the
+  Git effect. Focused proof passed 38 renderer/contract/preload unit tests, 13 desktop delivery
+  integration tests, 20 Git-engine integration tests, both package typechecks, and the 1,321-file
+  structure gate. The visual resolver now loads bounded base, ours, and theirs text from the
+  authentic conflicted index, permits an explicit side choice or manual merged result, and binds a
+  separately reviewed apply-and-stage plan to the current content hash. Main refuses ignored,
+  sensitive, oversized, binary, symlinked, stale, or out-of-root content and persists path-free audit
+  authorization immediately before both the atomic write and Git stage. A production-built Electron
+  journey passed through provider-owned OAuth connection, a real reviewer-gated workflow, required
+  Test evidence, human quality approval, divergent merge delivery, authentic conflict, inline
+  resolution, native-confirmed staging and Continue, and a clean primary checkout with the reviewed
+  content. This completes checklist item 73.
 - 2026-07-19: the command bar now uses one keyboard-accessible managed tooltip primitive for Undo,
   Redo, Fit, Notifications, and Settings, including focus/hover behavior and accessible descriptions.
   Focused tooltip and command-bar tests passed. Checklist item 88 remains open for equivalent
@@ -1648,3 +1675,116 @@ unchecked when only a subset of their required behavior has proof.
   build through `corepack pnpm verify`. The production dependency audit reported no known
   vulnerabilities. A fresh unsigned macOS arm64 ZIP, DMG, and unpacked application were generated;
   the packaged first-run, safe-default, demo-project, and real deterministic-agent smoke passed.
+- 2026-07-19: the current main-process effect inventory was repeated across direct subprocess,
+  network/browser, filesystem, SQLite, extension-registry, project-creation, export, recovery,
+  retention, and privacy-reset consumers. Settings saves now persist redacted authorization before
+  any setting or retention mutation; lowering transcript, audit, or snapshot retention requires a
+  second cancel-default native warning that enumerates the exact reductions. Settings and repair-
+  evidence exports, extension install/update and privacy purge, project creation/demo creation, and
+  project Git initialization now also persist their required event before the first external or
+  destructive effect, with focused audit-failure tests proving no write, trust transition, registry
+  copy/purge, project directory, Git metadata, service reset, or storage deletion occurs. Delete-all
+  now records its final authorization immediately before service reset and deliberately erases that
+  event with the audit table, reconciling audit-before-effect with the user's promise to erase all
+  Forgeboard local data. Checklist items 43 and 44 remain open: startup database restore/quarantine
+  can mutate recovery files before the restored audit database is available and currently relies on
+  its durable recovery journal, ordinary compare-and-swap project-file saves still need an explicit
+  policy decision on security-audit/impact-confirmation scope, and filesystem-effect coverage does
+  not yet have a repository-wide architecture gate equivalent to the outbound-network gate.
+- 2026-07-19: checklist item 88's renderer inventory was extended across the Welcome and moved-
+  project routes, project create/clone dialog, command palette, Settings shell, Git review and agent
+  comparison, workspace inspector and attempt history, rail search, and file-tab workspace. Their
+  compact primary controls now share the keyboard/hover `WorkspaceTooltip`, including focusable
+  explanations for disabled busy actions, while recent-project, file-tab, and rail no-result states
+  are explicitly announced and the rail status indicator no longer relies on a mouse-only native
+  title. The focused renderer run passed 85 of 86 tests; its sole failure is the concurrently added
+  settings-manifest entry changing the existing expected count from 57 to 58, outside this slice.
+  Desktop strict typecheck, the 1,311-file structure gate, and diff whitespace validation passed.
+  Item 88 remains open: the exhaustive inventory still identifies compact controls in extension
+  review, permission root/allowlist editing, Git-connection cards, and terminal launch review, plus
+  disabled-action native titles in setup, file editing, Agent nodes, privacy recovery, and whiteboard
+  tools that need the same managed tooltip treatment and route-level state verification.
+- 2026-07-19: the Agent node gained real same-process Pause and Continue controls backed by
+  main-owned POSIX process-group suspension. Host pipe launches create a dedicated group, and both
+  pipe and PTY launches advertise pause only after the owned child PID and matching process-group ID
+  are signalable; Windows, Docker, extension sessions, and any unverifiable group fail closed with
+  an honest unavailable control. Pause and Continue have
+  dedicated owner-checked, collaboration-authorized IPC routes, never use stdin or restart a
+  provider session, persist exact running/paused transitions, block buffered input while paused, and
+  recover a restart-stale paused child as lost. Interrupt and termination first continue a paused
+  group and then signal the complete group so descendants cannot escape supervision. Real-process
+  coverage proved parent and descendant output both stop, resume on the same PID, and terminate from
+  pause; a separate test proved interruption from pause. The focused slice passed 106 unit tests and
+  23 Electron compatibility integration tests, desktop and adapter strict typechecks, zero-warning
+  focused lint, and the 1,319-file structure gate. This closes checklist item 96.
+- 2026-07-19: checklist item 88's second renderer tranche replaced native-title-only explanations
+  in extension review, permission root and executable editors, file tabs and external-open actions,
+  Agent live and historical attempt controls, terminal launch review and launch admission, privacy
+  backup/recovery actions, and whiteboard tools with the shared keyboard/hover tooltip. Disabled
+  actions now expose a focusable reason, and extension, permission, file-diagnostic, file-failure,
+  recovery, and read-only-file loading/empty/error states use explicit status or alert semantics.
+  Ten focused files passed all 37 tests; the subsequent permission/Agent/recovery rerun passed all
+  12 tests. Focused zero-warning lint, the 1,319-file structure gate, and diff whitespace validation
+  and desktop strict typecheck passed. Item 88 remains open after re-inventory: Git review and
+  connection controls were intentionally left to the active delivery tranche, and non-Git
+  native-title affordances remain in safe Markdown links, project-tree drag guidance, canvas and
+  context-menu status/actions, workflow/status indicators, and several workspace command/inspector
+  controls. Setup `ChoiceCard`, Settings `SettingsSection`, file-failure, and test-result `title`
+  occurrences were verified as semantic component headings rather than native tooltip attributes.
+- 2026-07-19: checklist item 88's final non-Git renderer tranche replaced native-title-only link
+  safety states, project-file drag guidance, canvas run/collapse and context-menu reasons, group
+  membership locks, collaborator presence, workflow and workspace status, command-bar workflow
+  actions, inspector lock/delete controls, Settings save validation, and shortened file hashes with
+  the managed keyboard/hover tooltip and explicit status labels. Disabled actions remain focusably
+  explained, while safe Markdown links now distinguish blocked and unavailable states without
+  pretending they can open. The focused final run passed all 119 tests across 13 files; focused
+  zero-warning lint, desktop strict typecheck, the 1,323-file structure gate, and diff whitespace
+  validation passed. Item 88 remains open only for the active Git delivery tranche's native-title
+  affordances in `GitFileSidebar`, `GitReviewSummary`, `GitBaseComparisonPanel`, and
+  `GitDeliveryReadinessPanel`. The remaining renderer `title` occurrences were rechecked as semantic
+  component headings/data passed to Settings sections, setup choice cards, workflow decisions and
+  terminals, test results, and Git review disclosure/state components rather than HTML tooltip
+  attributes.
+- 2026-07-19: the security effect inventory is now closed and mechanically enforced. The TypeScript
+  AST gate enumerates every mutation-capable Electron, child-process, filesystem, SQLite, and global
+  process-signal capability acquired by desktop main, rejects namespace/default/CommonJS/dynamic/
+  re-export bypasses, and requires a reviewed policy for each owner module. Its two exceptions are
+  exact allowlists rather than open-ended labels: the direct project-editor Save is an ordinary
+  user-authored atomic compare-and-swap guarded by canonical containment, file identity, and the
+  opened content hash; pre-database startup recovery is restricted to seven database-recovery
+  modules whose private fsynced journal precedes primary replacement and whose user-selected restore
+  remains cancel-default. The separate outbound architecture gate still enumerates Git clone,
+  Docker pull, update, collaboration, and GitHub transports behind owner-bound permits. Together
+  with fail-closed pre-effect tests for launches, provider auth, extensions, projects, settings and
+  retention, exports/backups, collaboration delivery, Git mutation/shipping, recovery, and privacy
+  deletion, plus chained redaction/immutability/retention tests, this closes checklist items 43 and 44. The capability, outbound, approval, audit-integrity, privacy, settings, extension, and project
+  suites passed all 101 focused tests across ten files.
+- 2026-07-19: the final four Git-owned native-title affordances now use the same managed,
+  keyboard-accessible tooltip as the rest of the renderer. Whole-file stage/unstage actions expose
+  both their normal purpose and an honest focusable busy reason; tracked-line summary scope, full
+  base/head identifiers, and the delivery source fingerprint remain available on hover and keyboard
+  focus without relying on native browser titles. Four focused files passed all 28 tests, including
+  new description bindings and disabled-state assertions. Desktop strict typecheck, focused
+  zero-warning lint and formatting, the 1,327-file structure gate, and diff whitespace validation
+  passed. A renderer-wide inventory now finds zero native HTML `title` attributes. Every remaining
+  `title` match is a verified semantic component prop for headings, workflow decisions/terminals,
+  test results, or Git disclosure/state content. Together with the previously recorded route-level
+  command palette, notification, context-menu, empty, error, loading, read-only, and unavailable
+  state evidence, this closes checklist item 88.
+- 2026-07-19: the integrated final source tree passed the 1,338-file structure gate, formatting,
+  zero-warning lint, strict typechecking, 2,634 unit tests across 405 files, 334 integration tests
+  across 37 files, three documentation tests, three production-control gate tests, and every
+  production build. All 34 production-built Electron journeys passed together in one complete run,
+  including UI-only first run,
+  OAuth provider connection, Agent pause/input/retry recovery, nested canvas behavior, durable
+  restart state, settings/privacy confirmations, reviewed workflow evidence, GitHub delivery, and
+  inline conflict resolution. Adversarial review also proved that conflict approvals are revoked
+  across privacy/shutdown resets, rebound to the complete current target, and stage only the exact
+  reviewed bytes even when the worktree races after approval. The production dependency audit
+  reported no known vulnerabilities;
+  the production marker/control audit found no required TODO, fake-success, placeholder, stub, or
+  inert-button blocker. A fresh unsigned macOS arm64 ZIP, DMG, and unpacked application were built,
+  and packaged first-run smoke passed. This closes checklist items 188 and 196. Items 18, 183, and
+  184 remain honestly open because the private repository still has no published GitHub Release and
+  hosted Windows/Linux installation plus signing/notarization evidence requires restored GitHub
+  Actions billing and the optional platform credentials.

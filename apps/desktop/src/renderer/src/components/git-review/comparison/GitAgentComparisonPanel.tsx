@@ -2,6 +2,7 @@ import { GitCompareArrows, LoaderCircle, RefreshCw, TriangleAlert } from 'lucide
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { unwrap } from '../../../lib/ipc.js';
+import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 import type {
   GitAgentComparisonTarget,
   GitAgentComparisonView,
@@ -157,15 +158,23 @@ export function GitAgentComparisonPanel({
           )}{' '}
           Compare committed code
         </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Refresh comparable agent runs"
-          disabled={loadingRuns || comparing}
-          onClick={loadRuns}
+        <WorkspaceTooltip
+          content={
+            loadingRuns || comparing
+              ? 'Wait for the current comparison action'
+              : 'Refresh comparable agent runs'
+          }
         >
-          <RefreshCw className={loadingRuns ? 'spin' : ''} size={14} aria-hidden="true" />
-        </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Refresh comparable agent runs"
+            disabled={loadingRuns || comparing}
+            onClick={loadRuns}
+          >
+            <RefreshCw className={loadingRuns ? 'spin' : ''} size={14} aria-hidden="true" />
+          </button>
+        </WorkspaceTooltip>
       </header>
       {loadingRuns ? <p role="status">Loading available agent worktrees…</p> : null}
       {!loadingRuns && error === null && candidates.length === 0 ? (

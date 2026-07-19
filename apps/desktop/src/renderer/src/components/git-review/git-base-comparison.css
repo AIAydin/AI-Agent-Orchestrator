@@ -71,6 +71,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.git-base-comparison-summary .workspace-tooltip-target {
+  min-width: 0;
+}
 
 .git-base-commit-list {
   flex: 0 0 auto;

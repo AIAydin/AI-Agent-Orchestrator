@@ -13,7 +13,9 @@ describe('WorkspaceCommandBar notifications', () => {
     const props = commandBarProps();
     const view = render(<WorkspaceCommandBar {...props} notificationsOpen={false} />);
     const trigger = screen.getByRole('button', { name: 'Notifications' });
-    const tooltip = screen.getByRole('tooltip', { name: 'Local notifications' });
+    const tooltip = screen.getByRole('tooltip', {
+      name: 'Local notifications',
+    });
 
     expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
     expect(trigger.getAttribute('aria-describedby')).toBe(tooltip.id);
@@ -40,6 +42,37 @@ describe('WorkspaceCommandBar notifications', () => {
       const tooltip = screen.getByRole('tooltip', { name: description });
       expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
     }
+  });
+
+  it('describes disabled workflow actions and live workflow status without native titles', () => {
+    render(
+      <WorkspaceCommandBar
+        {...commandBarProps()}
+        notificationsOpen={false}
+        workflowStatus="waiting-for-approval"
+      />,
+    );
+
+    const expected = [
+      [
+        'Run canvas',
+        'Add an Agent, Test, Review gate, or Diff/review node before running this canvas',
+      ],
+      ['Run selected', 'Select a runnable node.'],
+    ] as const;
+    for (const [name, explanation] of expected) {
+      const button = screen.getByRole('button', { name });
+      const tooltip = screen.getByRole('tooltip', { name: explanation });
+      expect(button).toHaveProperty('disabled', true);
+      expect(button.getAttribute('title')).toBeNull();
+      expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
+    }
+    const status = screen.getByRole('status', {
+      name: /Workflow · waiting for approval/u,
+    });
+    expect(status.getAttribute('aria-describedby')).toBe(
+      screen.getByRole('tooltip', { name: 'Workflow: waiting-for-approval' }).id,
+    );
   });
 });
 

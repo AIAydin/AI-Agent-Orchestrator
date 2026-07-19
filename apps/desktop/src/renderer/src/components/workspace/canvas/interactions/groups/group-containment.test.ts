@@ -7,9 +7,11 @@ import {
   arrangeGroupMembers,
   assignDraggedNodeToContainingFrame,
   canvasNodeBounds,
+  descendantIds,
   fitGroupFrameToMembers,
   moveGroupFrameWithMembers,
   reconcileGroupMembership,
+  removeNodePreservingGroupHierarchy,
   validateGroupMembership,
 } from './group-containment.js';
 
@@ -48,7 +50,7 @@ describe('group containment', () => {
     });
   });
 
-  it('validates and deterministically reconciles stale, duplicate, nested, and competing claims', () => {
+  it('validates and deterministically reconciles stale, duplicate, and competing claims', () => {
     const child = node('child', 'task', 50, 50, { width: 20, height: 20 });
     const large = frame('large', 0, 0, 400, 300, ['child', 'child', 'missing', 'nested']);
     const small = frame('small', 40, 40, 100, 100, ['child']);
@@ -57,7 +59,10 @@ describe('group containment', () => {
 
     const validation = validateGroupMembership(nodes);
     expect(validation.valid).toBe(false);
-    expect(validation.memberships).toEqual([{ childId: 'child', frameId: 'small' }]);
+    expect(validation.memberships).toEqual([
+      { childId: 'child', frameId: 'small' },
+      { childId: 'nested', frameId: 'large' },
+    ]);
     expect(validation.issues).toEqual(
       expect.arrayContaining([
         { code: 'duplicate-child-id', childId: 'child', frameIds: ['large'] },
@@ -67,14 +72,13 @@ describe('group containment', () => {
           frameIds: ['large', 'small'],
         },
         { code: 'stale-child-id', childId: 'missing', frameIds: ['large'] },
-        { code: 'nested-group-frame', childId: 'nested', frameIds: ['large'] },
       ]),
     );
 
     const result = reconcileGroupMembership(nodes);
     expect(result.changedFrameIds).toEqual(['large']);
     expect(result.changedNodeIds).toEqual(['large']);
-    expect(group(result.nodes, 'large').data.childNodeIds).toEqual([]);
+    expect(group(result.nodes, 'large').data.childNodeIds).toEqual(['nested']);
     expect(group(result.nodes, 'small').data.childNodeIds).toEqual(['child']);
     expect(result.nodes.map((item) => item.id)).toEqual(nodes.map((item) => item.id));
     expect(result.membershipChanges).toEqual(
@@ -85,10 +89,44 @@ describe('group containment', () => {
           toFrameId: 'small',
         },
         { childId: 'missing', fromFrameIds: ['large'], toFrameId: null },
-        { childId: 'nested', fromFrameIds: ['large'], toFrameId: null },
       ]),
     );
     expect(validateGroupMembership(result.nodes).valid).toBe(true);
+  });
+
+  it('removes self and cyclic frame claims without disturbing ordinary ownership', () => {
+    const child = node('child', 'task', 60, 60, { width: 20, height: 20 });
+    const outer = frame('outer', 0, 0, 500, 400, ['outer', 'inner', 'child']);
+    const inner = frame('inner', 40, 40, 300, 240, ['outer', 'child']);
+
+    const validation = validateGroupMembership([outer, child, inner]);
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toEqual(
+      expect.arrayContaining([
+        { code: 'membership-cycle', childId: 'outer', frameIds: ['inner', 'outer'] },
+        { code: 'membership-cycle', childId: 'outer', frameIds: ['outer'] },
+        {
+          code: 'multiple-frame-membership',
+          childId: 'child',
+          frameIds: ['inner', 'outer'],
+        },
+      ]),
+    );
+
+    const reconciled = reconcileGroupMembership([outer, child, inner]);
+    expect(group(reconciled.nodes, 'outer').data.childNodeIds).toEqual(['inner']);
+    expect(group(reconciled.nodes, 'inner').data.childNodeIds).toEqual(['child']);
+    expect(reconciled.membershipChanges).toEqual(
+      expect.arrayContaining([
+        { childId: 'outer', fromFrameIds: ['inner', 'outer'], toFrameId: null },
+      ]),
+    );
+    expect(validateGroupMembership(reconciled.nodes).valid).toBe(true);
+
+    const repeated = reconcileGroupMembership(reconciled.nodes);
+    expect(repeated.changedFrameIds).toEqual([]);
+    expect(repeated.membershipChanges).toEqual([]);
+    expect(repeated.nodes).toEqual(reconciled.nodes);
   });
 
   it('prefers a containing existing owner before a smaller non-containing legacy claimant', () => {
@@ -135,6 +173,32 @@ describe('group containment', () => {
       changedNodeIds: [],
     });
     expect(rejected.nodes[0]).toBe(lockedFrame);
+  });
+
+  it('moves a nested descendant tree exactly once and preserves an explicitly locked subtree', () => {
+    const leaf = node('leaf', 'task', 80, 90);
+    const lockedLeaf = node('locked-leaf', 'task', 500, 500);
+    const inner = frame('inner', 50, 50, 360, 240, ['leaf']);
+    const lockedInnerValue = frame('locked-inner', 450, 450, 360, 240, ['locked-leaf']);
+    const lockedInner = { ...lockedInnerValue, data: { ...lockedInnerValue.data, locked: true } };
+    const outer = frame('outer', 0, 0, 900, 800, ['inner', 'locked-inner']);
+
+    const moved = moveGroupFrameWithMembers(
+      [outer, inner, leaf, lockedInner, lockedLeaf],
+      'outer',
+      { x: 100, y: 25 },
+    );
+
+    expect(descendantIds(moved.nodes, 'outer')).toEqual([
+      'inner',
+      'leaf',
+      'locked-inner',
+      'locked-leaf',
+    ]);
+    expect(at(moved.nodes, 'inner').position).toEqual({ x: 150, y: 75 });
+    expect(at(moved.nodes, 'leaf').position).toEqual({ x: 180, y: 115 });
+    expect(at(moved.nodes, 'locked-inner')).toBe(lockedInner);
+    expect(at(moved.nodes, 'locked-leaf')).toBe(lockedLeaf);
   });
 
   it('assigns overlap to the smallest unlocked containing frame and unassigns outside all frames', () => {
@@ -192,7 +256,7 @@ describe('group containment', () => {
     expect(group(assigned.nodes, 'visible').data.childNodeIds).toEqual(['dragged']);
   });
 
-  it('rejects dragged locked members and nested frame assignment without changing membership', () => {
+  it('rejects dragged locked members and permits safe nested frame assignment', () => {
     const locked = node('locked', 'task', 20, 20, { locked: true });
     const outer = frame('outer', 0, 0, 800, 600, ['locked']);
     const inner = frame('inner', 30, 30, 200, 200, []);
@@ -204,9 +268,10 @@ describe('group containment', () => {
       assignedFrameId: 'outer',
     });
     expect(assignDraggedNodeToContainingFrame([outer, inner], 'inner')).toMatchObject({
-      disposition: 'rejected',
-      reason: 'nested-group-frames-are-not-supported',
-      changedNodeIds: [],
+      disposition: 'assigned',
+      reason: 'smallest-containing-unlocked-frame-selected',
+      assignedFrameId: 'outer',
+      changedNodeIds: ['outer'],
     });
   });
 
@@ -237,12 +302,22 @@ describe('group containment', () => {
   });
 
   it('preserves a padded member union when it is larger than the group minimum', () => {
-    const member = node('member', 'task', 100, 100, { width: 400, height: 300 });
+    const member = node('member', 'task', 100, 100, {
+      width: 400,
+      height: 300,
+    });
     const groupNode = frame('group', 0, 0, 20, 20, ['member']);
 
-    const fitted = fitGroupFrameToMembers([groupNode, member], 'group', { padding: 10 });
+    const fitted = fitGroupFrameToMembers([groupNode, member], 'group', {
+      padding: 10,
+    });
 
-    expect(fitted.fittedBounds).toEqual({ x: 90, y: 90, width: 420, height: 320 });
+    expect(fitted.fittedBounds).toEqual({
+      x: 90,
+      y: 90,
+      width: 420,
+      height: 320,
+    });
     expect(canvasNodeBounds(group(fitted.nodes, 'group'))).toEqual({
       x: 90,
       y: 90,
@@ -327,6 +402,34 @@ describe('group containment', () => {
     expect(freeform.nodes.map((item) => item.position)).toEqual(
       grid.nodes.map((item) => item.position),
     );
+  });
+
+  it('reparents direct children when a nested frame is deleted without changing coordinates', () => {
+    const leaf = node('leaf', 'task', 120, 130);
+    const inner = frame('inner', 80, 80, 360, 240, ['leaf']);
+    const sibling = node('sibling', 'task', 500, 120);
+    const outer = frame('outer', 0, 0, 900, 600, ['inner', 'sibling']);
+
+    const removed = removeNodePreservingGroupHierarchy([outer, inner, leaf, sibling], 'inner');
+
+    expect(removed.map(({ id }) => id)).toEqual(['outer', 'leaf', 'sibling']);
+    expect(group(removed, 'outer').data.childNodeIds).toEqual(['leaf', 'sibling']);
+    expect(at(removed, 'leaf')).toBe(leaf);
+    expect(validateGroupMembership(removed).valid).toBe(true);
+  });
+
+  it('arranges a nested frame as one direct member and carries its descendants once', () => {
+    const leaf = node('leaf', 'task', 330, 340);
+    const inner = frame('inner', 300, 300, 360, 240, ['leaf']);
+    const outer = frame('outer', 10, 20, 900, 700, ['inner']);
+
+    const arranged = arrangeGroupMembers([outer, inner, leaf], 'outer', 'vertical', {
+      padding: 20,
+    });
+
+    expect(at(arranged.nodes, 'inner').position).toEqual({ x: 30, y: 40 });
+    expect(at(arranged.nodes, 'leaf').position).toEqual({ x: 60, y: 80 });
+    expect(arranged.movedMemberIds).toEqual(['inner']);
   });
 });
 

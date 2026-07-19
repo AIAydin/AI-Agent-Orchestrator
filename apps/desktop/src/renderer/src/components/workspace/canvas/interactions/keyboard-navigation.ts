@@ -1,5 +1,5 @@
 import type { WorkshopNode } from '../CanvasNode.js';
-import { reconcileGroupMembership } from './groups/group-containment.js';
+import { descendantIds } from './groups/group-containment.js';
 import { lockedCanvasNodeIds } from './lock-protection.js';
 
 export interface CanvasKeyboardMovement {
@@ -55,9 +55,9 @@ export function moveSelectedCanvasNodes(
       )
       .map((node) => node.id),
   );
-  for (const membership of reconcileGroupMembership(nodes).memberships) {
-    if (selectedMovableFrameIds.has(membership.frameId) && !lockedIds.has(membership.childId)) {
-      movedIds.add(membership.childId);
+  for (const frameId of selectedMovableFrameIds) {
+    for (const childId of descendantIds(nodes, frameId)) {
+      if (!lockedIds.has(childId)) movedIds.add(childId);
     }
   }
   const movedNodes = nodes.map((node) => {

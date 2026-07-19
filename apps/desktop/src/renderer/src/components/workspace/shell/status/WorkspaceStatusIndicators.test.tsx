@@ -24,6 +24,14 @@ describe('WorkspaceStatusIndicators', () => {
     expect(status.textContent).toContain('Solo · local only');
     expect(status.textContent).toContain('Providers · approved context only');
     expect(status.textContent).toContain('main · modified');
+    const sharing = screen.getByRole('status', { name: 'Solo · local only' });
+    const branch = screen.getByRole('status', { name: 'main · modified' });
+    expect(sharing.getAttribute('aria-describedby')).toBe(
+      screen.getByRole('tooltip', { name: /Solo mode is local/u }).id,
+    );
+    expect(branch.getAttribute('aria-describedby')).toBe(
+      screen.getByRole('tooltip', { name: 'Uncommitted changes on main' }).id,
+    );
     fireEvent.click(screen.getByText('Providers · approved context only'));
     expect(screen.getByRole('note').textContent).toContain('Codex may contact OpenAI');
   });

@@ -35,7 +35,7 @@ export async function openRepository(
   repositoryPath: string,
 ): Promise<void> {
   await choosePath(app, repositoryPath);
-  await page.getByRole('button', { name: /Open local repository/i }).click();
+  await page.getByRole('button', { name: /Open a project folder/i }).click();
   await expect(page.locator('.project-switcher')).toContainText('primary-repository');
 }
 
@@ -46,8 +46,8 @@ export async function addAndConfigureAgent(page: Page, prompt: string): Promise<
     .click();
   const node = page.getByRole('article', { name: 'Agent: Agent' });
   await node.click();
-  const configuration = page.getByRole('region', { name: 'Agent run configuration' });
-  await configuration.getByLabel('Installed adapter').selectOption(ADAPTER_ID);
+  const configuration = page.getByRole('region', { name: 'Agent run settings' });
+  await configuration.getByLabel('Agent to run').selectOption(ADAPTER_ID);
   await configuration.getByLabel('Model (optional)').fill(MODEL_ID);
   await configuration.getByLabel('Permission profile').selectOption('worktree-write');
   await configuration.getByLabel('Prompt').fill(prompt);
@@ -61,7 +61,7 @@ export async function approvePreparedRun(
   expectedText: readonly string[],
 ): Promise<Locator> {
   await openReview();
-  const dialog = page.getByRole('dialog', { name: 'Review the exact agent launch' });
+  const dialog = page.getByRole('dialog', { name: 'Review this run before it starts' });
   try {
     await expect(dialog).toBeVisible();
   } catch (error) {
@@ -79,7 +79,7 @@ export async function approvePreparedRun(
       dialog,
       ADAPTER_ID,
       async () => {
-        await dialog.getByRole('button', { name: 'Approve & launch' }).click();
+        await dialog.getByRole('button', { name: 'Approve and start' }).click();
       },
       { pollTimeoutMs: 20_000 },
     );

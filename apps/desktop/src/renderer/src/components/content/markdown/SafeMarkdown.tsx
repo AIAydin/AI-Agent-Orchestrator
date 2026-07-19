@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 
+import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 import { parseSafeMarkdown, type MarkdownBlock, type MarkdownInline } from './markdown-model.js';
 import './safe-markdown.css';
 
@@ -116,36 +117,49 @@ function renderInline(
     if (token.kind === 'strikethrough') return <s key={tokenKey}>{children}</s>;
     if (token.url === null) {
       return (
-        <span
-          key={tokenKey}
-          className="unsafe-markdown-link"
-          title="This link was blocked for safety"
-        >
-          {children}
-        </span>
+        <WorkspaceTooltip key={tokenKey} content="This link was blocked for safety">
+          <span
+            className="unsafe-markdown-link"
+            role="link"
+            aria-disabled="true"
+            aria-label="Blocked link"
+            tabIndex={0}
+          >
+            {children}
+          </span>
+        </WorkspaceTooltip>
       );
     }
     if (onOpenLink === undefined) {
       return (
-        <span
-          key={tokenKey}
-          className="safe-markdown-link unavailable"
-          title="Opening links is not available here"
-        >
-          {children}
-        </span>
+        <WorkspaceTooltip key={tokenKey} content="Opening links is not available here">
+          <span
+            className="safe-markdown-link unavailable"
+            role="link"
+            aria-disabled="true"
+            aria-label="Link opening unavailable"
+            tabIndex={0}
+          >
+            {children}
+          </span>
+        </WorkspaceTooltip>
       );
     }
-    return (
+    const link = (
       <button
-        key={tokenKey}
         type="button"
         className="safe-markdown-link"
-        title={token.title}
         onClick={() => onOpenLink(token.url as string)}
       >
         {children}
       </button>
+    );
+    return token.title ? (
+      <WorkspaceTooltip key={tokenKey} content={token.title}>
+        {link}
+      </WorkspaceTooltip>
+    ) : (
+      <Fragment key={tokenKey}>{link}</Fragment>
     );
   });
 }

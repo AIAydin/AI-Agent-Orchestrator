@@ -8,6 +8,7 @@ import type {
 import type { RunHistorySummary } from '../../../../../../shared/runs/contracts.js';
 import type { GitWorktreeRestorePlanView } from '../../../../../../shared/git/lifecycle/contracts.js';
 import { unwrap } from '../../../../lib/ipc.js';
+import { WorkspaceTooltip } from '../../shell/tooltips/WorkspaceTooltip.js';
 import { continuationUnavailableReason, type SelectedAgentAuthority } from './attempt-actions.js';
 import { useAgentAttemptHistory } from './useAgentAttemptHistory.js';
 import { tokenUsageRows } from './usage/token-usage.js';
@@ -97,15 +98,21 @@ export function AgentAttemptHistory({
           <History size={13} />
           <h4 id={`agent-history-${nodeId}`}>Attempt history</h4>
         </div>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Refresh Agent attempt history"
-          disabled={history.loading}
-          onClick={history.refresh}
+        <WorkspaceTooltip
+          content={
+            history.loading ? 'Attempt history is already loading' : 'Refresh attempt history'
+          }
         >
-          <RefreshCw size={12} />
-        </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Refresh Agent attempt history"
+            disabled={history.loading}
+            onClick={history.refresh}
+          >
+            <RefreshCw size={12} aria-hidden="true" />
+          </button>
+        </WorkspaceTooltip>
       </header>
       {history.loading ? <p role="status">Loading attempt history…</p> : null}
       {history.error !== null ? (
@@ -199,48 +206,60 @@ export function AgentAttemptHistory({
                     </details>
                   ) : null}
                   <div className="agent-attempt-actions">
-                    <button
-                      type="button"
-                      disabled={retryReason !== null || onRetryAttempt === undefined}
-                      title={
+                    <WorkspaceTooltip
+                      content={
                         retryReason ??
                         (onRetryAttempt === undefined
                           ? 'Retry wiring is not available in this build.'
-                          : undefined)
+                          : 'Review a fresh retry of this attempt.')
                       }
-                      onClick={() => onRetryAttempt?.(attempt)}
                     >
-                      <RotateCcw size={11} /> Retry review
-                    </button>
-                    <button
-                      type="button"
-                      disabled={resumeReason !== null || onResumeAttempt === undefined}
-                      title={
+                      <button
+                        type="button"
+                        aria-label="Retry review"
+                        disabled={retryReason !== null || onRetryAttempt === undefined}
+                        onClick={() => onRetryAttempt?.(attempt)}
+                      >
+                        <RotateCcw size={11} /> Retry review
+                      </button>
+                    </WorkspaceTooltip>
+                    <WorkspaceTooltip
+                      content={
                         resumeReason ??
                         (onResumeAttempt === undefined
                           ? 'Resume wiring is not available in this build.'
-                          : undefined)
+                          : 'Review a continuation from this interrupted attempt.')
                       }
-                      onClick={() => onResumeAttempt?.(attempt)}
                     >
-                      <Play size={11} /> Resume review
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!attempt.worktreeAvailable || onReviewAttempt === undefined}
-                      title={
+                      <button
+                        type="button"
+                        aria-label="Resume review"
+                        disabled={resumeReason !== null || onResumeAttempt === undefined}
+                        onClick={() => onResumeAttempt?.(attempt)}
+                      >
+                        <Play size={11} /> Resume review
+                      </button>
+                    </WorkspaceTooltip>
+                    <WorkspaceTooltip
+                      content={
                         attempt.supersededByNewerAttempt
                           ? 'A newer resumed attempt owns this worktree authority.'
                           : !attempt.worktreeAvailable
                             ? 'This attempt no longer has an available worktree.'
                             : onReviewAttempt === undefined
                               ? 'Worktree review wiring is not available in this build.'
-                              : undefined
+                              : 'Review the changes in this attempt workspace.'
                       }
-                      onClick={() => onReviewAttempt?.(attempt)}
                     >
-                      <GitBranch size={11} /> Review changes
-                    </button>
+                      <button
+                        type="button"
+                        aria-label="Review changes"
+                        disabled={!attempt.worktreeAvailable || onReviewAttempt === undefined}
+                        onClick={() => onReviewAttempt?.(attempt)}
+                      >
+                        <GitBranch size={11} /> Review changes
+                      </button>
+                    </WorkspaceTooltip>
                     {attempt.worktreeState === 'archived' && !attempt.supersededByNewerAttempt ? (
                       <button
                         type="button"

@@ -66,7 +66,10 @@ describe('startup database recovery composition', () => {
     });
 
     expect(recovered).not.toBeNull();
-    expect(recovered?.checkIntegrity('full')).toMatchObject({ ok: true, mode: 'full' });
+    expect(recovered?.checkIntegrity('full')).toMatchObject({
+      ok: true,
+      mode: 'full',
+    });
     recovered?.close();
     expect(dialog.showOpenDialog).toHaveBeenCalledOnce();
   });
@@ -77,7 +80,9 @@ describe('startup database recovery composition', () => {
     const userDataPath = join(root, 'user-data');
     const databasePath = join(userDataPath, 'forgeboard.sqlite');
     await mkdir(userDataPath, { mode: 0o700 });
-    new LocalStore(databasePath, { legacySettingsDefaults: defaultSettings(root) }).close();
+    new LocalStore(databasePath, {
+      legacySettingsDefaults: defaultSettings(root),
+    }).close();
 
     const store = await openLocalStoreWithStartupDatabaseRecovery({
       databasePath,
@@ -108,7 +113,9 @@ describe('startup database recovery composition', () => {
         dependencies: { createDefaultSettings: () => defaultSettings(root) },
       }),
     ).resolves.toBeNull();
-    await expect(readFile(databasePath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(databasePath)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
     expect(missingDialog.showOpenDialog).not.toHaveBeenCalled();
   });
 
@@ -183,8 +190,12 @@ describe('startup database recovery composition', () => {
     roots.push(root);
     const databasePath = join(root, 'forgeboard.sqlite');
     const replacementPath = join(root, 'replacement.sqlite');
-    new LocalStore(databasePath, { legacySettingsDefaults: defaultSettings(root) }).close();
-    new LocalStore(replacementPath, { legacySettingsDefaults: defaultSettings(root) }).close();
+    new LocalStore(databasePath, {
+      legacySettingsDefaults: defaultSettings(root),
+    }).close();
+    new LocalStore(replacementPath, {
+      legacySettingsDefaults: defaultSettings(root),
+    }).close();
     const expected = await lstat(databasePath);
     await rm(databasePath);
     await rename(replacementPath, databasePath);
@@ -299,6 +310,7 @@ function defaultSettings(root: string): AppSettings {
     gitIdentityName: '',
     gitIdentityEmail: '',
     gitRemote: 'origin',
+    externalEditorExecutable: '',
     terminalShell: '/bin/sh',
     envAllowlist: ['PATH'],
     developmentCommand: { executable: '', arguments: [] },

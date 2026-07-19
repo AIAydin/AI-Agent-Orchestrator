@@ -63,6 +63,12 @@ commits onto an advanced primary, but Git may stop when both sides changed the s
 - Open **Changes** and inspect every conflicted file. Resolve deliberately in the project editor or an
   explicitly opened external application, then stage and commit the resolution through reviewed Git
   actions.
+- Choose or reset that application under **Settings → Git & previews → External application**. If a
+  selected executable or macOS `.app` bundle was moved, replaced, or lost execute permission, choose
+  it again. Forgeboard fingerprints the reviewed executable; for a macOS bundle it also verifies the
+  bundle metadata and internal executable files, and refuses to launch an identity that changes
+  after the native review. Exact executables are supported on every platform; `.app` selection uses
+  macOS Launch Services without shell interpolation.
 - If you do not want to continue the conflicted operation, use Git recovery outside Forgeboard only
   if you understand the repository state. Forgeboard currently has no visual abort/resolution wizard.
 - Re-run delivery checks and human approval after any changed source. Earlier evidence no longer

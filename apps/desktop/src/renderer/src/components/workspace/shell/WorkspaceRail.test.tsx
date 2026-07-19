@@ -61,12 +61,15 @@ describe('WorkspaceRail accessibility', () => {
       screen.getByRole('textbox', { name: 'Search node templates' }).getAttribute('name'),
     ).toBe('workspace-rail-search');
     expect(
-      screen.getByRole('img', { name: 'Project has changes not yet recorded in Git' }),
+      screen.getByRole('img', {
+        name: 'Project has changes not yet recorded in Git',
+      }),
     ).toBeTruthy();
 
     rerender(<WorkspaceRail {...props} tab="nodes" />);
     expect(screen.getByRole('button', { name: 'Nodes' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('textbox', { name: 'Search canvas nodes' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe('No matching nodes on this canvas.');
   });
 
   it('offers an explicit UI path for initializing an existing non-Git folder', () => {
@@ -75,7 +78,12 @@ describe('WorkspaceRail accessibility', () => {
       <WorkspaceRail
         project={{
           ...project,
-          health: { ...project.health, isGitRepository: false, branch: null, dirty: false },
+          health: {
+            ...project.health,
+            isGitRepository: false,
+            branch: null,
+            dirty: false,
+          },
         }}
         tab="project"
         search=""

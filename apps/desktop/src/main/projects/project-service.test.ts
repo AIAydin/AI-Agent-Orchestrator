@@ -179,6 +179,23 @@ describe('ProjectService moved-project recovery', () => {
     expect((await repositories.git.run(['--version'])).executable).toContain('dugite');
   });
 
+  it('fails closed before creating a project folder when its audit cannot persist', async () => {
+    const root = temporaryRoot();
+    const parent = join(root, 'projects');
+    mkdirSync(parent);
+    const store = openStore(root);
+    vi.spyOn(store, 'appendAudit').mockImplementationOnce(() => {
+      throw new Error('audit unavailable');
+    });
+    const service = new ProjectService({} as App, {} as Dialog, store);
+
+    await expect(service.create(parent, 'not-created', false)).rejects.toThrow('audit unavailable');
+
+    await expect(access(join(parent, 'not-created'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
   it('refreshes persisted Git health by opaque project id without reopening the project', async () => {
     const root = temporaryRoot();
     const parent = join(root, 'projects');
@@ -286,6 +303,32 @@ describe('ProjectService moved-project recovery', () => {
       category: 'git',
       action: 'initialize',
       outcome: 'failed',
+    });
+  });
+
+  it('fails closed before creating Git metadata when the allowed audit cannot persist', async () => {
+    const root = temporaryRoot();
+    const repositoryPath = join(root, 'audit-failure-project');
+    mkdirSync(repositoryPath);
+    const store = openStore(root);
+    const repositories = createBundledGitRepositoryService();
+    const service = new ProjectService(
+      {} as App,
+      {
+        showMessageBox: vi.fn().mockResolvedValue({ response: 1 }),
+      } as unknown as Dialog,
+      store,
+      repositories,
+    );
+    const opened = await service.open(repositoryPath);
+    vi.spyOn(store, 'appendAudit').mockImplementationOnce(() => {
+      throw new Error('audit unavailable');
+    });
+
+    await expect(service.initializeGit(opened.id)).rejects.toThrow('audit unavailable');
+
+    await expect(access(join(repositoryPath, '.git'))).rejects.toMatchObject({
+      code: 'ENOENT',
     });
   });
 

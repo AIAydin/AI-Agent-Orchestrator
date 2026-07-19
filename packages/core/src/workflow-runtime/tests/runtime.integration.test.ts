@@ -359,6 +359,41 @@ describe('scoped workflow planning and typed edge behavior', () => {
     ).toEqual(['task-a', 'task-b', 'task-c']);
   });
 
+  it('expands a nested group frame to every runnable descendant', () => {
+    const nestedFrame = {
+      ...baseNode,
+      id: 'nested-frame',
+      type: 'group-frame' as const,
+      data: {
+        purpose: 'workflow-stage' as const,
+        childNodeIds: ['task-b', 'task-c'],
+        layout: 'vertical' as const,
+        autoFit: true,
+      },
+    };
+    const graph = canvas({
+      nodes: [taskNode('task-a'), taskNode('task-b'), taskNode('task-c'), nestedFrame],
+      groups: [
+        {
+          id: 'outer-group',
+          title: 'Outer',
+          nodeIds: ['nested-frame'],
+          position: { x: 0, y: 0 },
+          size: { width: 800, height: 500 },
+          color: '#223344',
+        },
+      ],
+    });
+
+    expect(
+      planWorkflowScope(graph, {
+        planId: 'nested-group',
+        scope: { kind: 'group', groupId: 'outer-group' },
+        eligibleNodeIds: ['task-a', 'task-b', 'task-c'],
+      }).nodeIds,
+    ).toEqual(['task-b', 'task-c']);
+  });
+
   it('preserves every source lifecycle state on an ordinary dependency edge', () => {
     const runtime = runtimeFor(
       canvas({

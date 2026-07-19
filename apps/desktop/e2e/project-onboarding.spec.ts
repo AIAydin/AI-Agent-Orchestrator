@@ -25,7 +25,7 @@ test('an existing non-Git folder can be initialized safely from the project UI',
     watchExternalRequests(page, externalRequests);
 
     await page
-      .getByRole('dialog', { name: /Set up Forgeboard in a few quick steps/i })
+      .getByRole('dialog', { name: 'Ready to build without wiring config files?' })
       .getByRole('button', { name: 'Use safe defaults' })
       .click();
     await chooseRepository(electronApp, projectPath);

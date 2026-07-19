@@ -845,6 +845,42 @@ describe('AgentExecutionRuntime approval binding', () => {
     expect(harness.launchSession).not.toHaveBeenCalled();
   });
 
+  it('does not trust an extension session to claim OS-level process pause', async () => {
+    const adapterId = 'vendor.agent';
+    const manifest = AgentAdapterManifestSchema.parse({
+      ...TEST_AGENT_MANIFEST,
+      id: adapterId,
+      invocation: {
+        ...TEST_AGENT_MANIFEST.invocation,
+        context: { strategy: 'prompt-references' },
+      },
+      capabilities: { ...TEST_AGENT_MANIFEST.capabilities, contextAttachments: true },
+    });
+    const controlled = controllableSession(4321);
+    const session: AgentSession = {
+      ...controlled.session,
+      capabilities: { ...SESSION_CAPABILITIES, pause: true },
+      pause: vi.fn(),
+      continue: vi.fn(),
+    };
+    const harness = createHarness({
+      adapterId,
+      trustedExtensionAdapter: true,
+      getTrustedAdapter: () => Promise.resolve(manifest),
+      session,
+    });
+    const prepared = await harness.runtime.prepare('owner-a', request(adapterId));
+    const handle = await harness.runtime.launch(
+      'owner-a',
+      prepared.planId,
+      prepared.disclosureFingerprint,
+    );
+
+    expect(handle.capabilities.pause).toBe(false);
+    expect(() => harness.runtime.pause('owner-a', prepared.runId)).toThrow(/cannot safely pause/iu);
+    await handle.terminate();
+  });
+
   it('revalidates the complete managed-worktree ownership record', async () => {
     const ownership = worktreeOwnership();
     const changedOwnership = {
@@ -1388,6 +1424,37 @@ describe('AgentExecutionRuntime launch handles', () => {
       status: 'terminated',
       exitCode: null,
     });
+  });
+
+  it('persists real same-session pause and continue transitions and blocks paused input', async () => {
+    const controlled = controllableSession(4321);
+    const pause = vi.fn();
+    const continueProcess = vi.fn();
+    const session: AgentSession = {
+      ...controlled.session,
+      capabilities: { ...SESSION_CAPABILITIES, pause: true },
+      pause,
+      continue: continueProcess,
+    };
+    const harness = createHarness({ session });
+    const prepared = await harness.runtime.prepare('owner-a', request());
+    const handle = await harness.runtime.launch(
+      'owner-a',
+      prepared.planId,
+      prepared.disclosureFingerprint,
+    );
+
+    expect(harness.runtime.pause('owner-a', prepared.runId)).toBe(true);
+    expect(pause).toHaveBeenCalledOnce();
+    expect(harness.records.get(prepared.runId)?.status).toBe('paused');
+    expect(() => harness.runtime.sendInput('owner-a', prepared.runId, 'not buffered')).toThrow(
+      /Continue the paused Agent run/u,
+    );
+
+    expect(harness.runtime.continue('owner-a', prepared.runId)).toBe(true);
+    expect(continueProcess).toHaveBeenCalledOnce();
+    expect(harness.records.get(prepared.runId)?.status).toBe('running');
+    await handle.terminate();
   });
 
   it('passes typed context through the headless planner seam', async () => {

@@ -308,11 +308,15 @@ function CanvasNodeList({
                 <strong>{node.data.title}</strong>
                 <small>{definition.label}</small>
               </span>
-              <span className={`run-status ${node.data.status}`} title={node.data.status} />
+              <span
+                className={`run-status ${node.data.status}`}
+                role="img"
+                aria-label={`Status: ${node.data.status}`}
+              />
             </button>
           );
         })}
-        {!nodes.length && <p>No matching nodes on this canvas.</p>}
+        {!nodes.length && <p role="status">No matching nodes on this canvas.</p>}
       </div>
     </section>
   );

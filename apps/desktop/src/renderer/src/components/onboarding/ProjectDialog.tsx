@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FolderOpen, GitFork, X } from 'lucide-react';
 
 import { unwrap } from '../../lib/ipc.js';
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 export type ProjectDialogMode = 'create' | 'clone';
 
@@ -58,9 +59,11 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
                 : 'Forgeboard will contact the address below to download the project.'}
             </p>
           </div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
-            <X size={18} />
-          </button>
+          <WorkspaceTooltip content="Close without creating or cloning a project">
+            <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
+              <X size={18} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
         </header>
 
         {mode === 'clone' && (

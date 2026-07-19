@@ -67,24 +67,24 @@ export async function connectAndConfigure(
   await expect(page.locator('.react-flow__edge')).toHaveCount(before + 1);
   const edge = page.locator('.react-flow__edge').last();
   await edge.locator('.react-flow__edge-interaction').dispatchEvent('click');
-  const configuration = page.getByRole('group', { name: 'Connection configuration' });
-  await configuration.getByLabel('Connection behavior').selectOption(kind);
+  const configuration = page.getByRole('group', { name: 'Connection settings' });
+  await configuration.getByLabel('Connection type').selectOption(kind);
   if (kind === 'output') {
-    await configuration.getByLabel('Published output').selectOption('diff');
+    await configuration.getByLabel('Output to share').selectOption('diff');
     const required = configuration.getByRole('checkbox', {
-      name: 'Require verified output before downstream execution',
+      name: 'Require verified output before the next step runs',
     });
     if (!(await required.isChecked())) await required.check();
   } else if (kind === 'review') {
-    await configuration.getByLabel('Reviewer authority').selectOption('gate');
+    await configuration.getByLabel('Who reviews').selectOption('gate');
     const approval = configuration.getByRole('checkbox', { name: 'Require approval' });
     if (!(await approval.isChecked())) await approval.check();
     const findings = configuration.getByRole('checkbox', {
-      name: 'Require structured findings',
+      name: 'Require findings in a fixed format',
     });
     if (!(await findings.isChecked())) await findings.check();
   } else {
-    await configuration.getByLabel('Bounded loop ID').fill('review-loop');
+    await configuration.getByLabel('Loop ID').fill('review-loop');
     await configuration.getByLabel('Maximum attempts').fill('2');
     const review = configuration.getByRole('checkbox', {
       name: 'Stop when review is approved',
@@ -95,7 +95,7 @@ export async function connectAndConfigure(
     });
     if (await tests.isChecked()) await tests.uncheck();
     await configuration
-      .getByLabel('Human escape instructions')
+      .getByLabel('How a person can step in')
       .fill('Cancel safely if both bounded review attempts fail.');
   }
 }

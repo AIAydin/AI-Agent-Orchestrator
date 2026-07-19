@@ -13,6 +13,7 @@ describe('createGitLifecycleApi', () => {
       opened: true,
       targetKind: 'agent-worktree' as const,
       branch: 'forgeboard/task',
+      application: 'selected' as const,
     };
     const invoke = vi.fn().mockResolvedValue({ ok: true, value: result });
     const api = createGitLifecycleApi(invoke);

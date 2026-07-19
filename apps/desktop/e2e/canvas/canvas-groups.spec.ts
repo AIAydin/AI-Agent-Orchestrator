@@ -26,23 +26,23 @@ test('group membership and collapse behavior work entirely from the canvas UI', 
     const taskNode = page.getByRole('article', { name: 'Task: Task' });
     await expect(taskNode).toBeVisible();
 
-    await templates.getByRole('button', { name: /^Group \/ frame/ }).click();
-    const groupFrame = page.getByRole('group', { name: 'Group / frame: Group / frame' });
+    await templates.getByRole('button', { name: /^Group/ }).click();
+    const groupFrame = page.getByRole('group', { name: 'Group: Group' });
     await expect(groupFrame).toBeVisible();
     await expect(page.locator('.canvas-title')).toContainText('2 nodes · 0 connections');
 
-    const groupConfiguration = page.locator('section[aria-label="Group frame configuration"]');
+    const groupConfiguration = page.locator('section[aria-label="Group settings"]');
     await expect(groupConfiguration).toBeVisible();
     const taskMembership = groupConfiguration.locator('input[type="checkbox"][name*="-member-"]');
     await expect(taskMembership).toHaveCount(1);
     await taskMembership.check();
     await expect(groupConfiguration.getByText('1 member', { exact: true })).toBeVisible();
 
-    await groupFrame.getByRole('button', { name: 'Collapse Group / frame' }).click();
+    await groupFrame.getByRole('button', { name: 'Collapse Group' }).click();
     await expect(groupFrame).toHaveClass(/collapsed/u);
     await expect(taskNode).toBeHidden();
 
-    await groupFrame.getByRole('button', { name: 'Expand Group / frame' }).click();
+    await groupFrame.getByRole('button', { name: 'Expand Group' }).click();
     await expect(groupFrame).not.toHaveClass(/collapsed/u);
     await expect(taskNode).toBeVisible();
     await expect(taskMembership).toBeChecked();

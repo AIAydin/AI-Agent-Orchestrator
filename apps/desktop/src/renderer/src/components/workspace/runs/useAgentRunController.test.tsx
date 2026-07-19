@@ -15,6 +15,8 @@ const retry = vi.fn();
 const approve = vi.fn();
 const terminate = vi.fn();
 const interrupt = vi.fn();
+const pause = vi.fn();
+const continueProcess = vi.fn();
 const sendInput = vi.fn();
 const onError = vi.fn();
 const updateNodeData = vi.fn();
@@ -27,6 +29,8 @@ beforeEach(() => {
     approve,
     terminate,
     interrupt,
+    pause,
+    continueProcess,
     sendInput,
     onError,
     updateNodeData,
@@ -39,6 +43,8 @@ beforeEach(() => {
   approve.mockResolvedValue({ ok: true, value: true });
   terminate.mockResolvedValue({ ok: true, value: true });
   interrupt.mockResolvedValue({ ok: true, value: true });
+  pause.mockResolvedValue({ ok: true, value: true });
+  continueProcess.mockResolvedValue({ ok: true, value: true });
   sendInput.mockResolvedValue({ ok: true, value: true });
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
@@ -50,6 +56,8 @@ beforeEach(() => {
         approve,
         terminate,
         interrupt,
+        pause,
+        continue: continueProcess,
         sendInput,
       },
     },
@@ -298,6 +306,20 @@ describe('useAgentRunController persisted review boundary', () => {
 
     expect(sendInput).toHaveBeenCalledWith(disclosure().runId, 'continue\n');
     expect(hook.result.current.events[0]).toContain('literal "continue" input');
+  });
+
+  it('routes pause and continue through dedicated process-control IPC methods', async () => {
+    const node = agentNode();
+    node.data.runId = disclosure().runId;
+    node.data.status = 'running';
+    const hook = renderStatefulController(node);
+
+    await act(async () => await hook.result.current.runs.controlRun('pause'));
+    await act(async () => await hook.result.current.runs.controlRun('continue'));
+
+    expect(pause).toHaveBeenCalledWith(disclosure().runId);
+    expect(continueProcess).toHaveBeenCalledWith(disclosure().runId);
+    expect(sendInput).not.toHaveBeenCalled();
   });
 
   it('does not treat a persisted running status as a live process after renderer restart', () => {

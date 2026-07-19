@@ -1,8 +1,11 @@
+import { patchSha256 } from '@forgeboard/git-engine';
 import type {
   ChangeService,
   CherryPickApproval,
+  CommitApproval,
   GitOperationResult,
   MergeApproval,
+  RebaseApproval,
   RepositoryService,
 } from '@forgeboard/git-engine';
 
@@ -151,16 +154,7 @@ export class GitShippingService {
       throw new Error('The reviewed commit range has no file changes to deliver.');
     }
 
-    const target = GitReviewTargetViewSchema.parse({
-      kind: 'agent-worktree',
-      projectId: source.project.id,
-      runId: source.run.id,
-      nodeId: source.run.nodeId,
-      worktreeId: source.ownership.id,
-      agentId: source.ownership.agentId,
-      baseRef: source.ownership.baseRef,
-      baseCommit: source.ownership.baseCommit,
-    });
+    const target = shippingReviewTarget(source);
     const readinessTarget = deliveryReadinessTarget(target);
     const readiness = await this.readiness.bind(readinessTarget);
     return {
@@ -218,8 +212,10 @@ export class GitShippingService {
       runId: plan.target.runId,
     });
     assertCleanSource(source);
+    const currentTarget = shippingReviewTarget(source);
     const primaryStatus = await this.assertUsablePrimary(source.primaryRepositoryRoot);
     if (
+      JSON.stringify(currentTarget) !== JSON.stringify(plan.target) ||
       source.primaryRepositoryRoot !== plan.repositoryRoot ||
       source.worktreeRepositoryPath !== plan.sourceRepositoryRoot ||
       source.ownership.id !== plan.target.worktreeId ||
@@ -268,6 +264,33 @@ export class GitShippingService {
       authorName: plan.identity.name,
       authorEmail: plan.identity.email,
     };
+    if (plan.strategy === 'rebase') {
+      const approval: RebaseApproval = {
+        action: 'rebase',
+        approved: true,
+        approvalId: plan.id,
+        approvedAt: base.approvedAt,
+        repositoryRoot: plan.sourceRepositoryRoot,
+        expectedHead: plan.sourceHead,
+        ontoRef: plan.targetHead,
+        expectedOntoOid: plan.targetHead,
+        branch: plan.sourceBranch,
+      };
+      const rebased = await this.changes.rebase(plan.sourceRepositoryRoot, approval);
+      if (rebased.state === 'conflicted') return rebased;
+      const rebasedHead = await this.repositories.resolveRef(
+        plan.sourceRepositoryRoot,
+        plan.sourceBranch,
+      );
+      return await this.changes.merge(plan.repositoryRoot, {
+        ...base,
+        action: 'merge',
+        sourceRef: plan.sourceBranch,
+        expectedSourceOid: rebasedHead,
+        targetBranch: plan.targetBranch,
+        strategy: 'fast-forward-only',
+      });
+    }
     if (plan.strategy !== 'cherry-pick') {
       const approval: MergeApproval = {
         ...base,
@@ -277,7 +300,20 @@ export class GitShippingService {
         targetBranch: plan.targetBranch,
         strategy: plan.strategy,
       };
-      return await this.changes.merge(plan.repositoryRoot, approval);
+      const merged = await this.changes.merge(plan.repositoryRoot, approval);
+      if (plan.strategy !== 'squash' || merged.state === 'conflicted') return merged;
+      const stagedPaths = await this.repositories.stagedPaths(plan.repositoryRoot);
+      const staged = await this.changes.diff(plan.repositoryRoot, 'staged');
+      const commitApproval: CommitApproval = {
+        ...base,
+        action: 'commit',
+        message: `Deliver ${plan.sourceBranch} as one reviewed change`,
+        stagedPaths,
+        stagedPatchSha256: patchSha256(staged.raw),
+      };
+      const committed = await this.changes.commit(plan.repositoryRoot, commitApproval);
+      await this.changes.finalizeSquash(plan.repositoryRoot);
+      return committed;
     }
     const approval: CherryPickApproval = {
       ...base,
@@ -441,6 +477,19 @@ export class GitShippingService {
     }
     return parents;
   }
+}
+
+function shippingReviewTarget(source: ResolvedGitTarget): GitReviewTargetView {
+  return GitReviewTargetViewSchema.parse({
+    kind: 'agent-worktree',
+    projectId: source.project.id,
+    runId: source.run.id,
+    nodeId: source.run.nodeId,
+    worktreeId: source.ownership.id,
+    agentId: source.ownership.agentId,
+    baseRef: source.ownership.baseRef,
+    baseCommit: source.ownership.baseCommit,
+  });
 }
 
 function deliveryReadinessTarget(target: GitReviewTargetView): GitDeliveryReadinessTarget {

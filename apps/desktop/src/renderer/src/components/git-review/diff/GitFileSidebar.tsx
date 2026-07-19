@@ -7,6 +7,7 @@ import type {
   GitReviewGroups,
 } from '../git-review-model.js';
 import { fileDiffStats, selectionKey, statusLabel } from '../git-review-model.js';
+import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 import { GitFilePageControls, useGitFilePage } from './GitFilePagination.js';
 
 interface GitFileSidebarProps {
@@ -107,22 +108,27 @@ function GitFileGroup({
                     </small>
                   </span>
                 </button>
-                <button
-                  className="git-file-action"
-                  type="button"
-                  disabled={busy}
-                  aria-label={action.aria}
-                  title={action.title}
-                  onClick={() =>
-                    area === 'staged' ? onUnstagePath(file.path) : onStagePath(file.path)
+                <WorkspaceTooltip
+                  content={
+                    busy ? `${action.title} after the current Git action finishes` : action.title
                   }
                 >
-                  {area === 'staged' ? (
-                    <Minus size={13} aria-hidden="true" />
-                  ) : (
-                    <Plus size={13} aria-hidden="true" />
-                  )}
-                </button>
+                  <button
+                    className="git-file-action"
+                    type="button"
+                    disabled={busy}
+                    aria-label={action.aria}
+                    onClick={() =>
+                      area === 'staged' ? onUnstagePath(file.path) : onStagePath(file.path)
+                    }
+                  >
+                    {area === 'staged' ? (
+                      <Minus size={13} aria-hidden="true" />
+                    ) : (
+                      <Plus size={13} aria-hidden="true" />
+                    )}
+                  </button>
+                </WorkspaceTooltip>
               </li>
             );
           })}

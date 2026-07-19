@@ -121,7 +121,7 @@ test('a UI-configured Custom host profile persists and governs deterministic run
     await runConfiguration.getByLabel('Prompt').fill(readOnlyPrompt);
 
     await test.step('exact approval discloses the full Custom policy and cancel starts no agent', async () => {
-      await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
+      await runConfiguration.getByRole('button', { name: 'Review and run Agent' }).click();
       const dialog = page.getByRole('dialog', {
         name: 'Review this run before it starts',
       });
@@ -155,7 +155,7 @@ test('a UI-configured Custom host profile persists and governs deterministic run
     });
 
     await test.step('approval honors the configured read-only behavior', async () => {
-      await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
+      await runConfiguration.getByRole('button', { name: 'Review and run Agent' }).click();
       const dialog = page.getByRole('dialog', {
         name: 'Review this run before it starts',
       });
@@ -187,7 +187,7 @@ test('a UI-configured Custom host profile persists and governs deterministic run
       const writePrompt =
         'Create the deterministic proof file under the saved Custom write policy.';
       await runConfiguration.getByLabel('Prompt').fill(writePrompt);
-      await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
+      await runConfiguration.getByRole('button', { name: 'Review and run Agent' }).click();
 
       const dialog = page.getByRole('dialog', {
         name: 'Review this run before it starts',

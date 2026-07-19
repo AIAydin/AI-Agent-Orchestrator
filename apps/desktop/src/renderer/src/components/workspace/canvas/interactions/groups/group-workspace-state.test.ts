@@ -125,12 +125,12 @@ describe('applyGroupAwareNodeChanges', () => {
     const result = applyGroupAwareNodeChanges([group, first, removed, replaced], changes);
 
     expect(result.some(({ id }) => id === 'removed')).toBe(false);
-    expect(children(result, 'group')).toEqual(['first']);
+    expect(children(result, 'group')).toEqual(['first', 'replaced']);
     expect(canvasNodeBounds(at(result, 'group'))).toEqual({
-      x: 25,
-      y: 26,
-      width: 360,
-      height: 240,
+      x: -4,
+      y: -4,
+      width: 408,
+      height: 288,
     });
     expect(validateGroupMembership(result).valid).toBe(true);
   });
@@ -161,6 +161,41 @@ describe('applyGroupAwareNodeChanges', () => {
       height: 240,
     });
     expect(at(result, 'group').data.autoFit).toBe(true);
+  });
+
+  it('moves nested descendants once when both ancestor and nested frame changes are emitted', () => {
+    const leaf = node('leaf', 80, 90);
+    const inner = frame('inner', 50, 50, 360, 240, ['leaf']);
+    const outer = frame('outer', 0, 0, 900, 700, ['inner']);
+    const changes: NodeChange<WorkshopNode>[] = [
+      { type: 'position', id: 'outer', position: { x: 100, y: 20 }, dragging: true },
+      { type: 'position', id: 'inner', position: { x: 150, y: 70 }, dragging: true },
+    ];
+
+    const result = applyGroupAwareNodeChanges([outer, inner, leaf], changes);
+
+    expect(at(result, 'inner').position).toEqual({ x: 150, y: 70 });
+    expect(at(result, 'leaf').position).toEqual({ x: 180, y: 110 });
+  });
+
+  it('reparents children and refits an automatic ancestor when a nested frame is removed', () => {
+    const leaf = node('leaf', 500, 500, { width: 40, height: 20 });
+    const inner = frame('inner', 450, 450, 500, 400, ['leaf']);
+    const outer = frame('outer', 0, 0, 1200, 900, ['inner'], { autoFit: true });
+
+    const result = applyGroupAwareNodeChanges(
+      [outer, inner, leaf],
+      [{ type: 'remove', id: 'inner' }],
+    );
+
+    expect(children(result, 'outer')).toEqual(['leaf']);
+    expect(canvasNodeBounds(at(result, 'outer'))).toEqual({
+      x: 425,
+      y: 426,
+      width: 360,
+      height: 240,
+    });
+    expect(at(result, 'leaf').position).toEqual({ x: 500, y: 500 });
   });
 });
 
@@ -263,7 +298,7 @@ describe('updateGroupFrameData', () => {
     );
 
     expect(result.blockedChildIds).toEqual(['own-locked', 'protected']);
-    expect(children(result.nodes, 'target')).toEqual(['movable']);
+    expect(children(result.nodes, 'target')).toEqual(['movable', 'nested']);
     expect(children(result.nodes, 'other')).toEqual([]);
     expect(children(result.nodes, 'locked-owner')).toEqual(['protected']);
     expect(at(result.nodes, 'target').data).toMatchObject({
@@ -393,6 +428,27 @@ describe('group frame state utilities', () => {
     });
     expect(at(result, 'manual')).toBe(manual);
     expect(at(result, 'locked')).toBe(lockedAutomatic);
+  });
+
+  it('propagates automatic fitting from a changed nested frame through every ancestor', () => {
+    const leaf = node('leaf', 500, 500, { width: 40, height: 20 });
+    const inner = frame('inner', 0, 0, 900, 700, ['leaf'], { autoFit: true });
+    const outer = frame('outer', -100, -100, 1200, 1000, ['inner'], { autoFit: true });
+
+    const result = fitAutomaticGroupFrames([outer, inner, leaf], ['inner']);
+
+    expect(canvasNodeBounds(at(result, 'inner'))).toEqual({
+      x: 425,
+      y: 426,
+      width: 360,
+      height: 240,
+    });
+    expect(canvasNodeBounds(at(result, 'outer'))).toEqual({
+      x: 401,
+      y: 402,
+      width: 408,
+      height: 288,
+    });
   });
 });
 

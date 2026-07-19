@@ -47,6 +47,47 @@
   color: var(--red);
 }
 
+.git-conflict-recovery,
+.git-conflict-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+}
+
+.git-conflict-versions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.git-conflict-versions label,
+.git-conflict-editor > label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-soft);
+  font-size: 9px;
+}
+
+.git-conflict-versions textarea,
+#git-conflict-merged {
+  min-height: 110px;
+  resize: vertical;
+  font: 10px/1.45 var(--font-mono);
+}
+
+#git-conflict-merged {
+  min-height: 150px;
+}
+
+.git-conflict-choice-actions,
+.git-conflict-recovery-actions,
+.git-conflict-recovery-review {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .git-disclosure-body h4 {
   margin: 10px 0 5px;
   color: var(--text-soft);
@@ -60,5 +101,9 @@
 
   .git-shipping-panel label {
     display: none;
+  }
+
+  .git-conflict-versions {
+    grid-template-columns: 1fr;
   }
 }

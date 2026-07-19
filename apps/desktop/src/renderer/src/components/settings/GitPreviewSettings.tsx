@@ -36,6 +36,13 @@ export function GitPreviewSettings({
     });
   }
 
+  async function chooseExternalApplication(onSelected: (path: string) => void) {
+    await perform(async () => {
+      const selected = unwrap(await window.forgeboard.projects.pickExternalApplication());
+      if (selected) onSelected(selected);
+    });
+  }
+
   return (
     <>
       <GitConnectionsSettings
@@ -140,6 +147,49 @@ export function GitPreviewSettings({
               onChange={(event) => setDraft({ ...draft, gitIdentityName: event.target.value })}
             />
           </label>
+          <div className="settings-form-field">
+            <label htmlFor="external-editor-executable">External application</label>
+            <span className="path-picker">
+              <input
+                id="external-editor-executable"
+                name="external-editor-executable"
+                value={draft.externalEditorExecutable}
+                placeholder="Use the system default"
+                readOnly
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  void chooseExternalApplication((externalEditorExecutable) =>
+                    setDraft((current) => ({
+                      ...current,
+                      externalEditorExecutable,
+                    })),
+                  )
+                }
+              >
+                Browse
+              </button>
+              <button
+                type="button"
+                disabled={draft.externalEditorExecutable === ''}
+                onClick={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    externalEditorExecutable: '',
+                  }))
+                }
+              >
+                Use system default
+              </button>
+            </span>
+            <small>
+              On macOS, choose an application bundle such as Visual Studio Code.app, or choose an
+              exact executable on any platform. Forgeboard reviews the selected identity and opens
+              the workspace without a shell. Leave this empty to use your operating system’s
+              registered application.
+            </small>
+          </div>
           <label>
             Git identity email
             <input

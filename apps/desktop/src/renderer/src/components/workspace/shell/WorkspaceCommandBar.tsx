@@ -119,33 +119,46 @@ export function WorkspaceCommandBar({
           <Maximize2 size={16} />
         </button>
       </WorkspaceTooltip>
-      <button
-        className="workflow-run-trigger"
-        type="button"
-        disabled={workflowBusy || !canRunWorkflow}
-        title={
+      <WorkspaceTooltip
+        content={
           canRunWorkflow
             ? 'Run every node in the saved canvas workflow'
             : 'Add an Agent, Test, Review gate, or Diff/review node before running this canvas'
         }
-        onClick={onRunWorkflow}
       >
-        <Play size={13} aria-hidden="true" /> Run canvas
-      </button>
-      <button
-        className="workflow-run-trigger secondary"
-        type="button"
-        disabled={workflowBusy || !canRunSelected}
-        title={runSelectedReason}
-        onClick={onRunSelected}
-      >
-        <Play size={13} aria-hidden="true" /> Run selected
-      </button>
+        <button
+          className="workflow-run-trigger"
+          type="button"
+          aria-label="Run canvas"
+          disabled={workflowBusy || !canRunWorkflow}
+          onClick={onRunWorkflow}
+        >
+          <Play size={13} aria-hidden="true" /> Run canvas
+        </button>
+      </WorkspaceTooltip>
+      <WorkspaceTooltip content={runSelectedReason}>
+        <button
+          className="workflow-run-trigger secondary"
+          type="button"
+          aria-label="Run selected"
+          disabled={workflowBusy || !canRunSelected}
+          onClick={onRunSelected}
+        >
+          <Play size={13} aria-hidden="true" /> Run selected
+        </button>
+      </WorkspaceTooltip>
       <div className="command-spacer" />
       {workflowStatus !== null && (
-        <span className="workflow-toolbar-state" title={`Workflow: ${workflowStatus}`}>
-          Workflow · {workflowStatus.replaceAll('-', ' ')}
-        </span>
+        <WorkspaceTooltip content={`Workflow: ${workflowStatus}`}>
+          <span
+            className="workflow-toolbar-state"
+            role="status"
+            aria-label={`Workflow · ${workflowStatus.replaceAll('-', ' ')}`}
+            tabIndex={0}
+          >
+            Workflow · {workflowStatus.replaceAll('-', ' ')}
+          </span>
+        </WorkspaceTooltip>
       )}
       <WorkspaceStatusIndicators
         project={project}
@@ -173,14 +186,11 @@ export function WorkspaceCommandBar({
         </span>
         <small>agents on this computer</small>
       </div>
-      <button
-        className="command-trigger"
-        type="button"
-        title="See what changed in this project"
-        onClick={onOpenGitReview}
-      >
-        <GitCompareArrows size={14} /> Changes
-      </button>
+      <WorkspaceTooltip content="See what changed in this project">
+        <button className="command-trigger" type="button" onClick={onOpenGitReview}>
+          <GitCompareArrows size={14} /> Changes
+        </button>
+      </WorkspaceTooltip>
       <button className="command-trigger" type="button" onClick={onOpenCommands}>
         <Command size={14} /> Commands <kbd>{commandPaletteShortcut}</kbd>
       </button>

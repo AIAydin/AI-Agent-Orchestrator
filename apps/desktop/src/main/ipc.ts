@@ -154,6 +154,7 @@ export function createDefaultSettings(): AppSettings {
     gitIdentityName: '',
     gitIdentityEmail: '',
     gitRemote: 'origin',
+    externalEditorExecutable: '',
     terminalShell: defaultTerminalExecutable({
       platform: process.platform,
       environmentShell: process.env.SHELL,
@@ -688,6 +689,16 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       ),
   );
   handleWithEvent(
+    IPC_CHANNELS.projectsPickExternalApplication,
+    z.tuple([]),
+    async (event) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.pickExternalApplication(authority)),
+      ),
+  );
+  handleWithEvent(
     IPC_CHANNELS.projectsPickReferences,
     z.tuple([LocalReferenceSelectionInputSchema]),
     async (event, input) =>
@@ -970,6 +981,12 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
             });
             authority.assertCurrent();
             return decision.response === 1;
+          },
+          authorizeDeletion: () => {
+            authority.assertCurrent();
+            store.appendAudit('privacy', 'delete-all-local-data', 'allowed', {
+              effect: 'erase-all-forgeboard-local-data-including-this-audit-event',
+            });
           },
           resetDataServices: async () => {
             authority.assertCurrent();

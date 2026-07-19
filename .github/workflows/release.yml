@@ -158,6 +158,7 @@ jobs:
         run: |
           node scripts/release/verify-metadata.mjs --verify-tag
           node scripts/release/artifacts.mjs artifacts --all
+          node scripts/release/checksums.mjs artifacts --verify-all
           node scripts/release/download-sources.mjs artifacts
           node scripts/release/checksums.mjs artifacts SHA256SUMS-source-and-installers.txt
       - name: Publish GitHub Release

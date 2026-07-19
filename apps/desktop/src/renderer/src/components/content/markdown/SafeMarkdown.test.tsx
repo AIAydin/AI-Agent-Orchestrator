@@ -61,19 +61,26 @@ describe('SafeMarkdown', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Docs' }));
     expect(open).toHaveBeenCalledWith('https://example.com/guide');
     expect(screen.queryByRole('button', { name: 'Attack' })).toBeNull();
-    expect(screen.getByText('Attack').getAttribute('title')).toBe(
-      'This link was blocked for safety',
-    );
-    expect(screen.getByText('Credentials').getAttribute('title')).toBe(
-      'This link was blocked for safety',
+    const blocked = screen.getAllByRole('link', { name: 'Blocked link' });
+    const explanations = screen.getAllByRole('tooltip', {
+      name: 'This link was blocked for safety',
+    });
+    expect(blocked).toHaveLength(2);
+    expect(explanations).toHaveLength(2);
+    expect(blocked.map((link) => link.getAttribute('aria-describedby'))).toEqual(
+      explanations.map((tooltip) => tooltip.id),
     );
   });
 
   it('does not expose a dead link control when no approved opener is available', () => {
     render(<SafeMarkdown markdown="[Docs](https://example.com/guide)" />);
 
-    expect(screen.queryByRole('button', { name: 'Docs' })).toBeNull();
-    expect(screen.getByText('Docs').getAttribute('title')).toContain('not available here');
+    const link = screen.getByRole('link', { name: 'Link opening unavailable' });
+    const tooltip = screen.getByRole('tooltip', {
+      name: 'Opening links is not available here',
+    });
+    expect(link.getAttribute('aria-disabled')).toBe('true');
+    expect(link.getAttribute('aria-describedby')).toBe(tooltip.id);
   });
 
   it('parses headings, quotes, ordered lists, rules, and unterminated fences deterministically', () => {

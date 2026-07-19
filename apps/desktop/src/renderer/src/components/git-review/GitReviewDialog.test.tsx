@@ -16,6 +16,7 @@ import type {
   GitWorktreeCleanupResultView,
 } from '../../../../shared/git/lifecycle/contracts.js';
 import type {
+  GitConflictRecoveryStateView,
   GitShippingPlanView,
   GitShippingResultView,
 } from '../../../../shared/git/shipping-contracts.js';
@@ -205,7 +206,17 @@ const shippingResult: GitShippingResultView = {
   headBefore: headOid,
   headAfter: agentHeadOid,
   conflictedPaths: [],
+  conflictTarget: null,
   review,
+};
+
+const stagedRecoveryState: GitConflictRecoveryStateView = {
+  target: primaryTarget,
+  operation: 'merge',
+  conflictedPaths: [],
+  stagedPaths: ['src/resolved.ts'],
+  canContinue: true,
+  canAbort: true,
 };
 
 const cleanupPlan: GitWorktreeCleanupPlanView = {
@@ -253,6 +264,9 @@ const confirmCommitMock = vi.fn(() =>
 );
 const prepareShippingMock = vi.fn(() => Promise.resolve(success(shippingPlan)));
 const confirmShippingMock = vi.fn(() => Promise.resolve(success(shippingResult)));
+const conflictRecoveryStateMock = vi.fn<
+  (input: GitTargetInput) => Promise<IpcResult<GitConflictRecoveryStateView | null>>
+>(() => Promise.resolve(success(null)));
 const readinessGetMock = vi.fn(() => Promise.resolve(success(deliveryReadinessGetView)));
 const readinessPrepareMock = vi.fn(() => Promise.resolve(success(deliveryReadiness)));
 const readinessRunMock = vi.fn(() =>
@@ -273,6 +287,7 @@ const openExternalMock = vi.fn(() =>
       opened: true,
       targetKind: 'primary' as const,
       branch: 'feature/review',
+      application: 'selected' as const,
     }),
   ),
 );
@@ -304,6 +319,7 @@ beforeEach(() => {
     confirmCommitMock,
     prepareShippingMock,
     confirmShippingMock,
+    conflictRecoveryStateMock,
     readinessGetMock,
     readinessPrepareMock,
     readinessRunMock,
@@ -320,6 +336,7 @@ beforeEach(() => {
   ]) {
     mock.mockClear();
   }
+  conflictRecoveryStateMock.mockImplementation(() => Promise.resolve(success(null)));
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
@@ -335,6 +352,7 @@ beforeEach(() => {
         confirmCommit: confirmCommitMock,
         prepareShipping: prepareShippingMock,
         confirmShipping: confirmShippingMock,
+        conflictRecoveryState: conflictRecoveryStateMock,
         comparison: { compareAgents: compareAgentsMock },
         readiness: {
           get: readinessGetMock,
@@ -365,6 +383,24 @@ afterEach(() => {
 });
 
 describe('GitReviewDialog', () => {
+  it('restores durable all-staged conflict recovery after the dialog is reopened', async () => {
+    reviewMock.mockResolvedValueOnce(success(agentReview));
+    conflictRecoveryStateMock.mockImplementation((input: GitTargetInput) =>
+      Promise.resolve(success(input.kind === 'primary' ? stagedRecoveryState : null)),
+    );
+
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    await waitFor(() => expect(conflictRecoveryStateMock).toHaveBeenCalledWith(primaryTarget));
+    expect(
+      await screen.findByText(
+        'Every conflict is staged. Review Continue to finish the Git operation.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Review Continue/u })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Review Abort/u })).toBeTruthy();
+  });
+
   it('opens only the current opaque review target through the native external handoff', async () => {
     render(<GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={vi.fn()} />);
     await screen.findByText('origin/feature/review');
@@ -373,7 +409,9 @@ describe('GitReviewDialog', () => {
 
     await waitFor(() => expect(openExternalMock).toHaveBeenCalledWith(primaryTarget));
     expect(
-      await screen.findByText(/Opened the main project externally on feature\/review/u),
+      await screen.findByText(
+        /Opened the main project in your selected application on feature\/review/u,
+      ),
     ).toBeTruthy();
   });
 

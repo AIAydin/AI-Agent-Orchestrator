@@ -17,6 +17,7 @@ import { InfoPath, SettingsSection, type AsyncSettingsProps } from '../shared.js
 import { TrustCenter } from '../../integrity/TrustCenter.js';
 import { SettingsRepairHistory } from './repair/SettingsRepairHistory.js';
 import { ProviderConnectionSummary } from '../agents/connections/index.js';
+import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 interface PrivacySettingsProps extends AsyncSettingsProps {
   info: AppInfo;
@@ -308,25 +309,31 @@ export function PrivacySettings({
               )}
               <FolderReadinessEvidence status={backupReadiness} />
             </div>
-            <button
-              type="button"
-              className="button"
-              disabled={busy || backupSettingsDirty}
-              title={
+            <WorkspaceTooltip
+              content={
                 backupSettingsDirty
-                  ? 'Save your backup settings before creating a backup.'
-                  : undefined
-              }
-              onClick={() =>
-                void perform(async () => {
-                  const backup = unwrap(await window.forgeboard.storage.createBackup());
-                  setNotice(`Backup created at ${backup.path}.`);
-                  await refreshBackupHealth();
-                })
+                  ? 'Save your backup settings before creating a backup'
+                  : busy
+                    ? 'Wait for the current data action to finish'
+                    : 'Create a verified local backup now'
               }
             >
-              <HardDrive size={15} /> Create backup now
-            </button>
+              <button
+                type="button"
+                className="button"
+                aria-label="Create backup now"
+                disabled={busy || backupSettingsDirty}
+                onClick={() =>
+                  void perform(async () => {
+                    const backup = unwrap(await window.forgeboard.storage.createBackup());
+                    setNotice(`Backup created at ${backup.path}.`);
+                    await refreshBackupHealth();
+                  })
+                }
+              >
+                <HardDrive size={15} /> Create backup now
+              </button>
+            </WorkspaceTooltip>
           </>
         )}
         <div

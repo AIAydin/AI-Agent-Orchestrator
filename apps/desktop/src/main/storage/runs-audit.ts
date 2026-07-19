@@ -283,7 +283,7 @@ export function recoverInterruptedRuns(
   const recoveredAt = now.toISOString();
   const rows = database
     .prepare(
-      `SELECT value_json FROM agent_runs WHERE status IN ('prepared', 'running')
+      `SELECT value_json FROM agent_runs WHERE status IN ('prepared', 'running', 'paused')
        ORDER BY updated_at`,
     )
     .all() as unknown as JsonRow[];

@@ -67,6 +67,7 @@ import {
 } from './continuation/authority.js';
 import { normalizedTokenUsage } from './history/usage.js';
 import { createAgentLaunchAuditCheckpoint } from './launch/authorization-audit.js';
+import { continueActiveRun, enforcePauseCapability, pauseActiveRun } from './control/pause.js';
 import { captureWorkspace, changedWorkspace } from './workspace/snapshot.js';
 
 export { revalidateContextAttachments } from './context/file-integrity.js';
@@ -304,6 +305,9 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
   public sendInput(ownerId: string, runId: string, data: string): boolean {
     this.#assertAvailable();
     const active = this.#ownedActive(OwnerIdSchema.parse(ownerId), runId);
+    if (active.record.status === 'paused') {
+      throw new Error('Continue the paused Agent run before sending input.');
+    }
     const parsed = InputSchema.parse(data);
     if (active.adapterId === 'test-agent') {
       const requestId = active.pendingTestInputId;
@@ -313,6 +317,20 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     } else {
       active.session.writeInput(parsed.endsWith('\n') ? parsed : `${parsed}\n`);
     }
+    return true;
+  }
+
+  public pause(ownerId: string, runId: string): boolean {
+    this.#assertAvailable();
+    const active = this.#ownedActive(OwnerIdSchema.parse(ownerId), runId);
+    pauseActiveRun(active, (record) => this.#store.saveRun(record), this.#now().toISOString());
+    return true;
+  }
+
+  public continue(ownerId: string, runId: string): boolean {
+    this.#assertAvailable();
+    const active = this.#ownedActive(OwnerIdSchema.parse(ownerId), runId);
+    continueActiveRun(active, (record) => this.#store.saveRun(record), this.#now().toISOString());
     return true;
   }
 
@@ -818,10 +836,10 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
           childRunId: prepared.record.id,
         });
       }
-      const launchedSession = await this.#launchPrepared(
-        prepared,
-        contextSnapshot,
-        authorizeLaunch,
+      const launchedSession = enforcePauseCapability(
+        await this.#launchPrepared(prepared, contextSnapshot, authorizeLaunch),
+        !prepared.trustedExtensionAdapter &&
+          prepared.plan.disclosure.permissionProfile.enforcement !== 'docker',
       );
       const session =
         contextSnapshot === null
@@ -915,6 +933,12 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         },
         interrupt: () => {
           this.interrupt(ownerId, active.record.id);
+        },
+        pause: () => {
+          this.pause(ownerId, active.record.id);
+        },
+        continue: () => {
+          this.continue(ownerId, active.record.id);
         },
         terminate: async () => {
           await this.terminate(ownerId, active.record.id);
@@ -1851,6 +1875,8 @@ function retainSnapshotThroughSession(
       : session.events,
     result,
     writeInput: (data) => session.writeInput(data),
+    ...(session.pause === undefined ? {} : { pause: () => session.pause?.() }),
+    ...(session.continue === undefined ? {} : { continue: () => session.continue?.() }),
     interrupt: () => session.interrupt(),
     terminate: () => session.terminate(),
   };

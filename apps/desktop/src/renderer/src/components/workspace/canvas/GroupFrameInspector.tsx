@@ -1,6 +1,9 @@
 import { Boxes } from 'lucide-react';
 
 import type { WorkshopNode } from './CanvasNode.js';
+import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
+import { descendantIds } from './interactions/groups/group-containment.js';
+import { lockedCanvasNodeIds } from './interactions/lock-protection.js';
 
 interface GroupFrameInspectorProps {
   readonly node: WorkshopNode;
@@ -27,19 +30,8 @@ export function GroupFrameInspector({
   const layout = node.data.layout ?? 'freeform';
   const hasMembers = childIds.size > 0;
   const canArrange = hasMembers && layout !== 'freeform';
-  const protectedChildIds = new Set(
-    nodes
-      .filter(
-        (candidate) =>
-          candidate.id !== node.id &&
-          candidate.data.kind === 'group-frame' &&
-          candidate.data.locked,
-      )
-      .flatMap((candidate) => stringIds(candidate.data.childNodeIds)),
-  );
-  const candidates = nodes.filter(
-    (candidate) => candidate.id !== node.id && candidate.data.kind !== 'group-frame',
-  );
+  const protectedChildIds = lockedCanvasNodeIds(nodes);
+  const candidates = nodes.filter((candidate) => candidate.id !== node.id);
   const updateConfiguration = (data: Partial<WorkshopNode['data']>) => {
     onRecord();
     onUpdate(data);
@@ -68,7 +60,9 @@ export function GroupFrameInspector({
               name={`group-${node.id}-purpose`}
               value={purpose}
               onChange={(event) =>
-                updateConfiguration({ purpose: event.currentTarget.value as FramePurpose })
+                updateConfiguration({
+                  purpose: event.currentTarget.value as FramePurpose,
+                })
               }
             >
               <option value="product-surface">Part of the product</option>
@@ -83,7 +77,9 @@ export function GroupFrameInspector({
               name={`group-${node.id}-layout`}
               value={layout}
               onChange={(event) =>
-                updateConfiguration({ layout: event.currentTarget.value as FrameLayout })
+                updateConfiguration({
+                  layout: event.currentTarget.value as FrameLayout,
+                })
               }
             >
               <option value="freeform">Freeform</option>
@@ -129,14 +125,12 @@ export function GroupFrameInspector({
           <p>Add nodes to the canvas before choosing members for this group.</p>
         ) : (
           candidates.map((candidate) => {
-            const membershipLocked = candidate.data.locked || protectedChildIds.has(candidate.id);
-            return (
-              <label
-                key={candidate.id}
-                title={
-                  membershipLocked ? 'Unlock this node or its current group first.' : undefined
-                }
-              >
+            const wouldCreateCycle =
+              candidate.data.kind === 'group-frame' &&
+              descendantIds(nodes, candidate.id).includes(node.id);
+            const membershipLocked = protectedChildIds.has(candidate.id) || wouldCreateCycle;
+            const control = (
+              <label tabIndex={membershipLocked ? 0 : undefined}>
                 <input
                   type="checkbox"
                   name={`group-${node.id}-member-${candidate.id}`}
@@ -152,10 +146,28 @@ export function GroupFrameInspector({
                 <span>
                   <strong>{candidate.data.title}</strong>
                   <small>
-                    {membershipLocked ? `${candidate.data.kind} · locked` : candidate.data.kind}
+                    {wouldCreateCycle
+                      ? `${candidate.data.kind} · would create a cycle`
+                      : membershipLocked
+                        ? `${candidate.data.kind} · locked`
+                        : candidate.data.kind}
                   </small>
                 </span>
               </label>
+            );
+            return membershipLocked ? (
+              <WorkspaceTooltip
+                key={candidate.id}
+                content={
+                  wouldCreateCycle
+                    ? 'A group cannot contain one of its ancestors.'
+                    : 'Unlock this node or its current group first.'
+                }
+              >
+                {control}
+              </WorkspaceTooltip>
+            ) : (
+              <span key={candidate.id}>{control}</span>
             );
           })
         )}

@@ -30,6 +30,11 @@ describe('WorkspaceProjectTree', () => {
       name: 'File src/index.ts',
     });
     expect(safe.getAttribute('draggable')).toBe('true');
+    expect(safe.getAttribute('aria-describedby')).toBe(
+      screen.getByRole('tooltip', {
+        name: /Drag src\/index\.ts onto an agent/u,
+      }).id,
+    );
 
     const transfer = dataTransfer();
     fireEvent.dragStart(safe, { dataTransfer: transfer });
@@ -46,6 +51,9 @@ describe('WorkspaceProjectTree', () => {
       name: 'Protected file .env',
     });
     expect(protectedEntry.getAttribute('draggable')).toBe('false');
+    expect(protectedEntry.getAttribute('aria-describedby')).toBe(
+      screen.getByRole('tooltip', { name: 'Credential-like file.' }).id,
+    );
   });
 
   it('supports bounded project-relative search and refresh', async () => {

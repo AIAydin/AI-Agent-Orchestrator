@@ -202,6 +202,24 @@ failed or malformed version output blocks all auth and API commands. Changing th
 CLI-bound delivery approvals and cache, but does not authorize or cancel an unrelated ordinary Git
 push.
 
+### Local-effect classification
+
+Forgeboard maintains an exact architecture-tested inventory of mutation-capable Electron, child-
+process, filesystem, SQLite, and process-signal capabilities used by desktop main. A new capability
+or owner module fails the normal test suite until it is assigned one reviewed policy: audited
+authority, durable internal state, reviewed runtime, journaled startup recovery, ordinary project
+save, or test/packaging only. A separate architecture gate enumerates direct and indirect network
+transports and keeps implemented external sends behind the owner-bound outbound permit.
+
+Two narrow classes are not separate security approvals. **Save** in the project editor is the user's
+direct instruction to replace that exact file with the text currently in the editor; main requires
+canonical containment, the same ordinary-file identity, and the exact content hash originally
+opened before its atomic rename. A changed file fails closed instead of being overwritten. Startup
+database repair runs before a trustworthy audit database exists and creates no new user authority:
+user-selected restore is cancel-default, and every primary-file replacement is preceded by a
+private, fsynced, identity-bound recovery journal that is deterministically reconciled after a
+crash. Once the restored database is validated, its redacted recovery audit is part of that database.
+
 ## Context is separately approved
 
 Permission to read visible worktree content is not permission to attach it to a provider prompt.

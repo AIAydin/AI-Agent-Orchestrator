@@ -27,8 +27,15 @@ describe('GitBaseComparisonPanel', () => {
     expect(screen.getByText('new committed line')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add to commit' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Discard change/ })).toBeNull();
-    expect(screen.getByText(BASE_COMMIT)).toBeTruthy();
-    expect(screen.getAllByText(HEAD_COMMIT)).toHaveLength(2);
+    expect(
+      screen
+        .getAllByText(HEAD_COMMIT)
+        .filter((element) => element.getAttribute('role') !== 'tooltip'),
+    ).toHaveLength(2);
+    const base = screen.getByLabelText(`Starting point: ${BASE_COMMIT}`);
+    const tooltip = screen.getByRole('tooltip', { name: BASE_COMMIT });
+    expect(base.getAttribute('title')).toBeNull();
+    expect(base.getAttribute('aria-describedby')).toBe(tooltip.id);
   });
 
   it('distinguishes an empty committed diff from staged or unstaged edits', () => {
@@ -90,7 +97,11 @@ describe('GitBaseComparisonPanel', () => {
     );
 
     expect(screen.getByText(/300 commits compared · not all shown/)).toBeTruthy();
-    expect(screen.getAllByText(HEAD_COMMIT)).toHaveLength(2);
+    expect(
+      screen
+        .getAllByText(HEAD_COMMIT)
+        .filter((element) => element.getAttribute('role') !== 'tooltip'),
+    ).toHaveLength(2);
   });
 });
 

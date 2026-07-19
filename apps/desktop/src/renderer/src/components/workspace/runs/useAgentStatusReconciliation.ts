@@ -137,7 +137,9 @@ export function useAgentStatusReconciliation({
 }
 
 function isTerminalAttempt(attempt: RunHistorySummary): boolean {
-  return attempt.status !== 'prepared' && attempt.status !== 'running';
+  return (
+    attempt.status !== 'prepared' && attempt.status !== 'running' && attempt.status !== 'paused'
+  );
 }
 
 export function reconcileAgentStatus(
@@ -151,6 +153,7 @@ export function reconcileAgentStatus(
   }
   if (attempt.status === 'prepared') return { status: 'waiting-for-approval' };
   if (attempt.status === 'running') return { status: 'running' };
+  if (attempt.status === 'paused') return { status: 'paused' };
   if (attempt.status === 'succeeded') return { status: 'succeeded' };
   if (attempt.status === 'interrupted' || attempt.status === 'terminated') {
     return { status: 'cancelled' };

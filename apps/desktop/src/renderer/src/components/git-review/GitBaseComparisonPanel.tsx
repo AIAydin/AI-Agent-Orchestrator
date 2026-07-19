@@ -8,6 +8,7 @@ import type { GitDiffDisplayFile } from './git-review-model.js';
 import { fileDiffStats } from './git-review-model.js';
 import { GIT_BASE_PANEL_ID, GIT_BASE_TAB_ID } from './GitReviewModeTabs.js';
 import type { GitReviewNotesController } from './review-notes/useGitReviewNotes.js';
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 interface GitComparisonPresentation {
   readonly panelId?: string;
@@ -206,9 +207,11 @@ function ComparisonStat({
     <div>
       <small>{label}</small>
       {code ? (
-        <code title={value} aria-label={`${label}: ${value}`}>
-          {value.slice(0, 12)}
-        </code>
+        <WorkspaceTooltip content={value}>
+          <code tabIndex={0} aria-label={`${label}: ${value}`}>
+            {value.slice(0, 12)}
+          </code>
+        </WorkspaceTooltip>
       ) : (
         <strong>{value}</strong>
       )}

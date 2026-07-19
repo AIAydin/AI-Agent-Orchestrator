@@ -15,11 +15,8 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import {
-  approveNextNativeAgentLaunch,
-  launchDesktop,
-  watchExternalRequests,
-} from '../support/electron.js';
+import { installFakeCodex } from '../review-gate/fixture.js';
+import { launchDesktop, watchExternalRequests } from '../support/electron.js';
 import {
   expectNativeCancelDefault,
   installNativeDialogHarness,
@@ -29,6 +26,10 @@ import {
 } from './connections/native-dialogs.js';
 import { writeConfiguredFakeGitHubCli } from './connections/fake-github-cli.js';
 import { currentProjectPath, git, gitRemoteUrl } from './connections/repository.js';
+import {
+  configureCodexReviewerConnection,
+  runReviewedAgentWorkflow,
+} from './connections/reviewed-workflow.js';
 import {
   configureCustomGitHubCliThroughUi,
   configureNetworkRemoteThroughUi,
@@ -88,6 +89,7 @@ test('push and GitHub PR delivery require exact review while all transport stays
   };
 
   try {
+    const fakeCodex = await installFakeCodex(sandboxRoot);
     await mkdir(sshFixtureBin, { recursive: true });
     await Promise.all([
       symlink(
@@ -115,9 +117,10 @@ test('push and GitHub PR delivery require exact review while all transport stays
     electronApp = session.app;
     const page = session.page;
     watchExternalRequests(page, externalRequests);
+    await installNativeDialogHarness(electronApp);
 
     await page.getByRole('button', { name: 'Use safe defaults' }).click();
-    await configureGitThroughUi(page, managedWorktreeRoot);
+    await configureGitThroughUi(page, managedWorktreeRoot, fakeCodex);
     await page.getByRole('button', { name: /Explore the safe demo/i }).click();
     await expect(page.locator('.canvas-title')).toContainText('0 nodes · 0 connections');
 
@@ -132,7 +135,6 @@ test('push and GitHub PR delivery require exact review while all transport stays
     fakeGhState.expectedBaseBranch = baseBranch;
     fakeGhState.baseOid = baseOid;
     await writeFakeGhState(fakeGhStatePath, fakeGhState);
-    await installNativeDialogHarness(electronApp);
     await configureNetworkRemoteThroughUi({
       app: electronApp,
       page,
@@ -154,30 +156,26 @@ test('push and GitHub PR delivery require exact review while all transport stays
       .click();
     const agentNode = page.getByRole('article', { name: 'Agent: Agent' });
     await agentNode.click();
-    const runConfiguration = page.getByRole('region', { name: 'Agent run settings' });
+    const runConfiguration = page.getByRole('region', {
+      name: 'Agent run settings',
+    });
     await runConfiguration.getByLabel('Agent to run').selectOption('test-agent');
     await runConfiguration.getByLabel('Permission profile').selectOption('worktree-write');
     await runConfiguration
       .getByLabel('Prompt')
       .fill('Create the deterministic file used by remote-delivery review.');
-    await runConfiguration.getByRole('button', { name: /Review & run/ }).click();
-
-    const launchDisclosure = page.getByRole('dialog', {
-      name: 'Review this run before it starts',
+    const report = await runReviewedAgentWorkflow({ page, implementation: agentNode });
+    await report.getByRole('button', { name: 'Review this agent worktree' }).click();
+    let reviewDialog = page.getByRole('dialog', {
+      name: /Review changes in forgeboard-demo/,
     });
-    await approveNextNativeAgentLaunch(session.app, launchDisclosure, 'test-agent', async () => {
-      await launchDisclosure.getByRole('button', { name: 'Approve and start' }).click();
-    });
-    await expect(page.locator('.run-history')).toContainText('succeeded · 1 changed file', {
-      timeout: 20_000,
-    });
-
-    const report = await openOnlyChangeReport(page);
-    const changedFile = (await report.locator('code').innerText()).trim();
-    const worktreePath = await findChangedWorktree(primaryPath, changedFile);
-    await report.getByRole('button', { name: 'Review this agent’s changes' }).click();
-    let reviewDialog = page.getByRole('dialog', { name: /Review changes in forgeboard-demo/ });
     await reviewDialog.getByRole('tab', { name: 'Uncommitted changes' }).click();
+    const changedFiles = reviewDialog
+      .getByRole('navigation', { name: 'Changed files' })
+      .locator('.git-file-select');
+    await expect(changedFiles).toHaveCount(1);
+    const changedFile = (await changedFiles.locator('strong').innerText()).trim();
+    const worktreePath = await findChangedWorktree(primaryPath, changedFile);
     await reviewDialog.getByRole('button', { name: `Add ${changedFile} to commit` }).click();
     await reviewDialog.getByLabel('Commit message').fill(COMMIT_MESSAGE);
     await reviewDialog.getByRole('button', { name: /Review commit/ }).click();
@@ -202,7 +200,11 @@ test('push and GitHub PR delivery require exact review while all transport stays
     const inspector = page.getByRole('region', { name: 'Publish changes' });
     const runPicker = inspector.getByLabel('Finished agent run');
     await expect.poll(async () => await runPicker.locator('option').count()).toBeGreaterThan(1);
-    await runPicker.selectOption({ index: 1 });
+    const reviewedRun = runPicker.locator('option').filter({ hasText: sourceBranch });
+    await expect(reviewedRun).toHaveCount(1);
+    const reviewedRunId = await reviewedRun.getAttribute('value');
+    if (reviewedRunId === null) throw new Error('Reviewed run option has no value.');
+    await runPicker.selectOption(reviewedRunId);
     await inspector.getByLabel('Remote', { exact: true }).fill('origin');
     await inspector.getByLabel('Destination branch').fill(sourceBranch);
     await inspector.getByLabel('Base branch').fill(baseBranch);
@@ -225,14 +227,36 @@ test('push and GitHub PR delivery require exact review while all transport stays
     await expect(inspector).toContainText("Found in this run's project copy: origin.");
 
     await inspector.getByRole('button', { name: 'Open checks and approval' }).click();
-    reviewDialog = page.getByRole('dialog', { name: /Review changes in forgeboard-demo/ });
-    const readiness = reviewDialog.getByRole('region', { name: 'Delivery readiness' });
-    const lintRequirement = readiness.getByRole('checkbox', { name: /^Lint\b/ });
-    await lintRequirement.uncheck();
-    await lintRequirement.check();
-    await readiness.getByRole('button', { name: 'Save required checks' }).click();
-    await readiness.getByRole('button', { name: 'Run Lint' }).click();
+    reviewDialog = page.getByRole('dialog', {
+      name: /Review changes in forgeboard-demo/,
+    });
+    const readiness = reviewDialog.getByRole('region', {
+      name: 'Delivery readiness',
+    });
+    const workflowExecution = readiness.getByRole('combobox', {
+      name: 'Verified workflow execution',
+    });
+    await expect(workflowExecution.locator('option')).toHaveCount(1);
+    await expect(workflowExecution.locator('option').first()).toContainText('revision');
+    await workflowExecution.selectOption({ index: 0 });
+    const saveRequirements = readiness.getByRole('button', {
+      name: 'Save delivery requirements',
+    });
+    if (await saveRequirements.isEnabled()) await saveRequirements.click();
+    await expect(
+      readiness.getByRole('button', { name: /^Run (?:Lint|Tests?)$/u }).first(),
+    ).toBeEnabled({ timeout: 20_000 });
+    for (let index = 0; index < 2; index += 1) {
+      const runCheck = readiness.getByRole('button', { name: /^Run (?:Lint|Tests?)$/u }).first();
+      if ((await runCheck.count()) === 0) break;
+      await queueNativeDialogResponse(electronApp, 1);
+      await runCheck.click();
+      await expect(
+        readiness.getByRole('button', { name: /^Re-run (?:Lint|Tests?)$/u }).first(),
+      ).toBeEnabled({ timeout: 20_000 });
+    }
     await expect(readiness).toContainText('Passed', { timeout: 20_000 });
+    await queueNativeDialogResponse(electronApp, 1);
     await readiness.getByRole('button', { name: 'Approve quality' }).click();
     await expect(readiness).toContainText('Ready for delivery review');
     await expect(readiness).toContainText(sourceHead.slice(0, 12));
@@ -304,7 +328,9 @@ test('push and GitHub PR delivery require exact review while all transport stays
 
     const prCreatesBeforeCancel = await countGhCommand(fakeGhLogPath, ['pr', 'create']);
     await inspector.getByRole('button', { name: 'Review pull request' }).click();
-    planDialog = page.getByRole('alertdialog', { name: 'Review the pull request' });
+    planDialog = page.getByRole('alertdialog', {
+      name: 'Review the pull request',
+    });
     await expect(planDialog).toContainText(PULL_REQUEST_TITLE);
     await expect(planDialog).toContainText(PULL_REQUEST_BODY);
     await expect(planDialog).toContainText(sourceHead);
@@ -324,12 +350,18 @@ test('push and GitHub PR delivery require exact review while all transport stays
     );
 
     await inspector.getByRole('button', { name: 'Review pull request' }).click();
-    planDialog = page.getByRole('alertdialog', { name: 'Review the pull request' });
+    planDialog = page.getByRole('alertdialog', {
+      name: 'Review the pull request',
+    });
     const prApproveDialogIndex = (await nativeDialogs(electronApp)).length;
     await queueNativeDialogResponse(electronApp, 1);
     await planDialog.getByRole('button', { name: 'Continue to final confirmation' }).click();
-    const createdPullRequest = inspector.getByRole('region', { name: 'Created pull request' });
-    await expect(createdPullRequest).toContainText(PULL_REQUEST_URL, { timeout: 20_000 });
+    const createdPullRequest = inspector.getByRole('region', {
+      name: 'Created pull request',
+    });
+    await expect(createdPullRequest).toContainText(PULL_REQUEST_URL, {
+      timeout: 20_000,
+    });
     await expect(
       createdPullRequest.getByRole('button', { name: 'Copy pull request URL' }),
     ).toBeVisible();
@@ -365,7 +397,9 @@ test('push and GitHub PR delivery require exact review while all transport stays
     const ciDialogIndex = (await nativeDialogs(electronApp)).length;
     await queueNativeDialogResponse(electronApp, 1);
     await inspector.getByRole('button', { name: 'Check CI results for this commit' }).click();
-    const ciStatus = inspector.getByRole('region', { name: 'CI results for this commit' });
+    const ciStatus = inspector.getByRole('region', {
+      name: 'CI results for this commit',
+    });
     await expect(ciStatus).toContainText('1 run', { timeout: 20_000 });
     await expect(ciStatus).toContainText(sourceHead);
     await expect(ciStatus).toContainText('Remote delivery validation');
@@ -406,7 +440,11 @@ test('push and GitHub PR delivery require exact review while all transport stays
   }
 });
 
-async function configureGitThroughUi(page: Page, managedWorktreeRoot: string): Promise<void> {
+async function configureGitThroughUi(
+  page: Page,
+  managedWorktreeRoot: string,
+  fakeCodex: string,
+): Promise<void> {
   await page.getByRole('button', { name: 'Settings' }).click();
   const settings = page.locator('.settings-modal');
   await settings.getByRole('button', { name: /Git & previews/ }).click();
@@ -414,22 +452,18 @@ async function configureGitThroughUi(page: Page, managedWorktreeRoot: string): P
   await settings.getByLabel('Git identity name').fill(COMMIT_IDENTITY.name);
   await settings.getByLabel('Git identity email').fill(COMMIT_IDENTITY.email);
   await settings.getByLabel('Default remote').fill('origin');
+  await configureCodexReviewerConnection(settings, fakeCodex);
   await settings.getByRole('button', { name: 'Checks', exact: true }).click();
   const lint = settings.getByRole('group', { name: 'Lint command' });
   await lint.getByLabel('Executable').fill(process.execPath);
   await lint.getByLabel('Arguments').fill(`-e\nprocess.stdout.write("${DELIVERY_CHECK_MARKER}")`);
+  const tests = settings.getByRole('group', { name: 'Tests command' });
+  await tests.getByLabel('Executable').fill(process.execPath);
+  await tests
+    .getByLabel('Arguments')
+    .fill('-e\nprocess.stdout.write("reviewed-workflow-test-pass")');
   await settings.getByRole('button', { name: /Save settings/ }).click();
   await expect(settings).toBeHidden();
-}
-
-async function openOnlyChangeReport(page: Page) {
-  const drawer = page.locator('.activity-drawer');
-  await drawer.getByRole('tab', { name: /Changes/ }).click();
-  const report = drawer
-    .getByRole('tabpanel', { name: 'Changes' })
-    .locator('.change-report-list article');
-  await expect(report).toHaveCount(1);
-  return report;
 }
 
 async function findChangedWorktree(primaryPath: string, changedFile: string): Promise<string> {

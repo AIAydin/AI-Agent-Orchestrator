@@ -66,6 +66,17 @@ function props(
 }
 
 describe('Welcome moved-project recovery', () => {
+  it('describes compact settings and announces an honest recent-project empty state', () => {
+    render(<Welcome {...props({ recent: [] })} />);
+
+    const settings = screen.getByRole('button', { name: 'Settings' });
+    const tooltip = screen.getByRole('tooltip', {
+      name: 'Open Forgeboard settings',
+    });
+    expect(settings.getAttribute('aria-describedby')).toBe(tooltip.id);
+    expect(screen.getByRole('status').textContent).toContain('No recent projects yet');
+  });
+
   it('marks a missing project, prevents blind open, and requires reviewed confirmation', async () => {
     const onOpenRecent = vi.fn();
     const onLocateMoved = vi.fn(() => Promise.resolve(assessment));
@@ -77,11 +88,15 @@ describe('Welcome moved-project recovery', () => {
     expect(onOpenRecent).not.toHaveBeenCalled();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Locate moved repository for Lost repository' }),
+      screen.getByRole('button', {
+        name: 'Locate moved repository for Lost repository',
+      }),
     );
     await waitFor(() => expect(onLocateMoved).toHaveBeenCalledWith(PROJECT_ID));
 
-    const dialog = await screen.findByRole('dialog', { name: 'Confirm moved project' });
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Confirm moved project',
+    });
     expect(within(dialog).getByText('/old/project')).toBeTruthy();
     expect(within(dialog).getByText('/new/project')).toBeTruthy();
     expect(within(dialog).getByText('Git repository')).toBeTruthy();
@@ -131,7 +146,9 @@ describe('Welcome moved-project recovery', () => {
     );
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Locate moved repository for Lost repository' }),
+      screen.getByRole('button', {
+        name: 'Locate moved repository for Lost repository',
+      }),
     );
     await waitFor(() => expect(onError).toHaveBeenCalledWith('Candidate was rejected.'));
     expect(screen.queryByRole('dialog', { name: 'Confirm moved project' })).toBeNull();

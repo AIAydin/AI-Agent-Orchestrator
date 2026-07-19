@@ -2,6 +2,7 @@ import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import type { WorkflowStartInput } from '../../../../../shared/workflow/contracts.js';
 import type { WorkflowExecutionView } from '../../../../../shared/workflow/contracts.js';
 import type { WorkshopEdge } from '../model/types.js';
+import { descendantIds } from '../canvas/interactions/groups/group-containment.js';
 
 export interface WorkflowNodeEligibility {
   readonly runnable: boolean;
@@ -89,7 +90,7 @@ export function workflowSelectionEligibility(
   }
   if (selectedNodes.length === 1 && selectedNodes[0]?.data.kind === 'group-frame') {
     const group = selectedNodes[0];
-    const childIds = stringIds(group.data['childNodeIds']);
+    const childIds = descendantIds(allNodes, group.id);
     const runnableChildren = allNodes.filter(
       (node) =>
         childIds.includes(node.id) && workflowNodeEligibility(node, edges, allNodes).runnable,
@@ -123,10 +124,6 @@ export function workflowSelectionEligibility(
         reason: `Run these ${String(ids.length)} selected nodes and everything they depend on`,
         scope: { kind: 'selection', nodeIds: ids, includeUpstream: true },
       };
-}
-
-function stringIds(value: unknown): readonly string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : [];
 }
 
 function taskAssigneeId(node: WorkshopNode): string | undefined {

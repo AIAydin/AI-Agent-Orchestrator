@@ -4,6 +4,7 @@ import { FilePlus2, X } from 'lucide-react';
 import { FileEditorPanel, type FileEditorSessionState } from '../FileEditorPanel.js';
 import type { MonacoLoader } from '../monaco-loader.js';
 import type { FileEditorOperations } from '../operations.js';
+import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 import './FileEditorWorkspace.css';
 
 const MAX_OPEN_FILE_TABS = 20;
@@ -127,47 +128,57 @@ export function FileEditorWorkspace({
               onFileDragStart !== undefined && state?.status === 'ready' && !dirty;
             return (
               <div className={`file-editor-tab${active ? ' active' : ''}`} key={key}>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  draggable={contextDraggable}
-                  title={
+                <WorkspaceTooltip
+                  content={
                     dirty
-                      ? 'Save or discard your changes before dragging this file.'
+                      ? 'Save or discard your changes before dragging this file'
                       : contextDraggable
                         ? `Drag ${tab.relativePath} to an agent to share it`
                         : tab.relativePath
                   }
-                  onDragStart={(event) => {
-                    if (!contextDraggable) {
-                      event.preventDefault();
-                      return;
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    draggable={contextDraggable}
+                    onDragStart={(event) => {
+                      if (!contextDraggable) {
+                        event.preventDefault();
+                        return;
+                      }
+                      onFileDragStart(event.dataTransfer, {
+                        projectId: tab.projectId,
+                        relativePath: tab.relativePath,
+                      });
+                    }}
+                    onClick={() =>
+                      setWorkspace((current) => ({
+                        ...current,
+                        activeKey: key,
+                        message: null,
+                      }))
                     }
-                    onFileDragStart(event.dataTransfer, {
-                      projectId: tab.projectId,
-                      relativePath: tab.relativePath,
-                    });
-                  }}
-                  onClick={() =>
-                    setWorkspace((current) => ({ ...current, activeKey: key, message: null }))
+                  >
+                    <span>{fileName(tab.relativePath)}</span>
+                    {dirty ? <em aria-label="Unsaved changes">●</em> : null}
+                  </button>
+                </WorkspaceTooltip>
+                <WorkspaceTooltip
+                  content={
+                    dirty ? 'Save or discard your changes before closing this tab' : 'Close tab'
                   }
                 >
-                  <span>{fileName(tab.relativePath)}</span>
-                  {dirty ? <em aria-label="Unsaved changes">●</em> : null}
-                </button>
-                <button
-                  type="button"
-                  className="file-editor-tab-close"
-                  aria-label={`Close ${tab.relativePath}`}
-                  title={
-                    dirty ? 'Save or discard your changes before closing this tab.' : 'Close tab'
-                  }
-                  disabled={dirty || state === undefined || state.status === 'loading'}
-                  onClick={() => closeTab(key)}
-                >
-                  <X size={11} aria-hidden="true" />
-                </button>
+                  <button
+                    type="button"
+                    className="file-editor-tab-close"
+                    aria-label={`Close ${tab.relativePath}`}
+                    disabled={dirty || state === undefined || state.status === 'loading'}
+                    onClick={() => closeTab(key)}
+                  >
+                    <X size={11} aria-hidden="true" />
+                  </button>
+                </WorkspaceTooltip>
               </div>
             );
           })}
@@ -215,7 +226,7 @@ export function FileEditorWorkspace({
           );
         })}
         {activeTab === null ? (
-          <div className="file-editor-tabs-empty">
+          <div className="file-editor-tabs-empty" role="status">
             <p>Files you open will show up here as tabs.</p>
             <button type="button" onClick={onBrowseFiles}>
               Browse project files

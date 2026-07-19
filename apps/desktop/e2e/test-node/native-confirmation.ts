@@ -96,16 +96,16 @@ export function expectExactLaunchConfirmation(
 ): void {
   expect(record).toMatchObject({
     type: 'warning',
-    title: 'Launch workflow node',
-    message: 'Launch this exact prepared workflow action?',
-    buttons: ['Cancel', 'Launch node'],
+    title: 'Run workflow node',
+    message: 'Run this workflow node exactly as reviewed?',
+    buttons: ['Cancel', 'Run node'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
     response: 1,
   });
   expectOwnedNativeDialog(record);
-  expect(record.detail).toContain('Executor: exact-check');
+  expect(record.detail).toContain('Runs with: exact-check');
   expect(record.detail).toContain('"executable"');
   expect(record.detail).toContain('"arguments"');
   expect(record.detail).toContain('"-e"');
@@ -119,7 +119,7 @@ export function expectExactNodeCancelConfirmation(record: WorkflowNativeDialogRe
   expect(record).toMatchObject({
     type: 'warning',
     title: 'Cancel workflow node',
-    message: 'Stop only this active workflow node attempt?',
+    message: 'Stop only this run of the workflow node?',
     buttons: ['Keep running', 'Cancel node'],
     defaultId: 0,
     cancelId: 0,
@@ -128,7 +128,7 @@ export function expectExactNodeCancelConfirmation(record: WorkflowNativeDialogRe
   });
   expectOwnedNativeDialog(record);
   expect(record.detail).toMatch(/^Node: .+/u);
-  expect(record.detail).toContain('verify the current execution, node, and attempt');
+  expect(record.detail).toContain('Forgeboard checks that nothing changed before stopping it.');
 }
 
 function expectOwnedNativeDialog(record: WorkflowNativeDialogRecord): void {

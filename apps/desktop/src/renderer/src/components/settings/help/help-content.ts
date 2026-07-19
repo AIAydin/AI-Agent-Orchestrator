@@ -183,10 +183,11 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     keywords: ['git', 'merge', 'cherry-pick', 'conflict', 'diverged', 'delivery', 'resolution'],
     icon: GitMerge,
     steps: [
-      'Open Changes and inspect every path Forgeboard reports as conflicted. The primary checkout remains in Git’s real conflict state.',
-      'Resolve the files deliberately in the project editor or an explicitly opened external application, then stage and commit the resolution through reviewed Git actions.',
+      'Open Changes and inspect every path Forgeboard reports as conflicted. Merge, squash, and cherry-pick conflicts remain in the primary checkout; rebase conflicts remain in the managed agent workspace.',
+      'Resolve the files deliberately in the project editor or an explicitly opened external application, then stage every resolution.',
+      'Use Review Continue to bind the current operation, commit, paths, staged resolution, and unstaged content to a cancel-default system confirmation. Use Review Abort to restore the pre-operation Git state.',
       'Run the required delivery checks and record human quality approval again because changed source invalidates the earlier evidence.',
-      'Forgeboard currently has no visual conflict-resolution or abort wizard, and squash and rebase delivery are not implemented.',
+      'Forgeboard supports reviewed fast-forward, merge-commit, squash, rebase, and cherry-pick delivery. For bounded text conflicts, compare Git base, ours, and theirs inline, edit the merged result, then review a separate apply-and-stage confirmation. Resolve binary, oversized, ignored, or sensitive files in a trusted external editor.',
     ],
   },
   {

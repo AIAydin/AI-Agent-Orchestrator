@@ -205,6 +205,7 @@ export const AppSettingsSchema = z
       .refine((value) => !containsControlCharacter(value))
       .default(''),
     gitRemote: GitRemoteSettingSchema.default('origin'),
+    externalEditorExecutable: OptionalMachineSpecificPathSchema.default(''),
     terminalShell: TerminalExecutableSettingSchema,
     envAllowlist: EnvironmentAllowlistSchema,
     developmentCommand: CommandConfigurationSchema.default({
@@ -1079,6 +1080,7 @@ export const IPC_CHANNELS = Object.freeze({
   projectsPick: 'projects:pick',
   projectsPickParent: 'projects:pick-parent',
   projectsPickExecutable: 'projects:pick-executable',
+  projectsPickExternalApplication: 'projects:pick-external-application',
   projectsPickReferences: 'projects:pick-references',
   projectsLocateMoved: 'projects:locate-moved',
   projectsConfirmMoved: 'projects:confirm-moved',
@@ -1105,6 +1107,8 @@ export const IPC_CHANNELS = Object.freeze({
   runsRetry: 'runs:retry',
   runsApprove: 'runs:approve',
   runsInput: 'runs:input',
+  runsPause: 'runs:pause',
+  runsContinue: 'runs:continue',
   runsInterrupt: 'runs:interrupt',
   runsTerminate: 'runs:terminate',
   runsEvent: 'runs:event',
@@ -1135,4 +1139,7 @@ export const IPC_CHANNELS = Object.freeze({
   gitConfirmCommit: 'git:confirm-commit',
   gitPrepareShipping: 'git:prepare-shipping',
   gitConfirmShipping: 'git:confirm-shipping',
+  gitConflictRecoveryState: 'git:conflict-recovery-state',
+  gitPrepareConflictRecovery: 'git:prepare-conflict-recovery',
+  gitConfirmConflictRecovery: 'git:confirm-conflict-recovery',
 } as const);

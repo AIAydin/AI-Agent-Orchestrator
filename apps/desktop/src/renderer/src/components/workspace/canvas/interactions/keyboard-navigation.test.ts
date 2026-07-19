@@ -76,7 +76,32 @@ describe('canvas keyboard navigation', () => {
       { x: 60, y: 70 },
     ]);
   });
+
+  it('moves every nested descendant once when ancestor and child frames are selected', () => {
+    const outer = groupNode('outer', { x: 0, y: 0 }, true, ['inner']);
+    const inner = groupNode('inner', { x: 20, y: 20 }, true, ['leaf']);
+    const leaf = node('leaf', { x: 40, y: 40 }, false, false);
+
+    const result = moveSelectedCanvasNodes([outer, inner, leaf], { x: 10, y: 5 });
+
+    expect(result.movedNodeIds).toEqual(['outer', 'inner', 'leaf']);
+    expect(result.nodes.map(({ position }) => position)).toEqual([
+      { x: 10, y: 5 },
+      { x: 30, y: 25 },
+      { x: 50, y: 45 },
+    ]);
+  });
 });
+
+function groupNode(
+  id: string,
+  position: { x: number; y: number },
+  selected: boolean,
+  childNodeIds: string[],
+): WorkshopNode {
+  const value = node(id, position, selected, false);
+  return { ...value, data: { ...value.data, kind: 'group-frame', childNodeIds } };
+}
 
 function node(
   id: string,

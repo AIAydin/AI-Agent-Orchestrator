@@ -216,6 +216,7 @@ export const GitWorkspaceExternalOpenResultSchema = z
     opened: z.boolean(),
     targetKind: z.enum(['primary', 'agent-worktree']),
     branch: GitLifecycleRefSchema.nullable(),
+    application: z.enum(['system-registered', 'selected']),
   })
   .strict();
 export type GitWorkspaceExternalOpenResult = z.infer<typeof GitWorkspaceExternalOpenResultSchema>;

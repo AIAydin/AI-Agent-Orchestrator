@@ -286,6 +286,13 @@
   grid-column: 1 / -1;
   display: flex;
 }
+.live-run-controls > div > .workspace-tooltip-target:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.live-run-controls > div > .workspace-tooltip-target:first-child > input {
+  width: 100%;
+}
 .live-run-controls input {
   min-width: 0;
   border-radius: 7px 0 0 7px;

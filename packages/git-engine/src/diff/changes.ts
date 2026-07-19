@@ -1,4 +1,4 @@
-import { lstat } from 'node:fs/promises';
+import { lstat, readFile, unlink, writeFile } from 'node:fs/promises';
 
 import { assertExplicitApproval, assertSameStrings } from '../model/approval.js';
 import { GitEngineError } from '../model/errors.js';
@@ -12,6 +12,7 @@ import type {
   DiscardHunksApproval,
   GitApprovalSnapshot,
   GitContinuationState,
+  GitCommitIdentity,
   GitOperationResult,
   HunkOperationResult,
   InProgressGitOperation,
@@ -297,14 +298,46 @@ export class ChangeService {
   public async stagePaths(
     repositoryPath: string,
     paths: readonly string[],
+    options: GitMutationExecutionOptions = {},
   ): Promise<HunkOperationResult> {
     const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
     await this.assertReviewablePaths(repositoryRoot, paths);
+    await options.beforeApply?.();
     await this.repositories.git.runGuarded(['-C', repositoryRoot, 'add', '--', ...paths], {
       repositoryPath: repositoryRoot,
       operation: 'stage-clean',
       paths,
     });
+    return await this.hunkResult(repositoryRoot);
+  }
+
+  /** Stages caller-supplied bytes directly, so later worktree races cannot change the index. */
+  public async stageExactContent(
+    repositoryPath: string,
+    filePath: string,
+    content: Uint8Array,
+    options: GitMutationExecutionOptions = {},
+  ): Promise<HunkOperationResult> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    assertPathSelection([filePath]);
+    const status = await this.repositories.status(repositoryRoot);
+    if (!status.entries.some((entry) => entry.kind === 'unmerged' && entry.path === filePath)) {
+      throw new GitEngineError('STALE_APPROVAL', 'The exact conflict path is no longer unmerged.');
+    }
+    const mode = await this.conflictFileMode(repositoryRoot, filePath);
+    await options.beforeApply?.();
+    const blob = await this.repositories.git.run(
+      ['-C', repositoryRoot, 'hash-object', '--no-filters', '-w', '--stdin'],
+      { input: content, maxOutputBytes: 256 },
+    );
+    const oid = blob.stdout.trim();
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(oid)) {
+      throw new GitEngineError('COMMAND_FAILED', 'Git returned an invalid reviewed-content blob.');
+    }
+    await this.repositories.git.runExactIndexUpdate(
+      ['-C', repositoryRoot, 'update-index', '-z', '--index-info'],
+      `${mode} ${oid}\t${filePath}\0`,
+    );
     return await this.hunkResult(repositoryRoot);
   }
 
@@ -443,17 +476,26 @@ export class ChangeService {
         : approval.strategy === 'merge-commit'
           ? ['--no-ff', '--no-edit', '--no-gpg-sign']
           : ['--squash', '--no-commit', '--no-gpg-sign'];
-    return await this.runConflictAware(repositoryRoot, [
-      '-C',
-      repositoryRoot,
-      '-c',
-      `user.name=${approval.authorName}`,
-      '-c',
-      `user.email=${approval.authorEmail}`,
-      'merge',
-      ...strategyArgs,
-      sourceOid,
-    ]);
+    if (approval.strategy === 'squash') {
+      await this.writeSquashMarker(repositoryRoot, approval);
+    }
+    try {
+      const result = await this.runConflictAware(repositoryRoot, [
+        '-C',
+        repositoryRoot,
+        '-c',
+        `user.name=${approval.authorName}`,
+        '-c',
+        `user.email=${approval.authorEmail}`,
+        'merge',
+        ...strategyArgs,
+        sourceOid,
+      ]);
+      return result;
+    } catch (error) {
+      if (approval.strategy === 'squash') await this.removeSquashMarker(repositoryRoot);
+      throw error;
+    }
   }
 
   public async cherryPick(
@@ -497,6 +539,12 @@ export class ChangeService {
       '--no-gpg-sign',
       ...commits,
     ]);
+  }
+
+  /** Clears the durable squash recovery marker only after its staged result was committed. */
+  public async finalizeSquash(repositoryPath: string): Promise<void> {
+    const repositoryRoot = await this.repositories.resolveRepositoryRoot(repositoryPath);
+    await this.removeSquashMarker(repositoryRoot);
   }
 
   public async rebase(
@@ -549,7 +597,10 @@ export class ChangeService {
       stagedPaths,
       stagedPatchSha256: patchSha256(stagedDiff.raw),
       unstagedPatchSha256: patchSha256(unstagedDiff.raw),
-      canContinue: operation !== null && conflictedPaths.length === 0,
+      canContinue:
+        operation !== null &&
+        conflictedPaths.length === 0 &&
+        (operation !== 'squash' || stagedPaths.length > 0),
       canAbort: operation !== null,
     };
   }
@@ -557,6 +608,7 @@ export class ChangeService {
   public async continueOperation(
     repositoryPath: string,
     approval: ContinueGitOperationApproval,
+    options: { readonly beforeApply?: () => void | Promise<void> } = {},
   ): Promise<GitOperationResult> {
     assertExplicitApproval(approval, 'continue-git-operation');
     const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
@@ -567,6 +619,27 @@ export class ChangeService {
         'All conflicted paths must be resolved before continuing.',
         { paths: state.conflictedPaths },
       );
+    }
+    await options.beforeApply?.();
+    if (approval.operation === 'squash') {
+      const identity = await this.readSquashMarker(repositoryRoot);
+      const headBefore = await this.currentHead(repositoryRoot);
+      await this.repositories.git.run([
+        '-C',
+        repositoryRoot,
+        '-c',
+        `user.name=${identity.authorName}`,
+        '-c',
+        `user.email=${identity.authorEmail}`,
+        'commit',
+        '--no-edit',
+        '--no-gpg-sign',
+        '-F',
+        await this.gitPath(repositoryRoot, 'SQUASH_MSG'),
+      ]);
+      const result = await this.operationResult(repositoryRoot, headBefore);
+      await this.removeSquashMarker(repositoryRoot);
+      return result;
     }
     return await this.runConflictAware(repositoryRoot, [
       '-C',
@@ -583,15 +656,22 @@ export class ChangeService {
   public async abortOperation(
     repositoryPath: string,
     approval: AbortGitOperationApproval,
+    options: { readonly beforeApply?: () => void | Promise<void> } = {},
   ): Promise<GitOperationResult> {
     assertExplicitApproval(approval, 'abort-git-operation');
     const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
     await this.assertContinuationApproval(repositoryRoot, approval);
+    await options.beforeApply?.();
     const headBefore = await this.currentHead(repositoryRoot);
-    await this.repositories.git.runGuarded(['-C', repositoryRoot, approval.operation, '--abort'], {
+    const abortArgs =
+      approval.operation === 'squash'
+        ? ['-C', repositoryRoot, 'read-tree', '--reset', '-u', 'HEAD']
+        : ['-C', repositoryRoot, approval.operation, '--abort'];
+    await this.repositories.git.runGuarded(abortArgs, {
       repositoryPath: repositoryRoot,
       operation: 'checkout-smudge',
     });
+    if (approval.operation === 'squash') await this.removeSquashMarker(repositoryRoot);
     if ((await this.inProgressOperation(repositoryRoot)) !== null) {
       throw new GitEngineError('COMMAND_FAILED', 'Git operation remained active after abort.');
     }
@@ -827,10 +907,11 @@ export class ChangeService {
     }
     if (await this.gitPathExists(repositoryRoot, 'MERGE_HEAD')) return 'merge';
     if (await this.gitPathExists(repositoryRoot, 'CHERRY_PICK_HEAD')) return 'cherry-pick';
+    if (await this.gitPathExists(repositoryRoot, 'FORGEBOARD_SQUASH_HEAD')) return 'squash';
     return null;
   }
 
-  private async gitPathExists(repositoryRoot: string, name: string): Promise<boolean> {
+  private async gitPath(repositoryRoot: string, name: string): Promise<string> {
     const result = await this.repositories.git.run([
       '-C',
       repositoryRoot,
@@ -839,11 +920,81 @@ export class ChangeService {
       '--git-path',
       name,
     ]);
+    return result.stdout.trim();
+  }
+
+  private async gitPathExists(repositoryRoot: string, name: string): Promise<boolean> {
+    const markerPath = await this.gitPath(repositoryRoot, name);
     try {
-      await lstat(result.stdout.trim());
+      await lstat(markerPath);
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private async conflictFileMode(repositoryRoot: string, filePath: string): Promise<string> {
+    const result = await this.repositories.git.run([
+      '-C',
+      repositoryRoot,
+      'ls-files',
+      '--stage',
+      '-z',
+      '--',
+      filePath,
+    ]);
+    const modes = result.stdout
+      .split('\0')
+      .filter((entry) => entry !== '')
+      .map((entry) => /^(100644|100755) [a-f0-9]{40,64} [123]\t([^\0]+)$/u.exec(entry))
+      .filter((match): match is RegExpExecArray => match !== null && match[2] === filePath)
+      .map((match) => match[1]);
+    const mode = modes[0];
+    if (mode === undefined || modes.some((candidate) => candidate !== mode)) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'The reviewed conflict has no stable ordinary-file mode.',
+      );
+    }
+    return mode;
+  }
+
+  private async writeSquashMarker(repositoryRoot: string, approval: MergeApproval): Promise<void> {
+    await writeFile(
+      await this.gitPath(repositoryRoot, 'FORGEBOARD_SQUASH_HEAD'),
+      JSON.stringify({
+        authorName: approval.authorName,
+        authorEmail: approval.authorEmail,
+      }),
+      { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+    );
+  }
+
+  private async readSquashMarker(repositoryRoot: string): Promise<GitCommitIdentity> {
+    const raw = await readFile(
+      await this.gitPath(repositoryRoot, 'FORGEBOARD_SQUASH_HEAD'),
+      'utf8',
+    );
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      !('authorName' in parsed) ||
+      typeof parsed.authorName !== 'string' ||
+      !('authorEmail' in parsed) ||
+      typeof parsed.authorEmail !== 'string'
+    ) {
+      throw new GitEngineError('APPROVAL_MISMATCH', 'Squash recovery metadata is invalid.');
+    }
+    assertCommitIdentity(parsed.authorName, parsed.authorEmail);
+    return { authorName: parsed.authorName, authorEmail: parsed.authorEmail };
+  }
+
+  private async removeSquashMarker(repositoryRoot: string): Promise<void> {
+    try {
+      await unlink(await this.gitPath(repositoryRoot, 'FORGEBOARD_SQUASH_HEAD'));
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
     }
   }
 
