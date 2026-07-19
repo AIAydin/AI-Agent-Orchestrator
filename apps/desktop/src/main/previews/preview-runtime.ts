@@ -30,7 +30,7 @@ import {
   type LaunchExecutableIdentity,
   type LaunchFileIdentity,
 } from '../agent-execution/launch-integrity.js';
-import type { StoredRunRecord } from '../storage.js';
+import type { LocalStore, StoredRunRecord } from '../storage.js';
 import { PreviewTargetResolver, type ResolvedPreviewTarget } from './targets/resolver.js';
 
 const PORT_PLACEHOLDER = '{PORT}';
@@ -41,6 +41,8 @@ export interface PreviewRuntimeStore {
   listProjects(): Project[];
   getProject?(projectId: string): Project | undefined;
   getRun?(runId: string): StoredRunRecord | undefined;
+  getGitWorktreeMetadataIntent?: LocalStore['getGitWorktreeMetadataIntent'];
+  reconcileGitWorktreeMetadataIntent?: LocalStore['reconcileGitWorktreeMetadataIntent'];
   listProjectRuns?(projectId: string, limit?: number): StoredRunRecord[];
   appendAudit(
     category: string,
@@ -135,6 +137,19 @@ export class PreviewRuntime {
             store.getProject?.(projectId) ??
             store.listProjects().find((candidate) => candidate.id === projectId),
           getRun: (runId) => store.getRun?.(runId),
+          ...(store.getGitWorktreeMetadataIntent === undefined
+            ? {}
+            : {
+                getGitWorktreeMetadataIntent: (runId: string) =>
+                  store.getGitWorktreeMetadataIntent?.(runId),
+              }),
+          ...(store.reconcileGitWorktreeMetadataIntent === undefined
+            ? {}
+            : {
+                reconcileGitWorktreeMetadataIntent: (
+                  input: Parameters<LocalStore['reconcileGitWorktreeMetadataIntent']>[0],
+                ) => store.reconcileGitWorktreeMetadataIntent!(input),
+              }),
           listProjectRuns: (projectId, limit) => store.listProjectRuns?.(projectId, limit) ?? [],
         },
         new RepositoryService(),
@@ -273,6 +288,20 @@ export class PreviewRuntime {
           beforeSpawn: async (launch) => {
             const latest = await this.#revalidatePlan(approvedPlan);
             assertPreviewLaunchMatchesPlan(latest, launch);
+            this.store.appendAudit('preview', 'start', 'allowed', {
+              projectId: input.projectId,
+              nodeId: input.nodeId,
+              commandFingerprint: approvedPlan.fingerprint,
+              executableSha256: approvedPlan.executableIdentity.digest,
+              cwdSha256: sha256(approvedPlan.cwd),
+              commandSource: command.source,
+              phase: 'authorized-before-spawn',
+              ...(command.packageScript === null
+                ? {}
+                : {
+                    packageManifestSha256: command.packageScript.packageJsonIdentity.digest,
+                  }),
+            });
           },
           authorizeSpawn: (launch) => {
             assertPreviewLaunchMatchesPlan(approvedPlan, launch);
@@ -284,18 +313,6 @@ export class PreviewRuntime {
         if (!isTerminal(session.status)) await this.#service.kill(session.id);
         throw new Error('The preview was invalidated while local data was being deleted.');
       }
-      this.store.appendAudit('preview', 'start', 'allowed', {
-        projectId: input.projectId,
-        nodeId: input.nodeId,
-        sessionId: session.id,
-        commandFingerprint: approvedPlan.fingerprint,
-        executableSha256: approvedPlan.executableIdentity.digest,
-        cwdSha256: sha256(approvedPlan.cwd),
-        commandSource: command.source,
-        ...(command.packageScript === null
-          ? {}
-          : { packageManifestSha256: command.packageScript.packageJsonIdentity.digest }),
-      });
       return serializeSnapshot(session, input.target ?? { kind: 'primary' });
     } catch (error) {
       if (generation === this.#generation) {
@@ -530,7 +547,10 @@ export class PreviewRuntime {
       projectIdentity,
       cwdIdentity,
       packageScript: command.packageScript,
-      portRange: { start: settings.previewPortStart, end: settings.previewPortEnd },
+      portRange: {
+        start: settings.previewPortStart,
+        end: settings.previewPortEnd,
+      },
       trustedHosts: [...settings.previewTrustedHosts],
     } satisfies Omit<PreviewLaunchPlan, 'fingerprint'>;
     return {
@@ -697,11 +717,19 @@ async function packageManagerLaunch(
   packageManager: 'pnpm' | 'npm' | 'yarn' | 'bun',
   script: string,
   cwd: string,
-): Promise<{ executable: string; arguments: string[]; indirectExecutable: string | null }> {
+): Promise<{
+  executable: string;
+  arguments: string[];
+  indirectExecutable: string | null;
+}> {
   const located = await locateExecutable(packageManager, cwd);
   if (located) {
     if (process.platform !== 'win32' || !/\.(?:bat|cmd)$/iu.test(located)) {
-      return { executable: located, arguments: ['run', script], indirectExecutable: null };
+      return {
+        executable: located,
+        arguments: ['run', script],
+        indirectExecutable: null,
+      };
     }
     if (/[%!]/u.test(located)) {
       throw new Error(
@@ -852,7 +880,12 @@ function clonePreviewInput(input: PreviewStartInput): PreviewStartInput {
     ...(input.target === undefined ? {} : { target: { ...input.target } }),
     ...(input.command === undefined
       ? {}
-      : { command: { executable: input.command.executable, args: [...input.command.args] } }),
+      : {
+          command: {
+            executable: input.command.executable,
+            args: [...input.command.args],
+          },
+        }),
     ...(input.packageScript === undefined ? {} : { packageScript: input.packageScript }),
   };
 }

@@ -23,7 +23,11 @@ import type {
   GitShippingResultView,
   GitShippingStrategy,
 } from '../../../../shared/git/shipping-contracts.js';
-import type { GitWorktreeCleanupPlanView } from '../../../../shared/git/lifecycle/contracts.js';
+import type {
+  GitWorktreeArchivePlanView,
+  GitWorktreeCleanupPlanView,
+  GitWorktreeRenamePlanView,
+} from '../../../../shared/git/lifecycle/contracts.js';
 import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
 import { GitAgentComparisonPanel } from './comparison/GitAgentComparisonPanel.js';
 import { GitCommitDisclosure, GitDiscardDisclosure } from './actions/GitActionDisclosure.js';
@@ -41,6 +45,7 @@ import { GitReviewSummary } from './GitReviewSummary.js';
 import { GitWorktreeCleanupDisclosure } from './lifecycle/GitWorktreeCleanupDisclosure.js';
 import { GitWorktreeCleanupPanel } from './lifecycle/GitWorktreeCleanupPanel.js';
 import { useGitWorktreeCleanup } from './lifecycle/useGitWorktreeCleanup.js';
+import { GitWorktreeMetadataPanel } from './lifecycle/GitWorktreeMetadataPanel.js';
 import { GitDeliveryReadinessPanel } from './readiness/GitDeliveryReadinessPanel.js';
 import {
   useGitDeliveryReadiness,
@@ -108,6 +113,9 @@ export function GitReviewDialog({
   const [shippingPlan, setShippingPlan] = useState<GitShippingPlanView | null>(null);
   const [shippingResult, setShippingResult] = useState<GitShippingResultView | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<GitWorktreeCleanupPlanView | null>(null);
+  const [renamePlan, setRenamePlan] = useState<GitWorktreeRenamePlanView | null>(null);
+  const [archivePlan, setArchivePlan] = useState<GitWorktreeArchivePlanView | null>(null);
+  const [metadataBusy, setMetadataBusy] = useState(false);
   const [notice, setNotice] = useState<GitReviewNotice | null>(null);
   const [externalOpenBusy, setExternalOpenBusy] = useState(false);
   const [reviewMode, setReviewMode] = useState<GitReviewMode>(
@@ -131,6 +139,7 @@ export function GitReviewDialog({
   const busy =
     controller.busyLabel !== null ||
     externalOpenBusy ||
+    metadataBusy ||
     cleanupController.busyLabel !== null ||
     deliveryReadiness.busy !== null;
   const busyLabel =
@@ -355,6 +364,74 @@ export function GitReviewDialog({
     });
   };
 
+  const lifecycleTarget =
+    target.kind === 'agent-worktree' ? { projectId: target.projectId, runId: target.runId } : null;
+  const runMetadataAction = async (operation: () => Promise<void>) => {
+    setNotice(null);
+    setMetadataBusy(true);
+    try {
+      await operation();
+    } catch (cause) {
+      const message =
+        cause instanceof Error ? cause.message : 'The workspace lifecycle action failed.';
+      setNotice(gitReviewNotice(message, 'warning'));
+      onError?.(message);
+    } finally {
+      setMetadataBusy(false);
+    }
+  };
+  const prepareRename = (newBranch: string) => {
+    if (lifecycleTarget === null) return;
+    void runMetadataAction(async () => {
+      setRenamePlan(
+        unwrap(
+          await window.forgeboard.git.lifecycle.prepareRename({ ...lifecycleTarget, newBranch }),
+        ),
+      );
+    });
+  };
+  const confirmRename = () => {
+    if (renamePlan === null) return;
+    void runMetadataAction(async () => {
+      const result = unwrap(
+        await window.forgeboard.git.lifecycle.confirmRename({ planId: renamePlan.planId }),
+      );
+      setRenamePlan(null);
+      setNotice(
+        gitReviewNotice(
+          result === null
+            ? 'Branch rename cancelled. Nothing changed.'
+            : `Renamed the managed branch to ${result.branch}.`,
+          result === null ? 'neutral' : 'success',
+        ),
+      );
+      if (result !== null) await controller.refresh();
+    });
+  };
+  const prepareArchive = () => {
+    if (lifecycleTarget === null) return;
+    void runMetadataAction(async () => {
+      setArchivePlan(unwrap(await window.forgeboard.git.lifecycle.prepareArchive(lifecycleTarget)));
+    });
+  };
+  const confirmArchive = () => {
+    if (archivePlan === null) return;
+    void runMetadataAction(async () => {
+      const result = unwrap(
+        await window.forgeboard.git.lifecycle.confirmArchive({ planId: archivePlan.planId }),
+      );
+      setArchivePlan(null);
+      if (result === null) {
+        setNotice(gitReviewNotice('Archive cancelled. The workspace remains active.', 'neutral'));
+      } else {
+        onCleanupSuccess?.(
+          `Archived ${result.branch}; its worktree, files, and branch were retained.`,
+        );
+        onClose();
+      }
+    });
+  };
+
   return (
     <div className="modal-backdrop git-review-backdrop" role="presentation">
       <section
@@ -480,6 +557,22 @@ export function GitReviewDialog({
                   Adding, discarding, and committing changes happens only in this workspace. Your
                   main project files stay untouched.
                 </small>
+                {controller.review.branch !== null && (
+                  <GitWorktreeMetadataPanel
+                    branch={controller.review.branch}
+                    busy={busy}
+                    renamePlan={renamePlan}
+                    archivePlan={archivePlan}
+                    onPrepareRename={prepareRename}
+                    onConfirmRename={confirmRename}
+                    onPrepareArchive={prepareArchive}
+                    onConfirmArchive={confirmArchive}
+                    onCancelPlan={() => {
+                      setRenamePlan(null);
+                      setArchivePlan(null);
+                    }}
+                  />
+                )}
               </section>
             )}
             {controller.review.target.kind === 'agent-worktree' && (

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { LoaderCircle } from 'lucide-react';
-
 import type {
   AgentDetection,
   AppInfo,
@@ -17,6 +15,7 @@ import { Welcome } from './components/onboarding/Welcome.js';
 import { Workspace } from './components/workspace/shell/Workspace.js';
 import type { WorkspaceHandle } from './components/workspace/model/types.js';
 import { unwrap } from './lib/ipc.js';
+import { BootstrapScreen } from './components/application/bootstrap/BootstrapScreen.js';
 
 interface BootstrapState {
   info: AppInfo;
@@ -64,15 +63,22 @@ export function App() {
     });
   }, []);
 
-  useEffect(() => {
-    void loadBootstrap().catch((cause: unknown) => {
+  const openApplication = useCallback(async () => {
+    setError(null);
+    try {
+      await loadBootstrap();
+    } catch (cause: unknown) {
       setError(
         cause instanceof Error
           ? cause.message
           : "Forgeboard couldn't start. Try closing and reopening the app.",
       );
-    });
+    }
   }, [loadBootstrap]);
+
+  useEffect(() => {
+    void openApplication();
+  }, [openApplication]);
 
   useEffect(() => {
     if (!bootstrap) return;
@@ -111,13 +117,7 @@ export function App() {
   }, []);
 
   if (!bootstrap) {
-    return (
-      <main className="loading-screen" aria-live="polite">
-        <div className="brand-mark large">F</div>
-        <LoaderCircle className="spin" aria-hidden="true" />
-        <p>{error ?? 'Opening Forgeboard…'}</p>
-      </main>
-    );
+    return <BootstrapScreen error={error} onRetry={() => void openApplication()} />;
   }
 
   return (

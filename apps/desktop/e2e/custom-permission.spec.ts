@@ -144,13 +144,13 @@ test('a UI-configured Custom host profile persists and governs deterministic run
 
       await dialog.getByRole('button', { name: 'Cancel run' }).click();
       await expect(dialog).toBeHidden();
-      await expect(page.getByText('Cancelled before the agent started.')).toBeVisible();
-      await expect(page.locator('.run-history')).toContainText(
-        'No runs yet. When this agent runs, its real output shows up here.',
-      );
-      await expect(page.locator('.run-history')).not.toContainText(
-        'Forgeboard deterministic agent started.',
-      );
+      await expect(page.getByText('Cancelled the run before it started.')).toBeVisible();
+      const cancelledAttempt = page.getByRole('article', {
+        name: 'Initial run attempt Terminated',
+      });
+      await expect(cancelledAttempt).toContainText('DurationNot started');
+      await expect(cancelledAttempt).toContainText('WorktreeCleaned');
+      await expect(cancelledAttempt).not.toContainText('Forgeboard deterministic agent started.');
       await expect(agentNode.locator('.node-status-label')).toContainText('cancelled');
     });
 
@@ -164,16 +164,14 @@ test('a UI-configured Custom host profile persists and governs deterministic run
         await dialog.getByRole('button', { name: 'Approve and start' }).click();
       });
 
-      const history = page.locator('.run-history');
-      await expect(history).toContainText('Forgeboard deterministic agent started.', {
+      const attempt = page.getByRole('article', { name: 'Initial run attempt Succeeded' }).first();
+      await expect(attempt).toContainText('Forgeboard deterministic agent started.', {
         timeout: 20_000,
       });
-      await expect(history).toContainText('Read-only plan completed without filesystem writes.', {
+      await expect(attempt).toContainText('Read-only plan completed without filesystem writes.', {
         timeout: 20_000,
       });
-      await expect(history).toContainText('succeeded · no file changes', {
-        timeout: 20_000,
-      });
+      await expect(attempt).toContainText('Files0');
       await expect(page.locator('.event-stream')).not.toContainText('Agent wrote');
     });
 
@@ -207,13 +205,11 @@ test('a UI-configured Custom host profile persists and governs deterministic run
         await dialog.getByRole('button', { name: 'Approve and start' }).click();
       });
 
-      const history = page.locator('.run-history');
-      await expect(history).toContainText('Forgeboard deterministic agent started.', {
+      const attempt = page.getByRole('article', { name: 'Initial run attempt Succeeded' }).first();
+      await expect(attempt).toContainText('Forgeboard deterministic agent started.', {
         timeout: 20_000,
       });
-      await expect(history).toContainText('succeeded · 1 changed file', {
-        timeout: 20_000,
-      });
+      await expect(attempt).toContainText('Files1');
       await expect(page.locator('.event-stream')).toContainText(
         'Agent wrote forgeboard-agent-output-',
       );

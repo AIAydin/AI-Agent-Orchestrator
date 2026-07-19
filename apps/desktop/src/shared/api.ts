@@ -171,6 +171,12 @@ import type {
   GitWorktreeCleanupPrepareOutcome,
   GitWorktreeCleanupResultView,
   GitWorktreeCleanupTargetInput,
+  GitWorktreeArchivePlanView,
+  GitWorktreeMetadataConfirmationInput,
+  GitWorktreeMetadataResultView,
+  GitWorktreeRenamePlanView,
+  GitWorktreeRestorePlanView,
+  GitWorktreeRenamePrepareInput,
 } from './git/lifecycle/contracts.js';
 import type {
   GitAgentComparisonInput,
@@ -559,6 +565,24 @@ export interface ForgeboardApi {
       confirmCleanup(
         input: GitWorktreeCleanupConfirmationInput,
       ): Promise<IpcResult<GitWorktreeCleanupResultView | null>>;
+      prepareRename(
+        input: GitWorktreeRenamePrepareInput,
+      ): Promise<IpcResult<GitWorktreeRenamePlanView>>;
+      confirmRename(
+        input: GitWorktreeMetadataConfirmationInput,
+      ): Promise<IpcResult<GitWorktreeMetadataResultView | null>>;
+      prepareArchive(
+        input: GitWorktreeCleanupTargetInput,
+      ): Promise<IpcResult<GitWorktreeArchivePlanView>>;
+      confirmArchive(
+        input: GitWorktreeMetadataConfirmationInput,
+      ): Promise<IpcResult<GitWorktreeMetadataResultView | null>>;
+      prepareRestore(
+        input: GitWorktreeCleanupTargetInput,
+      ): Promise<IpcResult<GitWorktreeRestorePlanView>>;
+      confirmRestore(
+        input: GitWorktreeMetadataConfirmationInput,
+      ): Promise<IpcResult<GitWorktreeMetadataResultView | null>>;
     };
     reviewNotes: {
       list(input: GitReviewNotesListInput): Promise<IpcResult<GitReviewNotesView>>;

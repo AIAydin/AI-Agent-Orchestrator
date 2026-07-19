@@ -20,6 +20,7 @@ import type {
   DiscardHunksApproval,
   MergeApproval,
   RenameManagedBranchApproval,
+  RestoreArchivedWorktreeApproval,
   WorktreeOwnership,
 } from '../model/types.js';
 import { WorktreeService } from './worktrees.js';
@@ -1007,6 +1008,82 @@ describe('parallel worktree change lifecycle', () => {
       code: 'APPROVAL_MISMATCH',
     });
 
+    const persistenceFailureBranch = 'forgeboard/persistence-failure/left';
+    const failingPersistenceWorktrees = new WorktreeService(repositories, {
+      beforePersistOwnership: (candidate) => {
+        if (candidate.branch === persistenceFailureBranch) {
+          throw new Error('simulated ownership persistence failure');
+        }
+      },
+    });
+    const persistenceFailureImpact = await failingPersistenceWorktrees.branchRenameImpact(
+      left.ownership,
+      persistenceFailureBranch,
+    );
+    await expect(
+      failingPersistenceWorktrees.renameBranch(left.ownership, {
+        action: 'rename-managed-branch',
+        ...approvalBase(
+          persistenceFailureImpact.ownership.repositoryRoot,
+          persistenceFailureImpact.expectedHead,
+        ),
+        worktreeId: persistenceFailureImpact.ownership.id,
+        worktreePath: persistenceFailureImpact.ownership.worktreePath,
+        oldBranch: persistenceFailureImpact.oldBranch,
+        newBranch: persistenceFailureImpact.newBranch,
+        expectedBranchOid: persistenceFailureImpact.branchOid ?? '',
+        dirtyPaths: persistenceFailureImpact.dirtyPaths,
+      }),
+    ).rejects.toThrow(/restored the original managed branch name/iu);
+    expect(await repositories.currentBranch(left.ownership.worktreePath)).toBe(
+      left.ownership.branch,
+    );
+    expect((await worktrees.readOwnership(fixture.managedRoot, left.ownership.id)).branch).toBe(
+      left.ownership.branch,
+    );
+    expect(await repositories.branchExists(fixture.repository, persistenceFailureBranch)).toBe(
+      false,
+    );
+
+    const syncFailureBranch = 'forgeboard/sync-failure/left';
+    const failingDirectorySyncWorktrees = new WorktreeService(repositories, {
+      syncOwnershipDirectory: () => Promise.reject(new Error('simulated directory fsync failure')),
+    });
+    const syncFailureImpact = await failingDirectorySyncWorktrees.branchRenameImpact(
+      left.ownership,
+      syncFailureBranch,
+    );
+    const syncFailureRenamed = await failingDirectorySyncWorktrees.renameBranch(left.ownership, {
+      action: 'rename-managed-branch',
+      ...approvalBase(syncFailureImpact.ownership.repositoryRoot, syncFailureImpact.expectedHead),
+      worktreeId: syncFailureImpact.ownership.id,
+      worktreePath: syncFailureImpact.ownership.worktreePath,
+      oldBranch: syncFailureImpact.oldBranch,
+      newBranch: syncFailureImpact.newBranch,
+      expectedBranchOid: syncFailureImpact.branchOid ?? '',
+      dirtyPaths: syncFailureImpact.dirtyPaths,
+    });
+    expect(syncFailureRenamed.branch).toBe(syncFailureBranch);
+    expect(await repositories.currentBranch(left.ownership.worktreePath)).toBe(syncFailureBranch);
+    expect((await worktrees.readOwnership(fixture.managedRoot, left.ownership.id)).branch).toBe(
+      syncFailureBranch,
+    );
+
+    const restoredNameImpact = await worktrees.branchRenameImpact(
+      syncFailureRenamed,
+      left.ownership.branch,
+    );
+    await worktrees.renameBranch(syncFailureRenamed, {
+      action: 'rename-managed-branch',
+      ...approvalBase(restoredNameImpact.ownership.repositoryRoot, restoredNameImpact.expectedHead),
+      worktreeId: restoredNameImpact.ownership.id,
+      worktreePath: restoredNameImpact.ownership.worktreePath,
+      oldBranch: restoredNameImpact.oldBranch,
+      newBranch: restoredNameImpact.newBranch,
+      expectedBranchOid: restoredNameImpact.branchOid ?? '',
+      dirtyPaths: restoredNameImpact.dirtyPaths,
+    });
+
     const currentImpact = await worktrees.branchRenameImpact(
       left.ownership,
       'forgeboard/renamed/left',
@@ -1042,6 +1119,39 @@ describe('parallel worktree change lifecycle', () => {
       'archived',
     );
     expect(await repositories.branchExists(fixture.repository, archived.branch)).toBe(true);
+
+    const restoreImpact = await worktrees.archiveImpact(archived);
+    await writeFile(path.join(archived.worktreePath, 'post-archive.txt'), 'still retained\n');
+    const staleRestore: RestoreArchivedWorktreeApproval = {
+      action: 'restore-archived-worktree',
+      ...approvalBase(restoreImpact.ownership.repositoryRoot, restoreImpact.expectedHead),
+      worktreeId: restoreImpact.ownership.id,
+      worktreePath: restoreImpact.ownership.worktreePath,
+      branch: restoreImpact.ownership.branch,
+      expectedBranchOid: restoreImpact.branchOid,
+      dirtyPaths: restoreImpact.dirtyPaths,
+    };
+    await expect(worktrees.restoreArchived(archived, staleRestore)).rejects.toMatchObject({
+      code: 'APPROVAL_MISMATCH',
+    });
+    const currentRestoreImpact = await worktrees.archiveImpact(archived);
+    const restoreApproval: RestoreArchivedWorktreeApproval = {
+      action: 'restore-archived-worktree',
+      ...approvalBase(
+        currentRestoreImpact.ownership.repositoryRoot,
+        currentRestoreImpact.expectedHead,
+      ),
+      worktreeId: currentRestoreImpact.ownership.id,
+      worktreePath: currentRestoreImpact.ownership.worktreePath,
+      branch: currentRestoreImpact.ownership.branch,
+      expectedBranchOid: currentRestoreImpact.branchOid,
+      dirtyPaths: currentRestoreImpact.dirtyPaths,
+    };
+    const restored = await worktrees.restoreArchived(archived, restoreApproval);
+    expect(restored.status).toBe('active');
+    expect(await readFile(path.join(restored.worktreePath, 'post-archive.txt'), 'utf8')).toBe(
+      'still retained\n',
+    );
   });
 
   it('detects merge conflicts and requires content-bound approvals to abort or continue', async () => {

@@ -278,6 +278,51 @@ describe('GitIpcService with a real repository', () => {
     await harness.service.dispose();
   });
 
+  it('does not commit when the required final pre-apply audit fails', async () => {
+    const fixture = await createRepository();
+    const harness = createHarness(fixture, [1]);
+    const event = liveEvent(22);
+    await writeFile(join(fixture.repository, 'story.txt'), changedStory(fixture.originalStory));
+    await harness.service.stagePaths({
+      target: primaryTarget(harness),
+      paths: ['story.txt'],
+    });
+    const headBefore = await runGit(fixture.repository, ['rev-parse', 'HEAD']);
+    const plan = await harness.service.prepareCommit(event.sender.id, {
+      target: primaryTarget(harness),
+      message: 'Audit-blocked commit',
+    });
+    harness.appendAudit.mockClear();
+    harness.appendAudit.mockImplementationOnce(() => {
+      throw new Error('required Git commit audit unavailable');
+    });
+
+    await expect(harness.service.confirmCommit(event, plan.planId)).rejects.toThrow(
+      'required Git commit audit unavailable',
+    );
+    expect(await runGit(fixture.repository, ['rev-parse', 'HEAD'])).toBe(headBefore);
+    expect(await runGit(fixture.repository, ['diff', '--cached', '--name-only'])).toBe('story.txt');
+    expect(harness.appendAudit).toHaveBeenNthCalledWith(
+      1,
+      'git',
+      'commit',
+      'allowed',
+      expect.objectContaining({
+        stagedPathCount: 1,
+        headBefore,
+        phase: 'authorized-before-apply',
+      }),
+    );
+    expect(harness.appendAudit).toHaveBeenNthCalledWith(
+      2,
+      'git',
+      'commit',
+      'failed',
+      expect.objectContaining({ reason: 'required Git commit audit unavailable' }),
+    );
+    await harness.service.dispose();
+  });
+
   it('refuses another owner, rejects stale staged content, and commits with the exact UI identity', async () => {
     const fixture = await createRepository();
     const harness = createHarness(fixture, [1, 1]);
@@ -369,9 +414,50 @@ describe('GitIpcService with a real repository', () => {
     await harness.service.dispose();
   });
 
+  it('does not discard content when the required final pre-apply audit fails', async () => {
+    const fixture = await createRepository();
+    const harness = createHarness(fixture, [1]);
+    const event = liveEvent(42);
+    const modified = fixture.originalStory.replace('line 2\n', 'line two\n');
+    await writeFile(join(fixture.repository, 'story.txt'), modified);
+    const review = await harness.service.review(primaryTarget(harness));
+    const hunkId = requiredHunkId(review.unstaged.files[0]?.hunks ?? [], 0);
+    const plan = await harness.service.prepareDiscard(event.sender.id, {
+      target: primaryTarget(harness),
+      hunkIds: [hunkId],
+    });
+    harness.appendAudit.mockImplementationOnce(() => {
+      throw new Error('required Git discard audit unavailable');
+    });
+
+    await expect(harness.service.confirmDiscard(event, plan.planId)).rejects.toThrow(
+      'required Git discard audit unavailable',
+    );
+    expect(await readFile(join(fixture.repository, 'story.txt'), 'utf8')).toBe(modified);
+    expect(harness.appendAudit).toHaveBeenNthCalledWith(
+      1,
+      'git',
+      'discard-hunks',
+      'allowed',
+      expect.objectContaining({
+        hunkCount: 1,
+        pathCount: 1,
+        phase: 'authorized-before-apply',
+      }),
+    );
+    expect(harness.appendAudit).toHaveBeenNthCalledWith(
+      2,
+      'git',
+      'discard-hunks',
+      'failed',
+      expect.objectContaining({ reason: 'required Git discard audit unavailable' }),
+    );
+    await harness.service.dispose();
+  });
+
   it('keeps revision requests target-bound, non-mutating, and stale instead of remapping them', async () => {
     const fixture = await createRepository();
-    const harness = createHarness(fixture);
+    const harness = createHarness(fixture, [0, 1]);
     const target = primaryTarget(harness);
     const event = liveEvent(45);
     harness.service.registerIpcHandlers();
@@ -463,6 +549,47 @@ describe('GitIpcService with a real repository', () => {
       await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, { target }),
     );
     expect(unchanged).toMatchObject({ ok: true, value: { notes: [{ body }] } });
+    if (!unchanged.ok || unchanged.value.notes[0] === undefined) {
+      throw new Error('Fixture is missing the review note to delete.');
+    }
+    const note = unchanged.value.notes[0];
+    const deleteInput = {
+      target,
+      noteId: note.id,
+      expectedUpdatedAt: note.updatedAt,
+    };
+
+    const cancelledDelete = ipcResultSchema(GitReviewNotesViewSchema).parse(
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.delete)(event, deleteInput),
+    );
+    expect(cancelledDelete).toMatchObject({ ok: true, value: { notes: [{ id: note.id }] } });
+    expect(harness.showMessageBox).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        buttons: ['Keep note', 'Delete note'],
+        defaultId: 0,
+        cancelId: 0,
+      }),
+    );
+
+    harness.appendAudit.mockImplementation((category, action, outcome) => {
+      if (category === 'git-review' && action === 'delete-review-note' && outcome === 'allowed') {
+        throw new Error('required review deletion audit unavailable');
+      }
+    });
+    const auditBlockedDelete = await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.delete)(
+      event,
+      deleteInput,
+    );
+    expect(auditBlockedDelete).toMatchObject({
+      ok: false,
+      error: { message: 'required review deletion audit unavailable' },
+    });
+    const retained = ipcResultSchema(GitReviewNotesViewSchema).parse(
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, { target }),
+    );
+    expect(retained).toMatchObject({ ok: true, value: { notes: [{ id: note.id }] } });
+    expect(JSON.stringify(harness.showMessageBox.mock.calls)).not.toContain(body);
 
     const wrongProject = await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, {
       target: { kind: 'primary', projectId: randomUUID() },
@@ -601,6 +728,16 @@ function createHarness(
     },
     transitionRunWorktreeState: () => {
       throw new Error('This primary-checkout fixture has no managed worktree lifecycle.');
+    },
+    renameRunWorktreeBranch: () => {
+      throw new Error('This primary-checkout fixture has no managed worktree branch.');
+    },
+    beginGitWorktreeMetadataIntent: () => {
+      throw new Error('This primary-checkout fixture has no managed worktree lifecycle intent.');
+    },
+    getGitWorktreeMetadataIntent: () => undefined,
+    reconcileGitWorktreeMetadataIntent: () => {
+      throw new Error('This primary-checkout fixture has no lifecycle intent to reconcile.');
     },
   };
   const window = { isDestroyed: () => false } as BrowserWindow;

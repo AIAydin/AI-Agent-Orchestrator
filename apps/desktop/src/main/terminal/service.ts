@@ -553,17 +553,37 @@ export class TerminalService {
     ).toISOString();
     const expired = this.store.listExpiredTerminalSessionIds(cutoff);
     for (const sessionId of expired) {
-      await this.#transcripts.delete(sessionId);
-      this.store.deleteTerminalSession(sessionId);
+      this.#recordRetentionDeletion(sessionId, 'expired-session');
+      let stage: 'transcript-file' | 'session-record' = 'transcript-file';
+      try {
+        // The private transcript file and SQLite session row cannot be deleted atomically. Audit
+        // authorization is durable before either effect; a later failure records the exact stage
+        // without hiding the original error or claiming the other effect rolled back.
+        await this.#transcripts.delete(sessionId);
+        stage = 'session-record';
+        if (!this.store.deleteTerminalSession(sessionId)) {
+          throw new Error('The expired terminal session changed before retention deletion.');
+        }
+      } catch (error) {
+        this.#recordRetentionDeletionFailure(sessionId, 'expired-session', stage, error);
+        throw error;
+      }
     }
     const retainedIds = new Set(this.store.listAllTerminalSessionIds());
-    const orphanedFiles = await this.#transcripts.pruneUnknown(retainedIds);
-    if (expired.length > 0 || orphanedFiles > 0) {
-      this.#safeAudit('retention', 'allowed', {
-        deletedSessionCount: expired.length,
-        deletedOrphanedTranscriptCount: orphanedFiles,
-      });
-    }
+    await this.#transcripts.pruneUnknown(
+      retainedIds,
+      (sessionId) => {
+        this.#recordRetentionDeletion(sessionId, 'orphaned-transcript');
+      },
+      (sessionId, error) => {
+        this.#recordRetentionDeletionFailure(
+          sessionId,
+          'orphaned-transcript',
+          'transcript-file',
+          error,
+        );
+      },
+    );
   }
 
   async #launch(
@@ -617,6 +637,16 @@ export class TerminalService {
           this.getSettings(),
         );
         assertAuthority();
+        this.store.appendAudit('terminal', 'launch', 'allowed', {
+          projectId: starting.projectId,
+          nodeId: starting.nodeId,
+          sessionId: starting.id,
+          executableName: basename(pending.resolved.executable),
+          argumentCount: pending.resolved.arguments.length,
+          cwdRelative: pending.resolved.cwdRelative,
+          environmentVariableNames: pending.resolved.environmentVariableNames,
+          phase: 'authorized-before-spawn',
+        });
       });
       active.handle = handle;
       handle.onData((data) => this.#onOutput(active, data));
@@ -635,15 +665,6 @@ export class TerminalService {
       handle.onExit((exit) => void this.#finalize(active, exit));
       exitListenerAttached = true;
       this.#emitSession(active);
-      this.#safeAudit('launch', 'allowed', {
-        projectId: active.view.projectId,
-        nodeId: active.view.nodeId,
-        sessionId: active.view.id,
-        executableName: basename(pending.resolved.executable),
-        argumentCount: pending.resolved.arguments.length,
-        cwdRelative: pending.resolved.cwdRelative,
-        environmentVariableNames: pending.resolved.environmentVariableNames,
-      });
       return structuredClone(active.finalizing ? await active.done : active.view);
     } catch (error) {
       if (active.handle !== null) {
@@ -1108,6 +1129,36 @@ export class TerminalService {
       nodeId: active.view.nodeId,
       sessionId: active.view.id,
     };
+  }
+
+  #recordRetentionDeletion(
+    sessionId: string,
+    reason: 'expired-session' | 'orphaned-transcript',
+  ): void {
+    this.store.appendAudit('terminal', 'retention-delete', 'allowed', {
+      sessionId,
+      reason,
+      phase: 'authorized-before-deletion',
+    });
+  }
+
+  #recordRetentionDeletionFailure(
+    sessionId: string,
+    reason: 'expired-session' | 'orphaned-transcript',
+    stage: 'transcript-file' | 'session-record',
+    error: unknown,
+  ): void {
+    try {
+      this.store.appendAudit('terminal', 'retention-delete', 'failed', {
+        sessionId,
+        reason,
+        stage,
+        errorKind: error instanceof Error ? error.name.slice(0, 128) : 'unknown-error',
+        effectSemantics: 'best-effort-nontransactional',
+      });
+    } catch {
+      // Preserve the original retention failure when audit storage is also unavailable.
+    }
   }
 
   #transcriptState(active: ActiveTerminal): {

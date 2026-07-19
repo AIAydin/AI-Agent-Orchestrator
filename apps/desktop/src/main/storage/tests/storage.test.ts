@@ -792,6 +792,48 @@ describe('LocalStore', () => {
     ).toThrow('Invalid run worktree lifecycle transition');
   });
 
+  it('renames and archives a managed worktree across its complete persisted attempt lineage', () => {
+    const store = openStore();
+    const parent = storedRun();
+    const child = storedRun({
+      ...parent,
+      id: uuidFor(502),
+      action: 'resume',
+      parentRunId: parent.id,
+      createdAt: '2026-07-14T18:00:00.000Z',
+      updatedAt: '2026-07-14T18:00:00.000Z',
+    });
+    store.saveRun(parent);
+    store.saveRun(child);
+
+    store.renameRunWorktreeBranch({
+      runId: child.id,
+      expectedWorktreeId: parent.worktreeId!,
+      expectedBranch: parent.branch!,
+      nextBranch: 'forgeboard/renamed-lineage',
+    });
+    expect(store.getRun(parent.id)?.branch).toBe('forgeboard/renamed-lineage');
+    expect(store.getRun(child.id)?.branch).toBe('forgeboard/renamed-lineage');
+
+    store.transitionRunWorktreeState({
+      runId: child.id,
+      expectedWorktreeId: parent.worktreeId!,
+      expectedState: 'active',
+      nextState: 'archived',
+    });
+    expect(store.getRun(parent.id)?.worktreeState).toBe('archived');
+    expect(store.getRun(child.id)?.worktreeState).toBe('archived');
+
+    store.transitionRunWorktreeState({
+      runId: parent.id,
+      expectedWorktreeId: parent.worktreeId!,
+      expectedState: 'archived',
+      nextState: 'active',
+    });
+    expect(store.getRun(parent.id)?.worktreeState).toBe('active');
+    expect(store.getRun(child.id)?.worktreeState).toBe('active');
+  });
+
   it('atomically transfers exact managed-worktree continuation authority', () => {
     const store = openStore();
     const parent = storedRun({

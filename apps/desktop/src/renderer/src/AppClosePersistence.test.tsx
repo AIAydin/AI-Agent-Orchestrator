@@ -36,7 +36,9 @@ vi.mock('./components/settings/shell/SettingsPanel.js', () => ({
     <div>Settings opened on {initialTab ?? 'appearance'}</div>
   ),
 }));
-vi.mock('./components/onboarding/SetupWizard.js', () => ({ SetupWizard: () => null }));
+vi.mock('./components/onboarding/SetupWizard.js', () => ({
+  SetupWizard: () => null,
+}));
 
 let closeListener: (() => boolean | Promise<boolean>) | null = null;
 let repairSummaries: unknown[] = [];
@@ -60,6 +62,30 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('App close persistence', () => {
+  it('distinguishes startup failure from loading and retries the real bootstrap calls', async () => {
+    const api = forgeboardApi();
+    const getInfo = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('The local database could not be read.'))
+      .mockResolvedValue({ ok: true, value: { version: '0.1.0' } });
+    api.app.getInfo = getInfo;
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: api,
+    });
+
+    render(<App />);
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The local database could not be read.',
+    );
+    expect(screen.queryByText('Opening Forgeboard…')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByRole('button', { name: 'Open project' })).toBeTruthy();
+    expect(getInfo).toHaveBeenCalledTimes(2);
+  });
+
   it('delegates native close requests and blocks close when the workspace flush fails', async () => {
     const view = render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Open project' }));
@@ -139,7 +165,10 @@ function forgeboardApi() {
         return mocks.unsubscribe;
       },
     },
-    settings: { get: () => ok(settings), listRepairs: () => ok(repairSummaries) },
+    settings: {
+      get: () => ok(settings),
+      listRepairs: () => ok(repairSummaries),
+    },
     agents: { detect: () => ok([]) },
     extensions: {
       list: () =>

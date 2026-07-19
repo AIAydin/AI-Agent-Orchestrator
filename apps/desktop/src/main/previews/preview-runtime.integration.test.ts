@@ -65,7 +65,10 @@ describe('PreviewRuntime', () => {
       gitRemote: 'origin',
       terminalShell: '/bin/sh',
       envAllowlist: ['PATH'],
-      developmentCommand: { executable: process.execPath, arguments: ['-e', SERVER_SCRIPT] },
+      developmentCommand: {
+        executable: process.execPath,
+        arguments: ['-e', SERVER_SCRIPT],
+      },
       testCommand: {},
       lintCommand: {},
       typecheckCommand: {},
@@ -117,13 +120,19 @@ describe('PreviewRuntime', () => {
     expect(url).toMatch(/^http:\/\/127\.0\.0\.1:43\d{3}\/proof$/);
     await expect(fetch(url ?? '')).resolves.toMatchObject({ status: 200 });
     expect(
-      runtime.validateNavigation('owner-a', { ...input, url: `${url}?device=desktop` }),
+      runtime.validateNavigation('owner-a', {
+        ...input,
+        url: `${url}?device=desktop`,
+      }),
     ).toContain('device=desktop');
     expect(runtime.isAllowedFrameNavigation(url ?? '')).toBe(true);
     expect(runtime.isAllowedFrameNavigation('https://example.com/')).toBe(false);
     expect(() => runtime?.get('owner-b', input)).toThrow('another renderer');
     expect(() =>
-      runtime?.validateNavigation('owner-a', { ...input, url: 'https://example.com/' }),
+      runtime?.validateNavigation('owner-a', {
+        ...input,
+        url: 'https://example.com/',
+      }),
     ).toThrow('not trusted');
 
     const restartPlan = await runtime.prepare(input);
@@ -175,7 +184,10 @@ describe('PreviewRuntime', () => {
       gitRemote: 'origin',
       terminalShell: '/bin/sh',
       envAllowlist: ['PATH'],
-      developmentCommand: { executable: process.execPath, arguments: ['-e', SERVER_SCRIPT] },
+      developmentCommand: {
+        executable: process.execPath,
+        arguments: ['-e', SERVER_SCRIPT],
+      },
       previewPortStart: 43_000,
       previewPortEnd: 43_100,
       transcriptRetentionDays: 30,
@@ -254,7 +266,10 @@ describe('PreviewRuntime', () => {
     const commandProcessorPath = join(root, 'cmd.exe');
     await writeFile(
       packagePath,
-      JSON.stringify({ packageManager: 'pnpm@10.0.0', scripts: { dev: 'vite' } }),
+      JSON.stringify({
+        packageManager: 'pnpm@10.0.0',
+        scripts: { dev: 'vite' },
+      }),
     );
     await writeFile(shimPath, '@echo off\r\nnode safe.cjs\r\n');
     await writeFile(commandProcessorPath, 'reviewed command processor');
@@ -369,6 +384,57 @@ describe('PreviewRuntime', () => {
     await expect(access(marker)).rejects.toThrow();
   });
 
+  it('fails closed before the marker process starts when launch authorization cannot be audited', async () => {
+    root = await mkdtemp(join(tmpdir(), 'forgeboard-preview-runtime-'));
+    const marker = join(root, 'spawned-without-audit.txt');
+    const store: PreviewRuntimeStore = {
+      listProjects: () => [projectAt(root ?? '')],
+      appendAudit: (_category, _action, outcome) => {
+        if (outcome === 'allowed') throw new Error('required preview launch audit unavailable');
+      },
+    };
+    const settings = AppSettingsSchema.parse({
+      theme: 'system',
+      reducedMotion: false,
+      density: 'comfortable',
+      defaultAgent: 'test-agent',
+      defaultPermissionProfile: 'worktree-write',
+      worktreeRoot: join(root, 'worktrees'),
+      branchPrefix: 'forgeboard/',
+      gitRemote: 'origin',
+      terminalShell: '/bin/sh',
+      envAllowlist: ['PATH'],
+      developmentCommand: {
+        executable: process.execPath,
+        arguments: ['-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'spawned')`],
+      },
+      previewPortStart: 43_000,
+      previewPortEnd: 43_100,
+      transcriptRetentionDays: 30,
+      collaborationEnabled: false,
+      collaborationUrl: '',
+    });
+    runtime = new PreviewRuntime(
+      store,
+      () => settings,
+      () => undefined,
+    );
+    const plan = await runtime.prepare({
+      projectId: PROJECT_ID,
+      nodeId: 'web-preview-required-audit',
+      cwdRelative: '.',
+      readinessPath: '/',
+      urlPath: '/',
+    });
+
+    await expect(
+      runtime.startPrepared('owner-a', plan, {
+        authorizeSpawn: () => undefined,
+      }),
+    ).rejects.toThrow('required preview launch audit unavailable');
+    await expect(access(marker)).rejects.toThrow();
+  });
+
   it('drains an in-flight readiness attempt without auditing after disposal', async () => {
     root = await mkdtemp(join(tmpdir(), 'forgeboard-preview-runtime-'));
     const audits: string[] = [];
@@ -413,7 +479,7 @@ describe('PreviewRuntime', () => {
 
     await runtime.dispose();
     await expect(starting).rejects.toThrow();
-    expect(audits).toEqual([]);
+    expect(audits).toEqual(['start:allowed']);
     runtime = null;
   });
 
@@ -466,7 +532,9 @@ describe('PreviewRuntime', () => {
     const url = started.processes[0]?.previewUrl ?? '';
     expect(url).toMatch(/\/from-package-script$/u);
     await expect(fetch(url)).resolves.toMatchObject({ status: 200 });
-    await expect(runtime.stop('owner-a', input)).resolves.toMatchObject({ status: 'stopped' });
+    await expect(runtime.stop('owner-a', input)).resolves.toMatchObject({
+      status: 'stopped',
+    });
   });
 
   it('fails closed with actionable guidance when the detected package runtime is missing', async () => {
@@ -550,7 +618,10 @@ describe('PreviewRuntime', () => {
     const resolveTarget = vi.fn(() =>
       Promise.resolve({
         project,
-        target: { kind: 'agent-run' as const, runId: '91111111-1111-4111-8111-111111111111' },
+        target: {
+          kind: 'agent-run' as const,
+          runId: '91111111-1111-4111-8111-111111111111',
+        },
         root: resolvedRoot,
         run: null,
       }),
@@ -560,20 +631,29 @@ describe('PreviewRuntime', () => {
       () => settings,
       () => undefined,
       {
-        targetResolver: { resolve: resolveTarget, list: () => Promise.resolve([]) },
+        targetResolver: {
+          resolve: resolveTarget,
+          list: () => Promise.resolve([]),
+        },
       },
     );
     const input: PreviewStartInput = {
       projectId: PROJECT_ID,
       nodeId: 'web-preview-owned-target',
-      target: { kind: 'agent-run', runId: '91111111-1111-4111-8111-111111111111' },
+      target: {
+        kind: 'agent-run',
+        runId: '91111111-1111-4111-8111-111111111111',
+      },
       command: { executable: process.execPath, args: ['-e', SERVER_SCRIPT] },
       cwdRelative: '.',
       readinessPath: '/',
       urlPath: '/owned',
     };
     const plan = await runtime.prepare(input);
-    expect(plan).toMatchObject({ source: 'node-command', cwd: await realpath(agentRoot) });
+    expect(plan).toMatchObject({
+      source: 'node-command',
+      cwd: await realpath(agentRoot),
+    });
 
     resolvedRoot = await realpath(primaryRoot);
     const authorizeSpawn = vi.fn();
@@ -612,7 +692,9 @@ async function startPrepared(
   input: PreviewStartInput,
 ): Promise<PreviewSessionSnapshot> {
   const plan = await target.prepare(input);
-  return await target.startPrepared(ownerId, plan, { authorizeSpawn: () => undefined });
+  return await target.startPrepared(ownerId, plan, {
+    authorizeSpawn: () => undefined,
+  });
 }
 
 function restoreEnvironment(name: string, value: string | undefined): void {

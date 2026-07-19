@@ -120,12 +120,20 @@ import {
   listAuditEvents as listDatabaseAuditEvents,
   listProjectRuns as listDatabaseProjectRuns,
   recoverInterruptedRuns as recoverDatabaseInterruptedRuns,
+  renameRunWorktreeBranch as renameDatabaseRunWorktreeBranch,
   saveRun as saveDatabaseRun,
   transferRunWorktreeAuthority as transferDatabaseRunWorktreeAuthority,
   transitionRunWorktreeState as transitionDatabaseRunWorktreeState,
   type RunWorktreeAuthorityTransfer,
+  type RunWorktreeBranchRename,
   type RunWorktreeStateTransition,
 } from './storage/runs-audit.js';
+import {
+  beginGitWorktreeMetadataIntent as beginDatabaseGitWorktreeMetadataIntent,
+  getGitWorktreeMetadataIntent as getDatabaseGitWorktreeMetadataIntent,
+  reconcileGitWorktreeMetadataIntent as reconcileDatabaseGitWorktreeMetadataIntent,
+  type GitWorktreeMetadataIntent,
+} from './storage/git-worktree/intents.js';
 import {
   createReviewNote as createDatabaseReviewNote,
   deleteReviewNote as deleteDatabaseReviewNote,
@@ -295,7 +303,9 @@ export class LocalStore implements DeliveryReadinessStore {
     this.deliveryReadiness = new SqliteDeliveryReadinessStore(this.#database);
     try {
       const sourceDatabaseVersion = (
-        this.#database.prepare('PRAGMA user_version;').get() as { user_version: number }
+        this.#database.prepare('PRAGMA user_version;').get() as {
+          user_version: number;
+        }
       ).user_version;
       migrate(this.#database);
       initializeAuditIntegrity(this.#database);
@@ -778,6 +788,40 @@ export class LocalStore implements DeliveryReadinessStore {
     return transitioned;
   }
 
+  renameRunWorktreeBranch(
+    input: Omit<RunWorktreeBranchRename, 'renamedAt'>,
+    now = new Date(),
+  ): StoredRunRecord {
+    const renamed = renameDatabaseRunWorktreeBranch(this.#database, {
+      ...input,
+      renamedAt: now.toISOString(),
+    });
+    this.notifyDurableChange();
+    return renamed;
+  }
+
+  beginGitWorktreeMetadataIntent(intent: GitWorktreeMetadataIntent): GitWorktreeMetadataIntent {
+    const saved = beginDatabaseGitWorktreeMetadataIntent(this.#database, intent);
+    this.notifyDurableChange();
+    return saved;
+  }
+
+  getGitWorktreeMetadataIntent(runId: string): GitWorktreeMetadataIntent | undefined {
+    return getDatabaseGitWorktreeMetadataIntent(this.#database, runId);
+  }
+
+  reconcileGitWorktreeMetadataIntent(
+    input: Omit<Parameters<typeof reconcileDatabaseGitWorktreeMetadataIntent>[1], 'reconciledAt'>,
+    now = new Date(),
+  ): 'applied' | 'rolled-back' {
+    const result = reconcileDatabaseGitWorktreeMetadataIntent(this.#database, {
+      ...input,
+      reconciledAt: now.toISOString(),
+    });
+    this.notifyDurableChange();
+    return result;
+  }
+
   getRun(runId: string): StoredRunRecord | undefined {
     return getDatabaseRun(this.#database, runId);
   }
@@ -797,7 +841,10 @@ export class LocalStore implements DeliveryReadinessStore {
   }
 
   updateReviewNote(input: GitReviewNoteUpdateInput, updatedAt = new Date()): StoredGitReviewNote {
-    const saved = updateDatabaseReviewNote(this.#database, { ...input, updatedAt });
+    const saved = updateDatabaseReviewNote(this.#database, {
+      ...input,
+      updatedAt,
+    });
     this.notifyDurableChange();
     return saved;
   }

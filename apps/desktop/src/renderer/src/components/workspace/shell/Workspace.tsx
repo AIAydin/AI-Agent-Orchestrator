@@ -76,6 +76,7 @@ import { WorkflowDecisionDialog } from '../workflows/WorkflowDecisionDialog.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
 import { WorkspaceNotifications } from './WorkspaceOverlays.js';
 import { WorkspaceRail } from './WorkspaceRail.js';
+import { nodeRegistryFromTemplates } from '../node-registry/NodeRegistryContext.js';
 import { useWorkspaceNodeMutations } from './node-actions/useWorkspaceNodeMutations.js';
 import {
   createEdgeData,
@@ -1047,6 +1048,21 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       ),
     [workflowEvidenceExecution],
   );
+  const extensionTemplates = useMemo<ExtensionTemplate[]>(
+    () =>
+      extensionDiscovery.installed.flatMap((extension) =>
+        extension.manifest.contributes.canvasNodeTypes.map((definition) => ({
+          extension,
+          definition,
+          key: extensionTemplateKey(extension.manifest.id, definition.id),
+        })),
+      ),
+    [extensionDiscovery.installed],
+  );
+  const nodeRegistry = useMemo(
+    () => nodeRegistryFromTemplates(extensionTemplates),
+    [extensionTemplates],
+  );
   const protectedNodeIds = useMemo(() => lockedCanvasNodeIds(nodes), [nodes]);
   const removalProtectedNodeIds = useMemo(
     () => removalProtectedCanvasNodeIds(nodes, edges),
@@ -1060,6 +1076,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const runtimeDisplayedNodes = useMemo(
     () =>
       nodes.map((node) => {
+        const definition = nodeRegistry.resolve(node.data);
         const status = workflowNodeStatuses.get(node.id);
         const reviewGate = workflowReviewGates.get(node.id);
         const inheritedLock = protectedNodeIds.has(node.id) && !node.data.locked;
@@ -1082,7 +1099,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         const mutable = !protectedNodeIds.has(node.id);
         return {
           ...displayed,
-          ariaLabel: `${node.data.title}, ${NODE_DEFINITIONS[node.data.kind].label} node${
+          ariaLabel: `${node.data.title}, ${definition.label} node${
             protectedNodeIds.has(node.id) ? ', locked' : ''
           }`,
           connectable: mutable,
@@ -1090,7 +1107,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           draggable: mutable,
         };
       }),
-    [nodes, protectedNodeIds, workflowNodeStatuses, workflowReviewGates],
+    [nodeRegistry, nodes, protectedNodeIds, workflowNodeStatuses, workflowReviewGates],
   );
   const workflowEdgeStates = useMemo(
     () => new Map((workflowEvidenceExecution?.edges ?? []).map((edge) => [edge.edgeId, edge])),
@@ -1147,20 +1164,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     if (workflowDecisionCount > 0) setActivityOpen(true);
   }, [workflowDecisionCount]);
 
-  const extensionTemplates = useMemo<ExtensionTemplate[]>(
-    () =>
-      extensionDiscovery.installed.flatMap((extension) =>
-        extension.manifest.contributes.canvasNodeTypes.map((definition) => ({
-          extension,
-          definition,
-          key: extensionTemplateKey(extension.manifest.id, definition.id),
-        })),
-      ),
-    [extensionDiscovery.installed],
-  );
   const searchTerm = search.toLowerCase();
   const filteredTemplates = NODE_KINDS.filter((kind) =>
-    NODE_DEFINITIONS[kind].label.toLowerCase().includes(searchTerm),
+    nodeRegistry.resolve({ kind }).label.toLowerCase().includes(searchTerm),
   );
   const filteredWorkflowTemplates = WORKFLOW_TEMPLATES.filter((template) =>
     `${template.name} ${template.description}`.toLowerCase().includes(searchTerm),
@@ -1171,7 +1177,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       .includes(searchTerm),
   );
   const filteredNodes = nodes.filter((node) =>
-    `${node.data.title} ${NODE_DEFINITIONS[node.data.kind].label}`
+    `${node.data.title} ${nodeRegistry.resolve(node.data).label}`
       .toLowerCase()
       .includes(searchTerm),
   );
@@ -1518,6 +1524,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           workflowTemplates={filteredWorkflowTemplates}
           extensionTemplates={filteredExtensionTemplates}
           nodes={railTab === 'nodes' ? filteredNodes : nodes}
+          nodeRegistry={nodeRegistry}
           fileOperations={window.forgeboard.files}
           initializingGit={initializingGit}
           collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
@@ -1550,6 +1557,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           edges={displayedGraph.edges}
           settings={settings}
           extensionTemplates={extensionTemplates}
+          nodeRegistry={nodeRegistry}
           instance={instance}
           onInstance={setInstance}
           onViewportChange={setViewport}
@@ -1660,6 +1668,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onContextDropError={onError}
         />
         <WorkspaceInspector
+          nodeRegistry={nodeRegistry}
           project={project}
           settings={settings}
           canvas={canvas}

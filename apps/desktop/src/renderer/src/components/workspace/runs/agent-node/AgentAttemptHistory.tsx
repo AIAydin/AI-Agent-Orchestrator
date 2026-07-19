@@ -1,10 +1,13 @@
-import { GitBranch, History, Play, RefreshCw, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { ArchiveRestore, GitBranch, History, Play, RefreshCw, RotateCcw } from 'lucide-react';
 
 import type {
   AgentDetection,
   RunAdapterId,
 } from '../../../../../../shared/application/contracts.js';
 import type { RunHistorySummary } from '../../../../../../shared/runs/contracts.js';
+import type { GitWorktreeRestorePlanView } from '../../../../../../shared/git/lifecycle/contracts.js';
+import { unwrap } from '../../../../lib/ipc.js';
 import { continuationUnavailableReason, type SelectedAgentAuthority } from './attempt-actions.js';
 import { useAgentAttemptHistory } from './useAgentAttemptHistory.js';
 import { tokenUsageRows } from './usage/token-usage.js';
@@ -36,6 +39,57 @@ export function AgentAttemptHistory({
   onReviewAttempt,
 }: AgentAttemptHistoryProps) {
   const history = useAgentAttemptHistory(projectId, nodeId, refreshKey);
+  const [restorePlan, setRestorePlan] = useState<{
+    readonly attempt: RunHistorySummary;
+    readonly plan: GitWorktreeRestorePlanView;
+  } | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreStatus, setRestoreStatus] = useState<string | null>(null);
+
+  const prepareRestore = async (attempt: RunHistorySummary) => {
+    setRestoreBusy(true);
+    setRestoreError(null);
+    setRestoreStatus(null);
+    try {
+      const plan = unwrap(
+        await window.forgeboard.git.lifecycle.prepareRestore({
+          projectId,
+          runId: attempt.id,
+        }),
+      );
+      setRestorePlan({ attempt, plan });
+    } catch (error) {
+      setRestoreError(error instanceof Error ? error.message : 'Could not review this restore.');
+    } finally {
+      setRestoreBusy(false);
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (restorePlan === null) return;
+    setRestoreBusy(true);
+    setRestoreError(null);
+    setRestoreStatus(null);
+    try {
+      const restored = unwrap(
+        await window.forgeboard.git.lifecycle.confirmRestore({
+          planId: restorePlan.plan.planId,
+        }),
+      );
+      setRestorePlan(null);
+      if (restored === null) {
+        setRestoreStatus('Restore cancelled. The workspace remains archived.');
+      } else {
+        setRestoreStatus(`Restored ${restored.branch} for active review.`);
+        history.refresh();
+      }
+    } catch (error) {
+      setRestoreError(error instanceof Error ? error.message : 'Could not restore this worktree.');
+    } finally {
+      setRestoreBusy(false);
+    }
+  };
   return (
     <section className="agent-attempt-history" aria-labelledby={`agent-history-${nodeId}`}>
       <header>
@@ -187,13 +241,61 @@ export function AgentAttemptHistory({
                     >
                       <GitBranch size={11} /> Review changes
                     </button>
+                    {attempt.worktreeState === 'archived' && !attempt.supersededByNewerAttempt ? (
+                      <button
+                        type="button"
+                        disabled={restoreBusy}
+                        onClick={() => void prepareRestore(attempt)}
+                      >
+                        <ArchiveRestore size={11} /> Restore workspace
+                      </button>
+                    ) : null}
                   </div>
+                  {restorePlan?.attempt.id === attempt.id ? (
+                    <div
+                      className="agent-history-restore-review"
+                      role="group"
+                      aria-label="Restore workspace review"
+                    >
+                      <strong>Restore archived workspace?</strong>
+                      <p>
+                        Branch <code>{restorePlan.plan.branch}</code> and all files, commits, and{' '}
+                        {restorePlan.plan.dirtyPathCount} uncommitted path(s) stay unchanged.
+                      </p>
+                      <p>
+                        A native confirmation will revalidate the exact Git state before restoring
+                        access.
+                      </p>
+                      <div className="agent-attempt-actions">
+                        <button
+                          type="button"
+                          disabled={restoreBusy}
+                          onClick={() => setRestorePlan(null)}
+                        >
+                          Go back
+                        </button>
+                        <button
+                          type="button"
+                          disabled={restoreBusy}
+                          onClick={() => void confirmRestore()}
+                        >
+                          Continue to native confirmation
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </article>
               </li>
             );
           })}
         </ol>
       ) : null}
+      {restoreError !== null ? (
+        <p className="agent-history-error" role="alert">
+          {restoreError}
+        </p>
+      ) : null}
+      {restoreStatus !== null ? <p role="status">{restoreStatus}</p> : null}
     </section>
   );
 }
@@ -235,6 +337,7 @@ function formatDuration(attempt: RunHistorySummary): string {
 function worktreeLabel(attempt: RunHistorySummary): string {
   if (attempt.worktreeAvailable) return 'Available for review';
   if (attempt.worktreeState === 'cleanup-pending') return 'Cleanup pending';
+  if (attempt.worktreeState === 'archived') return 'Archived';
   if (attempt.worktreeState === 'cleaned') return 'Cleaned';
   return attempt.worktreeState === 'active' ? 'Unavailable' : 'Not created';
 }

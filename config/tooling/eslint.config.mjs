@@ -26,7 +26,11 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.config.{js,mjs,ts}', '**/scripts/**/*.{js,mjs,ts}'],
+    files: [
+      '**/*.config.{js,mjs,ts}',
+      '**/scripts/**/*.{js,mjs,ts}',
+      'apps/desktop/e2e/**/fixtures/**/*.{js,mjs}',
+    ],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: {
       parserOptions: { projectService: false },

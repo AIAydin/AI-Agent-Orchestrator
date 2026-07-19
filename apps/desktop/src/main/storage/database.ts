@@ -449,6 +449,20 @@ export const MIGRATIONS = [
       FOREIGN KEY(canvas_id) REFERENCES canvas_documents(id) ON DELETE CASCADE
     );
   `,
+  `
+    CREATE TABLE IF NOT EXISTS git_worktree_metadata_intents (
+      intent_id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL UNIQUE,
+      worktree_id TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL CHECK(kind IN ('rename-worktree-branch', 'archive-worktree', 'restore-worktree')),
+      before_branch TEXT NOT NULL,
+      after_branch TEXT NOT NULL,
+      before_state TEXT NOT NULL CHECK(before_state IN ('active', 'archived')),
+      after_state TEXT NOT NULL CHECK(after_state IN ('active', 'archived')),
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    );
+  `,
 ] as const;
 
 export interface ExpectedDatabaseIdentity {
@@ -521,6 +535,7 @@ export function migrate(database: DatabaseSync): void {
 }
 
 export function clearAllTables(database: DatabaseSync): void {
+  database.prepare('DELETE FROM git_worktree_metadata_intents').run();
   database.prepare('DELETE FROM github_cli_executable_binding').run();
   database.prepare('DELETE FROM terminal_sessions').run();
   database.prepare('DELETE FROM settings_repair_history').run();
@@ -557,6 +572,7 @@ export function clearPortableTables(database: DatabaseSync): void {
   // Workflow recovery records are not part of portable export version 3. Clear them before the
   // canvases they bind to so a replace import cannot retain orphaned runtime state.
   database.prepare('DELETE FROM workflow_executions').run();
+  database.prepare('DELETE FROM git_worktree_metadata_intents').run();
   database.prepare('DELETE FROM terminal_sessions').run();
   database.prepare('DELETE FROM delivery_readiness_approvals').run();
   database.prepare('DELETE FROM delivery_readiness_records').run();

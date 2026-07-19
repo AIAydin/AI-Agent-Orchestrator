@@ -155,6 +155,16 @@ export class OutboundActionGate {
     }
   }
 
+  /** Persists a required redacted audit record for an already-authorized outbound consumer. */
+  public recordRequiredAudit(
+    category: string,
+    action: string,
+    outcome: 'allowed' | 'denied' | 'failed',
+    metadata: Record<string, unknown>,
+  ): void {
+    this.audit.appendAudit(category, action, outcome, metadata);
+  }
+
   public prepare(ownerId: string, disclosure: OutboundActionDisclosure): OutboundApprovalPlan {
     assertOwnerId(ownerId);
     assertDisclosure(disclosure);
@@ -244,7 +254,10 @@ export class OutboundActionGate {
       phase: 'authorized-before-execution',
     });
     try {
-      return { outcome: 'allowed', value: await input.execute(EXECUTION_PERMIT) };
+      return {
+        outcome: 'allowed',
+        value: await input.execute(EXECUTION_PERMIT),
+      };
     } catch (error) {
       this.audit.appendAudit('external-send', plan.disclosure.action, 'failed', {
         ...audit,

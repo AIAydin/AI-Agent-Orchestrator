@@ -11,6 +11,8 @@ const PROJECT_ID = '95000000-0000-4000-8000-000000000001';
 const RUN_ID = '95000000-0000-4000-8000-000000000002';
 const PARENT_ID = '95000000-0000-4000-8000-000000000003';
 const listRuns = vi.fn();
+const prepareRestore = vi.fn();
+const confirmRestore = vi.fn();
 const SELECTED_AUTHORITY = {
   adapterId: 'codex' as const,
   model: 'gpt-5.1-codex',
@@ -36,9 +38,14 @@ const codexAgent: AgentDetection & { id: 'codex' } = {
 
 beforeEach(() => {
   listRuns.mockReset();
+  prepareRestore.mockReset();
+  confirmRestore.mockReset();
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
-    value: { runs: { list: listRuns } },
+    value: {
+      runs: { list: listRuns },
+      git: { lifecycle: { prepareRestore, confirmRestore } },
+    },
   });
 });
 
@@ -199,7 +206,10 @@ describe('AgentAttemptHistory', () => {
 
   it('reports load failures and retries from an accessible action', async () => {
     listRuns
-      .mockResolvedValueOnce({ ok: false, error: { message: 'History database unavailable' } })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { message: 'History database unavailable' },
+      })
       .mockResolvedValueOnce({ ok: true, value: [] });
     render(
       <AgentAttemptHistory
@@ -220,6 +230,68 @@ describe('AgentAttemptHistory', () => {
       expect(screen.getByText('No attempts have been recorded for this Agent node.')).toBeTruthy(),
     );
     expect(listRuns).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps archived work discoverable and restores it through path-free reviewed IPC', async () => {
+    const archived = {
+      ...runSummary(),
+      worktreeState: 'archived' as const,
+      worktreeAvailable: false,
+    };
+    listRuns.mockResolvedValue({ ok: true, value: [archived] });
+    prepareRestore.mockResolvedValue({
+      ok: true,
+      value: {
+        kind: 'restore-worktree',
+        planId: '95000000-0000-4000-8000-000000000004',
+        expiresAt: '2026-07-17T18:05:00.000Z',
+        branch: 'feature/agent-node',
+        clean: false,
+        dirtyPathCount: 1,
+        retainsWorktree: true,
+        retainsBranch: true,
+      },
+    });
+    confirmRestore.mockResolvedValueOnce({ ok: true, value: null }).mockResolvedValueOnce({
+      ok: true,
+      value: { action: 'restored', branch: 'feature/agent-node' },
+    });
+
+    render(
+      <AgentAttemptHistory
+        projectId={PROJECT_ID}
+        nodeId="agent-node"
+        refreshKey="archived"
+        agents={[codexAgent]}
+        selectedAuthority={SELECTED_AUTHORITY}
+        actionUnavailableReason={null}
+      />,
+    );
+
+    expect(await screen.findByText('Archived')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore workspace' }));
+    expect(await screen.findByRole('group', { name: 'Restore workspace review' })).toBeTruthy();
+    expect(prepareRestore).toHaveBeenCalledWith({
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+    });
+    expect(screen.getByText(/all files, commits/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to native confirmation' }));
+    await waitFor(() =>
+      expect(confirmRestore).toHaveBeenCalledWith({
+        planId: '95000000-0000-4000-8000-000000000004',
+      }),
+    );
+    expect((await screen.findByRole('status')).textContent).toContain(
+      'Restore cancelled. The workspace remains archived.',
+    );
+    expect(screen.queryByRole('group', { name: 'Restore workspace review' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore workspace' }));
+    expect(await screen.findByRole('group', { name: 'Restore workspace review' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to native confirmation' }));
+    await waitFor(() => expect(listRuns).toHaveBeenCalledTimes(2));
   });
 });
 

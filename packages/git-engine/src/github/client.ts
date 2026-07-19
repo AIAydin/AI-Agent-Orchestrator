@@ -127,12 +127,13 @@ export class GitHubCliExecutor implements GitHubCommandRunner {
   public readonly executableResolution: GitHubExecutableResolutionState;
   readonly #environment: NodeJS.ProcessEnv;
   readonly #resolutionError: Error | undefined;
-  readonly #beforeSpawn: (executable: string) => void | Promise<void>;
+  readonly #beforeSpawn: (executable: string, args: readonly string[]) => void | Promise<void>;
 
   public constructor(
     executable = 'gh',
     environment: Readonly<Record<string, string | undefined>> = {},
-    beforeSpawn: (executable: string) => void | Promise<void> = () => undefined,
+    beforeSpawn: (executable: string, args: readonly string[]) => void | Promise<void> = () =>
+      undefined,
     options: GitHubCliExecutorOptions = {},
   ) {
     this.#environment = buildGitHubCliEnvironment(
@@ -167,7 +168,7 @@ export class GitHubCliExecutor implements GitHubCommandRunner {
         { cause: this.#resolutionError },
       );
     }
-    await this.#beforeSpawn(this.executable);
+    await this.#beforeSpawn(this.executable, args);
     if (signalIsAborted(options.signal)) {
       throw new GitEngineError('ABORTED', 'GitHub CLI command was aborted before launch.');
     }

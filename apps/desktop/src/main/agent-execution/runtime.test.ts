@@ -96,6 +96,7 @@ interface HarnessOptions {
   readonly session?: AgentSession;
   readonly trustedExtensionAdapter?: boolean;
   readonly worktrees?: WorktreeService;
+  readonly failLaunchAudit?: boolean;
 }
 
 type AgentExecutionRuntimeOptionsSubset = ConstructorParameters<typeof AgentExecutionRuntime>[0];
@@ -146,7 +147,10 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
       const parent = records.get(parentRunId);
       const child = records.get(childRunId);
       if (parent === undefined || child === undefined) throw new Error('missing transfer record');
-      const authoritativeChild = { ...child, worktreeAuthority: 'owned' as const };
+      const authoritativeChild = {
+        ...child,
+        worktreeAuthority: 'owned' as const,
+      };
       records.set(childRunId, authoritativeChild);
       const next = { ...parent, supersededByRunId: childRunId };
       records.set(parentRunId, next);
@@ -166,6 +170,9 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
       return next;
     },
     appendAudit: (_category, action, outcome) => {
+      if (options.failLaunchAudit === true && action === 'launch' && outcome === 'allowed') {
+        throw new Error('required launch audit unavailable');
+      }
       audits.push({ action, outcome });
     },
   };
@@ -189,7 +196,10 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
       ...TEST_AGENT_MANIFEST.invocation,
       context: { strategy: 'prompt-references' },
     },
-    capabilities: { ...TEST_AGENT_MANIFEST.capabilities, contextAttachments: true },
+    capabilities: {
+      ...TEST_AGENT_MANIFEST.capabilities,
+      contextAttachments: true,
+    },
   });
   const planner = vi.fn<AgentAdapterPlanner>((input, cwd, _settings, _runId, _auth, sessionId) => {
     const launchRequest = {
@@ -490,14 +500,18 @@ describe('AgentExecutionRuntime admission limits', () => {
     launchGate.resolve(controlled.session);
     const firstHandle = await firstLaunch;
     await firstHandle.terminate();
-    await expect(firstHandle.completion).resolves.toMatchObject({ status: 'terminated' });
+    await expect(firstHandle.completion).resolves.toMatchObject({
+      status: 'terminated',
+    });
 
     const retriedHandle = await harness.runtime.launch(
       'owner-b',
       retryablePlan.planId,
       retryablePlan.disclosureFingerprint,
     );
-    await expect(retriedHandle.completion).resolves.toMatchObject({ status: 'succeeded' });
+    await expect(retriedHandle.completion).resolves.toMatchObject({
+      status: 'succeeded',
+    });
     expect(harness.launchSession).toHaveBeenCalledTimes(2);
     await harness.runtime.dispose();
   });
@@ -560,7 +574,10 @@ describe('AgentExecutionRuntime admission limits', () => {
       await expect(harness.runtime.terminate('owner-a', prepared.runId)).rejects.toThrow(
         'no longer exists',
       );
-      expect(harness.audits).toContainEqual({ action: 'launch', outcome: 'denied' });
+      expect(harness.audits).toContainEqual({
+        action: 'launch',
+        outcome: 'denied',
+      });
     } finally {
       await harness.runtime.dispose();
       vi.useRealTimers();
@@ -591,7 +608,9 @@ describe('AgentExecutionRuntime admission limits', () => {
     await harness.runtime.stopOwner('owner-a');
 
     expect(controlled.terminate).toHaveBeenCalledOnce();
-    await expect(activeHandle.completion).resolves.toMatchObject({ status: 'terminated' });
+    await expect(activeHandle.completion).resolves.toMatchObject({
+      status: 'terminated',
+    });
     expect(harness.records.get(pendingPlan.runId)?.status).toBe('terminated');
     expect(harness.records.get(otherPlan.runId)?.status).toBe('prepared');
     await expect(harness.runtime.terminate('owner-b', otherPlan.runId)).resolves.toBe(true);
@@ -634,6 +653,18 @@ describe('AgentExecutionRuntime admission limits', () => {
 });
 
 describe('AgentExecutionRuntime approval binding', () => {
+  it('fails closed before invoking the launch seam when authorization cannot be audited', async () => {
+    const harness = createHarness({ failLaunchAudit: true });
+    const prepared = await harness.runtime.prepare('owner-a', request());
+
+    await expect(
+      harness.runtime.launch('owner-a', prepared.planId, prepared.disclosureFingerprint),
+    ).rejects.toThrow('required launch audit unavailable');
+    expect(harness.launchSession).not.toHaveBeenCalled();
+    expect(harness.records.get(prepared.runId)?.status).toBe('failed');
+    await harness.runtime.dispose();
+  });
+
   it('lets final synchronous authorization abort before the launch seam is invoked', async () => {
     const harness = createHarness();
     const prepared = await harness.runtime.prepare('owner-a', request());
@@ -661,8 +692,13 @@ describe('AgentExecutionRuntime approval binding', () => {
       prepared.planId,
       prepared.disclosureFingerprint,
     );
-    await expect(handle.completion).resolves.toMatchObject({ status: 'succeeded' });
-    expect(harness.audits).toContainEqual({ action: 'access', outcome: 'denied' });
+    await expect(handle.completion).resolves.toMatchObject({
+      status: 'succeeded',
+    });
+    expect(harness.audits).toContainEqual({
+      action: 'access',
+      outcome: 'denied',
+    });
   });
 
   it('rejects stale fingerprints and expires the still-pending exact plan', async () => {
@@ -811,7 +847,10 @@ describe('AgentExecutionRuntime approval binding', () => {
 
   it('revalidates the complete managed-worktree ownership record', async () => {
     const ownership = worktreeOwnership();
-    const changedOwnership = { ...ownership, cleanupPolicy: 'after-merge' as const };
+    const changedOwnership = {
+      ...ownership,
+      cleanupPolicy: 'after-merge' as const,
+    };
     const worktrees = {
       provision: vi.fn(() => Promise.resolve({ ownership, primaryWasDirty: false })),
       inspect: vi.fn(() =>
@@ -856,7 +895,10 @@ describe('AgentExecutionRuntime approval binding', () => {
       provision: vi.fn(() => Promise.resolve({ ownership, primaryWasDirty: false })),
       cleanupImpact: vi.fn(() => Promise.reject(new Error('cleanup inspection failed'))),
     } as unknown as WorktreeService;
-    const harness = createHarness({ worktrees, failSaveStatuses: ['prepared'] });
+    const harness = createHarness({
+      worktrees,
+      failSaveStatuses: ['prepared'],
+    });
 
     const failure = await harness.runtime
       .prepare('owner-a', request('test-agent', 'worktree-write'))
@@ -1047,7 +1089,9 @@ describe('AgentExecutionRuntime launch handles', () => {
       expect(session.inputs).toEqual(['continue\n']);
       expect(session.interruptCalls).toBe(1);
       expect(session.terminateCalls).toBe(1);
-      await expect(handle.completion).resolves.toMatchObject({ status: 'terminated' });
+      await expect(handle.completion).resolves.toMatchObject({
+        status: 'terminated',
+      });
       await expect(access(snapshotPath!)).rejects.toThrow();
     } finally {
       await harness.runtime.dispose();
@@ -1142,17 +1186,28 @@ describe('AgentExecutionRuntime launch handles', () => {
         agentEvent({
           type: 'message',
           channel: 'stdout',
-          payload: { type: 'output', stream: 'stdout', data: 'Visible agent answer.\n' },
+          payload: {
+            type: 'output',
+            stream: 'stdout',
+            data: 'Visible agent answer.\n',
+          },
         }),
         agentEvent({
           type: 'message',
           channel: 'stdout',
-          payload: { type: 'input-received', requestId: 'secret', data: 'USER_INPUT_SECRET' },
+          payload: {
+            type: 'input-received',
+            requestId: 'secret',
+            data: 'USER_INPUT_SECRET',
+          },
         }),
         agentEvent({
           type: 'message',
           channel: 'stdout',
-          payload: { type: 'completed', metadata: { secret: 'METADATA_SECRET' } },
+          payload: {
+            type: 'completed',
+            metadata: { secret: 'METADATA_SECRET' },
+          },
         }),
       ]),
       result: Promise.resolve({
@@ -1233,7 +1288,9 @@ describe('AgentExecutionRuntime launch handles', () => {
   });
 
   it('returns null instead of fabricating a process reference when the adapter has no PID', async () => {
-    const harness = createHarness({ session: settledSession('succeeded', undefined) });
+    const harness = createHarness({
+      session: settledSession('succeeded', undefined),
+    });
     const prepared = await harness.runtime.prepare('owner-a', request());
     const handle = await harness.runtime.launch(
       'owner-a',
@@ -1242,7 +1299,9 @@ describe('AgentExecutionRuntime launch handles', () => {
     );
 
     expect(handle.process).toBeNull();
-    await expect(handle.completion).resolves.toMatchObject({ status: 'succeeded' });
+    await expect(handle.completion).resolves.toMatchObject({
+      status: 'succeeded',
+    });
   });
 
   it('returns only provider-emitted bounded usage, resume identity, and exact session controls', async () => {
@@ -1252,7 +1311,12 @@ describe('AgentExecutionRuntime launch handles', () => {
       result: Promise.resolve({
         ...result('interrupted'),
         providerSessionId: 'provider-session-7',
-        usage: { inputTokens: 21, outputTokens: 8, totalTokens: 29, costUsd: 0.003 },
+        usage: {
+          inputTokens: 21,
+          outputTokens: 8,
+          totalTokens: 29,
+          costUsd: 0.003,
+        },
       }),
     };
     const harness = createHarness({ session });
@@ -1268,7 +1332,12 @@ describe('AgentExecutionRuntime launch handles', () => {
     expect(completion).toMatchObject({
       status: 'interrupted',
       providerSessionId: 'provider-session-7',
-      usage: { inputTokens: 21, outputTokens: 8, totalTokens: 29, costUsd: 0.003 },
+      usage: {
+        inputTokens: 21,
+        outputTokens: 8,
+        totalTokens: 29,
+        costUsd: 0.003,
+      },
       capabilities: session.capabilities,
       worktreeId: null,
     });
@@ -1352,7 +1421,9 @@ describe('AgentExecutionRuntime launch handles', () => {
 
     await expect(harness.runtime.resetForPrivacy()).rejects.toThrow('save failed for terminated');
     expect(controlled.terminate).toHaveBeenCalledOnce();
-    await expect(handle.completion).resolves.toMatchObject({ status: 'failed' });
+    await expect(handle.completion).resolves.toMatchObject({
+      status: 'failed',
+    });
 
     harness.runtime.resumeAfterPrivacyReset();
     expect(() => harness.runtime.sendInput('owner-a', activePlan.runId, 'late input')).toThrow(

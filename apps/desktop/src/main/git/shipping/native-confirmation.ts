@@ -5,14 +5,8 @@ import type { PendingGitShippingPlan } from './git-shipping-service.js';
 
 /** Exact, cancel-default native disclosure for a main-owned Git delivery plan. */
 export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOptions {
-  const strategy =
-    plan.strategy === 'fast-forward-only'
-      ? 'Move the primary branch forward'
-      : 'Copy the reviewed changes one by one';
-  const action =
-    plan.strategy === 'fast-forward-only'
-      ? 'Move primary branch forward'
-      : 'Copy changes one by one';
+  const strategy = strategyLabel(plan.strategy);
+  const action = strategyAction(plan.strategy);
   const qualityApproval = plan.readiness.approvals.find(
     (approval) => approval.approvalId === plan.readinessApprovalId,
   );
@@ -46,7 +40,7 @@ export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOp
       `Check-results fingerprint (SHA-256): ${plan.readiness.evidenceFingerprint}`,
       '',
       'Forgeboard will refuse to deliver if the check results, the agent branch, the primary branch, its latest commit, or any files changed after your review.',
-      'Git records this exact author with the delivery. Moving the branch forward creates no new commit; copying changes one by one records it as who made each new commit.',
+      deliveryIdentityEffect(plan),
       'Nothing is forced, reset, deleted, or pushed, and conflicts are never resolved automatically.',
     ].join('\n'),
     buttons: ['Cancel', action],
@@ -54,6 +48,28 @@ export function shippingConfirmation(plan: PendingGitShippingPlan): MessageBoxOp
     cancelId: 0,
     noLink: true,
   };
+}
+
+function strategyLabel(strategy: PendingGitShippingPlan['strategy']): string {
+  if (strategy === 'fast-forward-only') return 'Move the primary branch forward';
+  if (strategy === 'merge-commit') return 'Create a merge commit on the primary branch';
+  return 'Copy the reviewed changes one by one';
+}
+
+function strategyAction(strategy: PendingGitShippingPlan['strategy']): string {
+  if (strategy === 'fast-forward-only') return 'Move primary branch forward';
+  if (strategy === 'merge-commit') return 'Create merge commit';
+  return 'Copy changes one by one';
+}
+
+function deliveryIdentityEffect(plan: PendingGitShippingPlan): string {
+  if (plan.strategy === 'fast-forward-only') {
+    return 'Git records no new commit for this delivery, so the existing agent commit authors remain unchanged.';
+  }
+  if (plan.strategy === 'merge-commit') {
+    return 'Git records this exact author on the new merge commit; the existing agent commit authors remain unchanged.';
+  }
+  return 'Git records this exact author on each new commit copied to the primary branch.';
 }
 
 function identitySource(source: PendingGitShippingPlan['identity']['nameSource']): string {

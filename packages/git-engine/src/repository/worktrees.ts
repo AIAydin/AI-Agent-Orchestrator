@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 
 import { ChangeService } from '../diff/changes.js';
@@ -28,6 +28,7 @@ import type {
   ProvisionedWorktree,
   ProvisionWorktreeInput,
   RenameManagedBranchApproval,
+  RestoreArchivedWorktreeApproval,
   WorktreeCleanupPolicy,
   WorktreeLifecycleStatus,
   WorktreeOwnership,
@@ -122,16 +123,53 @@ function metadataPath(directory: string, id: string): string {
   return path.join(directory, `${id}.json`);
 }
 
-async function persistOwnership(ownership: WorktreeOwnership): Promise<void> {
+async function persistOwnership(
+  ownership: WorktreeOwnership,
+  syncDirectory: (directory: string) => Promise<void>,
+): Promise<void> {
   const directory = await ownershipDirectory(ownership.managedRoot);
   const destination = metadataPath(directory, ownership.id);
   const temporary = path.join(directory, `.${ownership.id}.${randomUUID()}.tmp`);
-  await writeFile(temporary, `${JSON.stringify(ownership, null, 2)}\n`, {
-    encoding: 'utf8',
-    mode: 0o600,
-    flag: 'wx',
-  });
-  await rename(temporary, destination);
+  try {
+    const file = await open(temporary, 'wx', 0o600);
+    try {
+      await file.writeFile(`${JSON.stringify(ownership, null, 2)}\n`, 'utf8');
+      await file.sync();
+    } finally {
+      await file.close();
+    }
+    await rename(temporary, destination);
+    try {
+      await syncDirectory(directory);
+    } catch {
+      // The atomic rename is the commit point. A durability-only directory fsync failure must not
+      // make callers roll Git back while the authoritative ownership file already names the new
+      // branch/status. The durable SQLite intent can reconcile either visible side after restart.
+    }
+  } finally {
+    await unlink(temporary).catch((error: unknown) => {
+      if (!isObject(error) || error.code !== 'ENOENT') throw error;
+    });
+  }
+}
+
+async function syncOwnershipDirectory(directory: string): Promise<void> {
+  let handle;
+  try {
+    handle = await open(directory, 'r');
+    await handle.sync();
+  } catch (error) {
+    if (
+      process.platform === 'win32' &&
+      isObject(error) &&
+      (error.code === 'EPERM' || error.code === 'EACCES' || error.code === 'EINVAL')
+    ) {
+      return;
+    }
+    throw error;
+  } finally {
+    await handle?.close();
+  }
 }
 
 function normalizeBranchPrefix(configured: string | undefined): string {
@@ -152,7 +190,24 @@ function normalizeBranchPrefix(configured: string | undefined): string {
 }
 
 export class WorktreeService {
-  public constructor(public readonly repositories = new RepositoryService()) {}
+  readonly #beforePersistOwnership: (ownership: WorktreeOwnership) => void | Promise<void>;
+  readonly #syncOwnershipDirectory: (directory: string) => Promise<void>;
+
+  public constructor(
+    public readonly repositories = new RepositoryService(),
+    options: {
+      readonly beforePersistOwnership?: (ownership: WorktreeOwnership) => void | Promise<void>;
+      readonly syncOwnershipDirectory?: (directory: string) => Promise<void>;
+    } = {},
+  ) {
+    this.#beforePersistOwnership = options.beforePersistOwnership ?? (() => undefined);
+    this.#syncOwnershipDirectory = options.syncOwnershipDirectory ?? syncOwnershipDirectory;
+  }
+
+  async #persistOwnership(ownership: WorktreeOwnership): Promise<void> {
+    await this.#beforePersistOwnership(ownership);
+    await persistOwnership(ownership, this.#syncOwnershipDirectory);
+  }
 
   public async provision(input: ProvisionWorktreeInput): Promise<ProvisionedWorktree> {
     if (input.agentId.trim() === '') {
@@ -252,7 +307,7 @@ export class WorktreeService {
             'Git created a worktree outside the managed root.',
           );
         }
-        await persistOwnership(ownership);
+        await this.#persistOwnership(ownership);
       } catch (error) {
         await this.repositories.git.run(
           ['-C', repositoryRoot, 'worktree', 'remove', '--force', '--', worktreePath],
@@ -418,13 +473,90 @@ export class WorktreeService {
       branch: impact.newBranch,
       updatedAt: timestamp,
     };
-    await persistOwnership(updated);
+    try {
+      await this.#persistOwnership(updated);
+    } catch (error) {
+      try {
+        await this.repositories.git.run([
+          '-C',
+          impact.ownership.worktreePath,
+          'branch',
+          '-m',
+          impact.newBranch,
+          impact.oldBranch,
+        ]);
+      } catch (rollbackError) {
+        throw new GitEngineError(
+          'OWNERSHIP_MISMATCH',
+          'The branch was renamed, ownership persistence failed, and Git could not restore the reviewed branch name.',
+          { oldBranch: impact.oldBranch, newBranch: impact.newBranch },
+          { cause: new AggregateError([error, rollbackError]) },
+        );
+      }
+      throw new GitEngineError(
+        'OWNERSHIP_MISMATCH',
+        'Ownership persistence failed, so Forgeboard restored the original managed branch name.',
+        { oldBranch: impact.oldBranch, newBranch: impact.newBranch },
+        { cause: error },
+      );
+    }
     return updated;
   }
 
   public async archiveImpact(ownership: WorktreeOwnership): Promise<ArchiveImpact> {
     const impact = await this.cleanupImpact(ownership);
     return { ...impact, archiveStatus: 'archived' };
+  }
+
+  /** Repairs only the branch/status pair authorized by a durable main-process lifecycle intent. */
+  public async reconcileInterruptedMetadata(
+    ownership: WorktreeOwnership,
+    intent: {
+      readonly beforeBranch: string;
+      readonly afterBranch: string;
+      readonly beforeState: 'active' | 'archived';
+      readonly afterState: 'active' | 'archived';
+    },
+  ): Promise<{
+    readonly ownership: WorktreeOwnership;
+    readonly side: 'before' | 'after';
+  }> {
+    const state = await this.inspect(ownership);
+    const actualBranch = state.status?.branch;
+    if (actualBranch === null || actualBranch === undefined) {
+      throw new GitEngineError(
+        'OWNERSHIP_MISMATCH',
+        'Interrupted lifecycle recovery has no branch.',
+      );
+    }
+    const before =
+      actualBranch === intent.beforeBranch &&
+      state.ownership.branch === intent.beforeBranch &&
+      state.ownership.status === intent.beforeState;
+    const after =
+      actualBranch === intent.afterBranch &&
+      state.ownership.branch === intent.afterBranch &&
+      state.ownership.status === intent.afterState;
+    if (after) return { ownership: state.ownership, side: 'after' };
+    if (before) return { ownership: state.ownership, side: 'before' };
+    if (
+      state.ownership.branch === intent.beforeBranch &&
+      state.ownership.status === intent.beforeState &&
+      actualBranch === intent.afterBranch
+    ) {
+      const repaired: WorktreeOwnership = {
+        ...state.ownership,
+        branch: intent.afterBranch,
+        status: intent.afterState,
+        updatedAt: new Date().toISOString(),
+      };
+      await this.#persistOwnership(repaired);
+      return { ownership: repaired, side: 'after' };
+    }
+    throw new GitEngineError(
+      'OWNERSHIP_MISMATCH',
+      'Interrupted lifecycle state matches neither side of its durable intent.',
+    );
   }
 
   /** Archives ownership metadata only; it does not delete the branch or worktree. */
@@ -451,7 +583,35 @@ export class WorktreeService {
       status: 'archived',
       updatedAt: new Date().toISOString(),
     };
-    await persistOwnership(updated);
+    await this.#persistOwnership(updated);
+    return updated;
+  }
+
+  /** Restores archived ownership metadata without changing the worktree, files, or branch. */
+  public async restoreArchived(
+    ownership: WorktreeOwnership,
+    approval: RestoreArchivedWorktreeApproval,
+  ): Promise<WorktreeOwnership> {
+    assertExplicitApproval(approval, 'restore-archived-worktree');
+    const impact = await this.archiveImpact(ownership);
+    this.assertManagedApprovalIdentity(impact, approval);
+    if (
+      approval.branch !== impact.ownership.branch ||
+      approval.expectedBranchOid !== impact.branchOid ||
+      impact.ownership.status !== 'archived'
+    ) {
+      throw new GitEngineError(
+        'STALE_APPROVAL',
+        'Archived worktree restore approval no longer matches current state.',
+      );
+    }
+    assertSameStrings(impact.dirtyPaths, approval.dirtyPaths, 'dirty archived worktree paths');
+    const updated: WorktreeOwnership = {
+      ...impact.ownership,
+      status: 'active',
+      updatedAt: new Date().toISOString(),
+    };
+    await this.#persistOwnership(updated);
     return updated;
   }
 
@@ -502,7 +662,10 @@ export class WorktreeService {
       );
     }
 
-    let branchDeletion: { readonly ref: string; readonly expectedOid: string } | null = null;
+    let branchDeletion: {
+      readonly ref: string;
+      readonly expectedOid: string;
+    } | null = null;
     if (approval.deleteBranch && state.branchExists) {
       if (state.branchOid === null) {
         throw new GitEngineError(
@@ -552,7 +715,7 @@ export class WorktreeService {
     }
     const missingPathRegistration = state.missing && registrationBeforeRemoval.exactPathRegistered;
 
-    await persistOwnership({
+    await this.#persistOwnership({
       ...authoritative,
       status: 'cleanup-pending',
       updatedAt: new Date().toISOString(),
@@ -721,7 +884,10 @@ export class WorktreeService {
 
   private assertManagedApprovalIdentity(
     impact: CleanupImpact,
-    approval: RenameManagedBranchApproval | ArchiveWorktreeApproval,
+    approval:
+      | RenameManagedBranchApproval
+      | ArchiveWorktreeApproval
+      | RestoreArchivedWorktreeApproval,
   ): void {
     if (
       approval.repositoryRoot !== impact.ownership.repositoryRoot ||

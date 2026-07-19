@@ -89,6 +89,25 @@ describe('AgentReadinessIpcService', () => {
     });
     expect(fixture.authorizations).toBe(2);
     expect(fixture.probe).toHaveBeenCalledWith(PLAN, expect.any(Function));
+    expect(fixture.appendAudit).toHaveBeenNthCalledWith(
+      1,
+      'agent',
+      'readiness-probe',
+      'allowed',
+      expect.objectContaining({
+        executableSha256: PLAN.executableIdentity.sha256,
+        probeSequence: 1,
+        probeKind: 'version',
+        phase: 'authorized-before-spawn',
+      }),
+    );
+    expect(fixture.appendAudit).toHaveBeenNthCalledWith(
+      2,
+      'agent',
+      'readiness-probe',
+      'allowed',
+      expect.objectContaining({ probeSequence: 2, probeKind: 'capability' }),
+    );
     expect(fixture.recordVerifiedSettingsReadiness).toHaveBeenCalledWith(PLAN, readyResult());
     await fixture.service.dispose();
   });
@@ -243,15 +262,24 @@ function createFixture(
     Promise.resolve(options.preparation ?? { outcome: 'probe' as const, plan: PLAN }),
   );
   let authorizations = 0;
-  const probe = vi.fn((_plan: AgentReadinessProbePlan, authorize?: () => void) => {
-    if (options.invokeAuthorization === true) {
-      authorize?.();
-      authorizations += 1;
-      authorize?.();
-      authorizations += 1;
-    }
-    return Promise.resolve(readyResult());
-  });
+  const probe = vi.fn(
+    (
+      _plan: AgentReadinessProbePlan,
+      authorize: (attempt: {
+        readonly sequence: number;
+        readonly kind: 'version' | 'capability';
+        readonly argumentCount: number;
+      }) => void,
+    ) => {
+      if (options.invokeAuthorization === true) {
+        authorize({ sequence: 1, kind: 'version', argumentCount: 1 });
+        authorizations += 1;
+        authorize({ sequence: 2, kind: 'capability', argumentCount: 1 });
+        authorizations += 1;
+      }
+      return Promise.resolve(readyResult());
+    },
+  );
   const showMessageBox = vi.fn((...dialogArguments: [unknown, MessageBoxOptions]) => {
     void dialogArguments;
     return options.decision === undefined

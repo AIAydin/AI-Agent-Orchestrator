@@ -79,7 +79,10 @@ describe('GitIpcService agent-worktree target', () => {
         ) => Promise<{ response: number; checkboxChecked: boolean }>
       >();
     showMessageBox.mockImplementation(() =>
-      Promise.resolve({ response: responses.shift() ?? 0, checkboxChecked: false }),
+      Promise.resolve({
+        response: responses.shift() ?? 0,
+        checkboxChecked: false,
+      }),
     );
     const window = { isDestroyed: () => false } as BrowserWindow;
     const settings = {
@@ -94,13 +97,20 @@ describe('GitIpcService agent-worktree target', () => {
       () => settings,
       () => window,
     );
-    const target = { kind: 'agent-worktree' as const, projectId: PROJECT_ID, runId: RUN_ID };
+    const target = {
+      kind: 'agent-worktree' as const,
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+    };
     const event = liveEvent(71);
     const worktreeStory = 'agent worktree change\n';
     await writeFile(path.join(ownership.worktreePath, 'story.txt'), worktreeStory);
 
     const primaryHeadBefore = await runGit(repository, ['rev-parse', 'HEAD']);
-    const primaryReviewBefore = await service.review({ kind: 'primary', projectId: PROJECT_ID });
+    const primaryReviewBefore = await service.review({
+      kind: 'primary',
+      projectId: PROJECT_ID,
+    });
     const agentReview = await service.review(target);
     expect(primaryReviewBefore).toMatchObject({ dirty: false, branch: 'main' });
     expect('baseComparison' in primaryReviewBefore).toBe(false);
@@ -174,7 +184,10 @@ describe('GitIpcService agent-worktree target', () => {
     expect(await runGit(repository, ['rev-parse', 'HEAD'])).toBe(primaryHeadBefore);
     expect(await readFile(path.join(repository, 'story.txt'), 'utf8')).toBe('primary story\n');
     expect((await service.review({ kind: 'primary', projectId: PROJECT_ID })).dirty).toBe(false);
-    expect(showMessageBox.mock.calls[0]?.[1]).toMatchObject({ defaultId: 0, cancelId: 0 });
+    expect(showMessageBox.mock.calls[0]?.[1]).toMatchObject({
+      defaultId: 0,
+      cancelId: 0,
+    });
     expect(String(showMessageBox.mock.calls[1]?.[1]?.detail)).toContain(
       `agent workspace for run ${RUN_ID.slice(0, 12)}`,
     );
@@ -190,6 +203,205 @@ describe('GitIpcService agent-worktree target', () => {
     );
     await service.dispose();
   });
+
+  it('persists native-confirmed rename and reversible archive lifecycle', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'forgeboard-git-metadata-ipc-'));
+    temporaryRoots.push(root);
+    const repository = await createRepository(root);
+    const managedRoot = path.join(root, 'managed-worktrees');
+    await mkdir(managedRoot);
+    const repositories = new RepositoryService();
+    const worktrees = new WorktreeService(repositories);
+    const ownership = (
+      await worktrees.provision({
+        repositoryPath: repository,
+        managedRoot,
+        agentId: 'test-agent',
+        taskId: 'agent-node',
+      })
+    ).ownership;
+    await writeFile(path.join(ownership.worktreePath, 'uncommitted.txt'), 'retain me\n');
+    const head = await runGit(ownership.worktreePath, ['rev-parse', 'HEAD']);
+    const databasePath = path.join(root, 'state', 'forgeboard.sqlite3');
+    const store = new LocalStore(databasePath);
+    stores.add(store);
+    store.saveProject(project(repository));
+    store.saveRun(runRecord(ownership));
+    const responses = [0, 1, 0, 1, 0, 1];
+    const showMessageBox = vi.fn<
+      (
+        window: BrowserWindow,
+        options: MessageBoxOptions,
+      ) => Promise<{ response: number; checkboxChecked: boolean }>
+    >(() =>
+      Promise.resolve({
+        response: responses.shift() ?? 0,
+        checkboxChecked: false,
+      }),
+    );
+    const window = { isDestroyed: () => false } as BrowserWindow;
+    const service = new GitIpcService(
+      { showMessageBox } as unknown as ConstructorParameters<typeof GitIpcService>[0],
+      store,
+      repositories,
+      () =>
+        ({
+          worktreeRoot: managedRoot,
+          gitIdentityName: 'Worktree UI Author',
+          gitIdentityEmail: 'worktree-author@forgeboard.invalid',
+        }) as AppSettings,
+      () => window,
+    );
+    const event = liveEvent(72);
+    const input = {
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+      newBranch: 'forgeboard/renamed-agent',
+    };
+
+    const cancelledRename = await service.prepareWorktreeRename(event.sender.id, input);
+    await expect(
+      service.confirmWorktreeMetadata(event, cancelledRename.planId, 'rename-worktree-branch'),
+    ).resolves.toBeNull();
+    expect(await runGit(ownership.worktreePath, ['branch', '--show-current'])).toBe(
+      ownership.branch,
+    );
+
+    const rename = await service.prepareWorktreeRename(event.sender.id, input);
+    await expect(
+      service.confirmWorktreeMetadata(event, rename.planId, 'rename-worktree-branch'),
+    ).resolves.toEqual({ action: 'renamed', branch: input.newBranch });
+    expect(await runGit(ownership.worktreePath, ['branch', '--show-current'])).toBe(
+      input.newBranch,
+    );
+    expect(await runGit(ownership.worktreePath, ['rev-parse', 'HEAD'])).toBe(head);
+    expect(await readFile(path.join(ownership.worktreePath, 'uncommitted.txt'), 'utf8')).toBe(
+      'retain me\n',
+    );
+    expect(store.getRun(RUN_ID)?.branch).toBe(input.newBranch);
+    const renamedOwnership = await worktrees.readOwnership(managedRoot, ownership.id);
+    expect(renamedOwnership.branch).toBe(input.newBranch);
+    expect(String(showMessageBox.mock.calls[1]?.[1]?.detail)).not.toContain(ownership.worktreePath);
+
+    const target = { projectId: PROJECT_ID, runId: RUN_ID };
+    const cancelledArchive = await service.prepareWorktreeArchive(event.sender.id, target);
+    await expect(
+      service.confirmWorktreeMetadata(event, cancelledArchive.planId, 'archive-worktree'),
+    ).resolves.toBeNull();
+    expect(store.getRun(RUN_ID)?.worktreeState).toBe('active');
+
+    const archive = await service.prepareWorktreeArchive(event.sender.id, target);
+    await expect(
+      service.confirmWorktreeMetadata(event, archive.planId, 'archive-worktree'),
+    ).resolves.toEqual({ action: 'archived', branch: input.newBranch });
+    expect(store.getRun(RUN_ID)?.worktreeState).toBe('archived');
+    expect((await worktrees.readOwnership(managedRoot, ownership.id)).status).toBe('archived');
+    expect(await runGit(ownership.worktreePath, ['branch', '--show-current'])).toBe(
+      input.newBranch,
+    );
+    expect(await readFile(path.join(ownership.worktreePath, 'uncommitted.txt'), 'utf8')).toBe(
+      'retain me\n',
+    );
+    expect(await repositories.branchExists(repository, input.newBranch)).toBe(true);
+    await expect(service.review({ kind: 'agent-worktree', ...target })).rejects.toThrow(
+      /archived/iu,
+    );
+    expect(showMessageBox.mock.calls[3]?.[1]).toMatchObject({
+      buttons: ['Cancel', 'Archive worktree'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+
+    const cancelledRestore = await service.prepareWorktreeRestore(event.sender.id, target);
+    await expect(
+      service.confirmWorktreeMetadata(event, cancelledRestore.planId, 'restore-worktree'),
+    ).resolves.toBeNull();
+    expect(store.getRun(RUN_ID)?.worktreeState).toBe('archived');
+
+    const restore = await service.prepareWorktreeRestore(event.sender.id, target);
+    await expect(
+      service.confirmWorktreeMetadata(event, restore.planId, 'restore-worktree'),
+    ).resolves.toEqual({ action: 'restored', branch: input.newBranch });
+    expect(store.getRun(RUN_ID)?.worktreeState).toBe('active');
+    expect((await worktrees.readOwnership(managedRoot, ownership.id)).status).toBe('active');
+    expect(await runGit(ownership.worktreePath, ['branch', '--show-current'])).toBe(
+      input.newBranch,
+    );
+    expect(await runGit(ownership.worktreePath, ['rev-parse', 'HEAD'])).toBe(head);
+    expect(await readFile(path.join(ownership.worktreePath, 'uncommitted.txt'), 'utf8')).toBe(
+      'retain me\n',
+    );
+    await expect(service.review({ kind: 'agent-worktree', ...target })).resolves.toMatchObject({
+      branch: input.newBranch,
+    });
+    expect(showMessageBox.mock.calls[5]?.[1]).toMatchObject({
+      buttons: ['Cancel', 'Restore worktree'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+
+    const beforeInterruptedRename = await worktrees.readOwnership(managedRoot, ownership.id);
+    const interruptedBranch = 'forgeboard/recovered-after-restart';
+    const interruptedIntentId = '70000000-0000-4000-8000-000000000099';
+    store.appendAudit('git', 'rename-worktree-branch', 'allowed', {
+      runId: RUN_ID,
+      stage: 'authorized-before-effect',
+    });
+    store.beginGitWorktreeMetadataIntent({
+      intentId: interruptedIntentId,
+      runId: RUN_ID,
+      worktreeId: ownership.id,
+      kind: 'rename-worktree-branch',
+      beforeBranch: beforeInterruptedRename.branch,
+      afterBranch: interruptedBranch,
+      beforeState: 'active',
+      afterState: 'active',
+      createdAt: new Date().toISOString(),
+    });
+    // Simulate process death in the exact seam after Git moved the branch but before ownership
+    // metadata or the SQLite lineage could be updated.
+    await runGit(ownership.worktreePath, [
+      'branch',
+      '-m',
+      beforeInterruptedRename.branch,
+      interruptedBranch,
+    ]);
+    expect((await worktrees.readOwnership(managedRoot, ownership.id)).branch).toBe(
+      beforeInterruptedRename.branch,
+    );
+    expect(store.getRun(RUN_ID)?.branch).toBe(input.newBranch);
+
+    await service.dispose();
+    store.close();
+    stores.delete(store);
+    const recoveredStore = new LocalStore(databasePath);
+    stores.add(recoveredStore);
+    const recoveredService = new GitIpcService(
+      { showMessageBox } as unknown as ConstructorParameters<typeof GitIpcService>[0],
+      recoveredStore,
+      repositories,
+      () =>
+        ({
+          worktreeRoot: managedRoot,
+          gitIdentityName: 'Worktree UI Author',
+          gitIdentityEmail: 'worktree-author@forgeboard.invalid',
+        }) as AppSettings,
+      () => window,
+    );
+    await expect(
+      recoveredService.review({ kind: 'agent-worktree', ...target }),
+    ).resolves.toMatchObject({
+      branch: interruptedBranch,
+    });
+    expect(recoveredStore.getRun(RUN_ID)?.branch).toBe(interruptedBranch);
+    expect(recoveredStore.getGitWorktreeMetadataIntent(RUN_ID)).toBeUndefined();
+    expect(recoveredStore.listAuditEvents(1)[0]).toMatchObject({
+      category: 'git',
+      action: 'rename-worktree-branch',
+      outcome: 'allowed',
+    });
+    await recoveredService.dispose();
+  }, 90_000);
 });
 
 async function createRepository(root: string): Promise<string> {
@@ -252,7 +464,12 @@ function runRecord(
 
 function liveEvent(ownerId: number): IpcMainInvokeEvent {
   const mainFrame = {};
-  const sender = { id: ownerId, mainFrame, isDestroyed: () => false, once: vi.fn() };
+  const sender = {
+    id: ownerId,
+    mainFrame,
+    isDestroyed: () => false,
+    once: vi.fn(),
+  };
   return { sender, senderFrame: mainFrame } as unknown as IpcMainInvokeEvent;
 }
 
@@ -276,7 +493,12 @@ async function runGit(cwd: string, args: readonly string[]): Promise<string> {
       },
       (error, stdout, stderr) => {
         if (error === null) resolve(stdout.trimEnd());
-        else reject(new Error(`git ${args.join(' ')} failed: ${stderr}`, { cause: error }));
+        else
+          reject(
+            new Error(`git ${args.join(' ')} failed: ${stderr}`, {
+              cause: error,
+            }),
+          );
       },
     );
   });

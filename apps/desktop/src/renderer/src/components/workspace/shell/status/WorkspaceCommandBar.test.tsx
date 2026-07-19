@@ -13,14 +13,33 @@ describe('WorkspaceCommandBar notifications', () => {
     const props = commandBarProps();
     const view = render(<WorkspaceCommandBar {...props} notificationsOpen={false} />);
     const trigger = screen.getByRole('button', { name: 'Notifications' });
+    const tooltip = screen.getByRole('tooltip', { name: 'Local notifications' });
 
     expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(trigger.getAttribute('aria-describedby')).toBe(tooltip.id);
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
     expect(trigger.hasAttribute('aria-controls')).toBe(false);
 
     view.rerender(<WorkspaceCommandBar {...props} notificationsOpen />);
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
     expect(trigger.getAttribute('aria-controls')).toBe('workspace-notifications');
+  });
+
+  it('provides reusable visible descriptions for every compact icon control', () => {
+    render(<WorkspaceCommandBar {...commandBarProps()} notificationsOpen={false} />);
+
+    const expected = [
+      ['Undo', 'Nothing to undo'],
+      ['Redo', 'Nothing to redo'],
+      ['Zoom to fit the canvas', 'Fit every node on the canvas'],
+      ['Notifications', 'Local notifications'],
+      ['Settings', 'Open Forgeboard settings'],
+    ] as const;
+    for (const [buttonName, description] of expected) {
+      const button = screen.getByRole('button', { name: buttonName });
+      const tooltip = screen.getByRole('tooltip', { name: description });
+      expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
+    }
   });
 });
 

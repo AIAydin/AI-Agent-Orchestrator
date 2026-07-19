@@ -148,7 +148,7 @@ export function writeSnapshot(database: DatabaseSync, snapshot: CanvasSnapshot):
 }
 
 export function writeRun(database: DatabaseSync, record: StoredRunRecord): void {
-  writeRunWithLifecyclePolicy(database, record, false);
+  writeRunWithLifecyclePolicy(database, record, false, false);
 }
 
 /** Persistence capability reserved for the exact run-worktree lifecycle transition operation. */
@@ -156,13 +156,22 @@ export function writeRunForWorktreeTransition(
   database: DatabaseSync,
   record: StoredRunRecord,
 ): void {
-  writeRunWithLifecyclePolicy(database, record, true);
+  writeRunWithLifecyclePolicy(database, record, true, false);
+}
+
+/** Persistence capability reserved for an exact managed-branch rename transaction. */
+export function writeRunForWorktreeBranchRename(
+  database: DatabaseSync,
+  record: StoredRunRecord,
+): void {
+  writeRunWithLifecyclePolicy(database, record, false, true);
 }
 
 function writeRunWithLifecyclePolicy(
   database: DatabaseSync,
   record: StoredRunRecord,
   allowWorktreeStateChange: boolean,
+  allowBranchChange: boolean,
 ): void {
   const current = database
     .prepare('SELECT value_json FROM agent_runs WHERE id = ?')
@@ -179,7 +188,7 @@ function writeRunWithLifecyclePolicy(
       (existing.parentRunId ?? null) !== (record.parentRunId ?? null) ||
       existing.createdAt !== record.createdAt ||
       existing.cwd !== record.cwd ||
-      existing.branch !== record.branch ||
+      (!allowBranchChange && existing.branch !== record.branch) ||
       existing.worktreeId !== record.worktreeId ||
       existing.repositoryRoot !== record.repositoryRoot ||
       existing.managedRoot !== record.managedRoot ||

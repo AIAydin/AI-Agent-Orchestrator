@@ -41,6 +41,11 @@ export interface PushExecutionOptions {
   readonly beforePush?: () => void | Promise<void>;
 }
 
+export interface GitMutationExecutionOptions {
+  /** Final trusted hook invoked after revalidation and immediately before Git mutates state. */
+  readonly beforeApply?: () => void | Promise<void>;
+}
+
 function conflictsFromDiff(files: readonly DiffFile[]): boolean {
   return files.some((file) => file.status === 'unknown');
 }
@@ -357,6 +362,7 @@ export class ChangeService {
     repositoryPath: string,
     hunkIds: readonly string[],
     approval: DiscardHunksApproval,
+    options: GitMutationExecutionOptions = {},
   ): Promise<HunkOperationResult> {
     assertExplicitApproval(approval, 'discard-hunks');
     const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
@@ -365,6 +371,7 @@ export class ChangeService {
     if (approval.patchSha256 !== patchSha256(patch)) {
       throw new GitEngineError('STALE_APPROVAL', 'The approved hunk content has changed.');
     }
+    await options.beforeApply?.();
     await this.applyPatch(repositoryRoot, patch, ['--reverse']);
     return await this.hunkResult(repositoryRoot);
   }
@@ -372,6 +379,7 @@ export class ChangeService {
   public async commit(
     repositoryPath: string,
     approval: CommitApproval,
+    options: GitMutationExecutionOptions = {},
   ): Promise<GitOperationResult> {
     assertExplicitApproval(approval, 'commit');
     const repositoryRoot = await this.assertApprovalContext(repositoryPath, approval);
@@ -392,6 +400,7 @@ export class ChangeService {
       throw new GitEngineError('STALE_APPROVAL', 'The staged content changed after approval.');
     }
     const headBefore = await this.currentHead(repositoryRoot);
+    await options.beforeApply?.();
     await this.repositories.git.run([
       '-C',
       repositoryRoot,

@@ -18,6 +18,7 @@ const EXECUTABLE_IDENTITY: ReadinessExecutableIdentity = {
 };
 
 const identifyExecutable = () => Promise.resolve(EXECUTABLE_IDENTITY);
+const authorizeProbe = () => undefined;
 
 function detection(overrides: Partial<AgentDetectionResult> = {}): AgentDetectionResult {
   return {
@@ -42,10 +43,13 @@ describe('AgentReadinessService', () => {
       identifyExecutable,
     });
 
-    const result = await service.check({
-      agentId: 'codex',
-      executableOverride: '/chosen/bin/codex',
-    });
+    const result = await service.check(
+      {
+        agentId: 'codex',
+        executableOverride: '/chosen/bin/codex',
+      },
+      authorizeProbe,
+    );
 
     expect(result.effectiveCapabilities?.modelSelection).toBe(true);
 
@@ -92,7 +96,7 @@ describe('AgentReadinessService', () => {
       identifyExecutable,
     });
 
-    await expect(service.check({ agentId: 'codex' })).resolves.toMatchObject({
+    await expect(service.check({ agentId: 'codex' }, authorizeProbe)).resolves.toMatchObject({
       ready: false,
       state: 'executable-missing',
       reason: 'Not an executable regular file.',
@@ -114,7 +118,7 @@ describe('AgentReadinessService', () => {
       ),
     });
 
-    await expect(service.check({ agentId: 'codex' })).resolves.toMatchObject({
+    await expect(service.check({ agentId: 'codex' }, authorizeProbe)).resolves.toMatchObject({
       ready: false,
       state: 'probe-failed',
       version: null,
@@ -136,7 +140,7 @@ describe('AgentReadinessService', () => {
       ),
     });
 
-    await expect(service.check({ agentId: 'codex' })).resolves.toMatchObject({
+    await expect(service.check({ agentId: 'codex' }, authorizeProbe)).resolves.toMatchObject({
       ready: false,
       state: 'probe-failed',
       reason: 'The version probe did not match the selected executable and agent adapter.',
@@ -168,7 +172,7 @@ describe('AgentReadinessService', () => {
       },
     };
 
-    await expect(service.check(request)).resolves.toMatchObject({
+    await expect(service.check(request, authorizeProbe)).resolves.toMatchObject({
       ready: false,
       state: 'invalid-configuration',
     });
@@ -202,7 +206,7 @@ describe('AgentReadinessService', () => {
       identifyExecutable,
     });
 
-    await expect(service.check({ agentId: 'test-agent' })).resolves.toMatchObject({
+    await expect(service.check({ agentId: 'test-agent' }, authorizeProbe)).resolves.toMatchObject({
       ready: true,
       source: 'bundled',
       version: '0.1.0',
@@ -249,7 +253,11 @@ describe('AgentReadinessService', () => {
       .mockResolvedValueOnce(EXECUTABLE_IDENTITY)
       .mockResolvedValueOnce(changedIdentity);
     const probeAgent = vi.fn<ProbeAgent>(async (_manifest, options = {}) => {
-      await options.beforeProbe?.();
+      await options.beforeProbe?.({
+        kind: 'version',
+        executable: '/canonical/bin/codex',
+        arguments: ['--version'],
+      });
       processStarted = true;
       return detection();
     });
@@ -261,11 +269,75 @@ describe('AgentReadinessService', () => {
     const prepared = await service.prepare({ agentId: 'codex' });
     if (prepared.outcome !== 'probe') throw new Error('Expected an executable probe plan.');
 
-    await expect(service.probe(prepared.plan)).resolves.toMatchObject({
+    await expect(service.probe(prepared.plan, authorizeProbe)).resolves.toMatchObject({
       ready: false,
       state: 'probe-failed',
       reason: 'The selected executable changed after approval. Review it again.',
     });
+    expect(processStarted).toBe(false);
+  });
+
+  it('requires a successful authorization audit before each readiness subprocess', async () => {
+    let processesStarted = 0;
+    const probeAgent = vi.fn<ProbeAgent>(async (_manifest, options = {}) => {
+      await options.beforeProbe?.({
+        kind: 'version',
+        executable: '/canonical/bin/codex',
+        arguments: ['--version'],
+      });
+      processesStarted += 1;
+      await options.beforeProbe?.({
+        kind: 'capability',
+        executable: '/canonical/bin/codex',
+        arguments: ['--help'],
+      });
+      processesStarted += 1;
+      return detection();
+    });
+    const service = new AgentReadinessService('/bundled/test-agent', {
+      locateExecutable: vi.fn(() => Promise.resolve(detection({ version: undefined }))),
+      identifyExecutable,
+      probeAgent,
+    });
+    const prepared = await service.prepare({ agentId: 'codex' });
+    if (prepared.outcome !== 'probe') throw new Error('Expected an executable probe plan.');
+    const authorize = vi.fn((attempt: { readonly sequence: number }) => {
+      if (attempt.sequence === 2) throw new Error('required readiness audit unavailable');
+    });
+
+    await expect(service.probe(prepared.plan, authorize)).rejects.toThrow(
+      'required readiness audit unavailable',
+    );
+    expect(processesStarted).toBe(1);
+    expect(authorize.mock.calls.map(([attempt]) => attempt.sequence)).toEqual([1, 2]);
+  });
+
+  it('rejects probe arguments that differ from the reviewed adapter contract', async () => {
+    let processStarted = false;
+    const authorize = vi.fn();
+    const probeAgent = vi.fn<ProbeAgent>(async (_manifest, options = {}) => {
+      await options.beforeProbe?.({
+        kind: 'capability',
+        executable: '/canonical/bin/codex',
+        arguments: ['--unreviewed'],
+      });
+      processStarted = true;
+      return detection();
+    });
+    const service = new AgentReadinessService('/bundled/test-agent', {
+      locateExecutable: vi.fn(() => Promise.resolve(detection({ version: undefined }))),
+      identifyExecutable,
+      probeAgent,
+    });
+    const prepared = await service.prepare({ agentId: 'codex' });
+    if (prepared.outcome !== 'probe') throw new Error('Expected an executable probe plan.');
+
+    await expect(service.probe(prepared.plan, authorize)).resolves.toMatchObject({
+      ready: false,
+      state: 'probe-failed',
+      reason: 'The readiness probe changed after approval. Review it again.',
+    });
+    expect(authorize).not.toHaveBeenCalled();
     expect(processStarted).toBe(false);
   });
 
@@ -286,7 +358,7 @@ describe('AgentReadinessService', () => {
     await expect(service.verifySettingsReadiness(request)).rejects.toThrow(/Refresh readiness/u);
     const prepared = await service.prepare(request);
     if (prepared.outcome !== 'probe') throw new Error('Expected an executable probe plan.');
-    const result = await service.probe(prepared.plan);
+    const result = await service.probe(prepared.plan, authorizeProbe);
     service.recordVerifiedSettingsReadiness(prepared.plan, result);
 
     await expect(service.verifySettingsReadiness(request)).resolves.toMatchObject({
@@ -320,7 +392,7 @@ describe('AgentReadinessService', () => {
     };
     const prepared = await service.prepare(approved);
     if (prepared.outcome !== 'probe') throw new Error('Expected an executable probe plan.');
-    const result = await service.probe(prepared.plan);
+    const result = await service.probe(prepared.plan, authorizeProbe);
     service.recordVerifiedSettingsReadiness(prepared.plan, result);
 
     await expect(service.verifySettingsReadiness(changed)).rejects.toThrow(/Refresh readiness/u);
@@ -356,7 +428,7 @@ describe('AgentReadinessService', () => {
     const request: AgentReadinessRequest = { agentId: 'custom', configuration };
     const prepared = await service.prepare(request);
     if (prepared.outcome !== 'probe') throw new Error('Expected an executable probe plan.');
-    const result = await service.probe(prepared.plan);
+    const result = await service.probe(prepared.plan, authorizeProbe);
     service.recordVerifiedSettingsReadiness(prepared.plan, result);
 
     await expect(

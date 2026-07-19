@@ -36,6 +36,16 @@ describe('WorkspaceActivityDrawer', () => {
     expect(screen.getByRole('tabpanel', { name: 'Checks' }).id).toBe('workspace-panel-checks');
   });
 
+  it('explains the compact close control and shows an honest empty activity state', () => {
+    render(<WorkspaceActivityDrawer {...props()} events={[]} />);
+
+    const close = screen.getByRole('button', { name: 'Close activity panel' });
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip.textContent).toBe('Close the activity panel');
+    expect(close.getAttribute('aria-describedby')).toBe(tooltip.id);
+    expect(screen.getByRole('status').textContent).toBe('Run activity will appear here.');
+  });
+
   it('opens primary review separately from eligible agent worktree reviews', () => {
     const onOpenGitReview = vi.fn();
     render(

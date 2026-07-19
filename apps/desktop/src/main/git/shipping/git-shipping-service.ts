@@ -65,6 +65,8 @@ export interface GitShippingReadinessAuthority {
   ): Promise<GitDeliveryReadinessView>;
 }
 
+export type GitShippingApplyAuthorizer = () => void | Promise<void>;
+
 interface NewPlanOptions {
   readonly id: string;
   readonly ownerId: number;
@@ -251,8 +253,12 @@ export class GitShippingService {
     }
   }
 
-  public async apply(plan: PendingGitShippingPlan): Promise<GitOperationResult> {
+  public async apply(
+    plan: PendingGitShippingPlan,
+    authorizeApply: GitShippingApplyAuthorizer,
+  ): Promise<GitOperationResult> {
     await this.assertCurrent(plan);
+    await authorizeApply();
     const base = {
       approved: true as const,
       approvalId: plan.id,
@@ -262,14 +268,14 @@ export class GitShippingService {
       authorName: plan.identity.name,
       authorEmail: plan.identity.email,
     };
-    if (plan.strategy === 'fast-forward-only') {
+    if (plan.strategy !== 'cherry-pick') {
       const approval: MergeApproval = {
         ...base,
         action: 'merge',
         sourceRef: plan.sourceBranch,
         expectedSourceOid: plan.sourceHead,
         targetBranch: plan.targetBranch,
-        strategy: 'fast-forward-only',
+        strategy: plan.strategy,
       };
       return await this.changes.merge(plan.repositoryRoot, approval);
     }
@@ -385,7 +391,10 @@ export class GitShippingService {
                 commit,
                 '--',
               ],
-              { repositoryPath: repositoryRoot, operation: 'object-inspection' },
+              {
+                repositoryPath: repositoryRoot,
+                operation: 'object-inspection',
+              },
               { maxOutputBytes: PATH_OUTPUT_LIMIT },
             ),
         ),
@@ -436,7 +445,11 @@ export class GitShippingService {
 
 function deliveryReadinessTarget(target: GitReviewTargetView): GitDeliveryReadinessTarget {
   if (target.kind !== 'agent-worktree') throw new Error('Invalid delivery readiness target.');
-  return { kind: 'agent-worktree', projectId: target.projectId, runId: target.runId };
+  return {
+    kind: 'agent-worktree',
+    projectId: target.projectId,
+    runId: target.runId,
+  };
 }
 
 function assertCleanSource(source: ResolvedGitTarget): void {

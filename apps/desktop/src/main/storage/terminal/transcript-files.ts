@@ -263,7 +263,10 @@ export class TerminalTranscriptFiles {
     return await this.#mutate(async () => await this.#deleteUnlocked(sessionId));
   }
 
-  async #deleteUnlocked(sessionId: string): Promise<boolean> {
+  async #deleteUnlocked(
+    sessionId: string,
+    beforeDelete?: (sessionId: string) => void,
+  ): Promise<boolean> {
     await this.initialize();
     const target = this.#path(sessionId);
     let details: Stats;
@@ -276,13 +279,21 @@ export class TerminalTranscriptFiles {
     if (!details.isFile() || details.isSymbolicLink()) {
       throw new Error('The terminal transcript selected for deletion is not an ordinary file.');
     }
+    beforeDelete?.(sessionId);
     await unlink(target);
     this.#totalBytes = Math.max(0, this.#totalBytes - details.size);
     this.#fileCount = Math.max(0, this.#fileCount - 1);
     return true;
   }
 
-  public async pruneUnknown(retainedSessionIds: ReadonlySet<string>): Promise<number> {
+  public async pruneUnknown(
+    retainedSessionIds: ReadonlySet<string>,
+    beforeDelete: (sessionId: string) => void,
+    onDeleteFailure?: (sessionId: string, error: unknown) => void,
+  ): Promise<number> {
+    // Each unlink is independent: filesystem deletion cannot share a transaction with the SQLite
+    // session ledger. The caller authorizes every exact file before this method attempts its unlink
+    // and can record a redacted failure without replacing the original filesystem error.
     return await this.#mutate(async () => {
       await this.initialize();
       const entries = await readdir(this.#root, { withFileTypes: true });
@@ -290,7 +301,16 @@ export class TerminalTranscriptFiles {
       for (const entry of entries) {
         const sessionId = transcriptSessionId(entry.name);
         if (sessionId === null || retainedSessionIds.has(sessionId)) continue;
-        if (await this.#deleteUnlocked(sessionId)) deleted += 1;
+        try {
+          if (await this.#deleteUnlocked(sessionId, beforeDelete)) deleted += 1;
+        } catch (error) {
+          try {
+            onDeleteFailure?.(sessionId, error);
+          } catch {
+            // Reporting is best-effort here so it cannot mask the destructive effect's real error.
+          }
+          throw error;
+        }
       }
       return deleted;
     });

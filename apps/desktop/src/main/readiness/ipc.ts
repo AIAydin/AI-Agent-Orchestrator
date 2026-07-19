@@ -15,6 +15,7 @@ import {
 import { IPC_CHANNELS, type IpcResult } from '../../shared/application/contracts.js';
 import type {
   AgentReadinessPreparation,
+  AgentReadinessProbeAttempt,
   AgentReadinessProbePlan,
   AgentReadinessService,
 } from './service.js';
@@ -155,8 +156,20 @@ export class AgentReadinessIpcService {
       });
       return null;
     }
+    const authorizeProbe = (attempt: AgentReadinessProbeAttempt): void => {
+      assertCurrent();
+      this.audit.appendAudit('agent', 'readiness-probe', 'allowed', {
+        agentId: plan.request.agentId,
+        source: plan.source,
+        executableSha256: plan.executableIdentity.sha256,
+        probeSequence: attempt.sequence,
+        probeKind: attempt.kind,
+        argumentCount: attempt.argumentCount,
+        phase: 'authorized-before-spawn',
+      });
+    };
     const result = AgentReadinessResultSchema.parse(
-      await this.readiness.probe(plan, assertCurrent),
+      await this.readiness.probe(plan, authorizeProbe),
     );
     assertCurrent();
     const recorded = this.#recordResult(result);

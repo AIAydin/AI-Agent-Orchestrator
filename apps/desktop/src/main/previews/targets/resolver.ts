@@ -9,14 +9,12 @@ import {
   type PreviewTarget,
   type PreviewTargetView,
 } from '../../../shared/preview/targets.js';
-import { GitTargetResolver } from '../../git/git-target-resolver.js';
+import { GitTargetResolver, type GitTargetResolverStore } from '../../git/git-target-resolver.js';
 import type { StoredRunRecord } from '../../storage.js';
 
 const MAX_TARGET_RUNS = 200;
 
-export interface PreviewTargetResolverStore {
-  getProject(projectId: string): Project | undefined;
-  getRun(runId: string): StoredRunRecord | undefined;
+export interface PreviewTargetResolverStore extends GitTargetResolverStore {
   listProjectRuns(projectId: string, limit?: number): StoredRunRecord[];
 }
 

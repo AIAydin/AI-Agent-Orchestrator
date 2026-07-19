@@ -8,6 +8,11 @@ import {
   GitWorktreeCleanupReconciledViewSchema,
   GitWorktreeCleanupResultViewSchema,
   GitWorktreeCleanupTargetInputSchema,
+  GitWorktreeArchivePlanViewSchema,
+  GitWorktreeMetadataConfirmationInputSchema,
+  GitWorktreeRenamePlanViewSchema,
+  GitWorktreeRenamePrepareInputSchema,
+  GitWorktreeRestorePlanViewSchema,
   GitWorkspaceExternalOpenResultSchema,
 } from './contracts.js';
 
@@ -17,7 +22,11 @@ const PLAN_ID = '94000000-0000-4000-8000-000000000003';
 
 describe('Git worktree cleanup contracts', () => {
   it('keeps external workspace handoff results path-free', () => {
-    const result = { opened: true, targetKind: 'agent-worktree', branch: 'forgeboard/task' };
+    const result = {
+      opened: true,
+      targetKind: 'agent-worktree',
+      branch: 'forgeboard/task',
+    };
     expect(GitWorkspaceExternalOpenResultSchema.parse(result)).toEqual(result);
     expect(
       GitWorkspaceExternalOpenResultSchema.safeParse({
@@ -219,6 +228,54 @@ describe('Git worktree cleanup contracts', () => {
       GitWorktreeCleanupPrepareOutcomeSchema.safeParse({
         ...reconciled,
         branchDeleted: false,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('keeps rename, archive, and restore metadata plans path-free and exact', () => {
+    const base = {
+      planId: PLAN_ID,
+      expiresAt: '2026-07-16T15:05:00.000Z',
+      branch: 'forgeboard/task/test-agent-1234',
+      clean: false,
+      dirtyPathCount: 1,
+    };
+    const rename = {
+      ...base,
+      kind: 'rename-worktree-branch',
+      newBranch: 'forgeboard/renamed',
+    };
+    const archive = {
+      ...base,
+      kind: 'archive-worktree',
+      retainsWorktree: true,
+      retainsBranch: true,
+    };
+    const restore = { ...archive, kind: 'restore-worktree' };
+    expect(GitWorktreeRenamePlanViewSchema.parse(rename)).toEqual(rename);
+    expect(GitWorktreeArchivePlanViewSchema.parse(archive)).toEqual(archive);
+    expect(GitWorktreeRestorePlanViewSchema.parse(restore)).toEqual(restore);
+    for (const schema of [
+      GitWorktreeRenamePlanViewSchema,
+      GitWorktreeArchivePlanViewSchema,
+      GitWorktreeRestorePlanViewSchema,
+    ]) {
+      expect(schema.safeParse({ ...restore, worktreePath: '/private/worktree' }).success).toBe(
+        false,
+      );
+    }
+    expect(
+      GitWorktreeRenamePrepareInputSchema.safeParse({
+        projectId: PROJECT_ID,
+        runId: RUN_ID,
+        newBranch: 'forgeboard/renamed',
+        repositoryRoot: '/private/repository',
+      }).success,
+    ).toBe(false);
+    expect(
+      GitWorktreeMetadataConfirmationInputSchema.safeParse({
+        planId: PLAN_ID,
+        branch: 'forgeboard/renamed',
       }).success,
     ).toBe(false);
   });

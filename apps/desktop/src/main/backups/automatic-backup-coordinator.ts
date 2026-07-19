@@ -14,6 +14,11 @@ export interface AutomaticBackupSettings {
 
 export interface AutomaticBackupStore {
   createBackup(destinationDirectory: string, now?: Date): Promise<BackupResult>;
+  /**
+   * Best-effort and non-transactional across the filesystem and SQLite ledger. The caller must
+   * persist authorization before invocation; a later failure may mean an oldest-first prefix was
+   * already removed while the newly created protected backup remains intact.
+   */
   pruneBackups(retentionCount: number, protectedBackupPath: string): Promise<number>;
 }
 
@@ -241,7 +246,16 @@ export class AutomaticBackupCoordinator {
     this.#backedUpDestination = destination;
     let prunedCount: number | null = null;
     let retentionFailure: Error | null = null;
+    let retentionAuthorized = false;
     try {
+      this.#recordRequiredAudit('automatic-prune', 'allowed', {
+        trigger,
+        retentionCount,
+        protectedBackupSha256Prefix: backup.sha256.slice(0, 12),
+        phase: 'authorized-before-effect',
+        effectSemantics: 'best-effort-nontransactional',
+      });
+      retentionAuthorized = true;
       prunedCount = await this.#store.pruneBackups(retentionCount, backup.path);
     } catch (error) {
       retentionFailure = new Error(
@@ -250,6 +264,8 @@ export class AutomaticBackupCoordinator {
       this.#recordAudit('automatic-prune', 'failed', {
         trigger,
         retentionCount,
+        stage: retentionAuthorized ? 'retention-effect' : 'required-audit',
+        effectSemantics: 'best-effort-nontransactional',
         error: error instanceof Error ? error.message : 'Unknown backup pruning failure',
       });
       this.#onBackgroundError?.(error);
@@ -281,6 +297,17 @@ export class AutomaticBackupCoordinator {
     } catch (error) {
       this.#onBackgroundError?.(error);
     }
+  }
+
+  #recordRequiredAudit(
+    action: 'automatic-prune',
+    outcome: 'allowed',
+    metadata: Record<string, unknown>,
+  ): void {
+    if (this.#audit === undefined) {
+      throw new Error('Required backup-retention audit storage is unavailable.');
+    }
+    this.#audit('backup', action, outcome, metadata);
   }
 
   #recordAttempt(attempt: AutomaticBackupAttempt): void {

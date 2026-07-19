@@ -44,7 +44,6 @@ export function hydrateNodeData(
   }
   return {
     ...current,
-    color: binding.definition.color,
     extensionId: binding.extensionId,
     extensionVersion: binding.extensionVersion,
     extensionNodeTypeId: binding.nodeTypeId,

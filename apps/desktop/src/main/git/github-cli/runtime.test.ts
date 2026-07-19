@@ -16,6 +16,7 @@ import {
   type GitHubCliBeforeSpawn,
   type GitHubCliBindingStore,
   type GitHubCliSelectionPlan,
+  type GitHubCliValidationSpawnReview,
 } from './runtime.js';
 
 const NOW = new Date('2026-07-17T14:00:00.000Z');
@@ -27,6 +28,43 @@ afterEach(async () => {
 });
 
 describe('GitHubCliRuntimeService custom selection', () => {
+  it('requires a redacted audit immediately before a custom version spawn', async () => {
+    const executable = await testExecutable();
+    const canonical = await realpath(executable);
+    const store = new MemoryBindingStore();
+    const events: string[] = [];
+    const runners = runnerFactory(events);
+    const reviews: GitHubCliValidationSpawnReview[] = [];
+    const service = new GitHubCliRuntimeService(store, {
+      createRunner: runners.create,
+      createValidationRunner: runners.create,
+      authorizeValidationSpawn: (review) => {
+        events.push('audit');
+        reviews.push(review);
+        throw new Error('required audit unavailable');
+      },
+      createId: () => PLAN_ID,
+      now: () => NOW,
+    });
+    const plan = await service.prepareCustomSelection('window:1', executable);
+
+    await expect(
+      service.confirmCustomSelection('window:1', plan.planId, () => Promise.resolve('approved')),
+    ).rejects.toThrow('required audit unavailable');
+    expect(events).toEqual(['construct', 'audit']);
+    expect(runners.run).not.toHaveBeenCalled();
+    expect(store.binding).toBeUndefined();
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toMatchObject({
+      kind: 'version',
+      source: 'custom',
+      arguments: ['--version'],
+      credentialAccess: false,
+    });
+    expect(reviews[0]?.identity).toMatchObject({ source: 'custom', filename: 'gh-fixture' });
+    expect(JSON.stringify(reviews)).not.toContain(canonical);
+  });
+
   it('keeps native selection passive and returns the exact path-free shared plan', async () => {
     const executable = await testExecutable();
     const canonical = await realpath(executable);
@@ -232,6 +270,42 @@ describe('GitHubCliRuntimeService custom selection', () => {
 });
 
 describe('GitHubCliRuntimeService automatic selection', () => {
+  it('requires a redacted audit immediately before an automatic version spawn', async () => {
+    const executable = await testExecutable();
+    const canonical = await realpath(executable);
+    const store = new MemoryBindingStore();
+    const discovery = runnerFactory([], undefined, canonical);
+    const validationEvents: string[] = [];
+    const validation = runnerFactory(validationEvents, undefined, canonical);
+    const reviews: GitHubCliValidationSpawnReview[] = [];
+    const service = new GitHubCliRuntimeService(store, {
+      createRunner: discovery.create,
+      createValidationRunner: validation.create,
+      authorizeValidationSpawn: (review) => {
+        reviews.push(review);
+        throw new Error('required automatic audit unavailable');
+      },
+      createId: () => PLAN_ID,
+      now: () => NOW,
+    });
+    const plan = await service.prepareAutomaticSelection('window:1');
+
+    await expect(
+      service.confirmAutomaticSelection('window:1', plan.planId, () => Promise.resolve('approved')),
+    ).rejects.toThrow('required automatic audit unavailable');
+    expect(validationEvents).toEqual(['construct']);
+    expect(validation.run).not.toHaveBeenCalled();
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toMatchObject({
+      kind: 'version',
+      source: 'automatic',
+      arguments: ['--version'],
+      credentialAccess: false,
+    });
+    expect(reviews[0]?.identity).toMatchObject({ source: 'automatic', filename: 'gh-fixture' });
+    expect(JSON.stringify(reviews)).not.toContain(canonical);
+  });
+
   it('reviews, validates, and applies a PATH-resolved executable only after approval', async () => {
     const executable = await testExecutable();
     const canonical = await realpath(executable);
@@ -458,7 +532,7 @@ describe('GitHubCliRuntimeService automatic selection', () => {
       return {
         executable,
         run: async (args) => {
-          await beforeSpawn?.(executable);
+          await beforeSpawn?.(executable, args);
           return commandResult(executable, args, 'gh version 2.80.0\n');
         },
       };
@@ -729,7 +803,7 @@ function runnerFactory(
       run: async (args) => {
         if (beforeSpawn !== undefined) {
           beforeSpawnCalls += 1;
-          await beforeSpawn(executable);
+          await beforeSpawn(executable, args);
         }
         return await run(executable, args);
       },
@@ -755,7 +829,7 @@ function scriptedRunnerFactory(
     return {
       executable,
       run: async (args) => {
-        await beforeSpawn?.(executable);
+        await beforeSpawn?.(executable, args);
         events.push(`run:${args.join(' ')}`);
         return result(executable, args);
       },

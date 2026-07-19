@@ -18,7 +18,11 @@ describe('createGitLifecycleApi', () => {
     const api = createGitLifecycleApi(invoke);
 
     await expect(
-      api.openExternal({ kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID }),
+      api.openExternal({
+        kind: 'agent-worktree',
+        projectId: PROJECT_ID,
+        runId: RUN_ID,
+      }),
     ).resolves.toEqual({ ok: true, value: result });
     expect(invoke).toHaveBeenCalledWith(GIT_LIFECYCLE_IPC_CHANNELS.openExternal, {
       kind: 'agent-worktree',
@@ -26,9 +30,16 @@ describe('createGitLifecycleApi', () => {
       runId: RUN_ID,
     });
 
-    invoke.mockResolvedValue({ ok: true, value: { ...result, path: '/private/worktree' } });
+    invoke.mockResolvedValue({
+      ok: true,
+      value: { ...result, path: '/private/worktree' },
+    });
     await expect(
-      api.openExternal({ kind: 'agent-worktree', projectId: PROJECT_ID, runId: RUN_ID }),
+      api.openExternal({
+        kind: 'agent-worktree',
+        projectId: PROJECT_ID,
+        runId: RUN_ID,
+      }),
     ).rejects.toBeTruthy();
   });
 
@@ -150,6 +161,91 @@ describe('createGitLifecycleApi', () => {
       ok: true,
       value: null,
     });
+  });
+
+  it('bridges rename, archive, and restore with opaque targets and plan-id confirmations', async () => {
+    const invoke = vi.fn();
+    const api = createGitLifecycleApi(invoke);
+    const target = { projectId: PROJECT_ID, runId: RUN_ID };
+    const base = {
+      planId: PLAN_ID,
+      expiresAt: '2026-07-16T15:05:00.000Z',
+      branch: 'forgeboard/task/test-agent-1234',
+      clean: false,
+      dirtyPathCount: 1,
+    };
+
+    invoke.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        ...base,
+        kind: 'rename-worktree-branch',
+        newBranch: 'forgeboard/renamed',
+      },
+    });
+    await api.prepareRename({ ...target, newBranch: 'forgeboard/renamed' });
+    expect(invoke).toHaveBeenLastCalledWith(GIT_LIFECYCLE_IPC_CHANNELS.prepareRename, {
+      ...target,
+      newBranch: 'forgeboard/renamed',
+    });
+
+    for (const [prepare, channel, kind] of [
+      [
+        (input: Parameters<typeof api.prepareArchive>[0]) => api.prepareArchive(input),
+        GIT_LIFECYCLE_IPC_CHANNELS.prepareArchive,
+        'archive-worktree',
+      ],
+      [
+        (input: Parameters<typeof api.prepareRestore>[0]) => api.prepareRestore(input),
+        GIT_LIFECYCLE_IPC_CHANNELS.prepareRestore,
+        'restore-worktree',
+      ],
+    ] as const) {
+      invoke.mockResolvedValueOnce({
+        ok: true,
+        value: { ...base, kind, retainsWorktree: true, retainsBranch: true },
+      });
+      await prepare(target);
+      expect(invoke).toHaveBeenLastCalledWith(channel, target);
+    }
+
+    for (const [confirm, channel, action] of [
+      [
+        (input: Parameters<typeof api.confirmRename>[0]) => api.confirmRename(input),
+        GIT_LIFECYCLE_IPC_CHANNELS.confirmRename,
+        'renamed',
+      ],
+      [
+        (input: Parameters<typeof api.confirmArchive>[0]) => api.confirmArchive(input),
+        GIT_LIFECYCLE_IPC_CHANNELS.confirmArchive,
+        'archived',
+      ],
+      [
+        (input: Parameters<typeof api.confirmRestore>[0]) => api.confirmRestore(input),
+        GIT_LIFECYCLE_IPC_CHANNELS.confirmRestore,
+        'restored',
+      ],
+    ] as const) {
+      invoke.mockResolvedValueOnce({
+        ok: true,
+        value: { action, branch: 'forgeboard/renamed' },
+      });
+      await confirm({ planId: PLAN_ID });
+      expect(invoke).toHaveBeenLastCalledWith(channel, { planId: PLAN_ID });
+    }
+
+    await expect(
+      api.prepareRestore({
+        ...target,
+        worktreePath: '/private/worktree',
+      } as never),
+    ).rejects.toBeTruthy();
+    await expect(
+      api.confirmRestore({
+        planId: PLAN_ID,
+        worktreeId: 'authority-leak',
+      } as never),
+    ).rejects.toBeTruthy();
   });
 });
 

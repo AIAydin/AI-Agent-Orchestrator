@@ -9,7 +9,8 @@ import type {
   Project,
   RunAdapterId,
 } from '../../../../../shared/application/contracts.js';
-import { NODE_DEFINITIONS, type WorkshopNode } from '../canvas/CanvasNode.js';
+import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
 import { DeclarativeExtensionInspector } from '../../extensions/DeclarativeExtensionInspector.js';
 import { PreviewNodePanel } from '../../preview/PreviewNodePanel.js';
 import { TypedEdgeInspector } from '../canvas/TypedEdgeInspector.js';
@@ -53,11 +54,13 @@ import { TestNodePanel } from '../workflows/test-node/TestNodePanel.js';
 import type { WorkflowArtifactActionInput } from '../../../../../shared/workflow/contracts.js';
 import { AgentNodePanel } from '../runs/agent-node/AgentNodePanel.js';
 import type { RunHistorySummary } from '../../../../../shared/runs/contracts.js';
+import { NodeRunHistory } from '../node-history/NodeRunHistory.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
 type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
 
 interface WorkspaceInspectorProps {
+  nodeRegistry?: NodeTypeRegistry;
   project: Project;
   settings: AppSettings;
   canvas: CanvasDocument | null;
@@ -129,7 +132,13 @@ export function WorkspaceInspector(props: WorkspaceInspectorProps) {
       <header>
         <div>
           <span>Details</span>
-          <small>{inspectorLabel(selectedNode, selectedEdge)}</small>
+          <small>
+            {inspectorLabel(
+              selectedNode,
+              selectedEdge,
+              props.nodeRegistry ?? BUILT_IN_NODE_REGISTRY,
+            )}
+          </small>
         </div>
         {(selectedNode || selectedEdge) && (
           <button
@@ -433,6 +442,7 @@ function NodeInspector(
           onUpdate={onUpdateSelected}
         />
       )}
+      <NodeRunHistory nodeId={selectedNode.id} executions={props.testNodeRuntime.executions} />
       <LocalComments comments={props.localComments} onCreate={props.onCreateLocalComment} />
       <SharedComments
         comments={props.sharedComments}
@@ -751,11 +761,8 @@ function CanvasInspector({
 function inspectorLabel(
   selectedNode: WorkshopNode | null,
   selectedEdge: WorkshopEdge | null,
+  nodeRegistry: NodeTypeRegistry,
 ): string {
-  if (selectedNode) {
-    return selectedNode.data.kind === 'extension'
-      ? (selectedNode.data.extensionDefinition?.displayName ?? 'Extension node')
-      : NODE_DEFINITIONS[selectedNode.data.kind].label;
-  }
+  if (selectedNode) return nodeRegistry.resolve(selectedNode.data).label;
   return selectedEdge ? 'Connection' : 'Canvas';
 }

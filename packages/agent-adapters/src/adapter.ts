@@ -933,18 +933,28 @@ function effectiveCapabilities(
   return { capabilities, warnings };
 }
 
+export interface AgentExecutableProbe {
+  readonly kind: 'version' | 'capability';
+  readonly executable: string;
+  readonly arguments: readonly string[];
+}
+
 export async function detectAgent(
   manifestInput: AgentAdapterManifest,
   options: {
     executable?: string;
     signal?: AbortSignal;
-    beforeProbe?: () => void | Promise<void>;
+    beforeProbe?: (probe: AgentExecutableProbe) => void | Promise<void>;
   } = {},
 ): Promise<AgentDetectionResult> {
   const manifest = AgentAdapterManifestSchema.parse(manifestInput);
   const executable = options.executable ?? manifest.executable.command;
   const checkedAt = new Date().toISOString();
-  await options.beforeProbe?.();
+  await options.beforeProbe?.({
+    kind: 'version',
+    executable,
+    arguments: manifest.executable.versionArguments,
+  });
   const versionProbe = await runExecutableProbe(
     executable,
     manifest.executable.versionArguments,
@@ -980,7 +990,11 @@ export async function detectAgent(
       permissionModes: [...manifest.capabilities.permissionModes],
     };
   } else {
-    await options.beforeProbe?.();
+    await options.beforeProbe?.({
+      kind: 'capability',
+      executable,
+      arguments: capabilityProbe.arguments,
+    });
     const helpProbe = await runExecutableProbe(
       executable,
       capabilityProbe.arguments,

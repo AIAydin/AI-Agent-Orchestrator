@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import {
   BrowserWindow,
@@ -85,6 +85,7 @@ import {
   type CollaborationManagementNativeAuthority,
 } from './management/operations.js';
 import { CollaborationManagementHttpError } from './management/http-client.js';
+import type { CollaborationTransportEffect } from './transport-effects.js';
 
 type CollaborationOperations = Pick<
   CollaborationClient,
@@ -182,7 +183,11 @@ export class CollaborationIpcService {
     private readonly outbound: OutboundActionGate,
     options: CollaborationIpcServiceOptions = {},
   ) {
-    this.#client = options.client ?? new CollaborationClient();
+    this.#client =
+      options.client ??
+      new CollaborationClient({
+        authorizeTransportEffect: (effect) => this.#authorizeTransportEffect(effect),
+      });
     this.#createOwnerId = options.createOwnerId ?? randomUUID;
     this.#store = options.store;
     const session = new CollaborationInviteSessionAuthority();
@@ -889,6 +894,13 @@ export class CollaborationIpcService {
       }
       const scope = this.#storageScope(input, connection);
       const receipt = this.#client.publish(input.snapshot, (plannedReceipt) => {
+        this.#auditCollaborationEffect('publish', 'allowed', connection, {
+          deliveryIdSha256: sha256(plannedReceipt.deliveryId),
+          snapshotSha256: plannedReceipt.snapshotDigest,
+          nodeCount: Object.keys(input.snapshot.nodes).length,
+          commentCount: Object.keys(input.snapshot.comments).length,
+          phase: 'authorized-before-publish',
+        });
         this.#recordDelivery(scope, input.baseline, input.snapshot, plannedReceipt);
       });
       return { ok: true, value: receipt };
@@ -1055,24 +1067,55 @@ export class CollaborationIpcService {
     }
   }
 
-  #discardRejectedComment(
+  async #discardRejectedComment(
     event: IpcMainInvokeEvent,
     rawArgs: unknown[],
-  ): IpcResult<CollaborationSyncRecovery | null> {
+  ): Promise<IpcResult<CollaborationSyncRecovery | null>> {
     try {
       this.#assertAvailable();
       const [input] = z.tuple([CollaborationDiscardRejectedCommentInputSchema]).parse(rawArgs);
       this.#assertOwner(event, 'Rejected collaboration comment discard');
+      const parent = this.#requireLiveParent(event);
       const connection = this.#requiredActiveConnection();
       const scope = this.#storageScope(input, connection);
       const store = this.#requiredStore();
-      const recovered = this.#retryRetainedSettlements(
-        scope,
-        store.recoverCollaborationSyncState(scope),
-      );
-      if (recovered === null) {
-        throw new Error('The rejected comment is no longer stored on this computer.');
+      const assertCurrent = (): void => {
+        this.#assertOwner(event, 'Rejected collaboration comment discard');
+        if (parent.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== parent) {
+          throw new Error('The originating Forgeboard window changed during confirmation.');
+        }
+        const recovered = this.#retryRetainedSettlements(
+          scope,
+          store.recoverCollaborationSyncState(scope),
+        );
+        if (!recoveryContainsRejectedComment(recovered, input.comment, input.rejectedDeliveryId)) {
+          throw new Error('The rejected comment changed or is no longer stored on this computer.');
+        }
+      };
+      assertCurrent();
+      const response = await this.dialog.showMessageBox(parent, {
+        type: 'warning',
+        title: 'Discard rejected comment?',
+        message: 'Permanently discard this rejected local comment?',
+        detail:
+          'This removes the exact rejected comment from local recovery. Other canvas changes remain untouched.',
+        buttons: ['Cancel', 'Discard comment'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      assertCurrent();
+      if (response.response !== 1) {
+        this.#auditCollaborationEffect('discard-rejected-comment', 'denied', connection, {
+          reason: 'native-confirmation-cancelled',
+        });
+        return { ok: true, value: null };
       }
+      this.#auditCollaborationEffect('discard-rejected-comment', 'allowed', connection, {
+        commentIdSha256: sha256(input.comment.id),
+        rejectedDeliveryIdSha256: sha256(input.rejectedDeliveryId),
+        phase: 'authorized-before-local-deletion',
+      });
       let recovery = store.discardRejectedCollaborationComment(
         scope,
         input.comment,
@@ -1118,6 +1161,13 @@ export class CollaborationIpcService {
       const result = this.#client.createComment(
         { nodeId: input.nodeId, body: input.body },
         (candidate, comment, plannedReceipt) => {
+          this.#auditCollaborationEffect('comment', 'allowed', connection, {
+            nodeIdSha256: sha256(input.nodeId),
+            bodyBytes: Buffer.byteLength(input.body, 'utf8'),
+            deliveryIdSha256: sha256(plannedReceipt.deliveryId),
+            snapshotSha256: plannedReceipt.snapshotDigest,
+            phase: 'authorized-before-publish',
+          });
           const preservePending =
             recovery !== null && recovery.disposition !== 'synchronized'
               ? snapshotWithComment(effectiveCollaborationSyncPending(recovery), comment)
@@ -1146,6 +1196,11 @@ export class CollaborationIpcService {
       this.#assertAvailable();
       const [input] = z.tuple([CollaborationUpdateAwarenessInputSchema]).parse(rawArgs);
       this.#assertOwner(event, 'Collaboration awareness update');
+      const connection = this.#requiredActiveConnection();
+      this.#auditCollaborationEffect('awareness', 'allowed', connection, {
+        fields: Object.keys(input.awareness).sort(),
+        phase: 'authorized-before-publish',
+      });
       return { ok: true, value: this.#client.updateAwareness(input.awareness) };
     } catch (error) {
       return ipcFailure(error, 'Forgeboard rejected the collaborator presence update.');
@@ -1169,9 +1224,9 @@ export class CollaborationIpcService {
 
   #sendEvent(event: CollaborationEvent): void {
     if (event.type === 'delivery-acknowledged') {
-      this.#settleDelivery(event.acknowledgement.deliveryId, 'acknowledged');
+      if (!this.#settleDelivery(event.acknowledgement.deliveryId, 'acknowledged')) return;
     } else if (event.type === 'delivery-rejected') {
-      this.#settleDelivery(event.rejection.deliveryId, 'rejected');
+      if (!this.#settleDelivery(event.rejection.deliveryId, 'rejected')) return;
     }
     const owner = this.#owner;
     if (owner === null || owner.isDestroyed()) return;
@@ -1387,6 +1442,11 @@ export class CollaborationIpcService {
     const early = this.#earlyDeliverySettlements.get(receipt.deliveryId);
     if (early !== undefined) {
       try {
+        this.#auditDeliverySettlement(
+          receipt.deliveryId,
+          early.disposition,
+          'authorized-before-early-settlement-persist',
+        );
         this.#requiredStore().settleCollaborationSyncDelivery(
           receipt.deliveryId,
           early.disposition,
@@ -1408,6 +1468,52 @@ export class CollaborationIpcService {
     trimOldest(this.#recordedDeliveryIds, CollaborationIpcService.MAX_TRACKED_DELIVERIES);
   }
 
+  #auditCollaborationEffect(
+    action: string,
+    outcome: 'allowed' | 'denied' | 'failed',
+    connection: CollaborationConnection,
+    metadata: Record<string, unknown>,
+  ): void {
+    this.outbound.recordRequiredAudit('collaboration', action, outcome, {
+      roomIdSha256: sha256(connection.roomId),
+      subjectSha256: sha256(connection.subject),
+      connectionIdSha256: sha256(connection.connectionId),
+      ...metadata,
+    });
+  }
+
+  #authorizeTransportEffect(effect: CollaborationTransportEffect): void {
+    const connection = this.#client.connection;
+    if (connection === null) {
+      throw new Error('A current collaboration connection is required for transport audit.');
+    }
+    const common = { phase: 'authorized-before-effect' };
+    switch (effect.kind) {
+      case 'document-sync':
+      case 'awareness':
+        this.#auditCollaborationEffect(`transport-${effect.kind}`, 'allowed', connection, {
+          ...common,
+          transportPhase: effect.phase,
+          connectionAttempt: effect.connectionAttempt,
+        });
+        return;
+      case 'delivery-confirmation':
+        this.#auditCollaborationEffect('delivery-confirmation', 'allowed', connection, {
+          ...common,
+          deliveryIdSha256: sha256(effect.deliveryId),
+          transportPhase: effect.phase,
+          attempt: effect.attempt,
+        });
+        return;
+      case 'delivery-settlement':
+        this.#auditCollaborationEffect('delivery-settlement', 'allowed', connection, {
+          ...common,
+          deliveryIdSha256: sha256(effect.deliveryId),
+          disposition: effect.disposition,
+        });
+    }
+  }
+
   #tryReplayComments(
     scope: CollaborationSyncStorageScope,
     current: CollaborationMetadataSnapshot,
@@ -1417,6 +1523,13 @@ export class CollaborationIpcService {
     let journalAttempted = false;
     try {
       return this.#client.replayComments(comments, (candidate, plannedReceipt) => {
+        const connection = this.#requiredActiveConnection();
+        this.#auditCollaborationEffect('comment-replay', 'allowed', connection, {
+          commentCount: comments.length,
+          deliveryIdSha256: sha256(plannedReceipt.deliveryId),
+          snapshotSha256: plannedReceipt.snapshotDigest,
+          phase: 'authorized-before-publish',
+        });
         journalAttempted = true;
         this.#recordDelivery(scope, current, candidate, plannedReceipt);
       });
@@ -1426,10 +1539,24 @@ export class CollaborationIpcService {
     }
   }
 
-  #settleDelivery(deliveryId: string, disposition: 'acknowledged' | 'rejected'): void {
-    const recorded = this.#recordedDeliveryIds.delete(deliveryId);
+  #settleDelivery(deliveryId: string, disposition: 'acknowledged' | 'rejected'): boolean {
+    const recorded = this.#recordedDeliveryIds.has(deliveryId);
     const scope = this.#deliveryScopes.get(deliveryId);
     if (recorded || scope !== undefined) {
+      try {
+        this.#auditDeliverySettlement(
+          deliveryId,
+          disposition,
+          'authorized-before-settlement-persist',
+        );
+      } catch {
+        this.#earlyDeliverySettlements.set(deliveryId, {
+          disposition,
+          ...(scope === undefined ? {} : { scope }),
+        });
+        trimOldest(this.#earlyDeliverySettlements, CollaborationIpcService.MAX_TRACKED_DELIVERIES);
+        return false;
+      }
       try {
         this.#store?.settleCollaborationSyncDelivery(deliveryId, disposition);
         if (scope !== undefined && this.#store !== undefined) {
@@ -1437,6 +1564,7 @@ export class CollaborationIpcService {
             this.#store.recoverCollaborationSyncState(scope),
           );
         }
+        this.#recordedDeliveryIds.delete(deliveryId);
         this.#earlyDeliverySettlements.delete(deliveryId);
         this.#deliveryScopes.delete(deliveryId);
       } catch {
@@ -1447,11 +1575,13 @@ export class CollaborationIpcService {
           ...(scope === undefined ? {} : { scope }),
         });
         trimOldest(this.#earlyDeliverySettlements, CollaborationIpcService.MAX_TRACKED_DELIVERIES);
+        return true;
       }
-      return;
+      return true;
     }
     this.#earlyDeliverySettlements.set(deliveryId, { disposition });
     trimOldest(this.#earlyDeliverySettlements, CollaborationIpcService.MAX_TRACKED_DELIVERIES);
+    return true;
   }
 
   #retryRetainedSettlements(
@@ -1462,6 +1592,11 @@ export class CollaborationIpcService {
     let settlementPersisted = false;
     for (const [deliveryId, settlement] of [...this.#earlyDeliverySettlements]) {
       try {
+        this.#auditDeliverySettlement(
+          deliveryId,
+          settlement.disposition,
+          'authorized-before-retained-settlement-retry',
+        );
         store.settleCollaborationSyncDelivery(deliveryId, settlement.disposition);
         this.#earlyDeliverySettlements.delete(deliveryId);
         this.#deliveryScopes.delete(deliveryId);
@@ -1477,6 +1612,19 @@ export class CollaborationIpcService {
       throw new Error('Collaboration recovery is paused until the rejected change is saved.');
     }
     return refreshed;
+  }
+
+  #auditDeliverySettlement(
+    deliveryId: string,
+    disposition: 'acknowledged' | 'rejected',
+    phase: string,
+  ): void {
+    const connection = this.#requiredActiveConnection();
+    this.#auditCollaborationEffect('delivery-settlement-persist', 'allowed', connection, {
+      deliveryIdSha256: sha256(deliveryId),
+      disposition,
+      phase,
+    });
   }
 
   #hasRetainedRejectedSettlement(scope: CollaborationSyncStorageScope): boolean {
@@ -1602,6 +1750,24 @@ function activeRejectedCommentCount(recovery: CollaborationSyncRecovery | null):
   }
   if (recovery.rejectedComments !== undefined) return recovery.rejectedComments.length;
   return recovery.rejectedCommentIds?.length ?? 0;
+}
+
+function recoveryContainsRejectedComment(
+  recovery: CollaborationSyncRecovery | null,
+  comment: CollaborationCommentMetadata,
+  rejectedDeliveryId: string,
+): boolean {
+  return (
+    recovery?.rejectedCommentEntries?.some(
+      (entry) =>
+        entry.rejectedDeliveryId === rejectedDeliveryId &&
+        collaborationCommentMetadataEquals(entry.comment, comment),
+    ) === true
+  );
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function snapshotWithComment(

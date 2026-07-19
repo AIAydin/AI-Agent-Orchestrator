@@ -39,6 +39,7 @@ export type RunHistoryTokenUsage = z.infer<typeof RunHistoryTokenUsageSchema>;
 export const RunHistoryWorktreeStateSchema = z.enum([
   'none',
   'active',
+  'archived',
   'cleanup-pending',
   'cleaned',
 ]);

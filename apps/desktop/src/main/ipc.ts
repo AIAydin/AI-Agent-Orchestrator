@@ -414,6 +414,17 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         ...(beforeSpawn === undefined ? {} : { beforeSpawn }),
         inheritEnvironment: false,
       }),
+    authorizeValidationSpawn: (review) => {
+      store.appendAudit('github-cli', 'readiness-probe', 'allowed', {
+        kind: review.kind,
+        source: review.source,
+        executableFileName: review.identity.filename,
+        executableSizeBytes: review.identity.sizeBytes,
+        executableSha256: review.identity.sha256,
+        arguments: [...review.arguments],
+        credentialAccess: review.credentialAccess,
+      });
+    },
   });
   const gitRemote = new GitRemoteDeliveryIpcService(
     dialog,

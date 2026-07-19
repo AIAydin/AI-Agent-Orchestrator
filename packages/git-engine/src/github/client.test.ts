@@ -170,8 +170,9 @@ describe('GitHubCliExecutor', () => {
     const checked: string[] = [];
     let current = true;
     try {
-      const executor = new GitHubCliExecutor(process.execPath, {}, (executable) => {
+      const executor = new GitHubCliExecutor(process.execPath, {}, (executable, args) => {
         checked.push(executable);
+        expect(args[0]).toBe('-e');
         if (!current) throw new Error('The selected GitHub CLI executable changed.');
       });
       await expect(executor.run(['-e', 'process.stdout.write("first")'])).resolves.toMatchObject({

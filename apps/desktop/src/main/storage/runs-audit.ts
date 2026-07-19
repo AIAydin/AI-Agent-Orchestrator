@@ -12,7 +12,12 @@ import {
 } from '../storage-schemas.js';
 import { transaction } from './database.js';
 import { type AuditRow, type JsonRow } from './values.js';
-import { writeAudit, writeRun, writeRunForWorktreeTransition } from './writes.js';
+import {
+  writeAudit,
+  writeRun,
+  writeRunForWorktreeBranchRename,
+  writeRunForWorktreeTransition,
+} from './writes.js';
 
 export function appendAudit(
   database: DatabaseSync,
@@ -129,6 +134,60 @@ export interface RunWorktreeStateTransition {
   readonly transitionedAt: string;
 }
 
+export interface RunWorktreeBranchRename {
+  readonly runId: string;
+  readonly expectedWorktreeId: string;
+  readonly expectedBranch: string;
+  readonly nextBranch: string;
+  readonly renamedAt: string;
+}
+
+/** Atomically updates every persisted attempt sharing one exactly-bound managed worktree. */
+export function renameRunWorktreeBranch(
+  database: DatabaseSync,
+  input: RunWorktreeBranchRename,
+): StoredRunRecord {
+  const runId = StoredRunRecordSchema.shape.id.parse(input.runId);
+  const worktreeId = parseUuid(input.expectedWorktreeId);
+  const expectedBranch = StoredRunRecordSchema.shape.branch.unwrap().parse(input.expectedBranch);
+  const nextBranch = StoredRunRecordSchema.shape.branch.unwrap().parse(input.nextBranch);
+  const renamedAt = StoredRunRecordSchema.shape.updatedAt.parse(input.renamedAt);
+  if (expectedBranch === nextBranch) throw new Error('The managed branch name did not change.');
+  return transaction(database, () => {
+    const selected = getRun(database, runId);
+    if (
+      selected === undefined ||
+      selected.worktreeId !== worktreeId ||
+      selected.branch !== expectedBranch ||
+      effectiveRunWorktreeState(selected) !== 'active'
+    ) {
+      throw new Error('The persisted run branch binding changed before rename.');
+    }
+    const rows = database
+      .prepare(
+        `SELECT value_json FROM agent_runs WHERE json_extract(value_json, '$.worktreeId') = ?`,
+      )
+      .all(worktreeId) as unknown as JsonRow[];
+    const siblings = rows.map((row) => StoredRunRecordSchema.parse(JSON.parse(row.value_json)));
+    if (siblings.length === 0 || siblings.some((record) => record.branch !== expectedBranch)) {
+      throw new Error('The managed worktree run lineage has inconsistent branch bindings.');
+    }
+    let renamedSelected: StoredRunRecord | undefined;
+    for (const sibling of siblings) {
+      const renamed = StoredRunRecordSchema.parse({
+        ...sibling,
+        branch: nextBranch,
+        updatedAt:
+          Date.parse(renamedAt) > Date.parse(sibling.updatedAt) ? renamedAt : sibling.updatedAt,
+      });
+      writeRunForWorktreeBranchRename(database, renamed);
+      if (renamed.id === runId) renamedSelected = renamed;
+    }
+    if (renamedSelected === undefined) throw new Error('The selected run branch was not renamed.');
+    return renamedSelected;
+  });
+}
+
 export function transitionRunWorktreeState(
   database: DatabaseSync,
   input: RunWorktreeStateTransition,
@@ -159,7 +218,11 @@ export function transitionRunWorktreeState(
           : current.updatedAt,
     });
     writeRunForWorktreeTransition(database, next);
-    if (nextState === 'cleaned') {
+    if (
+      nextState === 'cleaned' ||
+      nextState === 'archived' ||
+      (expectedState === 'archived' && nextState === 'active')
+    ) {
       const related = database
         .prepare(
           `SELECT value_json FROM agent_runs
@@ -170,7 +233,7 @@ export function transitionRunWorktreeState(
         const sibling = StoredRunRecordSchema.parse(JSON.parse(siblingRow.value_json));
         writeRunForWorktreeTransition(database, {
           ...sibling,
-          worktreeState: 'cleaned',
+          worktreeState: nextState,
           updatedAt:
             Date.parse(transitionedAt) > Date.parse(sibling.updatedAt)
               ? transitionedAt
@@ -250,6 +313,8 @@ function isAllowedWorktreeStateTransition(
 ): boolean {
   return (
     (current === 'active' && next === 'cleanup-pending') ||
+    (current === 'active' && next === 'archived') ||
+    (current === 'archived' && next === 'active') ||
     (current === 'cleanup-pending' && (next === 'active' || next === 'cleaned'))
   );
 }

@@ -134,8 +134,9 @@ run.
    commit dialog.
 4. For a managed run, complete selected delivery checks and record the required human quality
    approval against that exact clean committed state.
-5. Deliver by fast-forward when possible, or copy reviewed commits with cherry-pick when primary has
-   advanced. Forgeboard stops honestly on conflicts and does not resolve them automatically.
+5. Deliver by fast-forward when possible. When both histories advanced, either create one merge
+   commit that preserves both histories or copy reviewed commits one by one with cherry-pick.
+   Forgeboard stops honestly on conflicts and does not resolve them automatically.
 6. After a fully merged, clean managed branch is reverified, use reviewed cleanup to remove its
    worktree and branch.
 

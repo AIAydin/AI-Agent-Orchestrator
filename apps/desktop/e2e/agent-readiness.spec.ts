@@ -20,7 +20,7 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     const missingExecutable = join(userDataDirectory, 'missing-custom-agent');
 
     const setup = page.getByRole('dialog');
-    await expect(setup).toHaveAccessibleName(/Set up Forgeboard in a few quick steps/i);
+    await expect(setup).toHaveAccessibleName('Ready to build without wiring config files?');
     await setup.getByRole('button', { name: /Set up Forgeboard/ }).click();
     const customCli = setup.getByRole('radio', { name: /Custom agent/ });
     await setup.getByText('Custom agent', { exact: true }).click();
@@ -102,7 +102,7 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     const settings = page.locator('.settings-modal');
     await settings.getByRole('button', { name: /Agents & runtime/ }).click();
     await expect(settings.getByLabel('Default agent')).toHaveValue('custom');
-    await expect(settings.getByLabel('Executable', { exact: true })).toHaveValue(executable);
+    await expect(settings.getByLabel('Program file', { exact: true })).toHaveValue(executable);
     await settings.getByRole('button', { name: 'Checks', exact: true }).click();
     const tests = settings.getByRole('group', { name: 'Tests command' });
     await expect(tests.getByLabel('Executable')).toHaveValue(executable);

@@ -58,6 +58,16 @@ describe('ProviderConnectionService', () => {
     expect(serializedAudit).not.toContain('stdout');
     expect(fixture.probe).toHaveBeenCalledTimes(2);
     expect(fixture.record).toHaveBeenCalledTimes(2);
+    expect(fixture.appendAudit).toHaveBeenCalledWith(
+      'provider-connection',
+      'readiness-probe',
+      'allowed',
+      expect.objectContaining({
+        providerId: 'codex',
+        requestedAction: 'connect',
+        phase: 'authorized-before-spawn',
+      }),
+    );
   });
 
   it('requires native approval and rejects stale or replayed plans', async () => {
@@ -93,7 +103,9 @@ describe('ProviderConnectionService', () => {
       runProcess: vi.fn(async (_command, options) => {
         started.resolve();
         await new Promise<void>((resolve) =>
-          options?.signal?.addEventListener('abort', () => resolve(), { once: true }),
+          options?.signal?.addEventListener('abort', () => resolve(), {
+            once: true,
+          }),
         );
         return processResult('cancelled', null, null);
       }),
@@ -141,6 +153,47 @@ describe('ProviderConnectionService', () => {
     expect(fixture.runProcess).not.toHaveBeenCalled();
   });
 
+  it('fails closed before a provider command starts when its launch audit cannot persist', async () => {
+    let effectStarted = false;
+    const fixture = createFixture({
+      failLaunchAudit: true,
+      runProcess: vi.fn(async (_command, options) => {
+        await options?.beforeSpawn?.();
+        effectStarted = true;
+        return processResult('exited', 0, null);
+      }),
+    });
+    const plan = await fixture.service.prepare('window-a', {
+      providerId: 'codex',
+      action: 'connect',
+    });
+
+    await expect(
+      fixture.service.confirm('window-a', plan.planId, () => Promise.resolve('approved')),
+    ).rejects.toThrow('required provider launch audit unavailable');
+    expect(effectStarted).toBe(false);
+  });
+
+  it('fails closed before a readiness probe when its required audit cannot persist', async () => {
+    let readinessProcessStarted = false;
+    const fixture = createFixture({
+      failReadinessAudit: true,
+      startReadinessProcess: () => {
+        readinessProcessStarted = true;
+      },
+    });
+    const plan = await fixture.service.prepare('window-a', {
+      providerId: 'codex',
+      action: 'connect',
+    });
+
+    await expect(
+      fixture.service.confirm('window-a', plan.planId, () => Promise.resolve('approved')),
+    ).rejects.toThrow('required readiness audit unavailable');
+    expect(readinessProcessStarted).toBe(false);
+    expect(fixture.runProcess).not.toHaveBeenCalled();
+  });
+
   it('invalidates connected evidence immediately when the unsaved draft override changes', async () => {
     const fixture = createFixture();
     const plan = await fixture.service.prepare('window-a', {
@@ -161,28 +214,56 @@ function createFixture(
   options: {
     readonly now?: () => Date;
     readonly runProcess?: ReturnType<typeof vi.fn<ProviderAuthProcessRunner>>;
+    readonly failLaunchAudit?: boolean;
+    readonly failReadinessAudit?: boolean;
+    readonly startReadinessProcess?: () => void;
   } = {},
 ) {
-  const probe = vi.fn((plan: AgentReadinessProbePlan, authorize?: () => void) => {
-    authorize?.();
-    return Promise.resolve(readyResult(plan));
-  });
+  const probe = vi.fn(
+    (
+      plan: AgentReadinessProbePlan,
+      authorize: (attempt: {
+        readonly sequence: number;
+        readonly kind: 'version' | 'capability';
+        readonly argumentCount: number;
+      }) => void,
+    ) => {
+      authorize({ sequence: 1, kind: 'version', argumentCount: 1 });
+      options.startReadinessProcess?.();
+      return Promise.resolve(readyResult(plan));
+    },
+  );
   const record = vi.fn();
   const runProcess =
     options.runProcess ??
-    vi.fn<ProviderAuthProcessRunner>((command) => {
+    vi.fn<ProviderAuthProcessRunner>(async (command, processOptions) => {
+      await processOptions?.beforeSpawn?.();
       if (command.statusOutput === null) {
-        return Promise.resolve(processResult('exited', 0, null));
+        return processResult('exited', 0, null);
       }
-      return Promise.resolve(
-        processResult(
-          'exited',
-          command.statusOutput === 'claude-json' ? 1 : 0,
-          command.statusOutput === 'claude-json' ? 'disconnected' : 'connected',
-        ),
+      return processResult(
+        'exited',
+        command.statusOutput === 'claude-json' ? 1 : 0,
+        command.statusOutput === 'claude-json' ? 'disconnected' : 'connected',
       );
     });
-  const appendAudit = vi.fn();
+  const appendAudit = vi.fn((_category, _action, outcome, metadata) => {
+    if (
+      options.failLaunchAudit === true &&
+      _action !== 'readiness-probe' &&
+      outcome === 'allowed' &&
+      (metadata as { phase?: string }).phase === 'authorized-before-spawn'
+    ) {
+      throw new Error('required provider launch audit unavailable');
+    }
+    if (
+      options.failReadinessAudit === true &&
+      _action === 'readiness-probe' &&
+      outcome === 'allowed'
+    ) {
+      throw new Error('required readiness audit unavailable');
+    }
+  });
   const readiness = {
     prepare: vi.fn((input: unknown) => {
       const request = input as {
@@ -222,7 +303,10 @@ function readinessPlan(
   const manifest = getBuiltInAgentManifest(providerId);
   if (manifest === undefined) throw new Error('Missing built-in manifest.');
   return {
-    request: { agentId: providerId, ...(executableOverride ? { executableOverride } : {}) },
+    request: {
+      agentId: providerId,
+      ...(executableOverride ? { executableOverride } : {}),
+    },
     source: executableOverride ? 'override' : 'automatic',
     manifest,
     executable: executableOverride ?? `/usr/local/bin/${providerId}`,

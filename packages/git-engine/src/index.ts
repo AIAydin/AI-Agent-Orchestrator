@@ -1,4 +1,9 @@
-export { ChangeService, type PushExecutionOptions, type WorktreeDiffMode } from './diff/changes.js';
+export {
+  ChangeService,
+  type GitMutationExecutionOptions,
+  type PushExecutionOptions,
+  type WorktreeDiffMode,
+} from './diff/changes.js';
 export { parseUnifiedDiff, patchSha256, selectDiffHunks } from './diff/parser.js';
 export { GitEngineError, type GitEngineErrorCode } from './model/errors.js';
 export {

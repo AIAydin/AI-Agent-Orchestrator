@@ -66,7 +66,8 @@ export interface ResolvedGitTarget {
   readonly usesConfiguredManagedRoot: boolean;
 }
 
-export type GitTargetResolverStore = Pick<LocalStore, 'getProject' | 'getRun'>;
+export type GitTargetResolverStore = Pick<LocalStore, 'getProject' | 'getRun'> &
+  Partial<Pick<LocalStore, 'getGitWorktreeMetadataIntent' | 'reconcileGitWorktreeMetadataIntent'>>;
 
 interface CompleteRunBinding {
   readonly repositoryRoot: string;
@@ -93,7 +94,15 @@ export class GitTargetResolver {
   }
 
   public async resolve(input: { projectId: string; runId: string }): Promise<ResolvedGitTarget> {
-    return await this.#resolve(input, true);
+    return await this.#resolve(input, true, 'active');
+  }
+
+  /** Resolves an archived binding only for exact, reviewed restoration. */
+  public async resolveArchived(input: {
+    projectId: string;
+    runId: string;
+  }): Promise<ResolvedGitTarget> {
+    return await this.#resolve(input, true, 'archived');
   }
 
   /** Resolves the same durable ownership binding while allowing an in-progress agent run. */
@@ -101,12 +110,13 @@ export class GitTargetResolver {
     projectId: string;
     runId: string;
   }): Promise<ResolvedGitTarget> {
-    return await this.#resolve(input, false);
+    return await this.#resolve(input, false, 'active');
   }
 
   async #resolve(
     input: { projectId: string; runId: string },
     requireTerminalRun: boolean,
+    expectedLifecycle: 'active' | 'archived',
   ): Promise<ResolvedGitTarget> {
     const parsed = ResolveInputSchema.safeParse(input);
     if (!parsed.success) {
@@ -138,7 +148,7 @@ export class GitTargetResolver {
       );
     }
 
-    const run = this.store.getRun(parsed.data.runId);
+    let run = this.store.getRun(parsed.data.runId);
     if (run === undefined) {
       throw new GitTargetResolutionError(
         'RUN_NOT_FOUND',
@@ -151,6 +161,7 @@ export class GitTargetResolver {
         'The selected agent run does not belong to this project.',
       );
     }
+    run = await this.#reconcilePendingMetadataIntent(run);
     if (run.supersededByRunId != null) {
       throw new GitTargetResolutionError(
         'WORKTREE_LIFECYCLE_INACTIVE',
@@ -170,12 +181,14 @@ export class GitTargetResolver {
       );
     }
     const worktreeState = effectiveRunWorktreeState(run);
-    if (worktreeState !== 'active') {
+    if (worktreeState !== expectedLifecycle) {
       throw new GitTargetResolutionError(
         'WORKTREE_LIFECYCLE_INACTIVE',
         worktreeState === 'cleaned'
           ? 'This agent worktree has already been cleaned up.'
-          : 'This agent worktree cleanup is incomplete and cannot be used safely.',
+          : worktreeState === 'archived'
+            ? 'This agent worktree is archived and no longer available for active Git actions.'
+            : 'This agent worktree cleanup is incomplete and cannot be used safely.',
       );
     }
 
@@ -210,10 +223,10 @@ export class GitTargetResolver {
       );
     }
     assertOwnershipBinding(binding, state.ownership);
-    if (state.ownership.status !== 'active') {
+    if (state.ownership.status !== expectedLifecycle) {
       throw new GitTargetResolutionError(
         'WORKTREE_INACTIVE',
-        'The selected agent worktree is no longer active.',
+        `The selected agent worktree is no longer ${expectedLifecycle}.`,
       );
     }
     if (state.missing || state.status === null) {
@@ -278,6 +291,44 @@ export class GitTargetResolver {
       usesConfiguredManagedRoot: configuredManagedRoot === state.ownership.managedRoot,
     };
   }
+
+  async #reconcilePendingMetadataIntent(run: StoredRunRecord): Promise<StoredRunRecord> {
+    const intent = this.store.getGitWorktreeMetadataIntent?.(run.id);
+    if (intent === undefined) return run;
+    if (this.store.reconcileGitWorktreeMetadataIntent === undefined) {
+      throw new GitTargetResolutionError(
+        'OWNERSHIP_UNAVAILABLE',
+        'The interrupted managed-worktree lifecycle action cannot be reconciled safely.',
+      );
+    }
+    const binding = completeBinding(run);
+    const ownership = await this.#worktrees.readOwnership(binding.managedRoot, binding.worktreeId);
+    assertOwnershipIdentity(binding, ownership);
+    const recovered = await this.#worktrees.reconcileInterruptedMetadata(ownership, intent);
+    if (recovered.ownership.status !== 'active' && recovered.ownership.status !== 'archived') {
+      throw new GitTargetResolutionError(
+        'WORKTREE_INACTIVE',
+        'The interrupted managed-worktree lifecycle action requires manual recovery.',
+      );
+    }
+    this.store.reconcileGitWorktreeMetadataIntent({
+      intentId: intent.intentId,
+      worktreeId: recovered.ownership.id,
+      branch: recovered.ownership.branch,
+      state: recovered.ownership.status,
+      auditStage: 'interrupted-intent-reconciled',
+      auditMetadata: {
+        projectId: run.projectId,
+        runId: run.id,
+        worktreeId: recovered.ownership.id,
+      },
+    });
+    const reconciled = this.store.getRun(run.id);
+    if (reconciled === undefined) {
+      throw new GitTargetResolutionError('RUN_NOT_FOUND', 'The reconciled agent run is missing.');
+    }
+    return reconciled;
+  }
 }
 
 function completeBinding(run: StoredRunRecord): CompleteRunBinding {
@@ -329,6 +380,26 @@ function assertOwnershipBinding(binding: CompleteRunBinding, ownership: Worktree
     throw new GitTargetResolutionError(
       'OWNERSHIP_MISMATCH',
       `The saved run does not match this agent worktree's ${mismatch[0]}.`,
+    );
+  }
+}
+
+function assertOwnershipIdentity(binding: CompleteRunBinding, ownership: WorktreeOwnership): void {
+  const fields: ReadonlyArray<readonly [string, string | null, string | null]> = [
+    ['worktree ID', binding.worktreeId, ownership.id],
+    ['primary repository', binding.repositoryRoot, ownership.repositoryRoot],
+    ['workspace root folder', binding.managedRoot, ownership.managedRoot],
+    ['workspace folder', binding.worktreePath, ownership.worktreePath],
+    ['base branch', binding.baseRef, ownership.baseRef],
+    ['base commit', binding.baseCommit, ownership.baseCommit],
+    ['agent', binding.agentId, ownership.agentId],
+    ['task', binding.taskId, ownership.taskId],
+  ];
+  const mismatch = fields.find(([, expected, actual]) => expected !== actual);
+  if (mismatch !== undefined) {
+    throw new GitTargetResolutionError(
+      'OWNERSHIP_MISMATCH',
+      `The interrupted lifecycle intent has a different ${mismatch[0]}.`,
     );
   }
 }

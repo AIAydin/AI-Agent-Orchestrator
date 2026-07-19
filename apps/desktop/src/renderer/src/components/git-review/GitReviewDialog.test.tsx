@@ -269,7 +269,11 @@ const confirmCleanupMock = vi.fn(() =>
 );
 const openExternalMock = vi.fn(() =>
   Promise.resolve(
-    success({ opened: true, targetKind: 'primary' as const, branch: 'feature/review' }),
+    success({
+      opened: true,
+      targetKind: 'primary' as const,
+      branch: 'feature/review',
+    }),
   ),
 );
 const compareAgentsMock = vi.fn();
@@ -382,7 +386,9 @@ describe('GitReviewDialog', () => {
       <GitReviewDialog target={primaryTarget} projectName="Workshop" onClose={onClose} />,
     );
 
-    const dialog = screen.getByRole('dialog', { name: 'Review changes in Workshop' });
+    const dialog = screen.getByRole('dialog', {
+      name: 'Review changes in Workshop',
+    });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close Git review' }));
     await screen.findByText('origin/feature/review');
@@ -399,7 +405,10 @@ describe('GitReviewDialog', () => {
     expect(await screen.findByText('updated line')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Add src/app.ts to commit' }));
     await waitFor(() => expect(stagePathsMock).toHaveBeenCalledTimes(1));
-    expect(stagePathsMock).toHaveBeenCalledWith({ target: primaryTarget, paths: ['src/app.ts'] });
+    expect(stagePathsMock).toHaveBeenCalledWith({
+      target: primaryTarget,
+      paths: ['src/app.ts'],
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Add to commit' }));
     await waitFor(() => expect(stageHunksMock).toHaveBeenCalledTimes(1));
@@ -427,7 +436,9 @@ describe('GitReviewDialog', () => {
     );
 
     expect(
-      await screen.findByRole('table', { name: 'Changes in src/staged.ts (side by side)' }),
+      await screen.findByRole('table', {
+        name: 'Changes in src/staged.ts (side by side)',
+      }),
     ).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'Show spaces and tabs' })).toHaveProperty(
       'checked',
@@ -482,7 +493,9 @@ describe('GitReviewDialog', () => {
     await screen.findByText('origin/feature/review');
     fireEvent.click(screen.getByRole('button', { name: /src\/app\.ts Modified/ }));
     fireEvent.click(
-      screen.getByRole('button', { name: 'Review discard for change in src/app.ts' }),
+      screen.getByRole('button', {
+        name: 'Review discard for change in src/app.ts',
+      }),
     );
 
     let disclosure = await screen.findByRole('alertdialog', {
@@ -501,13 +514,19 @@ describe('GitReviewDialog', () => {
     expect(screen.getByRole('dialog', { name: 'Review changes in Workshop' })).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Review discard for change in src/app.ts' }),
+      screen.getByRole('button', {
+        name: 'Review discard for change in src/app.ts',
+      }),
     );
     disclosure = await screen.findByRole('alertdialog', {
       name: 'Discard these changes?',
     });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    await waitFor(() => expect(confirmDiscardMock).toHaveBeenCalledWith({ planId: discardPlanId }));
+    await waitFor(() =>
+      expect(confirmDiscardMock).toHaveBeenCalledWith({
+        planId: discardPlanId,
+      }),
+    );
     expect(disclosure).toBeTruthy();
     expect(await screen.findByText(/Discard cancelled/)).toBeTruthy();
   });
@@ -545,7 +564,9 @@ describe('GitReviewDialog', () => {
     expect(screen.getByRole('region', { name: 'Agent workspace details' }).textContent).toContain(
       'Your main project files stay untouched.',
     );
-    const repositoryStatus = screen.getByRole('region', { name: 'Repository status' });
+    const repositoryStatus = screen.getByRole('region', {
+      name: 'Repository status',
+    });
     expect(repositoryStatus.textContent).toContain('forgeboard/agent-node-1');
     expect(repositoryStatus.textContent).toContain('0 commits ahead · 0 commits behind');
     expect(repositoryStatus.textContent).toContain('Changed');
@@ -716,7 +737,9 @@ describe('GitReviewDialog', () => {
       name: "Review safe cleanup of the agent's workspace",
     });
     fireEvent.click(
-      screen.getByRole('button', { name: /Continue to the .*Clean up.* confirmation/u }),
+      screen.getByRole('button', {
+        name: /Continue to the .*Clean up.* confirmation/u,
+      }),
     );
 
     await waitFor(() =>
@@ -774,7 +797,9 @@ describe('GitReviewDialog', () => {
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
     await screen.findByText('Deliver the reviewed changes to the primary branch');
-    const reviewDelivery = screen.getByRole('button', { name: 'Review delivery…' });
+    const reviewDelivery = screen.getByRole('button', {
+      name: 'Review delivery…',
+    });
     await waitFor(() => expect(reviewDelivery).toHaveProperty('disabled', false));
     fireEvent.click(reviewDelivery);
     const disclosure = await screen.findByRole('alertdialog', {
@@ -802,9 +827,52 @@ describe('GitReviewDialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue to final confirmation' }));
     await waitFor(() =>
-      expect(confirmShippingMock).toHaveBeenCalledWith({ planId: shippingPlanId }),
+      expect(confirmShippingMock).toHaveBeenCalledWith({
+        planId: shippingPlanId,
+      }),
     );
     expect(await screen.findByText(/Delivered the reviewed commits/)).toBeTruthy();
+  });
+
+  it('offers merge-commit delivery and discloses the selected strategy', async () => {
+    reviewMock.mockResolvedValueOnce(
+      success({
+        ...agentReview,
+        dirty: false,
+        entries: [],
+        staged: { files: [], additions: 0, deletions: 0 },
+        unstaged: { files: [], additions: 0, deletions: 0 },
+      }),
+    );
+    prepareShippingMock.mockResolvedValueOnce(
+      success({ ...shippingPlan, strategy: 'merge-commit' }),
+    );
+
+    render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
+
+    const strategy = await screen.findByRole('combobox', {
+      name: 'Delivery method',
+    });
+    expect(
+      screen.getByRole('option', {
+        name: 'Create one merge commit (preserve both histories)',
+      }),
+    ).toBeTruthy();
+    fireEvent.change(strategy, { target: { value: 'merge-commit' } });
+    const reviewDelivery = screen.getByRole('button', {
+      name: 'Review delivery…',
+    });
+    await waitFor(() => expect(reviewDelivery).toHaveProperty('disabled', false));
+    fireEvent.click(reviewDelivery);
+
+    expect(prepareShippingMock).toHaveBeenCalledWith({
+      target: worktreeTarget,
+      strategy: 'merge-commit',
+    });
+    const disclosure = await screen.findByRole('alertdialog', {
+      name: 'Review delivery to the primary branch',
+    });
+    expect(disclosure.textContent).toContain('Create a merge commit on the primary branch');
   });
 
   it('keeps delivery fail-closed when earlier readiness evidence became stale', async () => {
@@ -830,7 +898,9 @@ describe('GitReviewDialog', () => {
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
     expect((await screen.findByRole('alert')).textContent).toContain(staleReason);
-    const reviewDelivery = screen.getByRole('button', { name: 'Review delivery…' });
+    const reviewDelivery = screen.getByRole('button', {
+      name: 'Review delivery…',
+    });
     expect(reviewDelivery).toHaveProperty('disabled', true);
     fireEvent.click(reviewDelivery);
     expect(prepareShippingMock).not.toHaveBeenCalled();
@@ -846,7 +916,9 @@ describe('GitReviewDialog', () => {
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Re-run Deterministic verification' }),
+      await screen.findByRole('button', {
+        name: 'Re-run Deterministic verification',
+      }),
     );
 
     await waitFor(() =>
@@ -884,7 +956,11 @@ describe('GitReviewDialog', () => {
     const terminalReadiness = readinessView({
       target: worktreeTarget,
       sourceFingerprint: deliverySourceFingerprint,
-      requiredChecks: [readinessCheck(state, { sourceFingerprint: deliverySourceFingerprint })],
+      requiredChecks: [
+        readinessCheck(state, {
+          sourceFingerprint: deliverySourceFingerprint,
+        }),
+      ],
       approvals: deliveryReadiness.approvals,
       evidenceFingerprint: '7'.repeat(64),
     });
@@ -900,7 +976,9 @@ describe('GitReviewDialog', () => {
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Re-run Deterministic verification' }),
+      await screen.findByRole('button', {
+        name: 'Re-run Deterministic verification',
+      }),
     );
 
     const notice = await screen.findByText(message);
@@ -911,7 +989,11 @@ describe('GitReviewDialog', () => {
     const lostReadiness = readinessView({
       target: worktreeTarget,
       sourceFingerprint: deliverySourceFingerprint,
-      requiredChecks: [readinessCheck('lost', { sourceFingerprint: deliverySourceFingerprint })],
+      requiredChecks: [
+        readinessCheck('lost', {
+          sourceFingerprint: deliverySourceFingerprint,
+        }),
+      ],
       approvals: deliveryReadiness.approvals,
       evidenceFingerprint: '6'.repeat(64),
     });
@@ -934,7 +1016,9 @@ describe('GitReviewDialog', () => {
     );
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
-    const reviewDelivery = await screen.findByRole('button', { name: 'Review delivery…' });
+    const reviewDelivery = await screen.findByRole('button', {
+      name: 'Review delivery…',
+    });
     await waitFor(() => expect(reviewDelivery).toHaveProperty('disabled', false));
     fireEvent.click(screen.getByRole('button', { name: 'Re-run Deterministic verification' }));
 
@@ -1195,8 +1279,18 @@ function diffFile(path: string, id: string, addition: string) {
         newStart: 1,
         newLines: 1,
         lines: [
-          { kind: 'deletion' as const, content: 'old line', oldLine: 1, newLine: null },
-          { kind: 'addition' as const, content: addition, oldLine: null, newLine: 1 },
+          {
+            kind: 'deletion' as const,
+            content: 'old line',
+            oldLine: 1,
+            newLine: null,
+          },
+          {
+            kind: 'addition' as const,
+            content: addition,
+            oldLine: null,
+            newLine: 1,
+          },
         ],
       },
     ],

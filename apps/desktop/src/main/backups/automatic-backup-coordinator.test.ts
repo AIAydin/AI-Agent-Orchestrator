@@ -41,6 +41,13 @@ describe('AutomaticBackupCoordinator', () => {
       30,
       '/tmp/forgeboard-backups/forgeboard-1.sqlite3',
     );
+    expect(fixture.audit).toHaveBeenCalledWith('backup', 'automatic-prune', 'allowed', {
+      trigger: 'flush',
+      retentionCount: 30,
+      protectedBackupSha256Prefix: '000000000000',
+      phase: 'authorized-before-effect',
+      effectSemantics: 'best-effort-nontransactional',
+    });
 
     await expect(fixture.coordinator.flush()).resolves.toEqual({ status: 'up-to-date' });
     expect(fixture.createBackup).toHaveBeenCalledTimes(1);
@@ -258,6 +265,38 @@ describe('AutomaticBackupCoordinator', () => {
     expect((cleanupAttempt?.error as Error).message).toContain('backup was created and verified');
   });
 
+  it('skips destructive rotation when its required audit cannot persist', async () => {
+    const events: string[] = [];
+    const pruneBackups = vi.fn<AutomaticBackupStore['pruneBackups']>(() => {
+      events.push('prune');
+      return Promise.resolve(1);
+    });
+    const fixture = createFixture(
+      {},
+      {
+        pruneBackups,
+        coordinator: {
+          audit: (_category, action, outcome) => {
+            events.push(`audit:${action}:${outcome}`);
+            if (action === 'automatic-prune' && outcome === 'allowed') {
+              throw new Error('retention audit unavailable');
+            }
+          },
+        },
+      },
+    );
+    fixture.coordinator.markDataChanged();
+
+    await expect(fixture.coordinator.flush()).resolves.toMatchObject({ status: 'created' });
+    expect(pruneBackups).not.toHaveBeenCalled();
+    expect(events).toContain('audit:automatic-prune:allowed');
+    expect(events).not.toContain('prune');
+    expect(fixture.onAttempt.mock.lastCall?.[0]).toMatchObject({ outcome: 'failed' });
+    expect(fixture.onBackgroundError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'retention audit unavailable' }),
+    );
+  });
+
   it('reports scheduled failures in the background and re-arms a later retry', async () => {
     const createBackup = vi
       .fn<AutomaticBackupStore['createBackup']>()
@@ -297,7 +336,7 @@ describe('AutomaticBackupCoordinator', () => {
 interface FixtureOverrides {
   readonly createBackup?: ReturnType<typeof vi.fn<AutomaticBackupStore['createBackup']>>;
   readonly pruneBackups?: ReturnType<typeof vi.fn<AutomaticBackupStore['pruneBackups']>>;
-  readonly coordinator?: Omit<AutomaticBackupCoordinatorOptions, 'audit' | 'schedule'>;
+  readonly coordinator?: Omit<AutomaticBackupCoordinatorOptions, 'schedule'>;
 }
 
 type MutableBackupSettings = {
@@ -324,7 +363,7 @@ function createFixture(
       backupSequence += 1;
       return Promise.resolve(backupResult(backupSequence));
     });
-  const audit = vi.fn<AutomaticBackupAudit>();
+  const audit = overrides.coordinator?.audit ?? vi.fn<AutomaticBackupAudit>();
   const pruneBackups =
     overrides.pruneBackups ?? vi.fn<AutomaticBackupStore['pruneBackups']>(() => Promise.resolve(0));
   const onBackgroundError = vi.fn<(error: unknown) => void>();

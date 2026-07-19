@@ -54,6 +54,7 @@ export function GitShippingPanel({
         onChange={(event) => setStrategy(event.target.value as GitShippingStrategy)}
       >
         <option value="fast-forward-only">Move the primary branch forward (safest)</option>
+        <option value="merge-commit">Create one merge commit (preserve both histories)</option>
         <option value="cherry-pick">Copy the reviewed changes one by one</option>
       </select>
       <button
@@ -72,8 +73,8 @@ export function GitShippingPanel({
       {result?.state === 'conflicted' && (
         <p className="git-shipping-result conflict" role="alert">
           <TriangleAlert size={13} aria-hidden="true" /> Git stopped because of conflicting changes
-          in {result.conflictedPaths.join(', ')}. The primary branch was left untouched — nothing
-          there was changed.
+          in {result.conflictedPaths.join(', ')}. The primary branch commit did not move, but its
+          working tree and index now contain Git's real conflict state for you to resolve or abort.
         </p>
       )}
     </section>

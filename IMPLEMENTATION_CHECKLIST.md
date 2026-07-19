@@ -175,8 +175,8 @@ not be reclassified as future work.
 - [x] Sensitive-context and zero-Forgeboard-outbound integration tests.
 - [x] Collaboration allowlist/two-client privacy integration tests.
 - [x] Complete onboarding-to-merge Electron E2E flow.
-- [ ] Keyboard-only, themes/reduced-motion, permissions/cancel, and multiplayer E2E flows.
-- [ ] Failure E2E coverage for missing CLI, moved repo, collision, conflict, offline server, malformed
+- [x] Keyboard-only, themes/reduced-motion, permissions/cancel, and multiplayer E2E flows.
+- [x] Failure E2E coverage for missing CLI, moved repo, collision, conflict, offline server, malformed
       import, and database recovery.
 - [x] Lint, formatting, typecheck, unit, integration, and E2E suites pass.
 - [x] Production build succeeds.
@@ -1592,3 +1592,59 @@ unchecked when only a subset of their required behavior has proof.
   zero-warning lint, every workspace strict typecheck, 2,521 unit tests across 384 files, 320
   integration tests across 37 files, all three documentation consistency tests, and every production
   build through `corepack pnpm verify`.
+- 2026-07-19: the canvas now constructs one exact-version node registry for all fifteen built-in
+  types and every installed declarative extension type. The same registry drives canvas type labels,
+  icons, ports, accessible node names, keyboard projections, search, rail templates and results, and
+  the inspector type label; persisted definitions remain recoverable when an extension is missing,
+  and extension refresh preserves a user-selected accent colour. Every selected node also receives
+  the shared local/shared comment surfaces and a bounded, locally restored workflow-run history.
+  Focused registry, hydration, history, canvas, and inspector tests passed. Checklist item 94 remains
+  open because group frames still use the intentionally flat ordinary-member model and cannot yet be
+  safely nested without coordinated cycle, inherited-lock, movement, layout, auto-fit, collapse, and
+  deletion semantics.
+- 2026-07-19: audit-before-effect coverage was expanded across Agent, terminal, preview, project-
+  check, provider-auth, readiness, and GitHub CLI subprocess launches; collaboration awareness,
+  update, resynchronization, and delivery-confirmation transport effects; review-note deletion;
+  terminal-retention deletion; and automatic backup pruning. The focused security, collaboration,
+  GitHub CLI, and shell runs passed 78, 53, 38, and 8 tests respectively. Checklist items 43 and 44
+  remain open pending the exhaustive consumer/event inventory and reconciliation of the successful
+  delete-all flow, whose own retained audit history is intentionally erased. The corrected Git
+  commit and selected-hunk discard paths persist their required audit before applying the index or
+  worktree mutation; twelve Git IPC integration tests passed, including forced audit failures that
+  leave both underlying states unchanged.
+- 2026-07-19: managed-worktree review now provides opaque-target, native-confirmed branch rename,
+  archive, and restore flows. Rename changes the real managed branch and durable ownership lineage;
+  archive preserves the branch, commits, files, and dirty work while removing it from active review;
+  archived attempts remain visible and can be restored through the UI after exact revalidation.
+  Merge-commit delivery creates a real two-parent commit, cancellation leaves Git unchanged, and a
+  conflict leaves the authentic index, markers, and operation state available for recovery. Focused
+  lifecycle IPC, Git-engine, storage/renderer/tooltip, and shipping runs passed 2, 20, 28, and 11
+  tests respectively. Recovery now binds the complete ownership lineage and action-kind invariants,
+  commits reconciliation, its audit event, and intent deletion atomically, and durably fsyncs the
+  intent before the filesystem commit point. Six intent-recovery tests, the focused lifecycle engine
+  test, and both combined worktree IPC tests passed; the two-test lifecycle load run also passed with
+  its explicit 90-second load budget. Checklist item 72 remains open for user-selected external-
+  editor handoff, and item 73 remains open for the complete UI-backed squash, rebase, and visual
+  conflict-resolution journey.
+- 2026-07-19: the command bar now uses one keyboard-accessible managed tooltip primitive for Undo,
+  Redo, Fit, Notifications, and Settings, including focus/hover behavior and accessible descriptions.
+  Focused tooltip and command-bar tests passed. Checklist item 88 remains open for equivalent
+  coverage across the remaining primary controls and an exhaustive empty/error/loading-state audit.
+- 2026-07-19: dedicated Electron journeys now exist for a pointer-free first-run-to-agent workflow
+  with computed dark/light and reduced-motion presentation, two simultaneous collaboration profiles
+  sharing cursors/comments/canvas edits without private prompt or credential projection, occupied
+  preview-port collision without a spawned surface, a real unresolved Git conflict that blocks
+  delivery, and user-chosen verified-backup startup recovery from a corrupt database. Existing
+  journeys cover system-theme persistence, permission disclosure and cancellation, missing CLI,
+  moved-repository recovery, offline collaboration with continued local saves, and malformed import
+  rollback. The focused two-profile collaboration privacy journey passed while observing real
+  WebSocket data frames and proving the private prompt and both access tokens were absent from shared
+  data frames and the peer UI. After stabilizing only stale selectors and Electron context/style-
+  settlement races, the complete final-tree set passed all twelve named journeys together in 42.6
+  seconds. This closes checklist items 178 and 179.
+- 2026-07-19: the integrated milestone passed the 1,310-file structure gate, repository formatting,
+  zero-warning lint, every workspace strict typecheck, 2,570 unit tests across 394 files, 327
+  integration tests across 37 files, all three documentation consistency tests, and every production
+  build through `corepack pnpm verify`. The production dependency audit reported no known
+  vulnerabilities. A fresh unsigned macOS arm64 ZIP, DMG, and unpacked application were generated;
+  the packaged first-run, safe-default, demo-project, and real deterministic-agent smoke passed.

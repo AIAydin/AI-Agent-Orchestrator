@@ -958,10 +958,7 @@ describe('CollaborationIpcService ownership and approval', () => {
       deliveryId: rejectedDeliveryId,
       snapshotDigest: 'd'.repeat(64),
       disposition: 'rejected',
-      rejectedCommentIds: [comment.id],
-      rejectedComments: [comment],
       rejectedCommentEntries: [{ comment, rejectedDeliveryId }],
-      dismissedRejectedComments: [],
       expiresAt: NOW,
     };
     store.recoverCollaborationSyncState.mockReturnValue(rejected);

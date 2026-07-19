@@ -407,12 +407,28 @@ describe('launch preparation and execution', () => {
   });
 
   it('detects executable versions and prepares supported resume invocations', async () => {
-    const detection = await detectAgent(nodeManifest());
+    const probes: Array<{
+      readonly kind: 'version' | 'capability';
+      readonly executable: string;
+      readonly arguments: readonly string[];
+    }> = [];
+    const detection = await detectAgent(nodeManifest(), {
+      beforeProbe: (probe) => {
+        probes.push(probe);
+      },
+    });
     expect(detection).toMatchObject({
       available: true,
       executable: process.execPath,
       version: process.version.slice(1),
     });
+    expect(probes).toEqual([
+      {
+        kind: 'version',
+        executable: process.execPath,
+        arguments: ['--version'],
+      },
+    ]);
 
     const cwd = await temporaryDirectory();
     const resumable = BUILT_IN_AGENT_MANIFESTS[0];

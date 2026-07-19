@@ -16,6 +16,7 @@ import {
   WorkspaceStatusIndicators,
   type WorkspaceSharingStatus,
 } from './status/WorkspaceStatusIndicators.js';
+import { WorkspaceTooltip } from './tooltips/WorkspaceTooltip.js';
 
 interface WorkspaceCommandBarProps {
   project: Project;
@@ -86,32 +87,38 @@ export function WorkspaceCommandBar({
         <ChevronDown size={14} />
       </button>
       <span className="toolbar-separator" />
-      <button
-        className="icon-button"
-        type="button"
-        onClick={onUndo}
-        disabled={!canUndo}
-        aria-label="Undo"
-      >
-        <Undo2 size={16} />
-      </button>
-      <button
-        className="icon-button"
-        type="button"
-        onClick={onRedo}
-        disabled={!canRedo}
-        aria-label="Redo"
-      >
-        <Redo2 size={16} />
-      </button>
-      <button
-        className="icon-button"
-        type="button"
-        onClick={onFitCanvas}
-        aria-label="Zoom to fit the canvas"
-      >
-        <Maximize2 size={16} />
-      </button>
+      <WorkspaceTooltip content={canUndo ? 'Undo the last canvas change' : 'Nothing to undo'}>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onUndo}
+          disabled={!canUndo}
+          aria-label="Undo"
+        >
+          <Undo2 size={16} />
+        </button>
+      </WorkspaceTooltip>
+      <WorkspaceTooltip content={canRedo ? 'Redo the last canvas change' : 'Nothing to redo'}>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onRedo}
+          disabled={!canRedo}
+          aria-label="Redo"
+        >
+          <Redo2 size={16} />
+        </button>
+      </WorkspaceTooltip>
+      <WorkspaceTooltip content="Fit every node on the canvas">
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onFitCanvas}
+          aria-label="Zoom to fit the canvas"
+        >
+          <Maximize2 size={16} />
+        </button>
+      </WorkspaceTooltip>
       <button
         className="workflow-run-trigger"
         type="button"
@@ -177,22 +184,30 @@ export function WorkspaceCommandBar({
       <button className="command-trigger" type="button" onClick={onOpenCommands}>
         <Command size={14} /> Commands <kbd>{commandPaletteShortcut}</kbd>
       </button>
-      <button
-        id="workspace-notifications-trigger"
-        className="icon-button"
-        type="button"
-        aria-label="Notifications"
-        aria-expanded={notificationsOpen}
-        aria-haspopup="dialog"
-        aria-controls={notificationsOpen ? 'workspace-notifications' : undefined}
-        title="Local notifications"
-        onClick={onToggleNotifications}
-      >
-        <Bell size={16} />
-      </button>
-      <button className="icon-button" type="button" onClick={onOpenSettings} aria-label="Settings">
-        <Settings size={16} />
-      </button>
+      <WorkspaceTooltip content="Local notifications">
+        <button
+          id="workspace-notifications-trigger"
+          className="icon-button"
+          type="button"
+          aria-label="Notifications"
+          aria-expanded={notificationsOpen}
+          aria-haspopup="dialog"
+          aria-controls={notificationsOpen ? 'workspace-notifications' : undefined}
+          onClick={onToggleNotifications}
+        >
+          <Bell size={16} />
+        </button>
+      </WorkspaceTooltip>
+      <WorkspaceTooltip content="Open Forgeboard settings">
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onOpenSettings}
+          aria-label="Settings"
+        >
+          <Settings size={16} />
+        </button>
+      </WorkspaceTooltip>
     </header>
   );
 }

@@ -11,7 +11,11 @@ const GitPathSchema = z
   .max(32_768)
   .refine((value) => !value.includes('\0'), 'Git paths cannot contain NUL bytes.');
 
-export const GitShippingStrategySchema = z.enum(['fast-forward-only', 'cherry-pick']);
+export const GitShippingStrategySchema = z.enum([
+  'fast-forward-only',
+  'merge-commit',
+  'cherry-pick',
+]);
 export type GitShippingStrategy = z.infer<typeof GitShippingStrategySchema>;
 
 export const GitShippingPlanInputSchema = z

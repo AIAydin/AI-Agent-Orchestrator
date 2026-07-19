@@ -17,6 +17,7 @@ import {
 } from '../readiness/executable-identity.js';
 import type {
   AgentReadinessPreparation,
+  AgentReadinessProbeAttempt,
   AgentReadinessProbePlan,
   AgentReadinessService,
 } from '../readiness/service.js';
@@ -233,12 +234,17 @@ export class ProviderConnectionService {
     }
     this.#assertCurrent(pending);
     const controller = new AbortController();
-    this.#active.set(planId, { ownerId, providerId: pending.view.providerId, controller });
+    this.#active.set(planId, {
+      ownerId,
+      providerId: pending.view.providerId,
+      controller,
+    });
     try {
-      const readiness = await this.readiness.probe(pending.readiness, () => {
+      const readiness = await this.readiness.probe(pending.readiness, (attempt) => {
         assertAuthority();
         this.#assertCurrent(pending);
         throwIfAborted(controller.signal);
+        this.#auditReadinessProbe(pending, attempt);
       });
       assertAuthority();
       this.#assertCurrent(pending);
@@ -362,7 +368,10 @@ export class ProviderConnectionService {
       executableOverride === undefined ? candidate : { agentId: providerId, executableOverride };
     const prepared: AgentReadinessPreparation = await this.readiness.prepare(request);
     if (prepared.outcome !== 'probe' || prepared.plan.request.agentId !== providerId) return null;
-    return { plan: prepared.plan, requestFingerprint: JSON.stringify(prepared.plan.request) };
+    return {
+      plan: prepared.plan,
+      requestFingerprint: JSON.stringify(prepared.plan.request),
+    };
   }
 
   async #run(
@@ -389,7 +398,27 @@ export class ProviderConnectionService {
         assertAuthority();
         this.#assertAvailable();
         throwIfAborted(signal);
+        this.audit.appendAudit('provider-connection', pending.view.action, 'allowed', {
+          providerId: pending.view.providerId,
+          executableSha256: pending.readiness.executableIdentity.sha256,
+          argumentCount: arguments_.length,
+          environmentVariableNames: Object.keys(pending.environment).sort(),
+          commandKind: arguments_ === pending.followUpArguments ? 'status-check' : 'primary',
+          phase: 'authorized-before-spawn',
+        });
       },
+    });
+  }
+
+  #auditReadinessProbe(pending: PendingPlan, attempt: AgentReadinessProbeAttempt): void {
+    this.audit.appendAudit('provider-connection', 'readiness-probe', 'allowed', {
+      providerId: pending.view.providerId,
+      requestedAction: pending.view.action,
+      executableSha256: pending.readiness.executableIdentity.sha256,
+      probeSequence: attempt.sequence,
+      probeKind: attempt.kind,
+      argumentCount: attempt.argumentCount,
+      phase: 'authorized-before-spawn',
     });
   }
 
