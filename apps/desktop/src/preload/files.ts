@@ -17,6 +17,13 @@ import {
   type FileDomainErrorCode,
   type FileIpcResult,
 } from '../shared/files/contracts.js';
+import {
+  PROJECT_IMAGE_IPC_CHANNELS,
+  ProjectImageChooseInputSchema,
+  ProjectImageLoadInputSchema,
+  ProjectImageLoadResultSchema,
+  ProjectImageReferenceSchema,
+} from '../shared/files/images/contracts.js';
 
 export type FileIpcInvoker = (channel: string, ...args: unknown[]) => Promise<unknown>;
 
@@ -74,6 +81,30 @@ export function createFileApi(invoke: FileIpcInvoker): ForgeboardApi['files'] {
         z.null(),
         input,
       );
+    },
+    chooseImage: async (input) =>
+      await invokeFile(
+        invoke,
+        PROJECT_IMAGE_IPC_CHANNELS.choose,
+        ProjectImageChooseInputSchema,
+        ProjectImageReferenceSchema.nullable(),
+        input,
+      ),
+    loadImage: async (input) => {
+      const result = await invokeFile(
+        invoke,
+        PROJECT_IMAGE_IPC_CHANNELS.load,
+        ProjectImageLoadInputSchema,
+        ProjectImageLoadResultSchema,
+        input,
+      );
+      if (result.projectId !== input.projectId || result.relativePath !== input.relativePath) {
+        throw new FileBridgeError(
+          'INVALID_REQUEST',
+          'The project image response did not match the requested reference.',
+        );
+      }
+      return result;
     },
   };
 }

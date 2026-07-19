@@ -28,9 +28,12 @@ describe('CollaboratorRoster', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Idle Reviewer, reviewer, not active right now').textContent).toBe(
-      'IR',
-    );
+    const avatar = screen.getByLabelText('Idle Reviewer, reviewer, not active right now');
+    const tooltip = screen.getByRole('tooltip', {
+      name: 'Idle Reviewer, reviewer, not active right now',
+    });
+    expect(avatar.textContent).toBe('IR');
+    expect(avatar.getAttribute('aria-describedby')).toBe(tooltip.id);
   });
 
   it('bounds visible avatars and reports overflow', () => {

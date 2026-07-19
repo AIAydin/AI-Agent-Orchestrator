@@ -52,7 +52,7 @@ describe('Forgeboard-owned outbound architecture', () => {
     expect(callSites(sources, /\bHocuspocusProvider\b/gu)).toEqual(['collaboration/provider.ts']);
 
     const inviteClient = requiredSource(sources, 'collaboration/invites/http-client.ts');
-    expect(inviteClient.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(3);
+    expect(inviteClient.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(4);
     const managementClient = requiredSource(sources, 'collaboration/management/http-client.ts');
     expect(managementClient.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(7);
     expect(requiredSource(sources, 'collaboration/ipc.ts')).toMatch(

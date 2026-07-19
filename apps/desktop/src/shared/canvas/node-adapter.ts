@@ -300,6 +300,8 @@ function canonicalData(
         ...base,
         excalidraw: raw['excalidraw'],
         annotationIds: raw['annotationIds'],
+        exportArtifactIds: raw['exportArtifactIds'],
+        contextSpecificationArtifactId: raw['contextSpecificationArtifactId'],
       });
     case 'note-image':
       return compact({
@@ -374,6 +376,7 @@ function legacyDataFromCanonical(node: CanvasNode): Record<string, unknown> {
         previewSecondaryPreset: node.data.secondaryPreset,
         previewOrientation: node.data.orientation,
         previewSideBySide: node.data.sideBySide,
+        previewComparison: node.data.comparison,
       });
     default:
       return { ...node.data };
@@ -409,6 +412,7 @@ function canonicalPreviewConfiguration(
     sideBySide: booleanValue(
       previewValueOrPrevious(raw, previous, 'previewSideBySide', 'sideBySide'),
     ),
+    comparison: previewValueOrPrevious(raw, previous, 'previewComparison', 'comparison'),
   });
 }
 

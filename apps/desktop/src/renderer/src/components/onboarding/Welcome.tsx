@@ -26,6 +26,7 @@ import type {
   ProjectRecoveryAssessment,
 } from '../../../../shared/application/contracts.js';
 import { ProjectDialog, type ProjectDialogMode } from './ProjectDialog.js';
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 interface WelcomeProps {
   recent: Project[];
@@ -94,14 +95,16 @@ export function Welcome(props: WelcomeProps) {
             <ShieldCheck size={13} /> Local
           </span>
         </a>
-        <button
-          className="icon-button"
-          type="button"
-          onClick={props.onOpenSettings}
-          aria-label="Settings"
-        >
-          <Settings size={18} />
-        </button>
+        <WorkspaceTooltip content="Open Forgeboard settings">
+          <button
+            className="icon-button"
+            type="button"
+            onClick={props.onOpenSettings}
+            aria-label="Settings"
+          >
+            <Settings size={18} aria-hidden="true" />
+          </button>
+        </WorkspaceTooltip>
       </header>
 
       <section className="welcome-content">
@@ -191,7 +194,7 @@ export function Welcome(props: WelcomeProps) {
             <span>{props.recent.length}</span>
           </div>
           {props.recent.length === 0 ? (
-            <div className="empty-recent">
+            <div className="empty-recent" role="status">
               <FolderGit2 size={24} />
               <div>
                 <strong>No recent projects yet</strong>
@@ -303,15 +306,23 @@ export function Welcome(props: WelcomeProps) {
                   location.
                 </p>
               </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() => setRecovery(null)}
-                disabled={recoveryBusy !== null}
-                aria-label="Close without changing anything"
+              <WorkspaceTooltip
+                content={
+                  recoveryBusy === null
+                    ? 'Close without changing the saved project'
+                    : 'Wait for project recovery to finish'
+                }
               >
-                <X size={16} />
-              </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => setRecovery(null)}
+                  disabled={recoveryBusy !== null}
+                  aria-label="Close without changing anything"
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </WorkspaceTooltip>
             </header>
 
             <div className="recovery-comparison">

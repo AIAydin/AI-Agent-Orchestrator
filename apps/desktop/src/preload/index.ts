@@ -41,7 +41,16 @@ import {
 import {
   GitShippingPlanViewSchema,
   GitShippingResultViewSchema,
+  GitConflictRecoveryPlanViewSchema,
+  GitConflictRecoveryResultViewSchema,
+  GitConflictRecoveryStateViewSchema,
 } from '../shared/git/shipping-contracts.js';
+import {
+  GIT_CONFLICT_RESOLUTION_IPC_CHANNELS,
+  GitConflictInspectionViewSchema,
+  GitConflictResolutionPlanViewSchema,
+  GitConflictResolutionResultViewSchema,
+} from '../shared/git/conflict-resolution/contracts.js';
 import { IntegrityCheckResultSchema } from '../shared/integrity/contracts.js';
 import { PREVIEW_TARGET_IPC_CHANNELS, PreviewTargetListSchema } from '../shared/preview/targets.js';
 import {
@@ -74,7 +83,9 @@ import { createFileApi } from './files.js';
 import { createCollaborationApi } from './collaboration/index.js';
 import { createGitConnectionsApi } from './git/connections/index.js';
 import { createGitLifecycleApi } from './git/lifecycle/cleanup.js';
+import { createGitAgentComparisonApi } from './git/comparison/bridge.js';
 import { createGitDeliveryReadinessApi } from './git/readiness/bridge.js';
+import { createGitIdentityApi } from './git/identity/bridge.js';
 import { createGitRemoteDeliveryApi } from './git/remote/index.js';
 import { createGitReviewNotesApi } from './git-review-notes.js';
 import { createRunHistoryApi } from './runs/history.js';
@@ -84,6 +95,8 @@ import { createTerminalApi } from './terminal/index.js';
 import { createPreviewSurfaceApi } from './preview/surface/index.js';
 import { createProviderConnectionsApi } from './provider-connections/index.js';
 import { createUpdatesApi } from './updates/bridge.js';
+import { createDiagramApi } from './diagram/bridge.js';
+import { createWhiteboardApi } from './whiteboard/bridge.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -95,6 +108,8 @@ async function invokeValidated<Schema extends z.ZodTypeAny>(
 }
 
 const api: ForgeboardApi = {
+  diagram: createDiagramApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
+  whiteboard: createWhiteboardApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
   app: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appInfo),
     onCloseRequested: (listener) => {
@@ -165,9 +180,11 @@ const api: ForgeboardApi = {
   },
   projects: {
     recent: () => ipcRenderer.invoke(IPC_CHANNELS.projectsRecent),
+    refresh: (projectId) => invokeValidated(IPC_CHANNELS.projectsRefresh, ProjectSchema, projectId),
     pick: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPick),
     pickParent: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickParent),
     pickExecutable: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickExecutable),
+    pickExternalApplication: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickExternalApplication),
     pickReferences: (input) =>
       invokeValidated(
         IPC_CHANNELS.projectsPickReferences,
@@ -210,6 +227,8 @@ const api: ForgeboardApi = {
     ...createRunContinuationApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     approve: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsApprove, runId),
     sendInput: (runId, data) => ipcRenderer.invoke(IPC_CHANNELS.runsInput, runId, data),
+    pause: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsPause, runId),
+    continue: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsContinue, runId),
     interrupt: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsInterrupt, runId),
     terminate: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsTerminate, runId),
     onEvent: (listener) => {
@@ -374,6 +393,7 @@ const api: ForgeboardApi = {
       invokeValidated(IPC_CHANNELS.extensionsRemove, ExtensionDiscoveryViewSchema, input),
   },
   git: {
+    identity: createGitIdentityApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
     review: (input) => invokeValidated(IPC_CHANNELS.gitReview, GitReviewViewSchema, input),
     stagePaths: (input) => invokeValidated(IPC_CHANNELS.gitStagePaths, GitReviewViewSchema, input),
     stageHunks: (input) => invokeValidated(IPC_CHANNELS.gitStageHunks, GitReviewViewSchema, input),
@@ -397,6 +417,45 @@ const api: ForgeboardApi = {
         GitShippingResultViewSchema.nullable(),
         input,
       ),
+    conflictRecoveryState: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.gitConflictRecoveryState,
+        GitConflictRecoveryStateViewSchema.nullable(),
+        input,
+      ),
+    prepareConflictRecovery: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.gitPrepareConflictRecovery,
+        GitConflictRecoveryPlanViewSchema,
+        input,
+      ),
+    confirmConflictRecovery: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.gitConfirmConflictRecovery,
+        GitConflictRecoveryResultViewSchema.nullable(),
+        input,
+      ),
+    inspectConflicts: (input) =>
+      invokeValidated(
+        GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.inspect,
+        GitConflictInspectionViewSchema,
+        input,
+      ),
+    prepareConflictFile: (input) =>
+      invokeValidated(
+        GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.prepare,
+        GitConflictResolutionPlanViewSchema,
+        input,
+      ),
+    confirmConflictFile: (input) =>
+      invokeValidated(
+        GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.confirm,
+        GitConflictResolutionResultViewSchema.nullable(),
+        input,
+      ),
+    comparison: createGitAgentComparisonApi((channel, ...args) =>
+      ipcRenderer.invoke(channel, ...args),
+    ),
     readiness: createGitDeliveryReadinessApi((channel, ...args) =>
       ipcRenderer.invoke(channel, ...args),
     ),

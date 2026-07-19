@@ -43,6 +43,10 @@ import type {
 } from '../outbound/outbound-action-gate.js';
 import { executeGitClone } from '../outbound/outbound-executors.js';
 import type { LocalStore } from '../storage.js';
+import {
+  assertExternalApplicationSelection,
+  externalApplicationDialogOptions,
+} from './external-application-selection.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_OUTPUT = 2 * 1024 * 1024;
@@ -116,6 +120,22 @@ export class ProjectService {
       if (project.missing !== missing) this.store.setProjectMissing(project.id, missing);
     }
     return this.store.listProjects();
+  }
+
+  async refreshProject(projectId: string, authority?: ProjectRequestAuthority): Promise<Project> {
+    const project = this.store.getProject(projectId);
+    if (!project) throw new Error('This project is no longer in your recent projects.');
+    const canonicalPath = await realpath(resolve(project.path));
+    const info = await stat(canonicalPath);
+    if (!info.isDirectory()) throw new Error('This project folder is no longer available.');
+    const health = await scanRepository(canonicalPath, this.repositories);
+    authority?.assertCurrent();
+    return this.store.saveProject({
+      ...project,
+      path: canonicalPath,
+      missing: false,
+      health,
+    });
   }
 
   async selectMovedProject(
@@ -293,6 +313,20 @@ export class ProjectService {
     return canonicalPath;
   }
 
+  async pickExternalApplication(authority?: ProjectRequestAuthority): Promise<string | null> {
+    const selection = await this.#showOpenDialog(
+      authority,
+      externalApplicationDialogOptions(process.platform),
+    );
+    authority?.assertCurrent();
+    const candidate = selection.filePaths[0];
+    if (selection.canceled || !candidate) return null;
+    const canonicalPath = await realpath(resolve(candidate));
+    authority?.assertCurrent();
+    assertExternalApplicationSelection(canonicalPath, await stat(canonicalPath), process.platform);
+    return canonicalPath;
+  }
+
   async pickReferences(
     input: LocalReferenceSelectionInput,
     authority?: ProjectRequestAuthority,
@@ -370,6 +404,10 @@ export class ProjectService {
       throw new Error('The project folder must stay inside the location you chose.');
     }
     authority?.assertCurrent();
+    this.store.appendAudit('project', 'create', 'allowed', {
+      name,
+      initializeGit,
+    });
     await mkdir(target, { recursive: false, mode: 0o755 });
     authority?.assertCurrent();
     await writeFile(join(target, 'README.md'), `# ${name}\n\nCreated locally with Forgeboard.\n`, {
@@ -405,10 +443,6 @@ export class ProjectService {
       );
       authority?.assertCurrent();
     }
-    this.store.appendAudit('project', 'create', 'allowed', {
-      name,
-      initializeGit,
-    });
     return this.open(target, authority);
   }
 
@@ -458,6 +492,7 @@ export class ProjectService {
   async createDemo(authority?: ProjectRequestAuthority): Promise<Project> {
     authority?.assertCurrent();
     const target = join(this.electronApp.getPath('userData'), 'demo', 'forgeboard-demo');
+    this.store.appendAudit('project', 'create-demo', 'allowed', { version: 1 });
     await mkdir(join(target, 'src'), { recursive: true, mode: 0o755 });
     authority?.assertCurrent();
     const marker = join(target, '.forgeboard-demo-v1');
@@ -504,7 +539,6 @@ export class ProjectService {
       );
       authority?.assertCurrent();
     }
-    this.store.appendAudit('project', 'create-demo', 'allowed', { version: 1 });
     return this.open(target, authority);
   }
 
@@ -543,6 +577,11 @@ export class ProjectService {
       if (current.path !== project.path) {
         throw new Error('The project location changed after approval. Review it again.');
       }
+      this.store.appendAudit('git', 'initialize', 'allowed', {
+        projectId,
+        repositoryName: current.name,
+        existingFilesPreserved: true,
+      });
       await this.repositories.git.run(['init', '--initial-branch=main'], {
         cwd: current.path,
       });
@@ -554,12 +593,6 @@ export class ProjectService {
         );
       }
       const updated = this.store.saveProject({ ...current, health });
-      this.store.appendAudit('git', 'initialize', 'allowed', {
-        projectId,
-        repositoryName: updated.name,
-        branch: updated.health.branch,
-        existingFilesPreserved: true,
-      });
       return updated;
     } catch (error) {
       this.store.appendAudit('git', 'initialize', 'failed', {

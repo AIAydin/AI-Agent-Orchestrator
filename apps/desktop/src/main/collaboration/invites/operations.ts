@@ -3,13 +3,19 @@ import type { BrowserWindow, Dialog } from 'electron';
 
 import {
   CollaborationInviteCreateInputSchema,
+  CollaborationInviteHistoryPageSchema,
+  CollaborationInviteHistoryViewSchema,
   CollaborationInviteIdSchema,
+  CollaborationInviteListInputSchema,
   CollaborationInviteSafeViewSchema,
   CollaborationJoinInputSchema,
   CollaborationJoinInviteInputSchema,
   collaborationInviteTokenFromLink,
   type CollaborationConnection,
   type CollaborationInviteCreateInput,
+  type CollaborationInviteHistoryPage,
+  type CollaborationInviteHistoryView,
+  type CollaborationInviteListInput,
   type CollaborationInviteRedeemResponse,
   type CollaborationInviteSafeView,
   type CollaborationJoinInput,
@@ -20,6 +26,7 @@ import type { OutboundActionGate } from '../../outbound/outbound-action-gate.js'
 import { createNativeOutboundConfirmation } from '../../outbound/native-confirmation.js';
 import {
   inviteCreateDisclosure,
+  inviteListDisclosure,
   inviteRedeemDisclosure,
   inviteRevokeDisclosure,
 } from './disclosures.js';
@@ -37,7 +44,8 @@ export interface CollaborationInviteOperationsOptions {
   readonly http?: Pick<
     CollaborationInviteHttpClient,
     'createInvite' | 'redeemInvite' | 'revokeInvite'
-  >;
+  > &
+    Partial<Pick<CollaborationInviteHttpClient, 'listInvites'>>;
   readonly session?: CollaborationInviteSessionAuthority;
   readonly clipboard?: { writeText(value: string): void };
 }
@@ -89,11 +97,41 @@ export class CollaborationInviteOperations {
     this.#session.dispose();
   }
 
-  public list(connection: CollaborationConnection): CollaborationInviteSafeView[] {
+  public async listHistory(
+    authority: CollaborationInviteNativeAuthority,
+    connection: CollaborationConnection,
+    rawInput: CollaborationInviteListInput,
+  ): Promise<CollaborationInviteHistoryPage> {
+    const input = CollaborationInviteListInputSchema.parse(rawInput);
     const lease = this.#ownerLease(connection);
-    return CollaborationInviteSafeViewSchema.array()
-      .max(100)
-      .parse(this.#session.createdInviteViews(lease));
+    const disclosure = inviteListDisclosure(lease, input);
+    const plan = this.outbound.prepare(authority.ownerId, disclosure);
+    const result = await this.outbound.confirmAndExecute({
+      ownerId: authority.ownerId,
+      planId: plan.id,
+      confirmation: this.#confirmation(authority),
+      currentDisclosure: () => {
+        authority.assertCurrent();
+        this.#session.assertCurrent(lease);
+        return inviteListDisclosure(lease, input);
+      },
+      execute: async (permit) => {
+        authority.assertCurrent();
+        if (this.#http.listInvites === undefined) {
+          throw new Error('Collaboration invite history is unavailable.');
+        }
+        const page = await this.#http.listInvites(permit, this.#session.assertCurrent(lease), {
+          ...(input.after === undefined ? {} : { after: input.after }),
+          limit: input.limit,
+        });
+        authority.assertCurrent();
+        return this.#session.recordListedPage(lease, page);
+      },
+    });
+    if (result.outcome === 'denied') {
+      throw new Error('The collaboration invite history request was cancelled.');
+    }
+    return CollaborationInviteHistoryPageSchema.parse(result.value);
   }
 
   public async create(
@@ -175,7 +213,7 @@ export class CollaborationInviteOperations {
     authority: CollaborationInviteNativeAuthority,
     connection: CollaborationConnection,
     rawInviteId: string,
-  ): Promise<boolean> {
+  ): Promise<CollaborationInviteHistoryView | null> {
     const inviteId = CollaborationInviteIdSchema.parse(rawInviteId);
     const lease = this.#ownerLease(connection);
     this.#session.authorizeRevoke(lease, inviteId);
@@ -192,16 +230,20 @@ export class CollaborationInviteOperations {
       },
       execute: async (permit) => {
         authority.assertCurrent();
-        await this.#http.revokeInvite(
+        const revoked = await this.#http.revokeInvite(
           permit,
           this.#session.authorizeRevoke(lease, inviteId),
           inviteId,
         );
         authority.assertCurrent();
         this.#session.recordRevokedInvite(lease, inviteId);
+        return CollaborationInviteHistoryViewSchema.parse({
+          ...revoked,
+          copyAvailable: false,
+        });
       },
     });
-    return result.outcome === 'allowed';
+    return result.outcome === 'allowed' ? result.value : null;
   }
 
   public async redeemAndJoin(

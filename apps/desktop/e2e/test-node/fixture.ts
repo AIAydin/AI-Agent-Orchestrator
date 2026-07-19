@@ -47,11 +47,11 @@ export async function configureTestNode(
   const configuration = panel.getByRole('group', {
     name: 'Test command configuration',
   });
-  await configuration.getByLabel('Executable').fill('node');
+  await configuration.getByLabel('Program').fill('node');
   await configuration.getByLabel(/Arguments/u).fill(`-e\n${script}`);
-  await configuration.getByLabel(/Working directory/u).fill('.');
+  await configuration.getByLabel(/Folder to run in/u).fill('.');
   await configuration
-    .getByLabel(/Expected artifacts/u)
+    .getByLabel(/Result files to keep/u)
     .fill(options.includeArtifact === false ? '' : ARTIFACT_PATH);
 }
 
@@ -59,9 +59,9 @@ export async function openLaunchDecision(page: Page): Promise<Locator> {
   const drawer = page.locator('.activity-drawer');
   await drawer.getByRole('tab', { name: /Workflows/ }).click();
   const workflows = drawer.getByRole('tabpanel', { name: 'Workflows' });
-  await workflows.getByRole('button', { name: 'Review launch' }).click();
+  await workflows.getByRole('button', { name: 'Review what will run' }).click();
   const dialog = page.getByRole('dialog', {
-    name: 'Review this workflow launch',
+    name: 'Review what will run',
   });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -71,7 +71,7 @@ export async function expectParsedSummary(
   panel: Locator,
   expected: { passed: number; failed: number; skipped: number; total: number },
 ): Promise<void> {
-  const summary = panel.locator('.test-node-result').first().getByLabel('Parsed test summary');
+  const summary = panel.locator('.test-node-result').first().getByLabel('Test result summary');
   await expect(summary).toContainText(`Passed${String(expected.passed)}`);
   await expect(summary).toContainText(`Failed${String(expected.failed)}`);
   await expect(summary).toContainText(`Skipped${String(expected.skipped)}`);

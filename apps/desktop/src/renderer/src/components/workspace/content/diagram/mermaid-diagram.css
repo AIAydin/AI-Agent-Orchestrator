@@ -1,0 +1,59 @@
+.mermaid-diagram {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.mermaid-diagram > header,
+.mermaid-diagram > footer,
+.mermaid-diagram > header > div {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  justify-content: space-between;
+}
+
+.mermaid-diagram > header > div {
+  justify-content: flex-end;
+}
+
+.mermaid-diagram [role='tab'][aria-selected='true'] {
+  background: var(--surface-active, rgba(116, 98, 210, 0.16));
+}
+
+.mermaid-diagram-body {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.mermaid-diagram.mode-split .mermaid-diagram-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.mermaid-diagram textarea {
+  min-height: 18rem;
+  resize: vertical;
+}
+
+.mermaid-diagram-preview {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.25));
+  border-radius: 0.55rem;
+  display: flex;
+  justify-content: center;
+  min-height: 18rem;
+  overflow: auto;
+  padding: 0.75rem;
+}
+
+.mermaid-diagram-preview img {
+  height: auto;
+  max-height: 32rem;
+  max-width: 100%;
+}
+
+@media (max-width: 960px) {
+  .mermaid-diagram.mode-split .mermaid-diagram-body {
+    grid-template-columns: 1fr;
+  }
+}

@@ -30,6 +30,8 @@ vi.mock('electron', () => ({
 
 import { IPC_CHANNELS } from '../../shared/application/contracts.js';
 import { ExtensionIpcService } from './extension-ipc.js';
+import { ExtensionManager } from './extension-manager.js';
+import { LocalStore } from '../storage.js';
 
 const roots: string[] = [];
 
@@ -56,9 +58,9 @@ describe('ExtensionIpcService', () => {
     const parentWindow = { isDestroyed: vi.fn(() => false) };
     electronMock.fromWebContents.mockReturnValue(parentWindow);
     const service = new ExtensionIpcService(
-      { getPath: () => '/tmp/forgeboard-extension-ipc-test' } as unknown as ConstructorParameters<
-        typeof ExtensionIpcService
-      >[0],
+      {
+        getPath: () => '/tmp/forgeboard-extension-ipc-test',
+      } as unknown as ConstructorParameters<typeof ExtensionIpcService>[0],
       { showOpenDialog } as unknown as ConstructorParameters<typeof ExtensionIpcService>[1],
       { appendAudit: () => undefined } as unknown as ConstructorParameters<
         typeof ExtensionIpcService
@@ -86,7 +88,10 @@ describe('ExtensionIpcService', () => {
 
     destroyed = true;
     listeners.get('destroyed')?.();
-    resolveSelection({ canceled: false, filePaths: ['/tmp/untrusted-after-close'] });
+    resolveSelection({
+      canceled: false,
+      filePaths: ['/tmp/untrusted-after-close'],
+    });
 
     const result = await pendingResult;
     expect(result).toMatchObject({
@@ -131,7 +136,11 @@ describe('ExtensionIpcService', () => {
       } as unknown as ConstructorParameters<typeof ExtensionIpcService>[2],
     );
     service.registerIpcHandlers();
-    const event = liveEvent({ id: 81, isDestroyed: () => false, once: vi.fn() });
+    const event = liveEvent({
+      id: 81,
+      isDestroyed: () => false,
+      once: vi.fn(),
+    });
     const handler = electronMock.handlers.get(IPC_CHANNELS.extensionsChoose);
     if (handler === undefined) throw new Error('Extension chooser handler was not registered.');
     const choosing = handler(event, 'folder');
@@ -240,6 +249,86 @@ describe('ExtensionIpcService', () => {
     await service.dispose();
   });
 
+  it('requires a live cancel-default native review for an exact owner-bound removal', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'forgeboard-extension-ipc-remove-'));
+    roots.push(root);
+    const source = join(root, 'source');
+    await writeExtension(source);
+    const store = new LocalStore(join(root, 'forgeboard.sqlite3'));
+    const registry = new LocalExtensionService(join(root, 'extensions'));
+    const bootstrap = new ExtensionManager(registry, store);
+    const installPlan = await bootstrap.plan(source, 1);
+    await bootstrap.approve(installPlan.planId, 1);
+    const parentWindow = { isDestroyed: vi.fn(() => false) };
+    electronMock.fromWebContents.mockReturnValue(parentWindow);
+    const showMessageBox = vi
+      .fn()
+      .mockResolvedValueOnce({ response: 0, checkboxChecked: false })
+      .mockResolvedValueOnce({ response: 1, checkboxChecked: false });
+    const service = new ExtensionIpcService(
+      { getPath: () => root } as unknown as ConstructorParameters<typeof ExtensionIpcService>[0],
+      {
+        showOpenDialog: vi.fn(),
+        showMessageBox,
+      } as unknown as ConstructorParameters<typeof ExtensionIpcService>[1],
+      store,
+    );
+    service.registerIpcHandlers();
+    const event = liveEvent({
+      id: 92,
+      isDestroyed: () => false,
+      once: vi.fn(),
+    });
+    const removeHandler = electronMock.handlers.get(IPC_CHANNELS.extensionsRemove);
+    if (removeHandler === undefined)
+      throw new Error('Extension removal handler was not registered.');
+
+    await expect(
+      removeHandler(event, {
+        extensionId: 'example.confirmation',
+        confirmation: 'wrong',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'APPROVAL_MISMATCH' },
+    });
+    expect(showMessageBox).not.toHaveBeenCalled();
+
+    await expect(
+      removeHandler(event, {
+        extensionId: 'example.confirmation',
+        confirmation: 'example.confirmation',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'APPROVAL_MISMATCH' },
+    });
+    expect((await registry.discover()).installed).toHaveLength(1);
+    expect(showMessageBox.mock.calls[0]?.[0]).toBe(parentWindow);
+    expect(showMessageBox.mock.calls[0]?.[1]).toMatchObject({
+      buttons: ['Cancel', 'Remove extension'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    expect(JSON.stringify(showMessageBox.mock.calls[0]?.[1])).not.toContain(source);
+
+    await expect(
+      removeHandler(event, {
+        extensionId: 'example.confirmation',
+        confirmation: 'example.confirmation',
+      }),
+    ).resolves.toMatchObject({ ok: true, value: { installed: [] } });
+    expect((await registry.discover()).installed).toEqual([]);
+    const removalAudits = store
+      .listAuditEvents(50)
+      .filter((event) => event.category === 'extension' && event.action === 'remove');
+    expect(removalAudits.map((event) => event.outcome)).toEqual(
+      expect.arrayContaining(['allowed', 'denied']),
+    );
+    await service.dispose();
+    store.close();
+  });
+
   it('rejects subframe extension requests before opening a native chooser', async () => {
     const root = await mkdtemp(join(tmpdir(), 'forgeboard-extension-ipc-'));
     roots.push(root);
@@ -250,7 +339,11 @@ describe('ExtensionIpcService', () => {
       { appendAudit: vi.fn() } as unknown as ConstructorParameters<typeof ExtensionIpcService>[2],
     );
     service.registerIpcHandlers();
-    const event = liveEvent({ id: 101, isDestroyed: () => false, once: vi.fn() });
+    const event = liveEvent({
+      id: 101,
+      isDestroyed: () => false,
+      once: vi.fn(),
+    });
     Object.defineProperty(event, 'senderFrame', { value: {} });
 
     const result = await electronMock.handlers.get(IPC_CHANNELS.extensionsChoose)?.(

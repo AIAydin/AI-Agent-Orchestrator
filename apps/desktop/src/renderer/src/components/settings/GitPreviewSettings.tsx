@@ -6,6 +6,7 @@ import { GitConnectionsSettings } from './git-connections/index.js';
 import { FolderReadinessEvidence } from './readiness/FolderReadinessEvidence.js';
 import type { FolderReadinessStatus } from './readiness/useSettingsFolderReadiness.js';
 import { CommandEditor, SettingsSection, type AsyncSettingsProps } from './shared.js';
+import { GitIdentityCheck } from './git-identity/GitIdentityCheck.js';
 
 interface GitPreviewSettingsProps extends AsyncSettingsProps {
   readonly projects: readonly Project[];
@@ -31,6 +32,13 @@ export function GitPreviewSettings({
   async function chooseExecutable(onSelected: (path: string) => void) {
     await perform(async () => {
       const selected = unwrap(await window.forgeboard.projects.pickExecutable());
+      if (selected) onSelected(selected);
+    });
+  }
+
+  async function chooseExternalApplication(onSelected: (path: string) => void) {
+    await perform(async () => {
+      const selected = unwrap(await window.forgeboard.projects.pickExternalApplication());
       if (selected) onSelected(selected);
     });
   }
@@ -139,6 +147,49 @@ export function GitPreviewSettings({
               onChange={(event) => setDraft({ ...draft, gitIdentityName: event.target.value })}
             />
           </label>
+          <div className="settings-form-field">
+            <label htmlFor="external-editor-executable">External application</label>
+            <span className="path-picker">
+              <input
+                id="external-editor-executable"
+                name="external-editor-executable"
+                value={draft.externalEditorExecutable}
+                placeholder="Use the system default"
+                readOnly
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  void chooseExternalApplication((externalEditorExecutable) =>
+                    setDraft((current) => ({
+                      ...current,
+                      externalEditorExecutable,
+                    })),
+                  )
+                }
+              >
+                Browse
+              </button>
+              <button
+                type="button"
+                disabled={draft.externalEditorExecutable === ''}
+                onClick={() =>
+                  setDraft((current) => ({
+                    ...current,
+                    externalEditorExecutable: '',
+                  }))
+                }
+              >
+                Use system default
+              </button>
+            </span>
+            <small>
+              On macOS, choose an application bundle such as Visual Studio Code.app, or choose an
+              exact executable on any platform. Forgeboard reviews the selected identity and opens
+              the workspace without a shell. Leave this empty to use your operating system’s
+              registered application.
+            </small>
+          </div>
           <label>
             Git identity email
             <input
@@ -155,6 +206,13 @@ export function GitPreviewSettings({
           Fill in both fields or leave both empty. Forgeboard shows the exact name and email again
           for you to confirm before every commit.
         </small>
+        <GitIdentityCheck
+          name={draft.gitIdentityName}
+          email={draft.gitIdentityEmail}
+          activeProject={activeProject}
+          busy={busy}
+          perform={perform}
+        />
       </SettingsSection>
       <SettingsSection
         title="Git remote"

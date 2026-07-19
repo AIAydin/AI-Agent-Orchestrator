@@ -52,6 +52,10 @@ import {
   type CollaborationProviderHandle,
   type CollaborationProviderStatus,
 } from './provider.js';
+import type {
+  CollaborationTransportEffect,
+  CollaborationTransportEffectAuthorizer,
+} from './transport-effects.js';
 
 const DEFAULT_JOIN_TIMEOUT_MS = 15_000;
 const DEFAULT_DELIVERY_ACKNOWLEDGEMENT_TIMEOUT_MS = 10_000;
@@ -92,6 +96,7 @@ interface PendingDelivery {
   readonly request: CollaborationDeliveryRequest;
   readonly snapshotDigest: string;
   timeout: ReturnType<typeof setTimeout> | null;
+  attempts: number;
 }
 
 export interface CollaborationClientOptions {
@@ -101,6 +106,7 @@ export interface CollaborationClientOptions {
   readonly now?: () => Date;
   readonly joinTimeoutMs?: number;
   readonly deliveryAcknowledgementTimeoutMs?: number;
+  readonly authorizeTransportEffect?: CollaborationTransportEffectAuthorizer;
 }
 
 export class CollaborationClient {
@@ -111,6 +117,7 @@ export class CollaborationClient {
   readonly #now: () => Date;
   readonly #joinTimeoutMs: number;
   readonly #deliveryAcknowledgementTimeoutMs: number;
+  readonly #authorizeTransportEffect: CollaborationTransportEffectAuthorizer;
   #connection: CollaborationConnection | null = null;
   #provider: CollaborationProviderHandle | null = null;
   #document: Y.Doc | null = null;
@@ -139,6 +146,7 @@ export class CollaborationClient {
     this.#joinTimeoutMs = options.joinTimeoutMs ?? DEFAULT_JOIN_TIMEOUT_MS;
     this.#deliveryAcknowledgementTimeoutMs =
       options.deliveryAcknowledgementTimeoutMs ?? DEFAULT_DELIVERY_ACKNOWLEDGEMENT_TIMEOUT_MS;
+    this.#authorizeTransportEffect = options.authorizeTransportEffect ?? (() => undefined);
     if (!Number.isSafeInteger(this.#joinTimeoutMs) || this.#joinTimeoutMs <= 0) {
       throw new Error('The collaboration join timeout must be a positive safe integer.');
     }
@@ -292,6 +300,7 @@ export class CollaborationClient {
         accessToken: input.accessToken,
         reconnect: input.reconnect,
         initialAwareness: this.#localAwarenessState(),
+        authorizeTransportEffect: (effect) => this.#authorizeEffect(effect),
         onAuthenticated: () => this.#handleAuthenticated(generation),
         onAuthenticationFailed: () =>
           this.#fail(
@@ -570,6 +579,7 @@ export class CollaborationClient {
       request,
       snapshotDigest: receipt.snapshotDigest,
       timeout: null,
+      attempts: 0,
     });
     this.#releaseDeliveryReservation();
     if (this.#sharingReady()) this.#sendDeliveryConfirmation(request.deliveryId);
@@ -858,6 +868,17 @@ export class CollaborationClient {
     }
     const pending = this.#pendingDeliveries.get(response.deliveryId);
     if (pending === undefined || pending.request.stateVector !== response.stateVector) return;
+    try {
+      this.#authorizeEffect({
+        kind: 'delivery-settlement',
+        disposition: response.type === 'delivery-acknowledged' ? 'acknowledged' : 'rejected',
+        deliveryId: response.deliveryId,
+      });
+    } catch {
+      // Keep the exact delivery pending. Its bounded timer will reject it honestly if required
+      // audit storage remains unavailable, and reconnect can retry without claiming success.
+      return;
+    }
     if (pending.timeout !== null) clearTimeout(pending.timeout);
     this.#pendingDeliveries.delete(response.deliveryId);
     const duringReconnect = this.#connection.status === 'reconnecting';
@@ -896,7 +917,14 @@ export class CollaborationClient {
     const pending = this.#pendingDeliveries.get(deliveryId);
     if (pending === undefined || pending.timeout !== null || this.#provider === null) return;
     try {
+      this.#authorizeEffect({
+        kind: 'delivery-confirmation',
+        phase: pending.attempts === 0 ? 'initial' : 'retry',
+        deliveryId,
+        attempt: pending.attempts,
+      });
       this.#provider.sendStateless(JSON.stringify(pending.request));
+      pending.attempts += 1;
     } catch {
       // The Yjs update and durable local receipt already exist. Keep the confirmation pending so a
       // late response can still settle it, or reject it honestly when the bounded timeout expires.
@@ -912,6 +940,17 @@ export class CollaborationClient {
     const pending = this.#pendingDeliveries.get(deliveryId);
     const connection = this.#connection;
     if (pending === undefined || connection === null) return;
+    try {
+      this.#authorizeEffect({
+        kind: 'delivery-settlement',
+        disposition: 'rejected',
+        deliveryId,
+      });
+    } catch {
+      // Preserve the durable local intent and make it eligible for a later reconnect retry.
+      pending.timeout = null;
+      return;
+    }
     this.#pendingDeliveries.delete(deliveryId);
     const duringReconnect = connection.status === 'reconnecting';
     this.#emit({
@@ -966,6 +1005,10 @@ export class CollaborationClient {
       },
       ...this.#latestAwareness,
     });
+  }
+
+  #authorizeEffect(effect: CollaborationTransportEffect): void {
+    this.#authorizeTransportEffect(effect);
   }
 
   #fail(generation: number, error: CollaborationConnectionError): void {

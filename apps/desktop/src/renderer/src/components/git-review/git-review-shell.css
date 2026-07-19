@@ -57,6 +57,37 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.git-worktree-metadata-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 8px 12px;
+  align-items: end;
+  margin-top: 6px;
+}
+.git-worktree-metadata-panel label,
+.git-worktree-metadata-review {
+  display: grid;
+  gap: 5px;
+}
+.git-worktree-metadata-panel > div,
+.git-worktree-metadata-review > div {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.git-worktree-metadata-review {
+  grid-column: 1 / -1;
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+.git-worktree-target .git-worktree-metadata-review p,
+.git-worktree-target .git-worktree-metadata-review small {
+  overflow: visible;
+  white-space: normal;
+}
 .git-worktree-target small {
   grid-column: 1 / -1;
   color: var(--text-faint);
@@ -69,14 +100,21 @@
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
-.git-review-summary > div {
+.git-review-summary > .workspace-tooltip-target,
+.git-review-summary > .workspace-tooltip-target > div {
+  min-width: 0;
+  width: 100%;
+}
+.git-review-summary > div,
+.git-review-summary > .workspace-tooltip-target > div {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--text-soft);
 }
-.git-review-summary > div > span {
+.git-review-summary > div > span,
+.git-review-summary > .workspace-tooltip-target > div > span {
   min-width: 0;
   display: flex;
   flex-direction: column;

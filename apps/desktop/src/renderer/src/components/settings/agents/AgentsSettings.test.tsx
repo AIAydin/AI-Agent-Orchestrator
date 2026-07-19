@@ -176,6 +176,8 @@ function Harness({ checkAgentReadiness }: { readonly checkAgentReadiness: CheckA
       busy={false}
       perform={async (operation) => await operation()}
       readiness={readiness}
+      dockerReadiness={null}
+      onDockerReadinessChange={() => undefined}
       onError={(message) => {
         throw new Error(message);
       }}

@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 
 import type { TerminalLaunchPlanView } from '../../../../../shared/terminal/index.js';
 import { trapModalFocus } from '../../../lib/modal-focus.js';
+import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 
 interface TerminalLaunchReviewDialogProps {
   readonly plan: TerminalLaunchPlanView;
@@ -76,16 +77,20 @@ export function TerminalLaunchReviewDialog({
               Your computer will then ask you to confirm once more.
             </p>
           </div>
-          <button
-            ref={cancelButtonRef}
-            type="button"
-            className="icon-button"
-            aria-label="Cancel review"
-            disabled={busy}
-            onClick={onCancel}
+          <WorkspaceTooltip
+            content={busy ? 'Wait for terminal confirmation to finish' : 'Cancel terminal review'}
           >
-            <X size={15} aria-hidden="true" />
-          </button>
+            <button
+              ref={cancelButtonRef}
+              type="button"
+              className="icon-button"
+              aria-label="Cancel review"
+              disabled={busy}
+              onClick={onCancel}
+            >
+              <X size={15} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
         </header>
 
         <div className="terminal-launch-review-scroll">

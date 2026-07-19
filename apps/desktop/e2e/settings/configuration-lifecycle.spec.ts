@@ -124,7 +124,9 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
 
       await settings.getByRole('button', { name: 'Restore defaults' }).click();
       await expect(settings.getByText(/Defaults loaded as a draft/u)).toBeVisible();
-      await settings.getByRole('button', { name: 'Save settings' }).click();
+      await approveNextRetentionReduction(electronApp, async () => {
+        await settings.getByRole('button', { name: 'Save settings' }).click();
+      });
       await expect(settings).toBeHidden();
       settings = await openSettings(session.page);
       await expect(settings.getByRole('button', { name: 'system' })).toHaveAttribute(
@@ -139,8 +141,7 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
       await expect(settings.getByText(/Settings loaded as a draft/u)).toBeVisible();
       const blockedSave = settings.getByRole('button', { name: 'Save settings' });
       await expect(blockedSave).toBeDisabled();
-      await expect(blockedSave).toHaveAttribute(
-        'title',
+      await expect(blockedSave).toHaveAccessibleDescription(
         /does not exist|not a directory|not an ordinary folder/u,
       );
       await settings.getByRole('button', { name: 'Close settings' }).click();
@@ -167,7 +168,7 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
 
 async function useSafeDefaults(page: Page): Promise<void> {
   await page
-    .getByRole('dialog', { name: /Set up Forgeboard in a few quick steps/i })
+    .getByRole('dialog', { name: 'Ready to build without wiring config files?' })
     .getByRole('button', { name: 'Use safe defaults' })
     .click();
 }
@@ -184,4 +185,116 @@ async function openDataSettings(page: Page) {
   await settings.getByRole('button', { name: 'Data & privacy' }).click();
   await expect(settings.getByRole('heading', { name: 'Export and import' })).toBeVisible();
   return settings;
+}
+
+async function approveNextRetentionReduction(
+  app: ElectronApplication,
+  save: () => Promise<void>,
+): Promise<void> {
+  await app.evaluate(({ dialog }) => {
+    interface RetentionDialogState {
+      error?: string;
+      originalDescriptor: PropertyDescriptor | undefined;
+      status: 'armed' | 'approved' | 'rejected';
+    }
+    const state = globalThis as typeof globalThis & {
+      __forgeboardSettingsRetentionDialog?: RetentionDialogState;
+    };
+    const originalDescriptor = Object.getOwnPropertyDescriptor(dialog, 'showMessageBox');
+    const record: RetentionDialogState = { originalDescriptor, status: 'armed' };
+
+    function restore(): void {
+      if (Object.getOwnPropertyDescriptor(dialog, 'showMessageBox')?.value !== interceptor) return;
+      if (originalDescriptor === undefined) Reflect.deleteProperty(dialog, 'showMessageBox');
+      else Object.defineProperty(dialog, 'showMessageBox', originalDescriptor);
+    }
+
+    function interceptor(...arguments_: unknown[]) {
+      restore();
+      const options = arguments_.at(-1) as
+        | {
+            buttons?: unknown;
+            cancelId?: unknown;
+            defaultId?: unknown;
+            detail?: unknown;
+            message?: unknown;
+            noLink?: unknown;
+            title?: unknown;
+            type?: unknown;
+          }
+        | undefined;
+      const expectedDetail = [
+        'Transcripts and completed run/check history: 45 to 30 days',
+        'Activity history: 400 to 365 days',
+        'Canvas snapshots per canvas: 125 to 100',
+        '',
+        'This applies immediately when Settings are saved and cannot be undone unless the data exists in a backup.',
+      ].join('\n');
+      const errors = [
+        options?.type === 'warning' ? undefined : 'type must be warning',
+        options?.title === 'Delete older local history?'
+          ? undefined
+          : 'title must identify deletion',
+        options?.message === 'These retention changes can permanently delete older local history.'
+          ? undefined
+          : 'message must disclose permanent deletion',
+        JSON.stringify(options?.buttons) ===
+        JSON.stringify(['Cancel', 'Save and delete older data'])
+          ? undefined
+          : 'buttons must be Cancel then Save and delete older data',
+        options?.defaultId === 0 ? undefined : 'Cancel must be the default action',
+        options?.cancelId === 0 ? undefined : 'Cancel must be the escape action',
+        options?.noLink === true ? undefined : 'native links must be disabled',
+        options?.detail === expectedDetail ? undefined : 'detail must list the exact reductions',
+      ].filter((error): error is string => error !== undefined);
+
+      if (errors.length > 0) {
+        record.error = errors.join('; ');
+        record.status = 'rejected';
+        return Promise.resolve({ response: 0, checkboxChecked: false });
+      }
+      record.status = 'approved';
+      return Promise.resolve({ response: 1, checkboxChecked: false });
+    }
+
+    state.__forgeboardSettingsRetentionDialog = record;
+    Object.defineProperty(dialog, 'showMessageBox', { configurable: true, value: interceptor });
+  });
+
+  try {
+    await save();
+    await expect
+      .poll(
+        async () =>
+          await app.evaluate(() => {
+            const state = globalThis as typeof globalThis & {
+              __forgeboardSettingsRetentionDialog?: { status: string };
+            };
+            return state.__forgeboardSettingsRetentionDialog?.status ?? 'missing';
+          }),
+      )
+      .not.toBe('armed');
+    const result = await app.evaluate(() => {
+      const state = globalThis as typeof globalThis & {
+        __forgeboardSettingsRetentionDialog?: { error?: string; status: string };
+      };
+      return state.__forgeboardSettingsRetentionDialog;
+    });
+    expect(result?.status, result?.error).toBe('approved');
+  } finally {
+    await app.evaluate(({ dialog }) => {
+      const state = globalThis as typeof globalThis & {
+        __forgeboardSettingsRetentionDialog?: {
+          originalDescriptor: PropertyDescriptor | undefined;
+        };
+      };
+      const record = state.__forgeboardSettingsRetentionDialog;
+      if (record !== undefined) {
+        if (record.originalDescriptor === undefined)
+          Reflect.deleteProperty(dialog, 'showMessageBox');
+        else Object.defineProperty(dialog, 'showMessageBox', record.originalDescriptor);
+      }
+      delete state.__forgeboardSettingsRetentionDialog;
+    });
+  }
 }

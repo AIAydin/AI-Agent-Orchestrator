@@ -1,6 +1,6 @@
 import type { WorkshopNode } from '../../CanvasNode.js';
 import type { WorkshopEdge } from '../../../model/types.js';
-import { reconcileGroupMembership } from './group-containment.js';
+import { descendantIds, reconcileGroupMembership } from './group-containment.js';
 
 export interface GroupDisplayProjection {
   readonly nodes: WorkshopNode[];
@@ -15,11 +15,11 @@ export function projectGroupDisplay(
   nodes: readonly WorkshopNode[],
   edges: readonly WorkshopEdge[],
 ): GroupDisplayProjection {
-  const nodesById = new Map(nodes.map((node) => [node.id, node] as const));
+  const reconciled = reconcileGroupMembership(nodes);
   const hiddenMemberIds = new Set(
-    reconcileGroupMembership(nodes)
-      .memberships.filter(({ frameId }) => nodesById.get(frameId)?.data.collapsed === true)
-      .map(({ childId }) => childId),
+    reconciled.nodes
+      .filter((node) => node.data.kind === 'group-frame' && node.data.collapsed === true)
+      .flatMap((frame) => descendantIds(reconciled.nodes, frame.id)),
   );
   const frameLayer = groupFrameLayer(nodes);
   const projectedNodes = nodes.map((node) => projectNode(node, hiddenMemberIds, frameLayer));

@@ -273,9 +273,7 @@ function applyNodeMetadata(
     status: localNodeStatus(metadata.status, node.status),
     locked: metadata.locked ?? frameGroup?.locked ?? false,
     collapsed: metadata.collapsed ?? frameGroup?.collapsed ?? false,
-    ...(metadata.groupId === undefined || node.type === 'group-frame'
-      ? {}
-      : { groupId: metadata.groupId }),
+    ...(metadata.groupId === undefined ? {} : { groupId: metadata.groupId }),
     comments: [...mergedComments.values()],
     inspector: {
       ...inspector,
@@ -359,7 +357,7 @@ function mergedGroups(
   const localNodes = new Map(local.nodes.map((node) => [node.id, node]));
   const remoteMembers = new Map<string, string[]>();
   for (const node of Object.values(snapshot.nodes)) {
-    if (node.groupId === undefined || node.type === 'group-frame') continue;
+    if (node.groupId === undefined) continue;
     const members = remoteMembers.get(node.groupId) ?? [];
     members.push(node.id);
     remoteMembers.set(node.groupId, members);
@@ -462,7 +460,7 @@ function collaborationGroupMemberIds(
 ): ReadonlyMap<string, string[]> {
   const membersByGroup = new Map<string, Set<string>>();
   for (const node of Object.values(snapshot.nodes)) {
-    if (node.groupId === undefined || node.type === 'group-frame') continue;
+    if (node.groupId === undefined) continue;
     appendUnique(membersByGroup, node.groupId, node.id);
   }
 

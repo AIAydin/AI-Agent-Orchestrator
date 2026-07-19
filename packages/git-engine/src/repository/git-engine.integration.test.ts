@@ -20,6 +20,7 @@ import type {
   DiscardHunksApproval,
   MergeApproval,
   RenameManagedBranchApproval,
+  RestoreArchivedWorktreeApproval,
   WorktreeOwnership,
 } from '../model/types.js';
 import { WorktreeService } from './worktrees.js';
@@ -1007,6 +1008,82 @@ describe('parallel worktree change lifecycle', () => {
       code: 'APPROVAL_MISMATCH',
     });
 
+    const persistenceFailureBranch = 'forgeboard/persistence-failure/left';
+    const failingPersistenceWorktrees = new WorktreeService(repositories, {
+      beforePersistOwnership: (candidate) => {
+        if (candidate.branch === persistenceFailureBranch) {
+          throw new Error('simulated ownership persistence failure');
+        }
+      },
+    });
+    const persistenceFailureImpact = await failingPersistenceWorktrees.branchRenameImpact(
+      left.ownership,
+      persistenceFailureBranch,
+    );
+    await expect(
+      failingPersistenceWorktrees.renameBranch(left.ownership, {
+        action: 'rename-managed-branch',
+        ...approvalBase(
+          persistenceFailureImpact.ownership.repositoryRoot,
+          persistenceFailureImpact.expectedHead,
+        ),
+        worktreeId: persistenceFailureImpact.ownership.id,
+        worktreePath: persistenceFailureImpact.ownership.worktreePath,
+        oldBranch: persistenceFailureImpact.oldBranch,
+        newBranch: persistenceFailureImpact.newBranch,
+        expectedBranchOid: persistenceFailureImpact.branchOid ?? '',
+        dirtyPaths: persistenceFailureImpact.dirtyPaths,
+      }),
+    ).rejects.toThrow(/restored the original managed branch name/iu);
+    expect(await repositories.currentBranch(left.ownership.worktreePath)).toBe(
+      left.ownership.branch,
+    );
+    expect((await worktrees.readOwnership(fixture.managedRoot, left.ownership.id)).branch).toBe(
+      left.ownership.branch,
+    );
+    expect(await repositories.branchExists(fixture.repository, persistenceFailureBranch)).toBe(
+      false,
+    );
+
+    const syncFailureBranch = 'forgeboard/sync-failure/left';
+    const failingDirectorySyncWorktrees = new WorktreeService(repositories, {
+      syncOwnershipDirectory: () => Promise.reject(new Error('simulated directory fsync failure')),
+    });
+    const syncFailureImpact = await failingDirectorySyncWorktrees.branchRenameImpact(
+      left.ownership,
+      syncFailureBranch,
+    );
+    const syncFailureRenamed = await failingDirectorySyncWorktrees.renameBranch(left.ownership, {
+      action: 'rename-managed-branch',
+      ...approvalBase(syncFailureImpact.ownership.repositoryRoot, syncFailureImpact.expectedHead),
+      worktreeId: syncFailureImpact.ownership.id,
+      worktreePath: syncFailureImpact.ownership.worktreePath,
+      oldBranch: syncFailureImpact.oldBranch,
+      newBranch: syncFailureImpact.newBranch,
+      expectedBranchOid: syncFailureImpact.branchOid ?? '',
+      dirtyPaths: syncFailureImpact.dirtyPaths,
+    });
+    expect(syncFailureRenamed.branch).toBe(syncFailureBranch);
+    expect(await repositories.currentBranch(left.ownership.worktreePath)).toBe(syncFailureBranch);
+    expect((await worktrees.readOwnership(fixture.managedRoot, left.ownership.id)).branch).toBe(
+      syncFailureBranch,
+    );
+
+    const restoredNameImpact = await worktrees.branchRenameImpact(
+      syncFailureRenamed,
+      left.ownership.branch,
+    );
+    await worktrees.renameBranch(syncFailureRenamed, {
+      action: 'rename-managed-branch',
+      ...approvalBase(restoredNameImpact.ownership.repositoryRoot, restoredNameImpact.expectedHead),
+      worktreeId: restoredNameImpact.ownership.id,
+      worktreePath: restoredNameImpact.ownership.worktreePath,
+      oldBranch: restoredNameImpact.oldBranch,
+      newBranch: restoredNameImpact.newBranch,
+      expectedBranchOid: restoredNameImpact.branchOid ?? '',
+      dirtyPaths: restoredNameImpact.dirtyPaths,
+    });
+
     const currentImpact = await worktrees.branchRenameImpact(
       left.ownership,
       'forgeboard/renamed/left',
@@ -1042,6 +1119,39 @@ describe('parallel worktree change lifecycle', () => {
       'archived',
     );
     expect(await repositories.branchExists(fixture.repository, archived.branch)).toBe(true);
+
+    const restoreImpact = await worktrees.archiveImpact(archived);
+    await writeFile(path.join(archived.worktreePath, 'post-archive.txt'), 'still retained\n');
+    const staleRestore: RestoreArchivedWorktreeApproval = {
+      action: 'restore-archived-worktree',
+      ...approvalBase(restoreImpact.ownership.repositoryRoot, restoreImpact.expectedHead),
+      worktreeId: restoreImpact.ownership.id,
+      worktreePath: restoreImpact.ownership.worktreePath,
+      branch: restoreImpact.ownership.branch,
+      expectedBranchOid: restoreImpact.branchOid,
+      dirtyPaths: restoreImpact.dirtyPaths,
+    };
+    await expect(worktrees.restoreArchived(archived, staleRestore)).rejects.toMatchObject({
+      code: 'APPROVAL_MISMATCH',
+    });
+    const currentRestoreImpact = await worktrees.archiveImpact(archived);
+    const restoreApproval: RestoreArchivedWorktreeApproval = {
+      action: 'restore-archived-worktree',
+      ...approvalBase(
+        currentRestoreImpact.ownership.repositoryRoot,
+        currentRestoreImpact.expectedHead,
+      ),
+      worktreeId: currentRestoreImpact.ownership.id,
+      worktreePath: currentRestoreImpact.ownership.worktreePath,
+      branch: currentRestoreImpact.ownership.branch,
+      expectedBranchOid: currentRestoreImpact.branchOid,
+      dirtyPaths: currentRestoreImpact.dirtyPaths,
+    };
+    const restored = await worktrees.restoreArchived(archived, restoreApproval);
+    expect(restored.status).toBe('active');
+    expect(await readFile(path.join(restored.worktreePath, 'post-archive.txt'), 'utf8')).toBe(
+      'still retained\n',
+    );
   });
 
   it('detects merge conflicts and requires content-bound approvals to abort or continue', async () => {
@@ -1116,8 +1226,22 @@ describe('parallel worktree change lifecycle', () => {
     expect(await readFile(path.join(fixture.repository, 'README.md'), 'utf8')).toBe('# main\n');
 
     await beginMerge();
-    await writeFile(path.join(fixture.repository, 'README.md'), '# resolved\n');
-    await runGit(fixture.repository, ['add', '--', 'README.md']);
+    const reviewedResolution = '# reviewed resolution\n';
+    const racedWorktreeContent = '# changed after authority hook\n';
+    await changes.stageExactContent(
+      fixture.repository,
+      'README.md',
+      Buffer.from(reviewedResolution),
+      {
+        beforeApply: async () => {
+          await writeFile(path.join(fixture.repository, 'README.md'), racedWorktreeContent);
+        },
+      },
+    );
+    expect(await runGit(fixture.repository, ['show', ':README.md'])).toBe(reviewedResolution);
+    expect(await readFile(path.join(fixture.repository, 'README.md'), 'utf8')).toBe(
+      racedWorktreeContent,
+    );
     const continueState = await changes.continuationState(fixture.repository);
     expect(continueState.canContinue).toBe(true);
     const continueApproval: ContinueGitOperationApproval = {
@@ -1133,6 +1257,77 @@ describe('parallel worktree change lifecycle', () => {
       'completed',
     );
     expect((await changes.continuationState(fixture.repository)).operation).toBeNull();
-    expect(await readFile(path.join(fixture.repository, 'README.md'), 'utf8')).toBe('# resolved\n');
+    expect(await runGit(fixture.repository, ['show', 'HEAD:README.md'])).toBe(reviewedResolution);
+    expect(await readFile(path.join(fixture.repository, 'README.md'), 'utf8')).toBe(
+      racedWorktreeContent,
+    );
+  });
+
+  it('keeps squash conflicts recoverable and commits one parent only after exact continuation', async () => {
+    const fixture = await createTemporaryRepository();
+    fixtures.push(fixture);
+    const changes = new ChangeService(new RepositoryService());
+    await runGit(fixture.repository, ['checkout', '-b', 'squash-topic']);
+    await writeFile(path.join(fixture.repository, 'README.md'), '# squash topic\n');
+    await runGit(fixture.repository, ['add', '--', 'README.md']);
+    await runGit(fixture.repository, ['commit', '-m', 'Squash topic']);
+    const topicOid = (await runGit(fixture.repository, ['rev-parse', 'HEAD'])).trim();
+    await runGit(fixture.repository, ['checkout', 'main']);
+    await writeFile(path.join(fixture.repository, 'README.md'), '# squash main\n');
+    await runGit(fixture.repository, ['add', '--', 'README.md']);
+    await runGit(fixture.repository, ['commit', '-m', 'Squash main']);
+    const primaryHead = (await runGit(fixture.repository, ['rev-parse', 'HEAD'])).trim();
+
+    const beginSquash = async () => {
+      const snapshot = await changes.approvalSnapshot(fixture.repository);
+      return await changes.merge(fixture.repository, {
+        action: 'merge',
+        ...approvalBase(snapshot.repositoryRoot, snapshot.expectedHead),
+        sourceRef: 'squash-topic',
+        expectedSourceOid: topicOid,
+        targetBranch: 'main',
+        strategy: 'squash',
+      });
+    };
+    expect((await beginSquash()).state).toBe('conflicted');
+    const abortState = await changes.continuationState(fixture.repository);
+    expect(abortState).toMatchObject({
+      operation: 'squash',
+      canAbort: true,
+      canContinue: false,
+    });
+    await changes.abortOperation(fixture.repository, {
+      action: 'abort-git-operation',
+      ...approvalBase(abortState.repositoryRoot, abortState.expectedHead),
+      operation: 'squash',
+      conflictedPaths: abortState.conflictedPaths,
+      stagedPaths: abortState.stagedPaths,
+      stagedPatchSha256: abortState.stagedPatchSha256,
+      unstagedPatchSha256: abortState.unstagedPatchSha256,
+    });
+    expect((await changes.continuationState(fixture.repository)).operation).toBeNull();
+
+    expect((await beginSquash()).state).toBe('conflicted');
+    await writeFile(path.join(fixture.repository, 'README.md'), '# resolved squash\n');
+    await runGit(fixture.repository, ['add', '--', 'README.md']);
+    const continueState = await changes.continuationState(fixture.repository);
+    expect(continueState).toMatchObject({
+      operation: 'squash',
+      canContinue: true,
+    });
+    const completed = await changes.continueOperation(fixture.repository, {
+      action: 'continue-git-operation',
+      ...approvalBase(continueState.repositoryRoot, continueState.expectedHead),
+      operation: 'squash',
+      conflictedPaths: continueState.conflictedPaths,
+      stagedPaths: continueState.stagedPaths,
+      stagedPatchSha256: continueState.stagedPatchSha256,
+      unstagedPatchSha256: continueState.unstagedPatchSha256,
+    });
+    expect(completed.state).toBe('completed');
+    expect(await runGit(fixture.repository, ['show', '-s', '--format=%P', 'HEAD'])).toBe(
+      `${primaryHead}\n`,
+    );
+    expect((await changes.continuationState(fixture.repository)).operation).toBeNull();
   });
 });

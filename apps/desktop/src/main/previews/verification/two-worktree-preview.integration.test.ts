@@ -128,32 +128,65 @@ describe('production two-worktree preview verification', () => {
       expect(JSON.stringify(targets)).not.toContain(fixture.repository);
       expect(JSON.stringify(targets)).not.toContain(fixture.managedRoot);
 
-      const inputA = previewInput(PRIMARY_PROJECT_ID, 'preview-a', {
-        kind: 'agent-run',
-        runId: RUN_A_ID,
-      });
-      const inputB = previewInput(PRIMARY_PROJECT_ID, 'preview-b', {
-        kind: 'agent-run',
-        runId: RUN_B_ID,
-      });
+      const inputA = {
+        ...previewInput(PRIMARY_PROJECT_ID, 'preview-comparison', {
+          kind: 'agent-run',
+          runId: RUN_A_ID,
+        }),
+        slot: 'comparison-left' as const,
+      };
+      const inputB = {
+        ...previewInput(PRIMARY_PROJECT_ID, 'preview-comparison', {
+          kind: 'agent-run',
+          runId: RUN_B_ID,
+        }),
+        slot: 'comparison-right' as const,
+      };
       const [planA, planB] = await Promise.all([runtime.prepare(inputA), runtime.prepare(inputB)]);
       expect(planA.projectRoot).toBe(fixture.ownershipA.worktreePath);
       expect(planA.cwd).toBe(fixture.ownershipA.worktreePath);
       expect(planB.projectRoot).toBe(fixture.ownershipB.worktreePath);
       expect(planB.cwd).toBe(fixture.ownershipB.worktreePath);
 
+      const duplicateRightInput = {
+        ...inputB,
+        target: { kind: 'agent-run' as const, runId: RUN_A_ID },
+      };
+      const duplicateRightPlan = await runtime.prepare(duplicateRightInput);
+      const competing = await Promise.allSettled([
+        runtime.startPrepared('renderer-comparison', planA, {
+          authorizeSpawn: () => undefined,
+        }),
+        runtime.startPrepared('renderer-comparison', duplicateRightPlan, {
+          authorizeSpawn: () => undefined,
+        }),
+      ]);
+      expect(competing.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(competing.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      const rejected = competing.find((result) => result.status === 'rejected');
+      expect(rejected?.status).toBe('rejected');
+      if (rejected?.status === 'rejected') {
+        expect(
+          rejected.reason instanceof Error ? rejected.reason.message : String(rejected.reason),
+        ).toContain('different agent-run targets');
+      }
+      const winningInput = competing[0]?.status === 'fulfilled' ? inputA : duplicateRightInput;
+      await runtime.stop('renderer-comparison', winningInput);
+
       const launchesA: PreviewProcessLaunch[] = [];
       const launchesB: PreviewProcessLaunch[] = [];
       const [startedA, startedB] = await Promise.all([
-        runtime.startPrepared('renderer-a', planA, {
+        runtime.startPrepared('renderer-comparison', planA, {
           authorizeSpawn: (launch) => launchesA.push(launch),
         }),
-        runtime.startPrepared('renderer-b', planB, {
+        runtime.startPrepared('renderer-comparison', planB, {
           authorizeSpawn: (launch) => launchesB.push(launch),
         }),
       ]);
       expect(startedA.status).toBe('ready');
       expect(startedB.status).toBe('ready');
+      expect(startedA.target).toEqual({ kind: 'agent-run', runId: RUN_A_ID });
+      expect(startedB.target).toEqual({ kind: 'agent-run', runId: RUN_B_ID });
       expect(startedA.id).not.toBe(startedB.id);
 
       const processA = requiredProcess(startedA);
@@ -188,28 +221,32 @@ describe('production two-worktree preview verification', () => {
         pid: processB.pid,
         url: '/preview',
       });
-      expect(() => runtime?.get('renderer-b', inputA)).toThrow('another renderer');
+      expect(() => runtime?.get('renderer-other', inputA)).toThrow('another renderer');
 
       const loggedA = await waitForLogMarker(
         runtime,
-        'renderer-a',
+        'renderer-comparison',
         inputA,
         'READY:worktree-alpha-v1',
       );
       const loggedB = await waitForLogMarker(
         runtime,
-        'renderer-b',
+        'renderer-comparison',
         inputB,
         'READY:worktree-beta-v1',
       );
       assertBoundedLogs(loggedA, 'READY:worktree-alpha-v1');
       assertBoundedLogs(loggedB, 'READY:worktree-beta-v1');
       expect(eventEvidence.maxOutputBytes).toBeLessThanOrEqual(MAX_RENDERER_EVENT_BYTES);
-      expect(eventEvidence.readyOwners).toEqual(new Set(['renderer-a', 'renderer-b']));
-      expect(eventEvidence.outputTailByOwner.get('renderer-a')).toContain(
+      expect(eventEvidence.readyOwners).toEqual(
+        new Set(['renderer-comparison:comparison-left', 'renderer-comparison:comparison-right']),
+      );
+      expect(eventEvidence.outputTailByOwner.get('renderer-comparison:comparison-left')).toContain(
         'READY:worktree-alpha-v1',
       );
-      expect(eventEvidence.outputTailByOwner.get('renderer-b')).toContain('READY:worktree-beta-v1');
+      expect(eventEvidence.outputTailByOwner.get('renderer-comparison:comparison-right')).toContain(
+        'READY:worktree-beta-v1',
+      );
 
       const rejectedAuthorization = vi.fn();
       const primaryInput = previewInput(PRIMARY_PROJECT_ID, 'preview-port-exhaustion', {
@@ -236,7 +273,7 @@ describe('production two-worktree preview verification', () => {
       });
       const secondPlanA = await runtime.prepare(inputA);
       const replacementAuthorized = vi.fn();
-      const restartedA = await runtime.restartPrepared('renderer-a', secondPlanA, {
+      const restartedA = await runtime.restartPrepared('renderer-comparison', secondPlanA, {
         authorizeReplacement: replacementAuthorized,
         authorizeSpawn: (launch) => launchesA.push(launch),
       });
@@ -256,9 +293,9 @@ describe('production two-worktree preview verification', () => {
         cwd: fixture.ownershipB.worktreePath,
         pid: processB.pid,
       });
-      expect(runtime.get('renderer-b', inputB)?.id).toBe(startedB.id);
+      expect(runtime.get('renderer-comparison', inputB)?.id).toBe(startedB.id);
 
-      const stoppedB = await runtime.stop('renderer-b', inputB);
+      const stoppedB = await runtime.stop('renderer-comparison', inputB);
       expect(stoppedB?.status).toBe('stopped');
       await waitForDead(requiredPid(processB));
       await expect(fetch(processB.previewUrl ?? '')).rejects.toThrow();
@@ -270,7 +307,7 @@ describe('production two-worktree preview verification', () => {
         .listAuditEvents(20)
         .filter((event) => event.category === 'preview')
         .map((event) => `${event.action}:${event.outcome}`);
-      expect(audits.filter((entry) => entry === 'start:allowed')).toHaveLength(3);
+      expect(audits.filter((entry) => entry === 'start:allowed')).toHaveLength(4);
       expect(audits).toEqual(expect.arrayContaining(['start:failed', 'stop:allowed']));
 
       const restartedProcessA = requiredProcess(restartedA);
@@ -323,7 +360,7 @@ describe('production two-worktree preview verification', () => {
         reopened
           .listAuditEvents(20)
           .filter((event) => event.category === 'preview' && event.action === 'start'),
-      ).toHaveLength(4);
+      ).toHaveLength(5);
       reopened.close();
       reopened = undefined;
 
@@ -534,14 +571,15 @@ async function previewResponse(session: PreviewSessionSnapshot): Promise<Preview
 }
 
 function observeEvent(evidence: EventEvidence, ownerId: string, event: PreviewEventEnvelope): void {
+  const key = `${ownerId}:${event.slot ?? 'primary'}`;
   if (event.kind === 'state') {
-    if (event.session.status === 'ready') evidence.readyOwners.add(ownerId);
+    if (event.session.status === 'ready') evidence.readyOwners.add(key);
     return;
   }
   const bytes = Buffer.byteLength(event.data, 'utf8');
   evidence.maxOutputBytes = Math.max(evidence.maxOutputBytes, bytes);
-  const current = evidence.outputTailByOwner.get(ownerId) ?? '';
-  evidence.outputTailByOwner.set(ownerId, `${current}${event.data}`.slice(-131_072));
+  const current = evidence.outputTailByOwner.get(key) ?? '';
+  evidence.outputTailByOwner.set(key, `${current}${event.data}`.slice(-131_072));
 }
 
 async function waitForLogMarker(

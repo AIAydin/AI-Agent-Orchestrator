@@ -2,16 +2,20 @@ import { useState } from 'react';
 
 import type {
   CollaborationInviteCreateInput,
+  CollaborationInviteHistoryPage,
   CollaborationInviteRole,
-  CollaborationInviteSafeView,
 } from '../../../../../shared/collaboration/index.js';
 
 interface InviteManagementControlsProps {
-  readonly invites: CollaborationInviteSafeView[];
+  readonly page: CollaborationInviteHistoryPage | null;
   readonly busy: boolean;
   readonly onCreate: (input: CollaborationInviteCreateInput) => Promise<void>;
   readonly onCopy: (inviteId: string) => Promise<void>;
   readonly onRevoke: (inviteId: string) => Promise<void>;
+  readonly onRefresh: () => Promise<void>;
+  readonly onPrevious: () => Promise<void>;
+  readonly onNext: () => Promise<void>;
+  readonly canPrevious: boolean;
 }
 
 const EXPIRATIONS = [
@@ -22,11 +26,15 @@ const EXPIRATIONS = [
 ] as const;
 
 export function InviteManagementControls({
-  invites,
+  page,
   busy,
   onCreate,
   onCopy,
   onRevoke,
+  onRefresh,
+  onPrevious,
+  onNext,
+  canPrevious,
 }: InviteManagementControlsProps) {
   const [role, setRole] = useState<CollaborationInviteRole>('editor');
   const [expiresInSeconds, setExpiresInSeconds] = useState(3_600);
@@ -87,35 +95,68 @@ export function InviteManagementControls({
         Create invite
       </button>
       <p>
-        Invite links remain in protected main-process memory. Use Copy to place one directly on the
-        system clipboard.
+        Invite history is durable on the server. Links remain only in protected main-process memory,
+        so Copy is available only for invites created in this app session.
       </p>
-      {invites.length === 0 ? (
-        <p>No invites have been created in this room session.</p>
+      <div className="settings-inline-actions">
+        <button
+          className="button secondary"
+          type="button"
+          disabled={busy}
+          onClick={() => void onRefresh()}
+        >
+          Refresh invites
+        </button>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={busy || !canPrevious}
+          onClick={() => void onPrevious()}
+        >
+          Previous
+        </button>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={busy || page?.nextCursor === null || page === null}
+          onClick={() => void onNext()}
+        >
+          Next
+        </button>
+      </div>
+      {page === null ? (
+        <p>Invite history has not been loaded. Refresh to review this room.</p>
+      ) : page.invites.length === 0 ? (
+        <p>No invite history was found for this room.</p>
       ) : (
-        <ul aria-label="Session invites">
-          {invites.map((invite) => (
+        <ul aria-label="Room invite history">
+          {page.invites.map((invite) => (
             <li key={invite.id}>
               <span>
-                {invite.role} · expires {formatExpiration(invite.expiresAt)} · up to{' '}
-                {invite.maxUses} {invite.maxUses === 1 ? 'use' : 'uses'}
+                {invite.role} · {invite.status} · created {formatExpiration(invite.createdAt)} ·
+                expires {formatExpiration(invite.expiresAt)} · {invite.useCount} / {invite.maxUses}{' '}
+                uses
               </span>{' '}
-              <button
-                className="button"
-                type="button"
-                disabled={busy}
-                onClick={() => void onCopy(invite.id)}
-              >
-                Copy
-              </button>{' '}
-              <button
-                className="button danger"
-                type="button"
-                disabled={busy}
-                onClick={() => void onRevoke(invite.id)}
-              >
-                Revoke
-              </button>
+              {invite.copyAvailable && (
+                <button
+                  className="button"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onCopy(invite.id)}
+                >
+                  Copy
+                </button>
+              )}{' '}
+              {invite.status === 'active' && (
+                <button
+                  className="button danger"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onRevoke(invite.id)}
+                >
+                  Revoke
+                </button>
+              )}
             </li>
           ))}
         </ul>

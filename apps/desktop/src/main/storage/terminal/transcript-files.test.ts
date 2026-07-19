@@ -1,8 +1,9 @@
+import { unlinkSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TerminalTranscriptFiles } from './transcript-files.js';
 
@@ -55,8 +56,25 @@ describe('TerminalTranscriptFiles', () => {
     await files.create(SECOND);
     await expect(files.create(THIRD)).rejects.toThrow(/file limit/u);
 
-    await expect(files.pruneUnknown(new Set([FIRST]))).resolves.toBe(1);
+    await expect(files.pruneUnknown(new Set([FIRST]), () => undefined)).resolves.toBe(1);
     await expect(files.create(THIRD)).resolves.toBeUndefined();
+  });
+
+  it('reports an orphan unlink failure without masking the filesystem error', async () => {
+    const files = await fixture(1_024, 4_096, 2);
+    const root = roots.at(-1);
+    if (root === undefined) throw new Error('Expected a transcript fixture root.');
+    await files.create(FIRST);
+    const onDeleteFailure = vi.fn();
+
+    await expect(
+      files.pruneUnknown(
+        new Set(),
+        (sessionId) => unlinkSync(path.join(root, `${sessionId}.jsonl`)),
+        onDeleteFailure,
+      ),
+    ).rejects.toThrow();
+    expect(onDeleteFailure).toHaveBeenCalledWith(FIRST, expect.any(Error));
   });
 
   it('distinguishes a missing transcript from an empty complete transcript', async () => {

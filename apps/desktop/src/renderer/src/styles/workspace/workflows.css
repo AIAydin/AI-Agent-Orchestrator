@@ -138,6 +138,10 @@
 .workflow-edge-state.blocked {
   color: var(--red);
 }
+.workflow-state.cancelled,
+.workflow-edge-run-status.cancelled {
+  color: var(--text-faint);
+}
 .workflow-run-summary dl {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -228,7 +232,9 @@
 }
 .workflow-node-icon.running,
 .workflow-node-icon.queued,
-.workflow-node-icon.waiting-for-approval {
+.workflow-node-icon.waiting-for-approval,
+.workflow-node-icon.paused,
+.workflow-node-icon.cancelling {
   color: var(--yellow);
 }
 .workflow-node-icon.succeeded {
@@ -237,6 +243,9 @@
 .workflow-node-icon.failed,
 .workflow-node-icon.lost {
   color: var(--red);
+}
+.workflow-node-icon.cancelled {
+  color: var(--text-faint);
 }
 .workflow-node-list article > div {
   min-width: 0;

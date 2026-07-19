@@ -36,7 +36,7 @@ export function requireContinuationParent(
       'The saved Agent adapter, model, or permission authority does not match the selected attempt.',
     );
   }
-  if (parent.status === 'prepared' || parent.status === 'running') {
+  if (parent.status === 'prepared' || parent.status === 'running' || parent.status === 'paused') {
     throw new Error('Wait for the selected parent attempt to finish before continuing it.');
   }
   if (continuation.action === 'retry' && parent.status === 'succeeded') {

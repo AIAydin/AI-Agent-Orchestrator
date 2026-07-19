@@ -4,6 +4,7 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
   agentExecutableOverrides: 'Agent executable override',
   customAgent: 'Custom agent',
   worktreeRoot: 'Managed worktree folder',
+  externalEditorExecutable: 'External application',
   previewPortStart: 'Preview port start',
   previewPortEnd: 'Preview port end',
   previewTrustedHosts: 'Preview trusted hosts',

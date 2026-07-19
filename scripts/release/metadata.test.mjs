@@ -56,7 +56,7 @@ test('desktop release targets keep deterministic artifacts and user-preserving i
   }
 });
 
-test('versioned release notes must identify this unsigned prerelease', async () => {
+test('versioned release notes must identify the matching Forgeboard version', async () => {
   const metadata = structuredClone(await loadReleaseMetadata());
   metadata.releaseNotes = 'Generic release notes';
   assert.throws(() => validateReleaseMetadata(metadata), /must identify Forgeboard v0.1.0/u);

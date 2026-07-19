@@ -184,7 +184,8 @@ function normalizeInterruptedRecords(
   let normalizedRuns = 0;
   let normalizedCheckExecutions = 0;
   const runs = document.runs.map((run) => {
-    if (run.status !== 'prepared' && run.status !== 'running') return run;
+    if (run.status !== 'prepared' && run.status !== 'running' && run.status !== 'paused')
+      return run;
     normalizedRuns += 1;
     const recoveredAt = boundedImportTimestamp(importedAt, run.updatedAt, run.startedAt);
     return {

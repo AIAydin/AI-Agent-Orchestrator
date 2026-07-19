@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { SaveDialogReturnValue } from 'electron';
+import type { BrowserWindow, MessageBoxOptions, SaveDialogReturnValue } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const electronMock = vi.hoisted(() => {
@@ -168,7 +168,11 @@ describe('SettingsIpcService transactions', () => {
     const importPath = join(directory, 'settings.json');
     writeFileSync(
       importPath,
-      JSON.stringify({ format: 'forgeboard-settings', version: 1, settings: imported }),
+      JSON.stringify({
+        format: 'forgeboard-settings',
+        version: 1,
+        settings: imported,
+      }),
       'utf8',
     );
     const fixture = createFixture(settings(), settings(), importPath);
@@ -373,6 +377,55 @@ describe('SettingsIpcService transactions', () => {
     expect(fixture.store.saveSettings).toHaveBeenCalledWith(draft);
     expect(fixture.onSettingsSaved).toHaveBeenCalledWith(draft);
     fixture.service.dispose();
+  });
+
+  it('requires exact main-owned Docker readiness before enabling a Docker profile', async () => {
+    const current = settings();
+    const draft = settings({
+      dockerEnabled: true,
+      dockerExecutable: '/selected/bin/docker',
+      dockerImage: 'registry.example/agent:1',
+      dockerContainerExecutable: '/usr/local/bin/codex',
+    });
+    const requireSettingsReadiness = vi.fn(() =>
+      Promise.reject(new Error('Run Check Docker successfully for the current Settings draft.')),
+    );
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness: vi.fn() },
+      { check: vi.fn() },
+      { verifySettingsReadiness: vi.fn() },
+      { requireSettingsReadiness },
+    );
+
+    await expect(readiness.verify(current, draft)).rejects.toThrow('Run Check Docker successfully');
+    expect(requireSettingsReadiness).toHaveBeenCalledWith({
+      dockerExecutable: '/selected/bin/docker',
+      image: 'registry.example/agent:1',
+      containerExecutable: '/usr/local/bin/codex',
+    });
+  });
+
+  it('accepts exact Docker authority and skips dormant disabled Docker changes', async () => {
+    const requireSettingsReadiness = vi.fn(() => Promise.resolve());
+    const readiness = new SettingsPersistenceReadinessVerifier(
+      { verifySettingsReadiness: vi.fn() },
+      { check: vi.fn() },
+      { verifySettingsReadiness: vi.fn() },
+      { requireSettingsReadiness },
+    );
+    const current = settings();
+    const enabled = settings({
+      dockerEnabled: true,
+      dockerImage: 'registry.example/agent:1',
+      dockerContainerExecutable: '/usr/local/bin/codex',
+    });
+
+    await expect(readiness.verify(current, enabled)).resolves.toBeUndefined();
+    expect(requireSettingsReadiness).toHaveBeenCalledTimes(1);
+    await expect(
+      readiness.verify(current, settings({ dockerImage: 'dormant:2' })),
+    ).resolves.toBeUndefined();
+    expect(requireSettingsReadiness).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a schema-valid command change without main-bound passive readiness', async () => {
@@ -592,11 +645,34 @@ describe('SettingsIpcService transactions', () => {
     fixture.service.dispose();
   });
 
+  it('fails closed before writing a settings export when its audit cannot persist', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'forgeboard-settings-export-audit-'));
+    temporaryDirectories.push(directory);
+    const exportPath = join(directory, 'settings.json');
+    const fixture = createFixture(settings(), settings());
+    fixture.dialog.showSaveDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePath: exportPath,
+    });
+    fixture.store.appendAudit.mockImplementationOnce(() => {
+      throw new Error('audit unavailable');
+    });
+    electronMock.fromWebContents.mockReturnValue(liveParent());
+
+    await expect(requiredHandler(IPC_CHANNELS.settingsExport)(liveEvent())).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    expect(() => readFileSync(exportPath, 'utf8')).toThrow();
+    fixture.service.dispose();
+  });
+
   it('keeps update as the sole save, retention, and applied-mutation audit path', async () => {
     const current = settings();
     const defaults = settings({ onboardingCompleted: false });
     const draft = settings({ theme: 'dark', transcriptRetentionDays: 14 });
     const fixture = createFixture(current, defaults);
+    electronMock.fromWebContents.mockReturnValue(liveParent());
 
     const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft);
 
@@ -614,9 +690,70 @@ describe('SettingsIpcService transactions', () => {
       'allowed',
       expect.objectContaining({
         envNames: draft.envAllowlist,
-        retention,
+        retentionPolicy: {
+          transcriptDays: draft.transcriptRetentionDays,
+          auditDays: draft.auditRetentionDays,
+          snapshotCount: draft.snapshotRetentionCount,
+        },
       }),
     );
+    fixture.service.dispose();
+  });
+
+  it('requires a cancel-default native confirmation before lower retention deletes local history', async () => {
+    const current = settings();
+    const draft = settings({
+      transcriptRetentionDays: 14,
+      auditRetentionDays: 90,
+      snapshotRetentionCount: 25,
+    });
+    const fixture = createFixture(current, settings());
+    fixture.dialog.showMessageBox.mockResolvedValueOnce({ response: 0 });
+    const parent = liveParent();
+    electronMock.fromWebContents.mockReturnValue(parent);
+
+    const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft);
+
+    expect(result).toEqual({ ok: true, value: current });
+    expect(fixture.dialog.showMessageBox).toHaveBeenCalledWith(parent, expect.any(Object));
+    const message = fixture.dialog.showMessageBox.mock.calls[0]?.[1];
+    expect(message).toMatchObject({
+      buttons: ['Cancel', 'Save and delete older data'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    expect(message?.detail).toMatch(/Transcripts.*Activity history.*Canvas snapshots/su);
+    expect(fixture.store.saveSettings).not.toHaveBeenCalled();
+    expect(fixture.store.applyRetention).not.toHaveBeenCalled();
+    expect(fixture.store.appendAudit).toHaveBeenCalledWith(
+      'settings',
+      'retention-update',
+      'denied',
+      expect.objectContaining({ reason: 'native-confirmation-cancelled' }),
+    );
+    fixture.service.dispose();
+  });
+
+  it('fails closed before saving settings or pruning retained data when audit persistence fails', async () => {
+    const draft = settings({
+      transcriptRetentionDays: 14,
+      auditRetentionDays: 30,
+    });
+    const fixture = createFixture(settings(), settings());
+    electronMock.fromWebContents.mockReturnValue(liveParent());
+    fixture.store.appendAudit.mockImplementationOnce(() => {
+      throw new Error('audit unavailable');
+    });
+
+    const result = await requiredHandler(IPC_CHANNELS.settingsUpdate)(liveEvent(), draft);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    expect(fixture.store.saveSettings).not.toHaveBeenCalled();
+    expect(fixture.store.applyRetention).not.toHaveBeenCalled();
+    expect(fixture.onSettingsSaved).not.toHaveBeenCalled();
     fixture.service.dispose();
   });
 
@@ -688,6 +825,11 @@ function createFixture(
     showSaveDialog: vi.fn(
       (): Promise<SaveDialogReturnValue> => Promise.resolve({ canceled: true, filePath: '' }),
     ),
+    showMessageBox: vi.fn((parent: BrowserWindow, options: MessageBoxOptions) => {
+      void parent;
+      void options;
+      return Promise.resolve({ response: 1 });
+    }),
   };
   const onSettingsSaved = vi.fn();
   const service = new SettingsIpcService(
@@ -853,6 +995,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     gitIdentityName: '',
     gitIdentityEmail: '',
     gitRemote: 'origin',
+    externalEditorExecutable: '',
     terminalShell: '/bin/sh',
     envAllowlist: ['PATH', 'HOME'],
     developmentCommand: { executable: '', arguments: [] },

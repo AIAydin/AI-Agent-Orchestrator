@@ -1,5 +1,7 @@
 import { FolderOpen, Plus, Trash2 } from 'lucide-react';
 
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
+
 interface PermissionRootEditorProps {
   kind: 'read' | 'write';
   values: readonly string[];
@@ -27,7 +29,7 @@ export function PermissionRootEditor({
         for the top folder.
       </p>
       {values.length === 0 ? (
-        <div className="permission-list-empty">
+        <div className="permission-list-empty" role="status">
           No {kind === 'read' ? 'read-only' : 'writable'} folders yet. Add one below.
         </div>
       ) : (
@@ -53,17 +55,19 @@ export function PermissionRootEditor({
                   )
                 }
               />
-              <button
-                type="button"
-                className="icon-button"
-                disabled={disabled}
-                aria-label={`Remove ${itemLabel.toLowerCase()} ${value || index + 1}`}
-                onClick={() =>
-                  onChange(values.filter((_, candidateIndex) => candidateIndex !== index))
-                }
-              >
-                <Trash2 size={14} aria-hidden="true" />
-              </button>
+              <WorkspaceTooltip content={`Remove ${itemLabel.toLowerCase()}`}>
+                <button
+                  type="button"
+                  className="icon-button"
+                  disabled={disabled}
+                  aria-label={`Remove ${itemLabel.toLowerCase()} ${value || index + 1}`}
+                  onClick={() =>
+                    onChange(values.filter((_, candidateIndex) => candidateIndex !== index))
+                  }
+                >
+                  <Trash2 size={14} aria-hidden="true" />
+                </button>
+              </WorkspaceTooltip>
             </div>
           ))}
         </div>
@@ -76,14 +80,22 @@ export function PermissionRootEditor({
         >
           <Plus size={14} aria-hidden="true" /> Add a folder
         </button>
-        <button
-          type="button"
-          disabled={disabled || !canBrowse || values.length >= 256}
-          title={canBrowse ? undefined : 'Open a project first to pick one of its folders.'}
-          onClick={onBrowse}
+        <WorkspaceTooltip
+          content={
+            canBrowse
+              ? 'Choose a folder inside the open project'
+              : 'Open a project first to pick one of its folders'
+          }
         >
-          <FolderOpen size={14} aria-hidden="true" /> Browse project folders
-        </button>
+          <button
+            type="button"
+            aria-label="Browse project folders"
+            disabled={disabled || !canBrowse || values.length >= 256}
+            onClick={onBrowse}
+          >
+            <FolderOpen size={14} aria-hidden="true" /> Browse project folders
+          </button>
+        </WorkspaceTooltip>
       </div>
     </fieldset>
   );

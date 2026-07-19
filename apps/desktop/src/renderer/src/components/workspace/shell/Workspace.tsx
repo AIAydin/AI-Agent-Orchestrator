@@ -70,11 +70,13 @@ import {
 } from '../canvas/interactions/groups/group-workspace-state.js';
 import { useCanvasGraphInteractions } from '../canvas/interactions/workspace/useCanvasGraphInteractions.js';
 import { WorkspaceCommandBar } from './WorkspaceCommandBar.js';
+import { useProjectStatus } from './status/useProjectStatus.js';
 import { applyNodeDataPatch } from './node-data-patch.js';
 import { WorkflowDecisionDialog } from '../workflows/WorkflowDecisionDialog.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
 import { WorkspaceNotifications } from './WorkspaceOverlays.js';
 import { WorkspaceRail } from './WorkspaceRail.js';
+import { nodeRegistryFromTemplates } from '../node-registry/NodeRegistryContext.js';
 import { useWorkspaceNodeMutations } from './node-actions/useWorkspaceNodeMutations.js';
 import {
   createEdgeData,
@@ -97,6 +99,7 @@ import type {
 import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
 import { useAgentRunController } from '../runs/useAgentRunController.js';
 import { useAgentStatusReconciliation } from '../runs/useAgentStatusReconciliation.js';
+import { useAgentWorktreeRecord } from '../runs/useAgentWorktreeAvailability.js';
 import { effectiveNodeModel } from '../runs/agent-node/model-selection.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
 import { useDurableCanvasHistory } from '../canvas/history/useDurableCanvasHistory.js';
@@ -108,6 +111,9 @@ import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
 import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
+import { buildWorkflowTemplate } from '../workflows/templates/builder.js';
+import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from '../workflows/templates/catalog.js';
+import { collisionFreeTemplateOrigin } from '../workflows/templates/placement.js';
 import { useDiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 import { useDiffReviewSession } from '../diff-review/useDiffReviewSession.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
@@ -121,6 +127,7 @@ import {
   workflowCanvasNodeStatus,
   workflowCanvasReviewGateState,
 } from '../workflows/workflow-node-status.js';
+import { workflowEdgeRuntimePresentation } from '../workflows/workflow-edge-presentation.js';
 import {
   appendLocalComment,
   appendSharedComment,
@@ -139,22 +146,6 @@ export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
     );
   },
 );
-
-function workflowEdgeColor(
-  disposition: WorkflowExecutionView['edges'][number]['disposition'],
-): string {
-  switch (disposition) {
-    case 'satisfied':
-      return 'var(--green)';
-    case 'waiting':
-    case 'waiting-for-approval':
-      return 'var(--yellow)';
-    case 'blocked':
-      return 'var(--red)';
-    case 'inactive':
-      return 'var(--text-faint)';
-  }
-}
 
 function workflowDecisionIsCurrent(
   target: WorkflowDecisionTarget,
@@ -239,6 +230,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   nodesRef.current = nodes;
   edgesRef.current = edges;
 
+  const projectStatus = useProjectStatus(project);
+
   useEffect(() => {
     loaded.current = false;
     const loadWorkspace = async () => {
@@ -303,6 +296,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
               ...(update.changedFiles === undefined ? {} : { changedFiles: update.changedFiles }),
               ...(update.branch === undefined ? {} : { branch: update.branch }),
               ...(update.worktreeId === undefined ? {} : { worktreeId: update.worktreeId }),
+              ...(update.worktreeRecordedActive === undefined
+                ? {}
+                : { worktreeRecordedActive: update.worktreeRecordedActive }),
               ...(update.interactiveInputSupported === undefined
                 ? {}
                 : {
@@ -725,6 +721,49 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     [collaborationCanvas.graphReadOnly, nodes.length, record, reportCollaborationReadOnly],
   );
 
+  const addWorkflowTemplate = useCallback(
+    (template: WorkflowTemplate) => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return;
+      }
+      try {
+        const origin = collisionFreeTemplateOrigin(template, nodesRef.current, { x: 220, y: 150 });
+        const built = buildWorkflowTemplate(template.id, settings, origin);
+        const selected = built.nodes[0];
+        if (selected === undefined) throw new Error('The workflow template contains no nodes.');
+        record();
+        pendingNodeSelection.current = selected.id;
+        setNodes((items) => [
+          ...items.map((node) => ({ ...node, selected: false })),
+          ...built.nodes.map((node, index) => ({ ...node, selected: index === 0 })),
+        ]);
+        setEdges((items) => [
+          ...items.map((edge) => ({ ...edge, selected: false })),
+          ...built.edges,
+        ]);
+        setSelectedNodeId(selected.id);
+        setSelectedEdgeId(null);
+        window.setTimeout(() => {
+          if (pendingNodeSelection.current === selected.id) pendingNodeSelection.current = null;
+        }, 250);
+        setEvents((items) =>
+          [
+            `Added ${built.template.name} workflow with ${built.nodes.length} nodes.`,
+            ...items,
+          ].slice(0, 30),
+        );
+      } catch (cause) {
+        onError(
+          cause instanceof Error
+            ? cause.message
+            : 'Forgeboard could not add the workflow template.',
+        );
+      }
+    },
+    [collaborationCanvas.graphReadOnly, onError, record, reportCollaborationReadOnly, settings],
+  );
+
   const attachProjectFileContext = useCallback(
     async (targetNodeId: string, payload: WorkspaceContextDragPayload): Promise<void> => {
       if (collaborationGraphReadOnlyRef.current) {
@@ -933,6 +972,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     updateNodeData,
     onError,
   });
+  useAgentWorktreeRecord({ projectId: project.id, nodes, updateNodeData });
   const readCurrentGraph = useCallback(
     () => ({ nodes: nodesRef.current, edges: edgesRef.current }),
     [],
@@ -1008,6 +1048,21 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       ),
     [workflowEvidenceExecution],
   );
+  const extensionTemplates = useMemo<ExtensionTemplate[]>(
+    () =>
+      extensionDiscovery.installed.flatMap((extension) =>
+        extension.manifest.contributes.canvasNodeTypes.map((definition) => ({
+          extension,
+          definition,
+          key: extensionTemplateKey(extension.manifest.id, definition.id),
+        })),
+      ),
+    [extensionDiscovery.installed],
+  );
+  const nodeRegistry = useMemo(
+    () => nodeRegistryFromTemplates(extensionTemplates),
+    [extensionTemplates],
+  );
   const protectedNodeIds = useMemo(() => lockedCanvasNodeIds(nodes), [nodes]);
   const removalProtectedNodeIds = useMemo(
     () => removalProtectedCanvasNodeIds(nodes, edges),
@@ -1021,6 +1076,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const runtimeDisplayedNodes = useMemo(
     () =>
       nodes.map((node) => {
+        const definition = nodeRegistry.resolve(node.data);
         const status = workflowNodeStatuses.get(node.id);
         const reviewGate = workflowReviewGates.get(node.id);
         const inheritedLock = protectedNodeIds.has(node.id) && !node.data.locked;
@@ -1043,7 +1099,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         const mutable = !protectedNodeIds.has(node.id);
         return {
           ...displayed,
-          ariaLabel: `${node.data.title}, ${NODE_DEFINITIONS[node.data.kind].label} node${
+          ariaLabel: `${node.data.title}, ${definition.label} node${
             protectedNodeIds.has(node.id) ? ', locked' : ''
           }`,
           connectable: mutable,
@@ -1051,7 +1107,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           draggable: mutable,
         };
       }),
-    [nodes, protectedNodeIds, workflowNodeStatuses, workflowReviewGates],
+    [nodeRegistry, nodes, protectedNodeIds, workflowNodeStatuses, workflowReviewGates],
   );
   const workflowEdgeStates = useMemo(
     () => new Map((workflowEvidenceExecution?.edges ?? []).map((edge) => [edge.edgeId, edge])),
@@ -1062,16 +1118,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       edges.map((edge) => {
         const runtime = workflowEdgeStates.get(edge.id);
         if (runtime === undefined) return edge;
+        const presentation = workflowEdgeRuntimePresentation(
+          runtime,
+          edge.data?.edgeType,
+          edge.className,
+        );
         return {
           ...edge,
-          animated: runtime.disposition === 'waiting' || runtime.status === 'running',
-          className: `${edge.className ?? ''} workflow-edge-runtime ${runtime.status}`.trim(),
-          label: `${edge.data?.edgeType ?? runtime.type} · ${runtime.status.replaceAll('-', ' ')} · ${runtime.disposition.replaceAll('-', ' ')}`,
+          ...presentation,
           style: {
             ...edge.style,
-            stroke: workflowEdgeColor(runtime.disposition),
-            strokeWidth: runtime.disposition === 'inactive' ? 1 : 2,
-            opacity: runtime.disposition === 'inactive' ? 0.45 : 1,
+            ...presentation.style,
           },
         };
       }),
@@ -1107,20 +1164,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     if (workflowDecisionCount > 0) setActivityOpen(true);
   }, [workflowDecisionCount]);
 
-  const extensionTemplates = useMemo<ExtensionTemplate[]>(
-    () =>
-      extensionDiscovery.installed.flatMap((extension) =>
-        extension.manifest.contributes.canvasNodeTypes.map((definition) => ({
-          extension,
-          definition,
-          key: extensionTemplateKey(extension.manifest.id, definition.id),
-        })),
-      ),
-    [extensionDiscovery.installed],
-  );
   const searchTerm = search.toLowerCase();
   const filteredTemplates = NODE_KINDS.filter((kind) =>
-    NODE_DEFINITIONS[kind].label.toLowerCase().includes(searchTerm),
+    nodeRegistry.resolve({ kind }).label.toLowerCase().includes(searchTerm),
+  );
+  const filteredWorkflowTemplates = WORKFLOW_TEMPLATES.filter((template) =>
+    `${template.name} ${template.description}`.toLowerCase().includes(searchTerm),
   );
   const filteredExtensionTemplates = extensionTemplates.filter(({ extension, definition }) =>
     `${definition.displayName} ${definition.description} ${extension.manifest.name}`
@@ -1128,7 +1177,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       .includes(searchTerm),
   );
   const filteredNodes = nodes.filter((node) =>
-    `${node.data.title} ${NODE_DEFINITIONS[node.data.kind].label}`
+    `${node.data.title} ${nodeRegistry.resolve(node.data).label}`
       .toLowerCase()
       .includes(searchTerm),
   );
@@ -1202,6 +1251,59 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     setSelectedNodeId,
     setEvents,
   });
+
+  const attachWhiteboardContext = useCallback(
+    (sourceNodeId: string, targetNodeId: string): string => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return 'Your collaboration role cannot change Context connections.';
+      }
+      const currentNodes = nodesRef.current;
+      const source = currentNodes.find((node) => node.id === sourceNodeId);
+      const target = currentNodes.find((node) => node.id === targetNodeId);
+      if (source?.data.kind !== 'whiteboard' || target?.data.kind !== 'agent') {
+        return 'The whiteboard or Agent node is no longer available.';
+      }
+      const protectedIds = lockedCanvasNodeIds(currentNodes);
+      if (protectedIds.has(sourceNodeId) || protectedIds.has(targetNodeId)) {
+        return 'Unlock the whiteboard, its group, and the Agent before attaching context.';
+      }
+      const existing = edgesRef.current.some(
+        (edge) =>
+          edge.source === sourceNodeId &&
+          edge.target === targetNodeId &&
+          edge.data?.edgeType === 'context' &&
+          edge.data.config.attachmentIds.includes(sourceNodeId),
+      );
+      if (existing)
+        return `The whiteboard specification is already attached to ${target.data.title}.`;
+      recordSnapshot(currentNodes, edgesRef.current);
+      const nextEdge: WorkshopEdge = {
+        id: crypto.randomUUID(),
+        source: sourceNodeId,
+        target: targetNodeId,
+        type: 'smoothstep',
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: createEdgeData('context', sourceNodeId),
+        label: 'context',
+      };
+      setEdges((items) => addEdge(nextEdge, items));
+      setEvents((items) =>
+        [
+          `Attached ${source.data.title} to ${target.data.title} as explicit Context.`,
+          ...items,
+        ].slice(0, 30),
+      );
+      return `Attached the exact whiteboard specification to ${target.data.title}.`;
+    },
+    [
+      collaborationCanvas.graphReadOnly,
+      recordSnapshot,
+      reportCollaborationReadOnly,
+      setEdges,
+      setEvents,
+    ],
+  );
 
   function updateEdgeType(edgeType: EdgeKind) {
     if (collaborationCanvas.graphReadOnly) {
@@ -1279,6 +1381,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         section: `Extension · ${template.extension.manifest.name}`,
         run: () => addExtensionNode(template),
       })),
+      ...WORKFLOW_TEMPLATES.map((template) => ({
+        id: `add-workflow-template-${template.id}`,
+        label: `Add ${template.name} workflow`,
+        section: 'Workflow templates',
+        run: () => addWorkflowTemplate(template),
+      })),
       {
         id: 'fit',
         label: 'Zoom to fit the canvas',
@@ -1341,6 +1449,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     [
       addExtensionNode,
       addNode,
+      addWorkflowTemplate,
       canRunWorkflow,
       closeProject,
       extensionTemplates,
@@ -1359,7 +1468,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   return (
     <main className="workspace-shell">
       <WorkspaceCommandBar
-        project={project}
+        project={projectStatus.project}
+        projectStatusAvailable={projectStatus.available}
         canvasName={canvas?.name}
         agents={agents}
         saveState={saveState}
@@ -1378,6 +1488,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             : 'Your role is view-only: you can see workflow history but cannot start runs.'
         }
         commandPaletteShortcut={commandPaletteShortcutLabel(settings.keyboardPreset)}
+        collaborationEnabled={settings.collaborationEnabled}
+        sharingStatus={collaborationCanvas.connectionStatus}
         onCloseProject={() => void closeProject()}
         onUndo={undo}
         onRedo={redo}
@@ -1409,14 +1521,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           tab={railTab}
           search={search}
           templates={filteredTemplates}
+          workflowTemplates={filteredWorkflowTemplates}
           extensionTemplates={filteredExtensionTemplates}
           nodes={railTab === 'nodes' ? filteredNodes : nodes}
+          nodeRegistry={nodeRegistry}
           fileOperations={window.forgeboard.files}
           initializingGit={initializingGit}
           collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
           onTabChange={setRailTab}
           onSearchChange={setSearch}
           onAddNode={addNode}
+          onAddWorkflowTemplate={addWorkflowTemplate}
           onAddExtensionNode={addExtensionNode}
           onInitializeGit={() => void initializeGit()}
           onAttachAgentContext={attachProjectFileContext}
@@ -1442,6 +1557,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           edges={displayedGraph.edges}
           settings={settings}
           extensionTemplates={extensionTemplates}
+          nodeRegistry={nodeRegistry}
           instance={instance}
           onInstance={setInstance}
           onViewportChange={setViewport}
@@ -1552,6 +1668,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onContextDropError={onError}
         />
         <WorkspaceInspector
+          nodeRegistry={nodeRegistry}
           project={project}
           settings={settings}
           canvas={canvas}
@@ -1585,6 +1702,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           }}
           onRecord={record}
           onUpdateSelected={updateSelected}
+          onAttachWhiteboardContext={attachWhiteboardContext}
           onFitGroupFrame={fitSelectedGroupFrame}
           onArrangeGroupFrame={arrangeSelectedGroupFrame}
           onUpdateEdgeType={updateEdgeType}
@@ -1592,7 +1710,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onDuplicateSelected={duplicateSelected}
           onDeleteSelected={deleteSelected}
           onRunInputChange={runs.setRunInput}
-          onSendRunInput={() => void runs.sendRunInput()}
+          onSendRunInput={(explicitInput) => void runs.sendRunInput(explicitInput)}
           onControlRun={(action) => void runs.controlRun(action)}
           onPrepareRun={() => {
             if (selectedPermissionUnavailableReason !== null) {

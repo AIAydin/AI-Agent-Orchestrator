@@ -3,8 +3,10 @@ import { createHash } from 'node:crypto';
 import {
   CollaborationInviteCreateInputSchema,
   CollaborationInviteIdSchema,
+  CollaborationInviteListInputSchema,
   CollaborationJoinInviteInputSchema,
   type CollaborationInviteCreateInput,
+  type CollaborationInviteListInput,
   type CollaborationJoinInviteInput,
 } from '../../../shared/collaboration/index.js';
 import type { OutboundActionDisclosure } from '../../outbound/outbound-action-gate.js';
@@ -28,6 +30,29 @@ export function inviteCreateDisclosure(
     ],
     warning:
       'The generated invite is a credential. Forgeboard retains its link only in volatile memory for this connected owner session.',
+  };
+}
+
+export function inviteListDisclosure(
+  lease: CollaborationInviteSessionLease,
+  rawInput: CollaborationInviteListInput,
+): OutboundActionDisclosure {
+  const input = CollaborationInviteListInputSchema.parse(rawInput);
+  return {
+    action: 'collaboration-invite-list',
+    title: 'Load collaboration invite history?',
+    summary: `Forgeboard will load token-free invite history for room ${JSON.stringify(lease.binding.roomId)}.`,
+    confirmLabel: 'Load invites',
+    destination: destination(lease.binding.managementBaseUrl, lease.binding.roomId),
+    details: [
+      { label: 'Page size', value: String(input.limit) },
+      {
+        label: 'Page',
+        value: input.after === undefined ? 'Newest invites' : 'Next page',
+      },
+    ],
+    warning:
+      'The server receives the current owner credential. Invite links and tokens are never returned by this history request.',
   };
 }
 

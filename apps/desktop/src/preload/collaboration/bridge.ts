@@ -9,7 +9,10 @@ import {
   CollaborationDiscardRejectedCommentInputSchema,
   CollaborationEventSchema,
   CollaborationInviteCreateInputSchema,
+  CollaborationInviteHistoryPageSchema,
+  CollaborationInviteHistoryViewSchema,
   CollaborationInviteIdInputSchema,
+  CollaborationInviteListInputSchema,
   CollaborationInviteSafeViewSchema,
   CollaborationJoinInputSchema,
   CollaborationJoinInviteInputSchema,
@@ -121,11 +124,12 @@ export function createCollaborationApi(
         CollaborationRoomAuditPageSchema,
         CollaborationRoomAuditListInputSchema.parse(input),
       ),
-    listSessionInvites: async () =>
+    listInvites: async (input) =>
       await invokeResult(
         invoke,
-        COLLABORATION_IPC_CHANNELS.listSessionInvites,
-        CollaborationInviteSafeViewSchema.array().max(100),
+        COLLABORATION_IPC_CHANNELS.listInvites,
+        CollaborationInviteHistoryPageSchema,
+        CollaborationInviteListInputSchema.parse(input),
       ),
     createInvite: async (input) =>
       await invokeResult(
@@ -145,7 +149,7 @@ export function createCollaborationApi(
       await invokeResult(
         invoke,
         COLLABORATION_IPC_CHANNELS.revokeInvite,
-        z.boolean(),
+        CollaborationInviteHistoryViewSchema.nullable(),
         CollaborationInviteIdInputSchema.parse(input),
       ),
     leave: async () =>

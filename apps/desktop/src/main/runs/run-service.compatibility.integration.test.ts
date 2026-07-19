@@ -90,6 +90,8 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
     readonly data: string;
   }> = [];
   readonly interruptCalls: Array<{ readonly ownerId: string; readonly runId: string }> = [];
+  readonly pauseCalls: Array<{ readonly ownerId: string; readonly runId: string }> = [];
+  readonly continueCalls: Array<{ readonly ownerId: string; readonly runId: string }> = [];
   readonly terminateCalls: Array<{ readonly ownerId: string; readonly runId: string }> = [];
   readonly stopOwnerCalls: string[] = [];
   disposed = false;
@@ -228,6 +230,16 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
 
   public interrupt(ownerId: string, runId: string): boolean {
     this.interruptCalls.push({ ownerId, runId });
+    return true;
+  }
+
+  public pause(ownerId: string, runId: string): boolean {
+    this.pauseCalls.push({ ownerId, runId });
+    return true;
+  }
+
+  public continue(ownerId: string, runId: string): boolean {
+    this.continueCalls.push({ ownerId, runId });
     return true;
   }
 
@@ -548,6 +560,8 @@ describe('RunService Electron compatibility', () => {
         IPC_CHANNELS.runsRetry,
         IPC_CHANNELS.runsApprove,
         IPC_CHANNELS.runsInput,
+        IPC_CHANNELS.runsPause,
+        IPC_CHANNELS.runsContinue,
         IPC_CHANNELS.runsInterrupt,
         IPC_CHANNELS.runsTerminate,
       ]),
@@ -583,6 +597,12 @@ describe('RunService Electron compatibility', () => {
       ok: false,
       error: { code: 'OPERATION_FAILED' },
     });
+    for (const channel of [IPC_CHANNELS.runsPause, IPC_CHANNELS.runsContinue]) {
+      await expect(requiredHandler(channel)(event, runId)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'OPERATION_FAILED' },
+      });
+    }
     await expect(requiredHandler(IPC_CHANNELS.runsTerminate)(event, runId)).resolves.toEqual({
       ok: true,
       value: true,
@@ -591,18 +611,25 @@ describe('RunService Electron compatibility', () => {
     expect(runtime.prepareCalls).toEqual([]);
     expect(runtime.inputCalls).toEqual([]);
     expect(runtime.interruptCalls).toEqual([]);
+    expect(runtime.pauseCalls).toEqual([]);
+    expect(runtime.continueCalls).toEqual([]);
     expect(runtime.terminateCalls).toEqual([expect.objectContaining({ runId })]);
-    expect(authorizeMutation).toHaveBeenCalledTimes(6);
+    expect(authorizeMutation).toHaveBeenCalledTimes(8);
     await service.dispose();
   });
 
-  it('fails input and interrupt closed when durable Agent node authority is missing', async () => {
+  it('fails active process controls closed when durable Agent node authority is missing', async () => {
     const runtime = new FakeAgentExecutionRuntime();
     const { service } = serviceHarness(runtime);
     const event = invokeEvent(webContents(92).owner);
     const runId = '00000000-0000-4000-8000-000000000092';
 
-    for (const channel of [IPC_CHANNELS.runsInput, IPC_CHANNELS.runsInterrupt]) {
+    for (const channel of [
+      IPC_CHANNELS.runsInput,
+      IPC_CHANNELS.runsPause,
+      IPC_CHANNELS.runsContinue,
+      IPC_CHANNELS.runsInterrupt,
+    ]) {
       const arguments_ = channel === IPC_CHANNELS.runsInput ? [runId, 'input'] : [runId];
       const result = await requiredHandler(channel)(event, ...arguments_);
       expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
@@ -610,6 +637,8 @@ describe('RunService Electron compatibility', () => {
     }
     expect(runtime.inputCalls).toEqual([]);
     expect(runtime.interruptCalls).toEqual([]);
+    expect(runtime.pauseCalls).toEqual([]);
+    expect(runtime.continueCalls).toEqual([]);
     await service.dispose();
   });
 

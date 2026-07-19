@@ -7,7 +7,7 @@ export class ExactCheckOutputBuffer {
     stdout: new StringDecoder('utf8'),
     stderr: new StringDecoder('utf8'),
   };
-  #tail = Buffer.alloc(0);
+  #tail: Buffer = Buffer.alloc(0);
   #truncated = false;
   #ended = false;
 

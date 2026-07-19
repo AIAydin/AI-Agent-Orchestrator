@@ -205,6 +205,7 @@ export const AppSettingsSchema = z
       .refine((value) => !containsControlCharacter(value))
       .default(''),
     gitRemote: GitRemoteSettingSchema.default('origin'),
+    externalEditorExecutable: OptionalMachineSpecificPathSchema.default(''),
     terminalShell: TerminalExecutableSettingSchema,
     envAllowlist: EnvironmentAllowlistSchema,
     developmentCommand: CommandConfigurationSchema.default({
@@ -304,6 +305,13 @@ export const AppSettingsSchema = z
         code: z.ZodIssueCode.custom,
         path: ['dockerContainerExecutable'],
         message: 'Choose the agent executable inside the image before enabling Docker profiles.',
+      });
+    }
+    if (settings.dockerEnabled && settings.dockerMountHostCredentials) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dockerMountHostCredentials'],
+        message: 'Disable host credential mounting before enabling Docker profiles.',
       });
     }
     if (settings.defaultPermissionProfile === 'docker-isolated' && !settings.dockerEnabled) {
@@ -570,6 +578,7 @@ export const PreviewNodeKeySchema = z
   .object({
     projectId: z.string().uuid(),
     nodeId: z.string().min(1).max(512),
+    slot: z.enum(['comparison-left', 'comparison-right']).optional(),
   })
   .strict();
 export type PreviewNodeKey = z.infer<typeof PreviewNodeKeySchema>;
@@ -645,6 +654,7 @@ export const PreviewSessionSnapshotSchema = z
     failure: z.string().nullable(),
     trustedHosts: z.array(z.string()),
     processes: z.array(PreviewProcessSnapshotSchema),
+    target: PreviewTargetSchema.optional(),
   })
   .strict();
 export type PreviewSessionSnapshot = z.infer<typeof PreviewSessionSnapshotSchema>;
@@ -653,14 +663,18 @@ export const PreviewEventEnvelopeSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('state'),
+      projectId: z.string().uuid(),
       nodeId: z.string().min(1).max(512),
+      slot: z.enum(['comparison-left', 'comparison-right']).optional(),
       session: PreviewSessionSnapshotSchema,
     })
     .strict(),
   z
     .object({
       kind: z.literal('output'),
+      projectId: z.string().uuid(),
       nodeId: z.string().min(1).max(512),
+      slot: z.enum(['comparison-left', 'comparison-right']).optional(),
       sessionId: z.string().uuid(),
       processId: z.string(),
       timestamp: z.string().datetime(),
@@ -1062,9 +1076,11 @@ export const IPC_CHANNELS = Object.freeze({
   approvalsList: 'approvals:list',
   approvalsRevoke: 'approvals:revoke',
   projectsRecent: 'projects:recent',
+  projectsRefresh: 'projects:refresh',
   projectsPick: 'projects:pick',
   projectsPickParent: 'projects:pick-parent',
   projectsPickExecutable: 'projects:pick-executable',
+  projectsPickExternalApplication: 'projects:pick-external-application',
   projectsPickReferences: 'projects:pick-references',
   projectsLocateMoved: 'projects:locate-moved',
   projectsConfirmMoved: 'projects:confirm-moved',
@@ -1091,6 +1107,8 @@ export const IPC_CHANNELS = Object.freeze({
   runsRetry: 'runs:retry',
   runsApprove: 'runs:approve',
   runsInput: 'runs:input',
+  runsPause: 'runs:pause',
+  runsContinue: 'runs:continue',
   runsInterrupt: 'runs:interrupt',
   runsTerminate: 'runs:terminate',
   runsEvent: 'runs:event',
@@ -1121,4 +1139,7 @@ export const IPC_CHANNELS = Object.freeze({
   gitConfirmCommit: 'git:confirm-commit',
   gitPrepareShipping: 'git:prepare-shipping',
   gitConfirmShipping: 'git:confirm-shipping',
+  gitConflictRecoveryState: 'git:conflict-recovery-state',
+  gitPrepareConflictRecovery: 'git:prepare-conflict-recovery',
+  gitConfirmConflictRecovery: 'git:confirm-conflict-recovery',
 } as const);

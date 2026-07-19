@@ -4,18 +4,18 @@ import {
   ChangeService,
   patchSha256,
   selectDiffHunks,
+  WorktreeService,
+  type ArchiveImpact,
+  type ArchiveWorktreeApproval,
+  type BranchRenameImpact,
   type CommitApproval,
   type DiscardHunksApproval,
   type ParsedDiff,
+  type RenameManagedBranchApproval,
+  type RestoreArchivedWorktreeApproval,
   type RepositoryService,
 } from '@forgeboard/git-engine';
-import {
-  BrowserWindow,
-  ipcMain,
-  type Dialog,
-  type IpcMainInvokeEvent,
-  type MessageBoxOptions,
-} from 'electron';
+import { BrowserWindow, ipcMain, type Dialog, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
 
 import type { AppSettings, IpcResult } from '../../shared/application/contracts.js';
@@ -48,19 +48,54 @@ import {
   GitShippingPlanInputSchema,
   GitShippingPlanViewSchema,
   GitShippingResultViewSchema,
+  GitConflictRecoveryPlanViewSchema,
+  GitConflictRecoveryPrepareInputSchema,
+  GitConflictRecoveryResultViewSchema,
+  GitConflictRecoveryStateViewSchema,
   type GitShippingPlanInput,
   type GitShippingPlanView,
   type GitShippingResultView,
+  type GitConflictRecoveryPlanView,
+  type GitConflictRecoveryPrepareInput,
+  type GitConflictRecoveryResultView,
+  type GitConflictRecoveryStateView,
 } from '../../shared/git/shipping-contracts.js';
 import {
+  GIT_CONFLICT_RESOLUTION_IPC_CHANNELS,
+  GitConflictInspectionInputSchema,
+  GitConflictInspectionViewSchema,
+  GitConflictResolutionPlanViewSchema,
+  GitConflictResolutionPrepareInputSchema,
+  GitConflictResolutionResultViewSchema,
+  type GitConflictInspectionInput,
+  type GitConflictResolutionPrepareInput,
+} from '../../shared/git/conflict-resolution/contracts.js';
+import {
+  GIT_AGENT_COMPARISON_IPC_CHANNELS,
+  GitAgentComparisonInputSchema,
+  GitAgentComparisonViewSchema,
+  type GitAgentComparisonInput,
+  type GitAgentComparisonView,
+} from '../../shared/git/comparison/contracts.js';
+import {
   GIT_LIFECYCLE_IPC_CHANNELS,
+  GitWorkspaceExternalOpenResultSchema,
   GitWorktreeCleanupConfirmationInputSchema,
   GitWorktreeCleanupPrepareOutcomeSchema,
   GitWorktreeCleanupResultViewSchema,
   GitWorktreeCleanupTargetInputSchema,
+  GitWorktreeArchivePlanViewSchema,
+  GitWorktreeMetadataConfirmationInputSchema,
+  GitWorktreeMetadataResultViewSchema,
+  GitWorktreeRenamePlanViewSchema,
+  GitWorktreeRenamePrepareInputSchema,
+  GitWorktreeRestorePlanViewSchema,
+  type GitWorktreeMetadataResultView,
+  type GitWorktreeRenamePrepareInput,
   type GitWorktreeCleanupPrepareOutcome,
   type GitWorktreeCleanupResultView,
   type GitWorktreeCleanupTargetInput,
+  type GitWorkspaceExternalOpenResult,
 } from '../../shared/git/lifecycle/contracts.js';
 import {
   GIT_REVIEW_NOTE_IPC_CHANNELS,
@@ -75,7 +110,6 @@ import {
   type GitReviewNotesView,
   type GitReviewNoteUpdateInput,
 } from '../../shared/git/reviews/contracts.js';
-import { displayEscapedText } from '../../shared/text/display-literal.js';
 import { GitTargetResolver } from './git-target-resolver.js';
 import type { LocalStore } from '../storage.js';
 import { createAgentBaseComparison } from './git-base-comparison.js';
@@ -84,29 +118,36 @@ import {
   WorktreeCleanupService,
   type WorktreeCleanupAdmission,
 } from './lifecycle/worktree-cleanup-service.js';
+import { worktreeMetadataConfirmation } from './lifecycle/worktree-metadata-confirmation.js';
+import { reconcileFailedWorktreeMetadataEffect } from './lifecycle/metadata-intent-recovery.js';
 import {
-  GitShippingService,
-  type GitShippingReadinessAuthority,
-  type PendingGitShippingPlan,
-} from './shipping/git-shipping-service.js';
-import { shippingConfirmation } from './shipping/native-confirmation.js';
+  launchExternalApplication,
+  openGitWorkspaceExternal,
+  type ExternalApplicationIdentity,
+} from './lifecycle/external-application.js';
+import type { GitShippingReadinessAuthority } from './shipping/git-shipping-service.js';
+import {
+  denyShippingWithoutReadiness,
+  GitShippingIpcController,
+} from './shipping/ipc-controller.js';
 import { GitReviewNotesService } from './reviews/review-notes-service.js';
+import {
+  GitReviewTargetService,
+  type GitReviewTarget as GitTarget,
+} from './reviews/review-target-service.js';
+import { reviewNoteDeleteConfirmation } from './reviews/native-confirmation.js';
+import { commitConfirmation, discardConfirmation } from './reviews/native-action-confirmations.js';
+import { normalizeGitIdentityValue, readRepositoryGitIdentity } from './identity/values.js';
+import { GitAgentComparisonService } from './comparison/service.js';
+import {
+  auditInputTargetMetadata,
+  auditTargetMetadata,
+  targetInput,
+  targetKey,
+} from './targets/view-metadata.js';
 
 const PLAN_TTL_MS = 5 * 60_000;
 const MAX_PENDING_PLANS_PER_OWNER = 32;
-const denyShippingWithoutReadiness: GitShippingReadinessAuthority = {
-  bind: () =>
-    Promise.reject(
-      new Error(
-        'Run at least one required delivery check and record human quality approval before delivery.',
-      ),
-    ),
-  revalidate: () =>
-    Promise.reject(
-      new Error('The delivery readiness authority is unavailable. Prepare a new delivery review.'),
-    ),
-};
-
 interface PendingPlanBase {
   readonly id: string;
   readonly ownerId: number;
@@ -115,7 +156,7 @@ interface PendingPlanBase {
   readonly expiresAtMs: number;
 }
 
-interface PendingCommitPlan extends PendingPlanBase {
+export interface PendingCommitPlan extends PendingPlanBase {
   readonly kind: 'commit';
   readonly message: string;
   readonly branch: string | null;
@@ -127,7 +168,7 @@ interface PendingCommitPlan extends PendingPlanBase {
   readonly identity: GitIdentityView;
 }
 
-interface PendingDiscardPlan extends PendingPlanBase {
+export interface PendingDiscardPlan extends PendingPlanBase {
   readonly kind: 'discard-hunks';
   readonly branch: string | null;
   readonly expectedHead: string;
@@ -138,26 +179,39 @@ interface PendingDiscardPlan extends PendingPlanBase {
   readonly deletions: number;
 }
 
-type PendingPlan = PendingCommitPlan | PendingDiscardPlan | PendingGitShippingPlan;
-
-interface GitTarget {
-  readonly view: GitReviewTargetView;
-  readonly repositoryRoot: string;
-  readonly comparisonBinding?: {
-    readonly projectId: string;
-    readonly runId: string;
-    readonly worktreeId: string;
-    readonly branch: string;
-    readonly baseCommit: string;
-    readonly headCommit: string;
-  };
+interface PendingRenamePlan extends PendingPlanBase {
+  readonly kind: 'rename-worktree-branch';
+  readonly input: GitWorktreeRenamePrepareInput;
+  readonly impact: BranchRenameImpact;
+  readonly branch: string;
+  readonly newBranch: string;
+  readonly expectedBranchOid: string;
+  readonly dirtyPaths: readonly string[];
 }
+
+interface PendingArchivePlan extends PendingPlanBase {
+  readonly kind: 'archive-worktree' | 'restore-worktree';
+  readonly input: GitWorktreeCleanupTargetInput;
+  readonly impact: ArchiveImpact;
+  readonly branch: string;
+  readonly expectedBranchOid: string | null;
+  readonly dirtyPaths: readonly string[];
+}
+
+export type PendingWorktreeMetadataPlan = PendingRenamePlan | PendingArchivePlan;
+
+type PendingPlan = PendingCommitPlan | PendingDiscardPlan | PendingWorktreeMetadataPlan;
 
 type WindowResolver = (event: IpcMainInvokeEvent) => BrowserWindow | null;
 
 export interface GitIpcServiceOptions {
   readonly withCleanupAdmission?: WorktreeCleanupAdmission;
   readonly shippingReadiness?: GitShippingReadinessAuthority;
+  readonly openExternalPath?: (path: string) => Promise<string>;
+  readonly launchExternalApplication?: (
+    application: ExternalApplicationIdentity,
+    workspacePath: string,
+  ) => Promise<void>;
 }
 
 export class GitIpcService {
@@ -167,9 +221,17 @@ export class GitIpcService {
   readonly #trackedOwners = new Set<number>();
   readonly #operationParents = new WeakMap<IpcMainInvokeEvent, BrowserWindow>();
   readonly #targets: GitTargetResolver;
-  readonly #shipping: GitShippingService;
+  readonly #reviewTargets: GitReviewTargetService;
+  readonly #shippingIpc: GitShippingIpcController;
   readonly #reviewNotes: GitReviewNotesService;
   readonly #cleanup: WorktreeCleanupService;
+  readonly #comparison: GitAgentComparisonService;
+  readonly #worktrees: WorktreeService;
+  readonly #openExternalPath: (path: string) => Promise<string>;
+  readonly #launchExternalApplication: (
+    application: ExternalApplicationIdentity,
+    workspacePath: string,
+  ) => Promise<void>;
   #disposed = false;
   #disposePromise: Promise<void> | null = null;
   #privacyResetting = false;
@@ -180,12 +242,16 @@ export class GitIpcService {
     private readonly store: Pick<
       LocalStore,
       | 'appendAudit'
+      | 'beginGitWorktreeMetadataIntent'
       | 'createReviewNote'
       | 'deleteReviewNote'
+      | 'getGitWorktreeMetadataIntent'
       | 'getProject'
       | 'getProjectByPath'
       | 'getRun'
       | 'listReviewNotes'
+      | 'renameRunWorktreeBranch'
+      | 'reconcileGitWorktreeMetadataIntent'
       | 'saveProject'
       | 'transitionRunWorktreeState'
       | 'updateReviewNote'
@@ -198,18 +264,30 @@ export class GitIpcService {
   ) {
     this.#changes = new ChangeService(repositories);
     this.#targets = new GitTargetResolver(store, repositories, getSettings);
-    this.#shipping = new GitShippingService(
-      this.#targets,
+    this.#reviewTargets = new GitReviewTargetService(store, repositories, this.#targets);
+    this.#shippingIpc = new GitShippingIpcController({
+      dialog: this.dialog,
+      targets: this.#targets,
       repositories,
-      this.#changes,
-      options.shippingReadiness ?? denyShippingWithoutReadiness,
-    );
+      changes: this.#changes,
+      readiness: options.shippingReadiness ?? denyShippingWithoutReadiness,
+      resolveIdentity: async (repositoryRoot) => await this.#resolveIdentity(repositoryRoot),
+      resolveTarget: async (input) => await this.#resolveTarget(input),
+      review: async (target) => await this.#reviewUnlocked(target),
+      audit: (action, outcome, metadata) =>
+        this.store.appendAudit('git', action, outcome, metadata),
+    });
     this.#reviewNotes = new GitReviewNotesService(store);
     this.#cleanup = new WorktreeCleanupService(this.dialog, store, this.#targets, repositories, {
       ...(options.withCleanupAdmission === undefined
         ? {}
         : { withCleanupAdmission: options.withCleanupAdmission }),
     });
+    this.#comparison = new GitAgentComparisonService(this.#targets, repositories);
+    this.#worktrees = new WorktreeService(repositories);
+    this.#openExternalPath = options.openExternalPath ?? unavailableExternalOpen;
+    this.#launchExternalApplication =
+      options.launchExternalApplication ?? launchExternalApplication;
   }
 
   public registerIpcHandlers(): void {
@@ -220,6 +298,15 @@ export class GitIpcService {
       (event, input) => {
         this.#trackOwner(event);
         return this.review(input);
+      },
+    );
+    this.#handle(
+      GIT_AGENT_COMPARISON_IPC_CHANNELS.compare,
+      z.tuple([GitAgentComparisonInputSchema]),
+      GitAgentComparisonViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.compareAgents(input);
       },
     );
     this.#handle(
@@ -304,6 +391,69 @@ export class GitIpcService {
       (event, input) => this.confirmShipping(event, input.planId),
     );
     this.#handle(
+      IPC_CHANNELS.gitConflictRecoveryState,
+      z.tuple([GitTargetInputSchema]),
+      GitConflictRecoveryStateViewSchema.nullable(),
+      (_event, input) => this.conflictRecoveryState(input),
+    );
+    this.#handle(
+      IPC_CHANNELS.gitPrepareConflictRecovery,
+      z.tuple([GitConflictRecoveryPrepareInputSchema]),
+      GitConflictRecoveryPlanViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.prepareConflictRecovery(event.sender.id, input);
+      },
+    );
+    this.#handle(
+      IPC_CHANNELS.gitConfirmConflictRecovery,
+      z.tuple([GitPlanConfirmationInputSchema]),
+      GitConflictRecoveryResultViewSchema.nullable(),
+      (event, input) => this.confirmConflictRecovery(event, input.planId),
+    );
+    this.#handle(
+      GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.inspect,
+      z.tuple([GitConflictInspectionInputSchema]),
+      GitConflictInspectionViewSchema,
+      (_event, input) =>
+        this.#withOperation(async () => await this.#shippingIpc.inspectConflicts(input)),
+    );
+    this.#handle(
+      GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.prepare,
+      z.tuple([GitConflictResolutionPrepareInputSchema]),
+      GitConflictResolutionPlanViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.#withOperation(
+          async () => await this.#shippingIpc.prepareConflictFile(event.sender.id, input),
+        );
+      },
+    );
+    this.#handle(
+      GIT_CONFLICT_RESOLUTION_IPC_CHANNELS.confirm,
+      z.tuple([GitPlanConfirmationInputSchema]),
+      GitConflictResolutionResultViewSchema.nullable(),
+      (event, input) =>
+        this.#withOperation(async () => {
+          const parent = this.#requireLiveWindow(event);
+          return await this.#shippingIpc.confirmConflictFile({
+            ownerId: event.sender.id,
+            planId: input.planId,
+            parent,
+            assertCurrent: () => this.#assertLiveSender(event),
+          });
+        }),
+    );
+    this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.openExternal,
+      z.tuple([GitTargetInputSchema]),
+      GitWorkspaceExternalOpenResultSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.openExternal(event, input);
+      },
+    );
+    this.#handle(
       GIT_LIFECYCLE_IPC_CHANNELS.prepareCleanup,
       z.tuple([GitWorktreeCleanupTargetInputSchema]),
       GitWorktreeCleanupPrepareOutcomeSchema,
@@ -317,6 +467,51 @@ export class GitIpcService {
       z.tuple([GitWorktreeCleanupConfirmationInputSchema]),
       GitWorktreeCleanupResultViewSchema.nullable(),
       (event, input) => this.confirmCleanup(event, input.planId),
+    );
+    this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.prepareRename,
+      z.tuple([GitWorktreeRenamePrepareInputSchema]),
+      GitWorktreeRenamePlanViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.prepareWorktreeRename(event.sender.id, input);
+      },
+    );
+    this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.confirmRename,
+      z.tuple([GitWorktreeMetadataConfirmationInputSchema]),
+      GitWorktreeMetadataResultViewSchema.nullable(),
+      (event, input) => this.confirmWorktreeMetadata(event, input.planId, 'rename-worktree-branch'),
+    );
+    this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.prepareArchive,
+      z.tuple([GitWorktreeCleanupTargetInputSchema]),
+      GitWorktreeArchivePlanViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.prepareWorktreeArchive(event.sender.id, input);
+      },
+    );
+    this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.confirmArchive,
+      z.tuple([GitWorktreeMetadataConfirmationInputSchema]),
+      GitWorktreeMetadataResultViewSchema.nullable(),
+      (event, input) => this.confirmWorktreeMetadata(event, input.planId, 'archive-worktree'),
+    );
+    this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.prepareRestore,
+      z.tuple([GitWorktreeCleanupTargetInputSchema]),
+      GitWorktreeRestorePlanViewSchema,
+      (event, input) => {
+        this.#trackOwner(event);
+        return this.prepareWorktreeRestore(event.sender.id, input);
+      },
+    );
+    this.#handle(
+      GIT_LIFECYCLE_IPC_CHANNELS.confirmRestore,
+      z.tuple([GitWorktreeMetadataConfirmationInputSchema]),
+      GitWorktreeMetadataResultViewSchema.nullable(),
+      (event, input) => this.confirmWorktreeMetadata(event, input.planId, 'restore-worktree'),
     );
     this.#handle(
       GIT_REVIEW_NOTE_IPC_CHANNELS.list,
@@ -351,7 +546,7 @@ export class GitIpcService {
       GitReviewNotesViewSchema,
       (event, input) => {
         this.#trackOwner(event);
-        return this.deleteReviewNote(input);
+        return this.deleteReviewNote(event, input);
       },
     );
   }
@@ -364,6 +559,7 @@ export class GitIpcService {
       this.#registeredChannels.length = 0;
       this.#plans.clear();
       this.#cleanup.clearPlans();
+      this.#shippingIpc.clear();
       this.#trackedOwners.clear();
     }
     this.#disposePromise ??= this.#operationTail.then(async () => await this.#cleanup.dispose());
@@ -375,6 +571,7 @@ export class GitIpcService {
     this.#privacyResetting = true;
     this.#plans.clear();
     this.#cleanup.clearPlans();
+    this.#shippingIpc.clear();
     await this.#operationTail;
   }
 
@@ -382,6 +579,7 @@ export class GitIpcService {
     if (this.#disposed) throw new Error('The Git review service has been disposed.');
     this.#privacyResetting = true;
     this.#cleanup.clearPlans();
+    this.#shippingIpc.clear();
     await this.#operationTail;
   }
 
@@ -406,7 +604,6 @@ export class GitIpcService {
 
   public createReviewNote(input: GitReviewNoteCreateInput): Promise<GitReviewNotesView> {
     return this.#mutateReviewNotes(input.target, 'create-review-note', (review) => {
-      const result = this.#reviewNotes.create(input, review);
       this.store.appendAudit(
         'git-review',
         input.kind === 'revision-request' ? 'record-revision-request' : 'record-line-comment',
@@ -417,33 +614,57 @@ export class GitIpcService {
           side: input.anchor.side,
           line: input.anchor.line,
           noteKind: input.kind,
+          phase: 'authorized-before-mutation',
         },
       );
-      return result;
+      return this.#reviewNotes.create(input, review);
     });
   }
 
   public updateReviewNote(input: GitReviewNoteUpdateInput): Promise<GitReviewNotesView> {
     return this.#mutateReviewNotes(input.target, 'update-review-note', (review) => {
-      const result = this.#reviewNotes.update(input, review);
       this.store.appendAudit('git-review', 'update-review-note', 'allowed', {
         ...auditInputTargetMetadata(input.target),
         noteId: input.noteId,
         bodyChanged: input.body !== undefined,
         ...(input.status === undefined ? {} : { status: input.status }),
+        phase: 'authorized-before-mutation',
       });
-      return result;
+      return this.#reviewNotes.update(input, review);
     });
   }
 
-  public deleteReviewNote(input: GitReviewNoteDeleteInput): Promise<GitReviewNotesView> {
-    return this.#mutateReviewNotes(input.target, 'delete-review-note', (review) => {
-      const result = this.#reviewNotes.delete(input, review);
+  public deleteReviewNote(
+    event: IpcMainInvokeEvent,
+    input: GitReviewNoteDeleteInput,
+  ): Promise<GitReviewNotesView> {
+    return this.#mutateReviewNotes(input.target, 'delete-review-note', async (review) => {
+      const current = this.#reviewNotes.list(input.target, review);
+      const note = current.notes.find(
+        (candidate) =>
+          candidate.id === input.noteId && candidate.updatedAt === input.expectedUpdatedAt,
+      );
+      if (note === undefined) {
+        throw new Error('The review note changed or no longer exists. Refresh before deleting it.');
+      }
+      const parent = this.#requireLiveWindow(event);
+      const decision = await this.dialog.showMessageBox(parent, reviewNoteDeleteConfirmation(note));
+      this.#requireLiveWindow(event);
+      if (decision.response !== 1) {
+        this.store.appendAudit('git-review', 'delete-review-note', 'denied', {
+          ...auditInputTargetMetadata(input.target),
+          noteId: input.noteId,
+          reason: 'native-confirmation-cancelled',
+        });
+        return current;
+      }
       this.store.appendAudit('git-review', 'delete-review-note', 'allowed', {
         ...auditInputTargetMetadata(input.target),
         noteId: input.noteId,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+        phase: 'authorized-before-mutation',
       });
-      return result;
+      return this.#reviewNotes.delete(input, review);
     });
   }
 
@@ -544,36 +765,32 @@ export class GitIpcService {
     ownerId: number,
     input: GitShippingPlanInput,
   ): Promise<GitShippingPlanView> {
-    return this.#withOperation(async () => {
-      try {
-        if (input.target.kind !== 'agent-worktree') {
-          throw new Error(
-            'Only a managed agent worktree can be delivered to the primary checkout.',
-          );
-        }
-        const plan = await this.#shipping.prepare({
-          id: randomUUID(),
-          ownerId,
-          expiresAtMs: Date.now() + PLAN_TTL_MS,
-          input,
-          resolveIdentity: async (primaryRepositoryRoot) =>
-            await this.#resolveIdentity(primaryRepositoryRoot),
-        });
-        const view = this.#shipping.view(plan);
-        this.#storePlan(plan);
-        return view;
-      } catch (error) {
-        this.store.appendAudit('git', 'ship-agent-commits', 'failed', {
-          projectId: input.target.projectId,
-          targetKind: input.target.kind,
-          ...(input.target.kind === 'agent-worktree' ? { runId: input.target.runId } : {}),
-          strategy: input.strategy,
-          stage: 'prepare',
-          reason: error instanceof Error ? error.message.slice(0, 4_096) : 'unknown failure',
-        });
-        throw error;
-      }
-    });
+    return this.#withOperation(async () => await this.#shippingIpc.prepareShipping(ownerId, input));
+  }
+
+  public prepareConflictRecovery(
+    ownerId: number,
+    input: GitConflictRecoveryPrepareInput,
+  ): Promise<GitConflictRecoveryPlanView> {
+    return this.#withOperation(
+      async () => await this.#shippingIpc.prepareConflictRecovery(ownerId, input),
+    );
+  }
+
+  public conflictRecoveryState(
+    input: GitTargetInput,
+  ): Promise<GitConflictRecoveryStateView | null> {
+    return this.#withOperation(async () => await this.#shippingIpc.conflictRecoveryState(input));
+  }
+
+  public inspectConflicts(input: GitConflictInspectionInput) {
+    return this.#withOperation(async () => await this.#shippingIpc.inspectConflicts(input));
+  }
+
+  public prepareConflictFile(ownerId: number, input: GitConflictResolutionPrepareInput) {
+    return this.#withOperation(
+      async () => await this.#shippingIpc.prepareConflictFile(ownerId, input),
+    );
   }
 
   public prepareCleanup(
@@ -581,6 +798,337 @@ export class GitIpcService {
     input: GitWorktreeCleanupTargetInput,
   ): Promise<GitWorktreeCleanupPrepareOutcome> {
     return this.#withOperation(async () => await this.#cleanup.prepare(ownerId, input));
+  }
+
+  public prepareWorktreeRename(ownerId: number, input: GitWorktreeRenamePrepareInput) {
+    return this.#withOperation(async () => {
+      const resolved = await this.#targets.resolve(input);
+      const impact = await this.#worktrees.branchRenameImpact(resolved.ownership, input.newBranch);
+      const target = await this.#resolveTarget({
+        kind: 'agent-worktree',
+        projectId: input.projectId,
+        runId: input.runId,
+      });
+      if (impact.branchOid === null) throw new Error('The managed branch no longer exists.');
+      const plan: PendingRenamePlan = {
+        kind: 'rename-worktree-branch',
+        id: randomUUID(),
+        ownerId,
+        target: target.view,
+        repositoryRoot: impact.ownership.repositoryRoot,
+        expiresAtMs: Date.now() + PLAN_TTL_MS,
+        input,
+        impact,
+        branch: impact.oldBranch,
+        newBranch: impact.newBranch,
+        expectedBranchOid: impact.branchOid,
+        dirtyPaths: [...impact.dirtyPaths],
+      };
+      this.#storePlan(plan);
+      return GitWorktreeRenamePlanViewSchema.parse({
+        kind: plan.kind,
+        planId: plan.id,
+        expiresAt: new Date(plan.expiresAtMs).toISOString(),
+        branch: plan.branch,
+        newBranch: plan.newBranch,
+        clean: plan.dirtyPaths.length === 0,
+        dirtyPathCount: plan.dirtyPaths.length,
+      });
+    });
+  }
+
+  public prepareWorktreeArchive(ownerId: number, input: GitWorktreeCleanupTargetInput) {
+    return this.#withOperation(async () => {
+      const resolved = await this.#targets.resolve(input);
+      const impact = await this.#worktrees.archiveImpact(resolved.ownership);
+      const target = await this.#resolveTarget({
+        kind: 'agent-worktree',
+        projectId: input.projectId,
+        runId: input.runId,
+      });
+      const plan: PendingArchivePlan = {
+        kind: 'archive-worktree',
+        id: randomUUID(),
+        ownerId,
+        target: target.view,
+        repositoryRoot: impact.ownership.repositoryRoot,
+        expiresAtMs: Date.now() + PLAN_TTL_MS,
+        input,
+        impact,
+        branch: impact.ownership.branch,
+        expectedBranchOid: impact.branchOid,
+        dirtyPaths: [...impact.dirtyPaths],
+      };
+      this.#storePlan(plan);
+      return GitWorktreeArchivePlanViewSchema.parse({
+        kind: plan.kind,
+        planId: plan.id,
+        expiresAt: new Date(plan.expiresAtMs).toISOString(),
+        branch: plan.branch,
+        clean: plan.dirtyPaths.length === 0,
+        dirtyPathCount: plan.dirtyPaths.length,
+        retainsWorktree: true,
+        retainsBranch: true,
+      });
+    });
+  }
+
+  public prepareWorktreeRestore(ownerId: number, input: GitWorktreeCleanupTargetInput) {
+    return this.#withOperation(async () => {
+      const resolved = await this.#targets.resolveArchived(input);
+      const impact = await this.#worktrees.archiveImpact(resolved.ownership);
+      const plan: PendingArchivePlan = {
+        kind: 'restore-worktree',
+        id: randomUUID(),
+        ownerId,
+        target: GitReviewTargetViewSchema.parse({
+          kind: 'agent-worktree',
+          projectId: input.projectId,
+          runId: input.runId,
+          nodeId: resolved.run.nodeId,
+          worktreeId: resolved.ownership.id,
+          agentId: resolved.ownership.agentId,
+          baseRef: resolved.ownership.baseRef,
+          baseCommit: resolved.ownership.baseCommit,
+        }),
+        repositoryRoot: impact.ownership.repositoryRoot,
+        expiresAtMs: Date.now() + PLAN_TTL_MS,
+        input,
+        impact,
+        branch: impact.ownership.branch,
+        expectedBranchOid: impact.branchOid,
+        dirtyPaths: [...impact.dirtyPaths],
+      };
+      this.#storePlan(plan);
+      return GitWorktreeRestorePlanViewSchema.parse({
+        kind: plan.kind,
+        planId: plan.id,
+        expiresAt: new Date(plan.expiresAtMs).toISOString(),
+        branch: plan.branch,
+        clean: plan.dirtyPaths.length === 0,
+        dirtyPathCount: plan.dirtyPaths.length,
+        retainsWorktree: true,
+        retainsBranch: true,
+      });
+    });
+  }
+
+  public confirmWorktreeMetadata(
+    event: IpcMainInvokeEvent,
+    planId: string,
+    kind: PendingWorktreeMetadataPlan['kind'],
+  ): Promise<GitWorktreeMetadataResultView | null> {
+    return this.#withOperation(async () => {
+      const plan = this.#takePlan(event, planId, kind);
+      const parent = this.#requireLiveWindow(event);
+      const decision = await this.dialog.showMessageBox(parent, worktreeMetadataConfirmation(plan));
+      this.#assertLiveSender(event);
+      if (decision.response !== 1) {
+        this.store.appendAudit('git', plan.kind, 'denied', {
+          ...auditTargetMetadata(plan.target),
+          reason: 'native-confirmation-cancelled',
+        });
+        return null;
+      }
+      try {
+        const resolved =
+          plan.kind === 'restore-worktree'
+            ? await this.#targets.resolveArchived(plan.input)
+            : await this.#targets.resolve(plan.input);
+        const current =
+          plan.kind === 'rename-worktree-branch'
+            ? await this.#worktrees.branchRenameImpact(resolved.ownership, plan.newBranch)
+            : await this.#worktrees.archiveImpact(resolved.ownership);
+        if (!sameWorktreeMetadataImpact(plan, current)) {
+          throw new Error('The managed worktree changed after review. Prepare a new plan.');
+        }
+        this.#requireLiveWindow(event);
+        this.store.appendAudit('git', plan.kind, 'allowed', {
+          ...auditTargetMetadata(plan.target),
+          stage: 'authorized-before-effect',
+          branch: plan.branch,
+          ...(plan.kind === 'rename-worktree-branch' ? { newBranch: plan.newBranch } : {}),
+          dirtyPathCount: plan.dirtyPaths.length,
+        });
+        this.store.beginGitWorktreeMetadataIntent(worktreeMetadataIntent(plan));
+        if (plan.kind === 'rename-worktree-branch') {
+          const approval: RenameManagedBranchApproval = {
+            action: 'rename-managed-branch',
+            approved: true,
+            approvalId: plan.id,
+            approvedAt: new Date().toISOString(),
+            repositoryRoot: plan.impact.ownership.repositoryRoot,
+            expectedHead: plan.impact.expectedHead,
+            worktreeId: plan.impact.ownership.id,
+            worktreePath: plan.impact.ownership.worktreePath,
+            oldBranch: plan.branch,
+            newBranch: plan.newBranch,
+            expectedBranchOid: plan.expectedBranchOid,
+            dirtyPaths: plan.dirtyPaths,
+          };
+          const renamed = await this.#worktrees.renameBranch(plan.impact.ownership, approval).catch(
+            async (error: unknown) =>
+              await reconcileFailedWorktreeMetadataEffect({
+                worktrees: this.#worktrees,
+                store: this.store,
+                intentId: plan.id,
+                runId: plan.input.runId,
+                kind: plan.kind,
+                managedRoot: plan.impact.ownership.managedRoot,
+                worktreeId: plan.impact.ownership.id,
+                auditMetadata: auditTargetMetadata(plan.target),
+                operationError: error,
+              }),
+          );
+          this.store.reconcileGitWorktreeMetadataIntent({
+            intentId: plan.id,
+            worktreeId: renamed.id,
+            branch: renamed.branch,
+            state: 'active',
+            auditStage: 'effect-reconciled',
+            auditMetadata: auditTargetMetadata(plan.target),
+          });
+          return { action: 'renamed', branch: plan.newBranch };
+        }
+        if (plan.kind === 'restore-worktree') {
+          const approval: RestoreArchivedWorktreeApproval = {
+            action: 'restore-archived-worktree',
+            approved: true,
+            approvalId: plan.id,
+            approvedAt: new Date().toISOString(),
+            repositoryRoot: plan.impact.ownership.repositoryRoot,
+            expectedHead: plan.impact.expectedHead,
+            worktreeId: plan.impact.ownership.id,
+            worktreePath: plan.impact.ownership.worktreePath,
+            branch: plan.branch,
+            expectedBranchOid: plan.expectedBranchOid,
+            dirtyPaths: plan.dirtyPaths,
+          };
+          const restored = await this.#worktrees
+            .restoreArchived(plan.impact.ownership, approval)
+            .catch(
+              async (error: unknown) =>
+                await reconcileFailedWorktreeMetadataEffect({
+                  worktrees: this.#worktrees,
+                  store: this.store,
+                  intentId: plan.id,
+                  runId: plan.input.runId,
+                  kind: plan.kind,
+                  managedRoot: plan.impact.ownership.managedRoot,
+                  worktreeId: plan.impact.ownership.id,
+                  auditMetadata: auditTargetMetadata(plan.target),
+                  operationError: error,
+                }),
+            );
+          this.store.reconcileGitWorktreeMetadataIntent({
+            intentId: plan.id,
+            worktreeId: restored.id,
+            branch: restored.branch,
+            state: 'active',
+            auditStage: 'effect-reconciled',
+            auditMetadata: auditTargetMetadata(plan.target),
+          });
+          return { action: 'restored', branch: plan.branch };
+        }
+        const approval: ArchiveWorktreeApproval = {
+          action: 'archive-worktree',
+          approved: true,
+          approvalId: plan.id,
+          approvedAt: new Date().toISOString(),
+          repositoryRoot: plan.impact.ownership.repositoryRoot,
+          expectedHead: plan.impact.expectedHead,
+          worktreeId: plan.impact.ownership.id,
+          worktreePath: plan.impact.ownership.worktreePath,
+          branch: plan.branch,
+          expectedBranchOid: plan.expectedBranchOid,
+          dirtyPaths: plan.dirtyPaths,
+        };
+        const archived = await this.#worktrees.archive(plan.impact.ownership, approval).catch(
+          async (error: unknown) =>
+            await reconcileFailedWorktreeMetadataEffect({
+              worktrees: this.#worktrees,
+              store: this.store,
+              intentId: plan.id,
+              runId: plan.input.runId,
+              kind: plan.kind,
+              managedRoot: plan.impact.ownership.managedRoot,
+              worktreeId: plan.impact.ownership.id,
+              auditMetadata: auditTargetMetadata(plan.target),
+              operationError: error,
+            }),
+        );
+        this.store.reconcileGitWorktreeMetadataIntent({
+          intentId: plan.id,
+          worktreeId: archived.id,
+          branch: archived.branch,
+          state: 'archived',
+          auditStage: 'effect-reconciled',
+          auditMetadata: auditTargetMetadata(plan.target),
+        });
+        return { action: 'archived', branch: plan.branch };
+      } catch (error) {
+        this.#auditFailure(plan.kind, plan.target, error);
+        throw error;
+      }
+    });
+  }
+
+  public compareAgents(input: GitAgentComparisonInput): Promise<GitAgentComparisonView> {
+    return this.#withOperation(async () => {
+      try {
+        const view = await this.#comparison.compare(input);
+        this.store.appendAudit('git', 'compare-agent-worktrees', 'allowed', {
+          projectId: input.left.projectId,
+          leftRunId: input.left.runId,
+          rightRunId: input.right.runId,
+          changedFileCount: view.comparison.diff.files.length,
+          commitCount: view.comparison.commitCount,
+        });
+        return view;
+      } catch (error) {
+        this.store.appendAudit('git', 'compare-agent-worktrees', 'failed', {
+          projectId: input.left.projectId,
+          leftRunId: input.left.runId,
+          rightRunId: input.right.runId,
+          reason: 'comparison-unavailable',
+        });
+        throw error;
+      }
+    });
+  }
+
+  public openExternal(
+    event: IpcMainInvokeEvent,
+    input: GitTargetInput,
+  ): Promise<GitWorkspaceExternalOpenResult> {
+    return this.#withOperation(async () => {
+      const target = await this.#resolveTarget(input);
+      const status = await this.repositories.status(target.repositoryRoot);
+      const parent = this.#requireLiveWindow(event);
+      try {
+        return await openGitWorkspaceExternal({
+          target,
+          branch: status.branch,
+          configuredApplication: this.getSettings().externalEditorExecutable,
+          confirm: async (options) => {
+            const decision = await this.dialog.showMessageBox(parent, options);
+            this.#assertLiveSender(event);
+            return decision.response === 1;
+          },
+          resolveCurrent: async () => await this.#resolveTarget(input),
+          getConfiguredApplication: () => this.getSettings().externalEditorExecutable,
+          assertCurrent: () => void this.#requireLiveWindow(event),
+          appendAudit: (...args) => this.store.appendAudit(...args),
+          openSystem: this.#openExternalPath,
+          launchSelected: this.#launchExternalApplication,
+          getBranch: async (workspacePath) =>
+            (await this.repositories.status(workspacePath)).branch,
+        });
+      } catch (error) {
+        this.#auditFailure('open-workspace-external', target.view, error);
+        throw error;
+      }
+    });
   }
 
   public confirmCommit(
@@ -615,17 +1163,21 @@ export class GitIpcService {
           authorName: plan.identity.name,
           authorEmail: plan.identity.email,
         };
-        const committed = await this.#changes.commit(plan.repositoryRoot, approval);
+        const committed = await this.#changes.commit(plan.repositoryRoot, approval, {
+          beforeApply: () => {
+            this.#assertLiveSender(event);
+            this.store.appendAudit('git', 'commit', 'allowed', {
+              ...auditTargetMetadata(plan.target),
+              branch: plan.branch,
+              stagedPathCount: plan.stagedPaths.length,
+              headBefore: plan.expectedHead,
+              phase: 'authorized-before-apply',
+            });
+          },
+        });
         const review = await this.#reviewUnlocked(
           await this.#resolveTarget(targetInput(plan.target)),
         );
-        this.store.appendAudit('git', 'commit', 'allowed', {
-          ...auditTargetMetadata(plan.target),
-          branch: plan.branch,
-          stagedPathCount: plan.stagedPaths.length,
-          headBefore: committed.headBefore,
-          headAfter: committed.headAfter,
-        });
         return {
           headBefore: committed.headBefore,
           headAfter: committed.headAfter,
@@ -665,15 +1217,20 @@ export class GitIpcService {
           patchSha256: plan.patchSha256,
           hunkIds: plan.hunkIds,
         };
-        await this.#changes.discardHunks(plan.repositoryRoot, plan.hunkIds, approval);
+        await this.#changes.discardHunks(plan.repositoryRoot, plan.hunkIds, approval, {
+          beforeApply: () => {
+            this.#assertLiveSender(event);
+            this.store.appendAudit('git', 'discard-hunks', 'allowed', {
+              ...auditTargetMetadata(plan.target),
+              pathCount: plan.paths.length,
+              hunkCount: plan.hunkIds.length,
+              phase: 'authorized-before-apply',
+            });
+          },
+        });
         const review = await this.#reviewUnlocked(
           await this.#resolveTarget(targetInput(plan.target)),
         );
-        this.store.appendAudit('git', 'discard-hunks', 'allowed', {
-          ...auditTargetMetadata(plan.target),
-          pathCount: plan.paths.length,
-          hunkCount: plan.hunkIds.length,
-        });
         return review;
       } catch (error) {
         this.#auditFailure('discard-hunks', plan.target, error);
@@ -687,62 +1244,40 @@ export class GitIpcService {
     planId: string,
   ): Promise<GitShippingResultView | null> {
     return this.#withOperation(async () => {
-      const plan = this.#takePlan(event, planId, 'ship-agent-commits');
-      try {
-        await this.#shipping.assertCurrent(plan);
-        const parent = this.#requireLiveWindow(event);
-        const decision = await this.dialog.showMessageBox(parent, shippingConfirmation(plan));
-        this.#assertLiveSender(event);
-        if (decision.response !== 1) {
-          this.store.appendAudit('git', 'ship-agent-commits', 'denied', {
-            ...auditTargetMetadata(plan.target),
-            strategy: plan.strategy,
-            reason: 'native-confirmation-cancelled',
-            commitCount: plan.commits.length,
-            affectedPathCount: plan.affectedPaths.length,
-          });
-          return null;
-        }
-        const result = await this.#shipping.apply(plan);
-        const review = await this.#reviewUnlocked(
-          await this.#resolveTarget({
-            kind: 'primary',
-            projectId: plan.target.projectId,
-          }),
-        );
-        const conflictedPaths = result.status.entries
-          .filter((entry) => entry.kind === 'unmerged')
-          .map((entry) => entry.path)
-          .sort();
-        this.store.appendAudit(
-          'git',
-          'ship-agent-commits',
-          result.state === 'completed' ? 'allowed' : 'failed',
-          {
-            ...auditTargetMetadata(plan.target),
-            strategy: plan.strategy,
-            sourceBranch: plan.sourceBranch,
-            targetBranch: plan.targetBranch,
-            commitCount: plan.commits.length,
-            affectedPathCount: plan.affectedPaths.length,
-            conflictedPathCount: conflictedPaths.length,
-            headBefore: result.headBefore,
-            headAfter: result.headAfter,
-            ...(result.state === 'conflicted' ? { reason: 'git-conflicts' } : {}),
-          },
-        );
-        return {
-          state: result.state,
-          strategy: plan.strategy,
-          headBefore: result.headBefore,
-          headAfter: result.headAfter,
-          conflictedPaths,
-          review,
-        };
-      } catch (error) {
-        this.#auditFailure('ship-agent-commits', plan.target, error);
-        throw error;
-      }
+      const parent = this.#requireLiveWindow(event);
+      return this.#shippingIpc.confirmShipping({
+        ownerId: event.sender.id,
+        planId,
+        parent,
+        assertCurrent: () => this.#assertLiveSender(event),
+      });
+    });
+  }
+
+  public confirmConflictRecovery(
+    event: IpcMainInvokeEvent,
+    planId: string,
+  ): Promise<GitConflictRecoveryResultView | null> {
+    return this.#withOperation(async () => {
+      const parent = this.#requireLiveWindow(event);
+      return await this.#shippingIpc.confirmConflictRecovery({
+        ownerId: event.sender.id,
+        planId,
+        parent,
+        assertCurrent: () => this.#assertLiveSender(event),
+      });
+    });
+  }
+
+  public confirmConflictFile(event: IpcMainInvokeEvent, planId: string) {
+    return this.#withOperation(async () => {
+      const parent = this.#requireLiveWindow(event);
+      return await this.#shippingIpc.confirmConflictFile({
+        ownerId: event.sender.id,
+        planId,
+        parent,
+        assertCurrent: () => this.#assertLiveSender(event),
+      });
     });
   }
 
@@ -833,7 +1368,7 @@ export class GitIpcService {
           'The agent worktree branch or its latest commit changed during the review.',
         );
       }
-      await this.#assertComparisonTargetCurrent(target);
+      await this.#reviewTargets.assertComparisonCurrent(target);
     }
     const project = this.store.getProject(target.view.projectId);
     if (target.view.kind === 'primary' && project !== undefined) {
@@ -878,8 +1413,8 @@ export class GitIpcService {
 
   async #resolveIdentity(repositoryRoot: string): Promise<GitIdentityView> {
     const settings = this.getSettings();
-    const configuredName = validIdentityValue(settings.gitIdentityName);
-    const configuredEmail = validIdentityValue(settings.gitIdentityEmail);
+    const configuredName = normalizeGitIdentityValue(settings.gitIdentityName);
+    const configuredEmail = normalizeGitIdentityValue(settings.gitIdentityEmail);
     if (configuredName !== '' || configuredEmail !== '') {
       return GitIdentityViewSchema.parse({
         name: configuredName,
@@ -889,107 +1424,19 @@ export class GitIpcService {
         ready: configuredName !== '' && configuredEmail !== '',
       });
     }
-    const [gitName, gitEmail] = await Promise.all([
-      this.#readGitConfig(repositoryRoot, 'user.name'),
-      this.#readGitConfig(repositoryRoot, 'user.email'),
-    ]);
-    const name = validIdentityValue(gitName);
-    const email = validIdentityValue(gitEmail);
-    return GitIdentityViewSchema.parse({
-      name,
-      email,
-      nameSource: name ? 'git-config' : 'missing',
-      emailSource: email ? 'git-config' : 'missing',
-      ready: name !== '' && email !== '',
-    });
-  }
-
-  async #readGitConfig(repositoryRoot: string, key: string): Promise<string> {
-    const result = await this.repositories.git.run(['-C', repositoryRoot, 'config', '--get', key], {
-      allowNonZeroExit: true,
-      maxOutputBytes: 4_096,
-    });
-    return result.exitCode === 0 ? result.stdout.trim() : '';
+    return await readRepositoryGitIdentity(this.repositories, repositoryRoot);
   }
 
   async #resolveTarget(input: GitTargetInput): Promise<GitTarget> {
     this.#assertAvailable();
-    if (input.kind === 'agent-worktree') {
-      const resolved = await this.#targets.resolve(input);
-      const headCommit = resolved.state.branchOid;
-      if (headCommit === null) {
-        throw new Error('The agent worktree has no current branch commit.');
-      }
-      const view = GitReviewTargetViewSchema.parse({
-        kind: 'agent-worktree',
-        projectId: input.projectId,
-        runId: input.runId,
-        nodeId: resolved.run.nodeId,
-        worktreeId: resolved.ownership.id,
-        agentId: resolved.ownership.agentId,
-        baseRef: resolved.ownership.baseRef,
-        baseCommit: resolved.ownership.baseCommit,
-      });
-      return {
-        view,
-        repositoryRoot: resolved.worktreeRepositoryPath,
-        comparisonBinding: {
-          projectId: input.projectId,
-          runId: input.runId,
-          worktreeId: resolved.ownership.id,
-          branch: resolved.ownership.branch,
-          baseCommit: resolved.ownership.baseCommit,
-          headCommit,
-        },
-      };
-    }
-    const project = this.store.getProject(input.projectId);
-    if (project === undefined || project.missing) {
-      throw new Error('The selected project is no longer available.');
-    }
-    if (!project.health.isGitRepository) {
-      throw new Error('Set up Git for this project before reviewing changes.');
-    }
-    const repositoryRoot = await this.repositories.resolveRepositoryRoot(project.path);
-    if (
-      repositoryRoot !== project.path ||
-      this.store.getProjectByPath(repositoryRoot)?.id !== input.projectId
-    ) {
-      throw new Error('Reopen this project from its main repository folder.');
-    }
-    return { view: input, repositoryRoot };
-  }
-
-  async #assertComparisonTargetCurrent(target: GitTarget): Promise<void> {
-    const binding = target.comparisonBinding;
-    if (binding === undefined) return;
-    const current = await this.#targets.resolve({
-      projectId: binding.projectId,
-      runId: binding.runId,
-    });
-    const currentStatus = current.state.status;
-    if (
-      current.worktreeRepositoryPath !== target.repositoryRoot ||
-      current.ownership.id !== binding.worktreeId ||
-      current.ownership.branch !== binding.branch ||
-      current.ownership.baseCommit !== binding.baseCommit ||
-      current.state.branchOid !== binding.headCommit ||
-      currentStatus === null ||
-      currentStatus.branch !== binding.branch ||
-      currentStatus.headOid !== binding.headCommit
-    ) {
-      throw new Error('The agent worktree changed during the base comparison.');
-    }
+    return await this.#reviewTargets.resolve(input);
   }
 
   async #assertPlanTarget(plan: PendingCommitPlan | PendingDiscardPlan): Promise<void> {
-    const target = await this.#resolveTarget(targetInput(plan.target));
-    if (
-      target.repositoryRoot !== plan.repositoryRoot ||
-      JSON.stringify(target.view) !== JSON.stringify(plan.target)
-    ) {
-      throw new Error('The project repository changed after Git review. Prepare a new plan.');
-    }
+    await this.#reviewTargets.assertPlanCurrent(targetInput(plan.target), {
+      view: plan.target,
+      repositoryRoot: plan.repositoryRoot,
+    });
   }
 
   #storePlan(plan: PendingPlan): void {
@@ -1047,6 +1494,7 @@ export class GitIpcService {
         if (plan.ownerId === ownerId) this.#plans.delete(id);
       }
       this.#cleanup.discardOwner(ownerId);
+      this.#shippingIpc.clearOwner(ownerId);
     });
   }
 
@@ -1161,18 +1609,6 @@ export class GitIpcService {
   }
 }
 
-function validIdentityValue(value: string): string {
-  const trimmed = value.trim();
-  return trimmed.length <= 512 && !containsControlCharacter(trimmed) ? trimmed : '';
-}
-
-function containsControlCharacter(value: string): boolean {
-  return [...value].some((character) => {
-    const code = character.codePointAt(0) ?? 0;
-    return code <= 31 || code === 127;
-  });
-}
-
 function diffView(diff: ParsedDiff): GitDiffView {
   return {
     files: diff.files.map((file) => ({
@@ -1246,96 +1682,57 @@ function discardPlanView(plan: PendingDiscardPlan): GitDiscardPlanView {
   };
 }
 
-function commitConfirmation(plan: PendingCommitPlan): MessageBoxOptions {
+function sameWorktreeMetadataImpact(
+  plan: PendingWorktreeMetadataPlan,
+  current: BranchRenameImpact | ArchiveImpact,
+): boolean {
+  return (
+    current.ownership.id === plan.impact.ownership.id &&
+    current.ownership.worktreePath === plan.impact.ownership.worktreePath &&
+    current.ownership.branch === plan.branch &&
+    current.expectedHead === plan.impact.expectedHead &&
+    current.branchOid === plan.expectedBranchOid &&
+    JSON.stringify(current.dirtyPaths) === JSON.stringify(plan.dirtyPaths) &&
+    (plan.kind !== 'rename-worktree-branch' ||
+      ('newBranch' in current && current.newBranch === plan.newBranch))
+  );
+}
+
+function worktreeMetadataIntent(plan: PendingWorktreeMetadataPlan) {
+  const identity = {
+    intentId: plan.id,
+    runId: plan.input.runId,
+    worktreeId: plan.impact.ownership.id,
+    beforeBranch: plan.branch,
+    createdAt: new Date().toISOString(),
+  };
+  if (plan.kind === 'rename-worktree-branch') {
+    return {
+      ...identity,
+      kind: plan.kind,
+      afterBranch: plan.newBranch,
+      beforeState: 'active' as const,
+      afterState: 'active' as const,
+    };
+  }
+  if (plan.kind === 'archive-worktree') {
+    return {
+      ...identity,
+      kind: plan.kind,
+      afterBranch: plan.branch,
+      beforeState: 'active' as const,
+      afterState: 'archived' as const,
+    };
+  }
   return {
-    type: 'question',
-    title: 'Commit staged changes?',
-    message: `Commit ${String(plan.stagedPaths.length)} staged file${plan.stagedPaths.length === 1 ? '' : 's'}?`,
-    detail: [
-      `Where: ${targetDisclosure(plan.target)}`,
-      `Branch: ${plan.branch === null ? 'no branch checked out' : displayBoundedLiteral(plan.branch, 4_096)}`,
-      `Commit author: ${displayBoundedLiteral(plan.identity.name, 512)} <${displayBoundedLiteral(plan.identity.email, 512)}>`,
-      `Commit message: ${displayBoundedLiteral(plan.message, 2_048)}`,
-      `Changes: +${String(plan.additions)} / -${String(plan.deletions)}`,
-      '',
-      ...boundedPathDisclosure(plan.stagedPaths),
-      '',
-      'Forgeboard commits only the exact staged snapshot you reviewed. If the latest commit on the branch or the staged content changed, the commit is refused.',
-      'Repository hooks (custom scripts) and commit signing are skipped for this commit.',
-    ].join('\n'),
-    buttons: ['Cancel', 'Commit'],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true,
+    ...identity,
+    kind: plan.kind,
+    afterBranch: plan.branch,
+    beforeState: 'archived' as const,
+    afterState: 'active' as const,
   };
 }
 
-function discardConfirmation(plan: PendingDiscardPlan): MessageBoxOptions {
-  return {
-    type: 'warning',
-    title: 'Discard uncommitted changes?',
-    message: `Permanently discard ${String(plan.hunkIds.length)} selected change block${plan.hunkIds.length === 1 ? '' : 's'}?`,
-    detail: [
-      `Where: ${targetDisclosure(plan.target)}`,
-      `Branch: ${plan.branch === null ? 'no branch checked out' : displayBoundedLiteral(plan.branch, 4_096)}`,
-      `Changes removed: +${String(plan.additions)} / -${String(plan.deletions)}`,
-      '',
-      ...boundedPathDisclosure(plan.paths),
-      '',
-      'This rewrites files in your workspace and cannot be undone by Forgeboard. It applies only to the exact change blocks you reviewed and fails if anything changed.',
-    ].join('\n'),
-    buttons: ['Cancel', 'Discard selected changes'],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true,
-  };
-}
-
-function boundedPathDisclosure(paths: readonly string[]): string[] {
-  const shown = paths.slice(0, 20).map((path) => `• ${displayBoundedLiteral(path, 512)}`);
-  return paths.length > shown.length
-    ? [...shown, `• …and ${String(paths.length - shown.length)} more`]
-    : shown;
-}
-
-function displayBoundedLiteral(value: string, maxLength: number): string {
-  const encoded = displayEscapedText(value);
-  return encoded.length > maxLength ? `${encoded.slice(0, maxLength)}…` : encoded;
-}
-
-function targetInput(target: GitReviewTargetView): GitTargetInput {
-  return target.kind === 'primary'
-    ? target
-    : { kind: target.kind, projectId: target.projectId, runId: target.runId };
-}
-
-function targetKey(target: GitReviewTargetView): string {
-  return target.kind === 'primary'
-    ? `primary:${target.projectId}`
-    : `agent-worktree:${target.projectId}:${target.runId}`;
-}
-
-function auditTargetMetadata(target: GitReviewTargetView): Record<string, unknown> {
-  return target.kind === 'primary'
-    ? { projectId: target.projectId, targetKind: target.kind }
-    : {
-        projectId: target.projectId,
-        targetKind: target.kind,
-        runId: target.runId,
-        worktreeId: target.worktreeId,
-      };
-}
-
-function auditInputTargetMetadata(target: GitTargetInput): Record<string, unknown> {
-  return {
-    projectId: target.projectId,
-    targetKind: target.kind,
-    ...(target.kind === 'agent-worktree' ? { runId: target.runId } : {}),
-  };
-}
-
-function targetDisclosure(target: GitReviewTargetView): string {
-  return target.kind === 'primary'
-    ? 'primary checkout'
-    : `agent workspace for run ${target.runId.slice(0, 12)} (base ${target.baseCommit.slice(0, 12)})`;
+function unavailableExternalOpen(): Promise<string> {
+  return Promise.reject(new Error('Opening an external workspace is unavailable.'));
 }

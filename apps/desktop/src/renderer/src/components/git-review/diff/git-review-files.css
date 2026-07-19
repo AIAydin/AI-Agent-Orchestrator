@@ -46,6 +46,11 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 29px;
 }
+.git-file-group li > .workspace-tooltip-target,
+.git-file-group li > .workspace-tooltip-target > .git-file-action {
+  width: 100%;
+  height: 100%;
+}
 .git-file-select,
 .git-file-action {
   border: 0;

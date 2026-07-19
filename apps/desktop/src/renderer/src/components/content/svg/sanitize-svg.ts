@@ -5,6 +5,7 @@ const ALLOWED_ELEMENTS = new Set([
   'svg',
   'g',
   'defs',
+  'marker',
   'title',
   'desc',
   'path',
@@ -74,6 +75,15 @@ const ALLOWED_ATTRIBUTES = new Set(
     'patternunits',
     'patterncontentunits',
     'patterntransform',
+    'markerwidth',
+    'markerheight',
+    'markerunits',
+    'refx',
+    'refy',
+    'orient',
+    'marker-start',
+    'marker-mid',
+    'marker-end',
     'font-family',
     'font-size',
     'font-weight',
@@ -86,7 +96,14 @@ const ALLOWED_ATTRIBUTES = new Set(
   ].map((name) => name.toLowerCase()),
 );
 
-const FRAGMENT_ATTRIBUTES = new Set(['clip-path', 'mask', 'filter']);
+const FRAGMENT_ATTRIBUTES = new Set([
+  'clip-path',
+  'mask',
+  'filter',
+  'marker-start',
+  'marker-mid',
+  'marker-end',
+]);
 const PAINT_ATTRIBUTES = new Set(['fill', 'stroke']);
 
 /**

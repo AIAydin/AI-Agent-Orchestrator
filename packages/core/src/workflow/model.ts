@@ -762,9 +762,12 @@ export function validateWorkflow(untrustedCanvas: unknown): WorkflowValidationRe
   }
 
   const groupIds = new Set(canvas.groups.map((group) => group.id));
+  const seenGroupIds = new Set<string>();
   for (const group of canvas.groups) {
-    if (allIds.has(group.id))
+    const pairedFrame = nodeById.get(group.id)?.type === 'group-frame';
+    if (seenGroupIds.has(group.id) || (allIds.has(group.id) && !pairedFrame))
       pushIssue(issues, 'DUPLICATE_ID', `Duplicate group id: ${group.id}`, group.id);
+    seenGroupIds.add(group.id);
     allIds.add(group.id);
     for (const nodeId of group.nodeIds) {
       if (!nodeById.has(nodeId))
@@ -780,6 +783,28 @@ export function validateWorkflow(untrustedCanvas: unknown): WorkflowValidationRe
       node.resources.memoryMb > canvas.workflowLimits.maximumMemoryMb
     ) {
       pushIssue(issues, 'RESOURCE_LIMIT', 'Node requirements exceed workflow capacity', node.id);
+    }
+  }
+  for (const frame of canvas.nodes.filter(
+    (node): node is Extract<Canvas['nodes'][number], { type: 'group-frame' }> =>
+      node.type === 'group-frame',
+  )) {
+    const visited = new Set<string>([frame.id]);
+    let parentId = frame.groupId;
+    while (parentId !== undefined) {
+      if (visited.has(parentId)) {
+        pushIssue(
+          issues,
+          'INVALID_GROUP',
+          'Nested group-frame ownership must not contain a cycle',
+          ...visited,
+          parentId,
+        );
+        break;
+      }
+      visited.add(parentId);
+      const parent = nodeById.get(parentId);
+      parentId = parent?.type === 'group-frame' ? parent.groupId : undefined;
     }
   }
 

@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Download, RefreshCw } from 'lucide-react';
 
 import type { AppSettings } from '../../../../shared/application/contracts.js';
-import type { DockerReadiness, DockerReadinessInput } from '../../../../shared/docker/contracts.js';
+import type { DockerReadiness } from '../../../../shared/docker/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
+import {
+  dockerEvidenceBelongsTo,
+  dockerReadinessRequest,
+  dockerRequestsMatch,
+  type DockerReadinessEvidence,
+} from './readiness-evidence.js';
 import './DockerConfiguration.css';
 
 type DockerSettings = Pick<
@@ -14,24 +20,42 @@ type DockerSettings = Pick<
 interface DockerConfigurationProps {
   value: DockerSettings;
   onChange(value: DockerSettings): void;
-  onReadinessChange?(readiness: DockerReadiness | null): void;
-  initialReadiness?: DockerReadiness | null;
+  onReadinessChange?(evidence: DockerReadinessEvidence | null): void;
+  initialReadiness?: DockerReadinessEvidence | null;
   onError(message: string): void;
   compact?: boolean;
   disabled?: boolean;
 }
 
 export function DockerConfiguration(props: DockerConfigurationProps) {
-  const [readiness, setReadiness] = useState<DockerReadiness | null>(
+  const [evidence, setEvidence] = useState<DockerReadinessEvidence | null>(
     props.initialReadiness ?? null,
   );
   const [busy, setBusy] = useState<'check' | 'pull' | 'browse' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const configuration = readinessInput(props.value);
+  const configuration = dockerReadinessRequest(props.value);
+  const configurationRef = useRef(configuration);
+  configurationRef.current = configuration;
+  const currentEvidence = dockerEvidenceBelongsTo(props.value, evidence) ? evidence : null;
+
+  useEffect(() => {
+    setEvidence(props.initialReadiness ?? null);
+    setNotice(null);
+  }, [props.initialReadiness]);
+
+  useEffect(() => {
+    setEvidence(null);
+    setNotice(null);
+    props.onReadinessChange?.(null);
+  }, [
+    props.value.dockerExecutable,
+    props.value.dockerImage,
+    props.value.dockerContainerExecutable,
+  ]);
 
   function update(patch: Partial<DockerSettings>): void {
     const next = { ...props.value, ...patch };
-    setReadiness(null);
+    setEvidence(null);
     setNotice(null);
     props.onReadinessChange?.(null);
     props.onChange(next);
@@ -54,28 +78,43 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
     }
   }
 
-  function acceptReadiness(next: DockerReadiness): void {
-    setReadiness(next);
-    props.onReadinessChange?.(next);
+  function clearReadiness(): void {
+    setEvidence(null);
+    props.onReadinessChange?.(null);
+  }
+
+  function acceptReadiness(
+    request: NonNullable<typeof configuration>,
+    next: DockerReadiness,
+  ): void {
+    const current = configurationRef.current;
+    if (current === null || !dockerRequestsMatch(request, current)) return;
+    const accepted = { request, readiness: next } satisfies DockerReadinessEvidence;
+    setEvidence(accepted);
+    props.onReadinessChange?.(accepted);
   }
 
   async function check(): Promise<void> {
     if (configuration === null) return;
+    const request = configuration;
+    clearReadiness();
     await perform('check', async () => {
-      const checked = unwrap(await window.forgeboard.docker.check(configuration));
+      const checked = unwrap(await window.forgeboard.docker.check(request));
       if (checked === null) {
         setNotice('Check cancelled — nothing was run.');
         return;
       }
-      acceptReadiness(checked);
+      acceptReadiness(request, checked);
     });
   }
 
   async function pull(): Promise<void> {
     if (configuration === null) return;
+    const request = configuration;
+    clearReadiness();
     await perform('pull', async () => {
-      const result = unwrap(await window.forgeboard.docker.pull(configuration));
-      if (result.readiness !== null) acceptReadiness(result.readiness);
+      const result = unwrap(await window.forgeboard.docker.pull(request));
+      if (result.readiness !== null) acceptReadiness(request, result.readiness);
       setNotice(
         result.outcome === 'cancelled'
           ? 'Download cancelled — nothing was downloaded.'
@@ -101,7 +140,7 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
               id="docker-executable"
               name="docker-executable"
               value={props.value.dockerExecutable}
-              disabled={props.disabled}
+              disabled={props.disabled || busy !== null}
               placeholder="docker"
               onChange={(event) => update({ dockerExecutable: event.target.value })}
             />
@@ -119,7 +158,7 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
           <input
             name="docker-container-image"
             value={props.value.dockerImage}
-            disabled={props.disabled}
+            disabled={props.disabled || busy !== null}
             placeholder="registry.example.com/agent:version"
             onChange={(event) => update({ dockerImage: event.target.value })}
           />
@@ -129,7 +168,7 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
           <input
             name="docker-container-agent-executable"
             value={props.value.dockerContainerExecutable}
-            disabled={props.disabled}
+            disabled={props.disabled || busy !== null}
             placeholder="/usr/local/bin/your-agent"
             onChange={(event) => update({ dockerContainerExecutable: event.target.value })}
           />
@@ -170,7 +209,7 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
           </span>
         </div>
       )}
-      {configuration !== null && readiness === null && (
+      {configuration !== null && currentEvidence === null && (
         <div className="docker-readiness missing" role="status">
           <AlertTriangle size={15} />
           <span>
@@ -179,7 +218,7 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
           </span>
         </div>
       )}
-      {readiness !== null && <DockerReadinessStatus readiness={readiness} />}
+      {currentEvidence !== null && <DockerReadinessStatus readiness={currentEvidence.readiness} />}
       {notice !== null && <small className="docker-notice">{notice}</small>}
     </div>
   );
@@ -199,14 +238,6 @@ function DockerReadinessStatus({ readiness }: { readiness: DockerReadiness }) {
       </span>
     </div>
   );
-}
-
-function readinessInput(value: DockerSettings): DockerReadinessInput | null {
-  const dockerExecutable = value.dockerExecutable.trim();
-  const image = value.dockerImage.trim();
-  const containerExecutable = value.dockerContainerExecutable.trim();
-  if (dockerExecutable === '' || image === '' || containerExecutable === '') return null;
-  return { dockerExecutable, image, containerExecutable };
 }
 
 function readinessLabel(readiness: DockerReadiness): string {

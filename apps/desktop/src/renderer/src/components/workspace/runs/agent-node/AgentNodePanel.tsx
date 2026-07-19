@@ -1,4 +1,4 @@
-import { Bot, History, Pause, ShieldCheck, Square, Trash2 } from 'lucide-react';
+import { Bot, FastForward, History, Pause, ShieldCheck, Square, Trash2 } from 'lucide-react';
 
 import type {
   AgentDetection,
@@ -15,6 +15,7 @@ import {
 import { AgentAttemptHistory, type AgentAttemptActionCallbacks } from './AgentAttemptHistory.js';
 import { effectiveNodeModel } from './model-selection.js';
 import { tokenUsageRows } from './usage/token-usage.js';
+import { WorkspaceTooltip } from '../../shell/tooltips/WorkspaceTooltip.js';
 
 import './agent-node.css';
 
@@ -35,8 +36,8 @@ export interface AgentNodePanelProps extends AgentAttemptActionCallbacks {
   readonly onRecord: () => void;
   readonly onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
   readonly onRunInputChange: (value: string) => void;
-  readonly onSendRunInput: () => void;
-  readonly onControlRun: (action: 'interrupt' | 'terminate') => void;
+  readonly onSendRunInput: (explicitInput?: string) => void;
+  readonly onControlRun: (action: 'pause' | 'continue' | 'interrupt' | 'terminate') => void;
   readonly onPrepareRun: () => void;
 }
 
@@ -61,6 +62,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
   const interactiveInputSupported = selectedNode.data.interactiveInputSupported === true;
   const interruptSupported = selectedNode.data.interruptSupported === true;
   const pauseSupported = selectedNode.data.pauseSupported === true;
+  const paused = selectedNode.data.status === 'paused';
   const refreshKey = `${selectedNode.data.runId ?? ''}:${selectedNode.data.status ?? ''}:${selectedNode.data.transcriptUpdatedAt ?? ''}`;
   const selectedModel =
     effectiveNodeModel(
@@ -78,6 +80,38 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
   const mutationUnavailableReason = props.configurationReadOnly
     ? 'Unlock this node and use an editable collaboration role to control the Agent.'
     : null;
+  const inputReason =
+    mutationUnavailableReason ??
+    (interactiveInputSupported
+      ? paused
+        ? 'Continue this Agent run before sending input.'
+        : 'Send input to the running Agent.'
+      : 'This running session does not expose interactive input.');
+  const interruptReason =
+    mutationUnavailableReason ??
+    (interruptSupported
+      ? paused
+        ? 'Continue this Agent run before interrupting it.'
+        : 'Ask the running Agent to stop gracefully.'
+      : 'This running session does not expose graceful interrupt.');
+  const continueInputReason =
+    mutationUnavailableReason ??
+    (interactiveInputSupported
+      ? 'Sends the literal word “continue” as ordinary input. It does not unpause the process.'
+      : 'This running session does not expose interactive input.');
+  const pauseReason =
+    mutationUnavailableReason ??
+    (pauseSupported
+      ? paused
+        ? 'Continue the exact suspended Agent process tree.'
+        : 'Suspend the exact Agent process tree without restarting it.'
+      : 'Pause is unavailable on this operating system or runtime.');
+  const prepareReason =
+    mutationUnavailableReason ??
+    permissionUnavailable ??
+    (props.preparingRun
+      ? 'Wait for the current launch review to finish.'
+      : 'Review this Agent run before launch.');
   const liveTokenUsage = tokenUsageRows(selectedNode.data.tokenUsage);
 
   return (
@@ -199,67 +233,71 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
         {props.running ? (
           <div className="live-run-controls">
             <div>
-              <input
-                name={`node-${selectedNode.id}-agent-input`}
-                value={props.runInput}
-                placeholder="Type a message for the running agent"
-                aria-label="Message to the running agent"
-                disabled={!interactiveInputSupported || props.configurationReadOnly}
-                title={
-                  mutationUnavailableReason ??
-                  (interactiveInputSupported
-                    ? undefined
-                    : 'This running session does not expose interactive input.')
-                }
-                onChange={(event) => props.onRunInputChange(event.target.value)}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === 'Enter' &&
-                    interactiveInputSupported &&
-                    !props.configurationReadOnly
-                  ) {
-                    props.onSendRunInput();
-                  }
-                }}
-              />
+              <WorkspaceTooltip content={inputReason}>
+                <input
+                  name={`node-${selectedNode.id}-agent-input`}
+                  value={props.runInput}
+                  placeholder="Type a message for the running agent"
+                  aria-label="Message to the running agent"
+                  disabled={paused || !interactiveInputSupported || props.configurationReadOnly}
+                  onChange={(event) => props.onRunInputChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === 'Enter' &&
+                      interactiveInputSupported &&
+                      !props.configurationReadOnly
+                    ) {
+                      props.onSendRunInput();
+                    }
+                  }}
+                />
+              </WorkspaceTooltip>
+              <WorkspaceTooltip content={inputReason}>
+                <button
+                  type="button"
+                  aria-label="Send input"
+                  disabled={paused || !interactiveInputSupported || props.configurationReadOnly}
+                  onClick={() => props.onSendRunInput()}
+                >
+                  Send
+                </button>
+              </WorkspaceTooltip>
+            </div>
+            <WorkspaceTooltip content={interruptReason}>
               <button
                 type="button"
-                disabled={!interactiveInputSupported || props.configurationReadOnly}
-                title={
-                  mutationUnavailableReason ??
-                  (interactiveInputSupported
-                    ? undefined
-                    : 'This running session does not expose interactive input.')
-                }
-                onClick={props.onSendRunInput}
+                aria-label="Interrupt Agent"
+                disabled={paused || !interruptSupported || props.configurationReadOnly}
+                onClick={() => props.onControlRun('interrupt')}
               >
-                Send
+                <Square size={12} /> Interrupt
               </button>
-            </div>
-            <button
-              type="button"
-              disabled={!interruptSupported || props.configurationReadOnly}
-              title={
-                mutationUnavailableReason ??
-                (interruptSupported
-                  ? undefined
-                  : 'This running session does not expose graceful interrupt.')
-              }
-              onClick={() => props.onControlRun('interrupt')}
-            >
-              <Square size={12} /> Interrupt
-            </button>
-            <button
-              type="button"
-              disabled
-              title={
-                pauseSupported
-                  ? 'Forgeboard same-process pause control is unavailable in this build.'
-                  : 'Same-process pause is unavailable for this running session.'
-              }
-            >
-              <Pause size={12} /> Pause unavailable
-            </button>
+            </WorkspaceTooltip>
+            <WorkspaceTooltip content={continueInputReason}>
+              <button
+                type="button"
+                aria-label="Send continue input"
+                disabled={paused || !interactiveInputSupported || props.configurationReadOnly}
+                onClick={() => props.onSendRunInput('continue')}
+              >
+                <FastForward size={12} /> Send “continue”
+              </button>
+            </WorkspaceTooltip>
+            <WorkspaceTooltip content={pauseReason}>
+              <button
+                type="button"
+                aria-label="Pause or continue Agent process"
+                disabled={!pauseSupported || props.configurationReadOnly}
+                onClick={() => props.onControlRun(paused ? 'continue' : 'pause')}
+              >
+                {paused ? <FastForward size={12} /> : <Pause size={12} />}{' '}
+                {paused
+                  ? 'Continue process'
+                  : pauseSupported
+                    ? 'Pause process'
+                    : 'Pause unavailable'}
+              </button>
+            </WorkspaceTooltip>
             <button
               type="button"
               className="danger-text"
@@ -269,26 +307,34 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            className="button primary review-run-button"
-            disabled={
-              props.preparingRun ||
-              runnableAgents.length === 0 ||
-              permissionUnavailable !== null ||
-              props.configurationReadOnly
-            }
-            title={mutationUnavailableReason ?? permissionUnavailable ?? undefined}
-            aria-describedby={permissionUnavailable === null ? undefined : permissionIssueId}
-            onClick={props.onPrepareRun}
-          >
-            <ShieldCheck size={14} />
-            {props.preparingRun ? 'Preparing the run…' : 'Review & run'}
-          </button>
+          <WorkspaceTooltip content={prepareReason}>
+            <button
+              type="button"
+              className="button primary review-run-button"
+              aria-label="Review and run Agent"
+              disabled={
+                props.preparingRun ||
+                runnableAgents.length === 0 ||
+                permissionUnavailable !== null ||
+                props.configurationReadOnly
+              }
+              onClick={props.onPrepareRun}
+            >
+              <ShieldCheck size={14} />
+              {props.preparingRun ? 'Preparing the run…' : 'Review & run'}
+            </button>
+          </WorkspaceTooltip>
         )}
         <p>
           Nothing starts from this button alone. Forgeboard first shows the exact command, folder,
           files, and permissions for your approval.
+        </p>
+        <p className="agent-control-disclosure">
+          Pause, input, and resume are different controls. Safe same-process pause is available only
+          when this local runtime can suspend the complete process tree; unsupported platforms and
+          Docker remain unavailable. “Send continue” is literal interactive input. Resume is
+          available only from an interrupted attempt with a provider session, and always launches a
+          freshly reviewed continuation.
         </p>
       </section>
       <section

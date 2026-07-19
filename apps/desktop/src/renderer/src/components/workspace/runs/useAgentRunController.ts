@@ -51,14 +51,10 @@ export function useAgentRunController({
   const selectedRunActive =
     selectedRunId !== undefined &&
     activeRunIds.has(selectedRunId) &&
-    (selectedRunStatus === 'running' || selectedRunStatus === 'waiting');
+    isSupervisedSessionStatus(selectedRunStatus);
 
   useEffect(() => {
-    if (
-      selectedRunId === undefined ||
-      selectedRunStatus === 'running' ||
-      selectedRunStatus === 'waiting'
-    ) {
+    if (selectedRunId === undefined || isSupervisedSessionStatus(selectedRunStatus)) {
       return;
     }
     setActiveRunIds((current) => {
@@ -98,6 +94,7 @@ export function useAgentRunController({
         transcriptUpdatedAt: new Date().toISOString(),
         lastRunSummary: '',
         worktreeId: undefined,
+        worktreeRecordedActive: undefined,
         branch: undefined,
         tokenUsage: undefined,
         cost: undefined,
@@ -121,7 +118,7 @@ export function useAgentRunController({
         setEvents((items) => ['Cancelled preparation before anything ran.', ...items].slice(0, 80));
         return;
       }
-      updateNodeData(nodeId, { runId: next.runId, status: 'waiting' });
+      updateNodeData(nodeId, { runId: next.runId, status: 'waiting-for-approval' });
       setReviewedPrompt(prompt);
       setDisclosure(next);
       setEvents((items) =>
@@ -190,6 +187,7 @@ export function useAgentRunController({
         transcriptUpdatedAt: new Date().toISOString(),
         lastRunSummary: '',
         worktreeId: undefined,
+        worktreeRecordedActive: undefined,
         branch: undefined,
         tokenUsage: undefined,
         cost: undefined,
@@ -223,7 +221,7 @@ export function useAgentRunController({
         );
         return;
       }
-      updateNodeData(nodeId, { runId: next.runId, status: 'waiting' });
+      updateNodeData(nodeId, { runId: next.runId, status: 'waiting-for-approval' });
       setReviewedPrompt(prompt);
       setDisclosure(next);
       setEvents((items) =>
@@ -295,28 +293,33 @@ export function useAgentRunController({
     }
   }
 
-  async function controlRun(action: 'interrupt' | 'terminate') {
+  async function controlRun(action: 'pause' | 'continue' | 'interrupt' | 'terminate') {
     const runId = selectedNode?.data.runId;
     if (!runId || !selectedNode) return;
     try {
-      const result =
-        action === 'interrupt'
-          ? await window.forgeboard.runs.interrupt(runId)
-          : await window.forgeboard.runs.terminate(runId);
+      const result = await window.forgeboard.runs[action](runId);
       unwrap(result);
     } catch (cause) {
-      const actionLabel = action === 'interrupt' ? 'interrupt' : 'stop';
+      const actionLabel = action === 'terminate' ? 'stop' : action;
       onError(cause instanceof Error ? cause.message : `Could not ${actionLabel} this run.`);
     }
   }
 
-  async function sendRunInput() {
+  async function sendRunInput(explicitInput?: string) {
     const runId = selectedNode?.data.runId;
-    if (!runId || !runInput.trim()) return;
+    const input = explicitInput ?? runInput;
+    if (!runId || !input.trim()) return;
     try {
-      unwrap(await window.forgeboard.runs.sendInput(runId, `${runInput}\n`));
-      setRunInput('');
-      setEvents((items) => ['Sent your input to the agent.', ...items].slice(0, 80));
+      unwrap(await window.forgeboard.runs.sendInput(runId, `${input.trimEnd()}\n`));
+      if (explicitInput === undefined) setRunInput('');
+      setEvents((items) =>
+        [
+          explicitInput === undefined
+            ? 'Sent your input to the agent.'
+            : `Sent the literal ${JSON.stringify(explicitInput)} input to the running agent.`,
+          ...items,
+        ].slice(0, 80),
+      );
     } catch (cause) {
       onError(
         cause instanceof Error
@@ -341,4 +344,8 @@ export function useAgentRunController({
     controlRun,
     sendRunInput,
   };
+}
+
+function isSupervisedSessionStatus(status: WorkshopNode['data']['status'] | undefined): boolean {
+  return status === 'running' || status === 'paused' || status === 'cancelling';
 }

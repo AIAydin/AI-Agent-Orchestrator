@@ -167,6 +167,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     gitIdentityName: '',
     gitIdentityEmail: '',
     gitRemote: 'origin',
+    externalEditorExecutable: '',
     terminalShell: '/bin/sh',
     envAllowlist: ['PATH'],
     developmentCommand: { executable: '', arguments: [] },
@@ -305,8 +306,10 @@ describe('LocalStore persistence and recovery', () => {
     const legacy = new DatabaseSync(databasePath);
     legacy.exec(`
       DROP TRIGGER audit_events_no_update;
+      DROP TRIGGER audit_events_no_delete;
       DROP TRIGGER audit_events_valid_insert;
       DROP TRIGGER audit_checkpoints_no_update;
+      DROP TRIGGER audit_checkpoints_no_delete;
       DROP TABLE approval_records;
       DROP TABLE audit_chain_checkpoints;
       DROP TABLE audit_chain_state;

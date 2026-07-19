@@ -51,7 +51,7 @@ test('Agent node discloses capabilities, streams, resumes, retries, and restores
     const liveOutput = page.getByRole('region', { name: 'Live output' });
 
     await test.step('capability and model selection are visible before launch', async () => {
-      await expect(configuration.getByLabel('Installed adapter')).toHaveValue(ADAPTER_ID);
+      await expect(configuration.getByLabel('Agent to run')).toHaveValue(ADAPTER_ID);
       await expect(configuration.getByLabel('Model (optional)')).toBeEnabled();
       await expect(configuration.getByLabel('Model (optional)')).toHaveValue(MODEL_ID);
       await expect(configuration.getByRole('button', { name: 'Pause' })).toHaveCount(0);
@@ -59,18 +59,22 @@ test('Agent node discloses capabilities, streams, resumes, retries, and restores
 
     await test.step('locking the Agent honestly disables configuration and launch', async () => {
       await page.getByRole('button', { name: 'Lock', exact: true }).click();
-      await expect(configuration.getByLabel('Installed adapter')).toBeDisabled();
+      await expect(configuration.getByLabel('Agent to run')).toBeDisabled();
       await expect(configuration.getByLabel('Prompt')).toBeDisabled();
-      await expect(configuration.getByRole('button', { name: 'Review & run' })).toBeDisabled();
+      await expect(
+        configuration.getByRole('button', { name: 'Review and run Agent' }),
+      ).toBeDisabled();
       await page.getByRole('button', { name: 'Unlock', exact: true }).click();
-      await expect(configuration.getByRole('button', { name: 'Review & run' })).toBeEnabled();
+      await expect(
+        configuration.getByRole('button', { name: 'Review and run Agent' }),
+      ).toBeEnabled();
     });
 
     await test.step('the approved run streams input and is interrupted with normalized metadata', async () => {
       await approvePreparedRun(
         app!,
         page,
-        async () => configuration.getByRole('button', { name: 'Review & run' }).click(),
+        async () => configuration.getByRole('button', { name: 'Review and run Agent' }).click(),
         [
           'Local offline fixture',
           'PIPES',
@@ -85,11 +89,13 @@ test('Agent node discloses capabilities, streams, resumes, retries, and restores
       await expect(liveOutput).toContainText(`OFFLINE_READY model=${MODEL_ID}`, {
         timeout: 20_000,
       });
-      await configuration.getByLabel('Agent input').fill(INPUT_TEXT);
-      await configuration.getByRole('button', { name: 'Send' }).click();
+      await configuration.getByLabel('Message to the running agent').fill(INPUT_TEXT);
+      await configuration.getByRole('button', { name: 'Send input', exact: true }).click();
       await expect(liveOutput).toContainText(`OFFLINE_INPUT_RECEIVED ${INPUT_TEXT}`);
       await expect(configuration.getByRole('button', { name: 'Interrupt' })).toBeVisible();
-      await expect(configuration.getByRole('button', { name: 'Pause unavailable' })).toBeDisabled();
+      await expect(
+        configuration.getByRole('button', { name: 'Pause or continue Agent process' }),
+      ).toBeDisabled();
       await configuration.getByRole('button', { name: 'Interrupt' }).click();
       await expect(liveOutput).toContainText('OFFLINE_INTERRUPTED forgeboard-offline-session-001');
 
@@ -136,7 +142,7 @@ test('Agent node discloses capabilities, streams, resumes, retries, and restores
       await approvePreparedRun(
         app!,
         page,
-        async () => configuration.getByRole('button', { name: 'Review & run' }).click(),
+        async () => configuration.getByRole('button', { name: 'Review and run Agent' }).click(),
         [RETRY_FAILURE_PROMPT, MODEL_ID],
       );
       await expect(liveOutput).toContainText('OFFLINE_RETRY_PARENT_FAILED');
@@ -170,11 +176,11 @@ test('Agent node discloses capabilities, streams, resumes, retries, and restores
     watchExternalRequests(page, externalRequests);
     await page.locator('.recent-list button').click();
     await page.getByRole('article', { name: 'Agent: Agent' }).click();
-    configuration = page.getByRole('region', { name: 'Agent run configuration' });
+    configuration = page.getByRole('region', { name: 'Agent run settings' });
     const restoredHistory = page.getByRole('region', { name: 'Attempt history' });
 
     await test.step('restart restores durable history, lineage, output, and completion metadata', async () => {
-      await expect(configuration.getByLabel('Installed adapter')).toHaveValue(ADAPTER_ID);
+      await expect(configuration.getByLabel('Agent to run')).toHaveValue(ADAPTER_ID);
       await expect(restoredHistory.getByRole('article')).toHaveCount(4);
       await expect(
         restoredHistory.getByRole('article', { name: 'Initial run attempt Interrupted' }),

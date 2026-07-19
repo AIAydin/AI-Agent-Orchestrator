@@ -18,9 +18,17 @@ export type SettingsValidationClass =
   | 'docker-completeness';
 
 export type SettingsUiTarget =
-  | { readonly kind: 'label'; readonly name: string; readonly occurrence?: number }
+  | {
+      readonly kind: 'label';
+      readonly name: string;
+      readonly occurrence?: number;
+    }
   | { readonly kind: 'button'; readonly name: string }
-  | { readonly kind: 'group-label'; readonly group: string; readonly name: string };
+  | {
+      readonly kind: 'group-label';
+      readonly group: string;
+      readonly name: string;
+    };
 
 export type SettingsFieldUiEntry =
   | {
@@ -148,6 +156,7 @@ export const SETTINGS_UI_MANIFEST = {
   backupIntervalHours: ui('Data & privacy', label('Back up automatically every (hours)')),
   backupOnQuit: ui('Data & privacy', label('Back up unsaved changes when quitting')),
   backupRetentionCount: ui('Data & privacy', label('Backups to keep')),
+  externalEditorExecutable: ui('Git & previews', label('External application')),
   collaborationEnabled: ui('Connectivity', label('Enable collaboration')),
   collaborationUrl: ui('Connectivity', label('Collaboration server URL')),
   collaborationManagementUrl: ui('Connectivity', label('Collaboration management API URL')),

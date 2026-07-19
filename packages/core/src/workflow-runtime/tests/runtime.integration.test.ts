@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CanvasSchema, type Canvas, type CheckResult } from '../../model/domain.js';
+import { CanvasSchema, type Canvas, type CheckResult, type RunStatus } from '../../model/domain.js';
 import type { ReviewerAssessment } from '../../workflow/gates.js';
 import {
   applyRevisionReview,
@@ -171,6 +171,25 @@ function runtimeFor(graph: Canvas) {
   });
 }
 
+function withNodeStatus(
+  runtime: WorkflowExecutionRuntime,
+  nodeId: string,
+  status: RunStatus,
+): WorkflowExecutionRuntime {
+  const current = runtime.run.nodeRuns[nodeId];
+  if (current === undefined) throw new Error(`Missing test node run: ${nodeId}`);
+  return {
+    ...runtime,
+    run: {
+      ...runtime.run,
+      nodeRuns: {
+        ...runtime.run.nodeRuns,
+        [nodeId]: { ...current, status },
+      },
+    },
+  };
+}
+
 function publish(
   runtime: WorkflowExecutionRuntime,
   edgeId: string,
@@ -338,6 +357,78 @@ describe('scoped workflow planning and typed edge behavior', () => {
     expect(
       planWorkflowScope(graph, { planId: 'all', scope: { kind: 'workflow' } }).nodeIds,
     ).toEqual(['task-a', 'task-b', 'task-c']);
+  });
+
+  it('expands a nested group frame to every runnable descendant', () => {
+    const nestedFrame = {
+      ...baseNode,
+      id: 'nested-frame',
+      type: 'group-frame' as const,
+      data: {
+        purpose: 'workflow-stage' as const,
+        childNodeIds: ['task-b', 'task-c'],
+        layout: 'vertical' as const,
+        autoFit: true,
+      },
+    };
+    const graph = canvas({
+      nodes: [taskNode('task-a'), taskNode('task-b'), taskNode('task-c'), nestedFrame],
+      groups: [
+        {
+          id: 'outer-group',
+          title: 'Outer',
+          nodeIds: ['nested-frame'],
+          position: { x: 0, y: 0 },
+          size: { width: 800, height: 500 },
+          color: '#223344',
+        },
+      ],
+    });
+
+    expect(
+      planWorkflowScope(graph, {
+        planId: 'nested-group',
+        scope: { kind: 'group', groupId: 'outer-group' },
+        eligibleNodeIds: ['task-a', 'task-b', 'task-c'],
+      }).nodeIds,
+    ).toEqual(['task-b', 'task-c']);
+  });
+
+  it('preserves every source lifecycle state on an ordinary dependency edge', () => {
+    const runtime = runtimeFor(
+      canvas({
+        nodes: [taskNode('source'), taskNode('target')],
+        edges: [
+          {
+            id: 'dependency',
+            sourceNodeId: 'source',
+            targetNodeId: 'target',
+            type: 'dependency',
+            config: {},
+            createdAt: NOW,
+          },
+        ],
+      }),
+    );
+    for (const status of [
+      'queued',
+      'running',
+      'waiting-for-approval',
+      'paused',
+      'cancelling',
+    ] as const) {
+      expect(
+        evaluateExecutableEdge(withNodeStatus(runtime, 'source', status), 'dependency'),
+      ).toMatchObject({ disposition: 'waiting', status });
+    }
+    for (const status of ['failed', 'cancelled', 'lost'] as const) {
+      expect(
+        evaluateExecutableEdge(withNodeStatus(runtime, 'source', status), 'dependency'),
+      ).toMatchObject({ disposition: 'blocked', status });
+    }
+    expect(
+      evaluateExecutableEdge(withNodeStatus(runtime, 'source', 'succeeded'), 'dependency'),
+    ).toMatchObject({ disposition: 'satisfied', status: 'succeeded' });
   });
 
   it('uses host eligibility to omit data-only nodes while rejecting an explicit unavailable run', () => {

@@ -15,14 +15,23 @@ import {
   FileTreeResultSchema,
   type FileIpcResult,
 } from '../../shared/files/contracts.js';
+import {
+  PROJECT_IMAGE_IPC_CHANNELS,
+  ProjectImageChooseInputSchema,
+  ProjectImageLoadInputSchema,
+  ProjectImageLoadResultSchema,
+  ProjectImageReferenceSchema,
+} from '../../shared/files/images/contracts.js';
 import { assertLiveMainFrame } from '../security/ipc-authority.js';
 import { FileDomainError } from './errors.js';
 import type { ProjectFileService } from './service.js';
+import type { ProjectImageService } from './images/service.js';
 
 type FileOperations = Pick<
   ProjectFileService,
   'tree' | 'search' | 'read' | 'save' | 'revert' | 'prepareReveal' | 'prepareOpenExternal'
 >;
+type ImageOperations = Pick<ProjectImageService, 'choose' | 'load'>;
 
 export type FileOperationRunner = <Output>(
   operation: () => Output | Promise<Output>,
@@ -44,6 +53,7 @@ export class FileIpcService {
     private readonly files: FileOperations,
     private readonly nativeShell: Pick<Shell, 'showItemInFolder' | 'openPath'>,
     private readonly runOperation: FileOperationRunner = async (operation) => await operation(),
+    private readonly images?: ImageOperations,
   ) {}
 
   public registerIpcHandlers(): void {
@@ -96,6 +106,26 @@ export class FileIpcService {
         return null;
       },
     );
+    const imageOperations = this.images;
+    if (imageOperations !== undefined) {
+      this.#handle(
+        PROJECT_IMAGE_IPC_CHANNELS.choose,
+        'Project image selection',
+        async (authority, rawArgs) => {
+          const [input] = z.tuple([ProjectImageChooseInputSchema]).parse(rawArgs);
+          const reference = await imageOperations.choose(input, () => authority.assertCurrent());
+          return ProjectImageReferenceSchema.nullable().parse(reference ?? null);
+        },
+      );
+      this.#handle(
+        PROJECT_IMAGE_IPC_CHANNELS.load,
+        'Project image preview',
+        async (_authority, rawArgs) => {
+          const [input] = z.tuple([ProjectImageLoadInputSchema]).parse(rawArgs);
+          return ProjectImageLoadResultSchema.parse(await imageOperations.load(input));
+        },
+      );
+    }
   }
 
   public async dispose(): Promise<void> {

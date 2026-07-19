@@ -26,7 +26,7 @@ test('a moved project is detected, reviewed, and relinked entirely in the UI', a
     let page = session.page;
     watchExternalRequests(page, externalRequests);
     await page
-      .getByRole('dialog', { name: /Set up Forgeboard in a few quick steps/i })
+      .getByRole('dialog', { name: 'Ready to build without wiring config files?' })
       .getByRole('button', { name: 'Use safe defaults' })
       .click();
 

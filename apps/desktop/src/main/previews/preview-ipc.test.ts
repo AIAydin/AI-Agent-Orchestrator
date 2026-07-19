@@ -149,6 +149,32 @@ describe('PreviewIpcService launch authority', () => {
     await fixture.service.dispose();
   });
 
+  it('preserves an opaque comparison slot and agent target through direct IPC launch', async () => {
+    const parent = liveParent();
+    electronMock.fromWebContents.mockReturnValue(parent);
+    const fixture = createFixture({ nativeResponse: 1 });
+    const comparisonInput: PreviewStartInput = {
+      ...input,
+      slot: 'comparison-left',
+      target: {
+        kind: 'agent-run',
+        runId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    };
+    fixture.runtime.prepare.mockResolvedValueOnce({ ...plan, input: comparisonInput });
+
+    await expect(
+      requiredHandler(IPC_CHANNELS.previewsStart)(liveEvent(), comparisonInput),
+    ).resolves.toMatchObject({ ok: true });
+    expect(fixture.runtime.prepare).toHaveBeenCalledWith(comparisonInput);
+    expect(fixture.runtime.startPrepared).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ input: comparisonInput }),
+      expect.any(Object),
+    );
+    await fixture.service.dispose();
+  });
+
   it('uses a cancel-default native disclosure and starts no process when cancelled', async () => {
     const parent = liveParent();
     electronMock.fromWebContents.mockReturnValue(parent);

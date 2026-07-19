@@ -7,6 +7,7 @@ import { languageForFile, languageHasBundledDiagnostics } from './language.js';
 import { MonacoTextEditor } from './MonacoTextEditor.js';
 import type { FileEditorOperations } from './operations.js';
 import { useFileEditor, type FileEditorStatus } from './useFileEditor.js';
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 import './FileEditorPanel.css';
 
 export interface FileEditorPanelProps {
@@ -118,18 +119,24 @@ export function FileEditorPanel({
               Show in file list
             </button>
           ) : null}
-          <button
-            type="button"
-            disabled={editor.status !== 'ready' || editor.activity !== null || editor.dirty}
-            title={
+          <WorkspaceTooltip
+            content={
               editor.dirty
-                ? 'Save or discard your changes before opening this file in another app.'
-                : ''
+                ? 'Save or discard your changes before opening this file in another app'
+                : editor.activity !== null
+                  ? 'Wait for the current file action to finish'
+                  : 'Open this file in its default desktop app'
             }
-            onClick={() => void editor.openExternal()}
           >
-            {editor.activity === 'external' ? 'Opening…' : 'Open in default app'}
-          </button>
+            <button
+              type="button"
+              aria-label="Open in default app"
+              disabled={editor.status !== 'ready' || editor.activity !== null || editor.dirty}
+              onClick={() => void editor.openExternal()}
+            >
+              {editor.activity === 'external' ? 'Opening…' : 'Open in default app'}
+            </button>
+          </WorkspaceTooltip>
           <button
             type="button"
             className="file-editor-save"
@@ -191,7 +198,7 @@ export function FileEditorPanel({
           />
         ) : null}
         {editor.status === 'ready' && editor.document?.contentKind !== 'text' ? (
-          <div className="file-editor-placeholder file-editor-read-only">
+          <div className="file-editor-placeholder file-editor-read-only" role="status">
             <strong>
               {editor.document?.contentKind === 'binary'
                 ? 'Not a text file'
@@ -208,7 +215,11 @@ export function FileEditorPanel({
           <span>{editor.document.encoding ?? editor.document.contentKind}</span>
           <span>{new Date(editor.document.modifiedAt).toLocaleString()}</span>
           {editor.document.sha256 !== null ? (
-            <code title={editor.document.sha256}>{editor.document.sha256.slice(0, 12)}</code>
+            <WorkspaceTooltip content={editor.document.sha256}>
+              <code aria-label={`SHA-256: ${editor.document.sha256}`} tabIndex={0}>
+                {editor.document.sha256.slice(0, 12)}
+              </code>
+            </WorkspaceTooltip>
           ) : null}
           <DiagnosticsSummary
             state={
@@ -236,7 +247,7 @@ function FileEditorFailure({
   readonly onRetry: () => void;
 }) {
   return (
-    <div className="file-editor-placeholder">
+    <div className="file-editor-placeholder" role="alert">
       <strong>{title}</strong>
       <p>{detail}</p>
       <button type="button" onClick={onRetry}>

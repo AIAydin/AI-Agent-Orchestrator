@@ -29,8 +29,22 @@ describe('Git shipping contracts', () => {
       }).success,
     ).toBe(false);
     expect(
+      GitShippingPlanInputSchema.parse({
+        target: { kind: 'agent-worktree', projectId, runId },
+        strategy: 'merge-commit',
+      }),
+    ).toEqual({
+      target: { kind: 'agent-worktree', projectId, runId },
+      strategy: 'merge-commit',
+    });
+    expect(
       GitShippingPlanInputSchema.safeParse({
-        target: { kind: 'agent-worktree', projectId, runId, repositoryPath: '/tmp/forged' },
+        target: {
+          kind: 'agent-worktree',
+          projectId,
+          runId,
+          repositoryPath: '/tmp/forged',
+        },
         strategy: 'fast-forward-only',
       }).success,
     ).toBe(false);
@@ -83,7 +97,11 @@ describe('Git shipping contracts', () => {
     };
     expect(GitShippingPlanViewSchema.parse(input)).toEqual(input);
     expect(
-      GitShippingPlanViewSchema.safeParse({ ...input, affectedPaths: [], truncated: true }).success,
+      GitShippingPlanViewSchema.safeParse({
+        ...input,
+        affectedPaths: [],
+        truncated: true,
+      }).success,
     ).toBe(false);
     expect(
       GitShippingPlanViewSchema.safeParse({
@@ -96,7 +114,11 @@ describe('Git shipping contracts', () => {
         ...input,
         readiness: {
           ...readiness,
-          evaluation: { ready: false, humanApprovalState: 'approved', blockers: [] },
+          evaluation: {
+            ready: false,
+            humanApprovalState: 'approved',
+            blockers: [],
+          },
         },
       }).success,
     ).toBe(false);

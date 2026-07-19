@@ -1,25 +1,30 @@
-import { ChevronRight, Files, GitBranch, Layers3, Puzzle, Search } from 'lucide-react';
+import { ChevronRight, Files, GitBranch, Layers3, Search, Workflow } from 'lucide-react';
 
 import type { Project } from '../../../../../shared/application/contracts.js';
 import type { ProjectFileBrowserOperations } from '../../file-editor/browser/useProjectFileBrowser.js';
-import { NODE_DEFINITIONS, type NodeKind, type WorkshopNode } from '../canvas/CanvasNode.js';
+import type { NodeKind, WorkshopNode } from '../canvas/CanvasNode.js';
 import { WorkspaceProjectTree } from '../context-dnd/WorkspaceProjectTree.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import type { ExtensionTemplate } from '../model/types.js';
+import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
+import type { WorkflowTemplate } from '../workflows/templates/catalog.js';
 
 interface WorkspaceRailProps {
   project: Project;
   tab: 'project' | 'nodes';
   search: string;
   templates: NodeKind[];
+  workflowTemplates: readonly WorkflowTemplate[];
   extensionTemplates: ExtensionTemplate[];
   nodes: WorkshopNode[];
+  nodeRegistry?: NodeTypeRegistry;
   fileOperations: ProjectFileBrowserOperations;
   initializingGit: boolean;
   collaborationGraphReadOnly: boolean;
   onTabChange: (tab: 'project' | 'nodes') => void;
   onSearchChange: (value: string) => void;
   onAddNode: (kind: NodeKind) => void;
+  onAddWorkflowTemplate: (template: WorkflowTemplate) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
   onSelectNode: (node: WorkshopNode) => void;
@@ -34,14 +39,17 @@ export function WorkspaceRail({
   tab,
   search,
   templates,
+  workflowTemplates,
   extensionTemplates,
   nodes,
+  nodeRegistry = BUILT_IN_NODE_REGISTRY,
   fileOperations,
   initializingGit,
   collaborationGraphReadOnly,
   onTabChange,
   onSearchChange,
   onAddNode,
+  onAddWorkflowTemplate,
   onAddExtensionNode,
   onInitializeGit,
   onSelectNode,
@@ -89,15 +97,19 @@ export function WorkspaceRail({
           <ProjectTemplates
             project={project}
             templates={templates}
+            workflowTemplates={workflowTemplates}
             extensionTemplates={extensionTemplates}
+            nodeRegistry={nodeRegistry}
             initializingGit={initializingGit}
+            readOnly={collaborationGraphReadOnly}
             onAddNode={onAddNode}
+            onAddWorkflowTemplate={onAddWorkflowTemplate}
             onAddExtensionNode={onAddExtensionNode}
             onInitializeGit={onInitializeGit}
           />
         </>
       ) : (
-        <CanvasNodeList nodes={nodes} onSelectNode={onSelectNode} />
+        <CanvasNodeList nodes={nodes} nodeRegistry={nodeRegistry} onSelectNode={onSelectNode} />
       )}
       <footer>
         <ShieldStatus project={project} />
@@ -109,9 +121,13 @@ export function WorkspaceRail({
 interface ProjectTemplatesProps {
   project: Project;
   templates: NodeKind[];
+  workflowTemplates: readonly WorkflowTemplate[];
   extensionTemplates: ExtensionTemplate[];
+  nodeRegistry: NodeTypeRegistry;
   initializingGit: boolean;
+  readOnly: boolean;
   onAddNode: (kind: NodeKind) => void;
+  onAddWorkflowTemplate: (template: WorkflowTemplate) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
 }
@@ -119,9 +135,13 @@ interface ProjectTemplatesProps {
 function ProjectTemplates({
   project,
   templates,
+  workflowTemplates,
   extensionTemplates,
+  nodeRegistry,
   initializingGit,
+  readOnly,
   onAddNode,
+  onAddWorkflowTemplate,
   onAddExtensionNode,
   onInitializeGit,
 }: ProjectTemplatesProps) {
@@ -162,6 +182,31 @@ function ProjectTemplates({
           </div>
         )}
       </section>
+      <section className="template-section" aria-labelledby="workflow-template-heading">
+        <header>
+          <h2 id="workflow-template-heading">Workflow templates</h2>
+          <span>{workflowTemplates.length}</span>
+        </header>
+        <div className="template-list">
+          {workflowTemplates.map((template) => (
+            <button
+              type="button"
+              key={template.id}
+              disabled={readOnly}
+              onClick={() => onAddWorkflowTemplate(template)}
+            >
+              <span style={{ color: '#d4a85b' }}>
+                <Workflow size={15} />
+              </span>
+              <span>
+                <strong>{template.name}</strong>
+                <small>{template.description}</small>
+              </span>
+              <ChevronRight size={13} />
+            </button>
+          ))}
+        </div>
+      </section>
       <section className="template-section">
         <header>
           <h2>Node templates</h2>
@@ -169,7 +214,7 @@ function ProjectTemplates({
         </header>
         <div className="template-list">
           {templates.map((kind) => {
-            const definition = NODE_DEFINITIONS[kind];
+            const definition = nodeRegistry.resolve({ kind });
             const Icon = definition.icon;
             return (
               <button
@@ -193,29 +238,42 @@ function ProjectTemplates({
               </button>
             );
           })}
-          {extensionTemplates.map((template) => (
-            <button
-              type="button"
-              key={template.key}
-              draggable
-              onDragStart={(event) => {
-                event.dataTransfer.setData('application/x-forgeboard-extension-node', template.key);
-                event.dataTransfer.effectAllowed = 'copy';
-              }}
-              onClick={() => onAddExtensionNode(template)}
-            >
-              <span style={{ color: template.definition.color }}>
-                <Puzzle size={15} />
-              </span>
-              <span>
-                <strong>{template.definition.displayName}</strong>
-                <small>
-                  {template.extension.manifest.name} · {template.definition.category}
-                </small>
-              </span>
-              <ChevronRight size={13} />
-            </button>
-          ))}
+          {extensionTemplates.map((template) => {
+            const definition = nodeRegistry.resolve({
+              kind: 'extension',
+              extensionId: template.extension.manifest.id,
+              extensionVersion: template.extension.manifest.version,
+              extensionNodeTypeId: template.definition.id,
+              extensionDefinition: template.definition,
+            });
+            const Icon = definition.icon;
+            return (
+              <button
+                type="button"
+                key={template.key}
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.setData(
+                    'application/x-forgeboard-extension-node',
+                    template.key,
+                  );
+                  event.dataTransfer.effectAllowed = 'copy';
+                }}
+                onClick={() => onAddExtensionNode(template)}
+              >
+                <span style={{ color: definition.color }}>
+                  <Icon size={15} />
+                </span>
+                <span>
+                  <strong>{definition.label}</strong>
+                  <small>
+                    {template.extension.manifest.name} · {template.definition.category}
+                  </small>
+                </span>
+                <ChevronRight size={13} />
+              </button>
+            );
+          })}
         </div>
       </section>
     </>
@@ -224,9 +282,11 @@ function ProjectTemplates({
 
 function CanvasNodeList({
   nodes,
+  nodeRegistry,
   onSelectNode,
 }: {
   nodes: WorkshopNode[];
+  nodeRegistry: NodeTypeRegistry;
   onSelectNode: (node: WorkshopNode) => void;
 }) {
   return (
@@ -237,7 +297,7 @@ function CanvasNodeList({
       </header>
       <div className="rail-node-list">
         {nodes.map((node) => {
-          const definition = NODE_DEFINITIONS[node.data.kind];
+          const definition = nodeRegistry.resolve(node.data);
           const Icon = definition.icon;
           return (
             <button type="button" key={node.id} onClick={() => onSelectNode(node)}>
@@ -248,11 +308,15 @@ function CanvasNodeList({
                 <strong>{node.data.title}</strong>
                 <small>{definition.label}</small>
               </span>
-              <span className={`run-status ${node.data.status}`} title={node.data.status} />
+              <span
+                className={`run-status ${node.data.status}`}
+                role="img"
+                aria-label={`Status: ${node.data.status}`}
+              />
             </button>
           );
         })}
-        {!nodes.length && <p>No matching nodes on this canvas.</p>}
+        {!nodes.length && <p role="status">No matching nodes on this canvas.</p>}
       </div>
     </section>
   );

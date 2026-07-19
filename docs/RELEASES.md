@@ -40,12 +40,25 @@ for normal end-user installation.
 3. Create and push a `v*` tag whose value is exactly `v` plus that package version. The workflow
    enforces the tag/version binding; cryptographic Git tag signing is an optional maintainer policy,
    not a release-workflow guarantee.
-4. Verify each GitHub Actions artifact, `RELEASE-INFO` file, checksum, and native smoke result before
-   publishing or announcing the release.
+4. Pushing the tag starts automatic publication. Every build, metadata check, checksum, and native
+   smoke must pass before the publish job runs; after publication, verify the GitHub Release assets
+   and signing disclosure before announcing it.
 
 The workflow rejects version/tag mismatches and validates installed Dugite metadata against
 [`third_party/dugite-sources.json`](../third_party/dugite-sources.json). A Dugite upgrade must update
 that ledger and all corresponding immutable source commits in the same reviewed change.
+
+## Current publication blockers
+
+As verified on 2026-07-19, the official repository is private, has no tags or published Releases,
+and its latest four-platform workflow attempt failed before any runner step started because of the
+repository account's billing or spending-limit restriction. That account restriction must be
+resolved before hosted installer proof or publication is possible. After it is resolved, the
+remaining release evidence is a successful native install-and-launch smoke on every hosted target,
+including Windows, Linux, and both macOS architectures, followed by a tag-gated publication whose
+assets and checksums are independently verified. Production signing also remains optional external
+maintainer setup: do not claim macOS signing/notarization or Windows Authenticode until the generated
+artifacts themselves pass the workflow's post-package verification.
 
 ## Optional signing credentials
 
@@ -56,11 +69,13 @@ GitHub Actions secrets to enable platform signing:
   `APPLE_TEAM_ID`.
 - Windows: `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`.
 
-Development builds can be produced without those secrets, but must be described as unsigned. The
-workflow derives release metadata from post-package Developer ID, stapled notarization-ticket, and
-Authenticode verification; configured credentials that do not produce the expected proof fail the
-build. Public production releases should be signed and notarized. Linux packages publish checksums
-and should add distribution-specific signing when an official package repository is introduced.
+Development builds can be produced without those secrets. The workflow derives release metadata
+from post-package Developer ID, stapled notarization-ticket, and Authenticode verification;
+configured credentials that do not produce the expected proof fail the build. The tag-gated publish
+job then derives the visible release title and a leading signing warning from all four verified
+`RELEASE-INFO` records. Public production releases should be signed and notarized. Linux packages
+publish checksums and should add distribution-specific signing when an official package repository
+is introduced.
 
 The release workflow uses read-only repository permissions while building. Only the tag-gated
 publish job receives `contents: write`. A manual workflow dispatch builds and uploads CI artifacts

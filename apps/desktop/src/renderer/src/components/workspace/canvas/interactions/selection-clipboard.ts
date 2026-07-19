@@ -1,6 +1,7 @@
 import type { WorkshopNode } from '../CanvasNode.js';
 import type { WorkshopEdge } from '../../model/types.js';
 import { persistedWorkshopNodeDimensions } from '../../model/node-persistence.js';
+import { descendantIds } from './groups/group-containment.js';
 
 export interface CanvasClipboardSelection {
   nodes: WorkshopNode[];
@@ -136,7 +137,7 @@ function selectedNodeClosure(
   const selectedIds = new Set(selectedNodes.map((node) => node.id));
   for (const frame of selectedNodes) {
     if (frame.data.kind !== 'group-frame') continue;
-    for (const childId of frame.data.childNodeIds ?? []) {
+    for (const childId of descendantIds(allNodes, frame.id)) {
       if (availableIds.has(childId)) selectedIds.add(childId);
     }
   }

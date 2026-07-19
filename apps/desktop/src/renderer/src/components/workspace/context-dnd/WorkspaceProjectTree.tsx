@@ -13,6 +13,7 @@ import {
   type ProjectFileBrowserOperations,
 } from '../../file-editor/browser/useProjectFileBrowser.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 import { writeWorkspaceContextDrag, type WorkspaceContextDragPayload } from './contracts.js';
 import './WorkspaceProjectTree.css';
 
@@ -219,37 +220,37 @@ function ProjectTreeEntry({
       </button>
     );
   }
+  const guidance = draggable
+    ? `Drag ${entry.relativePath} onto an agent to share it`
+    : (entry.policy.reason ?? "This file can't be attached.");
   return (
-    <button
-      type="button"
-      role="treeitem"
-      disabled={!draggable}
-      draggable={draggable}
-      aria-label={`${draggable ? 'File' : 'Protected file'} ${entry.relativePath}`}
-      aria-disabled={!draggable}
-      aria-selected={selected}
-      title={
-        draggable
-          ? `Drag ${entry.relativePath} onto an agent to share it`
-          : (entry.policy.reason ?? "This file can't be attached.")
-      }
-      onDragStart={(event) => {
-        if (!draggable) {
-          event.preventDefault();
-          return;
-        }
-        writeWorkspaceContextDrag(event.dataTransfer, {
-          schemaVersion: 1,
-          kind: 'project-file',
-          projectId,
-          relativePath: entry.relativePath,
-        });
-      }}
-      onClick={() => onSelectFile(entry)}
-    >
-      <File size={13} aria-hidden="true" />
-      <span>{label}</span>
-      <em>{policyLabel(entry)}</em>
-    </button>
+    <WorkspaceTooltip content={guidance}>
+      <button
+        type="button"
+        role="treeitem"
+        disabled={!draggable}
+        draggable={draggable}
+        aria-label={`${draggable ? 'File' : 'Protected file'} ${entry.relativePath}`}
+        aria-disabled={!draggable}
+        aria-selected={selected}
+        onDragStart={(event) => {
+          if (!draggable) {
+            event.preventDefault();
+            return;
+          }
+          writeWorkspaceContextDrag(event.dataTransfer, {
+            schemaVersion: 1,
+            kind: 'project-file',
+            projectId,
+            relativePath: entry.relativePath,
+          });
+        }}
+        onClick={() => onSelectFile(entry)}
+      >
+        <File size={13} aria-hidden="true" />
+        <span>{label}</span>
+        <em>{policyLabel(entry)}</em>
+      </button>
+    </WorkspaceTooltip>
   );
 }

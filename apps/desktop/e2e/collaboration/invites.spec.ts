@@ -60,8 +60,8 @@ test('owners manage token-free invite rows and a second profile redeems through 
         confirmLabel: 'Connect',
         secrets: [server!.ownerAccessToken],
       });
-      expect(dialog.detail).toContain(`Endpoint: ${server!.webSocketUrl}`);
-      expect(dialog.detail).toContain('Resource: invite-e2e-room');
+      expect(dialog.detail).toContain(`Address: ${server!.webSocketUrl}`);
+      expect(dialog.detail).toContain('Item: invite-e2e-room');
       await expect(collaborationStatus(ownerSettings)).toContainText('Your role is owner', {
         timeout: 20_000,
       });
@@ -84,7 +84,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
         'Invite creation was cancelled',
       );
       await expect(
-        ownerSettings.getByText('No invites have been created in this room session.'),
+        ownerSettings.getByText('Invite history has not been loaded. Refresh to review this room.'),
       ).toBeVisible();
 
       await ownerSettings.getByLabel('Invite role').selectOption('viewer');
@@ -100,8 +100,6 @@ test('owners manage token-free invite rows and a second profile redeems through 
       expect(dialog.detail).toContain('Role: viewer');
       expect(dialog.detail).toContain('Lifetime: 900 seconds');
       expect(dialog.detail).toContain('Maximum uses: 1');
-      await expect(sessionInvite(ownerSettings, 'viewer')).toBeVisible();
-
       await ownerSettings.getByLabel('Invite role').selectOption('reviewer');
       await ownerSettings.getByLabel('Maximum uses').fill('2');
       dialogIndex = await queueCollaborationDialog(owner.app, 1);
@@ -111,9 +109,17 @@ test('owners manage token-free invite rows and a second profile redeems through 
         title: 'Create collaboration invite?',
         confirmLabel: 'Create invite',
       });
-      await expect(sessionInvite(ownerSettings, 'reviewer')).toContainText('up to 2 uses');
+      dialogIndex = await queueCollaborationDialog(owner.app, 1);
+      await ownerSettings.getByRole('button', { name: 'Refresh invites' }).click();
+      dialog = await waitForCollaborationDialog(owner.app, dialogIndex);
+      expectCancelDefaultDialog(dialog, {
+        title: 'Load collaboration invite history?',
+        confirmLabel: 'Load invites',
+      });
+      await expect(sessionInvite(ownerSettings, 'viewer')).toBeVisible();
+      await expect(sessionInvite(ownerSettings, 'reviewer')).toContainText('0 / 2 uses');
       await expect(
-        ownerSettings.getByRole('list', { name: 'Session invites' }).getByRole('listitem'),
+        ownerSettings.getByRole('list', { name: 'Room invite history' }).getByRole('listitem'),
       ).toHaveCount(2);
       await expectSecretsAbsent(owner.page, [server!.ownerAccessToken, '#token=']);
     });
@@ -174,7 +180,12 @@ test('owners manage token-free invite rows and a second profile redeems through 
         secrets: [inviteLink, inviteToken ?? '', revokedInviteLink, revokedToken],
       });
       await expect(collaborationStatus(ownerSettings)).toContainText('Invite revoked');
-      await expect(sessionInvite(ownerSettings, 'reviewer')).toHaveCount(0);
+      await expect(sessionInvite(ownerSettings, 'reviewer')).toContainText('revoked');
+      await expect(
+        sessionInvite(ownerSettings, 'reviewer').getByRole('button', {
+          name: 'Revoke',
+        }),
+      ).toHaveCount(0);
       await expect(sessionInvite(ownerSettings, 'viewer')).toBeVisible();
     });
 
@@ -302,7 +313,7 @@ async function configureIdentity(
 
 function sessionInvite(settings: Locator, role: 'reviewer' | 'viewer'): Locator {
   return settings
-    .getByRole('list', { name: 'Session invites' })
+    .getByRole('list', { name: 'Room invite history' })
     .getByRole('listitem')
     .filter({ hasText: new RegExp(`^${role} \\u00b7`, 'u') });
 }

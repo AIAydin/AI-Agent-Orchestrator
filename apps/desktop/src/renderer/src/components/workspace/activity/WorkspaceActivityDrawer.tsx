@@ -22,6 +22,7 @@ import type { ChangeReport, CheckCommand } from '../model/types.js';
 import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
 import { WorkspaceChecksPanel } from '../checks/WorkspaceChecksPanel.js';
 import { WorkspaceWorkflowPanel } from '../workflows/WorkspaceWorkflowPanel.js';
+import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 
 type DrawerTab = 'activity' | 'workflows' | 'changes' | 'checks' | 'audit';
 const DRAWER_TABS: readonly DrawerTab[] = ['activity', 'workflows', 'changes', 'checks', 'audit'];
@@ -131,14 +132,16 @@ export function WorkspaceActivityDrawer({
             <ShieldCheck size={14} aria-hidden="true" /> History
           </DrawerTabButton>
         </div>
-        <button
-          className="icon-button"
-          type="button"
-          onClick={onClose}
-          aria-label="Close activity panel"
-        >
-          <PanelBottomClose size={16} aria-hidden="true" />
-        </button>
+        <WorkspaceTooltip content="Close the activity panel">
+          <button
+            className="icon-button"
+            type="button"
+            onClick={onClose}
+            aria-label="Close activity panel"
+          >
+            <PanelBottomClose size={16} aria-hidden="true" />
+          </button>
+        </WorkspaceTooltip>
       </header>
       {tab === 'activity' && <ActivityPanel events={events} />}
       {tab === 'workflows' && (
@@ -247,6 +250,9 @@ function ActivityPanel({ events }: { events: string[] }) {
           <small>local</small>
         </div>
       ))}
+      {events.length === 0 ? (
+        <DrawerEmpty role="status">Run activity will appear here.</DrawerEmpty>
+      ) : null}
     </div>
   );
 }
@@ -314,7 +320,9 @@ function ChangesPanel({
           })}
         </div>
       ) : (
-        <DrawerEmpty>Files an agent changes show up here. Run an agent to see them.</DrawerEmpty>
+        <DrawerEmpty role="status">
+          Files an agent changes show up here. Run an agent to see them.
+        </DrawerEmpty>
       )}
     </div>
   );
@@ -348,9 +356,11 @@ function AuditPanel({
         </button>
       </header>
       {state === 'loading' && !events.length ? (
-        <DrawerEmpty>Loading history…</DrawerEmpty>
+        <DrawerEmpty role="status">Loading history…</DrawerEmpty>
       ) : state === 'error' ? (
-        <DrawerEmpty>Forgeboard could not load the history.</DrawerEmpty>
+        <DrawerEmpty role="alert">
+          Forgeboard could not load the history. Use Refresh to try again.
+        </DrawerEmpty>
       ) : events.length ? (
         <div className="audit-event-list">
           {events.map((event) => (
@@ -363,14 +373,18 @@ function AuditPanel({
           ))}
         </div>
       ) : (
-        <DrawerEmpty>Nothing has been recorded yet.</DrawerEmpty>
+        <DrawerEmpty role="status">Nothing has been recorded yet.</DrawerEmpty>
       )}
     </div>
   );
 }
 
-function DrawerEmpty({ children }: { children: string }) {
-  return <p className="drawer-empty">{children}</p>;
+function DrawerEmpty({ children, role }: { children: string; role: 'alert' | 'status' }) {
+  return (
+    <p className="drawer-empty" role={role}>
+      {children}
+    </p>
+  );
 }
 
 function drawerTabId(tab: DrawerTab): string {

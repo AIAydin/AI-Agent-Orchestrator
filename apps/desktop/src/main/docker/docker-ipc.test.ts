@@ -298,6 +298,90 @@ describe('DockerIpcService', () => {
     await disposal;
     expect(disposed).toBe(true);
   });
+
+  it('authorizes Settings only after exact successful readiness evidence', async () => {
+    electronMock.fromWebContents.mockReturnValue({ isDestroyed: () => false });
+    const operations = createOperations();
+    const fixture = createFixture({ operations, nativeResponse: 1 });
+
+    await expect(fixture.service.requireSettingsReadiness(input)).rejects.toThrow(
+      'Run Check Docker successfully',
+    );
+    await expect(requiredHandler(IPC_CHANNELS.dockerCheck)(liveEvent(), input)).resolves.toEqual({
+      ok: true,
+      value: ready,
+    });
+    await expect(fixture.service.requireSettingsReadiness(input)).resolves.toBeUndefined();
+    await expect(
+      fixture.service.requireSettingsReadiness({ ...input, image: 'registry.example/agent:2' }),
+    ).rejects.toThrow('Run Check Docker successfully');
+    await fixture.service.dispose();
+  });
+
+  it('rejects expired readiness and executable identity drift', async () => {
+    electronMock.fromWebContents.mockReturnValue({ isDestroyed: () => false });
+    const operations = createOperations();
+    let current = new Date('2026-07-14T16:00:00.000Z');
+    const fixture = createFixture({ operations, nativeResponse: 1, now: () => current });
+    await requiredHandler(IPC_CHANNELS.dockerCheck)(liveEvent(), input);
+
+    current = new Date('2026-07-14T16:05:00.001Z');
+    await expect(fixture.service.requireSettingsReadiness(input)).rejects.toThrow(
+      'Run Check Docker successfully',
+    );
+    current = new Date('2026-07-14T16:01:00.000Z');
+    await requiredHandler(IPC_CHANNELS.dockerCheck)(liveEvent(), input);
+    operations.identify.mockResolvedValueOnce({ ...identity, sha256: 'b'.repeat(64) });
+    await expect(fixture.service.requireSettingsReadiness(input)).rejects.toThrow(
+      'selected Docker executable changed',
+    );
+    await fixture.service.dispose();
+  });
+
+  it('cannot authorize Settings after shutdown invalidates evidence during revalidation', async () => {
+    electronMock.fromWebContents.mockReturnValue({ isDestroyed: () => false });
+    const operations = createOperations();
+    const fixture = createFixture({ operations, nativeResponse: 1 });
+    await requiredHandler(IPC_CHANNELS.dockerCheck)(liveEvent(), input);
+    const resolution = deferred<string>();
+    const previousResolutionCount = operations.resolve.mock.calls.length;
+    operations.resolve.mockImplementationOnce(() => resolution.promise);
+
+    const verification = fixture.service.requireSettingsReadiness(input);
+    await vi.waitFor(() =>
+      expect(operations.resolve).toHaveBeenCalledTimes(previousResolutionCount + 1),
+    );
+    await fixture.service.pauseForShutdown();
+    resolution.resolve(canonicalInput.dockerExecutable);
+
+    await expect(verification).rejects.toThrow('paused while Forgeboard quits');
+    fixture.service.resumeAfterShutdownPause();
+    await fixture.service.dispose();
+  });
+
+  it('does not restore Settings evidence when a check drains during shutdown pause', async () => {
+    electronMock.fromWebContents.mockReturnValue({ isDestroyed: () => false });
+    const operations = createOperations();
+    const check = deferred<DockerReadiness>();
+    operations.check.mockImplementationOnce(async (_configuration, authorization) => {
+      await authorization.beforeCommand();
+      return await check.promise;
+    });
+    const fixture = createFixture({ operations, nativeResponse: 1 });
+    const request = requiredHandler(IPC_CHANNELS.dockerCheck)(liveEvent(), input);
+    await vi.waitFor(() => expect(operations.check).toHaveBeenCalledTimes(1));
+
+    const pause = fixture.service.pauseForShutdown();
+    check.resolve(ready);
+    await request;
+    await pause;
+    fixture.service.resumeAfterShutdownPause();
+
+    await expect(fixture.service.requireSettingsReadiness(input)).rejects.toThrow(
+      'Run Check Docker successfully',
+    );
+    await fixture.service.dispose();
+  });
 });
 
 function createOperations() {
@@ -319,12 +403,19 @@ function createOperations() {
 function createFixture(options: {
   readonly operations: DockerOperations;
   readonly nativeResponse?: number;
+  readonly now?: () => Date;
 }) {
   const showMessageBox = vi.fn<
     (parent: BrowserWindow, messageBoxOptions: MessageBoxOptions) => Promise<MessageBoxReturnValue>
   >(() => Promise.resolve({ response: options.nativeResponse ?? 0, checkboxChecked: false }));
   const appendAudit = vi.fn();
-  const service = new DockerIpcService({ showMessageBox }, { appendAudit }, options.operations);
+  const service = new DockerIpcService(
+    { showMessageBox },
+    { appendAudit },
+    options.operations,
+    undefined,
+    options.now,
+  );
   service.registerIpcHandlers();
   return { service, showMessageBox, appendAudit };
 }

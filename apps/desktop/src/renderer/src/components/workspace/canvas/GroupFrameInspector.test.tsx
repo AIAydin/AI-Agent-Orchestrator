@@ -38,7 +38,9 @@ describe('GroupFrameInspector', () => {
       target: { value: 'grid' },
     });
     fireEvent.click(
-      screen.getByRole('checkbox', { name: /Automatically fit the group to its members/u }),
+      screen.getByRole('checkbox', {
+        name: /Automatically fit the group to its members/u,
+      }),
     );
     expect(screen.getByRole('checkbox', { name: /agent-1/u })).toHaveProperty('checked', true);
     fireEvent.click(screen.getByRole('checkbox', { name: /test-1/u }));
@@ -111,7 +113,10 @@ describe('GroupFrameInspector', () => {
 
     rerender(
       <GroupFrameInspector
-        node={node('group-1', 'group-frame', { layout: 'grid', childNodeIds: [] })}
+        node={node('group-1', 'group-frame', {
+          layout: 'grid',
+          childNodeIds: [],
+        })}
         nodes={[node('group-1', 'group-frame'), node('agent-1', 'agent')]}
         onRecord={vi.fn()}
         onUpdate={vi.fn()}
@@ -149,11 +154,44 @@ describe('GroupFrameInspector', () => {
       />,
     );
 
-    expect(screen.getByRole('checkbox', { name: /protected/u })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('checkbox', { name: /^locked task/u })).toHaveProperty(
-      'disabled',
-      true,
+    const protectedMember = screen.getByRole('checkbox', {
+      name: /protected/u,
+    });
+    const lockedMember = screen.getByRole('checkbox', {
+      name: /^locked task/u,
+    });
+    const reasons = screen.getAllByRole('tooltip', {
+      name: 'Unlock this node or its current group first.',
+    });
+    expect(protectedMember).toHaveProperty('disabled', true);
+    expect(lockedMember).toHaveProperty('disabled', true);
+    expect(reasons.length).toBeGreaterThanOrEqual(2);
+    expect(protectedMember.closest('label')?.getAttribute('aria-describedby')).toBeTruthy();
+    expect(lockedMember.closest('label')?.getAttribute('aria-describedby')).toBeTruthy();
+  });
+
+  it('offers nested frames while disabling an ancestor that would create a cycle', () => {
+    const outer = node('outer', 'group-frame', { childNodeIds: ['group-1'] });
+    const group = node('group-1', 'group-frame', { childNodeIds: [] });
+    const nested = node('nested', 'group-frame', { childNodeIds: [] });
+    const onUpdate = vi.fn();
+    render(
+      <GroupFrameInspector
+        node={group}
+        nodes={[outer, group, nested]}
+        onRecord={vi.fn()}
+        onUpdate={onUpdate}
+        onFit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
     );
+
+    expect(screen.getByRole('checkbox', { name: /outer/u })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('checkbox', { name: /nested/u }));
+    expect(onUpdate).toHaveBeenCalledWith({ childNodeIds: ['nested'] });
+    expect(
+      screen.getByRole('tooltip', { name: 'A group cannot contain one of its ancestors.' }),
+    ).toBeTruthy();
   });
 });
 

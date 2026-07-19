@@ -108,7 +108,7 @@ export function useWorkspaceNodeMutations(options: WorkspaceNodeMutationOptions)
     const result = fitGroupFrameToMembers(currentNodes, currentFrame.id);
     if (result.disposition !== 'fitted') return;
     recordSnapshot(currentNodes, edgesRef.current);
-    replaceNodes(result.nodes);
+    replaceNodes(fitAutomaticGroupFrames(result.nodes, [currentFrame.id]));
     setEvents((items) =>
       [`Fitted ${currentFrame.data.title} to its members.`, ...items].slice(0, 30),
     );
@@ -134,7 +134,7 @@ export function useWorkspaceNodeMutations(options: WorkspaceNodeMutationOptions)
     const fitResult = currentFrame.data.autoFit
       ? fitGroupFrameToMembers(result.nodes, currentFrame.id)
       : null;
-    const nextNodes = fitResult?.nodes ?? result.nodes;
+    const nextNodes = fitAutomaticGroupFrames(fitResult?.nodes ?? result.nodes, [currentFrame.id]);
     if (result.disposition !== 'arranged' && fitResult?.disposition !== 'fitted') return;
     recordSnapshot(currentNodes, edgesRef.current);
     replaceNodes(nextNodes);

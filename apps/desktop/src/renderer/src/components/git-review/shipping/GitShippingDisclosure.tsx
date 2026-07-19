@@ -45,7 +45,9 @@ export function GitShippingDisclosure({
   const strategy =
     plan.strategy === 'fast-forward-only'
       ? 'Move the primary branch forward'
-      : 'Copy the reviewed changes one by one';
+      : plan.strategy === 'merge-commit'
+        ? 'Create a merge commit on the primary branch'
+        : 'Copy the reviewed changes one by one';
   const qualityApproval = plan.readiness.approvals.find(
     (approval) => approval.approvalId === plan.readinessApprovalId,
   );

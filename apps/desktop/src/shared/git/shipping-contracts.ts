@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { GitIdentityViewSchema, GitReviewViewSchema, GitTargetInputSchema } from './contracts.js';
+import {
+  GitIdentityViewSchema,
+  GitReviewTargetViewSchema,
+  GitReviewViewSchema,
+  GitTargetInputSchema,
+} from './contracts.js';
 import { GitDeliveryReadinessViewSchema } from './readiness/index.js';
 
 const OidSchema = z.string().regex(/^[a-f0-9]{40,64}$/u);
@@ -11,7 +16,13 @@ const GitPathSchema = z
   .max(32_768)
   .refine((value) => !value.includes('\0'), 'Git paths cannot contain NUL bytes.');
 
-export const GitShippingStrategySchema = z.enum(['fast-forward-only', 'cherry-pick']);
+export const GitShippingStrategySchema = z.enum([
+  'fast-forward-only',
+  'merge-commit',
+  'squash',
+  'rebase',
+  'cherry-pick',
+]);
 export type GitShippingStrategy = z.infer<typeof GitShippingStrategySchema>;
 
 export const GitShippingPlanInputSchema = z
@@ -110,10 +121,60 @@ export const GitShippingResultViewSchema = z
     headBefore: OidSchema,
     headAfter: OidSchema,
     conflictedPaths: z.array(GitPathSchema).max(256),
+    conflictTarget: GitTargetInputSchema.nullable(),
     review: GitReviewViewSchema,
   })
   .strict();
 export type GitShippingResultView = z.infer<typeof GitShippingResultViewSchema>;
+
+export const GitConflictRecoveryActionSchema = z.enum(['continue', 'abort']);
+export type GitConflictRecoveryAction = z.infer<typeof GitConflictRecoveryActionSchema>;
+
+export const GitConflictRecoveryPrepareInputSchema = z
+  .object({
+    target: GitTargetInputSchema,
+    action: GitConflictRecoveryActionSchema,
+  })
+  .strict();
+export type GitConflictRecoveryPrepareInput = z.infer<typeof GitConflictRecoveryPrepareInputSchema>;
+
+export const GitConflictRecoveryStateViewSchema = z
+  .object({
+    target: GitTargetInputSchema,
+    operation: z.enum(['merge', 'rebase', 'cherry-pick', 'squash']),
+    conflictedPaths: z.array(GitPathSchema).max(256),
+    stagedPaths: z.array(GitPathSchema).max(256),
+    canContinue: z.boolean(),
+    canAbort: z.boolean(),
+  })
+  .strict();
+export type GitConflictRecoveryStateView = z.infer<typeof GitConflictRecoveryStateViewSchema>;
+
+export const GitConflictRecoveryPlanViewSchema = z
+  .object({
+    planId: z.string().uuid(),
+    expiresAt: z.string().datetime(),
+    target: GitReviewTargetViewSchema,
+    action: GitConflictRecoveryActionSchema,
+    operation: z.enum(['merge', 'rebase', 'cherry-pick', 'squash']),
+    expectedHead: z.union([OidSchema, z.literal('UNBORN')]),
+    conflictedPaths: z.array(GitPathSchema).max(256),
+    stagedPaths: z.array(GitPathSchema).max(256),
+    stagedPatchSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    unstagedPatchSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    canContinue: z.boolean(),
+  })
+  .strict();
+export type GitConflictRecoveryPlanView = z.infer<typeof GitConflictRecoveryPlanViewSchema>;
+
+export const GitConflictRecoveryResultViewSchema = z
+  .object({
+    state: z.enum(['completed', 'conflicted']),
+    conflictedPaths: z.array(GitPathSchema).max(256),
+    review: GitReviewViewSchema,
+  })
+  .strict();
+export type GitConflictRecoveryResultView = z.infer<typeof GitConflictRecoveryResultViewSchema>;
 
 function containsControlCharacter(value: string): boolean {
   return [...value].some((character) => {

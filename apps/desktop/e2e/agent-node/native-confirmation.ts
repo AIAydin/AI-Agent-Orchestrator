@@ -35,10 +35,12 @@ export async function approveExtensionInstall(
           options.defaultId === 0 ? undefined : 'default',
           options.cancelId === 0 ? undefined : 'cancel',
           options.noLink === true ? undefined : 'links',
-          typeof options.detail === 'string' && options.detail.includes('Manifest SHA-256:')
+          typeof options.detail === 'string' &&
+          options.detail.includes('Manifest fingerprint (SHA-256):')
             ? undefined
             : 'manifest digest',
-          typeof options.detail === 'string' && options.detail.includes('Snapshot SHA-256:')
+          typeof options.detail === 'string' &&
+          options.detail.includes('Full package fingerprint (SHA-256):')
             ? undefined
             : 'snapshot digest',
           BrowserWindow.getAllWindows().some((window) => window.id === owner?.id)
@@ -60,9 +62,9 @@ export async function approveExtensionInstall(
   );
 
   await review
-    .getByRole('checkbox', { name: 'I reviewed this exact manifest and permission set' })
+    .getByRole('checkbox', { name: 'I reviewed these exact details and permissions' })
     .check();
-  await review.getByRole('button', { name: 'Continue to system confirmation' }).click();
+  await review.getByRole('button', { name: 'Continue to confirmation' }).click();
   await expect
     .poll(async () => {
       return await app.evaluate(() => {

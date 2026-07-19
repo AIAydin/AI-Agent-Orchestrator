@@ -9,6 +9,7 @@ import { unwrap } from '../../../lib/ipc.js';
 import { EnvironmentAllowlistEditor } from '../../configuration/EnvironmentAllowlistEditor.js';
 import { CommandReadinessEvidence } from '../../configuration/CommandReadinessEvidence.js';
 import type { CommandReadinessStatus } from '../../configuration/useCommandReadiness.js';
+import type { DockerReadinessEvidence } from '../../docker/readiness-evidence.js';
 import { AgentReadinessPanel } from '../../readiness/AgentReadinessPanel.js';
 import { permissionProfileNeedsDocker } from '../../permissions/permission-profile-ui.js';
 import { CustomAgentSettings } from './CustomAgentSettings.js';
@@ -21,6 +22,8 @@ interface AgentsSettingsProps extends AsyncSettingsProps {
   agents: AgentDetection[];
   readiness: SettingsAgentReadinessView;
   terminalReadiness?: CommandReadinessStatus | undefined;
+  dockerReadiness: DockerReadinessEvidence | null;
+  onDockerReadinessChange: (evidence: DockerReadinessEvidence | null) => void;
   onError: (message: string) => void;
 }
 
@@ -32,6 +35,8 @@ export function AgentsSettings({
   perform,
   readiness,
   terminalReadiness,
+  dockerReadiness,
+  onDockerReadinessChange,
   onError,
 }: AgentsSettingsProps) {
   const [providerStatuses, setProviderStatuses] = useState<
@@ -416,6 +421,8 @@ export function AgentsSettings({
         setDraft={setDraft}
         busy={busy}
         perform={perform}
+        readiness={dockerReadiness}
+        onReadinessChange={onDockerReadinessChange}
         onError={onError}
       />
     </>

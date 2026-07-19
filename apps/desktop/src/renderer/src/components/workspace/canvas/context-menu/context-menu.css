@@ -9,8 +9,13 @@
   box-shadow: 0 12px 32px rgb(21 25 22 / 18%);
 }
 
-.canvas-node-context-menu > button {
+.canvas-node-context-menu > button,
+.canvas-node-context-menu > .workspace-tooltip-target {
   width: 100%;
+}
+
+.canvas-node-context-menu > button,
+.canvas-node-context-menu > .workspace-tooltip-target > button {
   min-height: 30px;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
@@ -26,16 +31,20 @@
 }
 
 .canvas-node-context-menu > button:hover:not(:disabled),
-.canvas-node-context-menu > button:focus-visible {
+.canvas-node-context-menu > button:focus-visible,
+.canvas-node-context-menu > .workspace-tooltip-target > button:hover:not(:disabled),
+.canvas-node-context-menu > .workspace-tooltip-target > button:focus-visible {
   background: var(--accent-soft);
   outline: 1px solid var(--accent);
 }
 
-.canvas-node-context-menu > button:disabled {
+.canvas-node-context-menu > button:disabled,
+.canvas-node-context-menu > .workspace-tooltip-target > button:disabled {
   color: var(--text-faint);
   cursor: not-allowed;
 }
 
-.canvas-node-context-menu > button.danger-text:not(:disabled) {
+.canvas-node-context-menu > button.danger-text:not(:disabled),
+.canvas-node-context-menu > .workspace-tooltip-target > button.danger-text:not(:disabled) {
   color: var(--danger);
 }

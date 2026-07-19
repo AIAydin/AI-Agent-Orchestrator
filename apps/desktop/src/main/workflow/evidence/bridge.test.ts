@@ -93,7 +93,9 @@ describe('MainWorkflowEvidenceBridge', () => {
     const neverCalled = vi.fn();
     await expect(
       new MainWorkflowEvidenceBridge({ resolveContext: neverCalled }).reconcile(nonFile, T1),
-    ).rejects.toThrow('must be a regular File, Product Brief, Task, Diagram, or Note node');
+    ).rejects.toThrow(
+      'must be a regular File, Product Brief, Task, Diagram, Whiteboard, or Note node',
+    );
     expect(neverCalled).not.toHaveBeenCalled();
 
     const mismatched = new MainWorkflowEvidenceBridge({
@@ -504,8 +506,8 @@ function unsupportedContextNode(id: string) {
     ...baseNode,
     id,
     title: id,
-    type: 'whiteboard-mockup' as const,
-    data: { excalidraw: { elements: [] } },
+    type: 'group-frame' as const,
+    data: { purpose: 'custom' as const },
   };
 }
 

@@ -44,6 +44,42 @@ describe('GitFileSidebar', () => {
     expect(screen.getByText('201–205 of 205')).toBeTruthy();
     expect(screen.getByText(staged[204]!.path)).toBeTruthy();
   });
+
+  it('uses managed descriptions for available and busy whole-file actions', () => {
+    const file = reviewFile(0);
+    const groups: GitReviewGroups = { staged: [file], unstaged: [], untracked: [] };
+    const view = render(
+      <GitFileSidebar
+        groups={groups}
+        selection={null}
+        busy={false}
+        onSelect={vi.fn()}
+        onStagePath={vi.fn()}
+        onUnstagePath={vi.fn()}
+      />,
+    );
+
+    const action = screen.getByRole('button', { name: `Remove ${file.path} from commit` });
+    let tooltip = screen.getByRole('tooltip', { name: 'Remove whole file from commit' });
+    expect(action.getAttribute('title')).toBeNull();
+    expect(action.getAttribute('aria-describedby')).toBe(tooltip.id);
+
+    view.rerender(
+      <GitFileSidebar
+        groups={groups}
+        selection={null}
+        busy
+        onSelect={vi.fn()}
+        onStagePath={vi.fn()}
+        onUnstagePath={vi.fn()}
+      />,
+    );
+    tooltip = screen.getByRole('tooltip', {
+      name: 'Remove whole file from commit after the current Git action finishes',
+    });
+    expect(action).toHaveProperty('disabled', true);
+    expect(action.getAttribute('aria-describedby')).toBe(tooltip.id);
+  });
 });
 
 function reviewFile(index: number): GitReviewFile {

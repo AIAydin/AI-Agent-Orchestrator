@@ -1,4 +1,5 @@
 import type { CollaborationAwarenessEntry } from '../../../../../../shared/collaboration/index.js';
+import { WorkspaceTooltip } from '../../shell/tooltips/WorkspaceTooltip.js';
 import './collaborator-roster.css';
 
 const MAX_VISIBLE_AVATARS = 12;
@@ -17,15 +18,16 @@ export function CollaboratorRoster({ awareness }: CollaboratorRosterProps) {
         const activity = status === 'idle' ? 'not active right now' : status;
         const label = `${entry.state.user.displayName}, ${entry.state.user.role}, ${activity}`;
         return (
-          <span
-            key={entry.state.user.id}
-            className={`collaborator-avatar ${status}`}
-            style={{ backgroundColor: entry.state.user.color }}
-            aria-label={label}
-            title={label}
-          >
-            {initials(entry.state.user.displayName)}
-          </span>
+          <WorkspaceTooltip key={entry.state.user.id} content={label}>
+            <span
+              className={`collaborator-avatar ${status}`}
+              style={{ backgroundColor: entry.state.user.color }}
+              aria-label={label}
+              tabIndex={0}
+            >
+              {initials(entry.state.user.displayName)}
+            </span>
+          </WorkspaceTooltip>
         );
       })}
       {awareness.length > visible.length && (

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 
 import type { GitReviewView } from '../../../../shared/git/contracts.js';
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 import { workingTreeDiffStats } from './git-review-model.js';
 
 function identitySource(source: GitReviewView['identity']['nameSource']): string {
@@ -53,16 +54,18 @@ export function GitReviewSummary({ review }: { review: GitReviewView }) {
           </strong>
         </span>
       </div>
-      <div title="Only counts line changes in files Git already tracks. Brand-new and binary files don't add to these totals.">
-        <FileDiff size={15} aria-hidden="true" />
-        <span>
-          <small>Changes to review · tracked files</small>
-          <strong>
-            {diffStats.files} {diffStats.files === 1 ? 'file' : 'files'} · +{diffStats.additions} −
-            {diffStats.deletions}
-          </strong>
-        </span>
-      </div>
+      <WorkspaceTooltip content="Only counts line changes in files Git already tracks. Brand-new and binary files don't add to these totals.">
+        <div tabIndex={0} role="group" aria-label="Tracked file line changes">
+          <FileDiff size={15} aria-hidden="true" />
+          <span>
+            <small>Changes to review · tracked files</small>
+            <strong>
+              {diffStats.files} {diffStats.files === 1 ? 'file' : 'files'} · +{diffStats.additions}{' '}
+              −{diffStats.deletions}
+            </strong>
+          </span>
+        </div>
+      </WorkspaceTooltip>
       <div className={identity.ready ? '' : 'danger'}>
         {identity.ready ? (
           <UserRoundCheck size={15} aria-hidden="true" />

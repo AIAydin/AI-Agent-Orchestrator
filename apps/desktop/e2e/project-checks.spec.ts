@@ -52,7 +52,9 @@ test('project checks configure, approve, execute, cancel, and persist entirely t
       await page.getByRole('button', { name: 'Settings' }).click();
       const settings = page.locator('.settings-modal');
       await settings.getByRole('button', { name: 'Permissions', exact: true }).click();
-      await expect(settings.getByText('Saved approvals', { exact: true })).toBeVisible();
+      await expect(
+        settings.getByRole('heading', { name: 'Saved approvals', exact: true }),
+      ).toBeVisible();
       await settings.getByRole('button', { name: 'Revoke Command execute' }).click();
       await expect(settings.getByText('No active saved approvals for this project.')).toBeVisible();
       await settings.getByRole('button', { name: 'Close settings' }).click();

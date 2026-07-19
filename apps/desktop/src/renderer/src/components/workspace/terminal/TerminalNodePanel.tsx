@@ -25,6 +25,7 @@ import {
 } from '../../../../../shared/terminal/index.js';
 import { EnvironmentAllowlistEditor } from '../../configuration/EnvironmentAllowlistEditor.js';
 import { TerminalLaunchReviewDialog } from './TerminalLaunchReviewDialog.js';
+import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 import { TerminalSurface, type TerminalSurfaceHandle } from './TerminalSurface.js';
 import {
   terminalOperationsFromWindow,
@@ -248,26 +249,28 @@ export function TerminalNodePanel({
       </fieldset>
 
       <div className="terminal-toolbar" aria-label="Terminal controls">
-        <button
-          type="button"
-          className="button primary"
-          disabled={!canLaunch}
-          title={configurationIssues[0]}
-          onClick={() => void controller.prepareLaunch()}
-        >
-          {controller.busy === 'preparing' ? (
-            <LoaderCircle className="spin" size={13} aria-hidden="true" />
-          ) : controller.session === null ? (
-            <Play size={13} aria-hidden="true" />
-          ) : (
-            <RotateCcw size={13} aria-hidden="true" />
-          )}
-          {controller.busy === 'preparing'
-            ? 'Preparing…'
-            : controller.session === null
-              ? 'Review and start'
-              : 'Review and restart'}
-        </button>
+        <WorkspaceTooltip content={configurationIssues[0] ?? 'Review the terminal launch'}>
+          <button
+            type="button"
+            className="button primary"
+            aria-label={controller.session === null ? 'Review and start' : 'Review and restart'}
+            disabled={!canLaunch}
+            onClick={() => void controller.prepareLaunch()}
+          >
+            {controller.busy === 'preparing' ? (
+              <LoaderCircle className="spin" size={13} aria-hidden="true" />
+            ) : controller.session === null ? (
+              <Play size={13} aria-hidden="true" />
+            ) : (
+              <RotateCcw size={13} aria-hidden="true" />
+            )}
+            {controller.busy === 'preparing'
+              ? 'Preparing…'
+              : controller.session === null
+                ? 'Review and start'
+                : 'Review and restart'}
+          </button>
+        </WorkspaceTooltip>
         {controller.active ? (
           <>
             <button

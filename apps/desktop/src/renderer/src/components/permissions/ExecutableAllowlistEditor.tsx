@@ -1,5 +1,7 @@
 import { FileSearch, Plus, Trash2 } from 'lucide-react';
 
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
+
 interface ExecutableAllowlistEditorProps {
   values: readonly string[];
   disabled: boolean;
@@ -23,7 +25,9 @@ export function ExecutableAllowlistEditor({
         programs the agent starts afterward are not covered.
       </p>
       {values.length === 0 ? (
-        <div className="permission-list-empty">Add at least one program by its full path.</div>
+        <div className="permission-list-empty" role="status">
+          Add at least one program by its full path.
+        </div>
       ) : (
         <div className="permission-list-rows">
           {values.map((value, index) => (
@@ -45,17 +49,19 @@ export function ExecutableAllowlistEditor({
                   )
                 }
               />
-              <button
-                type="button"
-                className="icon-button"
-                disabled={disabled}
-                aria-label={`Remove allowed program ${value || index + 1}`}
-                onClick={() =>
-                  onChange(values.filter((_, candidateIndex) => candidateIndex !== index))
-                }
-              >
-                <Trash2 size={14} aria-hidden="true" />
-              </button>
+              <WorkspaceTooltip content="Remove this allowed program">
+                <button
+                  type="button"
+                  className="icon-button"
+                  disabled={disabled}
+                  aria-label={`Remove allowed program ${value || index + 1}`}
+                  onClick={() =>
+                    onChange(values.filter((_, candidateIndex) => candidateIndex !== index))
+                  }
+                >
+                  <Trash2 size={14} aria-hidden="true" />
+                </button>
+              </WorkspaceTooltip>
             </div>
           ))}
         </div>
@@ -68,18 +74,22 @@ export function ExecutableAllowlistEditor({
         >
           <Plus size={14} aria-hidden="true" /> Add a program
         </button>
-        <button
-          type="button"
-          disabled={disabled || dockerRuntime || values.length >= 256}
-          title={
+        <WorkspaceTooltip
+          content={
             dockerRuntime
-              ? "Type the program's full path as it appears inside the Docker image."
-              : undefined
+              ? "Type the program's full path as it appears inside the Docker image"
+              : 'Choose an allowed program on this computer'
           }
-          onClick={onBrowse}
         >
-          <FileSearch size={14} aria-hidden="true" /> Browse for a program
-        </button>
+          <button
+            type="button"
+            aria-label="Browse for an allowed program"
+            disabled={disabled || dockerRuntime || values.length >= 256}
+            onClick={onBrowse}
+          >
+            <FileSearch size={14} aria-hidden="true" /> Browse for a program
+          </button>
+        </WorkspaceTooltip>
       </div>
       {dockerRuntime && (
         <small>

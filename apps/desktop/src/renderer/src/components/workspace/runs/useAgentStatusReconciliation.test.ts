@@ -21,7 +21,7 @@ describe('Agent recovered status reconciliation', () => {
       status: 'running',
     });
     expect(reconcileAgentStatus(attempt('prepared'))).toEqual({
-      status: 'waiting',
+      status: 'waiting-for-approval',
     });
     expect(reconcileAgentStatus(attempt('interrupted'))).toEqual({
       status: 'cancelled',
@@ -71,6 +71,36 @@ describe('Agent recovered status reconciliation', () => {
       runId: durable.id,
     });
   });
+
+  it.each([
+    ['prepared', 'queued', 'waiting-for-approval'],
+    ['running', 'queued', 'running'],
+  ] as const)(
+    'projects durable %s over a stale canvas %s state',
+    async (durableStatus, canvasStatus, expectedStatus) => {
+      const durable = attempt(durableStatus);
+      Object.defineProperty(window, 'forgeboard', {
+        configurable: true,
+        value: { runs: { get: vi.fn().mockResolvedValue({ ok: true, value: durable }) } },
+      });
+      const updateNodeData = vi.fn();
+      renderHook(() =>
+        useAgentStatusReconciliation({
+          projectId: durable.projectId,
+          nodes: [agentNode(durable.id, canvasStatus)],
+          updateNodeData,
+          onError: vi.fn(),
+        }),
+      );
+
+      await waitFor(() =>
+        expect(updateNodeData).toHaveBeenCalledWith(
+          'agent-1',
+          expect.objectContaining({ status: expectedStatus }),
+        ),
+      );
+    },
+  );
 
   it('ignores a deferred response after the canvas moves to a superseding run', async () => {
     const first = deferred<{ ok: true; value: RunHistorySummary }>();

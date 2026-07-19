@@ -12,9 +12,15 @@ import {
 } from 'lucide-react';
 
 import type { AgentDetection, Project } from '../../../../../shared/application/contracts.js';
+import {
+  WorkspaceStatusIndicators,
+  type WorkspaceSharingStatus,
+} from './status/WorkspaceStatusIndicators.js';
+import { WorkspaceTooltip } from './tooltips/WorkspaceTooltip.js';
 
 interface WorkspaceCommandBarProps {
   project: Project;
+  projectStatusAvailable: boolean;
   canvasName: string | undefined;
   agents: AgentDetection[];
   saveState: 'saved' | 'saving' | 'error';
@@ -27,6 +33,8 @@ interface WorkspaceCommandBarProps {
   canRunSelected: boolean;
   runSelectedReason: string;
   commandPaletteShortcut: string;
+  collaborationEnabled: boolean;
+  sharingStatus: WorkspaceSharingStatus;
   onCloseProject: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -41,6 +49,7 @@ interface WorkspaceCommandBarProps {
 
 export function WorkspaceCommandBar({
   project,
+  projectStatusAvailable,
   canvasName,
   agents,
   saveState,
@@ -53,6 +62,8 @@ export function WorkspaceCommandBar({
   canRunSelected,
   runSelectedReason,
   commandPaletteShortcut,
+  collaborationEnabled,
+  sharingStatus,
   onCloseProject,
   onUndo,
   onRedo,
@@ -76,60 +87,86 @@ export function WorkspaceCommandBar({
         <ChevronDown size={14} />
       </button>
       <span className="toolbar-separator" />
-      <button
-        className="icon-button"
-        type="button"
-        onClick={onUndo}
-        disabled={!canUndo}
-        aria-label="Undo"
-      >
-        <Undo2 size={16} />
-      </button>
-      <button
-        className="icon-button"
-        type="button"
-        onClick={onRedo}
-        disabled={!canRedo}
-        aria-label="Redo"
-      >
-        <Redo2 size={16} />
-      </button>
-      <button
-        className="icon-button"
-        type="button"
-        onClick={onFitCanvas}
-        aria-label="Zoom to fit the canvas"
-      >
-        <Maximize2 size={16} />
-      </button>
-      <button
-        className="workflow-run-trigger"
-        type="button"
-        disabled={workflowBusy || !canRunWorkflow}
-        title={
+      <WorkspaceTooltip content={canUndo ? 'Undo the last canvas change' : 'Nothing to undo'}>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onUndo}
+          disabled={!canUndo}
+          aria-label="Undo"
+        >
+          <Undo2 size={16} />
+        </button>
+      </WorkspaceTooltip>
+      <WorkspaceTooltip content={canRedo ? 'Redo the last canvas change' : 'Nothing to redo'}>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onRedo}
+          disabled={!canRedo}
+          aria-label="Redo"
+        >
+          <Redo2 size={16} />
+        </button>
+      </WorkspaceTooltip>
+      <WorkspaceTooltip content="Fit every node on the canvas">
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onFitCanvas}
+          aria-label="Zoom to fit the canvas"
+        >
+          <Maximize2 size={16} />
+        </button>
+      </WorkspaceTooltip>
+      <WorkspaceTooltip
+        content={
           canRunWorkflow
             ? 'Run every node in the saved canvas workflow'
             : 'Add an Agent, Test, Review gate, or Diff/review node before running this canvas'
         }
-        onClick={onRunWorkflow}
       >
-        <Play size={13} aria-hidden="true" /> Run canvas
-      </button>
-      <button
-        className="workflow-run-trigger secondary"
-        type="button"
-        disabled={workflowBusy || !canRunSelected}
-        title={runSelectedReason}
-        onClick={onRunSelected}
-      >
-        <Play size={13} aria-hidden="true" /> Run selected
-      </button>
+        <button
+          className="workflow-run-trigger"
+          type="button"
+          aria-label="Run canvas"
+          disabled={workflowBusy || !canRunWorkflow}
+          onClick={onRunWorkflow}
+        >
+          <Play size={13} aria-hidden="true" /> Run canvas
+        </button>
+      </WorkspaceTooltip>
+      <WorkspaceTooltip content={runSelectedReason}>
+        <button
+          className="workflow-run-trigger secondary"
+          type="button"
+          aria-label="Run selected"
+          disabled={workflowBusy || !canRunSelected}
+          onClick={onRunSelected}
+        >
+          <Play size={13} aria-hidden="true" /> Run selected
+        </button>
+      </WorkspaceTooltip>
       <div className="command-spacer" />
       {workflowStatus !== null && (
-        <span className="workflow-toolbar-state" title={`Workflow: ${workflowStatus}`}>
-          Workflow · {workflowStatus.replaceAll('-', ' ')}
-        </span>
+        <WorkspaceTooltip content={`Workflow: ${workflowStatus}`}>
+          <span
+            className="workflow-toolbar-state"
+            role="status"
+            aria-label={`Workflow · ${workflowStatus.replaceAll('-', ' ')}`}
+            tabIndex={0}
+          >
+            Workflow · {workflowStatus.replaceAll('-', ' ')}
+          </span>
+        </WorkspaceTooltip>
       )}
+      <WorkspaceStatusIndicators
+        project={project}
+        projectStatusAvailable={projectStatusAvailable}
+        agents={agents}
+        collaborationEnabled={collaborationEnabled}
+        sharingStatus={sharingStatus}
+      />
       <span className={`autosave-state ${saveState}`}>
         <CircleDot size={12} />
         {saveState === 'saved'
@@ -149,30 +186,38 @@ export function WorkspaceCommandBar({
         </span>
         <small>agents on this computer</small>
       </div>
-      <button
-        className="command-trigger"
-        type="button"
-        title="See what changed in this project"
-        onClick={onOpenGitReview}
-      >
-        <GitCompareArrows size={14} /> Changes
-      </button>
+      <WorkspaceTooltip content="See what changed in this project">
+        <button className="command-trigger" type="button" onClick={onOpenGitReview}>
+          <GitCompareArrows size={14} /> Changes
+        </button>
+      </WorkspaceTooltip>
       <button className="command-trigger" type="button" onClick={onOpenCommands}>
         <Command size={14} /> Commands <kbd>{commandPaletteShortcut}</kbd>
       </button>
-      <button
-        className="icon-button"
-        type="button"
-        aria-label="Notifications"
-        aria-expanded={notificationsOpen}
-        title="Local notifications"
-        onClick={onToggleNotifications}
-      >
-        <Bell size={16} />
-      </button>
-      <button className="icon-button" type="button" onClick={onOpenSettings} aria-label="Settings">
-        <Settings size={16} />
-      </button>
+      <WorkspaceTooltip content="Local notifications">
+        <button
+          id="workspace-notifications-trigger"
+          className="icon-button"
+          type="button"
+          aria-label="Notifications"
+          aria-expanded={notificationsOpen}
+          aria-haspopup="dialog"
+          aria-controls={notificationsOpen ? 'workspace-notifications' : undefined}
+          onClick={onToggleNotifications}
+        >
+          <Bell size={16} />
+        </button>
+      </WorkspaceTooltip>
+      <WorkspaceTooltip content="Open Forgeboard settings">
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onOpenSettings}
+          aria-label="Settings"
+        >
+          <Settings size={16} />
+        </button>
+      </WorkspaceTooltip>
     </header>
   );
 }

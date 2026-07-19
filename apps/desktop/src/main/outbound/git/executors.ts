@@ -25,7 +25,7 @@ import {
 
 export interface GitHubCliRunnerConstructionOptions {
   readonly environment?: Readonly<Record<string, string | undefined>>;
-  readonly beforeSpawn?: (executable: string) => void | Promise<void>;
+  readonly beforeSpawn?: (executable: string, args: readonly string[]) => void | Promise<void>;
   readonly inheritEnvironment?: boolean;
 }
 

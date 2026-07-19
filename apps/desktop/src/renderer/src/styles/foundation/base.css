@@ -178,3 +178,28 @@ code {
   width: 19px;
   color: var(--accent);
 }
+.loading-screen.failed {
+  color: var(--text);
+}
+.loading-screen-error-icon {
+  width: 24px;
+  color: var(--red);
+}
+.loading-screen-message {
+  max-width: min(32rem, calc(100vw - 3rem));
+  text-align: center;
+}
+.loading-screen-message h1 {
+  margin: 0 0 0.45rem;
+  font-size: 1.15rem;
+}
+.loading-screen-message p,
+.loading-screen.failed > small {
+  margin: 0;
+  color: var(--text-soft);
+}
+.loading-screen .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}

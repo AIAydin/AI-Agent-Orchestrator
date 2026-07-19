@@ -8,6 +8,7 @@ export const RUN_HISTORY_OUTPUT_PREVIEW_MAX_LENGTH = 16_384;
 export const RunHistoryStatusSchema = z.enum([
   'prepared',
   'running',
+  'paused',
   'succeeded',
   'failed',
   'interrupted',
@@ -19,6 +20,7 @@ export type RunHistoryStatus = z.infer<typeof RunHistoryStatusSchema>;
 export const TerminalRunHistoryStatusSchema = RunHistoryStatusSchema.exclude([
   'prepared',
   'running',
+  'paused',
 ]);
 export type TerminalRunHistoryStatus = z.infer<typeof TerminalRunHistoryStatusSchema>;
 
@@ -39,6 +41,7 @@ export type RunHistoryTokenUsage = z.infer<typeof RunHistoryTokenUsageSchema>;
 export const RunHistoryWorktreeStateSchema = z.enum([
   'none',
   'active',
+  'archived',
   'cleanup-pending',
   'cleaned',
 ]);

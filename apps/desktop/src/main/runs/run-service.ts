@@ -202,6 +202,19 @@ export class RunService {
       this.#assertPersistedRunNodeMutable(runId);
       return this.interrupt(event.sender, runId);
     });
+    for (const [channel, action] of [
+      [IPC_CHANNELS.runsPause, 'pause'],
+      [IPC_CHANNELS.runsContinue, 'continue'],
+    ] as const) {
+      this.#handle(channel, z.tuple([RunIdSchema]), (event, runId) => {
+        this.#assertLiveMainFrame(event);
+        this.authorizeMutation(event.sender);
+        this.#assertPersistedRunNodeMutable(runId);
+        return action === 'pause'
+          ? this.pause(event.sender, runId)
+          : this.continue(event.sender, runId);
+      });
+    }
     this.#handle(IPC_CHANNELS.runsTerminate, z.tuple([RunIdSchema]), async (event, runId) => {
       this.#assertLiveMainFrame(event);
       return await this.#trackOperation(this.terminate(event.sender, runId));
@@ -528,6 +541,22 @@ export class RunService {
   public interrupt(owner: WebContents, runId: string): boolean {
     this.#assertAvailable();
     return this.#runtime.interrupt(this.#ownerId(owner), runId);
+  }
+
+  public pause(owner: WebContents, runId: string): boolean {
+    this.#assertAvailable();
+    if (this.#runtime.pause === undefined) {
+      throw new Error('This Forgeboard runtime does not support Agent process pause.');
+    }
+    return this.#runtime.pause(this.#ownerId(owner), runId);
+  }
+
+  public continue(owner: WebContents, runId: string): boolean {
+    this.#assertAvailable();
+    if (this.#runtime.continue === undefined) {
+      throw new Error('This Forgeboard runtime does not support Agent process continue.');
+    }
+    return this.#runtime.continue(this.#ownerId(owner), runId);
   }
 
   public async terminate(owner: WebContents, runId: string): Promise<boolean> {

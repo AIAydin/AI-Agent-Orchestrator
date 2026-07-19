@@ -20,6 +20,7 @@ import {
   type GitDeliveryReadinessGetView,
   type GitDeliveryReadinessView,
 } from '../../../../../shared/git/readiness/index.js';
+import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 import './delivery-readiness.css';
 
@@ -259,9 +260,14 @@ export function GitDeliveryReadinessPanel({
           {readiness !== null && (
             <>
               <span aria-hidden="true">·</span>
-              <code title={readiness.sourceFingerprint.digest}>
-                {readiness.sourceFingerprint.digest.slice(0, 12)}
-              </code>
+              <WorkspaceTooltip content={readiness.sourceFingerprint.digest}>
+                <code
+                  tabIndex={0}
+                  aria-label={`Quality source fingerprint: ${readiness.sourceFingerprint.digest}`}
+                >
+                  {readiness.sourceFingerprint.digest.slice(0, 12)}
+                </code>
+              </WorkspaceTooltip>
             </>
           )}
         </p>

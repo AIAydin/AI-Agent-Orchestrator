@@ -66,6 +66,28 @@ describe('UpdateSettings', () => {
     expect(screen.queryByText(/imported legacy automatic-download/u)).toBeNull();
     expect(check).not.toHaveBeenCalled();
   });
+
+  it('exposes and invokes cancellation only while an explicit update check is active', async () => {
+    let finishCheck: ((value: { ok: true; value: null }) => void) | undefined;
+    check.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishCheck = resolve;
+      }),
+    );
+    cancel.mockResolvedValueOnce({ ok: true, value: { cancelled: true } });
+    render(<Harness />);
+
+    expect(screen.queryByRole('button', { name: 'Cancel check' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel check' }));
+    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Cancelling the update check…',
+    );
+
+    finishCheck?.({ ok: true, value: null });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel check' })).toBeNull());
+  });
 });
 
 function Harness({ disabled = false, legacy = false }: { disabled?: boolean; legacy?: boolean }) {

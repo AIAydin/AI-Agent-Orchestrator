@@ -337,6 +337,7 @@ describe('preview IPC contracts', () => {
   it('keeps process output serializable and bounded at the bridge', () => {
     const event = {
       kind: 'output' as const,
+      projectId,
       nodeId: 'preview-1',
       sessionId: '123fae6e-e213-4a10-a0db-0f85b791f7e9',
       processId: 'development-server',

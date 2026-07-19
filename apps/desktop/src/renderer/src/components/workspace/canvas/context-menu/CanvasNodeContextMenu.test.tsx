@@ -99,7 +99,10 @@ describe('CanvasNodeContextMenu', () => {
       name: 'Run with dependencies',
     });
     expect(run.disabled).toBe(true);
-    expect(run.title).toBe('Choose an Agent assignee before running this Task.');
+    const reason = screen.getByRole('tooltip', {
+      name: 'Choose an Agent assignee before running this Task.',
+    });
+    expect(run.getAttribute('aria-describedby')).toBe(reason.id);
     fireEvent.click(run);
     expect(callbacks.onRun).not.toHaveBeenCalled();
   });

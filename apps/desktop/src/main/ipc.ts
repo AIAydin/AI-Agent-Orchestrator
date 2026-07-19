@@ -38,14 +38,23 @@ import { CommandReadinessService } from './command-readiness/service.js';
 import { CollaborationIpcService } from './collaboration/ipc.js';
 import { detectAgents, ProjectService } from './projects/project-service.js';
 import { DockerIpcService } from './docker/docker-ipc.js';
+import { DiagramExportService } from './diagram/export-service.js';
+import { WhiteboardExportService } from './whiteboard/export-service.js';
 import { ExtensionIpcService } from './extensions/extension-ipc.js';
 import { FileIpcService } from './file-domain/ipc.js';
 import { ProjectFileService } from './file-domain/service.js';
+import { ProjectImageService } from './file-domain/images/service.js';
 import { GitIpcService } from './git/git-ipc.js';
 import { GitConnectionsIpcService, GitConnectionsService } from './git/connections/index.js';
 import { GitConnectionsMutationCoordinator } from './git/connections/mutation-coordinator.js';
 import { GitHubCliRuntimeService } from './git/github-cli/runtime.js';
 import { GitTargetResolver } from './git/git-target-resolver.js';
+import { GitIdentityService } from './git/identity/service.js';
+import {
+  GIT_IDENTITY_IPC_CHANNEL,
+  GitIdentityCheckInputSchema,
+  GitIdentityCheckResultSchema,
+} from '../shared/git/identity/contracts.js';
 import { GitDeliveryReadinessIpcService } from './git/readiness/ipc.js';
 import { DeliveryReadinessService } from './git/readiness/service.js';
 import { DeliveryReadinessShippingAuthority } from './git/readiness/shipping-authority.js';
@@ -55,7 +64,9 @@ import { createBundledGitRepositoryService } from './git/git-runtime.js';
 import { IntegrityService } from './integrity/service.js';
 import { DataOperationGate } from './lifecycle/data-operation-gate.js';
 import { createProcessQuiescenceAdmission } from './lifecycle/process-quiescence.js';
+import { confirmPrivacyDeletion } from './lifecycle/privacy-deletion-confirmation.js';
 import { performPrivacyDeletion } from './lifecycle/privacy-deletion.js';
+import { performAuditedLocalEffect } from './lifecycle/audit/local-effect.js';
 import { OutboundActionGate } from './outbound/outbound-action-gate.js';
 import { createGitHubCliCommandRunner } from './outbound/git/executors.js';
 import { PreviewIpcService } from './previews/preview-ipc.js';
@@ -143,6 +154,7 @@ export function createDefaultSettings(): AppSettings {
     gitIdentityName: '',
     gitIdentityEmail: '',
     gitRemote: 'origin',
+    externalEditorExecutable: '',
     terminalShell: defaultTerminalExecutable({
       platform: process.platform,
       environmentShell: process.env.SHELL,
@@ -225,6 +237,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     if (failure !== undefined) throw failure.reason;
   };
   const repositories = createBundledGitRepositoryService();
+  const gitIdentity = new GitIdentityService(store, repositories);
   const withProjectGitAuthorization = async <Output>(
     event: IpcMainInvokeEvent,
     operation: (authority: {
@@ -245,8 +258,21 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   };
   const projects = new ProjectService(app, dialog, store, repositories);
   const projectFiles = new ProjectFileService(store);
-  const files = new FileIpcService(projectFiles, shell, runDataOperation);
+  const projectImages = new ProjectImageService(store, dialog);
+  const files = new FileIpcService(projectFiles, shell, runDataOperation, projectImages);
   const outbound = new OutboundActionGate(store);
+  const diagramExports = new DiagramExportService(
+    dialog,
+    undefined,
+    undefined,
+    (action, outcome, metadata) => store.appendAudit('export', action, outcome, metadata),
+  );
+  const whiteboardExports = new WhiteboardExportService(
+    dialog,
+    undefined,
+    undefined,
+    (action, outcome, metadata) => store.appendAudit('export', action, outcome, metadata),
+  );
   const updates = new UpdateIpcService(dialog, shell, store, () => app.getVersion(), outbound);
   const collaboration = new CollaborationIpcService(dialog, outbound, {
     store,
@@ -277,15 +303,16 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   );
   const commandReadiness = new CommandReadinessService(store, app.getPath('home'));
   const folderReadinessService = new FolderReadinessService();
+  const docker = new DockerIpcService(dialog, store, undefined, outbound);
   const settingsPersistenceReadiness = new SettingsPersistenceReadinessVerifier(
     agentReadiness,
     folderReadinessService,
     commandReadiness,
+    docker,
   );
   const integrity = new IntegrityService(store);
   const approvals = new ApprovalService(store);
   const extensions = new ExtensionIpcService(app, dialog, store);
-  const docker = new DockerIpcService(dialog, store, undefined, outbound);
   const backups = new AutomaticBackupCoordinator(
     store,
     () => store.getSettings(createDefaultSettings()),
@@ -388,6 +415,17 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         ...(beforeSpawn === undefined ? {} : { beforeSpawn }),
         inheritEnvironment: false,
       }),
+    authorizeValidationSpawn: (review) => {
+      store.appendAudit('github-cli', 'readiness-probe', 'allowed', {
+        kind: review.kind,
+        source: review.source,
+        executableFileName: review.identity.filename,
+        executableSizeBytes: review.identity.sizeBytes,
+        executableSha256: review.identity.sha256,
+        arguments: [...review.arguments],
+        credentialAccess: review.credentialAccess,
+      });
+    },
   });
   const gitRemote = new GitRemoteDeliveryIpcService(
     dialog,
@@ -426,6 +464,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     () => store.getSettings(createDefaultSettings()),
     undefined,
     {
+      openExternalPath: async (path) => await shell.openPath(path),
       withCleanupAdmission: createProcessQuiescenceAdmission(dataOperations, [
         workflows,
         runs,
@@ -576,6 +615,14 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         return result;
       }),
   );
+  handleWithEvent(
+    GIT_IDENTITY_IPC_CHANNEL,
+    z.tuple([GitIdentityCheckInputSchema]),
+    async (_event, input) =>
+      await runDataOperation(async () =>
+        GitIdentityCheckResultSchema.parse(await gitIdentity.check(input)),
+      ),
+  );
   handle(
     IPC_CHANNELS.approvalsList,
     z.tuple([ApprovalListInputSchema]),
@@ -588,14 +635,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     async (event, input) =>
       await runDataOperation(() => {
         requireIpcWindowAuthority(event, 'Saved approval revocation').assertCurrent();
-        const revoked = ApprovalViewSchema.parse(approvals.revoke(input));
-        store.appendAudit('permission', 'saved-approval-revoke', 'allowed', {
-          approvalId: revoked.record.id,
-          projectId: revoked.record.scope.projectId,
-          action: revoked.record.scope.action,
-          resourceFingerprint: revoked.record.scope.resourceFingerprint,
-        });
-        return revoked;
+        return ApprovalViewSchema.parse(approvals.revoke(input));
       }),
   );
   handleWithEvent(
@@ -606,6 +646,16 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         event,
         async (authority) =>
           await runDataOperation(() => projects.refreshRecentProjects(authority)),
+      ),
+  );
+  handleWithEvent(
+    IPC_CHANNELS.projectsRefresh,
+    z.tuple([z.string().uuid()]),
+    async (event, projectId) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.refreshProject(projectId, authority)),
       ),
   );
   handleWithEvent(
@@ -636,6 +686,16 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         event,
         async (authority) =>
           await runDataOperation(async () => await projects.pickExecutable(authority)),
+      ),
+  );
+  handleWithEvent(
+    IPC_CHANNELS.projectsPickExternalApplication,
+    z.tuple([]),
+    async (event) =>
+      await withProjectGitAuthorization(
+        event,
+        async (authority) =>
+          await runDataOperation(async () => await projects.pickExternalApplication(authority)),
       ),
   );
   handleWithEvent(
@@ -815,15 +875,31 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
           filters: [{ name: 'JSON', extensions: ['json'] }],
         });
         authority.assertCurrent();
-        if (selection.canceled || !selection.filePath) return null;
-        await writeFile(selection.filePath, `${JSON.stringify(store.exportData(), null, 2)}\n`, {
-          mode: 0o600,
+        if (selection.canceled || !selection.filePath) {
+          store.appendAudit('export', 'local-data', 'denied', {
+            reason: 'native-save-cancelled',
+          });
+          return null;
+        }
+        const filePath = selection.filePath;
+        const payload = `${JSON.stringify(store.exportData(), null, 2)}\n`;
+        await performAuditedLocalEffect({
+          assertCurrent: () => authority.assertCurrent(),
+          auditAllowed: () =>
+            store.appendAudit('export', 'local-data', 'allowed', {
+              format: 'json',
+              byteLength: Buffer.byteLength(payload, 'utf8'),
+            }),
+          effect: async () =>
+            await writeFile(filePath, payload, {
+              mode: 0o600,
+            }),
+          auditFailed: () =>
+            store.appendAudit('export', 'local-data', 'failed', {
+              reason: 'private-file-write-or-authority-failed',
+            }),
         });
-        authority.assertCurrent();
-        store.appendAudit('export', 'local-data', 'allowed', {
-          fileName: 'forgeboard-local-data.json',
-        });
-        return selection.filePath;
+        return filePath;
       }),
   );
   handleWithEvent(
@@ -840,24 +916,25 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         if (destination === '') {
           throw new Error('Choose a backup folder in Settings first.');
         }
-        backups.markDataChanged();
-        const outcome = await backups.flush();
-        authority.assertCurrent();
-        if (outcome.status !== 'created') {
-          throw new Error('Forgeboard could not create the requested backup.');
-        }
-        const backup = outcome.backup;
-        try {
-          store.appendAudit('backup', 'create', 'allowed', {
-            sizeBytes: backup.sizeBytes,
-            sha256Prefix: backup.sha256.slice(0, 12),
-          });
-        } catch (error) {
-          process.stderr.write(
-            `Forgeboard created a backup but could not record its audit event: ${error instanceof Error ? error.message : 'unknown error'}\n`,
-          );
-        }
-        return backup;
+        return await performAuditedLocalEffect({
+          assertCurrent: () => authority.assertCurrent(),
+          auditAllowed: () =>
+            store.appendAudit('backup', 'create', 'allowed', {
+              destinationKind: 'configured-local-backup-directory',
+            }),
+          effect: async () => {
+            backups.markDataChanged();
+            const outcome = await backups.flush();
+            if (outcome.status !== 'created') {
+              throw new Error('Forgeboard could not create the requested backup.');
+            }
+            return outcome.backup;
+          },
+          auditFailed: () =>
+            store.appendAudit('backup', 'create', 'failed', {
+              reason: 'backup-write-or-authority-failed',
+            }),
+        });
       }),
   );
   handle(IPC_CHANNELS.storageBackupHealth, z.tuple([]), async () =>
@@ -874,10 +951,19 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     async (event, confirmation) => {
       const authority = requireIpcWindowAuthority(event, 'Local-data deletion');
       if (confirmation !== 'DELETE ALL LOCAL DATA') throw new Error('Deletion was not confirmed.');
+      const confirmed = await confirmPrivacyDeletion(dialog, authority.parent, () => {
+        authority.assertCurrent();
+        store.appendAudit('privacy', 'delete-all-local-data', 'denied', {
+          reason: 'native-confirmation-cancelled',
+        });
+      });
+      authority.assertCurrent();
+      if (!confirmed) return false;
       await dataOperations.beginMutation('delete');
       try {
         authority.assertCurrent();
         return await performPrivacyDeletion({
+          assertCurrent: () => authority.assertCurrent(),
           pauseBackups: async () => await backups.pause(),
           listMissingBackupIds: async () => await store.listMissingRecordedBackupIds(),
           confirmForgetMissingBackups: async (count) => {
@@ -896,7 +982,14 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
             authority.assertCurrent();
             return decision.response === 1;
           },
+          authorizeDeletion: () => {
+            authority.assertCurrent();
+            store.appendAudit('privacy', 'delete-all-local-data', 'allowed', {
+              effect: 'erase-all-forgeboard-local-data-including-this-audit-event',
+            });
+          },
           resetDataServices: async () => {
+            authority.assertCurrent();
             agentReadiness.clearVerifiedSettingsReadiness();
             commandReadiness.clearVerifiedSettingsReadiness();
             await workflows.resetForPrivacy();
@@ -933,6 +1026,8 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   );
 
   settings.registerIpcHandlers();
+  diagramExports.registerIpcHandler();
+  whiteboardExports.registerIpcHandler();
   updates.registerIpcHandlers();
   folderReadiness.registerIpcHandler();
   readiness.registerIpcHandler();
@@ -987,6 +1082,8 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     dispose: async () => {
       dataOperations.beginShutdown();
       settings.dispose();
+      diagramExports.dispose();
+      whiteboardExports.dispose();
       updates.dispose();
       folderReadiness.dispose();
       await files.dispose();

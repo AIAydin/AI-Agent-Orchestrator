@@ -76,9 +76,12 @@ interface RuntimeExit {
 
 interface RuntimeProcess {
   readonly pid: number | undefined;
+  readonly pauseSupported: boolean;
   onData(listener: (channel: RuntimeChannel, data: string) => void): void;
   onExit(listener: (exit: RuntimeExit) => void): void;
   write(data: string): void;
+  pause(): void;
+  continue(): void;
   interrupt(): void;
   terminate(): void;
 }
@@ -150,6 +153,8 @@ export interface AgentSession {
   readonly events: AsyncIterable<AgentEvent>;
   readonly result: Promise<AgentResultMetadata>;
   writeInput(data: string): void;
+  pause?(): void;
+  continue?(): void;
   interrupt(): void;
   terminate(): void;
 }
@@ -165,6 +170,7 @@ class ProcessAgentSession implements AgentSession {
   #sequence = 0;
   #exitIntent: 'interrupt' | 'terminate' | undefined;
   #settled = false;
+  #paused = false;
   #providerSessionId: string | undefined;
   #usage: AgentUsageMetadata | undefined;
 
@@ -220,9 +226,37 @@ class ProcessAgentSession implements AgentSession {
       throw new UnsupportedAgentCapabilityError('interrupt', this.#manifest.id);
     }
     if (this.#settled) return;
+    if (this.#paused) {
+      this.#runtime.continue();
+      this.#paused = false;
+    }
     this.#exitIntent = 'interrupt';
     this.#emitLifecycle('interrupting');
     this.#runtime.interrupt();
+  }
+
+  public pause(): void {
+    if (!this.capabilities.pause) {
+      throw new UnsupportedAgentCapabilityError('pause', this.#manifest.id);
+    }
+    if (this.#settled) throw new AgentLaunchValidationError('Cannot pause an exited session.');
+    if (this.#paused) return;
+    this.#emitLifecycle('pausing');
+    this.#runtime.pause();
+    this.#paused = true;
+    this.#emitLifecycle('paused');
+  }
+
+  public continue(): void {
+    if (!this.capabilities.pause) {
+      throw new UnsupportedAgentCapabilityError('continue', this.#manifest.id);
+    }
+    if (this.#settled) throw new AgentLaunchValidationError('Cannot continue an exited session.');
+    if (!this.#paused) return;
+    this.#emitLifecycle('continuing');
+    this.#runtime.continue();
+    this.#paused = false;
+    this.#emitLifecycle('running');
   }
 
   public terminate(): void {
@@ -230,6 +264,10 @@ class ProcessAgentSession implements AgentSession {
       throw new UnsupportedAgentCapabilityError('terminate', this.#manifest.id);
     }
     if (this.#settled) return;
+    if (this.#paused) {
+      this.#runtime.continue();
+      this.#paused = false;
+    }
     this.#exitIntent = 'terminate';
     this.#emitLifecycle('terminating');
     this.#runtime.terminate();
@@ -240,7 +278,16 @@ class ProcessAgentSession implements AgentSession {
   }
 
   #emitLifecycle(
-    phase: 'starting' | 'running' | 'input-sent' | 'interrupting' | 'terminating' | 'exited',
+    phase:
+      | 'starting'
+      | 'running'
+      | 'input-sent'
+      | 'pausing'
+      | 'paused'
+      | 'continuing'
+      | 'interrupting'
+      | 'terminating'
+      | 'exited',
     detail?: string,
   ): void {
     this.#events.push({
@@ -368,6 +415,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function createPipeRuntime(plan: PreparedAgentLaunch, beforeSpawn?: () => void): RuntimeProcess {
+  const shouldCreateProcessGroup = supportsHostProcessGroupPause(plan);
   beforeSpawn?.();
   const child: ChildProcessWithoutNullStreams = spawn(
     plan.disclosure.executable,
@@ -378,8 +426,10 @@ function createPipeRuntime(plan: PreparedAgentLaunch, beforeSpawn?: () => void):
       shell: false,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
+      detached: shouldCreateProcessGroup,
     },
   );
+  const pauseSupported = shouldCreateProcessGroup && hasOwnedProcessGroup(child.pid);
   const dataListeners: Array<(channel: RuntimeChannel, data: string) => void> = [];
   const exitListeners: Array<(exit: RuntimeExit) => void> = [];
   const pendingData: Array<readonly [RuntimeChannel, string]> = [];
@@ -410,6 +460,7 @@ function createPipeRuntime(plan: PreparedAgentLaunch, beforeSpawn?: () => void):
 
   return {
     pid: child.pid,
+    pauseSupported,
     onData: (listener) => {
       dataListeners.push(listener);
       for (const [channel, data] of pendingData.splice(0)) listener(channel, data);
@@ -419,11 +470,18 @@ function createPipeRuntime(plan: PreparedAgentLaunch, beforeSpawn?: () => void):
       if (pendingExit !== undefined) listener(pendingExit);
     },
     write: (data) => child.stdin.write(data),
-    interrupt: () => child.kill('SIGINT'),
+    pause: () => signalProcessGroup(child.pid, 'SIGSTOP'),
+    continue: () => signalProcessGroup(child.pid, 'SIGCONT'),
+    interrupt: () => {
+      if (pauseSupported) signalOwnedProcessGroup(child.pid, 'SIGINT');
+      else child.kill('SIGINT');
+    },
     terminate: () => {
-      child.kill('SIGTERM');
+      if (pauseSupported) signalOwnedProcessGroup(child.pid, 'SIGTERM');
+      else child.kill('SIGTERM');
       setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+        if (pauseSupported) signalExistingProcessGroup(child.pid, 'SIGKILL');
+        else if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
       }, 2_000).unref();
     },
   };
@@ -443,6 +501,7 @@ async function createPtyRuntime(
     cols: 120,
     rows: 40,
   });
+  const pauseSupported = supportsHostProcessGroupPause(plan) && hasOwnedProcessGroup(terminal.pid);
   const dataListeners: Array<(channel: RuntimeChannel, data: string) => void> = [];
   const exitListeners: Array<(exit: RuntimeExit) => void> = [];
   const pendingData: string[] = [];
@@ -460,6 +519,7 @@ async function createPtyRuntime(
 
   return {
     pid: terminal.pid,
+    pauseSupported,
     onData: (listener) => {
       dataListeners.push(listener);
       for (const data of pendingData.splice(0)) listener('pty', data);
@@ -469,18 +529,84 @@ async function createPtyRuntime(
       if (pendingExit !== undefined) listener(pendingExit);
     },
     write: (data) => terminal.write(data),
-    interrupt: () => terminal.write('\x03'),
+    pause: () => signalProcessGroup(terminal.pid, 'SIGSTOP'),
+    continue: () => signalProcessGroup(terminal.pid, 'SIGCONT'),
+    interrupt: () => {
+      if (pauseSupported) signalOwnedProcessGroup(terminal.pid, 'SIGINT');
+      else terminal.write('\x03');
+    },
     terminate: () => {
-      terminal.kill('SIGTERM');
+      if (pauseSupported) {
+        signalOwnedProcessGroup(terminal.pid, 'SIGTERM');
+      } else {
+        terminal.kill('SIGTERM');
+      }
       setTimeout(() => {
         try {
-          terminal.kill('SIGKILL');
+          if (pauseSupported) {
+            signalExistingProcessGroup(terminal.pid, 'SIGKILL');
+          } else {
+            terminal.kill('SIGKILL');
+          }
         } catch {
           // The PTY already exited during the grace period.
         }
       }, 2_000).unref();
     },
   };
+}
+
+function supportsHostProcessGroupPause(plan: PreparedAgentLaunch): boolean {
+  return process.platform !== 'win32' && plan.disclosure.permissionProfile.enforcement !== 'docker';
+}
+
+type ProcessGroupSignal = 'SIGINT' | 'SIGTERM' | 'SIGKILL' | 'SIGSTOP' | 'SIGCONT';
+
+function signalProcessGroup(pid: number | undefined, signal: 'SIGSTOP' | 'SIGCONT'): void {
+  if (process.platform === 'win32' || pid === undefined) {
+    throw new AgentLaunchValidationError('This process runtime cannot safely pause and continue.');
+  }
+  assertOwnedProcessGroup(pid);
+  process.kill(-pid, signal);
+}
+
+function signalOwnedProcessGroup(pid: number | undefined, signal: ProcessGroupSignal): void {
+  if (process.platform === 'win32' || pid === undefined) {
+    throw new AgentLaunchValidationError('This process runtime has no owned POSIX process group.');
+  }
+  assertOwnedProcessGroup(pid);
+  process.kill(-pid, signal);
+}
+
+function assertOwnedProcessGroup(pid: number): void {
+  try {
+    process.kill(pid, 0);
+    process.kill(-pid, 0);
+  } catch {
+    throw new AgentLaunchValidationError(
+      'The owned child is not the leader of a signalable process group; pause failed closed.',
+    );
+  }
+}
+
+function hasOwnedProcessGroup(pid: number | undefined): boolean {
+  if (process.platform === 'win32' || pid === undefined) return false;
+  try {
+    process.kill(pid, 0);
+    process.kill(-pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function signalExistingProcessGroup(pid: number | undefined, signal: ProcessGroupSignal): void {
+  if (process.platform === 'win32' || pid === undefined) return;
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    // The complete process group already exited.
+  }
 }
 
 async function ensureNodePtySpawnHelper(): Promise<void> {
@@ -731,8 +857,12 @@ export async function launchPreparedAgent(
     plan.disclosure.runtime === 'pty'
       ? await createPtyRuntime(plan, beforeSpawn)
       : createPipeRuntime(plan, beforeSpawn);
-  const capabilities =
+  const declaredCapabilities =
     capabilitiesInput ?? sessionCapabilities(plan.manifest.capabilities, 'manifest');
+  const capabilities = AgentSessionCapabilitiesSchema.parse({
+    ...declaredCapabilities,
+    pause: runtime.pauseSupported,
+  });
   return new ProcessAgentSession(plan.manifest, runtime, plan.initialStdin, capabilities);
 }
 
@@ -933,18 +1063,28 @@ function effectiveCapabilities(
   return { capabilities, warnings };
 }
 
+export interface AgentExecutableProbe {
+  readonly kind: 'version' | 'capability';
+  readonly executable: string;
+  readonly arguments: readonly string[];
+}
+
 export async function detectAgent(
   manifestInput: AgentAdapterManifest,
   options: {
     executable?: string;
     signal?: AbortSignal;
-    beforeProbe?: () => void | Promise<void>;
+    beforeProbe?: (probe: AgentExecutableProbe) => void | Promise<void>;
   } = {},
 ): Promise<AgentDetectionResult> {
   const manifest = AgentAdapterManifestSchema.parse(manifestInput);
   const executable = options.executable ?? manifest.executable.command;
   const checkedAt = new Date().toISOString();
-  await options.beforeProbe?.();
+  await options.beforeProbe?.({
+    kind: 'version',
+    executable,
+    arguments: manifest.executable.versionArguments,
+  });
   const versionProbe = await runExecutableProbe(
     executable,
     manifest.executable.versionArguments,
@@ -980,7 +1120,11 @@ export async function detectAgent(
       permissionModes: [...manifest.capabilities.permissionModes],
     };
   } else {
-    await options.beforeProbe?.();
+    await options.beforeProbe?.({
+      kind: 'capability',
+      executable,
+      arguments: capabilityProbe.arguments,
+    });
     const helpProbe = await runExecutableProbe(
       executable,
       capabilityProbe.arguments,

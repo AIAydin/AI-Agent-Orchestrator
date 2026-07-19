@@ -10,6 +10,7 @@ import type {
 } from '../../../../../shared/recovery/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
 import { SettingsSection } from '../shared.js';
+import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 interface RecoverySettingsProps {
   projects: Project[];
@@ -92,7 +93,7 @@ export function RecoverySettings({
         description="Look back at saved snapshots of a canvas, take a new one, or restore an exact earlier state."
       >
         {availableProjects.length === 0 ? (
-          <p className="settings-empty-state">
+          <p className="settings-empty-state" role="status">
             Snapshots let you go back to an earlier version of a canvas. Open a project once to
             start saving them.
           </p>
@@ -134,7 +135,9 @@ export function RecoverySettings({
                       throw new Error('Save the open canvas before creating a snapshot.');
                     }
                     const snapshot = unwrap(
-                      await window.forgeboard.recovery.createSnapshot({ projectId }),
+                      await window.forgeboard.recovery.createSnapshot({
+                        projectId,
+                      }),
                     );
                     setNotice(`Snapshot created for ${snapshot.canvasName}.`);
                     setSnapshotRefresh((value) => value + 1);
@@ -153,9 +156,13 @@ export function RecoverySettings({
             )}
 
             {snapshotsLoading ? (
-              <p className="settings-empty-state">Loading recovery history…</p>
+              <p className="settings-empty-state" role="status">
+                Loading recovery history…
+              </p>
             ) : snapshots.length === 0 ? (
-              <p className="settings-empty-state">No snapshots saved for this project yet.</p>
+              <p className="settings-empty-state" role="status">
+                No snapshots saved for this project yet.
+              </p>
             ) : (
               <div className="recovery-snapshot-list" aria-label="Canvas recovery snapshots">
                 {snapshots.map((snapshot) => (
@@ -168,25 +175,35 @@ export function RecoverySettings({
                       </span>
                       <code>{snapshot.contentHash.slice(0, 12)}…</code>
                     </div>
-                    <button
-                      type="button"
-                      className="button ghost"
-                      disabled={busy || projectOpen}
-                      title={projectOpen ? 'Close the open project before restoring.' : undefined}
-                      onClick={() =>
-                        void perform(async () => {
-                          const plan = unwrap(
-                            await window.forgeboard.recovery.prepareSnapshotRestore({
-                              projectId,
-                              snapshotId: snapshot.id,
-                            }),
-                          );
-                          setRestorePlan(plan);
-                        })
+                    <WorkspaceTooltip
+                      content={
+                        projectOpen
+                          ? 'Close the open project before restoring'
+                          : busy
+                            ? 'Wait for the current recovery action to finish'
+                            : 'Review this snapshot before restoring it'
                       }
                     >
-                      <ArchiveRestore size={14} /> Review restore
-                    </button>
+                      <button
+                        type="button"
+                        className="button ghost"
+                        aria-label="Review restore"
+                        disabled={busy || projectOpen}
+                        onClick={() =>
+                          void perform(async () => {
+                            const plan = unwrap(
+                              await window.forgeboard.recovery.prepareSnapshotRestore({
+                                projectId,
+                                snapshotId: snapshot.id,
+                              }),
+                            );
+                            setRestorePlan(plan);
+                          })
+                        }
+                      >
+                        <ArchiveRestore size={14} /> Review restore
+                      </button>
+                    </WorkspaceTooltip>
                   </article>
                 ))}
               </div>
@@ -273,23 +290,35 @@ export function RecoverySettings({
               <option value="replace">Replace all current data</option>
             </select>
           </label>
-          <button
-            type="button"
-            className="button"
-            disabled={busy || projectOpen}
-            title={projectOpen ? 'Close the open project before importing.' : undefined}
-            onClick={() =>
-              void perform(async () => {
-                const plan = unwrap(
-                  await window.forgeboard.recovery.chooseImport({ mode: importMode }),
-                );
-                setImportPlan(plan);
-                if (plan === null) setNotice('Import cancelled. Nothing changed.');
-              })
+          <WorkspaceTooltip
+            content={
+              projectOpen
+                ? 'Close the open project before importing'
+                : busy
+                  ? 'Wait for the current recovery action to finish'
+                  : 'Choose and review a Forgeboard export file'
             }
           >
-            <FileInput size={14} /> Choose export file
-          </button>
+            <button
+              type="button"
+              className="button"
+              aria-label="Choose export file"
+              disabled={busy || projectOpen}
+              onClick={() =>
+                void perform(async () => {
+                  const plan = unwrap(
+                    await window.forgeboard.recovery.chooseImport({
+                      mode: importMode,
+                    }),
+                  );
+                  setImportPlan(plan);
+                  if (plan === null) setNotice('Import cancelled. Nothing changed.');
+                })
+              }
+            >
+              <FileInput size={14} /> Choose export file
+            </button>
+          </WorkspaceTooltip>
         </div>
 
         {importPlan && (

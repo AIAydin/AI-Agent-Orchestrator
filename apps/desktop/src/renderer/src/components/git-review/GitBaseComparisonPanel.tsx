@@ -8,20 +8,54 @@ import type { GitDiffDisplayFile } from './git-review-model.js';
 import { fileDiffStats } from './git-review-model.js';
 import { GIT_BASE_PANEL_ID, GIT_BASE_TAB_ID } from './GitReviewModeTabs.js';
 import type { GitReviewNotesController } from './review-notes/useGitReviewNotes.js';
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
-export function GitBaseComparisonPanel({
-  comparison,
-  footer,
-  reviewNotes,
-  displayPreferences,
-  onDisplayPreferencesChange,
-}: {
+interface GitComparisonPresentation {
+  readonly panelId?: string;
+  readonly tabId?: string;
+  readonly leftLabel: string;
+  readonly rightLabel: string;
+  readonly distanceLabel: string;
+  readonly aheadLabel: string;
+  readonly behindLabel: string;
+  readonly filesLabel: string;
+  readonly emptyDescription: string;
+}
+
+interface GitComparisonPanelProps {
   comparison: GitAgentBaseComparisonView;
+  presentation: GitComparisonPresentation;
   footer?: React.ReactNode;
   reviewNotes?: GitReviewNotesController;
   displayPreferences?: GitDiffDisplayPreferences;
   onDisplayPreferencesChange?: (preferences: GitDiffDisplayPreferences) => void;
-}) {
+}
+
+const basePresentation: GitComparisonPresentation = {
+  panelId: GIT_BASE_PANEL_ID,
+  tabId: GIT_BASE_TAB_ID,
+  leftLabel: 'Starting point',
+  rightLabel: "Agent's latest commit",
+  distanceLabel: 'Compared to starting point',
+  aheadLabel: 'Only in agent workspace',
+  behindLabel: 'Only at starting point',
+  filesLabel: 'Committed changes',
+  emptyDescription:
+    "The agent's latest commit matches its starting point. Anything not committed yet is in the other tab.",
+};
+
+export function GitBaseComparisonPanel(props: Omit<GitComparisonPanelProps, 'presentation'>) {
+  return <GitComparisonPanel {...props} presentation={basePresentation} />;
+}
+
+export function GitComparisonPanel({
+  comparison,
+  presentation,
+  footer,
+  reviewNotes,
+  displayPreferences,
+  onDisplayPreferencesChange,
+}: GitComparisonPanelProps) {
   const files = useMemo(() => comparisonFiles(comparison), [comparison]);
   const [selectedPath, setSelectedPath] = useState<string | null>(files[0]?.path ?? null);
   const selected = files.find((file) => file.path === selectedPath) ?? null;
@@ -38,20 +72,21 @@ export function GitBaseComparisonPanel({
 
   return (
     <section
-      id={GIT_BASE_PANEL_ID}
+      {...(presentation.panelId === undefined ? {} : { id: presentation.panelId })}
       className="git-base-comparison"
-      role="tabpanel"
-      aria-labelledby={GIT_BASE_TAB_ID}
+      {...(presentation.tabId === undefined
+        ? {}
+        : { role: 'tabpanel', 'aria-labelledby': presentation.tabId })}
     >
       <header className="git-base-comparison-summary">
-        <ComparisonStat label="Starting point" value={comparison.baseCommit} code />
-        <ComparisonStat label="Agent's latest commit" value={comparison.headCommit} code />
+        <ComparisonStat label={presentation.leftLabel} value={comparison.baseCommit} code />
+        <ComparisonStat label={presentation.rightLabel} value={comparison.headCommit} code />
         <ComparisonStat
-          label="Compared to starting point"
+          label={presentation.distanceLabel}
           value={commitDistance(comparison.ahead, comparison.behind)}
         />
         <ComparisonStat
-          label="Committed changes"
+          label={presentation.filesLabel}
           value={`${files.length} ${files.length === 1 ? 'file' : 'files'} · +${comparison.diff.additions} −${comparison.diff.deletions}`}
         />
       </header>
@@ -62,11 +97,11 @@ export function GitBaseComparisonPanel({
           {comparison.commitIdsTruncated ? ' · not all shown' : ''}
         </summary>
         <dl className="git-base-binding-list">
-          <dt>Starting point</dt>
+          <dt>{presentation.leftLabel}</dt>
           <dd>
             <code>{comparison.baseCommit}</code>
           </dd>
-          <dt>Agent's latest commit</dt>
+          <dt>{presentation.rightLabel}</dt>
           <dd>
             <code>{comparison.headCommit}</code>
           </dd>
@@ -79,9 +114,7 @@ export function GitBaseComparisonPanel({
               <li key={`${commit.relation}:${commit.oid}`}>
                 <code>{commit.oid}</code>
                 <span>
-                  {commit.relation === 'ahead'
-                    ? 'Only in agent workspace'
-                    : 'Only at starting point'}
+                  {commit.relation === 'ahead' ? presentation.aheadLabel : presentation.behindLabel}
                 </span>
               </li>
             ))}
@@ -92,17 +125,14 @@ export function GitBaseComparisonPanel({
         <div className="git-base-comparison-empty" role="status">
           <CheckCircle2 size={28} aria-hidden="true" />
           <strong>No committed changes to compare</strong>
-          <p>
-            The agent's latest commit matches its starting point. Anything not committed yet is in
-            the other tab.
-          </p>
+          <p>{presentation.emptyDescription}</p>
         </div>
       ) : (
         <div className="git-review-workspace git-base-comparison-workspace">
-          <nav className="git-file-sidebar" aria-label="Files changed since the starting point">
-            <section className="git-file-group" aria-labelledby="git-base-files-heading">
+          <nav className="git-file-sidebar" aria-label={presentation.filesLabel}>
+            <section className="git-file-group">
               <header>
-                <h3 id="git-base-files-heading">Committed changes</h3>
+                <h3>{presentation.filesLabel}</h3>
                 <span>{files.length}</span>
               </header>
               <ul>
@@ -130,7 +160,7 @@ export function GitBaseComparisonPanel({
                 })}
               </ul>
               <GitFilePageControls
-                label="Committed changes"
+                label={presentation.filesLabel}
                 fileCount={files.length}
                 page={filePage}
               />
@@ -177,9 +207,11 @@ function ComparisonStat({
     <div>
       <small>{label}</small>
       {code ? (
-        <code title={value} aria-label={`${label}: ${value}`}>
-          {value.slice(0, 12)}
-        </code>
+        <WorkspaceTooltip content={value}>
+          <code tabIndex={0} aria-label={`${label}: ${value}`}>
+            {value.slice(0, 12)}
+          </code>
+        </WorkspaceTooltip>
       ) : (
         <strong>{value}</strong>
       )}

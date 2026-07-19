@@ -7,6 +7,13 @@ export const GIT_WORKTREE_CLEANUP_MAX_DIRTY_PATH_COUNT = 1_000_000;
 export const GIT_LIFECYCLE_IPC_CHANNELS = Object.freeze({
   prepareCleanup: 'git:lifecycle:prepare-cleanup',
   confirmCleanup: 'git:lifecycle:confirm-cleanup',
+  openExternal: 'git:lifecycle:open-external',
+  prepareRename: 'git:lifecycle:prepare-rename',
+  confirmRename: 'git:lifecycle:confirm-rename',
+  prepareArchive: 'git:lifecycle:prepare-archive',
+  confirmArchive: 'git:lifecycle:confirm-archive',
+  prepareRestore: 'git:lifecycle:prepare-restore',
+  confirmRestore: 'git:lifecycle:confirm-restore',
 });
 
 const GitLifecycleIdSchema = z.string().uuid();
@@ -34,6 +41,59 @@ export const GitWorktreeCleanupTargetInputSchema = z
   })
   .strict();
 export type GitWorktreeCleanupTargetInput = z.infer<typeof GitWorktreeCleanupTargetInputSchema>;
+
+const ManagedBranchNameSchema = GitLifecycleRefSchema.refine(
+  (value) => value !== 'HEAD' && !value.startsWith('-'),
+  'Managed branch names cannot be HEAD or start with a dash.',
+);
+
+export const GitWorktreeRenamePrepareInputSchema = GitWorktreeCleanupTargetInputSchema.extend({
+  newBranch: ManagedBranchNameSchema,
+}).strict();
+export type GitWorktreeRenamePrepareInput = z.infer<typeof GitWorktreeRenamePrepareInputSchema>;
+
+export const GitWorktreeMetadataConfirmationInputSchema = z
+  .object({ planId: GitLifecycleIdSchema })
+  .strict();
+export type GitWorktreeMetadataConfirmationInput = z.infer<
+  typeof GitWorktreeMetadataConfirmationInputSchema
+>;
+
+const GitWorktreeMetadataPlanBaseSchema = z.object({
+  planId: GitLifecycleIdSchema,
+  expiresAt: z.string().datetime(),
+  branch: GitLifecycleRefSchema,
+  clean: z.boolean(),
+  dirtyPathCount: z.number().int().nonnegative().max(GIT_WORKTREE_CLEANUP_MAX_DIRTY_PATH_COUNT),
+});
+
+export const GitWorktreeRenamePlanViewSchema = GitWorktreeMetadataPlanBaseSchema.extend({
+  kind: z.literal('rename-worktree-branch'),
+  newBranch: ManagedBranchNameSchema,
+}).strict();
+export type GitWorktreeRenamePlanView = z.infer<typeof GitWorktreeRenamePlanViewSchema>;
+
+export const GitWorktreeArchivePlanViewSchema = GitWorktreeMetadataPlanBaseSchema.extend({
+  kind: z.literal('archive-worktree'),
+  retainsWorktree: z.literal(true),
+  retainsBranch: z.literal(true),
+}).strict();
+export type GitWorktreeArchivePlanView = z.infer<typeof GitWorktreeArchivePlanViewSchema>;
+
+export const GitWorktreeRestorePlanViewSchema = GitWorktreeMetadataPlanBaseSchema.extend({
+  kind: z.literal('restore-worktree'),
+  retainsWorktree: z.literal(true),
+  retainsBranch: z.literal(true),
+}).strict();
+export type GitWorktreeRestorePlanView = z.infer<typeof GitWorktreeRestorePlanViewSchema>;
+
+export const GitWorktreeMetadataResultViewSchema = z
+  .object({
+    action: z.enum(['renamed', 'archived', 'restored']),
+    branch: GitLifecycleRefSchema,
+  })
+  .strict();
+export type GitWorktreeMetadataResultView = z.infer<typeof GitWorktreeMetadataResultViewSchema>;
 
 /**
  * Path-free cleanup disclosure. Main retains every authoritative root, worktree identifier, and
@@ -149,6 +209,17 @@ export const GitWorktreeCleanupResultViewSchema = z
   })
   .strict();
 export type GitWorktreeCleanupResultView = z.infer<typeof GitWorktreeCleanupResultViewSchema>;
+
+/** Path-free result for a native-confirmed handoff to the system-registered external application. */
+export const GitWorkspaceExternalOpenResultSchema = z
+  .object({
+    opened: z.boolean(),
+    targetKind: z.enum(['primary', 'agent-worktree']),
+    branch: GitLifecycleRefSchema.nullable(),
+    application: z.enum(['system-registered', 'selected']),
+  })
+  .strict();
+export type GitWorkspaceExternalOpenResult = z.infer<typeof GitWorkspaceExternalOpenResultSchema>;
 
 function isRendererSafeGitRef(value: string): boolean {
   if (value.trim() !== value || value.startsWith('/') || value.includes('\\')) return false;

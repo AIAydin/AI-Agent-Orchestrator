@@ -2,6 +2,7 @@ import type { Connection, EdgeChange, NodeChange } from '@xyflow/react';
 
 import type { WorkshopNode } from '../CanvasNode.js';
 import type { WorkshopEdge } from '../../model/types.js';
+import { descendantIds } from './groups/group-containment.js';
 
 export function filterLockedNodeChanges(
   changes: readonly NodeChange<WorkshopNode>[],
@@ -77,9 +78,20 @@ function endpointsAreUnlocked(
 
 export function lockedCanvasNodeIds(nodes: readonly WorkshopNode[]): Set<string> {
   const lockedNodeIds = new Set(nodes.filter((node) => node.data.locked).map((node) => node.id));
+  const byId = new Map(nodes.map((node) => [node.id, node] as const));
+  const protectRawDescendants = (frameId: string, visited: Set<string>): void => {
+    if (visited.has(frameId)) return;
+    visited.add(frameId);
+    const frame = byId.get(frameId);
+    if (frame?.data.kind !== 'group-frame') return;
+    for (const childId of frame.data.childNodeIds ?? []) {
+      lockedNodeIds.add(childId);
+      if (byId.get(childId)?.data.kind === 'group-frame') protectRawDescendants(childId, visited);
+    }
+  };
   for (const frame of nodes) {
     if (frame.data.kind !== 'group-frame' || !frame.data.locked) continue;
-    for (const childId of frame.data.childNodeIds ?? []) lockedNodeIds.add(childId);
+    protectRawDescendants(frame.id, new Set());
   }
   return lockedNodeIds;
 }
@@ -102,7 +114,7 @@ export function removalProtectedCanvasNodeIds(
   }
   for (const frame of nodes) {
     if (frame.data.kind !== 'group-frame') continue;
-    if ((frame.data.childNodeIds ?? []).some((childId) => lockedNodeIds.has(childId))) {
+    if (descendantIds(nodes, frame.id).some((childId) => lockedNodeIds.has(childId))) {
       protectedIds.add(frame.id);
     }
   }

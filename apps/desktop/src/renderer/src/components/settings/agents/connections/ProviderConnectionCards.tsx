@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useId, type ReactNode } from 'react';
 import { ExternalLink, LoaderCircle } from 'lucide-react';
 
 import type {
@@ -29,6 +29,7 @@ export function ProviderConnectionCards({
   executableOverrides = {},
 }: ProviderConnectionCardsProps) {
   const { views, perform, cancel } = useProviderConnections(providerIds, executableOverrides);
+  const headingIdPrefix = useId();
 
   useEffect(() => {
     for (const providerId of providerIds) {
@@ -41,6 +42,7 @@ export function ProviderConnectionCards({
     <div className={compact ? 'provider-connections compact' : 'provider-connections'}>
       {providerIds.map((providerId) => {
         const provider = PROVIDERS[providerId];
+        const headingId = `${headingIdPrefix}-${providerId}`;
         const view = views[providerId];
         const status = view?.status ?? null;
         const active = view?.activeAction ?? null;
@@ -60,10 +62,13 @@ export function ProviderConnectionCards({
             className="provider-connection-card"
             key={providerId}
             aria-busy={Boolean(active)}
+            aria-labelledby={headingId}
           >
             <div className="provider-connection-heading">
               <div>
-                <strong>{provider.product}</strong>
+                <strong id={headingId} role="heading" aria-level={4}>
+                  {provider.product}
+                </strong>
                 <small>{provider.name} account</small>
               </div>
               <span

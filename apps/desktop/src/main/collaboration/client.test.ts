@@ -321,6 +321,90 @@ describe('CollaborationClient', () => {
     );
   });
 
+  it('requires redacted transport authorization before confirmation sends, retries, and settlement', async () => {
+    const provider = providerHarness();
+    const effects: Array<Record<string, unknown>> = [];
+    let rejectSettlement = true;
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      createDeliveryId: () => '00000000-0000-4000-8000-000000000091',
+      now: () => new Date(NOW),
+      authorizeTransportEffect: (effect) => {
+        effects.push(effect);
+        if (effect.kind === 'delivery-settlement' && rejectSettlement) {
+          throw new Error('required audit unavailable');
+        }
+      },
+    });
+    const events: CollaborationEvent[] = [];
+    client.onEvent((event) => events.push(event));
+    await connect(client, provider);
+
+    expect(client.publish(snapshot())).toMatchObject({ disposition: 'sent' });
+    expect(provider.stateless).toHaveLength(1);
+    expect(effects).toContainEqual({
+      kind: 'delivery-confirmation',
+      phase: 'initial',
+      deliveryId: '00000000-0000-4000-8000-000000000091',
+      attempt: 0,
+    });
+
+    acknowledgeLatestDelivery(provider);
+    expect(events.some((event) => event.type === 'delivery-acknowledged')).toBe(false);
+
+    provider.input?.onDisconnect();
+    provider.input?.onAuthenticated();
+    provider.input?.onSynced();
+    expect(provider.stateless).toHaveLength(2);
+    expect(effects).toContainEqual({
+      kind: 'delivery-confirmation',
+      phase: 'retry',
+      deliveryId: '00000000-0000-4000-8000-000000000091',
+      attempt: 1,
+    });
+
+    rejectSettlement = false;
+    acknowledgeLatestDelivery(provider);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'delivery-acknowledged',
+        reconciledAfterReconnect: true,
+      }),
+    );
+  });
+
+  it('does not send a delivery confirmation when its required transport audit fails', async () => {
+    vi.useFakeTimers();
+    const provider = providerHarness();
+    const events: CollaborationEvent[] = [];
+    const client = new CollaborationClient({
+      createProvider: provider.factory,
+      createId: () => CONNECTION_ID,
+      createDeliveryId: () => '00000000-0000-4000-8000-000000000092',
+      now: () => new Date(NOW),
+      deliveryAcknowledgementTimeoutMs: 25,
+      authorizeTransportEffect: (effect) => {
+        if (effect.kind === 'delivery-confirmation') throw new Error('audit unavailable');
+      },
+    });
+    try {
+      client.onEvent((event) => events.push(event));
+      await connect(client, provider);
+      expect(client.publish(snapshot())).toMatchObject({ disposition: 'sent' });
+      expect(provider.stateless).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(26);
+      expect(events.at(-1)).toMatchObject({
+        type: 'delivery-rejected',
+        rejection: { deliveryId: '00000000-0000-4000-8000-000000000092' },
+      });
+    } finally {
+      client.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it('reports a lost delivery acknowledgement as an explicit retained-intent rejection', async () => {
     vi.useFakeTimers();
     const provider = providerHarness();

@@ -9,13 +9,17 @@ import type {
   Project,
   RunAdapterId,
 } from '../../../../../shared/application/contracts.js';
-import { NODE_DEFINITIONS, type WorkshopNode } from '../canvas/CanvasNode.js';
+import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
+import { WorkspaceTooltip } from './tooltips/WorkspaceTooltip.js';
 import { DeclarativeExtensionInspector } from '../../extensions/DeclarativeExtensionInspector.js';
 import { PreviewNodePanel } from '../../preview/PreviewNodePanel.js';
 import { TypedEdgeInspector } from '../canvas/TypedEdgeInspector.js';
 import { canEditEdge } from '../canvas/interactions/lock-protection.js';
 import { GroupFrameInspector } from '../canvas/GroupFrameInspector.js';
 import { BuiltInContentInspector } from '../content/BuiltInContentInspector.js';
+import { MermaidDiagramInspector } from '../content/diagram/MermaidDiagramInspector.js';
+import { WhiteboardMockupInspector } from '../content/whiteboard/WhiteboardMockupInspector.js';
 import {
   FileEditorWorkspace,
   ProjectFileBrowser,
@@ -51,11 +55,13 @@ import { TestNodePanel } from '../workflows/test-node/TestNodePanel.js';
 import type { WorkflowArtifactActionInput } from '../../../../../shared/workflow/contracts.js';
 import { AgentNodePanel } from '../runs/agent-node/AgentNodePanel.js';
 import type { RunHistorySummary } from '../../../../../shared/runs/contracts.js';
+import { NodeRunHistory } from '../node-history/NodeRunHistory.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
 type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
 
 interface WorkspaceInspectorProps {
+  nodeRegistry?: NodeTypeRegistry;
   project: Project;
   settings: AppSettings;
   canvas: CanvasDocument | null;
@@ -89,8 +95,8 @@ interface WorkspaceInspectorProps {
   onDuplicateSelected: () => void;
   onDeleteSelected: () => void;
   onRunInputChange: (value: string) => void;
-  onSendRunInput: () => void;
-  onControlRun: (action: 'interrupt' | 'terminate') => void;
+  onSendRunInput: (explicitInput?: string) => void;
+  onControlRun: (action: 'pause' | 'continue' | 'interrupt' | 'terminate') => void;
   onPrepareRun: () => void;
   onRetryAgentAttempt: (attempt: RunHistorySummary) => void;
   onResumeAgentAttempt: (attempt: RunHistorySummary) => void;
@@ -115,6 +121,7 @@ interface WorkspaceInspectorProps {
     payload: WorkspaceContextDragPayload,
   ) => Promise<void>;
   onRemoveAgentContext: (targetNodeId: string, attachmentNodeId: string) => void;
+  onAttachWhiteboardContext: (sourceNodeId: string, targetNodeId: string) => string;
   onOpenSettings: () => void;
   onError: (message: string) => void;
 }
@@ -126,17 +133,25 @@ export function WorkspaceInspector(props: WorkspaceInspectorProps) {
       <header>
         <div>
           <span>Details</span>
-          <small>{inspectorLabel(selectedNode, selectedEdge)}</small>
+          <small>
+            {inspectorLabel(
+              selectedNode,
+              selectedEdge,
+              props.nodeRegistry ?? BUILT_IN_NODE_REGISTRY,
+            )}
+          </small>
         </div>
         {(selectedNode || selectedEdge) && (
-          <button
-            className="icon-button"
-            type="button"
-            onClick={props.onClearSelection}
-            aria-label="Clear selection"
-          >
-            <X size={15} />
-          </button>
+          <WorkspaceTooltip content="Clear the selected canvas item">
+            <button
+              className="icon-button"
+              type="button"
+              onClick={props.onClearSelection}
+              aria-label="Clear selection"
+            >
+              <X size={15} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
         )}
       </header>
       {selectedNode ? (
@@ -255,13 +270,34 @@ function NodeInspector(
         )}
         {(selectedNode.data.kind === 'brief' || selectedNode.data.kind === 'note-image') && (
           <BuiltInContentInspector
+            projectId={props.project.id}
             node={selectedNode}
             nodes={props.nodes}
+            readOnly={configurationReadOnly}
+            onRecord={onRecord}
+            onUpdate={onUpdateSelected}
+            onError={props.onError}
+          />
+        )}
+        {selectedNode.data.kind === 'diagram' && (
+          <MermaidDiagramInspector
+            node={selectedNode}
+            readOnly={configurationReadOnly}
             onRecord={onRecord}
             onUpdate={onUpdateSelected}
           />
         )}
       </fieldset>
+      {selectedNode.data.kind === 'whiteboard' && (
+        <WhiteboardMockupInspector
+          node={selectedNode}
+          nodes={props.nodes}
+          readOnly={configurationReadOnly}
+          onRecord={onRecord}
+          onUpdate={onUpdateSelected}
+          onAttachContext={props.onAttachWhiteboardContext}
+        />
+      )}
       {selectedNode.data.kind === 'test' && (
         <TestNodePanel
           projectId={props.project.id}
@@ -409,6 +445,7 @@ function NodeInspector(
           onUpdate={onUpdateSelected}
         />
       )}
+      <NodeRunHistory nodeId={selectedNode.id} executions={props.testNodeRuntime.executions} />
       <LocalComments comments={props.localComments} onCreate={props.onCreateLocalComment} />
       <SharedComments
         comments={props.sharedComments}
@@ -419,24 +456,30 @@ function NodeInspector(
         onDiscardRejected={props.onDiscardRejectedComment}
       />
       <div className="inspector-actions">
-        <button
-          type="button"
-          disabled={props.selectedNodeLockedByGroup || props.collaborationGraphReadOnly}
-          title={
+        <WorkspaceTooltip
+          content={
             props.collaborationGraphReadOnly
               ? 'A view-only role cannot change node locks.'
               : props.selectedNodeLockedByGroup
                 ? 'Unlock the group frame that contains this node before changing its lock.'
-                : undefined
+                : selectedNode.data.locked
+                  ? 'Unlock this node'
+                  : 'Lock this node'
           }
-          onClick={() => {
-            onRecord();
-            onUpdateSelected({ locked: !selectedNode.data.locked });
-          }}
         >
-          {selectedNode.data.locked ? <Unlock size={14} /> : <Lock size={14} />}
-          {selectedNode.data.locked ? 'Unlock' : 'Lock'}
-        </button>
+          <button
+            type="button"
+            aria-label={selectedNode.data.locked ? 'Unlock' : 'Lock'}
+            disabled={props.selectedNodeLockedByGroup || props.collaborationGraphReadOnly}
+            onClick={() => {
+              onRecord();
+              onUpdateSelected({ locked: !selectedNode.data.locked });
+            }}
+          >
+            {selectedNode.data.locked ? <Unlock size={14} /> : <Lock size={14} />}
+            {selectedNode.data.locked ? 'Unlock' : 'Lock'}
+          </button>
+        </WorkspaceTooltip>
         <button
           type="button"
           disabled={props.collaborationGraphReadOnly}
@@ -445,20 +488,26 @@ function NodeInspector(
           <Copy size={14} />
           Duplicate
         </button>
-        <button
-          type="button"
-          className="danger-text"
-          disabled={configurationReadOnly || props.selectedNodeDeletionProtected}
-          title={
+        <WorkspaceTooltip
+          content={
             props.selectedNodeDeletionProtected && !configurationReadOnly
               ? 'Unlock protected members or connected locked nodes before deleting this node.'
-              : undefined
+              : configurationReadOnly
+                ? 'A view-only role cannot delete this node.'
+                : 'Delete this node'
           }
-          onClick={props.onDeleteSelected}
         >
-          <Trash2 size={14} />
-          Delete
-        </button>
+          <button
+            type="button"
+            className="danger-text"
+            aria-label="Delete"
+            disabled={configurationReadOnly || props.selectedNodeDeletionProtected}
+            onClick={props.onDeleteSelected}
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
+        </WorkspaceTooltip>
       </div>
     </div>
   );
@@ -727,11 +776,8 @@ function CanvasInspector({
 function inspectorLabel(
   selectedNode: WorkshopNode | null,
   selectedEdge: WorkshopEdge | null,
+  nodeRegistry: NodeTypeRegistry,
 ): string {
-  if (selectedNode) {
-    return selectedNode.data.kind === 'extension'
-      ? (selectedNode.data.extensionDefinition?.displayName ?? 'Extension node')
-      : NODE_DEFINITIONS[selectedNode.data.kind].label;
-  }
+  if (selectedNode) return nodeRegistry.resolve(selectedNode.data).label;
   return selectedEdge ? 'Connection' : 'Canvas';
 }

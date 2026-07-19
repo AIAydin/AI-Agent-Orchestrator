@@ -172,7 +172,10 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(customOption?.disabled).toBe(true);
     expect(screen.getByRole('alert').textContent).toMatch(/can't run in Docker/u);
     expect(screen.getByText(/Nothing starts inside Docker/u)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Review & run' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Review and run Agent' })).toHaveProperty(
+      'disabled',
+      true,
+    );
   });
 
   it('disables node editing and deletion while preserving unlock and duplicate actions', () => {
@@ -193,7 +196,10 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByRole('button', { name: 'Unlock' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', false);
     expect(screen.getByLabelText('Agent to run')).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Review & run' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Review and run Agent' })).toHaveProperty(
+      'disabled',
+      true,
+    );
   });
 
   it('explains inherited group protection and prevents a misleading child unlock action', () => {
@@ -222,7 +228,9 @@ describe('WorkspaceInspector Custom permissions', () => {
     inspectorProps.collaborationGraphReadOnly = true;
     render(<WorkspaceInspector {...inspectorProps} />);
 
-    expect(screen.getByText(/view-only/u)).toBeTruthy();
+    expect(
+      screen.getAllByRole('status').some((status) => /view-only/u.test(status.textContent ?? '')),
+    ).toBe(true);
     expect(screen.getByRole('group', { name: 'Node settings' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Lock' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', true);
@@ -250,7 +258,10 @@ describe('WorkspaceInspector Custom permissions', () => {
       true,
     );
     expect(screen.getByLabelText('Prompt')).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Review & run' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Review and run Agent' })).toHaveProperty(
+      'disabled',
+      true,
+    );
   });
 
   it('passes collaboration read-only authority into preview runtime controls', async () => {
@@ -265,7 +276,7 @@ describe('WorkspaceInspector Custom permissions', () => {
           restart: vi.fn(),
           stop: vi.fn(),
           navigate: vi.fn(),
-          onEvent: vi.fn(),
+          onEvent: vi.fn().mockReturnValue(() => undefined),
         },
       },
     });
@@ -313,7 +324,10 @@ describe('WorkspaceInspector Custom permissions', () => {
 
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
     expect(deleteButton).toHaveProperty('disabled', true);
-    expect(deleteButton.getAttribute('title')).toMatch(/protected members|connected locked/u);
+    const reason = screen.getByRole('tooltip', {
+      name: /protected members|connected locked/u,
+    });
+    expect(deleteButton.getAttribute('aria-describedby')).toBe(reason.id);
     expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', false);
   });
 
@@ -350,8 +364,11 @@ describe('WorkspaceInspector Custom permissions', () => {
       true,
     );
     expect(screen.getByLabelText<HTMLTextAreaElement>('Prompt')).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Pause unavailable' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Interrupt Agent' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(screen.getByRole('button', { name: 'Pause or continue Agent process' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -365,17 +382,20 @@ describe('WorkspaceInspector Custom permissions', () => {
   it('shows live controls only for a runtime-confirmed active Agent run', () => {
     const preparedNode = agentNode({
       runId: '80000000-0000-4000-8000-000000000001',
-      status: 'waiting',
+      status: 'waiting-for-approval',
     });
     const inspectorProps = props(settings(), preparedNode);
     const { rerender } = render(<WorkspaceInspector {...inspectorProps} />);
 
-    expect(screen.queryByRole('button', { name: 'Interrupt' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Review & run' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Interrupt Agent' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Review and run Agent' })).toBeTruthy();
 
     inspectorProps.agentRunActive = true;
     rerender(<WorkspaceInspector {...inspectorProps} />);
-    expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Interrupt Agent' })).toHaveProperty(
+      'disabled',
+      true,
+    );
     expect(screen.getByLabelText('Message to the running agent')).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Terminate' })).toBeTruthy();
 
@@ -387,7 +407,10 @@ describe('WorkspaceInspector Custom permissions', () => {
       pauseSupported: false,
     });
     rerender(<WorkspaceInspector {...inspectorProps} />);
-    expect(screen.getByRole('button', { name: 'Interrupt' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Interrupt Agent' })).toHaveProperty(
+      'disabled',
+      false,
+    );
     expect(screen.getByLabelText('Message to the running agent')).toHaveProperty('disabled', false);
 
     inspectorProps.agentRunActive = false;
@@ -396,7 +419,7 @@ describe('WorkspaceInspector Custom permissions', () => {
       status: 'failed',
     });
     rerender(<WorkspaceInspector {...inspectorProps} />);
-    expect(screen.queryByRole('button', { name: 'Interrupt' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Interrupt Agent' })).toBeNull();
   });
 
   it('wires a selected File node to the real project-relative editor and preserves its lock', async () => {
@@ -613,6 +636,32 @@ describe('WorkspaceInspector Custom permissions', () => {
   });
 });
 
+describe('WorkspaceInspector whiteboard read-only operations', () => {
+  it('keeps safe local export outside the disabled configuration fieldset', async () => {
+    const exportSvg = vi.fn().mockResolvedValue({ ok: true, value: { fileName: 'Board.svg' } });
+    Object.defineProperty(window, 'forgeboard', {
+      configurable: true,
+      value: {
+        runs: { list: vi.fn().mockResolvedValue({ ok: true, value: [] }) },
+        whiteboard: { exportSvg },
+      },
+    });
+    const selectedNode = whiteboardNode({ locked: true });
+    const inspectorProps = props(settings(), selectedNode);
+
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    const exportButton = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Export SVG image',
+    });
+    expect(exportButton.disabled).toBe(false);
+    expect(exportButton.closest('fieldset[disabled]')).toBeNull();
+    fireEvent.click(exportButton);
+    await waitFor(() => expect(exportSvg).toHaveBeenCalledTimes(1));
+    expect(inspectorProps.onUpdateSelected).not.toHaveBeenCalled();
+  });
+});
+
 function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
   return {
     project,
@@ -678,6 +727,7 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     collaborationGraphReadOnly: false,
     onAttachAgentContext: vi.fn().mockResolvedValue(undefined),
     onRemoveAgentContext: vi.fn(),
+    onAttachWhiteboardContext: vi.fn().mockReturnValue('Attached whiteboard context.'),
     onOpenSettings: vi.fn(),
     onError: vi.fn(),
   };
@@ -697,6 +747,29 @@ function agentNode(data: Partial<WorkshopNode['data']>): WorkshopNode {
       collapsed: false,
       color: '#445566',
       adapterId: 'test-agent',
+      ...data,
+    },
+  };
+}
+
+function whiteboardNode(data: Partial<WorkshopNode['data']>): WorkshopNode {
+  return {
+    id: 'whiteboard-1',
+    type: 'workshop',
+    position: { x: 0, y: 0 },
+    data: {
+      kind: 'whiteboard',
+      title: 'Board',
+      description: 'A mockup',
+      color: '#445566',
+      status: 'idle',
+      locked: false,
+      collapsed: false,
+      excalidraw: {
+        type: 'excalidraw',
+        version: 2,
+        elements: [{ id: 'shape-1', type: 'rectangle', width: 100, height: 80 }],
+      },
       ...data,
     },
   };

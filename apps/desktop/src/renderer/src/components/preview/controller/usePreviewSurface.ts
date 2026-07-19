@@ -11,6 +11,7 @@ interface UsePreviewSurfaceInput {
   operations: PreviewRendererOperations;
   projectId: string;
   nodeId: string;
+  slot?: 'comparison-left' | 'comparison-right';
   url: string;
   touchEmulation: boolean;
   hostRef: RefObject<HTMLElement | null>;
@@ -20,6 +21,7 @@ export function usePreviewSurface({
   operations,
   projectId,
   nodeId,
+  slot,
   url,
   touchEmulation,
   hostRef,
@@ -56,6 +58,7 @@ export function usePreviewSurface({
         const created = await operations.createSurface({
           projectId,
           nodeId,
+          ...(slot === undefined ? {} : { slot }),
           url,
           bounds,
           touchEmulation,
@@ -117,7 +120,17 @@ export function usePreviewSurface({
         void operations.closeSurface({ surfaceId: currentId }).catch(() => false);
       }
     };
-  }, [generation, hostRef, nodeId, operations, projectId, refreshConsole, touchEmulation, url]);
+  }, [
+    generation,
+    hostRef,
+    nodeId,
+    operations,
+    projectId,
+    refreshConsole,
+    slot,
+    touchEmulation,
+    url,
+  ]);
 
   useEffect(
     () =>

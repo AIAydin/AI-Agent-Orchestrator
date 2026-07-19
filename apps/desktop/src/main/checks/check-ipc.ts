@@ -201,16 +201,9 @@ export class CheckIpcService {
       if (savedApproval !== undefined) {
         return await this.#runtime.start(event.sender.id, planId, () => {
           this.#assertCurrentWindow(event, parent);
-          const authorized = this.approvals.authorize({
+          this.approvals.authorize({
             approvalId: savedApproval.id,
             scope,
-          });
-          this.store.appendAudit('permission', 'saved-approval-use', 'allowed', {
-            approvalId: authorized.id,
-            projectId: pending.plan.projectId,
-            checkId: pending.plan.checkId,
-            kind: pending.plan.kind,
-            resourceFingerprint: pending.plan.approvalFingerprint,
           });
         });
       }
@@ -227,21 +220,13 @@ export class CheckIpcService {
         return null;
       }
       if (decision.checkboxChecked) {
-        const approval = this.approvals.create({
+        this.approvals.create({
           scope,
           decision: 'approved',
           decidedBy: LOCAL_ACTOR,
           reason: `Remembered exact ${pending.plan.kind} project check after native confirmation.`,
           expiresAt: new Date(Date.now() + SAVED_CHECK_APPROVAL_MS).toISOString(),
           singleUse: false,
-        });
-        this.store.appendAudit('permission', 'saved-approval-grant', 'allowed', {
-          approvalId: approval.record.id,
-          projectId: pending.plan.projectId,
-          checkId: pending.plan.checkId,
-          kind: pending.plan.kind,
-          resourceFingerprint: pending.plan.approvalFingerprint,
-          expiresAt: approval.record.expiresAt,
         });
       }
       return await this.#runtime.start(event.sender.id, planId, () =>

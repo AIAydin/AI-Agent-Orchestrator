@@ -48,12 +48,12 @@ import {
   type TrustedExtensionState,
 } from './storage-schemas.js';
 import {
-  consumeApproval as consumeDatabaseApproval,
+  consumeApprovalWithAudit as consumeDatabaseApprovalWithAudit,
   findApprovalsByScope as findDatabaseApprovalsByScope,
   getApproval as getDatabaseApproval,
   listApprovals as listDatabaseApprovals,
-  revokeApproval as revokeDatabaseApproval,
-  saveApproval as saveDatabaseApproval,
+  revokeApprovalWithAudit as revokeDatabaseApprovalWithAudit,
+  saveApprovalWithAudit as saveDatabaseApprovalWithAudit,
 } from './storage/security/approvals.js';
 import { initializeAuditIntegrity } from './storage/security/audit-integrity.js';
 import {
@@ -120,12 +120,20 @@ import {
   listAuditEvents as listDatabaseAuditEvents,
   listProjectRuns as listDatabaseProjectRuns,
   recoverInterruptedRuns as recoverDatabaseInterruptedRuns,
+  renameRunWorktreeBranch as renameDatabaseRunWorktreeBranch,
   saveRun as saveDatabaseRun,
   transferRunWorktreeAuthority as transferDatabaseRunWorktreeAuthority,
   transitionRunWorktreeState as transitionDatabaseRunWorktreeState,
   type RunWorktreeAuthorityTransfer,
+  type RunWorktreeBranchRename,
   type RunWorktreeStateTransition,
 } from './storage/runs-audit.js';
+import {
+  beginGitWorktreeMetadataIntent as beginDatabaseGitWorktreeMetadataIntent,
+  getGitWorktreeMetadataIntent as getDatabaseGitWorktreeMetadataIntent,
+  reconcileGitWorktreeMetadataIntent as reconcileDatabaseGitWorktreeMetadataIntent,
+  type GitWorktreeMetadataIntent,
+} from './storage/git-worktree/intents.js';
 import {
   createReviewNote as createDatabaseReviewNote,
   deleteReviewNote as deleteDatabaseReviewNote,
@@ -271,7 +279,7 @@ export {
  */
 export class LocalStore implements DeliveryReadinessStore {
   readonly databasePath: string;
-  private readonly database: DatabaseSync;
+  readonly #database: DatabaseSync;
   private readonly deliveryReadiness: SqliteDeliveryReadinessStore;
   private readonly durableChangeListeners = new Set<() => void>();
   private startupRecovery: InterruptedRunRecoveryReport = {
@@ -291,29 +299,31 @@ export class LocalStore implements DeliveryReadinessStore {
     } = {},
   ) {
     this.databasePath = databasePath;
-    this.database = openDatabase(databasePath, options.expectedDatabaseIdentity);
-    this.deliveryReadiness = new SqliteDeliveryReadinessStore(this.database);
+    this.#database = openDatabase(databasePath, options.expectedDatabaseIdentity);
+    this.deliveryReadiness = new SqliteDeliveryReadinessStore(this.#database);
     try {
       const sourceDatabaseVersion = (
-        this.database.prepare('PRAGMA user_version;').get() as { user_version: number }
+        this.#database.prepare('PRAGMA user_version;').get() as {
+          user_version: number;
+        }
       ).user_version;
-      migrate(this.database);
-      initializeAuditIntegrity(this.database);
+      migrate(this.#database);
+      initializeAuditIntegrity(this.#database);
       if (options.legacySettingsDefaults !== undefined) {
         repairLegacyStoredSettings(
-          this.database,
+          this.#database,
           sourceDatabaseVersion,
           options.legacySettingsDefaults,
         );
       }
-      redactStoredSecrets(this.database);
-      sanitizeStoredExtensionData(this.database);
-      assertIntegrity(this.database);
-      this.startupRecovery = recoverDatabaseInterruptedRuns(this.database);
-      this.startupCheckRecovery = recoverDatabaseInterruptedCheckExecutions(this.database);
+      redactStoredSecrets(this.#database);
+      sanitizeStoredExtensionData(this.#database);
+      assertIntegrity(this.#database);
+      this.startupRecovery = recoverDatabaseInterruptedRuns(this.#database);
+      this.startupCheckRecovery = recoverDatabaseInterruptedCheckExecutions(this.#database);
     } catch (error) {
       try {
-        this.database.close();
+        this.#database.close();
       } catch {
         // Preserve the initialization error when SQLite also rejects cleanup.
       }
@@ -323,7 +333,7 @@ export class LocalStore implements DeliveryReadinessStore {
 
   close(): void {
     this.durableChangeListeners.clear();
-    this.database.close();
+    this.#database.close();
   }
 
   subscribeToDurableChanges(listener: () => void): () => void {
@@ -332,7 +342,7 @@ export class LocalStore implements DeliveryReadinessStore {
   }
 
   getSettings(fallback: AppSettings): AppSettings {
-    const row = this.database
+    const row = this.#database
       .prepare('SELECT value_json FROM app_settings WHERE singleton = 1')
       .get() as JsonRow | undefined;
     if (!row) return fallback;
@@ -341,29 +351,29 @@ export class LocalStore implements DeliveryReadinessStore {
 
   saveSettings(settings: AppSettings): AppSettings {
     const parsed = validateSettings(settings);
-    writeSettings(this.database, parsed);
+    writeSettings(this.#database, parsed);
     this.notifyDurableChange();
     return parsed;
   }
 
   getGitHubCliBinding(): StoredGitHubCliBinding | undefined {
-    return getDatabaseGitHubCliBinding(this.database);
+    return getDatabaseGitHubCliBinding(this.#database);
   }
 
   saveGitHubCliBinding(binding: StoredGitHubCliBinding): StoredGitHubCliBinding {
-    const saved = saveDatabaseGitHubCliBinding(this.database, binding);
+    const saved = saveDatabaseGitHubCliBinding(this.#database, binding);
     this.notifyDurableChange();
     return saved;
   }
 
   clearGitHubCliBinding(): boolean {
-    const cleared = clearDatabaseGitHubCliBinding(this.database);
+    const cleared = clearDatabaseGitHubCliBinding(this.#database);
     if (cleared) this.notifyDurableChange();
     return cleared;
   }
 
   createTerminalSession(session: TerminalSessionView): void {
-    createDatabaseTerminalSession(this.database, session);
+    createDatabaseTerminalSession(this.#database, session);
     this.notifyDurableChange();
   }
 
@@ -374,46 +384,46 @@ export class LocalStore implements DeliveryReadinessStore {
       readonly lastPersistedSequence: number;
     },
   ): void {
-    updateDatabaseTerminalSession(this.database, session, transcript);
+    updateDatabaseTerminalSession(this.#database, session, transcript);
     this.notifyDurableChange();
   }
 
   getTerminalSession(sessionId: string): TerminalSessionView | undefined {
-    return getDatabaseTerminalSession(this.database, sessionId);
+    return getDatabaseTerminalSession(this.#database, sessionId);
   }
 
   getTerminalSessionRecord(sessionId: string): StoredTerminalSession | undefined {
-    return getDatabaseTerminalSessionRecord(this.database, sessionId);
+    return getDatabaseTerminalSessionRecord(this.#database, sessionId);
   }
 
   listTerminalSessions(projectId: string, nodeId?: string): TerminalSessionView[] {
-    return listDatabaseTerminalSessions(this.database, projectId, nodeId);
+    return listDatabaseTerminalSessions(this.#database, projectId, nodeId);
   }
 
   recoverInterruptedTerminalSessions(now = new Date()): TerminalRecoveryReport {
-    const result = recoverDatabaseInterruptedTerminalSessions(this.database, now);
+    const result = recoverDatabaseInterruptedTerminalSessions(this.#database, now);
     if (result.lostSessionIds.length > 0) this.notifyDurableChange();
     return result;
   }
 
   deleteTerminalSessions(): number {
-    const deleted = deleteDatabaseTerminalSessions(this.database);
+    const deleted = deleteDatabaseTerminalSessions(this.#database);
     if (deleted > 0) this.notifyDurableChange();
     return deleted;
   }
 
   deleteTerminalSession(sessionId: string): boolean {
-    const deleted = deleteDatabaseTerminalSession(this.database, sessionId);
+    const deleted = deleteDatabaseTerminalSession(this.#database, sessionId);
     if (deleted) this.notifyDurableChange();
     return deleted;
   }
 
   listAllTerminalSessionIds(): string[] {
-    return listAllDatabaseTerminalSessionIds(this.database);
+    return listAllDatabaseTerminalSessionIds(this.#database);
   }
 
   listExpiredTerminalSessionIds(cutoff: string): string[] {
-    return listExpiredDatabaseTerminalSessionIds(this.database, cutoff);
+    return listExpiredDatabaseTerminalSessionIds(this.#database, cutoff);
   }
 
   createDeliveryReadiness(
@@ -485,51 +495,51 @@ export class LocalStore implements DeliveryReadinessStore {
   }
 
   listSettingsRepairs(): SettingsRepairSummary[] {
-    return listDatabaseSettingsRepairs(this.database);
+    return listDatabaseSettingsRepairs(this.#database);
   }
 
   getSettingsRepair(repairId: string): SettingsRepairEvidence | undefined {
-    return getDatabaseSettingsRepair(this.database, repairId);
+    return getDatabaseSettingsRepair(this.#database, repairId);
   }
 
   listProjects(limit = 30): Project[] {
-    return listDatabaseProjects(this.database, limit);
+    return listDatabaseProjects(this.#database, limit);
   }
 
   getProject(projectId: string): Project | undefined {
-    return getDatabaseProject(this.database, projectId);
+    return getDatabaseProject(this.#database, projectId);
   }
 
   getProjectByPath(projectPath: string): Project | undefined {
-    return getDatabaseProjectByPath(this.database, projectPath);
+    return getDatabaseProjectByPath(this.#database, projectPath);
   }
 
   saveProject(project: Project): Project {
-    const saved = saveDatabaseProject(this.database, project);
+    const saved = saveDatabaseProject(this.#database, project);
     this.notifyDurableChange();
     return saved;
   }
 
   saveProjectAndCanvas(project: Project, document: CanvasDocument): CanvasDocument {
-    const saved = saveDatabaseProjectAndCanvas(this.database, project, document);
+    const saved = saveDatabaseProjectAndCanvas(this.#database, project, document);
     this.notifyDurableChange();
     return saved;
   }
 
   setProjectMissing(projectId: string, missing: boolean): Project {
-    const saved = setDatabaseProjectMissing(this.database, projectId, missing);
+    const saved = setDatabaseProjectMissing(this.#database, projectId, missing);
     this.notifyDurableChange();
     return saved;
   }
 
   relocateProject(project: Project): Project {
-    const saved = relocateDatabaseProject(this.database, project);
+    const saved = relocateDatabaseProject(this.#database, project);
     this.notifyDurableChange();
     return saved;
   }
 
   loadCanvas(projectId: string): CanvasDocument | undefined {
-    const document = loadDatabaseCanvas(this.database, projectId);
+    const document = loadDatabaseCanvas(this.#database, projectId);
     // Legacy sanitation can repair stored JSON during a read. Conservatively mark the revision so
     // a possible repair is never omitted from the next verified backup.
     this.notifyDurableChange();
@@ -537,19 +547,19 @@ export class LocalStore implements DeliveryReadinessStore {
   }
 
   saveCanvas(document: CanvasDocument): CanvasDocument {
-    const saved = saveDatabaseCanvas(this.database, document);
+    const saved = saveDatabaseCanvas(this.#database, document);
     this.notifyDurableChange();
     return saved;
   }
 
   loadCanvasHistory(projectId: string): CanvasHistoryState | undefined {
-    const history = loadDatabaseCanvasHistory(this.database, projectId);
+    const history = loadDatabaseCanvasHistory(this.#database, projectId);
     this.notifyDurableChange();
     return history;
   }
 
   saveCanvasWithHistory(input: CanvasHistorySaveInput): CanvasDocument {
-    const saved = saveDatabaseCanvasWithHistory(this.database, input);
+    const saved = saveDatabaseCanvasWithHistory(this.#database, input);
     this.notifyDurableChange();
     return saved;
   }
@@ -557,7 +567,7 @@ export class LocalStore implements DeliveryReadinessStore {
   recoverCollaborationSyncState(
     scope: CollaborationSyncStorageScope,
   ): CollaborationSyncRecovery | null {
-    return recoverDatabaseCollaborationSyncState(this.database, scope);
+    return recoverDatabaseCollaborationSyncState(this.#database, scope);
   }
 
   stageCollaborationSyncState(
@@ -565,7 +575,7 @@ export class LocalStore implements DeliveryReadinessStore {
     baseline: CollaborationMetadataSnapshot | null,
     pending: CollaborationMetadataSnapshot,
   ): CollaborationSyncRecovery {
-    const value = stageDatabaseCollaborationSyncState(this.database, scope, baseline, pending);
+    const value = stageDatabaseCollaborationSyncState(this.#database, scope, baseline, pending);
     this.notifyDurableChange();
     return value;
   }
@@ -581,7 +591,7 @@ export class LocalStore implements DeliveryReadinessStore {
     },
   ): CollaborationSyncRecovery {
     const value = stageDatabaseCollaborationSyncDelivery(
-      this.database,
+      this.#database,
       scope,
       baseline,
       pending,
@@ -595,7 +605,7 @@ export class LocalStore implements DeliveryReadinessStore {
     scope: CollaborationSyncStorageScope,
     snapshot: CollaborationMetadataSnapshot,
   ): CollaborationSyncRecovery {
-    const value = checkpointDatabaseCollaborationSyncState(this.database, scope, snapshot);
+    const value = checkpointDatabaseCollaborationSyncState(this.#database, scope, snapshot);
     this.notifyDurableChange();
     return value;
   }
@@ -606,7 +616,7 @@ export class LocalStore implements DeliveryReadinessStore {
     rejectedDeliveryId: string,
   ): CollaborationSyncRecovery {
     const value = discardDatabaseRejectedCollaborationComment(
-      this.database,
+      this.#database,
       scope,
       comment,
       rejectedDeliveryId,
@@ -623,7 +633,7 @@ export class LocalStore implements DeliveryReadinessStore {
       readonly disposition: 'sent' | 'queued-offline';
     },
   ): void {
-    recordDatabaseCollaborationSyncDelivery(this.database, scope, input);
+    recordDatabaseCollaborationSyncDelivery(this.#database, scope, input);
     this.notifyDurableChange();
   }
 
@@ -631,18 +641,18 @@ export class LocalStore implements DeliveryReadinessStore {
     deliveryId: string,
     disposition: 'acknowledged' | 'rejected',
   ): void {
-    settleDatabaseCollaborationSyncDelivery(this.database, deliveryId, disposition);
+    settleDatabaseCollaborationSyncDelivery(this.#database, deliveryId, disposition);
     this.notifyDurableChange();
   }
 
   pruneExpiredCollaborationSyncStates(): number {
-    const count = pruneDatabaseCollaborationSyncStates(this.database);
+    const count = pruneDatabaseCollaborationSyncStates(this.#database);
     if (count > 0) this.notifyDurableChange();
     return count;
   }
 
   createCanvasSnapshot(projectId: string, reason: 'manual' | 'import' = 'manual'): CanvasSnapshot {
-    const snapshot = createDatabaseCanvasSnapshot(this.database, projectId, reason);
+    const snapshot = createDatabaseCanvasSnapshot(this.#database, projectId, reason);
     this.notifyDurableChange();
     return snapshot;
   }
@@ -652,20 +662,25 @@ export class LocalStore implements DeliveryReadinessStore {
     reason: 'manual' | 'import',
     audit: TransactionalAuditEvent,
   ): CanvasSnapshot {
-    const snapshot = createDatabaseCanvasSnapshotWithAudit(this.database, projectId, reason, audit);
+    const snapshot = createDatabaseCanvasSnapshotWithAudit(
+      this.#database,
+      projectId,
+      reason,
+      audit,
+    );
     this.notifyDurableChange();
     return snapshot;
   }
 
   listCanvasSnapshots(projectId: string, limit = 100): CanvasSnapshot[] {
-    const snapshots = listDatabaseCanvasSnapshots(this.database, projectId, limit);
+    const snapshots = listDatabaseCanvasSnapshots(this.#database, projectId, limit);
     // Snapshot sanitation may rewrite legacy rows; a conservative notification is data-safe.
     this.notifyDurableChange();
     return snapshots;
   }
 
   restoreCanvasSnapshot(snapshotId: string, restoredAt = new Date()): CanvasDocument {
-    const restored = restoreDatabaseCanvasSnapshot(this.database, snapshotId, restoredAt);
+    const restored = restoreDatabaseCanvasSnapshot(this.#database, snapshotId, restoredAt);
     this.notifyDurableChange();
     return restored;
   }
@@ -674,7 +689,7 @@ export class LocalStore implements DeliveryReadinessStore {
     request: AuditedCanvasSnapshotRestore,
     audit: TransactionalAuditEvent,
   ): CanvasDocument {
-    const restored = restoreDatabaseCanvasSnapshotWithAudit(this.database, request, audit);
+    const restored = restoreDatabaseCanvasSnapshotWithAudit(this.#database, request, audit);
     this.notifyDurableChange();
     return restored;
   }
@@ -686,22 +701,22 @@ export class LocalStore implements DeliveryReadinessStore {
     metadata: Record<string, unknown>,
     markDurableChange = true,
   ): void {
-    appendDatabaseAudit(this.database, category, action, outcome, metadata);
+    appendDatabaseAudit(this.#database, category, action, outcome, metadata);
     if (markDurableChange) this.notifyDurableChange();
   }
 
   listAuditEvents(limit: number): AuditEvent[] {
-    return listDatabaseAuditEvents(this.database, limit);
+    return listDatabaseAuditEvents(this.#database, limit);
   }
 
-  saveApproval(record: ApprovalRecord): ApprovalRecord {
-    const saved = saveDatabaseApproval(this.database, record);
+  saveApprovalWithAudit(record: ApprovalRecord, audit: TransactionalAuditEvent): ApprovalRecord {
+    const saved = saveDatabaseApprovalWithAudit(this.#database, record, audit);
     this.notifyDurableChange();
     return saved;
   }
 
   getApproval(approvalId: string): ApprovalRecord | undefined {
-    return getDatabaseApproval(this.database, approvalId);
+    return getDatabaseApproval(this.#database, approvalId);
   }
 
   listApprovals(input: {
@@ -709,31 +724,42 @@ export class LocalStore implements DeliveryReadinessStore {
     readonly action?: ApprovalRecord['scope']['action'];
     readonly limit: number;
   }): ApprovalRecord[] {
-    return listDatabaseApprovals(this.database, input);
+    return listDatabaseApprovals(this.#database, input);
   }
 
   findApprovalsByScope(scope: ApprovalRecord['scope']): ApprovalRecord[] {
-    return findDatabaseApprovalsByScope(this.database, scope);
+    return findDatabaseApprovalsByScope(this.#database, scope);
   }
 
-  consumeApproval(
+  consumeApprovalWithAudit(
     approvalId: string,
     expectedScope: ApprovalRecord['scope'],
     consumedAt: Date,
+    audit: TransactionalAuditEvent,
   ): ApprovalRecord {
-    const consumed = consumeDatabaseApproval(this.database, approvalId, expectedScope, consumedAt);
+    const consumed = consumeDatabaseApprovalWithAudit(
+      this.#database,
+      approvalId,
+      expectedScope,
+      consumedAt,
+      audit,
+    );
     this.notifyDurableChange();
     return consumed;
   }
 
-  revokeApproval(approvalId: string, revokedAt: Date): ApprovalRecord {
-    const revoked = revokeDatabaseApproval(this.database, approvalId, revokedAt);
+  revokeApprovalWithAudit(
+    approvalId: string,
+    revokedAt: Date,
+    audit: TransactionalAuditEvent,
+  ): ApprovalRecord {
+    const revoked = revokeDatabaseApprovalWithAudit(this.#database, approvalId, revokedAt, audit);
     this.notifyDurableChange();
     return revoked;
   }
 
   saveRun(record: StoredRunRecord): StoredRunRecord {
-    const saved = saveDatabaseRun(this.database, record);
+    const saved = saveDatabaseRun(this.#database, record);
     this.notifyDurableChange();
     return saved;
   }
@@ -742,7 +768,7 @@ export class LocalStore implements DeliveryReadinessStore {
     input: Omit<RunWorktreeAuthorityTransfer, 'transferredAt'>,
     now = new Date(),
   ): StoredRunRecord {
-    const transferred = transferDatabaseRunWorktreeAuthority(this.database, {
+    const transferred = transferDatabaseRunWorktreeAuthority(this.#database, {
       ...input,
       transferredAt: now.toISOString(),
     });
@@ -754,7 +780,7 @@ export class LocalStore implements DeliveryReadinessStore {
     input: Omit<RunWorktreeStateTransition, 'transitionedAt'>,
     now = new Date(),
   ): StoredRunRecord {
-    const transitioned = transitionDatabaseRunWorktreeState(this.database, {
+    const transitioned = transitionDatabaseRunWorktreeState(this.#database, {
       ...input,
       transitionedAt: now.toISOString(),
     });
@@ -762,88 +788,125 @@ export class LocalStore implements DeliveryReadinessStore {
     return transitioned;
   }
 
+  renameRunWorktreeBranch(
+    input: Omit<RunWorktreeBranchRename, 'renamedAt'>,
+    now = new Date(),
+  ): StoredRunRecord {
+    const renamed = renameDatabaseRunWorktreeBranch(this.#database, {
+      ...input,
+      renamedAt: now.toISOString(),
+    });
+    this.notifyDurableChange();
+    return renamed;
+  }
+
+  beginGitWorktreeMetadataIntent(intent: GitWorktreeMetadataIntent): GitWorktreeMetadataIntent {
+    const saved = beginDatabaseGitWorktreeMetadataIntent(this.#database, intent);
+    this.notifyDurableChange();
+    return saved;
+  }
+
+  getGitWorktreeMetadataIntent(runId: string): GitWorktreeMetadataIntent | undefined {
+    return getDatabaseGitWorktreeMetadataIntent(this.#database, runId);
+  }
+
+  reconcileGitWorktreeMetadataIntent(
+    input: Omit<Parameters<typeof reconcileDatabaseGitWorktreeMetadataIntent>[1], 'reconciledAt'>,
+    now = new Date(),
+  ): 'applied' | 'rolled-back' {
+    const result = reconcileDatabaseGitWorktreeMetadataIntent(this.#database, {
+      ...input,
+      reconciledAt: now.toISOString(),
+    });
+    this.notifyDurableChange();
+    return result;
+  }
+
   getRun(runId: string): StoredRunRecord | undefined {
-    return getDatabaseRun(this.database, runId);
+    return getDatabaseRun(this.#database, runId);
   }
 
   listProjectRuns(projectId: string, limit = 200, nodeId?: string): StoredRunRecord[] {
-    return listDatabaseProjectRuns(this.database, projectId, limit, nodeId);
+    return listDatabaseProjectRuns(this.#database, projectId, limit, nodeId);
   }
 
   createReviewNote(note: StoredGitReviewNote): StoredGitReviewNote {
-    const saved = createDatabaseReviewNote(this.database, note);
+    const saved = createDatabaseReviewNote(this.#database, note);
     this.notifyDurableChange();
     return saved;
   }
 
   listReviewNotes(target: GitTargetInput, limit = 500): StoredReviewNotePage {
-    return listDatabaseReviewNotes(this.database, target, limit);
+    return listDatabaseReviewNotes(this.#database, target, limit);
   }
 
   updateReviewNote(input: GitReviewNoteUpdateInput, updatedAt = new Date()): StoredGitReviewNote {
-    const saved = updateDatabaseReviewNote(this.database, { ...input, updatedAt });
+    const saved = updateDatabaseReviewNote(this.#database, {
+      ...input,
+      updatedAt,
+    });
     this.notifyDurableChange();
     return saved;
   }
 
   deleteReviewNote(input: GitReviewNoteDeleteInput): StoredGitReviewNote {
-    const deleted = deleteDatabaseReviewNote(this.database, input);
+    const deleted = deleteDatabaseReviewNote(this.#database, input);
     this.notifyDurableChange();
     return deleted;
   }
 
   createWorkflowExecution(record: WorkflowExecutionRecordInput): WorkflowExecutionRecord {
-    const created = createDatabaseWorkflowExecution(this.database, record);
+    const created = createDatabaseWorkflowExecution(this.#database, record);
     this.notifyDurableChange();
     return created;
   }
 
   getWorkflowExecution(executionId: string): WorkflowExecutionRecord | undefined {
-    return getDatabaseWorkflowExecution(this.database, executionId);
+    return getDatabaseWorkflowExecution(this.#database, executionId);
   }
 
   listRecoverableWorkflowExecutions(limit = 200): WorkflowExecutionRecord[] {
-    return listDatabaseRecoverableWorkflowExecutions(this.database, limit);
+    return listDatabaseRecoverableWorkflowExecutions(this.#database, limit);
   }
 
   listProjectWorkflowExecutions(
     projectId: string,
     options: { readonly canvasId?: string; readonly limit?: number } = {},
   ): WorkflowExecutionRecord[] {
-    return listDatabaseProjectWorkflowExecutions(this.database, projectId, options);
+    return listDatabaseProjectWorkflowExecutions(this.#database, projectId, options);
   }
 
   listWorkflowExecutionEvents(
     executionId: string,
     request: WorkflowEventPageRequest = {},
   ): WorkflowExecutionEvent[] {
-    return listDatabaseWorkflowExecutionEvents(this.database, executionId, request);
+    return listDatabaseWorkflowExecutionEvents(this.#database, executionId, request);
   }
 
   listWorkflowNodeBindings(executionId: string): WorkflowNodeBinding[] {
-    return listDatabaseWorkflowNodeBindings(this.database, executionId);
+    return listDatabaseWorkflowNodeBindings(this.#database, executionId);
   }
 
   mutateWorkflowExecution(
     mutation: WorkflowExecutionMutationInput,
   ): WorkflowExecutionMutationResult {
-    const result = mutateDatabaseWorkflowExecution(this.database, mutation);
+    const result = mutateDatabaseWorkflowExecution(this.#database, mutation);
     if (!result.replayed) this.notifyDurableChange();
     return result;
   }
 
   saveCheckExecution(execution: CheckExecutionView): StoredCheckExecutionRecord {
-    const saved = saveDatabaseCheckExecution(this.database, execution);
+    const saved = saveDatabaseCheckExecution(this.#database, execution);
     this.notifyDurableChange();
     return saved;
   }
 
   getCheckExecution(executionId: string): StoredCheckExecutionRecord | undefined {
-    return getDatabaseCheckExecution(this.database, executionId);
+    return getDatabaseCheckExecution(this.#database, executionId);
   }
 
   listCheckExecutions(projectId: string, limit = 200): StoredCheckExecutionRecord[] {
-    return listDatabaseCheckExecutions(this.database, projectId, limit);
+    return listDatabaseCheckExecutions(this.#database, projectId, limit);
   }
 
   listWorkflowCheckExecutions(
@@ -852,7 +915,7 @@ export class LocalStore implements DeliveryReadinessStore {
     limit = 2_000,
   ): StoredCheckExecutionRecord[] {
     return listDatabaseWorkflowCheckExecutions(
-      this.database,
+      this.#database,
       projectId,
       workflowExecutionId,
       limit,
@@ -860,7 +923,7 @@ export class LocalStore implements DeliveryReadinessStore {
   }
 
   stageTrustedExtension(record: TrustedExtensionLedgerRecord): TrustedExtensionLedgerRecord {
-    const saved = stageDatabaseTrustedExtension(this.database, record);
+    const saved = stageDatabaseTrustedExtension(this.#database, record);
     this.notifyDurableChange();
     return saved;
   }
@@ -871,7 +934,7 @@ export class LocalStore implements DeliveryReadinessStore {
     activatedAt = new Date(),
   ): TrustedExtensionLedgerRecord {
     const saved = activateDatabaseTrustedExtension(
-      this.database,
+      this.#database,
       extensionId,
       operationId,
       activatedAt,
@@ -886,7 +949,7 @@ export class LocalStore implements DeliveryReadinessStore {
     restoredAt = new Date(),
   ): TrustedExtensionLedgerRecord {
     const saved = restoreDatabaseActiveTrustedExtension(
-      this.database,
+      this.#database,
       previousRecord,
       failedOperationId,
       restoredAt,
@@ -896,17 +959,17 @@ export class LocalStore implements DeliveryReadinessStore {
   }
 
   upsertActiveTrustedExtension(record: TrustedExtensionLedgerRecord): TrustedExtensionLedgerRecord {
-    const saved = upsertDatabaseActiveTrustedExtension(this.database, record);
+    const saved = upsertDatabaseActiveTrustedExtension(this.#database, record);
     this.notifyDurableChange();
     return saved;
   }
 
   getTrustedExtension(extensionId: string): TrustedExtensionLedgerRecord | undefined {
-    return getDatabaseTrustedExtension(this.database, extensionId);
+    return getDatabaseTrustedExtension(this.#database, extensionId);
   }
 
   listTrustedExtensions(state?: TrustedExtensionState): TrustedExtensionLedgerRecord[] {
-    return listDatabaseTrustedExtensions(this.database, state);
+    return listDatabaseTrustedExtensions(this.#database, state);
   }
 
   revokeTrustedExtension(
@@ -915,7 +978,7 @@ export class LocalStore implements DeliveryReadinessStore {
     revokedAt = new Date(),
   ): TrustedExtensionLedgerRecord {
     const saved = revokeDatabaseTrustedExtension(
-      this.database,
+      this.#database,
       extensionId,
       removalOperationId,
       revokedAt,
@@ -925,7 +988,7 @@ export class LocalStore implements DeliveryReadinessStore {
   }
 
   purgeTrustedExtension(extensionId: string, removalOperationId: string): boolean {
-    const purged = purgeDatabaseTrustedExtension(this.database, extensionId, removalOperationId);
+    const purged = purgeDatabaseTrustedExtension(this.#database, extensionId, removalOperationId);
     if (purged) this.notifyDurableChange();
     return purged;
   }
@@ -945,29 +1008,29 @@ export class LocalStore implements DeliveryReadinessStore {
   }
 
   recoverInterruptedRuns(now = new Date()): InterruptedRunRecoveryReport {
-    const recovered = recoverDatabaseInterruptedRuns(this.database, now);
+    const recovered = recoverDatabaseInterruptedRuns(this.#database, now);
     if (recovered.lostRunIds.length > 0) this.notifyDurableChange();
     return recovered;
   }
 
   recoverInterruptedCheckExecutions(now = new Date()): InterruptedCheckRecoveryReport {
-    const recovered = recoverDatabaseInterruptedCheckExecutions(this.database, now);
+    const recovered = recoverDatabaseInterruptedCheckExecutions(this.#database, now);
     if (recovered.lostCheckExecutionIds.length > 0) this.notifyDurableChange();
     return recovered;
   }
 
   exportData(exportedAt = new Date()): LocalDataExport {
-    return exportDatabaseData(this.database, exportedAt);
+    return exportDatabaseData(this.#database, exportedAt);
   }
 
   importData(document: unknown, options: PortableImportOptions = {}): ImportResult {
-    const imported = importDatabaseData(this.database, document, options);
+    const imported = importDatabaseData(this.#database, document, options);
     this.notifyDurableChange();
     return imported;
   }
 
   preflightImportData(document: unknown, options: PortableImportOptions = {}): ImportResult {
-    return preflightDatabaseImportData(this.database, document, options);
+    return preflightDatabaseImportData(this.#database, document, options);
   }
 
   importDataWithAudit(
@@ -975,47 +1038,47 @@ export class LocalStore implements DeliveryReadinessStore {
     options: PortableImportOptions,
     audit: TransactionalAuditEvent,
   ): ImportResult {
-    const imported = importDatabaseDataWithAudit(this.database, document, options, audit);
+    const imported = importDatabaseDataWithAudit(this.#database, document, options, audit);
     this.notifyDurableChange();
     return imported;
   }
 
   applyRetention(settings: AppSettings, now = new Date()): RetentionResult {
-    const result = applyDatabaseRetention(this.database, settings, now);
+    const result = applyDatabaseRetention(this.#database, settings, now);
     if (Object.values(result).some((count) => count > 0)) this.notifyDurableChange();
     return result;
   }
 
   checkIntegrity(mode: 'quick' | 'full' = 'quick', checkedAt = new Date()): IntegrityReport {
-    return checkDatabaseIntegrity(this.database, mode, checkedAt);
+    return checkDatabaseIntegrity(this.#database, mode, checkedAt);
   }
 
   async createBackup(destinationDirectory: string, now = new Date()): Promise<BackupResult> {
-    return createDatabaseBackup(this.database, destinationDirectory, now);
+    return createDatabaseBackup(this.#database, destinationDirectory, now);
   }
 
   getBackupHealth(): BackupHealth {
-    return getDatabaseBackupHealth(this.database);
+    return getDatabaseBackupHealth(this.#database);
   }
 
   recordBackupAttempt(attempt: BackupAttempt): void {
-    recordDatabaseBackupAttempt(this.database, attempt);
+    recordDatabaseBackupAttempt(this.#database, attempt);
   }
 
   recordVerifiedBackup(result: BackupResult): void {
-    recordDatabaseBackupAttempt(this.database, backupAttemptFromResult(result));
+    recordDatabaseBackupAttempt(this.#database, backupAttemptFromResult(result));
   }
 
   async pruneBackups(retentionCount: number, protectedBackupPath: string): Promise<number> {
-    return pruneDatabaseBackups(this.database, retentionCount, protectedBackupPath);
+    return pruneDatabaseBackups(this.#database, retentionCount, protectedBackupPath);
   }
 
   async listMissingRecordedBackupIds(): Promise<string[]> {
-    return listDatabaseMissingRecordedBackupIds(this.database);
+    return listDatabaseMissingRecordedBackupIds(this.#database);
   }
 
   async deleteAllLocalData(options: DeleteAllLocalDataOptions = {}): Promise<void> {
-    await deleteDatabaseData(this.database, options);
+    await deleteDatabaseData(this.#database, options);
     this.notifyDurableChange();
   }
 

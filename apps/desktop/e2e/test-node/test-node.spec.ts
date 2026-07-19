@@ -45,20 +45,20 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
       const configuration = panel.getByRole('group', {
         name: 'Test command configuration',
       });
-      await expect(configuration.getByLabel('Executable')).toHaveValue('node');
+      await expect(configuration.getByLabel('Program')).toHaveValue('node');
       await expect(configuration.getByLabel(/Arguments/u)).toHaveValue(
         `-e\n${LONG_RUNNING_SCRIPT}`,
       );
-      await expect(configuration.getByLabel(/Expected artifacts/u)).toHaveValue(ARTIFACT_PATH);
+      await expect(configuration.getByLabel(/Result files to keep/u)).toHaveValue(ARTIFACT_PATH);
     });
 
     await test.step('review the exact launch, observe live parsed output, and cancel only the node', async () => {
-      await panel.getByRole('button', { name: 'Review & run' }).click();
+      await panel.getByRole('button', { name: 'Review and run' }).click();
       const launch = await openLaunchDecision(page);
       await expect(launch).toContainText(LIVE_MARKER);
       await expect(launch).toContainText(ARTIFACT_PATH);
       await queueWorkflowNativeResponse(electronApp!, 1);
-      await launch.getByRole('button', { name: 'Continue to native launch approval' }).click();
+      await launch.getByRole('button', { name: 'Continue to approval' }).click();
       expectExactLaunchConfirmation(await waitForWorkflowNativeDialog(electronApp!, 0), {
         artifactPath: ARTIFACT_PATH,
         marker: LIVE_MARKER,
@@ -66,7 +66,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
 
       await expect(panel.locator('.test-node-state')).toHaveText('Running');
       await expect(
-        panel.locator('.test-node-result').first().getByLabel('Test node raw output'),
+        panel.locator('.test-node-result').first().getByLabel('Test output'),
       ).toContainText(LIVE_MARKER);
       await expectParsedSummary(panel, {
         passed: 1,
@@ -94,7 +94,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
       const launch = await openLaunchDecision(page);
       await expect(launch).toContainText(PASS_MARKER);
       await queueWorkflowNativeResponse(electronApp!, 1);
-      await launch.getByRole('button', { name: 'Continue to native launch approval' }).click();
+      await launch.getByRole('button', { name: 'Continue to approval' }).click();
       expectExactLaunchConfirmation(await waitForWorkflowNativeDialog(electronApp!, 2), {
         artifactPath: ARTIFACT_PATH,
         marker: PASS_MARKER,
@@ -102,7 +102,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
 
       await expect(panel.locator('.test-node-state')).toHaveText('Passed');
       await expect(
-        panel.locator('.test-node-result').first().getByLabel('Test node raw output'),
+        panel.locator('.test-node-result').first().getByLabel('Test output'),
       ).toContainText(PASS_MARKER);
       await expectParsedSummary(panel, {
         passed: 4,
@@ -139,7 +139,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
     await test.step('restart restores the prior output, summary, artifact, and cancelled attempt', async () => {
       await expect(restoredPanel.locator('.test-node-state')).toHaveText('Passed');
       await expect(
-        restoredPanel.locator('.test-node-result').first().getByLabel('Test node raw output'),
+        restoredPanel.locator('.test-node-result').first().getByLabel('Test output'),
       ).toContainText(PASS_MARKER);
       await expectParsedSummary(restoredPanel, {
         passed: 4,

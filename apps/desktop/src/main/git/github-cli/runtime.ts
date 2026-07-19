@@ -94,7 +94,19 @@ export interface GitHubCliCommandRuntime {
   readonly runner: GitHubCommandRunner;
 }
 
-export type GitHubCliBeforeSpawn = (executable: string) => void | Promise<void>;
+export type GitHubCliBeforeSpawn = (
+  executable: string,
+  args: readonly string[],
+) => void | Promise<void>;
+
+/** Redacted, exact process evidence required immediately before a validation spawn. */
+export interface GitHubCliValidationSpawnReview {
+  readonly kind: 'version';
+  readonly source: GitHubCliSource;
+  readonly identity: GitHubCliPublicIdentity;
+  readonly arguments: readonly ['--version'];
+  readonly credentialAccess: false;
+}
 
 export interface GitHubCliRuntimeDependencies {
   /**
@@ -114,6 +126,10 @@ export interface GitHubCliRuntimeDependencies {
     executable: string,
     beforeSpawn?: GitHubCliBeforeSpawn,
   ) => GitHubCommandRunner;
+  /** Must persist the required audit record or reject, which prevents the process from spawning. */
+  readonly authorizeValidationSpawn?: (
+    review: GitHubCliValidationSpawnReview,
+  ) => void | Promise<void>;
   readonly now?: () => Date;
   readonly createId?: () => string;
 }
@@ -160,6 +176,9 @@ export class GitHubCliRuntimeService {
   readonly #pending = new Map<string, PendingSelection>();
   readonly #createRunner: GitHubCliRuntimeDependencies['createRunner'];
   readonly #createValidationRunner: GitHubCliRuntimeDependencies['createRunner'];
+  readonly #authorizeValidationSpawn: NonNullable<
+    GitHubCliRuntimeDependencies['authorizeValidationSpawn']
+  >;
   readonly #now: () => Date;
   readonly #createId: () => string;
   #automaticValidation: AutomaticValidation | undefined;
@@ -175,6 +194,7 @@ export class GitHubCliRuntimeService {
     }
     this.#createRunner = dependencies.createRunner;
     this.#createValidationRunner = dependencies.createValidationRunner ?? dependencies.createRunner;
+    this.#authorizeValidationSpawn = dependencies.authorizeValidationSpawn ?? (() => undefined);
     this.#now = dependencies.now ?? (() => new Date());
     this.#createId = dependencies.createId ?? randomUUID;
   }
@@ -410,6 +430,7 @@ export class GitHubCliRuntimeService {
       selection.captured,
       assertCurrent,
       this.#createValidationRunner,
+      this.#validationSpawnAuthorizer('custom', selection.captured),
     );
     const version = await validateVersion(runner, signal);
     assertCurrent();
@@ -454,6 +475,7 @@ export class GitHubCliRuntimeService {
       currentCaptured,
       assertCurrent,
       this.#createValidationRunner,
+      this.#validationSpawnAuthorizer('automatic', currentCaptured),
     );
     const version = await validateVersion(runner, signal);
     assertCurrent();
@@ -527,13 +549,16 @@ export class GitHubCliRuntimeService {
     captured: CapturedGitHubCliExecutable,
     assertCurrent: () => void = () => undefined,
     createRunner: GitHubCliRuntimeDependencies['createRunner'] = this.#createRunner,
+    authorizeSpawn: ((args: readonly string[]) => void | Promise<void>) | undefined = undefined,
   ): GitHubCommandRunner {
-    const beforeSpawn: GitHubCliBeforeSpawn = async (executable) => {
+    const beforeSpawn: GitHubCliBeforeSpawn = async (executable, args) => {
       assertCurrent();
       if (!pathsEqual(executable, captured.executablePath)) {
         throw new Error('The GitHub CLI about to run does not match the reviewed program.');
       }
       await assertGitHubCliExecutableCurrent(captured);
+      assertCurrent();
+      await authorizeSpawn?.(args);
       assertCurrent();
     };
     const delegate = createRunner(captured.executablePath, beforeSpawn);
@@ -572,6 +597,7 @@ export class GitHubCliRuntimeService {
       captured,
       () => undefined,
       this.#createValidationRunner,
+      this.#validationSpawnAuthorizer('automatic', captured),
     );
     let validated = false;
 
@@ -611,6 +637,24 @@ export class GitHubCliRuntimeService {
         this.#assertAutomaticPathCurrent(captured);
         return await runner.run(args, options);
       },
+    };
+  }
+
+  #validationSpawnAuthorizer(
+    source: GitHubCliSource,
+    captured: CapturedGitHubCliExecutable,
+  ): (args: readonly string[]) => Promise<void> {
+    return async (args) => {
+      if (!isVersionCommand(args)) {
+        throw new Error('GitHub CLI validation may run only the exact --version command.');
+      }
+      await this.#authorizeValidationSpawn({
+        kind: 'version',
+        source,
+        identity: publicIdentity(source, captured, null),
+        arguments: VERSION_ARGUMENTS,
+        credentialAccess: false,
+      });
     };
   }
 

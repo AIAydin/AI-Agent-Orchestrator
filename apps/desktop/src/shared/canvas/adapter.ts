@@ -186,7 +186,7 @@ function reconcileGroupFrameNodes(nodes: readonly CanvasNode[]): {
       if (seenChildIds.has(childId)) continue;
       seenChildIds.add(childId);
       const child = byId.get(childId);
-      if (child === undefined || child.id === frame.id || isGroupFrameNode(child)) continue;
+      if (child === undefined || child.id === frame.id) continue;
       const claims = claimsByChildId.get(childId) ?? [];
       claims.push(frame);
       claimsByChildId.set(childId, claims);
@@ -197,15 +197,22 @@ function reconcileGroupFrameNodes(nodes: readonly CanvasNode[]): {
   const childrenByFrameId = new Map<string, string[]>();
   for (const childId of [...claimsByChildId.keys()].sort(compareIds)) {
     const child = byId.get(childId);
-    if (child === undefined || isGroupFrameNode(child)) continue;
+    if (child === undefined) continue;
     const winner = [...(claimsByChildId.get(childId) ?? [])].sort((left, right) =>
       compareGroupFrameClaims(left, right, child),
     )[0];
     if (winner === undefined) continue;
     parentByChildId.set(childId, winner.id);
-    const children = childrenByFrameId.get(winner.id) ?? [];
+  }
+  while (true) {
+    const cycle = findGroupCycle(parentByChildId, byId);
+    if (cycle.length === 0) break;
+    parentByChildId.delete([...cycle].sort(compareIds).at(-1)!);
+  }
+  for (const [childId, parentId] of parentByChildId) {
+    const children = childrenByFrameId.get(parentId) ?? [];
     children.push(childId);
-    childrenByFrameId.set(winner.id, children);
+    childrenByFrameId.set(parentId, children);
   }
 
   const reconciled = nodes.map((node) => {
@@ -222,6 +229,27 @@ function reconcileGroupFrameNodes(nodes: readonly CanvasNode[]): {
     nodesById: new Map(frames.map((frame) => [frame.id, frame] as const)),
     parentByChildId,
   };
+}
+
+function findGroupCycle(
+  parents: ReadonlyMap<string, string>,
+  byId: ReadonlyMap<string, CanvasNode>,
+): string[] {
+  for (const start of [...parents.keys()].sort(compareIds)) {
+    const path: string[] = [];
+    const seen = new Map<string, number>();
+    let current: string | undefined = start;
+    while (current !== undefined) {
+      const node = byId.get(current);
+      if (node === undefined || !isGroupFrameNode(node)) break;
+      const index = seen.get(current);
+      if (index !== undefined) return path.slice(index);
+      seen.set(current, path.length);
+      path.push(current);
+      current = parents.get(current);
+    }
+  }
+  return [];
 }
 
 type GroupFrameNode = Extract<CanvasNode, { type: 'group-frame' }>;

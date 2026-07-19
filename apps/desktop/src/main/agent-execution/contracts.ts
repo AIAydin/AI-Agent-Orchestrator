@@ -174,6 +174,8 @@ export interface AgentExecutionLaunchHandle {
   readonly capabilities: AgentSession['capabilities'];
   readonly completion: Promise<AgentExecutionCompletion>;
   writeInput(data: string): void;
+  pause?(): void;
+  continue?(): void;
   interrupt(): void;
   terminate(): Promise<void>;
 }
@@ -274,6 +276,8 @@ export interface AgentExecutionOperations {
     authorizeLaunch?: () => void,
   ): Promise<AgentExecutionLaunchHandle>;
   sendInput(ownerId: string, runId: string, data: string): boolean;
+  pause?(ownerId: string, runId: string): boolean;
+  continue?(ownerId: string, runId: string): boolean;
   interrupt(ownerId: string, runId: string): boolean;
   terminate(ownerId: string, runId: string): Promise<boolean>;
   /** Releases every pending plan and active run owned by a disconnected caller. */

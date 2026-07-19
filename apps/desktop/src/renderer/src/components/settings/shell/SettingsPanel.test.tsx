@@ -22,6 +22,10 @@ import type {
   FolderReadinessRequest,
   FolderReadinessResult,
 } from '../../../../../shared/settings/folder-readiness.js';
+import type {
+  DockerReadiness,
+  DockerReadinessInput,
+} from '../../../../../shared/docker/contracts.js';
 import {
   SETTINGS_UI_MANIFEST,
   type SettingsUiTarget,
@@ -51,6 +55,9 @@ const importSettings = vi.fn(() => Promise.resolve({ ok: true as const, value: i
 const pickExecutable = vi.fn(() =>
   Promise.resolve({ ok: true as const, value: null as string | null }),
 );
+const pickExternalApplication = vi.fn(() =>
+  Promise.resolve({ ok: true as const, value: null as string | null }),
+);
 const pickReferences = vi.fn(() => Promise.resolve({ ok: true as const, value: [] as string[] }));
 const getBackupHealth = vi.fn(() =>
   Promise.resolve({
@@ -74,6 +81,9 @@ const agentCheck = vi.fn((input: AgentReadinessRequest) =>
 );
 const folderCheck = vi.fn((input: FolderReadinessRequest) =>
   Promise.resolve({ ok: true as const, value: readyFolder(input) }),
+);
+const dockerCheck = vi.fn((input: DockerReadinessInput) =>
+  Promise.resolve({ ok: true as const, value: readyDocker(input) }),
 );
 
 function readyCommand(input: CommandReadinessRequest): CommandReadinessResult {
@@ -137,12 +147,33 @@ function blockedFolder(input: FolderReadinessRequest, reason: string): FolderRea
   };
 }
 
+function readyDocker(input: DockerReadinessInput): DockerReadiness {
+  return {
+    executable: input.dockerExecutable,
+    image: input.image,
+    containerExecutable: input.containerExecutable,
+    executableAvailable: true,
+    daemonAvailable: true,
+    imageAvailable: true,
+    imageCompatible: true,
+    containerExecutableAvailable: true,
+    available: true,
+    status: 'ready',
+    checkedAt: '2026-07-15T18:00:00.000Z',
+    daemonVersion: '27.5.1',
+    imageId: 'sha256:abc123',
+    agentVersion: 'codex 1.2.3',
+  };
+}
+
 beforeEach(() => {
   updateSettings.mockClear();
   resetSettings.mockClear();
   importSettings.mockClear();
   pickExecutable.mockReset();
   pickExecutable.mockResolvedValue({ ok: true, value: null });
+  pickExternalApplication.mockReset();
+  pickExternalApplication.mockResolvedValue({ ok: true, value: null });
   pickReferences.mockReset();
   pickReferences.mockResolvedValue({ ok: true, value: [] });
   getBackupHealth.mockClear();
@@ -155,6 +186,10 @@ beforeEach(() => {
   folderCheck.mockReset();
   folderCheck.mockImplementation((input) =>
     Promise.resolve({ ok: true, value: readyFolder(input) }),
+  );
+  dockerCheck.mockReset();
+  dockerCheck.mockImplementation((input) =>
+    Promise.resolve({ ok: true, value: readyDocker(input) }),
   );
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
@@ -171,11 +206,16 @@ beforeEach(() => {
       },
       projects: {
         pickExecutable,
+        pickExternalApplication,
         pickReferences,
         pickParent: vi.fn(() => Promise.resolve({ ok: true, value: null })),
       },
       commands: { checkReadiness: commandCheck },
       agents: { checkReadiness: agentCheck },
+      docker: {
+        check: dockerCheck,
+        pull: vi.fn(),
+      },
       git: {
         connections: {
           list: vi.fn(({ projectId }: { projectId: string }) =>
@@ -315,7 +355,7 @@ describe('SettingsPanel draft transactions', () => {
     );
 
     const entries = Object.entries(SETTINGS_UI_MANIFEST);
-    expect(entries).toHaveLength(57);
+    expect(entries).toHaveLength(58);
     expect(entries.filter(([, entry]) => entry.kind === 'first-run')).toHaveLength(1);
     for (const tab of [
       'Appearance',
@@ -584,9 +624,11 @@ describe('SettingsPanel draft transactions', () => {
       name: 'Save settings',
     });
     expect(save.disabled).toBe(true);
-    expect(await screen.findAllByText(/Refresh readiness for the current program/u)).toHaveLength(
-      1,
-    );
+    expect(
+      (await screen.findAllByText(/Refresh readiness for the current program/u)).filter(
+        (element) => element.getAttribute('role') !== 'tooltip',
+      ),
+    ).toHaveLength(1);
 
     fireEvent.click(
       screen.getByRole('button', {
@@ -603,7 +645,11 @@ describe('SettingsPanel draft transactions', () => {
       target: { value: '/other/bin/codex' },
     });
     expect(save.disabled).toBe(true);
-    expect(screen.getAllByText(/Refresh readiness for the current program/u).length).toBe(1);
+    expect(
+      screen
+        .getAllByText(/Refresh readiness for the current program/u)
+        .filter((element) => element.getAttribute('role') !== 'tooltip').length,
+    ).toBe(1);
   });
 
   it('requires an exact readiness refresh after selecting a different detected default', async () => {
@@ -762,6 +808,35 @@ describe('SettingsPanel draft transactions', () => {
     expect(updateSettings.mock.calls[0]?.[0].customAgent.output).toBe('json-lines');
   });
 
+  it('selects and resets the external workspace application entirely in Settings', async () => {
+    pickExternalApplication.mockResolvedValue({
+      ok: true,
+      value: '/Applications/Visual Studio Code.app',
+    });
+    render(<SettingsPanel {...props()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
+    const field = screen.getByLabelText<HTMLInputElement>('External application');
+    const controls = field.closest('.settings-form-field');
+    if (!(controls instanceof HTMLElement))
+      throw new Error('Missing external application settings field.');
+    fireEvent.click(within(controls).getByRole('button', { name: 'Browse' }));
+    await waitFor(() => expect(field.value).toBe('/Applications/Visual Studio Code.app'));
+    expect(pickExternalApplication).toHaveBeenCalledOnce();
+    expect(pickExecutable).not.toHaveBeenCalled();
+    await clickSaveSettings();
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0].externalEditorExecutable).toBe(
+      '/Applications/Visual Studio Code.app',
+    );
+
+    fireEvent.click(within(controls).getByRole('button', { name: 'Use system default' }));
+    expect(field.value).toBe('');
+    await clickSaveSettings();
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
+    expect(updateSettings.mock.calls[1]?.[0].externalEditorExecutable).toBe('');
+  });
+
   it('builds and validates the Custom permission profile entirely in the permission centre', async () => {
     pickReferences.mockResolvedValue({
       ok: true,
@@ -811,7 +886,7 @@ describe('SettingsPanel draft transactions', () => {
     ).toBeGreaterThan(0);
     fireEvent.click(
       within(executableGroup).getByRole('button', {
-        name: 'Browse for a program',
+        name: 'Browse for an allowed program',
       }),
     );
     await waitFor(() =>
@@ -871,7 +946,7 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.change(screen.getByLabelText('Which programs can start it'), {
       target: { value: 'allowlist' },
     });
-    expect(screen.getByRole('button', { name: 'Browse for a program' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Browse for an allowed program' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -880,13 +955,6 @@ describe('SettingsPanel draft transactions', () => {
     });
     fireEvent.change(ignoredFiles, { target: { value: 'allow' } });
     fireEvent.change(sensitiveFiles, { target: { value: 'allow' } });
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty(
-        'disabled',
-        false,
-      ),
-    );
-
     fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
     const dockerEnabled = screen.getByRole<HTMLInputElement>('checkbox', {
       name: /Enable Docker profiles/u,
@@ -894,6 +962,8 @@ describe('SettingsPanel draft transactions', () => {
     expect(dockerEnabled.checked).toBe(true);
     expect(dockerEnabled.disabled).toBe(true);
     expect(screen.getByText(/Switch Custom to Host in the Permissions centre/u)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Check Docker' }));
+    await screen.findByText('Docker profile ready');
     await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
@@ -974,7 +1044,11 @@ describe('SettingsPanel draft transactions', () => {
       target: { value: 'missing-linter' },
     });
 
-    expect(await screen.findAllByText(/configured executable was not found/u)).toHaveLength(2);
+    expect(
+      (await screen.findAllByText(/configured executable was not found/u)).filter(
+        (element) => element.getAttribute('role') !== 'tooltip',
+      ),
+    ).toHaveLength(2);
     expect(
       within(lintEditor).getByText(/install it and reopen Forgeboard, or use Browse/u),
     ).toBeTruthy();
@@ -1233,11 +1307,19 @@ describe('SettingsPanel draft transactions', () => {
 
     fireEvent.change(terminalShell, { target: { value: '' } });
     expect(save.disabled).toBe(true);
-    expect(screen.getByText(/Default terminal executable: Choose a path/u)).toBeTruthy();
+    expect(
+      screen
+        .getAllByText(/Default terminal executable: Choose a path/u)
+        .some((element) => element.getAttribute('role') === 'alert'),
+    ).toBe(true);
 
     fireEvent.change(terminalShell, { target: { value: 'missing-shell' } });
     expect(save.disabled).toBe(true);
-    expect(await screen.findAllByText(/terminal executable was not found/u)).toHaveLength(2);
+    expect(
+      (await screen.findAllByText(/terminal executable was not found/u)).filter(
+        (element) => element.getAttribute('role') !== 'tooltip',
+      ),
+    ).toHaveLength(2);
     expect(save.disabled).toBe(true);
     fireEvent.submit(screen.getByRole('dialog', { name: 'Settings' }));
     expect(updateSettings).not.toHaveBeenCalled();
@@ -1292,12 +1374,14 @@ describe('SettingsPanel draft transactions', () => {
     render(
       <SettingsPanel
         {...props({
-          settings: settings({
-            dockerEnabled: true,
-            dockerImage: 'example/agent:latest',
-            dockerContainerExecutable: '/usr/local/bin/agent',
+          settings: {
+            ...settings({
+              dockerEnabled: true,
+              dockerImage: 'example/agent:latest',
+              dockerContainerExecutable: '/usr/local/bin/agent',
+            }),
             dockerMountHostCredentials: true,
-          }),
+          },
         })}
       />,
     );
@@ -1314,16 +1398,32 @@ describe('SettingsPanel draft transactions', () => {
     fireEvent.click(credentialMount);
     expect(credentialMount.checked).toBe(false);
     expect(credentialMount.disabled).toBe(true);
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty(
-        'disabled',
-        false,
-      ),
-    );
     await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(dockerCheck).not.toHaveBeenCalled();
     expect(updateSettings.mock.calls[0]?.[0].dockerMountHostCredentials).toBe(false);
+  });
+
+  it('saves unrelated changes without rechecking an unchanged enabled Docker profile', async () => {
+    render(
+      <SettingsPanel
+        {...props({
+          settings: settings({
+            dockerEnabled: true,
+            dockerImage: 'example/agent:latest',
+            dockerContainerExecutable: '/usr/local/bin/agent',
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'dark' }));
+    await clickSaveSettings();
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]?.[0].theme).toBe('dark');
+    expect(dockerCheck).not.toHaveBeenCalled();
   });
 });
 

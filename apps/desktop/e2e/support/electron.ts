@@ -157,15 +157,18 @@ export async function approveNextNativeAgentLaunch(
   let operationError: unknown;
   try {
     await launchAction();
+    let observedResult: { error?: string; status: string } | undefined;
     await expect
       .poll(
-        async () =>
-          await app.evaluate((_, currentToken) => {
+        async () => {
+          observedResult = await app.evaluate((_, currentToken) => {
             const state = globalThis as typeof globalThis & {
               __forgeboardE2eAgentLaunchDialogs?: Map<string, { error?: string; status: string }>;
             };
-            return state.__forgeboardE2eAgentLaunchDialogs?.get(currentToken)?.status ?? 'missing';
-          }, token),
+            return state.__forgeboardE2eAgentLaunchDialogs?.get(currentToken);
+          }, token);
+          return observedResult?.status ?? 'missing';
+        },
         {
           message: 'the owner-bound native agent launch confirmation should open',
           timeout: options.pollTimeoutMs ?? 5_000,
@@ -173,15 +176,10 @@ export async function approveNextNativeAgentLaunch(
       )
       .not.toBe('armed');
 
-    const result = await app.evaluate((_, currentToken) => {
-      const state = globalThis as typeof globalThis & {
-        __forgeboardE2eAgentLaunchDialogs?: Map<string, { error?: string; status: string }>;
-      };
-      return state.__forgeboardE2eAgentLaunchDialogs?.get(currentToken);
-    }, token);
-    if (result?.status !== 'approved') {
+    if (observedResult?.status !== 'approved') {
       throw new Error(
-        result?.error ?? 'The native agent launch confirmation did not approve the reviewed run.',
+        observedResult?.error ??
+          'The native agent launch confirmation did not approve the reviewed run.',
       );
     }
   } catch (error) {
@@ -207,11 +205,20 @@ export async function approveNextNativeAgentLaunch(
       void dialog;
     }, token);
   } catch (error) {
-    cleanupFailed = true;
-    cleanupError = error;
+    // A successful native dialog restores the original handler before returning. If Electron
+    // replaces its evaluation context immediately afterward, the old harness record is gone with
+    // that context and there is nothing left to clean up.
+    if (!isDestroyedEvaluationContext(error)) {
+      cleanupFailed = true;
+      cleanupError = error;
+    }
   }
   if (operationFailed) throw operationError;
   if (cleanupFailed) throw cleanupError;
+}
+
+function isDestroyedEvaluationContext(error: unknown): boolean {
+  return error instanceof Error && /Execution context was destroyed/u.test(error.message);
 }
 
 export function watchExternalRequests(page: Page, externalRequests: string[]): void {

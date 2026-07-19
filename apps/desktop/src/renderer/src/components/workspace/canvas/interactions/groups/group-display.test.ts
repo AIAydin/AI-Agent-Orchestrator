@@ -50,7 +50,7 @@ describe('group display projections', () => {
     expect(memberEdge.hidden).toBe(false);
   });
 
-  it('uses reconciled ownership for duplicate, stale, nested, and competing claims', () => {
+  it('uses reconciled ownership recursively for nested and competing claims', () => {
     const child = node('child', 'task', { x: 50, y: 50, width: 20, height: 20 });
     const nested = frame('nested', { x: 10, y: 10, width: 50, height: 50 });
     const collapsedLarge = frame('large', {
@@ -86,7 +86,7 @@ describe('group display projections', () => {
     );
     expect(projectedNode(collapsedWinner.nodes, 'child').hidden).toBe(true);
     expect(projectedEdge(collapsedWinner.edges, 'connection').hidden).toBe(true);
-    expect(projectedNode(collapsedWinner.nodes, 'nested').hidden).not.toBe(true);
+    expect(projectedNode(collapsedWinner.nodes, 'nested').hidden).toBe(true);
   });
 });
 

@@ -77,7 +77,10 @@ import type {
   CollaborationRoomMemberRevokeInput,
   CollaborationRoomMemberUpdateInput,
   CollaborationInviteCreateInput,
+  CollaborationInviteHistoryPage,
+  CollaborationInviteHistoryView,
   CollaborationInviteIdInput,
+  CollaborationInviteListInput,
   CollaborationInviteSafeView,
   CollaborationMetadataSnapshot,
   CollaborationPublishInput,
@@ -98,6 +101,11 @@ import type {
   UpdateCheckInput,
   UpdateCheckResult,
 } from './updates/contracts.js';
+import type { DiagramSvgExportInput, DiagramSvgExportResult } from './diagram/contracts.js';
+import type {
+  WhiteboardSvgExportInput,
+  WhiteboardSvgExportResult,
+} from './whiteboard/contracts.js';
 import type {
   GitCommitPlanInput,
   GitCommitPlanView,
@@ -113,7 +121,19 @@ import type {
   GitShippingPlanInput,
   GitShippingPlanView,
   GitShippingResultView,
+  GitConflictRecoveryPlanView,
+  GitConflictRecoveryPrepareInput,
+  GitConflictRecoveryResultView,
+  GitConflictRecoveryStateView,
 } from './git/shipping-contracts.js';
+import type {
+  GitConflictInspectionInput,
+  GitConflictInspectionView,
+  GitConflictResolutionPlanView,
+  GitConflictResolutionPrepareInput,
+  GitConflictResolutionResultView,
+} from './git/conflict-resolution/contracts.js';
+import type { GitIdentityCheckInput, GitIdentityCheckResult } from './git/identity/contracts.js';
 import type {
   GitDeliveryReadinessApproveInput,
   GitDeliveryReadinessApproveView,
@@ -157,11 +177,22 @@ import type {
   GitRemotePushResultView,
 } from './git/remote/index.js';
 import type {
+  GitWorkspaceExternalOpenResult,
   GitWorktreeCleanupConfirmationInput,
   GitWorktreeCleanupPrepareOutcome,
   GitWorktreeCleanupResultView,
   GitWorktreeCleanupTargetInput,
+  GitWorktreeArchivePlanView,
+  GitWorktreeMetadataConfirmationInput,
+  GitWorktreeMetadataResultView,
+  GitWorktreeRenamePlanView,
+  GitWorktreeRestorePlanView,
+  GitWorktreeRenamePrepareInput,
 } from './git/lifecycle/contracts.js';
+import type {
+  GitAgentComparisonInput,
+  GitAgentComparisonView,
+} from './git/comparison/contracts.js';
 import type {
   GitReviewNoteCreateInput,
   GitReviewNoteDeleteInput,
@@ -181,6 +212,12 @@ import type {
   FileTreeInput,
   FileTreeResult,
 } from './files/contracts.js';
+import type {
+  ProjectImageChooseInput,
+  ProjectImageLoadInput,
+  ProjectImageLoadResult,
+  ProjectImageReference,
+} from './files/images/contracts.js';
 import type { IntegrityCheckInput, IntegrityCheckResult } from './integrity/contracts.js';
 import type {
   RunHistoryGetInput,
@@ -283,9 +320,11 @@ export interface ForgeboardApi {
   };
   projects: {
     recent(): Promise<IpcResult<Project[]>>;
+    refresh(projectId: string): Promise<IpcResult<Project>>;
     pick(): Promise<IpcResult<Project | null>>;
     pickParent(): Promise<IpcResult<string | null>>;
     pickExecutable(): Promise<IpcResult<string | null>>;
+    pickExternalApplication(): Promise<IpcResult<string | null>>;
     pickReferences(input: LocalReferenceSelectionInput): Promise<IpcResult<string[]>>;
     locateMoved(
       input: LocateProjectRecoveryInput,
@@ -318,6 +357,8 @@ export interface ForgeboardApi {
     revert(input: FileRevertInput): Promise<FileDocument>;
     reveal(input: FileRevealInput): Promise<void>;
     openExternal(input: FileOpenExternalInput): Promise<void>;
+    chooseImage(input: ProjectImageChooseInput): Promise<ProjectImageReference | null>;
+    loadImage(input: ProjectImageLoadInput): Promise<ProjectImageLoadResult>;
   };
   collaboration: {
     get(): Promise<IpcResult<CollaborationConnection | null>>;
@@ -341,12 +382,16 @@ export interface ForgeboardApi {
     listRoomAudit(
       input: CollaborationRoomAuditListInput,
     ): Promise<IpcResult<CollaborationRoomAuditPage>>;
-    listSessionInvites(): Promise<IpcResult<CollaborationInviteSafeView[]>>;
+    listInvites(
+      input: CollaborationInviteListInput,
+    ): Promise<IpcResult<CollaborationInviteHistoryPage>>;
     createInvite(
       input: CollaborationInviteCreateInput,
     ): Promise<IpcResult<CollaborationInviteSafeView | null>>;
     copyInviteLink(input: CollaborationInviteIdInput): Promise<IpcResult<boolean>>;
-    revokeInvite(input: CollaborationInviteIdInput): Promise<IpcResult<boolean>>;
+    revokeInvite(
+      input: CollaborationInviteIdInput,
+    ): Promise<IpcResult<CollaborationInviteHistoryView | null>>;
     leave(): Promise<IpcResult<CollaborationConnection | null>>;
     publish(
       input: CollaborationPublishInput,
@@ -372,6 +417,8 @@ export interface ForgeboardApi {
     retry(input: PrepareRunContinuationInput): Promise<IpcResult<RunApprovalView | null>>;
     approve(runId: string): Promise<IpcResult<boolean>>;
     sendInput(runId: string, data: string): Promise<IpcResult<boolean>>;
+    pause(runId: string): Promise<IpcResult<boolean>>;
+    continue(runId: string): Promise<IpcResult<boolean>>;
     interrupt(runId: string): Promise<IpcResult<boolean>>;
     terminate(runId: string): Promise<IpcResult<boolean>>;
     onEvent(listener: (event: RunEventEnvelope) => void): () => void;
@@ -446,6 +493,9 @@ export interface ForgeboardApi {
     remove(input: ExtensionRemoveInput): Promise<IpcResult<ExtensionDiscoveryView>>;
   };
   git: {
+    identity: {
+      check(input: GitIdentityCheckInput): Promise<IpcResult<GitIdentityCheckResult>>;
+    };
     review(input: GitTargetInput): Promise<IpcResult<GitReviewView>>;
     stagePaths(input: GitPathSelectionInput): Promise<IpcResult<GitReviewView>>;
     stageHunks(input: GitHunkSelectionInput): Promise<IpcResult<GitReviewView>>;
@@ -459,6 +509,27 @@ export interface ForgeboardApi {
     confirmShipping(
       input: GitPlanConfirmationInput,
     ): Promise<IpcResult<GitShippingResultView | null>>;
+    conflictRecoveryState(
+      input: GitTargetInput,
+    ): Promise<IpcResult<GitConflictRecoveryStateView | null>>;
+    prepareConflictRecovery(
+      input: GitConflictRecoveryPrepareInput,
+    ): Promise<IpcResult<GitConflictRecoveryPlanView>>;
+    confirmConflictRecovery(
+      input: GitPlanConfirmationInput,
+    ): Promise<IpcResult<GitConflictRecoveryResultView | null>>;
+    inspectConflicts(
+      input: GitConflictInspectionInput,
+    ): Promise<IpcResult<GitConflictInspectionView>>;
+    prepareConflictFile(
+      input: GitConflictResolutionPrepareInput,
+    ): Promise<IpcResult<GitConflictResolutionPlanView>>;
+    confirmConflictFile(
+      input: GitPlanConfirmationInput,
+    ): Promise<IpcResult<GitConflictResolutionResultView | null>>;
+    comparison: {
+      compareAgents(input: GitAgentComparisonInput): Promise<IpcResult<GitAgentComparisonView>>;
+    };
     readiness: {
       get(input: GitDeliveryReadinessGetInput): Promise<IpcResult<GitDeliveryReadinessGetView>>;
       prepare(
@@ -519,12 +590,31 @@ export interface ForgeboardApi {
       ): Promise<IpcResult<GitHubCiResultView | null>>;
     };
     lifecycle: {
+      openExternal(input: GitTargetInput): Promise<IpcResult<GitWorkspaceExternalOpenResult>>;
       prepareCleanup(
         input: GitWorktreeCleanupTargetInput,
       ): Promise<IpcResult<GitWorktreeCleanupPrepareOutcome>>;
       confirmCleanup(
         input: GitWorktreeCleanupConfirmationInput,
       ): Promise<IpcResult<GitWorktreeCleanupResultView | null>>;
+      prepareRename(
+        input: GitWorktreeRenamePrepareInput,
+      ): Promise<IpcResult<GitWorktreeRenamePlanView>>;
+      confirmRename(
+        input: GitWorktreeMetadataConfirmationInput,
+      ): Promise<IpcResult<GitWorktreeMetadataResultView | null>>;
+      prepareArchive(
+        input: GitWorktreeCleanupTargetInput,
+      ): Promise<IpcResult<GitWorktreeArchivePlanView>>;
+      confirmArchive(
+        input: GitWorktreeMetadataConfirmationInput,
+      ): Promise<IpcResult<GitWorktreeMetadataResultView | null>>;
+      prepareRestore(
+        input: GitWorktreeCleanupTargetInput,
+      ): Promise<IpcResult<GitWorktreeRestorePlanView>>;
+      confirmRestore(
+        input: GitWorktreeMetadataConfirmationInput,
+      ): Promise<IpcResult<GitWorktreeMetadataResultView | null>>;
     };
     reviewNotes: {
       list(input: GitReviewNotesListInput): Promise<IpcResult<GitReviewNotesView>>;
@@ -555,5 +645,11 @@ export interface ForgeboardApi {
     confirmImport(
       input: RecoveryPlanConfirmationInput,
     ): Promise<IpcResult<RecoveryImportCounts | null>>;
+  };
+  diagram: {
+    exportSvg(input: DiagramSvgExportInput): Promise<IpcResult<DiagramSvgExportResult>>;
+  };
+  whiteboard: {
+    exportSvg(input: WhiteboardSvgExportInput): Promise<IpcResult<WhiteboardSvgExportResult>>;
   };
 }

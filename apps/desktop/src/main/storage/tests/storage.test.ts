@@ -18,6 +18,14 @@ const NOW = '2026-07-14T16:00:00.000Z';
 const PROJECT_ID = '00000000-0000-4000-8000-000000000001';
 const CANVAS_ID = '00000000-0000-4000-8000-000000000002';
 
+function legacyReadinessMigrationIndex(): number {
+  const index = MIGRATIONS.findIndex((migration) =>
+    migration.includes('DELETE FROM delivery_readiness_approvals'),
+  );
+  if (index < 0) throw new Error('Legacy readiness migration is missing.');
+  return index;
+}
+
 const openStores = new Set<LocalStore>();
 const temporaryDirectories: string[] = [];
 
@@ -99,6 +107,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     gitIdentityName: '',
     gitIdentityEmail: '',
     gitRemote: 'origin',
+    externalEditorExecutable: '',
     terminalShell: '/bin/sh',
     envAllowlist: ['PATH', 'HOME'],
     developmentCommand: { executable: '', arguments: [] },
@@ -244,7 +253,7 @@ describe('LocalStore', () => {
         .prepare('INSERT INTO delivery_readiness_approvals(id, readiness_id) VALUES(?, ?)')
         .run('approval', 'legacy');
 
-      const migration = MIGRATIONS.at(-1)!;
+      const migration = MIGRATIONS[legacyReadinessMigrationIndex()]!;
       database.exec(migration);
       database.exec(migration);
 
@@ -263,7 +272,10 @@ describe('LocalStore', () => {
   it('upgrades legacy readiness without blocking startup or deleting its project and run', () => {
     const databasePath = createDatabasePath();
     const legacy = openDatabase(databasePath);
-    for (const [index, migration] of MIGRATIONS.slice(0, -1).entries()) {
+    for (const [index, migration] of MIGRATIONS.slice(
+      0,
+      legacyReadinessMigrationIndex(),
+    ).entries()) {
       legacy.exec(migration);
       legacy
         .prepare('INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)')
@@ -298,7 +310,11 @@ describe('LocalStore', () => {
       schemaVersion: 1,
       id: readinessId,
       revision: 0,
-      target: { kind: 'agent-worktree', projectId: PROJECT_ID, runId: savedRun.id },
+      target: {
+        kind: 'agent-worktree',
+        projectId: PROJECT_ID,
+        runId: savedRun.id,
+      },
       sourceFingerprint: {
         sourceHead: '1'.repeat(40),
         sourceTree: '2'.repeat(40),
@@ -781,6 +797,48 @@ describe('LocalStore', () => {
     ).toThrow('Invalid run worktree lifecycle transition');
   });
 
+  it('renames and archives a managed worktree across its complete persisted attempt lineage', () => {
+    const store = openStore();
+    const parent = storedRun();
+    const child = storedRun({
+      ...parent,
+      id: uuidFor(502),
+      action: 'resume',
+      parentRunId: parent.id,
+      createdAt: '2026-07-14T18:00:00.000Z',
+      updatedAt: '2026-07-14T18:00:00.000Z',
+    });
+    store.saveRun(parent);
+    store.saveRun(child);
+
+    store.renameRunWorktreeBranch({
+      runId: child.id,
+      expectedWorktreeId: parent.worktreeId!,
+      expectedBranch: parent.branch!,
+      nextBranch: 'forgeboard/renamed-lineage',
+    });
+    expect(store.getRun(parent.id)?.branch).toBe('forgeboard/renamed-lineage');
+    expect(store.getRun(child.id)?.branch).toBe('forgeboard/renamed-lineage');
+
+    store.transitionRunWorktreeState({
+      runId: child.id,
+      expectedWorktreeId: parent.worktreeId!,
+      expectedState: 'active',
+      nextState: 'archived',
+    });
+    expect(store.getRun(parent.id)?.worktreeState).toBe('archived');
+    expect(store.getRun(child.id)?.worktreeState).toBe('archived');
+
+    store.transitionRunWorktreeState({
+      runId: parent.id,
+      expectedWorktreeId: parent.worktreeId!,
+      expectedState: 'archived',
+      nextState: 'active',
+    });
+    expect(store.getRun(parent.id)?.worktreeState).toBe('active');
+    expect(store.getRun(child.id)?.worktreeState).toBe('active');
+  });
+
   it('atomically transfers exact managed-worktree continuation authority', () => {
     const store = openStore();
     const parent = storedRun({
@@ -817,10 +875,17 @@ describe('LocalStore', () => {
       new Date('2026-07-14T18:01:00.000Z'),
     );
 
-    expect(store.getRun(parent.id)).toMatchObject({ supersededByRunId: child.id });
-    expect(store.getRun(child.id)).toMatchObject({ worktreeAuthority: 'owned' });
+    expect(store.getRun(parent.id)).toMatchObject({
+      supersededByRunId: child.id,
+    });
+    expect(store.getRun(child.id)).toMatchObject({
+      worktreeAuthority: 'owned',
+    });
     expect(() =>
-      store.transferRunWorktreeAuthority({ parentRunId: parent.id, childRunId: child.id }),
+      store.transferRunWorktreeAuthority({
+        parentRunId: parent.id,
+        childRunId: child.id,
+      }),
     ).toThrow('lineage or exact worktree authority changed');
   });
 
@@ -861,10 +926,17 @@ describe('LocalStore', () => {
     });
     store.saveRun(parent);
     store.saveRun(child);
-    store.transferRunWorktreeAuthority({ parentRunId: parent.id, childRunId: child.id });
+    store.transferRunWorktreeAuthority({
+      parentRunId: parent.id,
+      childRunId: child.id,
+    });
     expect(store.getRun(child.id)?.worktreeAuthority).toBe('owned');
 
-    const secondParent = { ...parent, id: uuidFor(504), supersededByRunId: null };
+    const secondParent = {
+      ...parent,
+      id: uuidFor(504),
+      supersededByRunId: null,
+    };
     const driftedChild = {
       ...child,
       id: uuidFor(505),
@@ -975,41 +1047,44 @@ describe('LocalStore', () => {
     });
   });
 
-  it('marks prepared or running child processes as lost after a restart', () => {
-    const databasePath = createDatabasePath();
-    const store = openStore(databasePath);
-    const record: StoredRunRecord = {
-      id: uuidFor(500),
-      projectId: PROJECT_ID,
-      nodeId: 'agent-1',
-      adapterId: 'test-agent',
-      status: 'running',
-      cwd: '/tmp/forgeboard-worktrees/run-1',
-      branch: 'forgeboard/agent-1',
-      worktreeId: uuidFor(501),
-      worktreeState: 'active',
-      repositoryRoot: '/tmp/forgeboard-project',
-      managedRoot: '/tmp/forgeboard-worktrees',
-      baseRef: 'HEAD',
-      baseCommit: '0123456789abcdef0123456789abcdef01234567',
-      startedAt: NOW,
-      endedAt: null,
-      exitCode: null,
-      createdAt: NOW,
-      updatedAt: NOW,
-    };
-    store.saveRun(record);
-    closeStore(store);
+  it.each(['running', 'paused'] as const)(
+    'marks a %s child process as lost after a restart',
+    (nonterminalStatus) => {
+      const databasePath = createDatabasePath();
+      const store = openStore(databasePath);
+      const record: StoredRunRecord = {
+        id: uuidFor(500),
+        projectId: PROJECT_ID,
+        nodeId: 'agent-1',
+        adapterId: 'test-agent',
+        status: nonterminalStatus,
+        cwd: '/tmp/forgeboard-worktrees/run-1',
+        branch: 'forgeboard/agent-1',
+        worktreeId: uuidFor(501),
+        worktreeState: 'active',
+        repositoryRoot: '/tmp/forgeboard-project',
+        managedRoot: '/tmp/forgeboard-worktrees',
+        baseRef: 'HEAD',
+        baseCommit: '0123456789abcdef0123456789abcdef01234567',
+        startedAt: NOW,
+        endedAt: null,
+        exitCode: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+      };
+      store.saveRun(record);
+      closeStore(store);
 
-    const reopened = openStore(databasePath);
-    const recovered = rows(reopened, 'runs')[0];
-    expect(recovered).toMatchObject({
-      id: record.id,
-      status: 'lost',
-      exitCode: null,
-    });
-    expect(recovered).toHaveProperty('endedAt');
-  });
+      const reopened = openStore(databasePath);
+      const recovered = rows(reopened, 'runs')[0];
+      expect(recovered).toMatchObject({
+        id: record.id,
+        status: 'lost',
+        exitCode: null,
+      });
+      expect(recovered).toHaveProperty('endedAt');
+    },
+  );
 
   it('rolls back every local-data deletion if any table delete fails', async () => {
     const store = openStore();

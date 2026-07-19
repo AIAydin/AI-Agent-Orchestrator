@@ -277,7 +277,7 @@ describe('FileNodeWorkflowContextResolver', () => {
     ).rejects.toThrow(/32 MiB aggregate/iu);
   });
 
-  it('resolves a mixed File, Product Brief, Task, Diagram, and Note selection in edge order', async () => {
+  it('resolves a mixed File, Product Brief, Task, Diagram, Whiteboard, and Note selection in edge order', async () => {
     const root = fixtureRoot();
     writeFileSync(join(root, 'review.md'), '# File context\n');
     const brief = canvasContextNode('brief-1', 'product-brief', { markdown: '# Brief' });
@@ -285,14 +285,26 @@ describe('FileNodeWorkflowContextResolver', () => {
     const diagram = canvasContextNode('diagram-1', 'diagram', {
       mermaidSource: 'flowchart LR\nA-->B',
     });
+    const whiteboard = canvasContextNode('whiteboard-1', 'whiteboard-mockup', {
+      excalidraw: { type: 'excalidraw', version: 2, elements: [] },
+      annotationIds: ['annotation-1'],
+    });
     const note = canvasContextNode('note-1', 'note-image', { markdown: 'Remember this' });
-    const attachmentIds = ['brief-1', 'file-1', 'task-context', 'diagram-1', 'note-1'];
+    const attachmentIds = [
+      'brief-1',
+      'file-1',
+      'task-context',
+      'diagram-1',
+      'whiteboard-1',
+      'note-1',
+    ];
     const nodes = [
       agentNode(attachmentIds),
       brief,
       fileNode('file-1', 'review.md'),
       task,
       diagram,
+      whiteboard,
       note,
     ];
     const resolver = new FileNodeWorkflowContextResolver({
@@ -306,6 +318,7 @@ describe('FileNodeWorkflowContextResolver', () => {
           node.type === 'product-brief' ||
           node.type === 'task' ||
           node.type === 'diagram' ||
+          node.type === 'whiteboard-mockup' ||
           node.type === 'note-image',
       )
       .map(serializeWorkflowCanvasContext);
@@ -365,6 +378,7 @@ describe('FileNodeWorkflowContextResolver', () => {
             node.type === 'product-brief' ||
             node.type === 'task' ||
             node.type === 'diagram' ||
+            node.type === 'whiteboard-mockup' ||
             node.type === 'note-image',
         )
         .map(serializeWorkflowCanvasContext),
@@ -372,11 +386,12 @@ describe('FileNodeWorkflowContextResolver', () => {
 
     const resolved = await resolver.resolve(request(runtime, attachmentIds));
     expect(resolved.attachments.map(({ attachmentId }) => attachmentId)).toEqual(attachmentIds);
-    expect(resolved.generatedArtifacts).toHaveLength(4);
+    expect(resolved.generatedArtifacts).toHaveLength(5);
     expect(resolved.generatedArtifacts?.map(({ attachmentId }) => attachmentId)).toEqual([
       'brief-1',
       'task-context',
       'diagram-1',
+      'whiteboard-1',
       'note-1',
     ]);
     for (const generated of resolved.generatedArtifacts ?? []) {
@@ -463,7 +478,7 @@ function fileReference(attachmentId: string, relativePath: string) {
 
 function canvasContextNode(
   id: string,
-  type: 'product-brief' | 'task' | 'diagram' | 'note-image',
+  type: 'product-brief' | 'task' | 'diagram' | 'whiteboard-mockup' | 'note-image',
   data: Record<string, unknown>,
 ): CanvasNode {
   return CanvasNodeSchema.parse({ ...nodeBase(id, id), type, data });

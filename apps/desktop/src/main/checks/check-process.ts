@@ -167,7 +167,9 @@ export function launchCheckProcess(
   onOutput: (stream: 'stdout' | 'stderr', data: Buffer) => void,
   gracefulStopMs: number,
   forceStopMs: number,
+  beforeSpawn: () => void = () => undefined,
 ): CheckProcessHandle {
+  beforeSpawn();
   const child = spawn(executable, [...args], {
     cwd,
     detached: process.platform !== 'win32',

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CollaborationInviteListQuerySchema,
+  CollaborationInviteListResponseSchema,
   CollaborationAuditListQuerySchema,
   CollaborationAuditListResponseSchema,
   CollaborationManagementErrorResponseSchema,
@@ -34,6 +36,52 @@ const ownerAccessResponse = {
   accessToken: 'header.payload.signature',
   expiresAt: '2026-07-18T12:00:00.000Z',
 } as const;
+
+const durableInvite = {
+  id: '00000000-0000-4000-8000-000000000001',
+  roomId: 'room-1',
+  role: 'editor',
+  createdAt: '2026-07-18T11:00:00.000Z',
+  expiresAt: '2026-07-18T12:00:00.000Z',
+  maxUses: 2,
+  useCount: 1,
+  revokedAt: null,
+  status: 'active',
+} as const;
+
+describe('collaboration durable invite contracts', () => {
+  it('parses bounded pagination and token-free invite history', () => {
+    expect(CollaborationInviteListQuerySchema.parse({ limit: '25' })).toEqual({
+      limit: 25,
+    });
+    expect(
+      CollaborationInviteListResponseSchema.parse({
+        invites: [durableInvite],
+        nextCursor: 'opaque_cursor',
+        hasMore: true,
+      }),
+    ).not.toHaveProperty('token');
+  });
+
+  it('rejects inconsistent status, pagination, and credential fields', () => {
+    for (const value of [
+      {
+        invites: [{ ...durableInvite, status: 'revoked' }],
+        nextCursor: null,
+        hasMore: false,
+      },
+      {
+        invites: [{ ...durableInvite, token: 'secret' }],
+        nextCursor: null,
+        hasMore: false,
+      },
+      { invites: [], nextCursor: 'cursor', hasMore: true },
+      { invites: [durableInvite], nextCursor: null, hasMore: true },
+    ]) {
+      expect(CollaborationInviteListResponseSchema.safeParse(value).success).toBe(false);
+    }
+  });
+});
 
 describe('collaboration management bootstrap and owner contracts', () => {
   it('accepts strict bootstrap requests and version-bearing owner access responses', () => {
@@ -84,7 +132,10 @@ describe('collaboration management bootstrap and owner contracts', () => {
       ownerId: 'owner-1',
     });
     expect(() =>
-      CollaborationOwnerRecoverRequestSchema.parse({ ownerId: 'owner-1', force: true }),
+      CollaborationOwnerRecoverRequestSchema.parse({
+        ownerId: 'owner-1',
+        force: true,
+      }),
     ).toThrow();
   });
 
@@ -106,10 +157,15 @@ describe('collaboration management bootstrap and owner contracts', () => {
 
 describe('collaboration member management contracts', () => {
   it('parses bounded raw query strings and defaults member page size', () => {
-    expect(CollaborationMemberListQuerySchema.parse({})).toEqual({ limit: 100 });
-    expect(CollaborationMemberListQuerySchema.parse({ after: 'bWVtYmVyLTE', limit: '25' })).toEqual(
-      { after: 'bWVtYmVyLTE', limit: 25 },
-    );
+    expect(CollaborationMemberListQuerySchema.parse({})).toEqual({
+      limit: 100,
+    });
+    expect(
+      CollaborationMemberListQuerySchema.parse({
+        after: 'bWVtYmVyLTE',
+        limit: '25',
+      }),
+    ).toEqual({ after: 'bWVtYmVyLTE', limit: 25 });
     expect(() => CollaborationMemberListQuerySchema.parse({ limit: '0' })).toThrow();
     expect(() => CollaborationMemberListQuerySchema.parse({ limit: '101' })).toThrow();
     expect(() => CollaborationMemberListQuerySchema.parse({ after: 'not opaque!' })).toThrow();
@@ -131,7 +187,10 @@ describe('collaboration member management contracts', () => {
       }),
     ).toEqual({ members: [member], nextCursor: 'bWVtYmVyLTI', hasMore: true });
     expect(
-      CollaborationMemberUpdateRequestSchema.parse({ role: 'reviewer', expectedTokenVersion: 4 }),
+      CollaborationMemberUpdateRequestSchema.parse({
+        role: 'reviewer',
+        expectedTokenVersion: 4,
+      }),
     ).toEqual({ role: 'reviewer', expectedTokenVersion: 4 });
     expect(
       CollaborationMemberMutationResponseSchema.parse({
@@ -167,7 +226,10 @@ describe('collaboration member management contracts', () => {
 
   it('rejects owner assignment and absent concurrency state', () => {
     expect(() =>
-      CollaborationMemberUpdateRequestSchema.parse({ role: 'owner', expectedTokenVersion: 1 }),
+      CollaborationMemberUpdateRequestSchema.parse({
+        role: 'owner',
+        expectedTokenVersion: 1,
+      }),
     ).toThrow();
     expect(() => CollaborationMemberUpdateRequestSchema.parse({ role: 'viewer' })).toThrow();
   });
@@ -204,7 +266,10 @@ describe('collaboration member management contracts', () => {
 
 describe('collaboration audit pagination and common errors', () => {
   it('parses backward-compatible audit limits and strict paginated events', () => {
-    expect(CollaborationAuditListQuerySchema.parse({})).toEqual({ after: 0, limit: 100 });
+    expect(CollaborationAuditListQuerySchema.parse({})).toEqual({
+      after: 0,
+      limit: 100,
+    });
     expect(CollaborationAuditListQuerySchema.parse({ after: '41', limit: '500' })).toEqual({
       after: 41,
       limit: 500,
@@ -321,12 +386,20 @@ describe('collaboration audit pagination and common errors', () => {
     });
     expect(() =>
       CollaborationManagementErrorResponseSchema.parse({
-        error: { code: 'rate-limited', message: 'Retry.', retryAfterSeconds: 0 },
+        error: {
+          code: 'rate-limited',
+          message: 'Retry.',
+          retryAfterSeconds: 0,
+        },
       }),
     ).toThrow();
     expect(() =>
       CollaborationManagementErrorResponseSchema.parse({
-        error: { code: 'unauthorized', message: 'Denied.', accessToken: 'secret' },
+        error: {
+          code: 'unauthorized',
+          message: 'Denied.',
+          accessToken: 'secret',
+        },
       }),
     ).toThrow();
   });

@@ -39,6 +39,18 @@ describe('canvas selection clipboard', () => {
     });
   });
 
+  it('captures the complete nested frame closure', () => {
+    const outer = node('outer', true, { kind: 'group-frame', childNodeIds: ['inner'] });
+    const inner = node('inner', false, { kind: 'group-frame', childNodeIds: ['leaf'] });
+    const leaf = node('leaf', false);
+
+    expect(captureSelectedSubgraph([outer, inner, leaf], []).nodes.map(({ id }) => id)).toEqual([
+      'outer',
+      'inner',
+      'leaf',
+    ]);
+  });
+
   it('creates fresh unlocked nodes and remaps internal references and edges', () => {
     const first = node('first', true, {
       locked: true,

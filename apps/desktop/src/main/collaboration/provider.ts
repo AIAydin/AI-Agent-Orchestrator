@@ -3,6 +3,7 @@ import type * as Y from 'yjs';
 import { Awareness } from 'y-protocols/awareness';
 
 import type { CollaborationAwarenessState } from '../../shared/collaboration/index.js';
+import type { CollaborationTransportEffectAuthorizer } from './transport-effects.js';
 
 export type CollaborationProviderStatus = 'connecting' | 'connected' | 'disconnected';
 
@@ -23,6 +24,7 @@ export interface CollaborationProviderFactoryInput extends CollaborationProvider
   readonly accessToken: string;
   readonly reconnect: boolean;
   readonly initialAwareness: CollaborationAwarenessState;
+  readonly authorizeTransportEffect: CollaborationTransportEffectAuthorizer;
 }
 
 export interface CollaborationProviderHandle {
@@ -46,12 +48,26 @@ export const createHocuspocusCollaborationProvider: CollaborationProviderFactory
   const awareness = new Awareness(input.document);
   awareness.setLocalState(input.initialAwareness);
   let provider: HocuspocusProvider | undefined;
+  let connectionAttempt = 0;
   provider = new HocuspocusProvider({
     name: input.roomId,
     url: input.serverUrl,
     document: input.document,
     awareness,
     token: input.accessToken,
+    onOpen: () => {
+      const phase = connectionAttempt === 0 ? 'initial' : 'reconnect';
+      const attempt = connectionAttempt;
+      // Hocuspocus calls onOpen synchronously before authentication, SyncStepOne, and the initial
+      // awareness message. Throwing here therefore fails closed before either automatic send.
+      input.authorizeTransportEffect({
+        kind: 'document-sync',
+        phase,
+        connectionAttempt: attempt,
+      });
+      input.authorizeTransportEffect({ kind: 'awareness', phase, connectionAttempt: attempt });
+      connectionAttempt += 1;
+    },
     onAuthenticated: () => input.onAuthenticated(),
     onAuthenticationFailed: () => input.onAuthenticationFailed(),
     onStatus: ({ status }) => {

@@ -327,7 +327,15 @@ export interface ArchiveWorktreeApproval extends ApprovalBase<'archive-worktree'
   readonly dirtyPaths: readonly string[];
 }
 
-export type InProgressGitOperation = 'merge' | 'rebase' | 'cherry-pick';
+export interface RestoreArchivedWorktreeApproval extends ApprovalBase<'restore-archived-worktree'> {
+  readonly worktreeId: string;
+  readonly worktreePath: string;
+  readonly branch: string;
+  readonly expectedBranchOid: string | null;
+  readonly dirtyPaths: readonly string[];
+}
+
+export type InProgressGitOperation = 'merge' | 'rebase' | 'cherry-pick' | 'squash';
 
 export interface GitContinuationState {
   readonly repositoryRoot: string;
@@ -430,6 +438,7 @@ export type GitApproval =
   | DiscardHunksApproval
   | RenameManagedBranchApproval
   | ArchiveWorktreeApproval
+  | RestoreArchivedWorktreeApproval
   | ContinueGitOperationApproval
   | AbortGitOperationApproval
   | CreateGitHubPullRequestApproval;

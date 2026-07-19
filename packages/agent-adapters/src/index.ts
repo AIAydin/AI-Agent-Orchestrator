@@ -9,6 +9,7 @@ export {
   prepareAgentLaunch,
   prepareAgentResume,
   type AgentSession,
+  type AgentExecutableProbe,
   type AgentExecutableLocationOptions,
 } from './adapter.js';
 export {

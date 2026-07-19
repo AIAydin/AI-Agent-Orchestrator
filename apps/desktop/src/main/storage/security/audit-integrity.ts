@@ -11,6 +11,11 @@ BEFORE UPDATE ON audit_events
 BEGIN
   SELECT RAISE(ABORT, 'audit events are immutable');
 END`;
+const AUDIT_DELETE_TRIGGER = `CREATE TRIGGER audit_events_no_delete
+BEFORE DELETE ON audit_events
+BEGIN
+  SELECT RAISE(ABORT, 'audit events are append-only');
+END`;
 const AUDIT_INSERT_TRIGGER = `CREATE TRIGGER audit_events_valid_insert
 BEFORE INSERT ON audit_events
 WHEN NEW.previous_hash IS NULL OR length(NEW.previous_hash) != 64
@@ -23,12 +28,26 @@ BEFORE UPDATE ON audit_chain_checkpoints
 BEGIN
   SELECT RAISE(ABORT, 'audit checkpoints are immutable');
 END`;
+const CHECKPOINT_DELETE_TRIGGER = `CREATE TRIGGER audit_checkpoints_no_delete
+BEFORE DELETE ON audit_chain_checkpoints
+BEGIN
+  SELECT RAISE(ABORT, 'audit checkpoints are append-only');
+END`;
 
 const REQUIRED_TRIGGERS = new Map([
   ['audit_events_no_update', AUDIT_UPDATE_TRIGGER],
+  ['audit_events_no_delete', AUDIT_DELETE_TRIGGER],
   ['audit_events_valid_insert', AUDIT_INSERT_TRIGGER],
   ['audit_checkpoints_no_update', CHECKPOINT_UPDATE_TRIGGER],
+  ['audit_checkpoints_no_delete', CHECKPOINT_DELETE_TRIGGER],
 ]);
+
+const CONTROLLED_DELETE_TRIGGERS = [
+  ['audit_events_no_delete', AUDIT_DELETE_TRIGGER],
+  ['audit_checkpoints_no_delete', CHECKPOINT_DELETE_TRIGGER],
+] as const;
+const deleteAuthority = new WeakSet<DatabaseSync>();
+const installedDeleteAuthorities = new WeakSet<DatabaseSync>();
 
 interface AuditIntegrityRow {
   readonly sequence: number;
@@ -66,6 +85,7 @@ export function initializeAuditIntegrity(database: DatabaseSync, now = new Date(
   if (state !== undefined) {
     const messages = triggerIntegrityMessages(database);
     if (messages.length > 0) throw new Error(messages.join('; '));
+    registerControlledAuditDeletion(database);
     return;
   }
   if (installed.some((name) => REQUIRED_TRIGGERS.has(name))) {
@@ -103,6 +123,7 @@ export function initializeAuditIntegrity(database: DatabaseSync, now = new Date(
       .run(initializedAt, lastSequence, previousHash);
     for (const sql of REQUIRED_TRIGGERS.values()) database.exec(`${sql};`);
   });
+  registerControlledAuditDeletion(database);
 }
 
 export function appendChainedAudit(
@@ -189,9 +210,9 @@ export function pruneAuditPrefix(database: DatabaseSync, cutoff: string, now = n
         previousCheckpointHash,
         checkpointHash,
       );
-    const deleted = database
-      .prepare('DELETE FROM audit_events WHERE sequence <= ?')
-      .run(last.sequence);
+    const deleted = withControlledAuditDeletion(database, () =>
+      database.prepare('DELETE FROM audit_events WHERE sequence <= ?').run(last.sequence),
+    );
     if (Number(deleted.changes) !== prefix.length) {
       throw new Error('Audit retention did not delete the verified contiguous prefix.');
     }
@@ -204,10 +225,15 @@ export function pruneAuditPrefix(database: DatabaseSync, cutoff: string, now = n
 
 /** Explicit privacy/replace reset. Ordinary retention must use pruneAuditPrefix instead. */
 export function resetAuditChain(database: DatabaseSync, now = new Date()): void {
+  // Privacy/import cleanup is also used by migration-level storage consumers. Bring a valid
+  // migrated connection under the same trigger and controlled-delete boundary before resetting.
+  initializeAuditIntegrity(database, now);
   const initializedAt = validTimestamp(now, 'Audit reset time');
   withSavepoint(database, () => {
-    database.prepare('DELETE FROM audit_events').run();
-    database.prepare('DELETE FROM audit_chain_checkpoints').run();
+    withControlledAuditDeletion(database, () => {
+      database.prepare('DELETE FROM audit_events').run();
+      database.prepare('DELETE FROM audit_chain_checkpoints').run();
+    });
     database
       .prepare(
         `INSERT INTO audit_chain_state(
@@ -436,10 +462,11 @@ function hashFields(domain: string, fields: readonly string[]): string {
 }
 
 function triggerIntegrityMessages(database: DatabaseSync): string[] {
+  const placeholders = [...REQUIRED_TRIGGERS].map(() => '?').join(', ');
   const rows = database
     .prepare(
       `SELECT name, sql FROM sqlite_schema
-       WHERE type = 'trigger' AND name IN (?, ?, ?)`,
+       WHERE type = 'trigger' AND name IN (${placeholders})`,
     )
     .all(...REQUIRED_TRIGGERS.keys()) as unknown as Array<{ name: string; sql: string | null }>;
   const actual = new Map(rows.map((row) => [row.name, normalizeSql(row.sql ?? '')]));
@@ -449,6 +476,28 @@ function triggerIntegrityMessages(database: DatabaseSync): string[] {
       messages.push(`Required audit trigger ${name} is missing or changed.`);
   }
   return messages;
+}
+
+/** Retention and an explicit privacy reset are the only production delete authorities. */
+function withControlledAuditDeletion<T>(database: DatabaseSync, operation: () => T): T {
+  if (!installedDeleteAuthorities.has(database)) {
+    throw new Error('Audit deletion authority is not installed for this database connection.');
+  }
+  if (deleteAuthority.has(database)) throw new Error('Audit deletion authority cannot be nested.');
+  deleteAuthority.add(database);
+  try {
+    for (const [name] of CONTROLLED_DELETE_TRIGGERS) database.exec(`DROP TRIGGER ${name};`);
+    const result = operation();
+    for (const [, sql] of CONTROLLED_DELETE_TRIGGERS) database.exec(`${sql};`);
+    return result;
+  } finally {
+    deleteAuthority.delete(database);
+  }
+}
+
+/** Registers the privately owned connection for the two controlled deletion operations. */
+function registerControlledAuditDeletion(database: DatabaseSync): void {
+  installedDeleteAuthorities.add(database);
 }
 
 function installedTriggerNames(database: DatabaseSync): string[] {

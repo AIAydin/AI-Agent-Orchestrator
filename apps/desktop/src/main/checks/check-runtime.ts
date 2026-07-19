@@ -292,6 +292,16 @@ export class CheckRuntime {
         (stream, data) => this.#captureOutput(active, stream, data),
         this.#gracefulStopMs,
         this.#forceStopMs,
+        () => {
+          this.store.appendAudit('check', 'launch', 'allowed', {
+            executionId: active.view.id,
+            projectId: active.view.projectId,
+            checkId: active.view.checkId,
+            kind: active.view.kind,
+            environmentVariableNames: active.view.environmentVariableNames,
+            phase: 'authorized-before-spawn',
+          });
+        },
       );
       void active.handle.exited
         .then(async (result) => await this.#completeFromExit(active, result))
@@ -307,13 +317,6 @@ export class CheckRuntime {
         updatedAt: startedAt,
       };
       this.#persistAndEmit(active);
-      this.store.appendAudit('check', 'launch', 'allowed', {
-        executionId: active.view.id,
-        projectId: active.view.projectId,
-        checkId: active.view.checkId,
-        kind: active.view.kind,
-        environmentVariableNames: active.view.environmentVariableNames,
-      });
       return copyExecution(active.view);
     } catch (error) {
       if (active.handle !== null && !active.finalizing) {

@@ -20,7 +20,7 @@ export type GroupLayout = 'freeform' | 'horizontal' | 'vertical' | 'grid';
 export type GroupMembershipIssueCode =
   | 'duplicate-child-id'
   | 'stale-child-id'
-  | 'nested-group-frame'
+  | 'membership-cycle'
   | 'multiple-frame-membership';
 
 export interface GroupMembershipIssue {
@@ -170,9 +170,10 @@ export function validateGroupMembership(nodes: readonly WorkshopNode[]): GroupMe
 }
 
 /**
- * Removes stale, duplicate, nested-frame, and losing cross-frame claims. A child can have one frame
- * owner. When legacy frames disagree, a containing frame wins over a non-containing frame, then the
- * smallest frame wins, with the frame ID as the final stable tie-breaker.
+ * Removes stale, duplicate, cyclic, and losing cross-frame claims. Every node, including a frame,
+ * can have one frame owner. When persisted peers disagree, a containing frame wins over a
+ * non-containing frame, then the smallest frame wins, with the frame ID as the final stable
+ * tie-breaker. Cycles are cut deterministically at the lexically greatest child in each cycle.
  */
 export function reconcileGroupMembership(
   nodes: readonly WorkshopNode[],
@@ -218,21 +219,49 @@ export function reconcileGroupMembership(
   };
 }
 
-/** Moves an unlocked frame and every unlocked member by the same absolute-canvas delta. */
+/** Removes one node and reparents a removed frame's direct children to its surviving parent. */
+export function removeNodePreservingGroupHierarchy(
+  nodes: readonly WorkshopNode[],
+  nodeId: string,
+): WorkshopNode[] {
+  const reconciled = reconcileGroupMembership(nodes).nodes;
+  const removed = nodeIndex(reconciled).get(nodeId);
+  if (removed === undefined) return reconciled;
+  const parents = resolvedGroupParents(reconciled);
+  const parentId = parents.get(nodeId);
+  const directChildren = isGroupFrame(removed) ? ownedMemberIds(reconciled, nodeId) : [];
+  let survivors = reconciled.filter((node) => node.id !== nodeId);
+  if (parentId !== undefined) {
+    const parent = findFrame(survivors, parentId);
+    if (parent !== undefined) {
+      const nextChildren = uniqueSorted([
+        ...childIds(parent).filter((id) => id !== nodeId),
+        ...directChildren,
+      ]);
+      survivors = nodesWithUpdates(
+        survivors,
+        new Map([[parent.id, withChildIds(parent, nextChildren)]]),
+      );
+    }
+  }
+  return reconcileGroupMembership(survivors).nodes;
+}
+
+/** Moves an unlocked frame and every effectively unlocked descendant once in absolute coordinates. */
 export function moveGroupFrameWithMembers(
   nodes: readonly WorkshopNode[],
   frameId: string,
   nextPosition: { readonly x: number; readonly y: number },
 ): MoveGroupFrameResult {
   const frame = findFrame(nodes, frameId);
-  const memberIds = frame === undefined ? [] : ownedMemberIds(nodes, frameId);
+  const memberIds = frame === undefined ? [] : descendantIds(nodes, frameId);
   const base = {
     nodes: nodes.slice(),
     frameId,
     delta: { x: 0, y: 0 },
     memberIds,
     movedMemberIds: [] as readonly string[],
-    preservedLockedMemberIds: lockedIds(nodes, memberIds),
+    preservedLockedMemberIds: effectivelyLockedIds(nodes, memberIds),
     changedNodeIds: [] as readonly string[],
   };
   if (frame === undefined) {
@@ -272,10 +301,11 @@ export function moveGroupFrameWithMembers(
   ]);
   const movedMemberIds: string[] = [];
   const preservedLockedMemberIds: string[] = [];
+  const locked = effectiveLockSet(nodes);
   for (const memberId of memberIds) {
     const member = membersById.get(memberId);
-    if (member === undefined || isGroupFrame(member)) continue;
-    if (member.data.locked) {
+    if (member === undefined) continue;
+    if (locked.has(member.id)) {
       preservedLockedMemberIds.push(member.id);
       continue;
     }
@@ -303,9 +333,9 @@ export function moveGroupFrameWithMembers(
 }
 
 /**
- * Reassigns a dragged ordinary node from its final absolute bounds. Locked and collapsed frames do
- * not receive nodes. If visible frames overlap, the smallest fully containing unlocked frame wins
- * deterministically.
+ * Reassigns a dragged node from its final absolute bounds. Locked/collapsed frames and descendants
+ * of a dragged frame cannot receive it. If visible frames overlap, the smallest safe containing
+ * frame wins deterministically.
  */
 export function assignDraggedNodeToContainingFrame(
   nodes: readonly WorkshopNode[],
@@ -328,11 +358,21 @@ export function assignDraggedNodeToContainingFrame(
     changedNodeIds: [],
   });
   if (node === undefined) return rejected('dragged-node-not-found');
-  if (isGroupFrame(node)) return rejected('nested-group-frames-are-not-supported');
-  if (node.data.locked) return rejected('dragged-node-locked');
+  if (effectiveLockSet(nodes).has(node.id)) return rejected('dragged-node-locked');
+
+  const forbiddenOwners = isGroupFrame(node)
+    ? new Set([node.id, ...descendantIds(nodes, node.id)])
+    : new Set<string>();
 
   const candidateFrames = groupFrames(nodes)
-    .filter((frame) => !frame.data.locked && !frame.data.collapsed && containsNode(frame, node))
+    .filter(
+      (frame) =>
+        !effectiveLockSet(nodes).has(frame.id) &&
+        !hasCollapsedAncestor(nodes, frame.id) &&
+        !frame.data.collapsed &&
+        !forbiddenOwners.has(frame.id) &&
+        containsNode(frame, node),
+    )
     .sort(compareFramePriority);
   const assignedFrameId = candidateFrames[0]?.id ?? null;
   const updates = new Map<string, WorkshopNode>();
@@ -381,7 +421,7 @@ export function assignDraggedNodeToContainingFrame(
   };
 }
 
-/** Fits an unlocked frame to the absolute union of all resolved members, including locked members. */
+/** Fits an unlocked frame to the absolute union of all direct members, including nested frames. */
 export function fitGroupFrameToMembers(
   nodes: readonly WorkshopNode[],
   frameId: string,
@@ -403,7 +443,7 @@ export function fitGroupFrameToMembers(
       reason: 'group-frame-not-found',
     };
   }
-  if (frame.data.locked) {
+  if (effectiveLockSet(nodes).has(frame.id)) {
     return { ...base, disposition: 'rejected', reason: 'group-frame-locked' };
   }
   const members = nodesForIds(nodes, memberIds);
@@ -458,7 +498,7 @@ export function fitGroupFrameToMembers(
   };
 }
 
-/** Arranges resolved members in stable ID order while leaving every locked member byte-for-byte. */
+/** Arranges direct members and carries nested descendants by the exact direct-frame delta. */
 export function arrangeGroupMembers(
   nodes: readonly WorkshopNode[],
   frameId: string,
@@ -484,7 +524,8 @@ export function arrangeGroupMembers(
       reason: 'group-frame-not-found',
     };
   }
-  if (frame.data.locked) {
+  const lockSet = effectiveLockSet(nodes);
+  if (lockSet.has(frame.id)) {
     return {
       ...emptyBase,
       disposition: 'rejected',
@@ -517,7 +558,7 @@ export function arrangeGroupMembers(
   const preservedLockedMemberIds: string[] = [];
   for (const member of members) {
     const target = targets.get(member.id) ?? member.position;
-    const locked = member.data.locked;
+    const locked = lockSet.has(member.id);
     const changed = member.position.x !== target.x || member.position.y !== target.y;
     const applied = !locked && changed;
     placements.push({
@@ -530,7 +571,19 @@ export function arrangeGroupMembers(
     if (locked) {
       preservedLockedMemberIds.push(member.id);
     } else if (changed) {
-      updates.set(member.id, { ...member, position: { ...target } });
+      const delta = { x: target.x - member.position.x, y: target.y - member.position.y };
+      for (const movedId of [
+        member.id,
+        ...(isGroupFrame(member) ? descendantIds(nodes, member.id) : []),
+      ]) {
+        if (lockSet.has(movedId)) continue;
+        const moved = updates.get(movedId) ?? nodeIndex(nodes).get(movedId);
+        if (moved === undefined) continue;
+        updates.set(movedId, {
+          ...moved,
+          position: { x: moved.position.x + delta.x, y: moved.position.y + delta.y },
+        });
+      }
       movedMemberIds.push(member.id);
     }
   }
@@ -583,12 +636,8 @@ function analyzeMembership(nodes: readonly WorkshopNode[]): MembershipAnalysis {
         issues.push({ code: 'stale-child-id', childId, frameIds: [frame.id] });
         continue;
       }
-      if (isGroupFrame(child)) {
-        issues.push({
-          code: 'nested-group-frame',
-          childId,
-          frameIds: [frame.id],
-        });
+      if (childId === frame.id) {
+        issues.push({ code: 'membership-cycle', childId, frameIds: [frame.id] });
         continue;
       }
       const claims = validClaims.get(childId) ?? [];
@@ -614,6 +663,14 @@ function analyzeMembership(nodes: readonly WorkshopNode[]): MembershipAnalysis {
         frameIds: claims.map((frame) => frame.id).sort(compareIds),
       });
     }
+  }
+
+  while (true) {
+    const cycle = findMembershipCycle(ownerByChild, byId);
+    if (cycle.length === 0) break;
+    const childId = [...cycle].sort(compareIds).at(-1)!;
+    ownerByChild.delete(childId);
+    issues.push({ code: 'membership-cycle', childId, frameIds: uniqueSorted(cycle) });
   }
 
   const memberships = sorted(ownerByChild.keys()).map((childId) => ({
@@ -717,19 +774,90 @@ function ownedMemberIds(nodes: readonly WorkshopNode[], frameId: string): string
     .sort(compareIds);
 }
 
+/** Returns all descendants in stable pre-order; corrupt cycles are removed by reconciliation. */
+export function descendantIds(nodes: readonly WorkshopNode[], frameId: string): string[] {
+  const memberships = analyzeMembership(nodes).memberships;
+  const children = new Map<string, string[]>();
+  for (const membership of memberships) {
+    const values = children.get(membership.frameId) ?? [];
+    values.push(membership.childId);
+    children.set(membership.frameId, values);
+  }
+  const result: string[] = [];
+  const visit = (id: string) => {
+    for (const childId of (children.get(id) ?? []).sort(compareIds)) {
+      result.push(childId);
+      const child = nodeIndex(nodes).get(childId);
+      if (child !== undefined && isGroupFrame(child)) visit(childId);
+    }
+  };
+  visit(frameId);
+  return result;
+}
+
+/** Returns the deterministic direct parent of each node after cycle reconciliation. */
+export function resolvedGroupParents(nodes: readonly WorkshopNode[]): ReadonlyMap<string, string> {
+  return new Map(
+    analyzeMembership(nodes).memberships.map(({ childId, frameId }) => [childId, frameId]),
+  );
+}
+
 function nodesForIds(nodes: readonly WorkshopNode[], ids: readonly string[]): WorkshopNode[] {
   const byId = nodeIndex(nodes);
   return ids
     .map((id) => byId.get(id))
-    .filter((node): node is WorkshopNode => node !== undefined && !isGroupFrame(node))
+    .filter((node): node is WorkshopNode => node !== undefined)
     .sort((left, right) => compareIds(left.id, right.id));
 }
 
 function lockedIds(nodes: readonly WorkshopNode[], ids: readonly string[]): string[] {
-  return nodesForIds(nodes, ids)
-    .filter((node) => node.data.locked)
-    .map((node) => node.id)
-    .sort(compareIds);
+  return effectivelyLockedIds(nodes, ids);
+}
+
+function effectivelyLockedIds(nodes: readonly WorkshopNode[], ids: readonly string[]): string[] {
+  const locked = effectiveLockSet(nodes);
+  return ids.filter((id) => locked.has(id)).sort(compareIds);
+}
+
+function effectiveLockSet(nodes: readonly WorkshopNode[]): Set<string> {
+  const locked = new Set(nodes.filter((node) => node.data.locked).map(({ id }) => id));
+  for (const frame of groupFrames(nodes)) {
+    if (!locked.has(frame.id)) continue;
+    for (const id of descendantIds(nodes, frame.id)) locked.add(id);
+  }
+  return locked;
+}
+
+function hasCollapsedAncestor(nodes: readonly WorkshopNode[], nodeId: string): boolean {
+  const parents = resolvedGroupParents(nodes);
+  const byId = nodeIndex(nodes);
+  let current = parents.get(nodeId);
+  while (current !== undefined) {
+    if (byId.get(current)?.data.collapsed === true) return true;
+    current = parents.get(current);
+  }
+  return false;
+}
+
+function findMembershipCycle(
+  owners: ReadonlyMap<string, string>,
+  byId: ReadonlyMap<string, WorkshopNode>,
+): string[] {
+  for (const start of sorted(owners.keys())) {
+    const path: string[] = [];
+    const index = new Map<string, number>();
+    let current: string | undefined = start;
+    while (current !== undefined) {
+      const currentNode = byId.get(current);
+      if (currentNode === undefined || !isGroupFrame(currentNode)) break;
+      const existing = index.get(current);
+      if (existing !== undefined) return path.slice(existing);
+      index.set(current, path.length);
+      path.push(current);
+      current = owners.get(current);
+    }
+  }
+  return [];
 }
 
 function groupFrames(nodes: readonly WorkshopNode[]): WorkshopNode[] {

@@ -24,6 +24,11 @@ describe('CommandPalette accessibility', () => {
     );
 
     const query = screen.getByRole('combobox', { name: 'Search actions' });
+    const close = screen.getByRole('button', { name: 'Close' });
+    const closeTooltip = screen.getByRole('tooltip', {
+      name: 'Close the command palette',
+    });
+    expect(close.getAttribute('aria-describedby')).toBe(closeTooltip.id);
     const options = screen.getAllByRole('option');
     expect(query.getAttribute('name')).toBe('command-palette-query');
     expect(query.getAttribute('aria-controls')).toBe('command-palette-results');
@@ -41,5 +46,27 @@ describe('CommandPalette accessibility', () => {
     expect(runs[2]).toHaveBeenCalledTimes(1);
     expect(runs[0]).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces an empty filtered result without inventing an active option', () => {
+    render(
+      <CommandPalette
+        actions={[
+          {
+            id: 'settings',
+            label: 'Open settings',
+            section: 'Application',
+            run: vi.fn(),
+          },
+        ]}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const query = screen.getByRole('combobox', { name: 'Search actions' });
+    fireEvent.change(query, { target: { value: 'not a real command' } });
+    expect(screen.getByRole('status').textContent).toBe('No actions match your search.');
+    expect(query.hasAttribute('aria-activedescendant')).toBe(false);
+    expect(screen.queryByRole('option')).toBeNull();
   });
 });

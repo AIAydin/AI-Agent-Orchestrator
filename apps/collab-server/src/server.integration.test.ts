@@ -406,14 +406,18 @@ describe('optional collaboration service', () => {
       body: JSON.stringify({ role: 'viewer', expiresInSeconds: 600, maxUses: 1 }),
     });
     const unusedInvite = InviteResponseSchema.parse(unusedInviteResponse.body).invite;
-    expect(
-      (
-        await requestJson(address, `/v1/rooms/launch-room/invites/${unusedInvite.id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${ownerToken}` },
-        })
-      ).status,
-    ).toBe(204);
+    const revokeResponse = await requestJson(
+      address,
+      `/v1/rooms/launch-room/invites/${unusedInvite.id}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${ownerToken}` },
+      },
+    );
+    expect(revokeResponse.status).toBe(200);
+    expect(revokeResponse.body).toMatchObject({
+      invite: { id: unusedInvite.id, status: 'revoked' },
+    });
     expect(
       (
         await requestJson(address, '/v1/invites/redeem', {

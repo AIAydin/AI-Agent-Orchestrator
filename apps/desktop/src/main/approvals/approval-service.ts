@@ -23,9 +23,16 @@ import {
   type ApprovalStatus,
   type ApprovalView,
 } from '../../shared/approvals/contracts.js';
+import type { TransactionalAuditEvent } from '../storage.js';
 
 export interface ApprovalStore {
-  saveApproval(record: ApprovalRecord): ApprovalRecord;
+  appendAudit(
+    category: string,
+    action: string,
+    outcome: 'allowed' | 'denied' | 'failed',
+    metadata: Record<string, unknown>,
+  ): void;
+  saveApprovalWithAudit(record: ApprovalRecord, audit: TransactionalAuditEvent): ApprovalRecord;
   getApproval(approvalId: string): ApprovalRecord | undefined;
   listApprovals(input: {
     readonly projectId?: string;
@@ -33,12 +40,17 @@ export interface ApprovalStore {
     readonly limit: number;
   }): ApprovalRecord[];
   findApprovalsByScope(scope: ApprovalRecord['scope']): ApprovalRecord[];
-  consumeApproval(
+  consumeApprovalWithAudit(
     approvalId: string,
     expectedScope: ApprovalRecord['scope'],
     consumedAt: Date,
+    audit: TransactionalAuditEvent,
   ): ApprovalRecord;
-  revokeApproval(approvalId: string, revokedAt: Date): ApprovalRecord;
+  revokeApprovalWithAudit(
+    approvalId: string,
+    revokedAt: Date,
+    audit: TransactionalAuditEvent,
+  ): ApprovalRecord;
 }
 
 export class ApprovalService {
@@ -64,18 +76,36 @@ export class ApprovalService {
       expiresAt: input.expiresAt,
       singleUse: input.singleUse,
     });
-    return this.#view(this.store.saveApproval(record), createdAt);
+    return this.#view(
+      this.store.saveApprovalWithAudit(
+        record,
+        approvalAudit('saved-approval-grant', record, {
+          outcome: record.decision === 'approved' ? 'allowed' : 'denied',
+          occurredAt: createdAt,
+        }),
+      ),
+      createdAt,
+    );
   }
 
   public authorize(inputValue: ApprovalAuthorizationInput): ApprovalRecord {
     const input = ApprovalAuthorizationInputSchema.parse(inputValue);
     const now = this.#validNow();
     const record = this.store.getApproval(input.approvalId);
-    if (record === undefined) throw new Error('The scoped approval does not exist.');
+    if (record === undefined) {
+      this.#denyAuthorization(input, now, 'approval-not-found');
+      throw new Error('The scoped approval does not exist.');
+    }
     if (!isApprovalActive(record, input.scope, now)) {
+      this.#denyAuthorization(input, now, inactiveReasonCode(record, input.scope, now));
       throw new Error(this.#inactiveReason(record, input.scope, now));
     }
-    return record.singleUse ? this.store.consumeApproval(record.id, input.scope, now) : record;
+    return this.store.consumeApprovalWithAudit(
+      record.id,
+      input.scope,
+      now,
+      approvalAudit('saved-approval-use', record, { occurredAt: now }),
+    );
   }
 
   /** Trusted exact-scope lookup. The renderer never selects an approval identity. */
@@ -92,12 +122,25 @@ export class ApprovalService {
     const now = this.#validNow();
     const current = this.store.getApproval(input.approvalId);
     if (current === undefined || current.scope.projectId !== input.projectId) {
+      this.#denyRevocation(input, now, 'approval-not-found-or-cross-project');
       throw new Error('The scoped approval does not exist for this project.');
     }
-    if (current.decision !== 'approved')
+    if (current.decision !== 'approved') {
+      this.#denyRevocation(input, now, 'denied-decision');
       throw new Error('A denied decision is not an active grant.');
-    if (current.revokedAt !== undefined) throw new Error('The scoped approval is already revoked.');
-    return this.#view(this.store.revokeApproval(current.id, now), now);
+    }
+    if (current.revokedAt !== undefined) {
+      this.#denyRevocation(input, now, 'already-revoked');
+      throw new Error('The scoped approval is already revoked.');
+    }
+    return this.#view(
+      this.store.revokeApprovalWithAudit(
+        current.id,
+        now,
+        approvalAudit('saved-approval-revoke', current, { occurredAt: now }),
+      ),
+      now,
+    );
   }
 
   public list(inputValue: ApprovalListInput = {}): ApprovalView[] {
@@ -140,6 +183,71 @@ export class ApprovalService {
     const status = approvalStatus(record, now);
     return `The scoped approval is ${status} and cannot authorize this action.`;
   }
+
+  #denyAuthorization(input: ApprovalAuthorizationInput, occurredAt: Date, reason: string): void {
+    this.store.appendAudit('permission', 'saved-approval-use', 'denied', {
+      approvalId: input.approvalId,
+      projectId: input.scope.projectId,
+      action: input.scope.action,
+      resourceFingerprint: input.scope.resourceFingerprint,
+      ...(input.scope.agentId === undefined ? {} : { agentId: input.scope.agentId }),
+      ...(input.scope.runId === undefined ? {} : { runId: input.scope.runId }),
+      occurredAt: occurredAt.toISOString(),
+      reason,
+    });
+  }
+
+  #denyRevocation(input: ApprovalRevocationInput, occurredAt: Date, reason: string): void {
+    this.store.appendAudit('permission', 'saved-approval-revoke', 'denied', {
+      approvalId: input.approvalId,
+      projectId: input.projectId,
+      occurredAt: occurredAt.toISOString(),
+      reason,
+    });
+  }
+}
+
+function inactiveReasonCode(
+  record: ApprovalRecord,
+  expectedScope: ApprovalRecord['scope'],
+  now: Date,
+): string {
+  if (
+    record.scope.projectId !== expectedScope.projectId ||
+    record.scope.action !== expectedScope.action ||
+    record.scope.resourceFingerprint !== expectedScope.resourceFingerprint ||
+    record.scope.agentId !== expectedScope.agentId ||
+    record.scope.runId !== expectedScope.runId
+  ) {
+    return 'scope-mismatch';
+  }
+  return approvalStatus(record, now);
+}
+
+function approvalAudit(
+  action: 'saved-approval-grant' | 'saved-approval-use' | 'saved-approval-revoke',
+  record: ApprovalRecord,
+  input: {
+    readonly occurredAt: Date;
+    readonly outcome?: 'allowed' | 'denied';
+  },
+): TransactionalAuditEvent {
+  return {
+    category: 'permission',
+    action,
+    outcome: input.outcome ?? 'allowed',
+    occurredAt: input.occurredAt,
+    metadata: {
+      approvalId: record.id,
+      projectId: record.scope.projectId,
+      action: record.scope.action,
+      resourceFingerprint: record.scope.resourceFingerprint,
+      ...(record.scope.agentId === undefined ? {} : { agentId: record.scope.agentId }),
+      ...(record.scope.runId === undefined ? {} : { runId: record.scope.runId }),
+      expiresAt: record.expiresAt,
+      singleUse: record.singleUse,
+    },
+  };
 }
 
 export function approvalStatus(record: ApprovalRecord, now = new Date()): ApprovalStatus {

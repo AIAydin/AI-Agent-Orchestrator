@@ -19,6 +19,7 @@ import type {
   InstalledExtensionView,
 } from '../../../../shared/application/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 import './ExtensionSettings.css';
 
@@ -99,7 +100,10 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
     if (plan === null || !reviewed) return;
     await perform(async () => {
       const next = unwrap(
-        await window.forgeboard.extensions.approve({ planId: plan.planId, confirmed: true }),
+        await window.forgeboard.extensions.approve({
+          planId: plan.planId,
+          confirmed: true,
+        }),
       );
       setDiscovery(next);
       setPlan(null);
@@ -184,7 +188,9 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
             </div>
           )}
           {discovery === null && !error ? (
-            <div className="extension-empty">Loading extensions…</div>
+            <div className="extension-empty" role="status">
+              Loading extensions…
+            </div>
           ) : (
             discovery && (
               <>
@@ -193,7 +199,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                   <code>{discovery.registryPath}</code>
                 </div>
                 {discovery.installed.length === 0 ? (
-                  <div className="extension-empty">
+                  <div className="extension-empty" role="status">
                     <PackagePlus size={21} />
                     <strong>No extensions installed yet</strong>
                     <span>Choose an extension folder you downloaded to review and install it.</span>
@@ -350,18 +356,24 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 </h2>
                 <p>This approval applies only to the exact version and permissions shown below.</p>
               </div>
-              <button
-                className="icon-button"
-                type="button"
-                disabled={busy}
-                aria-label="Cancel extension review"
-                onClick={() => {
-                  setPlan(null);
-                  setReviewed(false);
-                }}
+              <WorkspaceTooltip
+                content={
+                  busy ? 'Wait for the extension action to finish' : 'Cancel extension review'
+                }
               >
-                <X size={17} />
-              </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  disabled={busy}
+                  aria-label="Cancel extension review"
+                  onClick={() => {
+                    setPlan(null);
+                    setReviewed(false);
+                  }}
+                >
+                  <X size={17} aria-hidden="true" />
+                </button>
+              </WorkspaceTooltip>
             </header>
             <div className="extension-review-content">
               <div className="extension-plan-title">
@@ -487,7 +499,8 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 <h2 id="extension-remove-title">Remove {removeTarget.manifest.name}?</h2>
                 <p>
                   This removes the extension from Forgeboard. The folder you originally downloaded
-                  stays on this device.
+                  stays on this device. Continuing opens a final system confirmation with Cancel
+                  pre-selected.
                 </p>
               </div>
             </header>
@@ -521,7 +534,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 disabled={busy || removePhrase !== removeTarget.manifest.id}
                 onClick={() => void remove()}
               >
-                <Trash2 size={15} /> Remove extension
+                <Trash2 size={15} /> Continue to confirmation
               </button>
             </footer>
           </section>

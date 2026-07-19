@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Command, CornerDownLeft, Search, X } from 'lucide-react';
 
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
+
 interface PaletteAction {
   id: string;
   label: string;
@@ -89,9 +91,11 @@ export function CommandPalette({
               }
             }}
           />
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
-            <X size={16} />
-          </button>
+          <WorkspaceTooltip content="Close the command palette">
+            <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
+              <X size={16} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
         </header>
         <div id="command-palette-results" className="palette-results" role="listbox">
           {filtered.map((action, index) => (
@@ -120,7 +124,11 @@ export function CommandPalette({
               <CornerDownLeft className="enter-icon" size={13} />
             </button>
           ))}
-          {filtered.length === 0 && <p>No actions match your search.</p>}
+          {filtered.length === 0 && (
+            <p role="status" aria-live="polite">
+              No actions match your search.
+            </p>
+          )}
         </div>
         <footer>
           <span>

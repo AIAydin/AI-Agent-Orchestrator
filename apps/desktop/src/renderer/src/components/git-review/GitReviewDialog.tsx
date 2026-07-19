@@ -1,6 +1,7 @@
 import {
   CheckCircle2,
   CircleDashed,
+  ExternalLink,
   GitCompareArrows,
   LoaderCircle,
   RefreshCw,
@@ -8,6 +9,9 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+
+import { unwrap } from '../../lib/ipc.js';
+import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 import type { CheckId } from '../../../../shared/checks/contracts.js';
 import type {
@@ -19,9 +23,15 @@ import type {
   GitShippingPlanView,
   GitShippingResultView,
   GitShippingStrategy,
+  GitConflictRecoveryStateView,
 } from '../../../../shared/git/shipping-contracts.js';
-import type { GitWorktreeCleanupPlanView } from '../../../../shared/git/lifecycle/contracts.js';
+import type {
+  GitWorktreeArchivePlanView,
+  GitWorktreeCleanupPlanView,
+  GitWorktreeRenamePlanView,
+} from '../../../../shared/git/lifecycle/contracts.js';
 import { GitBaseComparisonPanel } from './GitBaseComparisonPanel.js';
+import { GitAgentComparisonPanel } from './comparison/GitAgentComparisonPanel.js';
 import { GitCommitDisclosure, GitDiscardDisclosure } from './actions/GitActionDisclosure.js';
 import { GitCommitPanel } from './actions/GitCommitPanel.js';
 import { GitDiffViewer, type GitDiffDisplayPreferences } from './diff/GitDiffViewer.js';
@@ -37,6 +47,7 @@ import { GitReviewSummary } from './GitReviewSummary.js';
 import { GitWorktreeCleanupDisclosure } from './lifecycle/GitWorktreeCleanupDisclosure.js';
 import { GitWorktreeCleanupPanel } from './lifecycle/GitWorktreeCleanupPanel.js';
 import { useGitWorktreeCleanup } from './lifecycle/useGitWorktreeCleanup.js';
+import { GitWorktreeMetadataPanel } from './lifecycle/GitWorktreeMetadataPanel.js';
 import { GitDeliveryReadinessPanel } from './readiness/GitDeliveryReadinessPanel.js';
 import {
   useGitDeliveryReadiness,
@@ -54,6 +65,7 @@ import {
 import { useGitReview } from './useGitReview.js';
 import { GitShippingDisclosure } from './shipping/GitShippingDisclosure.js';
 import { GitShippingPanel } from './shipping/GitShippingPanel.js';
+import { GitConflictRecoveryPanel } from './shipping/GitConflictRecoveryPanel.js';
 
 export interface GitReviewDialogProps {
   target: GitTargetInput;
@@ -94,7 +106,11 @@ export function GitReviewDialog({
   );
   const deliveryReadiness = useGitDeliveryReadiness(
     target.kind === 'agent-worktree'
-      ? { kind: 'agent-worktree', projectId: target.projectId, runId: target.runId }
+      ? {
+          kind: 'agent-worktree',
+          projectId: target.projectId,
+          runId: target.runId,
+        }
       : null,
   );
   const reviewNotes = useGitReviewNotes(target, controller.review?.refreshedAt ?? null, onError);
@@ -103,8 +119,13 @@ export function GitReviewDialog({
   const [commitPlan, setCommitPlan] = useState<GitCommitPlanView | null>(null);
   const [shippingPlan, setShippingPlan] = useState<GitShippingPlanView | null>(null);
   const [shippingResult, setShippingResult] = useState<GitShippingResultView | null>(null);
+  const [recoveryState, setRecoveryState] = useState<GitConflictRecoveryStateView | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<GitWorktreeCleanupPlanView | null>(null);
+  const [renamePlan, setRenamePlan] = useState<GitWorktreeRenamePlanView | null>(null);
+  const [archivePlan, setArchivePlan] = useState<GitWorktreeArchivePlanView | null>(null);
+  const [metadataBusy, setMetadataBusy] = useState(false);
   const [notice, setNotice] = useState<GitReviewNotice | null>(null);
+  const [externalOpenBusy, setExternalOpenBusy] = useState(false);
   const [reviewMode, setReviewMode] = useState<GitReviewMode>(
     target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree',
   );
@@ -125,9 +146,15 @@ export function GitReviewDialog({
   const readinessBusyLabel = deliveryReadinessBusyLabel(deliveryReadiness.busy);
   const busy =
     controller.busyLabel !== null ||
+    externalOpenBusy ||
+    metadataBusy ||
     cleanupController.busyLabel !== null ||
     deliveryReadiness.busy !== null;
-  const busyLabel = controller.busyLabel ?? cleanupController.busyLabel ?? readinessBusyLabel;
+  const busyLabel =
+    controller.busyLabel ??
+    cleanupController.busyLabel ??
+    readinessBusyLabel ??
+    (externalOpenBusy ? 'Waiting for external workspace confirmation…' : null);
   const actionError = controller.error ?? cleanupController.error ?? deliveryReadiness.error;
   const cleanupRecoveryOnly = target.kind === 'agent-worktree' && cleanupRecovery;
   const deliveryReady =
@@ -170,6 +197,41 @@ export function GitReviewDialog({
   useEffect(() => {
     setReviewMode(target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree');
   }, [target.kind, target.projectId, target.kind === 'agent-worktree' ? target.runId : null]);
+
+  useEffect(() => {
+    let current = true;
+    const candidates: GitTargetInput[] = [
+      { kind: 'primary', projectId: target.projectId },
+      ...(target.kind === 'agent-worktree' ? [target] : []),
+    ];
+    void (async () => {
+      try {
+        for (const candidate of candidates) {
+          const state = unwrap(await window.forgeboard.git.conflictRecoveryState(candidate));
+          if (state !== null) {
+            if (current) setRecoveryState(state);
+            return;
+          }
+        }
+        if (current) setRecoveryState(null);
+      } catch (cause) {
+        if (!current) return;
+        const message =
+          cause instanceof Error
+            ? cause.message
+            : 'Could not inspect the current Git recovery state.';
+        onError?.(message);
+      }
+    })();
+    return () => {
+      current = false;
+    };
+  }, [
+    onError,
+    target.kind,
+    target.projectId,
+    target.kind === 'agent-worktree' ? target.runId : null,
+  ]);
 
   const prepareDiscard = (hunkId: string) => {
     setNotice(null);
@@ -256,6 +318,28 @@ export function GitReviewDialog({
     void deliveryReadiness.refresh();
   };
 
+  const openExternal = async () => {
+    setNotice(null);
+    setExternalOpenBusy(true);
+    try {
+      const result = unwrap(await window.forgeboard.git.lifecycle.openExternal(target));
+      setNotice(
+        gitReviewNotice(
+          result.opened
+            ? `Opened the ${result.targetKind === 'primary' ? 'main project' : 'agent workspace'} in ${result.application === 'selected' ? 'your selected application' : 'the system default'}${result.branch === null ? '' : ` on ${result.branch}`}.`
+            : 'External open cancelled. No application was launched.',
+          result.opened ? 'success' : 'neutral',
+        ),
+      );
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not open this workspace.';
+      setNotice(gitReviewNotice(message, 'warning'));
+      onError?.(message);
+    } finally {
+      setExternalOpenBusy(false);
+    }
+  };
+
   const confirmShipping = () => {
     if (shippingPlan === null) return;
     void controller.confirmShipping(shippingPlan.planId).then((result) => {
@@ -280,6 +364,27 @@ export function GitReviewDialog({
       }
     });
   };
+
+  const finishConflictRecovery = () => {
+    setShippingResult(null);
+    setRecoveryState(null);
+    setNotice(
+      gitReviewNotice(
+        'Git conflict recovery completed. The affected workspace was refreshed.',
+        'success',
+      ),
+    );
+    void controller.refresh();
+  };
+
+  const immediateRecovery =
+    shippingResult?.state === 'conflicted' && shippingResult.conflictTarget !== null
+      ? {
+          target: shippingResult.conflictTarget,
+          conflictedPaths: shippingResult.conflictedPaths,
+        }
+      : null;
+  const activeRecovery = immediateRecovery ?? recoveryState;
 
   const prepareCleanup = () => {
     setNotice(null);
@@ -323,6 +428,81 @@ export function GitReviewDialog({
     });
   };
 
+  const lifecycleTarget =
+    target.kind === 'agent-worktree' ? { projectId: target.projectId, runId: target.runId } : null;
+  const runMetadataAction = async (operation: () => Promise<void>) => {
+    setNotice(null);
+    setMetadataBusy(true);
+    try {
+      await operation();
+    } catch (cause) {
+      const message =
+        cause instanceof Error ? cause.message : 'The workspace lifecycle action failed.';
+      setNotice(gitReviewNotice(message, 'warning'));
+      onError?.(message);
+    } finally {
+      setMetadataBusy(false);
+    }
+  };
+  const prepareRename = (newBranch: string) => {
+    if (lifecycleTarget === null) return;
+    void runMetadataAction(async () => {
+      setRenamePlan(
+        unwrap(
+          await window.forgeboard.git.lifecycle.prepareRename({
+            ...lifecycleTarget,
+            newBranch,
+          }),
+        ),
+      );
+    });
+  };
+  const confirmRename = () => {
+    if (renamePlan === null) return;
+    void runMetadataAction(async () => {
+      const result = unwrap(
+        await window.forgeboard.git.lifecycle.confirmRename({
+          planId: renamePlan.planId,
+        }),
+      );
+      setRenamePlan(null);
+      setNotice(
+        gitReviewNotice(
+          result === null
+            ? 'Branch rename cancelled. Nothing changed.'
+            : `Renamed the managed branch to ${result.branch}.`,
+          result === null ? 'neutral' : 'success',
+        ),
+      );
+      if (result !== null) await controller.refresh();
+    });
+  };
+  const prepareArchive = () => {
+    if (lifecycleTarget === null) return;
+    void runMetadataAction(async () => {
+      setArchivePlan(unwrap(await window.forgeboard.git.lifecycle.prepareArchive(lifecycleTarget)));
+    });
+  };
+  const confirmArchive = () => {
+    if (archivePlan === null) return;
+    void runMetadataAction(async () => {
+      const result = unwrap(
+        await window.forgeboard.git.lifecycle.confirmArchive({
+          planId: archivePlan.planId,
+        }),
+      );
+      setArchivePlan(null);
+      if (result === null) {
+        setNotice(gitReviewNotice('Archive cancelled. The workspace remains active.', 'neutral'));
+      } else {
+        onCleanupSuccess?.(
+          `Archived ${result.branch}; its worktree, files, and branch were retained.`,
+        );
+        onClose();
+      }
+    });
+  };
+
   return (
     <div className="modal-backdrop git-review-backdrop" role="presentation">
       <section
@@ -351,23 +531,37 @@ export function GitReviewDialog({
             </h2>
           </span>
           <button
-            className="icon-button"
+            className="button"
             type="button"
             disabled={busy}
-            aria-label="Refresh Git changes"
-            onClick={refreshReview}
+            onClick={() => void openExternal()}
           >
-            <RefreshCw className={busy ? 'spin' : ''} size={16} />
+            <ExternalLink size={14} aria-hidden="true" /> Open externally…
           </button>
-          <button
-            ref={closeButton}
-            className="icon-button"
-            type="button"
-            aria-label="Close Git review"
-            onClick={onClose}
+          <WorkspaceTooltip
+            content={busy ? 'Wait for the current Git action' : 'Refresh Git changes'}
           >
-            <X size={17} />
-          </button>
+            <button
+              className="icon-button"
+              type="button"
+              disabled={busy}
+              aria-label="Refresh Git changes"
+              onClick={refreshReview}
+            >
+              <RefreshCw className={busy ? 'spin' : ''} size={16} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
+          <WorkspaceTooltip content="Close Git review">
+            <button
+              ref={closeButton}
+              className="icon-button"
+              type="button"
+              aria-label="Close Git review"
+              onClick={onClose}
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
         </header>
 
         {controller.loading ? (
@@ -396,6 +590,13 @@ export function GitReviewDialog({
                 </button>
               )}
             </GitReviewState>
+            {activeRecovery !== null && (
+              <GitConflictRecoveryPanel
+                target={activeRecovery.target}
+                conflictedPaths={activeRecovery.conflictedPaths}
+                onRecovered={finishConflictRecovery}
+              />
+            )}
             {target.kind === 'agent-worktree' && (
               <section className="git-cleanup-recovery" aria-label="Agent cleanup recovery">
                 {(cleanupController.error !== null ||
@@ -440,6 +641,22 @@ export function GitReviewDialog({
                   Adding, discarding, and committing changes happens only in this workspace. Your
                   main project files stay untouched.
                 </small>
+                {controller.review.branch !== null && (
+                  <GitWorktreeMetadataPanel
+                    branch={controller.review.branch}
+                    busy={busy}
+                    renamePlan={renamePlan}
+                    archivePlan={archivePlan}
+                    onPrepareRename={prepareRename}
+                    onConfirmRename={confirmRename}
+                    onPrepareArchive={prepareArchive}
+                    onConfirmArchive={confirmArchive}
+                    onCancelPlan={() => {
+                      setRenamePlan(null);
+                      setArchivePlan(null);
+                    }}
+                  />
+                )}
               </section>
             )}
             {controller.review.target.kind === 'agent-worktree' && (
@@ -450,6 +667,13 @@ export function GitReviewDialog({
               <p className="git-conflict-banner" role="alert">
                 <TriangleAlert size={14} /> Fix the conflicting files before creating a commit.
               </p>
+            )}
+            {activeRecovery !== null && (
+              <GitConflictRecoveryPanel
+                target={activeRecovery.target}
+                conflictedPaths={activeRecovery.conflictedPaths}
+                onRecovered={finishConflictRecovery}
+              />
             )}
             {(actionError !== null || notice !== null || busy) && (
               <div
@@ -554,6 +778,20 @@ export function GitReviewDialog({
                   }
                 />
               )
+            ) : controller.review.target.kind === 'agent-worktree' &&
+              reviewMode === 'agent-comparison' ? (
+              <GitAgentComparisonPanel
+                target={{
+                  kind: 'agent-worktree',
+                  projectId: controller.review.target.projectId,
+                  runId: controller.review.target.runId,
+                }}
+                {...(displayPreferences === undefined ? {} : { displayPreferences })}
+                {...(onDisplayPreferencesChange === undefined
+                  ? {}
+                  : { onDisplayPreferencesChange })}
+                {...(onError === undefined ? {} : { onError })}
+              />
             ) : (
               <section
                 id={
@@ -602,12 +840,18 @@ export function GitReviewDialog({
                             onPrevious: () => {
                               const previous = reviewFiles[selectedFileIndex - 1];
                               if (previous !== undefined)
-                                setSelection({ area: previous.area, path: previous.path });
+                                setSelection({
+                                  area: previous.area,
+                                  path: previous.path,
+                                });
                             },
                             onNext: () => {
                               const next = reviewFiles[selectedFileIndex + 1];
                               if (next !== undefined)
-                                setSelection({ area: next.area, path: next.path });
+                                setSelection({
+                                  area: next.area,
+                                  path: next.path,
+                                });
                             },
                           },
                         })}

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -121,6 +121,63 @@ describe('TerminalService', () => {
       }),
     ).rejects.toThrow(/changed after review/u);
     expect(changed.spawned()).toBe(false);
+  });
+
+  it('fails closed before PTY creation when the required launch audit cannot persist', async () => {
+    const harness = await fixture();
+    harness.store.failLaunchAudit = true;
+    const plan = await harness.service.prepareLaunch('owner-a', harness.input);
+
+    await expect(
+      harness.service.confirmLaunch('owner-a', plan.planId, () => Promise.resolve('approved')),
+    ).rejects.toThrow('required terminal launch audit unavailable');
+    expect(harness.spawned()).toBe(false);
+    expect(harness.store.sessions.get(SESSION_ID)?.session.status).toBe('failed');
+  });
+
+  it('keeps an expired transcript and session when its required retention audit fails', async () => {
+    const harness = await fixture({ expiredSession: true, failRetentionAudit: true });
+    const transcript = path.join(harness.transcriptRoot, `${SESSION_ID}.jsonl`);
+
+    await expect(harness.service.assertProjectAvailable(PROJECT_ID)).rejects.toThrow(
+      'required terminal retention audit unavailable',
+    );
+    await expect(access(transcript)).resolves.toBeUndefined();
+    expect(harness.store.sessions.has(SESSION_ID)).toBe(true);
+  });
+
+  it('keeps an orphaned transcript when its required retention audit fails', async () => {
+    const harness = await fixture({ orphanedTranscript: true, failRetentionAudit: true });
+    const transcript = path.join(harness.transcriptRoot, `${SESSION_ID}.jsonl`);
+
+    await expect(harness.service.assertProjectAvailable(PROJECT_ID)).rejects.toThrow(
+      'required terminal retention audit unavailable',
+    );
+    await expect(access(transcript)).resolves.toBeUndefined();
+    expect(harness.store.sessions.has(SESSION_ID)).toBe(false);
+  });
+
+  it('records a redacted failed outcome when an expired session row cannot be deleted', async () => {
+    const harness = await fixture({ expiredSession: true, failSessionDeletion: true });
+    const transcript = path.join(harness.transcriptRoot, `${SESSION_ID}.jsonl`);
+
+    await expect(harness.service.assertProjectAvailable(PROJECT_ID)).rejects.toThrow(
+      'simulated terminal session deletion failure',
+    );
+    await expect(access(transcript)).rejects.toThrow();
+    expect(harness.store.sessions.has(SESSION_ID)).toBe(true);
+    expect(harness.store.audits).toContainEqual([
+      'terminal',
+      'retention-delete',
+      'failed',
+      {
+        sessionId: SESSION_ID,
+        reason: 'expired-session',
+        stage: 'session-record',
+        errorKind: 'Error',
+        effectSemantics: 'best-effort-nontransactional',
+      },
+    ]);
   });
 
   it('refuses merge pause without killing work, then drains privacy and shutdown explicitly', async () => {
@@ -311,6 +368,10 @@ describe('TerminalService', () => {
       readonly now?: () => Date;
       readonly planTtlMs?: number;
       readonly failAfterSpawn?: boolean;
+      readonly expiredSession?: boolean;
+      readonly orphanedTranscript?: boolean;
+      readonly failRetentionAudit?: boolean;
+      readonly failSessionDeletion?: boolean;
     } = {},
   ): Promise<{
     readonly service: TerminalService;
@@ -332,6 +393,16 @@ describe('TerminalService', () => {
       missing: false,
     } as Project;
     const store = new FakeTerminalStore(project);
+    store.failRetentionAudit = options.failRetentionAudit === true;
+    store.failSessionDeletion = options.failSessionDeletion === true;
+    if (options.expiredSession === true) {
+      store.sessions.set(SESSION_ID, terminalStorageRecord(expiredTerminalSession()));
+      store.expiredSessionIds.push(SESSION_ID);
+    }
+    if (options.expiredSession === true || options.orphanedTranscript === true) {
+      await mkdir(transcriptRoot, { recursive: true, mode: 0o700 });
+      await writeFile(path.join(transcriptRoot, `${SESSION_ID}.jsonl`), '', { mode: 0o600 });
+    }
     const pty = new FakePty();
     let didSpawn = false;
     const ids = [PLAN_ID, SESSION_ID];
@@ -378,6 +449,10 @@ class FakeTerminalStore implements TerminalServiceStore {
   readonly audits: unknown[] = [];
   failUpdates = false;
   failUpdateCount = 0;
+  failLaunchAudit = false;
+  failRetentionAudit = false;
+  failSessionDeletion = false;
+  readonly expiredSessionIds: string[] = [];
 
   public constructor(private readonly project: Project) {}
 
@@ -427,6 +502,7 @@ class FakeTerminalStore implements TerminalServiceStore {
   }
 
   deleteTerminalSession(sessionId: string): boolean {
+    if (this.failSessionDeletion) throw new Error('simulated terminal session deletion failure');
     return this.sessions.delete(sessionId);
   }
 
@@ -441,12 +517,49 @@ class FakeTerminalStore implements TerminalServiceStore {
   }
 
   listExpiredTerminalSessionIds(): string[] {
-    return [];
+    return [...this.expiredSessionIds];
   }
 
   appendAudit(...value: unknown[]): void {
+    if (this.failLaunchAudit && value[1] === 'launch' && value[2] === 'allowed') {
+      throw new Error('required terminal launch audit unavailable');
+    }
+    if (this.failRetentionAudit && value[1] === 'retention-delete' && value[2] === 'allowed') {
+      throw new Error('required terminal retention audit unavailable');
+    }
     this.audits.push(value);
   }
+}
+
+function expiredTerminalSession(): TerminalSessionView {
+  const endedAt = '2026-06-01T12:00:00.000Z';
+  return {
+    id: SESSION_ID,
+    projectId: PROJECT_ID,
+    nodeId: 'terminal-1',
+    executable: '/bin/sh',
+    arguments: ['-l'],
+    cwdRelative: '.',
+    environmentVariableNames: ['PATH'],
+    columns: 100,
+    rows: 30,
+    permission: {
+      label: 'Local process',
+      sandboxed: false,
+      filesystem: 'operating-system-user',
+      network: 'operating-system-user',
+      detail: 'The working directory limits context but is not a security sandbox.',
+    },
+    status: 'exited',
+    startedAt: endedAt,
+    endedAt,
+    exitCode: 0,
+    exitSignal: null,
+    earliestSequence: 1,
+    nextSequence: 1,
+    outputTruncated: false,
+    updatedAt: endedAt,
+  };
 }
 
 class FakePty implements TerminalPtyHandle {

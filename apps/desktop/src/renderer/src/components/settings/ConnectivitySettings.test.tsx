@@ -46,7 +46,6 @@ beforeEach(() => {
         get: vi.fn(() => Promise.resolve({ ok: true, value: null })),
         join,
         joinInvite: vi.fn(),
-        listSessionInvites: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
         createInvite: vi.fn(),
         copyInviteLink: vi.fn(),
         revokeInvite: vi.fn(),

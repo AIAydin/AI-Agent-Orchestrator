@@ -13,6 +13,7 @@ import type { LegacyCanvasDocument, LegacyCanvasNode } from './types.js';
 const T1 = '2026-07-15T12:00:00.000Z';
 const T2 = '2026-07-15T12:01:00.000Z';
 const AGENT_RUN_ID = '11111111-1111-4111-8111-111111111111';
+const COMPETING_RUN_ID = '22222222-2222-4222-8222-222222222222';
 
 function node(id: string, kind: string, data: Record<string, unknown> = {}): LegacyCanvasNode {
   return {
@@ -270,7 +271,7 @@ describe('canonical desktop canvas adapter', () => {
     expect(initial.ok).toBe(true);
     if (!initial.ok) return;
     expect(initial.canvas.nodes.find((candidate) => candidate.id === 'frame-a')).toMatchObject({
-      data: { childNodeIds: ['child-1'] },
+      data: { childNodeIds: ['child-1', 'frame-b'] },
     });
     expect(initial.canvas.nodes.find((candidate) => candidate.id === 'frame-b')).toMatchObject({
       data: { childNodeIds: ['child-2'] },
@@ -281,8 +282,11 @@ describe('canonical desktop canvas adapter', () => {
     expect(initial.canvas.nodes.find((candidate) => candidate.id === 'child-2')?.groupId).toBe(
       'frame-b',
     );
+    expect(initial.canvas.nodes.find((candidate) => candidate.id === 'frame-b')?.groupId).toBe(
+      'frame-a',
+    );
     expect(initial.canvas.groups).toMatchObject([
-      { id: 'frame-a', nodeIds: ['child-1'], locked: false },
+      { id: 'frame-a', nodeIds: ['child-1', 'frame-b'], locked: false },
       { id: 'frame-b', nodeIds: ['child-2'], locked: false },
     ]);
 
@@ -369,9 +373,12 @@ describe('canonical desktop canvas adapter', () => {
         migrated.canvas.nodes.find((candidate) => candidate.id === 'a-containing'),
       ).toMatchObject({
         size: { width: 360, height: 240 },
-        data: { childNodeIds: ['child'] },
+        data: { childNodeIds: ['child', 'large-containing'] },
       });
-      for (const frameId of ['outside-first', 'large-containing', 'z-containing']) {
+      expect(
+        migrated.canvas.nodes.find((candidate) => candidate.id === 'large-containing'),
+      ).toMatchObject({ groupId: 'a-containing', data: { childNodeIds: [] } });
+      for (const frameId of ['outside-first', 'z-containing']) {
         expect(migrated.canvas.nodes.find((candidate) => candidate.id === frameId)).toMatchObject({
           data: { childNodeIds: [] },
         });
@@ -381,12 +388,49 @@ describe('canonical desktop canvas adapter', () => {
           .map((group) => ({ id: group.id, nodeIds: group.nodeIds }))
           .sort((left, right) => left.id.localeCompare(right.id)),
       ).toEqual([
-        { id: 'a-containing', nodeIds: ['child'] },
+        { id: 'a-containing', nodeIds: ['child', 'large-containing'] },
         { id: 'large-containing', nodeIds: [] },
         { id: 'outside-first', nodeIds: [] },
         { id: 'z-containing', nodeIds: [] },
       ]);
     }
+  });
+
+  it('round-trips nested frames and deterministically cuts imported membership cycles', () => {
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('outer', 'group-frame', { childNodeIds: ['inner'] }),
+          node('inner', 'group-frame', { childNodeIds: ['outer', 'leaf'] }),
+          node('leaf', 'task'),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.canvas.nodes.find(({ id }) => id === 'outer')).not.toHaveProperty('groupId');
+    expect(migrated.canvas.nodes.find(({ id }) => id === 'inner')).toMatchObject({
+      groupId: 'outer',
+      data: { childNodeIds: ['leaf'] },
+    });
+    expect(migrated.canvas.nodes.find(({ id }) => id === 'leaf')).toMatchObject({
+      groupId: 'inner',
+    });
+
+    const surface = legacySurfaceFromCanonical(migrated.canvas);
+    const roundTrip = canonicalCanvasFromLegacy({
+      ...surface,
+      canonical: migrated.canvas,
+      updatedAt: T2,
+    });
+    expect(roundTrip.ok).toBe(true);
+    if (!roundTrip.ok) return;
+    expect(roundTrip.canvas.groups.map(({ id, nodeIds }) => ({ id, nodeIds }))).toEqual([
+      { id: 'outer', nodeIds: ['inner'] },
+      { id: 'inner', nodeIds: ['leaf'] },
+    ]);
   });
 
   it('maps every built-in draft plus declarative extension nodes', () => {
@@ -433,6 +477,56 @@ describe('canonical desktop canvas adapter', () => {
         values: { enabled: true },
       },
     });
+  });
+
+  it('round-trips Excalidraw-compatible whiteboard data and context/export references exactly', () => {
+    const excalidraw = {
+      type: 'excalidraw',
+      version: 2,
+      source: 'https://forgeboard.local',
+      elements: [
+        {
+          id: 'annotation-1',
+          type: 'text',
+          x: 24,
+          y: 24,
+          width: 180,
+          height: 42,
+          text: 'Review checkout',
+        },
+      ],
+      appState: { viewBackgroundColor: '#ffffff', gridSize: 20 },
+      files: {},
+    };
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('whiteboard-1', 'whiteboard', {
+            excalidraw,
+            annotationIds: ['annotation-1'],
+            exportArtifactIds: ['artifact-export-1'],
+            contextSpecificationArtifactId: 'artifact-specification-1',
+          }),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.canvas.nodes[0]).toMatchObject({
+      type: 'whiteboard-mockup',
+      data: {
+        excalidraw,
+        annotationIds: ['annotation-1'],
+        exportArtifactIds: ['artifact-export-1'],
+        contextSpecificationArtifactId: 'artifact-specification-1',
+      },
+    });
+    const reloaded = canonicalCanvasFromLegacy(legacySurfaceFromCanonical(migrated.canvas));
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) return;
+    expect(reloaded.canvas.nodes[0]?.data).toEqual(migrated.canvas.nodes[0]?.data);
   });
 
   it('round-trips an opaque Diff review target and presentation preferences exactly', () => {
@@ -552,6 +646,12 @@ describe('canonical desktop canvas adapter', () => {
             previewSecondaryPreset: 'tablet',
             previewOrientation: 'landscape',
             previewSideBySide: true,
+            previewComparison: {
+              leftTarget: previewTarget,
+              rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
+              leftPreset: 'desktop',
+              rightPreset: 'tablet',
+            },
           }),
           node('mobile-1', 'mobile-preview', {
             previewTarget: { kind: 'primary' },
@@ -587,6 +687,12 @@ describe('canonical desktop canvas adapter', () => {
         secondaryPreset: 'tablet',
         orientation: 'landscape',
         sideBySide: true,
+        comparison: {
+          leftTarget: previewTarget,
+          rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
+          leftPreset: 'desktop',
+          rightPreset: 'tablet',
+        },
       },
     });
 
@@ -605,6 +711,12 @@ describe('canonical desktop canvas adapter', () => {
       previewSecondaryPreset: 'tablet',
       previewOrientation: 'landscape',
       previewSideBySide: true,
+      previewComparison: {
+        leftTarget: previewTarget,
+        rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
+        leftPreset: 'desktop',
+        rightPreset: 'tablet',
+      },
     });
 
     const roundTripped = canonicalCanvasFromLegacy({
@@ -637,6 +749,30 @@ describe('canonical desktop canvas adapter', () => {
     expect(preserved.canvas.nodes.map((candidate) => candidate.data)).toEqual(
       migrated.canvas.nodes.map((candidate) => candidate.data),
     );
+  });
+
+  it('rejects imported preview comparisons that repeat one agent target', () => {
+    const repeated = { kind: 'agent-run', runId: AGENT_RUN_ID } as const;
+    const migrated = canonicalCanvasFromLegacy(
+      legacy({
+        nodes: [
+          node('web-1', 'web-preview', {
+            previewComparison: {
+              leftTarget: repeated,
+              rightTarget: repeated,
+              leftPreset: 'desktop',
+              rightPreset: 'tablet',
+            },
+          }),
+        ],
+        edges: [],
+      }),
+    );
+
+    expect(migrated).toMatchObject({
+      ok: false,
+      issues: [{ code: 'INVALID_TYPED_NODE', entityId: 'web-1' }],
+    });
   });
 
   it('rejects preview targets that contain a renderer-selected checkout path', () => {

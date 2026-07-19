@@ -47,13 +47,21 @@ describe('CanvasNode presentation interactions', () => {
     const onResizeStart = vi.fn();
     renderNode(nodeData(), { selected: true, setCollapsed, onResizeStart });
 
-    const node = screen.getByRole('article', { name: 'Agent: Implement search' });
+    const node = screen.getByRole('article', {
+      name: 'Agent: Implement search',
+    });
     expect(node.getAttribute('aria-roledescription')).toBe('canvas node');
     expect(screen.getByText('Build the local index.')).toBeTruthy();
-    const collapse = screen.getByRole('button', { name: 'Collapse Implement search' });
+    const collapse = screen.getByRole('button', {
+      name: 'Collapse Implement search',
+    });
     expect(collapse.getAttribute('aria-expanded')).toBe('true');
     expect(collapse).toHaveProperty('disabled', false);
-    expect(resizer()).toMatchObject({ visible: 'true', minWidth: '210', minHeight: '92' });
+    expect(resizer()).toMatchObject({
+      visible: 'true',
+      minWidth: '210',
+      minHeight: '92',
+    });
 
     fireEvent.click(collapse);
     expect(setCollapsed).toHaveBeenCalledWith('node-1', true);
@@ -64,7 +72,10 @@ describe('CanvasNode presentation interactions', () => {
 
   it('keeps edge handles and a visible title while collapsed, but removes the body and resizer', () => {
     const onResizeStart = vi.fn();
-    renderNode(nodeData({ collapsed: true }), { selected: true, onResizeStart });
+    renderNode(nodeData({ collapsed: true }), {
+      selected: true,
+      onResizeStart,
+    });
 
     expect(
       screen.getByRole('button', { name: 'Expand Implement search' }).getAttribute('aria-expanded'),
@@ -94,20 +105,34 @@ describe('CanvasNode presentation interactions', () => {
       setCollapsed: lockedChange,
     });
 
-    const lockedButton = screen.getByRole('button', { name: 'Collapse Implement search' });
+    const lockedButton = screen.getByRole('button', {
+      name: 'Collapse Implement search',
+    });
     expect(lockedButton).toHaveProperty('disabled', true);
-    expect(lockedButton.getAttribute('title')).toMatch(/Unlock this node/u);
+    const lockedReason = screen.getByRole('tooltip', {
+      name: /Unlock this node/u,
+    });
+    expect(lockedButton.getAttribute('aria-describedby')).toBe(lockedReason.id);
     fireEvent.click(lockedButton);
     expect(lockedChange).not.toHaveBeenCalled();
     expect(resizer().visible).toBe('false');
 
     const readOnlyChange = vi.fn();
     view.rerender(
-      renderedNode(nodeData(), { readOnly: true, selected: true, setCollapsed: readOnlyChange }),
+      renderedNode(nodeData(), {
+        readOnly: true,
+        selected: true,
+        setCollapsed: readOnlyChange,
+      }),
     );
-    const readOnlyButton = screen.getByRole('button', { name: 'Collapse Implement search' });
+    const readOnlyButton = screen.getByRole('button', {
+      name: 'Collapse Implement search',
+    });
     expect(readOnlyButton).toHaveProperty('disabled', true);
-    expect(readOnlyButton.getAttribute('title')).toMatch(/collaboration role/u);
+    const readOnlyReason = screen.getByRole('tooltip', {
+      name: /collaboration role/u,
+    });
+    expect(readOnlyButton.getAttribute('aria-describedby')).toBe(readOnlyReason.id);
     fireEvent.click(readOnlyButton);
     expect(readOnlyChange).not.toHaveBeenCalled();
     expect(resizer().visible).toBe('false');
@@ -129,13 +154,21 @@ describe('CanvasNode presentation interactions', () => {
     expect(frame.classList.contains('group-frame')).toBe(true);
     expect(frame.getAttribute('aria-roledescription')).toBe('group');
     expect(frame.getAttribute('data-node-kind')).toBe('group-frame');
-    expect(resizer()).toMatchObject({ visible: 'false', minWidth: '360', minHeight: '240' });
+    expect(resizer()).toMatchObject({
+      visible: 'false',
+      minWidth: '360',
+      minHeight: '240',
+    });
 
     cleanup();
     renderNode(nodeData({ kind: 'group-frame', title: 'Manual frame', autoFit: false }), {
       selected: true,
     });
-    expect(resizer()).toMatchObject({ visible: 'true', minWidth: '360', minHeight: '240' });
+    expect(resizer()).toMatchObject({
+      visible: 'true',
+      minWidth: '360',
+      minHeight: '240',
+    });
   });
 
   it('changes only serializable collapsed data and rejects locked or read-only mutation', () => {
@@ -158,6 +191,20 @@ describe('CanvasNode presentation interactions', () => {
     expect(setCanvasNodeCollapsed(lockedNodes, locked.id, true, false)).toBe(lockedNodes);
     const readOnlyNodes = [target];
     expect(setCanvasNodeCollapsed(readOnlyNodes, target.id, true, true)).toBe(readOnlyNodes);
+  });
+
+  it('shows explicit branch and active-record badges for an assigned Agent run', () => {
+    renderNode(
+      nodeData({
+        branch: 'forgeboard/agent/search',
+        worktreeId: 'worktree-1',
+        worktreeRecordedActive: true,
+      }),
+    );
+
+    const workspace = screen.getByLabelText('Agent Git workspace');
+    expect(workspace.textContent).toContain('Branch · forgeboard/agent/search');
+    expect(workspace.textContent).toContain('Worktree assigned');
   });
 });
 

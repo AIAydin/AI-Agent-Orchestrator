@@ -10,7 +10,9 @@ import {
 import type { WorkshopNode } from '../../canvas/CanvasNode.js';
 import { AgentNodePanel } from './AgentNodePanel.js';
 
-vi.mock('./AgentAttemptHistory.js', () => ({ AgentAttemptHistory: () => null }));
+vi.mock('./AgentAttemptHistory.js', () => ({
+  AgentAttemptHistory: () => null,
+}));
 
 afterEach(cleanup);
 
@@ -76,7 +78,9 @@ describe('AgentNodePanel configuration and usage', () => {
     fireEvent.focus(model);
     fireEvent.change(model, { target: { value: 'gpt-5.2' } });
 
-    const permission = screen.getByRole('combobox', { name: 'Permission profile' });
+    const permission = screen.getByRole('combobox', {
+      name: 'Permission profile',
+    });
     fireEvent.focus(permission);
     fireEvent.change(permission, { target: { value: 'plan-read-only' } });
 
@@ -85,10 +89,17 @@ describe('AgentNodePanel configuration and usage', () => {
     fireEvent.change(prompt, { target: { value: 'Implement the feature.' } });
 
     expect(onRecord).toHaveBeenCalledTimes(4);
-    expect(onUpdateSelected).toHaveBeenCalledWith({ adapterId: 'test-agent', model: undefined });
+    expect(onUpdateSelected).toHaveBeenCalledWith({
+      adapterId: 'test-agent',
+      model: undefined,
+    });
     expect(onUpdateSelected).toHaveBeenCalledWith({ model: 'gpt-5.2' });
-    expect(onUpdateSelected).toHaveBeenCalledWith({ permissionProfile: 'plan-read-only' });
-    expect(onUpdateSelected).toHaveBeenCalledWith({ prompt: 'Implement the feature.' });
+    expect(onUpdateSelected).toHaveBeenCalledWith({
+      permissionProfile: 'plan-read-only',
+    });
+    expect(onUpdateSelected).toHaveBeenCalledWith({
+      prompt: 'Implement the feature.',
+    });
   });
 
   it('displays every token category exactly when the provider reports it', () => {
@@ -108,32 +119,118 @@ describe('AgentNodePanel configuration and usage', () => {
     expect(metric('Output tokens')).toBe('300');
     expect(metric('Total tokens')).toBe('1,500');
   });
+
+  it('offers only real input/interrupt controls and explains pause versus reviewed resume', () => {
+    const onSendRunInput = vi.fn();
+    renderPanel(
+      agentNode({
+        status: 'running',
+        interactiveInputSupported: true,
+        interruptSupported: true,
+        pauseSupported: false,
+      }),
+      { running: true, onSendRunInput },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send continue input' }));
+    expect(onSendRunInput).toHaveBeenCalledWith('continue');
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: 'Pause or continue Agent process',
+      }).disabled,
+    ).toBe(true);
+    const pauseStatus = screen.getByRole('group', {
+      name: 'Pause or continue Agent process unavailable',
+    });
+    const pauseTooltip = screen.getByRole('tooltip', {
+      name: 'Pause is unavailable on this operating system or runtime.',
+    });
+    expect(pauseStatus.getAttribute('aria-describedby')).toBe(pauseTooltip.id);
+    expect(screen.getByText(/unsupported platforms and Docker remain unavailable/iu)).toBeTruthy();
+    expect(screen.getByText(/always launches a freshly reviewed continuation/iu)).toBeTruthy();
+  });
+
+  it('offers distinct same-process pause and continue controls only for a capable live session', () => {
+    const onControlRun = vi.fn();
+    const view = renderPanel(
+      agentNode({
+        status: 'running',
+        interactiveInputSupported: true,
+        interruptSupported: true,
+        pauseSupported: true,
+      }),
+      { running: true, onControlRun },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause or continue Agent process' }));
+    expect(onControlRun).toHaveBeenCalledWith('pause');
+
+    view.rerender(
+      <AgentNodePanel
+        {...panelProps(
+          agentNode({
+            status: 'paused',
+            interactiveInputSupported: true,
+            interruptSupported: true,
+            pauseSupported: true,
+          }),
+          { running: true, onControlRun },
+        )}
+      />,
+    );
+    const input = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Message to the running agent',
+    });
+    expect(input.disabled).toBe(true);
+    expect(document.getElementById(input.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+      'Continue this Agent run before sending input.',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pause or continue Agent process' }));
+    expect(onControlRun).toHaveBeenCalledWith('continue');
+  });
 });
 
 function renderPanel(
   selectedNode: WorkshopNode,
-  overrides: { readonly onRecord?: () => void; readonly onUpdateSelected?: () => void } = {},
+  overrides: {
+    readonly onRecord?: () => void;
+    readonly onUpdateSelected?: () => void;
+    readonly onSendRunInput?: (explicitInput?: string) => void;
+    readonly onControlRun?: (action: 'pause' | 'continue' | 'interrupt' | 'terminate') => void;
+    readonly running?: boolean;
+  } = {},
 ) {
-  return render(
-    <AgentNodePanel
-      projectId="95000000-0000-4000-8000-000000000001"
-      selectedNode={selectedNode}
-      selectedAdapter="codex"
-      selectedPermission="worktree-write"
-      runnableAgents={[codex, testAgent]}
-      settings={settings}
-      runInput=""
-      running={false}
-      preparingRun={false}
-      configurationReadOnly={false}
-      onRecord={overrides.onRecord ?? vi.fn()}
-      onUpdateSelected={overrides.onUpdateSelected ?? vi.fn()}
-      onRunInputChange={vi.fn()}
-      onSendRunInput={vi.fn()}
-      onControlRun={vi.fn()}
-      onPrepareRun={vi.fn()}
-    />,
-  );
+  return render(<AgentNodePanel {...panelProps(selectedNode, overrides)} />);
+}
+
+function panelProps(
+  selectedNode: WorkshopNode,
+  overrides: {
+    readonly onRecord?: () => void;
+    readonly onUpdateSelected?: () => void;
+    readonly onSendRunInput?: (explicitInput?: string) => void;
+    readonly onControlRun?: (action: 'pause' | 'continue' | 'interrupt' | 'terminate') => void;
+    readonly running?: boolean;
+  } = {},
+) {
+  return {
+    projectId: '95000000-0000-4000-8000-000000000001',
+    selectedNode,
+    selectedAdapter: 'codex' as const,
+    selectedPermission: 'worktree-write' as const,
+    runnableAgents: [codex, testAgent],
+    settings,
+    runInput: '',
+    running: overrides.running ?? false,
+    preparingRun: false,
+    configurationReadOnly: false,
+    onRecord: overrides.onRecord ?? vi.fn(),
+    onUpdateSelected: overrides.onUpdateSelected ?? vi.fn(),
+    onRunInputChange: vi.fn(),
+    onSendRunInput: overrides.onSendRunInput ?? vi.fn(),
+    onControlRun: overrides.onControlRun ?? vi.fn(),
+    onPrepareRun: vi.fn(),
+  };
 }
 
 function agentNode(data: Partial<WorkshopNode['data']> = {}): WorkshopNode {

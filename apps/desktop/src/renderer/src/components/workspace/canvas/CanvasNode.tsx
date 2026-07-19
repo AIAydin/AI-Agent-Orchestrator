@@ -1,27 +1,4 @@
-import {
-  Bot,
-  Box,
-  CheckCircle2,
-  ChevronDown,
-  FileCode2,
-  FileDiff,
-  Frame,
-  GitPullRequest,
-  GitBranch,
-  Image,
-  ListChecks,
-  LayoutGrid,
-  Lock,
-  MonitorPlay,
-  Network,
-  NotebookPen,
-  PanelTop,
-  Play,
-  Smartphone,
-  TerminalSquare,
-  TestTube2,
-  Workflow,
-} from 'lucide-react';
+import { ChevronDown, Lock, Play } from 'lucide-react';
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
 
 import type {
@@ -33,14 +10,24 @@ import { CANVAS_NODE_MINIMUM_DIMENSIONS } from '../../../../../shared/canvas/nod
 import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
 import { useCanvasNodeInteractions } from './interactions/CanvasNodeInteractionContext.js';
+import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
+import { useNodeTypeRegistry } from '../node-registry/NodeRegistryContext.js';
+import type { NodeKind } from '../node-registry/registry.js';
 import type { RunStatus } from '@forgeboard/core/domain';
+
+export {
+  NODE_DEFINITIONS,
+  NODE_KINDS,
+  type BuiltInNodeKind,
+  type NodeKind,
+} from '../node-registry/registry.js';
 
 export interface WorkshopNodeData extends Record<string, unknown> {
   kind: NodeKind;
   title: string;
   description: string;
-  status: 'idle' | 'waiting' | RunStatus;
+  status: 'idle' | RunStatus;
   locked: boolean;
   collapsed: boolean;
   color: string;
@@ -89,6 +76,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   reviewTarget?: { kind: 'primary' } | { kind: 'agent-run'; runId: string };
   deliveryTarget?: { kind: 'agent-run'; runId: string } | undefined;
   worktreeId?: string | undefined;
+  worktreeRecordedActive?: boolean | undefined;
   branch?: string | undefined;
   interactiveInputSupported?: boolean | undefined;
   pauseSupported?: boolean | undefined;
@@ -127,6 +115,10 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   altText?: Record<string, string>;
   mermaidSource?: string;
   agentEditable?: boolean;
+  excalidraw?: unknown;
+  annotationIds?: string[];
+  exportArtifactIds?: string[];
+  contextSpecificationArtifactId?: string;
   taskStatus?: 'backlog' | 'ready' | 'in-progress' | 'review' | 'done' | 'cancelled';
   command?: WorkshopCommandConfiguration;
   checkKind?: 'lint' | 'typecheck' | 'test' | 'build' | 'custom';
@@ -159,6 +151,12 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   previewSecondaryPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewOrientation?: 'portrait' | 'landscape';
   previewSideBySide?: boolean;
+  previewComparison?: {
+    leftTarget?: { kind: 'agent-run'; runId: string };
+    rightTarget?: { kind: 'agent-run'; runId: string };
+    leftPreset: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
+    rightPreset: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
+  };
   extensionId?: string;
   extensionVersion?: string;
   extensionNodeTypeId?: string;
@@ -176,162 +174,15 @@ export interface WorkshopCommandConfiguration {
 
 export type WorkshopNode = Node<WorkshopNodeData, 'workshop'>;
 
-export const NODE_KINDS = [
-  'agent',
-  'brief',
-  'task',
-  'file',
-  'diff',
-  'terminal',
-  'web-preview',
-  'mobile-preview',
-  'test',
-  'review-gate',
-  'git-pr',
-  'diagram',
-  'whiteboard',
-  'note-image',
-  'group-frame',
-] as const;
-
-export type BuiltInNodeKind = (typeof NODE_KINDS)[number];
-export type NodeKind = BuiltInNodeKind | 'extension';
-
-export const NODE_DEFINITIONS: Record<
-  NodeKind,
-  { label: string; description: string; color: string; icon: typeof Bot }
-> = {
-  agent: {
-    label: 'Agent',
-    description: 'Run an AI coding agent on this computer',
-    color: '#d4a85b',
-    icon: Bot,
-  },
-  brief: {
-    label: 'Product brief',
-    description: 'What to build and how to check it',
-    color: '#8d7de8',
-    icon: NotebookPen,
-  },
-  task: {
-    label: 'Task',
-    description: 'A piece of work to assign and run',
-    color: '#58a6a6',
-    icon: ListChecks,
-  },
-  file: {
-    label: 'File',
-    description: 'A live link to a file on this computer',
-    color: '#6d9ed0',
-    icon: FileCode2,
-  },
-  diff: {
-    label: 'Diff / review',
-    description: 'Review changes and choose what to keep',
-    color: '#e27b68',
-    icon: FileDiff,
-  },
-  terminal: {
-    label: 'Terminal',
-    description: 'Run commands on this computer',
-    color: '#8dbd6f',
-    icon: TerminalSquare,
-  },
-  'web-preview': {
-    label: 'Web preview',
-    description: 'See your web app in its own window',
-    color: '#6099c5',
-    icon: MonitorPlay,
-  },
-  'mobile-preview': {
-    label: 'Mobile preview',
-    description: 'See your app at phone and tablet sizes',
-    color: '#a27bd3',
-    icon: Smartphone,
-  },
-  test: {
-    label: 'Test',
-    description: 'Run the same checks every time',
-    color: '#64a774',
-    icon: TestTube2,
-  },
-  'review-gate': {
-    label: 'Review gate',
-    description: 'Pause the workflow until work is approved',
-    color: '#d39b55',
-    icon: CheckCircle2,
-  },
-  'git-pr': {
-    label: 'Git / PR',
-    description: 'Track branches, commits, and approvals',
-    color: '#d06870',
-    icon: GitPullRequest,
-  },
-  diagram: {
-    label: 'Diagram',
-    description: 'Turn Mermaid text into a diagram',
-    color: '#7888d8',
-    icon: Network,
-  },
-  whiteboard: {
-    label: 'Whiteboard',
-    description: 'Sketch and add notes freely',
-    color: '#c482aa',
-    icon: PanelTop,
-  },
-  'note-image': {
-    label: 'Note / image',
-    description: 'A quick note or picture',
-    color: '#c5a75f',
-    icon: Image,
-  },
-  'group-frame': {
-    label: 'Group',
-    description: 'Collect related nodes in one area',
-    color: '#82909b',
-    icon: Frame,
-  },
-  extension: {
-    label: 'Extension node',
-    description: 'Fields from a trusted extension',
-    color: '#7f8c98',
-    icon: Box,
-  },
-};
-
-const EXTENSION_ICONS: Readonly<Record<ExtensionCanvasNodeTypeView['icon'], typeof Bot>> = {
-  bot: Bot,
-  box: Box,
-  'check-circle': CheckCircle2,
-  file: FileCode2,
-  'git-branch': GitBranch,
-  image: Image,
-  layout: LayoutGrid,
-  note: NotebookPen,
-  play: Play,
-  terminal: TerminalSquare,
-  workflow: Workflow,
-};
-
 export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
   const interactions = useCanvasNodeInteractions();
-  const builtInDefinition = NODE_DEFINITIONS[data.kind];
-  const extensionDefinition = data.kind === 'extension' ? data.extensionDefinition : undefined;
-  const definition =
-    extensionDefinition === undefined
-      ? builtInDefinition
-      : {
-          label: extensionDefinition.displayName,
-          description: extensionDefinition.description,
-          color: extensionDefinition.color,
-          icon: EXTENSION_ICONS[extensionDefinition.icon],
-        };
+  const registry = useNodeTypeRegistry();
+  const definition = registry.resolve(data);
   const Icon = definition.icon;
-  const inputPorts = extensionDefinition?.ports.filter((port) => port.direction === 'input') ?? [];
-  const outputPorts =
-    extensionDefinition?.ports.filter((port) => port.direction === 'output') ?? [];
-  const targetHandles = extensionDefinition === undefined ? [{ id: 'input' }] : inputPorts;
-  const sourceHandles = extensionDefinition === undefined ? [{ id: 'output' }] : outputPorts;
+  const inputPorts = definition.ports?.filter((port) => port.direction === 'input') ?? [];
+  const outputPorts = definition.ports?.filter((port) => port.direction === 'output') ?? [];
+  const targetHandles = data.kind === 'extension' ? inputPorts : [{ id: 'input' }];
+  const sourceHandles = data.kind === 'extension' ? outputPorts : [{ id: 'output' }];
   const groupFrame = data.kind === 'group-frame';
   const minimum = groupFrame ? GROUP_FRAME_MINIMUM : CANVAS_NODE_MINIMUM_DIMENSIONS;
   const canChangePresentation = !interactions.readOnly && !data.locked;
@@ -354,7 +205,13 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
     >
       <NodeResizer
         nodeId={id}
-        isVisible={selected && canChangePresentation && !data.collapsed && !automaticallySized}
+        isVisible={
+          definition.behaviors.resizable &&
+          selected &&
+          canChangePresentation &&
+          !data.collapsed &&
+          !automaticallySized
+        }
         minWidth={minimum.width}
         minHeight={minimum.height}
         handleClassName="canvas-node-resize-handle"
@@ -384,15 +241,14 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         </span>
         <span className="node-kind">{definition.label}</span>
         {data.collapsed && <strong className="collapsed-node-title">{data.title}</strong>}
-        <span className={`run-status ${data.status}`} title={data.status} />
+        <span
+          className={`run-status ${data.status}`}
+          role="status"
+          aria-label={`Status: ${data.status}`}
+        />
         {data.locked && <Lock size={12} aria-label="Locked" />}
-        <button
-          className="node-collapse-button nodrag"
-          type="button"
-          aria-label={`${data.collapsed ? 'Expand' : 'Collapse'} ${data.title}`}
-          aria-expanded={!data.collapsed}
-          disabled={!canChangePresentation}
-          title={
+        <WorkspaceTooltip
+          content={
             interactions.readOnly
               ? 'Your collaboration role cannot change this node.'
               : data.locked
@@ -401,15 +257,23 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
                   ? 'Expand node'
                   : 'Collapse node'
           }
-          onClick={(event) => {
-            event.stopPropagation();
-            interactions.setCollapsed(id, !data.collapsed);
-          }}
         >
-          <ChevronDown className="collapse-glyph" size={13} aria-hidden="true" />
-        </button>
+          <button
+            className="node-collapse-button nodrag"
+            type="button"
+            aria-label={`${data.collapsed ? 'Expand' : 'Collapse'} ${data.title}`}
+            aria-expanded={!data.collapsed}
+            disabled={!canChangePresentation}
+            onClick={(event) => {
+              event.stopPropagation();
+              interactions.setCollapsed(id, !data.collapsed);
+            }}
+          >
+            <ChevronDown className="collapse-glyph" size={13} aria-hidden="true" />
+          </button>
+        </WorkspaceTooltip>
       </header>
-      {!data.collapsed && (
+      {definition.behaviors.collapsible && !data.collapsed && (
         <div className="node-body">
           <strong>{data.title}</strong>
           <p>{data.description || definition.description}</p>
@@ -424,6 +288,16 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
               {permissionProfileLabel(data.permissionProfile)}
             </span>
           )}
+          {data.kind === 'agent' &&
+            (data.branch !== undefined ||
+              (data.worktreeId !== undefined && data.worktreeRecordedActive === true)) && (
+              <span className="node-worktree-badges" aria-label="Agent Git workspace">
+                {data.branch !== undefined && <span>Branch · {data.branch}</span>}
+                {data.worktreeId !== undefined && data.worktreeRecordedActive === true && (
+                  <span>Worktree assigned</span>
+                )}
+              </span>
+            )}
           {data.kind === 'extension' && data.extensionAvailability !== 'active' && (
             <span className="extension-node-state">
               {data.extensionAvailability === 'quarantined' ? 'Quarantined' : 'Unavailable'}

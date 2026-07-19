@@ -5,6 +5,7 @@ import {
   locateAgentExecutable,
   type AgentAdapterManifest,
   type AgentDetectionResult,
+  type AgentExecutableProbe,
 } from '@forgeboard/agent-adapters';
 import { TEST_AGENT_MANIFEST, TEST_AGENT_PACKAGE_VERSION } from '@forgeboard/test-agent';
 
@@ -58,6 +59,16 @@ export interface AgentReadinessProbePlan {
   readonly expiresAtMs: number;
 }
 
+export interface AgentReadinessProbeAttempt {
+  readonly sequence: number;
+  readonly kind: 'version' | 'capability';
+  readonly argumentCount: number;
+}
+
+export type AgentReadinessProbeAuthorizer = (
+  attempt: AgentReadinessProbeAttempt,
+) => void | Promise<void>;
+
 export type AgentReadinessPreparation =
   | { readonly outcome: 'result'; readonly result: AgentReadinessResult }
   | { readonly outcome: 'probe'; readonly plan: AgentReadinessProbePlan };
@@ -86,9 +97,14 @@ export class AgentReadinessService {
     this.#now = dependencies.now ?? (() => new Date());
   }
 
-  public async check(input: unknown): Promise<AgentReadinessResult> {
+  public async check(
+    input: unknown,
+    authorizeProbe: AgentReadinessProbeAuthorizer,
+  ): Promise<AgentReadinessResult> {
     const prepared = await this.prepare(input);
-    return prepared.outcome === 'result' ? prepared.result : await this.probe(prepared.plan);
+    return prepared.outcome === 'result'
+      ? prepared.result
+      : await this.probe(prepared.plan, authorizeProbe);
   }
 
   /** Performs validation and passive executable discovery without starting a process. */
@@ -178,7 +194,7 @@ export class AgentReadinessService {
   /** Revalidates the exact executable after native approval, then performs bounded probes. */
   public async probe(
     plan: AgentReadinessProbePlan,
-    authorizeProbe: (() => void) | undefined = undefined,
+    authorizeProbe: AgentReadinessProbeAuthorizer,
   ): Promise<AgentReadinessResult> {
     const { request, source, manifest } = plan;
     this.#verifiedSettingsReadiness.delete(readinessRequestFingerprint(request));
@@ -206,18 +222,32 @@ export class AgentReadinessService {
     }
 
     let detection: AgentDetectionResult;
+    let authorizationFailed = false;
+    let probeSequence = 0;
     try {
       detection = await this.#probeAgent(manifest, {
         executable: located.executable,
-        beforeProbe: async () => {
+        beforeProbe: async (probe: AgentExecutableProbe) => {
+          assertExpectedProbe(plan, probe);
           const currentIdentity = await this.#identifyExecutable(plan.executable);
           if (!sameReadinessExecutable(plan.executableIdentity, currentIdentity)) {
             throw new Error('The selected executable changed after approval. Review it again.');
           }
-          authorizeProbe?.();
+          probeSequence += 1;
+          try {
+            await authorizeProbe({
+              sequence: probeSequence,
+              kind: probe.kind,
+              argumentCount: probe.arguments.length,
+            });
+          } catch (error) {
+            authorizationFailed = true;
+            throw error;
+          }
         },
       });
     } catch (error) {
+      if (authorizationFailed) throw error;
       return this.#result(request, source, 'probe-failed', {
         executable: located.executable,
         reason: errorMessage(error, 'The selected executable could not report its version.'),
@@ -387,6 +417,19 @@ export class AgentReadinessService {
       if (oldest === undefined) return;
       this.#verifiedSettingsReadiness.delete(oldest);
     }
+  }
+}
+
+function assertExpectedProbe(plan: AgentReadinessProbePlan, probe: AgentExecutableProbe): void {
+  const expectedArguments =
+    probe.kind === 'version' ? plan.versionArguments : plan.capabilityArguments;
+  if (
+    probe.executable !== plan.executable ||
+    expectedArguments === null ||
+    probe.arguments.length !== expectedArguments.length ||
+    probe.arguments.some((argument, index) => argument !== expectedArguments[index])
+  ) {
+    throw new Error('The readiness probe changed after approval. Review it again.');
   }
 }
 

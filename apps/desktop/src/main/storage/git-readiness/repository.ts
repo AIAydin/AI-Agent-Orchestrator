@@ -79,7 +79,11 @@ export function initializeDeliveryReadinessStorage(database: DatabaseSync): void
 
 /** SQLite implementation with CAS progress and bounded, immutable-while-retained approvals. */
 export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
-  public constructor(private readonly database: DatabaseSync) {}
+  readonly #database: DatabaseSync;
+
+  public constructor(database: DatabaseSync) {
+    this.#database = database;
+  }
 
   public createDeliveryReadiness(
     recordValue: DeliveryReadinessRecord,
@@ -88,8 +92,8 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
     const record = DeliveryReadinessRecordSchema.parse(recordValue);
     if (record.revision !== 0)
       throw new Error('New delivery readiness must start at revision zero.');
-    return transaction(this.database, () => {
-      this.database
+    return transaction(this.#database, () => {
+      this.#database
         .prepare(
           `INSERT INTO delivery_readiness_records(
              id, project_id, run_id, worktree_id, source_fingerprint, revision,
@@ -127,7 +131,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
       throw new Error('Delivery readiness changed before this update could be recorded.');
     }
     assertImmutableReadinessAuthority(current, record);
-    const result = this.database
+    const result = this.#database
       .prepare(
         `UPDATE delivery_readiness_records
          SET project_id = ?, run_id = ?, worktree_id = ?, source_fingerprint = ?,
@@ -152,7 +156,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
   }
 
   public getDeliveryReadiness(readinessId: string): DeliveryReadinessRecord | undefined {
-    const row = this.database
+    const row = this.#database
       .prepare('SELECT * FROM delivery_readiness_records WHERE id = ?')
       .get(readinessId) as ReadinessRow | undefined;
     return row === undefined ? undefined : readinessFromRow(row);
@@ -163,7 +167,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
     limit = 20,
   ): DeliveryReadinessRecord[] {
     const boundedLimit = Math.max(1, Math.min(1_000, Math.trunc(limit)));
-    const rows = this.database
+    const rows = this.#database
       .prepare(
         `SELECT * FROM delivery_readiness_records
          WHERE project_id = ? AND run_id = ?
@@ -175,7 +179,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
 
   public pruneDeliveryReadinessForTarget(target: DeliveryReadinessTarget, keep = 32): number {
     const boundedKeep = Math.max(1, Math.min(1_000, Math.trunc(keep)));
-    const result = this.database
+    const result = this.#database
       .prepare(
         `DELETE FROM delivery_readiness_records
          WHERE id IN (
@@ -196,7 +200,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
     if (!Number.isInteger(expectedReadinessRevision) || expectedReadinessRevision < 0) {
       throw new Error('The expected delivery readiness revision is invalid.');
     }
-    return transaction(this.database, () => {
+    return transaction(this.#database, () => {
       const readiness = this.getDeliveryReadiness(approval.readinessId);
       if (readiness === undefined)
         throw new Error('The approved delivery readiness does not exist.');
@@ -213,7 +217,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
       if (approval.evidenceFingerprint !== deliveryEvidenceFingerprint(readiness)) {
         throw new Error('The human approval does not match the current delivery check evidence.');
       }
-      this.database
+      this.#database
         .prepare(
           `INSERT INTO delivery_readiness_approvals(
              id, readiness_id, project_id, run_id, authority, source_fingerprint,
@@ -242,7 +246,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
    * stale rows; renderer view limits alone would otherwise leave physical storage unbounded.
    */
   #pruneDeliveryReadinessApprovalHistory(readinessId: string, currentApprovalId: string): void {
-    this.database
+    this.#database
       .prepare(
         `DELETE FROM delivery_readiness_approvals
          WHERE readiness_id = ? AND id <> ? AND id NOT IN (
@@ -261,7 +265,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
   }
 
   public getDeliveryReadinessApproval(approvalId: string): DeliveryHumanApprovalRecord | undefined {
-    const row = this.database
+    const row = this.#database
       .prepare('SELECT * FROM delivery_readiness_approvals WHERE id = ?')
       .get(approvalId) as ApprovalRow | undefined;
     return row === undefined ? undefined : approvalFromRow(row);
@@ -271,7 +275,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
     readinessId: string,
     evidenceFingerprint: string,
   ): DeliveryHumanApprovalRecord | undefined {
-    const row = this.database
+    const row = this.#database
       .prepare(
         `SELECT * FROM delivery_readiness_approvals
          WHERE readiness_id = ? AND evidence_fingerprint = ? LIMIT 1`,
@@ -288,7 +292,7 @@ export class SqliteDeliveryReadinessStore implements DeliveryReadinessStore {
       1,
       Math.min(GIT_DELIVERY_READINESS_MAX_APPROVALS, Math.trunc(limit)),
     );
-    const rows = this.database
+    const rows = this.#database
       .prepare(
         `SELECT * FROM delivery_readiness_approvals
          WHERE readiness_id = ? ORDER BY approved_at DESC, id DESC LIMIT ?`,

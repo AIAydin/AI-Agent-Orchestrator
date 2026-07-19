@@ -51,7 +51,10 @@ describe('FileEditorWorkspace', () => {
     await waitFor(() => expect(monaco.editors).toHaveLength(2));
     expect(screen.getAllByRole('tab')).toHaveLength(2);
     expect(screen.getByRole('tab', { name: 'second.ts' })).toHaveProperty('ariaSelected', 'true');
-    expect(monaco.editors[1]?.setPosition).toHaveBeenCalledWith({ lineNumber: 12, column: 5 });
+    expect(monaco.editors[1]?.setPosition).toHaveBeenCalledWith({
+      lineNumber: 12,
+      column: 5,
+    });
 
     act(() => monaco.editors[1]?.userEdit('unsaved second\n'));
     const closeSecond = screen.getByRole<HTMLButtonElement>('button', {
@@ -99,7 +102,9 @@ describe('FileEditorWorkspace', () => {
     await waitFor(() => expect(tab.getAttribute('draggable')).toBe('false'));
     fireEvent.dragStart(tab, { dataTransfer: transfer });
     expect(onFileDragStart).toHaveBeenCalledOnce();
-    expect(tab.title).toMatch(/Save or discard/u);
+    const tooltipId = tab.getAttribute('aria-describedby');
+    expect(tooltipId).not.toBeNull();
+    expect(document.getElementById(tooltipId ?? '')?.textContent).toMatch(/Save or discard/u);
   });
 });
 

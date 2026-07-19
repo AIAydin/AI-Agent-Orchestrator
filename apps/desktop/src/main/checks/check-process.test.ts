@@ -1,10 +1,10 @@
-import { chmod, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { resolveCheckExecutable, sameFileIdentities } from './check-process.js';
+import { launchCheckProcess, resolveCheckExecutable, sameFileIdentities } from './check-process.js';
 
 const roots: string[] = [];
 
@@ -15,6 +15,28 @@ afterEach(async () => {
 });
 
 describe('check executable identity', () => {
+  it('fails before process creation when required launch authorization throws', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'forgeboard-check-audit-'));
+    roots.push(root);
+    const marker = join(root, 'spawned.txt');
+
+    expect(() =>
+      launchCheckProcess(
+        process.execPath,
+        ['-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'spawned')`],
+        root,
+        { PATH: process.env.PATH ?? '' },
+        () => undefined,
+        10,
+        10,
+        () => {
+          throw new Error('required check launch audit unavailable');
+        },
+      ),
+    ).toThrow('required check launch audit unavailable');
+    await expect(access(marker)).rejects.toThrow();
+  });
+
   it('binds the resolved executable to its SHA-256 content, mode, and change time', async () => {
     const resolved = await resolveCheckExecutable(process.execPath, [], process.cwd());
     const executable = resolved.identities[0];

@@ -32,6 +32,7 @@ vi.mock('electron', () => ({
 import type { AppSettings, Project } from '../../shared/application/contracts.js';
 import { IPC_CHANNELS, ipcResultSchema } from '../../shared/application/contracts.js';
 import type { GitTargetInput } from '../../shared/git/contracts.js';
+import { GIT_LIFECYCLE_IPC_CHANNELS } from '../../shared/git/lifecycle/contracts.js';
 import {
   GIT_REVIEW_NOTE_IPC_CHANNELS,
   GitReviewNotesViewSchema,
@@ -41,6 +42,7 @@ import {
   type StoredGitReviewNote,
 } from '../../shared/git/reviews/contracts.js';
 import { GitIpcService } from './git-ipc.js';
+import type { ExternalApplicationIdentity } from './lifecycle/external-application.js';
 
 interface RepositoryFixture {
   readonly root: string;
@@ -71,6 +73,191 @@ afterEach(async () => {
 });
 
 describe('GitIpcService with a real repository', () => {
+  it('opens only the main-resolved workspace after a cancel-default native disclosure', async () => {
+    const fixture = await createRepository();
+    const openExternalPath = vi.fn<() => Promise<string>>();
+    const harness = createHarness(fixture, [0, 1], { openExternalPath });
+    openExternalPath.mockImplementation(() => {
+      expect(harness.appendAudit).toHaveBeenCalledWith(
+        'git',
+        'open-workspace-external',
+        'allowed',
+        expect.objectContaining({
+          projectId: harness.project().id,
+          targetKind: 'primary',
+        }),
+      );
+      return Promise.resolve('');
+    });
+    harness.service.registerIpcHandlers();
+    const handler = requiredHandler(GIT_LIFECYCLE_IPC_CHANNELS.openExternal);
+    const target = primaryTarget(harness);
+
+    await expect(handler(liveEvent(10), target)).resolves.toMatchObject({
+      ok: true,
+      value: { opened: false, targetKind: 'primary', branch: 'main' },
+    });
+    expect(openExternalPath).not.toHaveBeenCalled();
+
+    await expect(handler(liveEvent(10), target)).resolves.toMatchObject({
+      ok: true,
+      value: { opened: true, targetKind: 'primary', branch: 'main' },
+    });
+    expect(openExternalPath).toHaveBeenCalledWith(fixture.repository);
+    expect(JSON.stringify(harness.showMessageBox.mock.calls)).not.toContain(fixture.repository);
+    expect(harness.appendAudit).toHaveBeenCalledWith(
+      'git',
+      'open-workspace-external',
+      'allowed',
+      expect.objectContaining({
+        projectId: harness.project().id,
+        targetKind: 'primary',
+      }),
+    );
+    expect(JSON.stringify(harness.appendAudit.mock.calls)).not.toContain(fixture.repository);
+    await harness.service.dispose();
+  });
+
+  it('launches the selected application directly with one main-resolved workspace argument', async () => {
+    const fixture = await createRepository();
+    const executable = join(fixture.root, 'editor');
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const launchSelected = vi.fn<
+      (application: ExternalApplicationIdentity, workspacePath: string) => Promise<void>
+    >(() => Promise.resolve());
+    const harness = createHarness(fixture, [1], {
+      externalEditorExecutable: executable,
+      launchExternalApplication: launchSelected,
+    });
+    harness.service.registerIpcHandlers();
+
+    const result = await requiredHandler(GIT_LIFECYCLE_IPC_CHANNELS.openExternal)(
+      liveEvent(11),
+      primaryTarget(harness),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { opened: true, application: 'selected' },
+    });
+    expect(launchSelected).toHaveBeenCalledTimes(1);
+    expect(launchSelected.mock.calls[0]?.[1]).toBe(fixture.repository);
+    const shown = harness.showMessageBox.mock.calls[0] as unknown as
+      | [BrowserWindow, MessageBoxOptions]
+      | undefined;
+    expect(shown?.[0]).toBeDefined();
+    expect(shown?.[1]).toMatchObject({ defaultId: 0, cancelId: 0 });
+    expect(shown?.[1].detail).toContain(`Literal argument: ${fixture.repository}`);
+    expect(harness.appendAudit).toHaveBeenCalledWith(
+      'git',
+      'open-workspace-external',
+      'allowed',
+      expect.objectContaining({
+        application: 'selected',
+        applicationFileName: 'editor',
+      }),
+    );
+    expect(JSON.stringify(harness.appendAudit.mock.calls)).not.toContain(fixture.repository);
+    await harness.service.dispose();
+  });
+
+  it('rejects a selected application whose file identity changes during native review', async () => {
+    const fixture = await createRepository();
+    const executable = join(fixture.root, 'editor');
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const launchSelected = vi.fn<
+      (application: ExternalApplicationIdentity, workspacePath: string) => Promise<void>
+    >(() => Promise.resolve());
+    const harness = createHarness(fixture, [1], {
+      externalEditorExecutable: executable,
+      launchExternalApplication: launchSelected,
+      onShow: () => writeFile(executable, '#!/bin/sh\necho changed\n', { mode: 0o700 }),
+    });
+    harness.service.registerIpcHandlers();
+
+    const result = await requiredHandler(GIT_LIFECYCLE_IPC_CHANNELS.openExternal)(
+      liveEvent(12),
+      primaryTarget(harness),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    expect(JSON.stringify(result)).toContain('changed after review');
+    expect(launchSelected).not.toHaveBeenCalled();
+    expect(harness.appendAudit).not.toHaveBeenCalledWith(
+      'git',
+      'open-workspace-external',
+      'allowed',
+      expect.anything(),
+    );
+    await harness.service.dispose();
+  });
+
+  it('does not launch the selected application when the required audit cannot persist', async () => {
+    const fixture = await createRepository();
+    const executable = join(fixture.root, 'editor');
+    await writeFile(executable, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const launchSelected = vi.fn<
+      (application: ExternalApplicationIdentity, workspacePath: string) => Promise<void>
+    >(() => Promise.resolve());
+    const harness = createHarness(fixture, [1], {
+      externalEditorExecutable: executable,
+      launchExternalApplication: launchSelected,
+    });
+    harness.appendAudit.mockImplementation((_category, action, outcome) => {
+      if (action === 'open-workspace-external' && outcome === 'allowed') {
+        throw new Error('audit unavailable');
+      }
+    });
+    harness.service.registerIpcHandlers();
+
+    const result = await requiredHandler(GIT_LIFECYCLE_IPC_CHANNELS.openExternal)(
+      liveEvent(13),
+      primaryTarget(harness),
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(launchSelected).not.toHaveBeenCalled();
+    await harness.service.dispose();
+  });
+
+  it('refuses to open an external workspace after the originating window is replaced', async () => {
+    const fixture = await createRepository();
+    const first = { isDestroyed: () => false } as BrowserWindow;
+    const replacement = { isDestroyed: () => false } as BrowserWindow;
+    let current = first;
+    const openExternalPath = vi.fn(() => Promise.resolve(''));
+    const harness = createHarness(fixture, [1], {
+      onShow: () => {
+        current = replacement;
+      },
+      openExternalPath,
+      resolveWindow: () => current,
+    });
+    harness.service.registerIpcHandlers();
+
+    const result = await requiredHandler(GIT_LIFECYCLE_IPC_CHANNELS.openExternal)(
+      liveEvent(53),
+      primaryTarget(harness),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
+    expect(JSON.stringify(result)).toContain('window changed');
+    expect(openExternalPath).not.toHaveBeenCalled();
+    expect(harness.appendAudit).not.toHaveBeenCalledWith(
+      'git',
+      'open-workspace-external',
+      'allowed',
+      expect.anything(),
+    );
+    await harness.service.dispose();
+  });
+
   it('resolves a projectId through the main-owned project path and returns authoritative review', async () => {
     const fixture = await createRepository();
     const harness = createHarness(fixture);
@@ -90,21 +277,31 @@ describe('GitIpcService with a real repository', () => {
         branch: 'main',
         dirty: true,
         entries: [{ kind: 'ordinary', path: 'story.txt', worktree: 'M' }],
-        identity: { ready: true, nameSource: 'settings', emailSource: 'settings' },
+        identity: {
+          ready: true,
+          nameSource: 'settings',
+          emailSource: 'settings',
+        },
       },
     });
     expect(resolveRepositoryRoot).toHaveBeenCalled();
     expect(resolveRepositoryRoot.mock.calls.every(([path]) => path === fixture.repository)).toBe(
       true,
     );
-    expect(harness.project().health).toMatchObject({ branch: 'main', dirty: true });
+    expect(harness.project().health).toMatchObject({
+      branch: 'main',
+      dirty: true,
+    });
 
     const rejected = await requiredHandler(IPC_CHANNELS.gitReview)(liveEvent(11), {
       kind: 'primary',
       projectId: harness.project().id,
       repositoryPath: fixture.root,
     });
-    expect(rejected).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_REQUEST' },
+    });
     const rejectedFrame = await requiredHandler(IPC_CHANNELS.gitReview)(
       subframeEvent(11),
       primaryTarget(harness),
@@ -206,6 +403,53 @@ describe('GitIpcService with a real repository', () => {
     await harness.service.dispose();
   });
 
+  it('does not commit when the required final pre-apply audit fails', async () => {
+    const fixture = await createRepository();
+    const harness = createHarness(fixture, [1]);
+    const event = liveEvent(22);
+    await writeFile(join(fixture.repository, 'story.txt'), changedStory(fixture.originalStory));
+    await harness.service.stagePaths({
+      target: primaryTarget(harness),
+      paths: ['story.txt'],
+    });
+    const headBefore = await runGit(fixture.repository, ['rev-parse', 'HEAD']);
+    const plan = await harness.service.prepareCommit(event.sender.id, {
+      target: primaryTarget(harness),
+      message: 'Audit-blocked commit',
+    });
+    harness.appendAudit.mockClear();
+    harness.appendAudit.mockImplementationOnce(() => {
+      throw new Error('required Git commit audit unavailable');
+    });
+
+    await expect(harness.service.confirmCommit(event, plan.planId)).rejects.toThrow(
+      'required Git commit audit unavailable',
+    );
+    expect(await runGit(fixture.repository, ['rev-parse', 'HEAD'])).toBe(headBefore);
+    expect(await runGit(fixture.repository, ['diff', '--cached', '--name-only'])).toBe('story.txt');
+    expect(harness.appendAudit).toHaveBeenNthCalledWith(
+      1,
+      'git',
+      'commit',
+      'allowed',
+      expect.objectContaining({
+        stagedPathCount: 1,
+        headBefore,
+        phase: 'authorized-before-apply',
+      }),
+    );
+    expect(harness.appendAudit).toHaveBeenNthCalledWith(
+      2,
+      'git',
+      'commit',
+      'failed',
+      expect.objectContaining({
+        reason: 'required Git commit audit unavailable',
+      }),
+    );
+    await harness.service.dispose();
+  });
+
   it('refuses another owner, rejects stale staged content, and commits with the exact UI identity', async () => {
     const fixture = await createRepository();
     const harness = createHarness(fixture, [1, 1]);
@@ -257,7 +501,10 @@ describe('GitIpcService with a real repository', () => {
       'git',
       'commit',
       'allowed',
-      expect.objectContaining({ projectId: harness.project().id, stagedPathCount: 1 }),
+      expect.objectContaining({
+        projectId: harness.project().id,
+        stagedPathCount: 1,
+      }),
     );
     await harness.service.dispose();
   });
@@ -297,9 +544,52 @@ describe('GitIpcService with a real repository', () => {
     await harness.service.dispose();
   });
 
+  it('does not discard content when the required final pre-apply audit fails', async () => {
+    const fixture = await createRepository();
+    const harness = createHarness(fixture, [1]);
+    const event = liveEvent(42);
+    const modified = fixture.originalStory.replace('line 2\n', 'line two\n');
+    await writeFile(join(fixture.repository, 'story.txt'), modified);
+    const review = await harness.service.review(primaryTarget(harness));
+    const hunkId = requiredHunkId(review.unstaged.files[0]?.hunks ?? [], 0);
+    const plan = await harness.service.prepareDiscard(event.sender.id, {
+      target: primaryTarget(harness),
+      hunkIds: [hunkId],
+    });
+    harness.appendAudit.mockImplementationOnce(() => {
+      throw new Error('required Git discard audit unavailable');
+    });
+
+    await expect(harness.service.confirmDiscard(event, plan.planId)).rejects.toThrow(
+      'required Git discard audit unavailable',
+    );
+    expect(await readFile(join(fixture.repository, 'story.txt'), 'utf8')).toBe(modified);
+    expect(harness.appendAudit).toHaveBeenNthCalledWith(
+      1,
+      'git',
+      'discard-hunks',
+      'allowed',
+      expect.objectContaining({
+        hunkCount: 1,
+        pathCount: 1,
+        phase: 'authorized-before-apply',
+      }),
+    );
+    expect(harness.appendAudit).toHaveBeenNthCalledWith(
+      2,
+      'git',
+      'discard-hunks',
+      'failed',
+      expect.objectContaining({
+        reason: 'required Git discard audit unavailable',
+      }),
+    );
+    await harness.service.dispose();
+  });
+
   it('keeps revision requests target-bound, non-mutating, and stale instead of remapping them', async () => {
     const fixture = await createRepository();
-    const harness = createHarness(fixture);
+    const harness = createHarness(fixture, [0, 1]);
     const target = primaryTarget(harness);
     const event = liveEvent(45);
     harness.service.registerIpcHandlers();
@@ -314,7 +604,9 @@ describe('GitIpcService with a real repository', () => {
     }
 
     const listed = ipcResultSchema(GitReviewNotesViewSchema).parse(
-      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, { target }),
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, {
+        target,
+      }),
     );
     if (!listed.ok) throw new Error(listed.error.message);
     const revision = listed.value.revisions.find((candidate) => candidate.area === 'unstaged');
@@ -357,7 +649,10 @@ describe('GitIpcService with a real repository', () => {
       'git-review',
       'record-revision-request',
       'allowed',
-      expect.objectContaining({ projectId: harness.project().id, targetKind: 'primary' }),
+      expect.objectContaining({
+        projectId: harness.project().id,
+        targetKind: 'primary',
+      }),
     );
     expect(JSON.stringify(harness.appendAudit.mock.calls)).not.toContain(body);
 
@@ -366,7 +661,9 @@ describe('GitIpcService with a real repository', () => {
       modified.replace('line 3\n', 'line three\n'),
     );
     const stale = ipcResultSchema(GitReviewNotesViewSchema).parse(
-      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, { target }),
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, {
+        target,
+      }),
     );
     expect(stale).toMatchObject({
       ok: true,
@@ -386,16 +683,73 @@ describe('GitIpcService with a real repository', () => {
       },
       body: 'This must never be stored.',
     });
-    expect(rejected).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_REQUEST' },
+    });
     const unchanged = ipcResultSchema(GitReviewNotesViewSchema).parse(
-      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, { target }),
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, {
+        target,
+      }),
     );
     expect(unchanged).toMatchObject({ ok: true, value: { notes: [{ body }] } });
+    if (!unchanged.ok || unchanged.value.notes[0] === undefined) {
+      throw new Error('Fixture is missing the review note to delete.');
+    }
+    const note = unchanged.value.notes[0];
+    const deleteInput = {
+      target,
+      noteId: note.id,
+      expectedUpdatedAt: note.updatedAt,
+    };
+
+    const cancelledDelete = ipcResultSchema(GitReviewNotesViewSchema).parse(
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.delete)(event, deleteInput),
+    );
+    expect(cancelledDelete).toMatchObject({
+      ok: true,
+      value: { notes: [{ id: note.id }] },
+    });
+    expect(harness.showMessageBox).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        buttons: ['Keep note', 'Delete note'],
+        defaultId: 0,
+        cancelId: 0,
+      }),
+    );
+
+    harness.appendAudit.mockImplementation((category, action, outcome) => {
+      if (category === 'git-review' && action === 'delete-review-note' && outcome === 'allowed') {
+        throw new Error('required review deletion audit unavailable');
+      }
+    });
+    const auditBlockedDelete = await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.delete)(
+      event,
+      deleteInput,
+    );
+    expect(auditBlockedDelete).toMatchObject({
+      ok: false,
+      error: { message: 'required review deletion audit unavailable' },
+    });
+    const retained = ipcResultSchema(GitReviewNotesViewSchema).parse(
+      await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, {
+        target,
+      }),
+    );
+    expect(retained).toMatchObject({
+      ok: true,
+      value: { notes: [{ id: note.id }] },
+    });
+    expect(JSON.stringify(harness.showMessageBox.mock.calls)).not.toContain(body);
 
     const wrongProject = await requiredHandler(GIT_REVIEW_NOTE_IPC_CHANNELS.list)(event, {
       target: { kind: 'primary', projectId: randomUUID() },
     });
-    expect(wrongProject).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(wrongProject).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
     await harness.service.dispose();
   });
 
@@ -447,7 +801,10 @@ describe('GitIpcService with a real repository', () => {
       primaryTarget(harness),
     );
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
     expect(JSON.stringify(result)).toContain('window changed');
     await expect(access(sentinel)).rejects.toMatchObject({ code: 'ENOENT' });
     await harness.service.dispose();
@@ -458,7 +815,13 @@ function createHarness(
   fixture: RepositoryFixture,
   responses: readonly number[] = [],
   options: {
-    readonly onShow?: () => void;
+    readonly onShow?: () => void | Promise<void>;
+    readonly openExternalPath?: (path: string) => Promise<string>;
+    readonly externalEditorExecutable?: string;
+    readonly launchExternalApplication?: (
+      application: ExternalApplicationIdentity,
+      workspacePath: string,
+    ) => Promise<void>;
     readonly resolveWindow?: () => BrowserWindow;
   } = {},
 ): TestHarness {
@@ -467,8 +830,8 @@ function createHarness(
   const remainingResponses = [...responses];
   const appendAudit = vi.fn();
   const reviewNotes: StoredGitReviewNote[] = [];
-  const showMessageBox = vi.fn(() => {
-    options.onShow?.();
+  const showMessageBox = vi.fn(async () => {
+    await options.onShow?.();
     return Promise.resolve({
       response: remainingResponses.shift() ?? 0,
       checkboxChecked: false,
@@ -486,7 +849,10 @@ function createHarness(
     },
     listReviewNotes: (target: GitTargetInput, limit = 500) => {
       const matching = reviewNotes.filter((note) => sameReviewTarget(note.target, target));
-      return { notes: matching.slice(0, limit), truncated: matching.length > limit };
+      return {
+        notes: matching.slice(0, limit),
+        truncated: matching.length > limit,
+      };
     },
     updateReviewNote: (input: GitReviewNoteUpdateInput, updatedAt = new Date()) => {
       const index = reviewNoteIndex(reviewNotes, input.target, input.noteId);
@@ -529,11 +895,22 @@ function createHarness(
     transitionRunWorktreeState: () => {
       throw new Error('This primary-checkout fixture has no managed worktree lifecycle.');
     },
+    renameRunWorktreeBranch: () => {
+      throw new Error('This primary-checkout fixture has no managed worktree branch.');
+    },
+    beginGitWorktreeMetadataIntent: () => {
+      throw new Error('This primary-checkout fixture has no managed worktree lifecycle intent.');
+    },
+    getGitWorktreeMetadataIntent: () => undefined,
+    reconcileGitWorktreeMetadataIntent: () => {
+      throw new Error('This primary-checkout fixture has no lifecycle intent to reconcile.');
+    },
   };
   const window = { isDestroyed: () => false } as BrowserWindow;
   const settings = {
     gitIdentityName: 'Forgeboard UI Author',
     gitIdentityEmail: 'ui-author@forgeboard.invalid',
+    externalEditorExecutable: options.externalEditorExecutable ?? '',
   } as AppSettings;
   const service = new GitIpcService(
     { showMessageBox } as unknown as ConstructorParameters<typeof GitIpcService>[0],
@@ -541,8 +918,22 @@ function createHarness(
     repositories,
     () => settings,
     options.resolveWindow ?? (() => window),
+    {
+      ...(options.openExternalPath === undefined
+        ? {}
+        : { openExternalPath: options.openExternalPath }),
+      ...(options.launchExternalApplication === undefined
+        ? {}
+        : { launchExternalApplication: options.launchExternalApplication }),
+    },
   );
-  return { service, repositories, appendAudit, showMessageBox, project: () => project };
+  return {
+    service,
+    repositories,
+    appendAudit,
+    showMessageBox,
+    project: () => project,
+  };
 }
 
 function reviewNoteIndex(
@@ -679,7 +1070,12 @@ async function runGit(cwd: string, args: readonly string[]): Promise<string> {
       },
       (error, stdout, stderr) => {
         if (error === null) resolve(stdout.trimEnd());
-        else reject(new Error(`git ${args.join(' ')} failed: ${stderr}`, { cause: error }));
+        else
+          reject(
+            new Error(`git ${args.join(' ')} failed: ${stderr}`, {
+              cause: error,
+            }),
+          );
       },
     );
   });

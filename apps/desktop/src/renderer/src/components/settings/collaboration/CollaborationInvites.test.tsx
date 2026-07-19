@@ -30,7 +30,9 @@ describe('collaboration invite settings', () => {
 
     const inviteLink = screen.getByLabelText<HTMLInputElement>(/Invite link/u);
     fireEvent.change(inviteLink, { target: { value: PRIVATE_LINK } });
-    const joinButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Join with invite' });
+    const joinButton = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Join with invite',
+    });
     act(() => {
       joinButton.click();
       joinButton.click();
@@ -83,10 +85,10 @@ describe('collaboration invite settings', () => {
 
     expect(await screen.findByText(/Your role is viewer/u)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Create invite' })).toBeNull();
-    expect(api.listSessionInvites).not.toHaveBeenCalled();
+    expect(api.listInvites).not.toHaveBeenCalled();
   });
 
-  it('creates, copies, and revokes only safe session invite rows with exact inputs', async () => {
+  it('creates, pages durable invite history, copies only current-session links, and revokes exact rows', async () => {
     const invite = {
       id: INVITE_ID,
       roomId: 'launch-room',
@@ -96,16 +98,84 @@ describe('collaboration invite settings', () => {
     };
     const api = installApi({ current: connected('owner'), invites: [] });
     api.createInvite.mockResolvedValue({ ok: true, value: invite });
+    const firstPage = {
+      ok: true,
+      value: {
+        invites: [
+          {
+            ...invite,
+            createdAt: '2026-07-18T11:00:00.000Z',
+            useCount: 0,
+            revokedAt: null,
+            status: 'active',
+            copyAvailable: true,
+          },
+          {
+            id: '95c8589e-b738-4506-9ea9-7578f062f295',
+            roomId: 'launch-room',
+            role: 'reviewer' as const,
+            createdAt: '2026-07-18T10:00:00.000Z',
+            expiresAt: '2026-07-18T13:00:00.000Z',
+            maxUses: 2,
+            useCount: 1,
+            revokedAt: null,
+            status: 'active' as const,
+            copyAvailable: false,
+          },
+        ],
+        nextCursor: 'next-page-cursor',
+        hasMore: true,
+      },
+    };
+    const secondPage = {
+      ok: true,
+      value: {
+        invites: [
+          {
+            id: '95c8589e-b738-4506-9ea9-7578f062f296',
+            roomId: 'launch-room',
+            role: 'editor' as const,
+            createdAt: '2026-07-18T09:00:00.000Z',
+            expiresAt: '2026-07-18T10:00:00.000Z',
+            maxUses: 1,
+            useCount: 1,
+            revokedAt: null,
+            status: 'exhausted' as const,
+            copyAvailable: false,
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+      },
+    };
+    api.listInvites
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce(secondPage)
+      .mockResolvedValueOnce(firstPage);
     api.copyInviteLink.mockResolvedValue({ ok: true, value: true });
-    api.revokeInvite.mockResolvedValue({ ok: true, value: true });
+    api.revokeInvite.mockResolvedValue({
+      ok: true,
+      value: {
+        ...invite,
+        createdAt: '2026-07-18T11:00:00.000Z',
+        useCount: 0,
+        revokedAt: '2026-07-18T11:30:00.000Z',
+        status: 'revoked',
+        copyAvailable: false,
+      },
+    });
     render(<Harness />);
 
     await screen.findByRole('button', { name: 'Create invite' });
-    fireEvent.change(screen.getByLabelText('Invite role'), { target: { value: 'viewer' } });
+    fireEvent.change(screen.getByLabelText('Invite role'), {
+      target: { value: 'viewer' },
+    });
     fireEvent.change(screen.getByLabelText('Invite expires after'), {
       target: { value: '86400' },
     });
-    fireEvent.change(screen.getByLabelText('Maximum uses'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Maximum uses'), {
+      target: { value: '3' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Create invite' }));
 
     await waitFor(() =>
@@ -115,15 +185,33 @@ describe('collaboration invite settings', () => {
         maxUses: 3,
       }),
     );
-    expect(await screen.findByText(/viewer · expires/u)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh invites' }));
+    await waitFor(() => expect(api.listInvites).toHaveBeenCalledWith({ limit: 50 }));
+    expect(await screen.findByText(/^viewer · active/u)).toBeTruthy();
+    expect(screen.getByText(/reviewer · active/u)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Copy' })).toHaveLength(1);
     expect(document.body.textContent).not.toContain('token=');
     expect(document.body.textContent).not.toContain(PRIVATE_LINK);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(api.listInvites).toHaveBeenLastCalledWith({
+        after: 'next-page-cursor',
+        limit: 50,
+      }),
+    );
+    expect(await screen.findByText(/editor · exhausted/u)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    await waitFor(() => expect(api.listInvites).toHaveBeenLastCalledWith({ limit: 50 }));
+    expect(await screen.findByText(/^viewer · active/u)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
     await waitFor(() => expect(api.copyInviteLink).toHaveBeenCalledWith({ inviteId: INVITE_ID }));
     expect(await screen.findByText(/Invite link copied/u)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Revoke' })[0]!);
     await waitFor(() => expect(api.revokeInvite).toHaveBeenCalledWith({ inviteId: INVITE_ID }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull());
   });
@@ -148,13 +236,16 @@ function connected(role: CollaborationConnection['role']): CollaborationConnecti
 }
 
 function installApi(
-  options: { current?: CollaborationConnection | null; invites?: unknown[] } = {},
+  options: {
+    current?: CollaborationConnection | null;
+    invites?: unknown[];
+  } = {},
 ) {
   const collaboration = {
     get: vi.fn(() => Promise.resolve({ ok: true, value: options.current ?? null })),
     join: vi.fn(),
     joinInvite: vi.fn(),
-    listSessionInvites: vi.fn(() => Promise.resolve({ ok: true, value: options.invites ?? [] })),
+    listInvites: vi.fn(),
     createInvite: vi.fn(),
     copyInviteLink: vi.fn(),
     revokeInvite: vi.fn(),

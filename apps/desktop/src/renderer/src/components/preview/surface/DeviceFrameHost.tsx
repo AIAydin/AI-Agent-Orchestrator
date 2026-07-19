@@ -17,6 +17,7 @@ import {
 interface DeviceFrameHostProps {
   projectId: string;
   nodeId: string;
+  slot?: 'comparison-left' | 'comparison-right';
   url: string;
   presetId: PreviewPresetId;
   orientation: PreviewOrientation;
@@ -36,7 +37,18 @@ export interface DeviceFrameHandle {
 
 export const DeviceFrameHost = forwardRef<DeviceFrameHandle, DeviceFrameHostProps>(
   function DeviceFrameHost(
-    { projectId, nodeId, url, presetId, orientation, operations, readOnly, onView, onConsole },
+    {
+      projectId,
+      nodeId,
+      slot,
+      url,
+      presetId,
+      orientation,
+      operations,
+      readOnly,
+      onView,
+      onConsole,
+    },
     ref,
   ) {
     const hostRef = useRef<HTMLDivElement>(null);
@@ -46,6 +58,7 @@ export const DeviceFrameHost = forwardRef<DeviceFrameHandle, DeviceFrameHostProp
       operations,
       projectId,
       nodeId,
+      ...(slot === undefined ? {} : { slot }),
       url,
       touchEmulation,
       hostRef,

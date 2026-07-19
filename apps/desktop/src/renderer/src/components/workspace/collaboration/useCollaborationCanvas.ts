@@ -13,6 +13,7 @@ import {
   type CollaborationAwarenessEntry,
   type CollaborationCommentMetadata,
   type CollaborationConnection,
+  type CollaborationConnectionStatus,
   type CollaborationEvent,
   type CollaborationMetadataSnapshot,
   type CollaborationRejectedCommentEntry,
@@ -63,6 +64,7 @@ export interface CollaborationCanvasBinding {
   readonly rejectedComments: readonly CollaborationCommentMetadata[];
   readonly rejectedCommentEntries: readonly CollaborationRejectedCommentEntry[];
   readonly graphReadOnly: boolean;
+  readonly connectionStatus: CollaborationConnectionStatus | 'not-connected';
   readonly role: CollaborationRole | null;
   readonly canComment: boolean;
   readonly createComment: (
@@ -1204,6 +1206,7 @@ export function useCollaborationCanvas({
     rejectedCommentEntries,
     graphReadOnly:
       graphAuthorityRole !== null && !collaborationRoleCanEditGraph(graphAuthorityRole),
+    connectionStatus: connection?.status ?? 'not-connected',
     role: graphAuthorityRole,
     canComment:
       sessionReady &&

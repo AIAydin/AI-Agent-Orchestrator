@@ -4,7 +4,7 @@ import {
   captureSelectedSubgraph,
   type CanvasClipboardSelection,
 } from '../interactions/selection-clipboard.js';
-import { reconcileGroupMembership } from '../interactions/groups/group-containment.js';
+import { removeNodePreservingGroupHierarchy } from '../interactions/groups/group-containment.js';
 import {
   fitAutomaticGroupFrames,
   frameIdsClaimingMembers,
@@ -32,7 +32,7 @@ export function removeContextNode(
   const affectedFrameIds = frameIdsClaimingMembers(nodes, [nodeId]);
   return {
     nodes: fitAutomaticGroupFrames(
-      reconcileGroupMembership(nodes.filter((node) => node.id !== nodeId)).nodes,
+      removeNodePreservingGroupHierarchy(nodes, nodeId),
       affectedFrameIds,
     ),
     edges: edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),

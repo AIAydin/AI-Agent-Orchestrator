@@ -308,6 +308,33 @@ const PreviewUrlPathSchema = z
 
 const PreviewPresetSchema = z.enum(['desktop', 'laptop', 'iphone', 'pixel', 'tablet']);
 
+const PreviewComparisonSchema = z
+  .object({
+    leftTarget: z
+      .object({ kind: z.literal('agent-run'), runId: z.string().uuid() })
+      .strict()
+      .optional(),
+    rightTarget: z
+      .object({ kind: z.literal('agent-run'), runId: z.string().uuid() })
+      .strict()
+      .optional(),
+    leftPreset: PreviewPresetSchema.default('desktop'),
+    rightPreset: PreviewPresetSchema.default('desktop'),
+  })
+  .strict()
+  .superRefine((comparison, context) => {
+    if (
+      comparison.leftTarget !== undefined &&
+      comparison.leftTarget.runId === comparison.rightTarget?.runId
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['rightTarget'],
+        message: 'Preview comparison targets must be different agent runs.',
+      });
+    }
+  });
+
 const PreviewConfigurationShape = {
   target: PreviewTargetSchema.default({ kind: 'primary' }),
   command: CommandSpecSchema.optional(),
@@ -322,6 +349,7 @@ const PreviewConfigurationShape = {
   secondaryPreset: PreviewPresetSchema.optional(),
   orientation: z.enum(['portrait', 'landscape']).default('portrait'),
   sideBySide: z.boolean().default(false),
+  comparison: PreviewComparisonSchema.optional(),
 } as const;
 
 export const WebPreviewNodeSchema = createNodeSchema(

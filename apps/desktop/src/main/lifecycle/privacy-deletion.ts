@@ -1,7 +1,9 @@
 export interface PrivacyDeletionCoordinator {
+  readonly assertCurrent: () => void;
   readonly pauseBackups: () => Promise<void>;
   readonly listMissingBackupIds: () => Promise<string[]>;
   readonly confirmForgetMissingBackups: (count: number) => Promise<boolean>;
+  readonly authorizeDeletion: () => void;
   readonly resetDataServices: () => Promise<void>;
   readonly deleteData: (approvedMissingBackupIds: string[]) => Promise<void>;
 }
@@ -10,13 +12,22 @@ export interface PrivacyDeletionCoordinator {
 export async function performPrivacyDeletion(
   coordinator: PrivacyDeletionCoordinator,
 ): Promise<boolean> {
+  coordinator.assertCurrent();
   await coordinator.pauseBackups();
+  coordinator.assertCurrent();
   const missingBackupIds = await coordinator.listMissingBackupIds();
+  coordinator.assertCurrent();
   if (missingBackupIds.length > 0) {
     const approved = await coordinator.confirmForgetMissingBackups(missingBackupIds.length);
+    coordinator.assertCurrent();
     if (!approved) return false;
   }
+  coordinator.assertCurrent();
+  coordinator.authorizeDeletion();
+  coordinator.assertCurrent();
   await coordinator.resetDataServices();
+  coordinator.assertCurrent();
   await coordinator.deleteData(missingBackupIds);
+  coordinator.assertCurrent();
   return true;
 }

@@ -47,6 +47,7 @@ export function useWorkspacePreviews({
 
   useEffect(() => {
     return window.forgeboard.previews.onEvent((event: PreviewEventEnvelope) => {
+      if (event.projectId !== projectId || event.slot !== undefined) return;
       if (event.kind === 'state') {
         updateSession(event.nodeId, event.session);
         if (['ready', 'failed', 'stopped', 'killed'].includes(event.session.status)) {
@@ -65,7 +66,7 @@ export function useWorkspacePreviews({
         return { ...items, [event.nodeId]: applyPreviewOutput(current, event) };
       });
     });
-  }, [setEvents, updateSession]);
+  }, [projectId, setEvents, updateSession]);
 
   useEffect(() => {
     sessionsRef.current = sessions;

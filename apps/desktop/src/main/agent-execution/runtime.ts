@@ -1,15 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { lstat, realpath, stat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
 import type { AgentEvent, AgentSession } from '@forgeboard/agent-adapters';
-import {
-  ProcessReferenceSchema,
-  findSensitivePath,
-  loadProjectIgnoreMatcher,
-} from '@forgeboard/core';
+import { ProcessReferenceSchema } from '@forgeboard/core';
 import { RepositoryService, WorktreeService, type WorktreeOwnership } from '@forgeboard/git-engine';
 import { z } from 'zod';
 
@@ -56,6 +51,11 @@ import {
   type ImmutableContextSnapshot,
 } from './context/immutable-snapshot.js';
 import { withDockerContextBindFailureGuidance } from './context/docker-bind-guidance.js';
+import {
+  canonicalRegularFile,
+  isContainedRelativePath,
+  stableFileDigest,
+} from './context/file-integrity.js';
 import { boundedInteger, boundedSubset, countOwnerIds, countOwners } from './admission/limits.js';
 import {
   assertContinuationNotInUse,
@@ -66,7 +66,11 @@ import {
   type AttemptContinuation,
 } from './continuation/authority.js';
 import { normalizedTokenUsage } from './history/usage.js';
+import { createAgentLaunchAuditCheckpoint } from './launch/authorization-audit.js';
+import { continueActiveRun, enforcePauseCapability, pauseActiveRun } from './control/pause.js';
 import { captureWorkspace, changedWorkspace } from './workspace/snapshot.js';
+
+export { revalidateContextAttachments } from './context/file-integrity.js';
 
 const DEFAULT_PLAN_TTL_MS = 60_000;
 const MAX_PLAN_TTL_MS = 10 * 60_000;
@@ -301,6 +305,9 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
   public sendInput(ownerId: string, runId: string, data: string): boolean {
     this.#assertAvailable();
     const active = this.#ownedActive(OwnerIdSchema.parse(ownerId), runId);
+    if (active.record.status === 'paused') {
+      throw new Error('Continue the paused Agent run before sending input.');
+    }
     const parsed = InputSchema.parse(data);
     if (active.adapterId === 'test-agent') {
       const requestId = active.pendingTestInputId;
@@ -310,6 +317,20 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     } else {
       active.session.writeInput(parsed.endsWith('\n') ? parsed : `${parsed}\n`);
     }
+    return true;
+  }
+
+  public pause(ownerId: string, runId: string): boolean {
+    this.#assertAvailable();
+    const active = this.#ownedActive(OwnerIdSchema.parse(ownerId), runId);
+    pauseActiveRun(active, (record) => this.#store.saveRun(record), this.#now().toISOString());
+    return true;
+  }
+
+  public continue(ownerId: string, runId: string): boolean {
+    this.#assertAvailable();
+    const active = this.#ownedActive(OwnerIdSchema.parse(ownerId), runId);
+    continueActiveRun(active, (record) => this.#store.saveRun(record), this.#now().toISOString());
     return true;
   }
 
@@ -535,7 +556,10 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         worktree === null
           ? input.context
           : await remapContextIntoWorktree(input.context, repositoryPath, cwd);
-      const effectiveInput: AgentExecutionRequest = { ...input, context: effectiveContext };
+      const effectiveInput: AgentExecutionRequest = {
+        ...input,
+        context: effectiveContext,
+      };
       const planned = await this.#planAdapter(
         effectiveInput,
         cwd,
@@ -812,10 +836,10 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
           childRunId: prepared.record.id,
         });
       }
-      const launchedSession = await this.#launchPrepared(
-        prepared,
-        contextSnapshot,
-        authorizeLaunch,
+      const launchedSession = enforcePauseCapability(
+        await this.#launchPrepared(prepared, contextSnapshot, authorizeLaunch),
+        !prepared.trustedExtensionAdapter &&
+          prepared.plan.disclosure.permissionProfile.enforcement !== 'docker',
       );
       const session =
         contextSnapshot === null
@@ -894,16 +918,10 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         runId: active.record.id,
         nodeId: active.nodeId,
         kind: 'agent-event',
-        payload: { type: 'capabilities', capabilities: active.session.capabilities },
-      });
-      this.#safeAudit('agent-run', 'launch', 'allowed', {
-        runId: active.record.id,
-        planId,
-        nodeId: active.nodeId,
-        adapterId: active.adapterId,
-        processId: process?.pid ?? null,
-        branch: active.record.branch,
-        disclosureFingerprint: fingerprint,
+        payload: {
+          type: 'capabilities',
+          capabilities: active.session.capabilities,
+        },
       });
       return {
         runId: active.record.id,
@@ -915,6 +933,12 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         },
         interrupt: () => {
           this.interrupt(ownerId, active.record.id);
+        },
+        pause: () => {
+          this.pause(ownerId, active.record.id);
+        },
+        continue: () => {
+          this.continue(ownerId, active.record.id);
         },
         terminate: async () => {
           await this.terminate(ownerId, active.record.id);
@@ -1004,6 +1028,14 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       }
     }
     this.#assertOwnerAccepting(prepared.ownerId);
+    const recordLaunchAuthorization = createAgentLaunchAuditCheckpoint(this.#store, {
+      runId: prepared.record.id,
+      planId: prepared.planId,
+      nodeId: prepared.nodeId,
+      adapterId: prepared.adapterId,
+      branch: prepared.record.branch,
+      disclosureFingerprint: prepared.disclosureFingerprint,
+    });
     const launch = async (): Promise<AgentSession> => {
       this.#assertOwnerAccepting(prepared.ownerId);
       const launchPlan =
@@ -1013,9 +1045,11 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         return await prepared.adapter.launch(launchPlan, () => {
           this.#assertOwnerAccepting(prepared.ownerId);
           authorizeLaunch?.();
+          recordLaunchAuthorization();
         });
       }
       authorizeLaunch?.();
+      recordLaunchAuthorization();
       return await this.#launchSession(prepared.adapter, launchPlan);
     };
     if (!prepared.trustedExtensionAdapter || this.#launchTrustedAdapter === undefined) {
@@ -1740,7 +1774,10 @@ export async function remapContextIntoWorktree(
         if (!isContainedRelativePath(relativePath)) {
           throw new Error('Generated context is outside the approved project checkout.');
         }
-        return { ...attachment, path: path.resolve(canonicalWorktree, relativePath) };
+        return {
+          ...attachment,
+          path: path.resolve(canonicalWorktree, relativePath),
+        };
       }
       const source = await canonicalRegularFile(attachment.path, canonicalRepository, 'source');
       const relativePath = path.relative(canonicalRepository, source);
@@ -1773,7 +1810,10 @@ export async function remapContextIntoWorktree(
     if (!isContainedRelativePath(relativePath)) {
       throw new Error('Generated context is outside the approved project checkout.');
     }
-    return { ...artifact, path: path.resolve(canonicalWorktree, relativePath) };
+    return {
+      ...artifact,
+      path: path.resolve(canonicalWorktree, relativePath),
+    };
   });
   return AgentExecutionRequestSchema.shape.context.parse({
     ...context,
@@ -1835,6 +1875,8 @@ function retainSnapshotThroughSession(
       : session.events,
     result,
     writeInput: (data) => session.writeInput(data),
+    ...(session.pause === undefined ? {} : { pause: () => session.pause?.() }),
+    ...(session.continue === undefined ? {} : { continue: () => session.continue?.() }),
     interrupt: () => session.interrupt(),
     terminate: () => session.terminate(),
   };
@@ -1855,95 +1897,6 @@ async function cleanupFailedSnapshot(
       'The agent launch failed and its private context snapshot could not be removed.',
     );
   }
-}
-
-export async function revalidateContextAttachments(
-  context: AgentExecutionContextRequest,
-  checkoutPath: string,
-): Promise<void> {
-  if (context.attachments.length === 0) return;
-  const canonicalCheckout = await realpath(path.resolve(checkoutPath));
-  const ignoreMatcher = await loadProjectIgnoreMatcher(canonicalCheckout);
-  await Promise.all(
-    context.attachments.map(async (attachment) => {
-      if (attachment.kind !== 'file' || attachment.sha256 === undefined) {
-        throw new Error('Approved context must contain only digest-bound ordinary files.');
-      }
-      const canonical = await canonicalRegularFile(attachment.path, canonicalCheckout, 'approved');
-      const relativePath = path.relative(canonicalCheckout, canonical).split(path.sep).join('/');
-      if (findSensitivePath(relativePath) !== undefined) {
-        throw new Error(
-          'An approved context file became sensitive after disclosure. Review what will run.',
-        );
-      }
-      if (ignoreMatcher.evaluate(relativePath).ignored) {
-        throw new Error(
-          'An approved context file became ignored after disclosure. Review what will run.',
-        );
-      }
-      const digest = await stableFileDigest(canonical);
-      if (digest !== attachment.sha256) {
-        throw new Error('An approved context file changed after disclosure. Review what will run.');
-      }
-    }),
-  );
-}
-
-async function canonicalRegularFile(
-  candidate: string,
-  canonicalRoot: string,
-  label: string,
-): Promise<string> {
-  const resolved = path.resolve(candidate);
-  const details = await lstat(resolved).catch(() => undefined);
-  if (details === undefined || !details.isFile() || details.isSymbolicLink()) {
-    throw new Error(`The selected ${label} context path is not an ordinary file.`);
-  }
-  const canonical = await realpath(resolved);
-  if (!pathsEqual(canonical, resolved)) {
-    throw new Error(`The selected ${label} context path crosses a symbolic-link alias.`);
-  }
-  const relativePath = path.relative(canonicalRoot, canonical);
-  if (!isContainedRelativePath(relativePath)) {
-    throw new Error(`The selected ${label} context path escapes its approved checkout.`);
-  }
-  return canonical;
-}
-
-async function stableFileDigest(filePath: string): Promise<string> {
-  const before = await stat(filePath);
-  if (!before.isFile()) throw new Error('Selected context is no longer a regular file.');
-  const digest = await new Promise<string>((resolve, reject) => {
-    const hash = createHash('sha256');
-    const stream = createReadStream(filePath);
-    stream.on('data', (chunk: Buffer | string) => hash.update(chunk));
-    stream.once('error', reject);
-    stream.once('end', () => resolve(hash.digest('hex')));
-  });
-  const after = await stat(filePath);
-  if (
-    before.dev !== after.dev ||
-    before.ino !== after.ino ||
-    before.size !== after.size ||
-    before.mtimeMs !== after.mtimeMs
-  ) {
-    throw new Error('Selected context changed while Forgeboard verified it. Review what will run.');
-  }
-  return digest;
-}
-
-function isContainedRelativePath(relativePath: string): boolean {
-  return (
-    relativePath !== '..' &&
-    !relativePath.startsWith(`..${path.sep}`) &&
-    !path.isAbsolute(relativePath)
-  );
-}
-
-function pathsEqual(left: string, right: string): boolean {
-  return process.platform === 'win32'
-    ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
-    : path.resolve(left) === path.resolve(right);
 }
 
 function errorMessage(error: unknown): string {

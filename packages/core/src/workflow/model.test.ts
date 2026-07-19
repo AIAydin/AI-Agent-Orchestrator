@@ -124,6 +124,41 @@ function canvas(input: Record<string, unknown> & { nodes: unknown[]; edges: unkn
 }
 
 describe('workflow validation and planning', () => {
+  it('accepts a group-frame and its canonical same-ID group while rejecting nested cycles', () => {
+    const frame = {
+      ...taskNode('frame'),
+      type: 'group-frame' as const,
+      data: {
+        purpose: 'feature-area' as const,
+        childNodeIds: ['task'],
+        layout: 'freeform' as const,
+        autoFit: false,
+      },
+    };
+    const group = {
+      id: 'frame',
+      title: 'Frame',
+      nodeIds: ['task'],
+      position: { x: 0, y: 0 },
+      size: { width: 800, height: 500 },
+      color: '#223344',
+    };
+    expect(
+      validateWorkflow(canvas({ nodes: [frame, taskNode('task')], edges: [], groups: [group] }))
+        .valid,
+    ).toBe(true);
+
+    const outer = { ...frame, id: 'outer', groupId: 'inner' };
+    const inner = { ...frame, id: 'inner', groupId: 'outer' };
+    const cyclic = validateWorkflow(canvas({ nodes: [outer, inner], edges: [], groups: [] }));
+    expect(cyclic.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'INVALID_GROUP',
+        message: 'Nested group-frame ownership must not contain a cycle',
+      }),
+    );
+  });
+
   it('keeps draft canvases honest but blocks only selected unconfigured nodes at plan time', () => {
     const draftAgent = {
       ...agentNode('draft-agent'),

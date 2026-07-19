@@ -176,6 +176,9 @@ export async function pruneBackups(
   protectedBackupPath: string,
   securityDependencies: BackupFilesystemSecurityDependencies = {},
 ): Promise<number> {
+  // Filesystem deletion and SQLite ledger deletion cannot form one atomic transaction. This is an
+  // oldest-first, best-effort rotation: each verified file is removed before its exact ledger row,
+  // and callers must persist the required redacted authorization audit before entering this loop.
   const security = await resolveBackupFilesystemSecurity(securityDependencies);
   if (!Number.isInteger(retentionCount) || retentionCount < 1 || retentionCount > 365) {
     throw new Error('Backup retention must be an integer from 1 through 365.');
