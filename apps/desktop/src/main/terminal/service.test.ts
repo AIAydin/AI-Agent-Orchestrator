@@ -605,6 +605,40 @@ describe('TerminalService', () => {
       expect(provider.boundCalls).toEqual([]);
     });
 
+    it('(d-bonus) fails the launch with the same error when peer provision is supplied but no provider is wired', async () => {
+      // This tests the wiring bug case: peerProvisionId present, but this.#peerProvider is
+      // undefined because setPeerEnvironmentProvider was never called. Should be unreachable
+      // by end users, but distinguished internally via an audit entry for observability.
+      const harness = await fixture(); // Note: NO peerProvider option
+      const plan = await harness.service.prepareLaunch('owner-a', {
+        ...harness.input,
+        peerProvisionId: PEER_PROVISION_ID,
+      });
+
+      await expect(
+        harness.service.confirmLaunch('owner-a', plan.planId, () => Promise.resolve('approved')),
+      ).rejects.toThrow('Peer session expired. Start again.');
+      expect(harness.spawned()).toBe(false);
+      expect(harness.store.sessions.has(SESSION_ID)).toBe(false);
+
+      // Verify the internal audit signal for the wiring bug was recorded
+      const launchFailedAudits = harness.store.audits.filter(
+        (audit): audit is [unknown, string, string, Record<string, unknown>] =>
+          Array.isArray(audit) && audit[1] === 'launch' && audit[2] === 'failed',
+      );
+      expect(
+        launchFailedAudits.some((audit) => {
+          const metadata = audit[3];
+          return (
+            typeof metadata === 'object' &&
+            metadata !== null &&
+            'reason' in metadata &&
+            metadata.reason === 'peer-provider-not-configured'
+          );
+        }),
+      ).toBe(true);
+    });
+
     it('(e) discloses the peer environment variable names in the native launch review when attached', async () => {
       const provider = new FakePeerEnvironmentProvider();
       provider.environments.set(PEER_PROVISION_ID, {

@@ -805,15 +805,22 @@ export class TerminalService {
 
   /**
    * Resolves an attached `peerProvisionId` to its main-side-only env values, or `undefined` when
-   * no provision is attached. Throws the same clear, user-facing error whether the provision is
-   * genuinely unknown/expired (`environmentForProvision` returns `null`) or no provider is wired
-   * at all (`undefined`) — both mean the same thing to a caller that explicitly asked for peer
-   * env: it cannot be delivered, so the launch must not silently proceed without it.
+   * no provision is attached. Throws a clear, user-facing error when the provision cannot be
+   * delivered: either because the provision is genuinely unknown/expired (`environmentForProvision`
+   * returns `null`), or because no provider is wired at all (`undefined`). Both block the launch,
+   * but the latter is a wiring bug that gets an internal audit signal for observability.
    */
   #resolvePeerEnvironment(provisionId: string | undefined): Record<string, string> | undefined {
     if (provisionId === undefined) return undefined;
-    const environment = this.#peerProvider?.environmentForProvision(provisionId);
-    if (environment === undefined || environment === null) {
+    if (this.#peerProvider === undefined) {
+      this.#safeAudit('launch', 'failed', {
+        reason: 'peer-provider-not-configured',
+        provisionId,
+      });
+      throw new Error('Peer session expired. Start again.');
+    }
+    const environment = this.#peerProvider.environmentForProvision(provisionId);
+    if (environment === null) {
       throw new Error('Peer session expired. Start again.');
     }
     return environment;
