@@ -254,6 +254,42 @@ describe('AgentPeersService', () => {
     expect(bridge.deliverPeerInput).toHaveBeenCalledTimes(6);
   });
 
+  it('the rate-limit window slides: still blocked at 59_999ms, allowed again once past 60_000ms', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
+    bridge.findActiveSessionByNode.mockImplementation((_projectId, nodeId) =>
+      nodeId === b.id ? { sessionId: 'session-b' } : null,
+    );
+    bridge.deliverPeerInput.mockResolvedValue('delivered');
+
+    const provision = await service.provision(PROJECT_ID, a.id);
+    const token =
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
+
+    const send = () =>
+      fetchJson(`${provision.url}/v1/message`, token, {
+        method: 'POST',
+        body: JSON.stringify({ to: 'Agent B', message: 'hi' }),
+      });
+
+    const start = clock;
+    for (let i = 0; i < 6; i += 1) {
+      const { body } = await send();
+      expect(body['result']).toBe('delivered');
+    }
+    const seventh = await send();
+    expect(seventh.body).toEqual({ result: 'rate-limited' });
+
+    clock = start + 59_999;
+    const stillLimited = await send();
+    expect(stillLimited.body).toEqual({ result: 'rate-limited' });
+
+    clock = start + 60_001;
+    const slid = await send();
+    expect(slid.body).toEqual({ result: 'delivered' });
+  });
+
   it('a peer without a live session returns no-live-session', async () => {
     const a = agentNode('agent-a', 'Agent A');
     const b = agentNode('agent-b', 'Agent B');
@@ -372,6 +408,55 @@ describe('AgentPeersService', () => {
     service.registerCleanup(provision.provisionId, cleanup);
 
     service.releaseSession('session-a');
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('resetForPrivacy runs registered cleanups before wiping provision state', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const provision = await service.provision(PROJECT_ID, a.id);
+    const cleanup = vi.fn(() => Promise.resolve());
+    service.registerCleanup(provision.provisionId, cleanup);
+
+    await service.resetForPrivacy();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('dispose runs registered cleanups', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const provision = await service.provision(PROJECT_ID, a.id);
+    const cleanup = vi.fn(() => Promise.resolve());
+    service.registerCleanup(provision.provisionId, cleanup);
+
+    await service.dispose();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('a rejecting cleanup does not throw out of resetForPrivacy', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const provision = await service.provision(PROJECT_ID, a.id);
+    service.registerCleanup(provision.provisionId, () => Promise.reject(new Error('boom')));
+
+    await expect(service.resetForPrivacy()).resolves.toBeUndefined();
+  });
+
+  it('releaseSession followed by dispose does not double-run that provision cleanup', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    setCanvas([a], []);
+    const provision = await service.provision(PROJECT_ID, a.id);
+    service.bindSession(provision.provisionId, 'session-a');
+    const cleanup = vi.fn(() => Promise.resolve());
+    service.registerCleanup(provision.provisionId, cleanup);
+
+    service.releaseSession('session-a');
+    expect(cleanup).toHaveBeenCalledTimes(1);
+
+    await service.dispose();
 
     expect(cleanup).toHaveBeenCalledTimes(1);
   });

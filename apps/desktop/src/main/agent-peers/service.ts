@@ -168,16 +168,19 @@ export class AgentPeersService {
   }
 
   async pauseForShutdown(): Promise<void> {
+    await this.#runRegisteredCleanups();
     await this.#stopServer();
     this.#clearProvisionState();
   }
 
   async pauseForDataMutation(): Promise<void> {
+    await this.#runRegisteredCleanups();
     await this.#stopServer();
     this.#clearProvisionState();
   }
 
   async resetForPrivacy(): Promise<void> {
+    await this.#runRegisteredCleanups();
     await this.#stopServer();
     this.#clearProvisionState();
   }
@@ -188,6 +191,7 @@ export class AgentPeersService {
   }
 
   async dispose(): Promise<void> {
+    await this.#runRegisteredCleanups();
     await this.#stopServer();
     this.#clearProvisionState();
     this.#messageListeners.clear();
@@ -200,6 +204,10 @@ export class AgentPeersService {
   async #ensureListening(): Promise<void> {
     if (this.#server !== null) return;
     const server = createServer(this.#handleRequest);
+    // Permanent handler: without it, a fault after startup (once the `once` listener below has
+    // either fired and detached, or never fires again) would leave zero 'error' listeners and
+    // crash the process. Best-effort: nothing to do but not let it become unhandled.
+    server.on('error', () => {});
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
       server.listen(0, '127.0.0.1', () => resolve());
@@ -227,11 +235,29 @@ export class AgentPeersService {
     return `http://127.0.0.1:${String(this.#port)}`;
   }
 
+  /**
+   * Runs every still-registered cleanup (i.e. not already run by `releaseSession` for its
+   * provision) before a teardown path wipes provision state, so privacy-sensitive on-disk
+   * artifacts (see `registerCleanup`) are never silently dropped. Best-effort, mirroring
+   * `releaseSession`'s fire-and-forget pattern, but awaited here so a slow cleanup is given the
+   * chance to finish before the caller proceeds — a rejection can never crash teardown.
+   */
+  async #runRegisteredCleanups(): Promise<void> {
+    const cleanups = [...this.#cleanupsByProvision.values()].flat();
+    this.#cleanupsByProvision.clear();
+    await Promise.allSettled(
+      cleanups.map((cleanup) =>
+        cleanup().catch(() => {
+          // Best-effort: a cleanup failure must not block teardown.
+        }),
+      ),
+    );
+  }
+
   #clearProvisionState(): void {
     this.#provisionsById.clear();
     this.#provisionsByToken.clear();
     this.#provisionIdBySession.clear();
-    this.#cleanupsByProvision.clear();
     this.#rateLimitHits.clear();
   }
 
