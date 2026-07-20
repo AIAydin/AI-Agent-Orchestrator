@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { SetStateAction } from 'react';
 import type { NodeChange } from '@xyflow/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkshopNode } from '../../CanvasNode.js';
 import type { WorkshopEdge } from '../../../model/types.js';
@@ -11,6 +11,21 @@ import {
   useCanvasGraphInteractions,
   type UseCanvasGraphInteractionsOptions,
 } from './useCanvasGraphInteractions.js';
+
+const terminalApi = {
+  listSessions: vi.fn(async () => ({ ok: true as const, value: [] as unknown[] })),
+  terminate: vi.fn(async () => ({ ok: true as const, value: {} })),
+};
+
+beforeEach(() => {
+  terminalApi.listSessions.mockReset();
+  terminalApi.terminate.mockReset();
+  terminalApi.listSessions.mockResolvedValue({ ok: true as const, value: [] });
+  terminalApi.terminate.mockResolvedValue({ ok: true as const, value: {} });
+  (globalThis as { window: unknown }).window = Object.assign(globalThis.window ?? {}, {
+    forgeboard: { terminal: terminalApi },
+  });
+});
 
 afterEach(cleanup);
 
@@ -112,6 +127,43 @@ describe('useCanvasGraphInteractions', () => {
     expect(harness.state.events[0]).toBe('Unlock locked nodes before changing them.');
   });
 
+  it('terminates the live terminal session of a removed agent node', async () => {
+    const agent = agentNode('agent');
+    const plain = node('task');
+    const harness = setup([agent, plain]);
+    terminalApi.listSessions.mockResolvedValue({
+      ok: true,
+      value: [
+        { id: 'session-agent', status: 'running' },
+        { id: 'session-stale', status: 'exited' },
+      ],
+    });
+
+    act(() =>
+      harness.hook.result.current.changeCanvasNodes([
+        { type: 'remove', id: 'agent' },
+        { type: 'remove', id: 'task' },
+      ]),
+    );
+
+    await waitFor(() =>
+      expect(terminalApi.listSessions).toHaveBeenCalledWith({
+        projectId: 'proj-1',
+        nodeId: 'agent',
+      }),
+    );
+    // The task node owns no session, so it is never listed.
+    expect(terminalApi.listSessions).not.toHaveBeenCalledWith({
+      projectId: 'proj-1',
+      nodeId: 'task',
+    });
+    await waitFor(() =>
+      expect(terminalApi.terminate).toHaveBeenCalledWith({ sessionId: 'session-agent' }),
+    );
+    // Only active sessions are terminated.
+    expect(terminalApi.terminate).not.toHaveBeenCalledWith({ sessionId: 'session-stale' });
+  });
+
   it('finalizes drag coordinates and group membership without creating another undo record', () => {
     const group = frame('frame', [], { x: 0, y: 0, width: 300, height: 220 });
     const member = node('member', { x: 500, y: 500, width: 40, height: 40 });
@@ -146,6 +198,7 @@ function setup(nodes: WorkshopNode[], edges: WorkshopEdge[] = []) {
   const recordSnapshot = vi.fn<(nodes: WorkshopNode[], edges: WorkshopEdge[]) => void>();
   const reportCollaborationReadOnly = vi.fn();
   const options = {
+    projectId: 'proj-1',
     nodesRef,
     edgesRef,
     readOnlyRef,
@@ -194,6 +247,14 @@ function node(id: string, options: NodeOptions = {}): WorkshopNode {
       collapsed: false,
       color: '#445566',
     },
+  };
+}
+
+function agentNode(id: string, options: NodeOptions = {}): WorkshopNode {
+  const base = node(id, options);
+  return {
+    ...base,
+    data: { ...base.data, kind: 'agent', adapterId: 'claude' },
   };
 }
 

@@ -9,10 +9,12 @@ import {
   applyGroupAwareNodeChanges,
   finalizeDraggedGroupMembership,
 } from '../groups/group-workspace-state.js';
+import { terminateRemovedNodeSessions } from '../../../terminal/terminate-node-sessions.js';
 
 const LOCKED_CONNECTION_ACTIVITY = 'Unlock locked nodes before changing them.';
 
 export interface UseCanvasGraphInteractionsOptions {
+  readonly projectId: string;
   readonly nodesRef: RefObject<WorkshopNode[]>;
   readonly edgesRef: RefObject<WorkshopEdge[]>;
   readonly readOnlyRef: RefObject<boolean>;
@@ -30,6 +32,7 @@ export interface CanvasGraphInteractionCallbacks {
 }
 
 export function useCanvasGraphInteractions({
+  projectId,
   nodesRef,
   edgesRef,
   readOnlyRef,
@@ -138,12 +141,21 @@ export function useCanvasGraphInteractions({
         );
       }
       const nextNodes = applyGroupAwareNodeChanges(currentNodes, allowedChanges);
+      const remainingIds = new Set(nextNodes.map((candidate) => candidate.id));
+      terminateRemovedNodeSessions(
+        window.forgeboard.terminal,
+        projectId,
+        currentNodes
+          .filter((candidate) => !remainingIds.has(candidate.id))
+          .map((candidate) => ({ id: candidate.id, kind: candidate.data.kind })),
+      );
       nodesRef.current = nextNodes;
       setNodes(nextNodes);
     },
     [
       edgesRef,
       nodesRef,
+      projectId,
       readOnlyRef,
       recordSnapshot,
       reportCollaborationReadOnly,

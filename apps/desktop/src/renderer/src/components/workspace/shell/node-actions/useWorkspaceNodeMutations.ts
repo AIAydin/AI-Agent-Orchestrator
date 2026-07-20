@@ -16,6 +16,7 @@ import {
   updateGroupFrameData,
 } from '../../canvas/interactions/groups/group-workspace-state.js';
 import { removeContextNode } from '../../canvas/context-menu/graph-actions.js';
+import { terminateRemovedNodeSessions } from '../../terminal/terminate-node-sessions.js';
 import type { WorkshopEdge } from '../../model/types.js';
 
 interface WorkspaceNodeMutationOptions {
@@ -198,6 +199,14 @@ export function useWorkspaceNodeMutations(options: WorkspaceNodeMutationOptions)
     }
     recordSnapshot(currentNodes, edgesRef.current);
     const nextGraph = removeContextNode(currentNodes, edgesRef.current, node.id);
+    const remainingIds = new Set(nextGraph.nodes.map((candidate) => candidate.id));
+    terminateRemovedNodeSessions(
+      window.forgeboard.terminal,
+      projectId,
+      currentNodes
+        .filter((candidate) => !remainingIds.has(candidate.id))
+        .map((candidate) => ({ id: candidate.id, kind: candidate.data.kind })),
+    );
     replaceNodes(nextGraph.nodes);
     edgesRef.current = nextGraph.edges;
     setEdges(nextGraph.edges);

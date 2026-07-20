@@ -485,6 +485,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
 
   const { setNodeCollapsed, beginNodeResize, finishNodeDrag, changeCanvasNodes } =
     useCanvasGraphInteractions({
+      projectId: project.id,
       nodesRef,
       edgesRef,
       readOnlyRef: collaborationGraphReadOnlyRef,
