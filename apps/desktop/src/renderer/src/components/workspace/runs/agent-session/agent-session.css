@@ -129,10 +129,25 @@
   font-size: var(--text-xs);
 }
 
-.agent-restart-hint {
+.agent-restart-apply {
   flex-basis: 100%;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--warning, #d6b567);
+  background: transparent;
   color: var(--warning, #d6b567);
   font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.agent-restart-apply:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning, #d6b567) 15%, transparent);
+}
+
+.agent-restart-apply:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .agent-session-notice {

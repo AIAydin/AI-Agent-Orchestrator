@@ -1,4 +1,4 @@
-import { useEffect, useRef, type JSX } from 'react';
+import { useRef, type JSX } from 'react';
 
 import type { PermissionProfile } from '../../../../../../shared/application/contracts.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
@@ -81,21 +81,15 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   const hasActiveSession = controller.session !== null && controller.active;
   const endedSession = controller.session !== null && !controller.active;
 
-  // Restart-to-apply: remember the config key that started the running session; when the desired
-  // launch config drifts from it while a session is live, prompt to restart. Terminal sessions
-  // cannot be reconfigured in place, so this surfaces the mismatch instead of silently ignoring it.
+  // Restart-to-apply: remember the config key that was live when the session was last (re)launched;
+  // when the desired launch config drifts from it while a session is live, prompt to restart.
+  // Terminal sessions cannot be reconfigured in place, so this surfaces the mismatch instead of
+  // silently ignoring it.
   const launchedKeyRef = useRef<string | null>(null);
   const currentKey =
     launch === null
       ? null
-      : `${launch.configuration.executable}\n${launch.configuration.arguments.join(',')}`;
-  useEffect(() => {
-    if (hasActiveSession) {
-      if (launchedKeyRef.current === null) launchedKeyRef.current = currentKey;
-    } else {
-      launchedKeyRef.current = null;
-    }
-  }, [hasActiveSession, currentKey]);
+      : `${launch.configuration.executable} ${launch.configuration.arguments.join(' ')}`;
   const configDrifted =
     hasActiveSession && launchedKeyRef.current !== null && launchedKeyRef.current !== currentKey;
 
@@ -207,7 +201,10 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
             plan={controller.pendingPlan}
             busy={controller.busy === 'confirming'}
             onCancel={() => void controller.cancelLaunch()}
-            onContinue={() => void controller.confirmLaunch()}
+            onContinue={() => {
+              launchedKeyRef.current = currentKey;
+              void controller.confirmLaunch();
+            }}
           />
         </div>
       )}
@@ -277,7 +274,16 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
           <small className="agent-profile-note">{launch.profileNote}</small>
         )}
         {configDrifted && (
-          <small className="agent-restart-hint">Settings changed. Restart the session to apply.</small>
+          <button
+            type="button"
+            className="agent-restart-apply nodrag"
+            disabled={readOnly}
+            onClick={() => {
+              void controller.terminate().then(() => controller.prepareLaunch());
+            }}
+          >
+            Restart to apply
+          </button>
         )}
         {data.status !== 'idle' && (
           <span className={`node-status-label ${data.status}`}>{data.status}</span>

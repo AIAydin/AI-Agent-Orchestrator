@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import {
   AppSettingsSchema,
@@ -10,6 +10,7 @@ import {
   type Project,
   type RunAdapterId,
 } from '../../../../../../shared/application/contracts.js';
+import type { TerminalLaunchPlanView } from '../../../../../../shared/terminal/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import type { AgentProviderGate } from '../useAgentProviderGate.js';
 import { CanvasNodeInteractionProvider } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
@@ -128,15 +129,41 @@ function nodeData(overrides: Partial<WorkshopNodeData> = {}): WorkshopNodeData {
   };
 }
 
-function renderNode(data: WorkshopNodeData = nodeData()) {
-  return render(
+function nodeTree(data: WorkshopNodeData) {
+  return (
     <AgentSessionProvider value={contextValue()}>
       <CanvasNodeInteractionProvider readOnly={false} setCollapsed={vi.fn()}>
         <AgentSessionNode id={NODE_ID} data={data} />
       </CanvasNodeInteractionProvider>
-    </AgentSessionProvider>,
+    </AgentSessionProvider>
   );
 }
+
+function renderNode(data: WorkshopNodeData = nodeData()) {
+  return render(nodeTree(data));
+}
+
+const REVIEW_PLAN: TerminalLaunchPlanView = {
+  kind: 'terminal-launch',
+  planId: 'plan-1',
+  projectId: 'proj-1',
+  projectName: 'Forgeboard',
+  nodeId: NODE_ID,
+  executable: '/usr/local/bin/claude',
+  arguments: [],
+  cwdRelative: '',
+  environmentVariableNames: [],
+  columns: 120,
+  rows: 36,
+  permission: {
+    label: 'Local process',
+    sandboxed: false,
+    filesystem: 'operating-system-user',
+    network: 'operating-system-user',
+    detail: 'The working directory limits context but is not a security sandbox.',
+  },
+  expiresAt: '2026-07-17T16:10:00.000Z',
+};
 
 afterEach(cleanup);
 
@@ -204,5 +231,23 @@ describe('AgentSessionNode', () => {
   it('shows the last run output when a transcript exists', () => {
     renderNode(nodeData({ transcript: 'run log' }));
     expect(screen.getByText('Last run output')).toBeTruthy();
+  });
+
+  it('offers Restart to apply once the launched config drifts, and restarts on click', async () => {
+    controller.pendingPlan = REVIEW_PLAN;
+    const view = render(nodeTree(nodeData()));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(controller.confirmLaunch).toHaveBeenCalledOnce();
+
+    controller.pendingPlan = null;
+    controller.session = { id: 's1', status: 'running' };
+    controller.active = true;
+    view.rerender(nodeTree(nodeData({ model: 'gpt-5' })));
+
+    const restart = screen.getByRole('button', { name: 'Restart to apply' });
+    fireEvent.click(restart);
+    expect(controller.terminate).toHaveBeenCalledOnce();
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
   });
 });
