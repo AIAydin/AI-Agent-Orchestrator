@@ -90,7 +90,12 @@ describe('TypedEdgeInspector', () => {
     );
     expect(onChange).toHaveBeenCalledWith({
       edgeType: 'context',
-      config: { attachmentMode: 'explicit', required: false, muted: false, attachmentIds: ['brief-1'] },
+      config: {
+        attachmentMode: 'explicit',
+        required: false,
+        muted: false,
+        attachmentIds: ['brief-1'],
+      },
     });
   });
 
@@ -164,7 +169,7 @@ describe('TypedEdgeInspector', () => {
   });
 
   it('toggles muted on a context edge', () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(data: WorkshopEdgeData) => void>();
     render(
       <TypedEdgeInspector
         edge={edge(createEdgeData('context', 'brief-1'))}
@@ -174,11 +179,10 @@ describe('TypedEdgeInspector', () => {
       />,
     );
     fireEvent.click(screen.getByLabelText('Muted'));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        edgeType: 'context',
-        config: expect.objectContaining({ muted: true }),
-      }),
-    );
+    const called = onChange.mock.calls.at(-1)?.[0];
+    expect(called).toMatchObject({
+      edgeType: 'context',
+      config: { muted: true },
+    });
   });
 });
