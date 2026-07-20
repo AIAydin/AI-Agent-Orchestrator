@@ -1,7 +1,9 @@
 # Agent node chat — design (v2, hybrid)
 
 Date: 2026-07-20
-Status: Approved (v2 pivot: real CLI terminal in the node + structured runs for orchestration)
+Status: Implemented (commits 3140da4..4140497; final whole-branch review passed after fix wave)
+
+Implementation deviations of record: green traffic light focuses the terminal (not resize); the §5 description/accent overflow popover was not built (agent description currently editable nowhere — follow-up); interactive model flags map claude/codex/gemini/opencode, others hide the Model field. Known pending: commits depend on untracked provider-gate scaffolding (user WIP) — needs a dedicated scaffolding commit for isolated builds.
 
 ## Goal
 
