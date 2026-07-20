@@ -415,6 +415,33 @@ describe('TerminalService', () => {
       expect(harness.pty.writes).toEqual([]);
     });
 
+    it('refuses peer input during the finalize drain window and writes nothing into the tearing-down PTY', async () => {
+      const harness = await fixture();
+      const plan = await harness.service.prepareLaunch('owner-a', harness.input);
+      await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+
+      // Queue live output so `#finalize`'s drain must wait on a real `setImmediate` macrotask
+      // before it can advance past `finalizing = true`. `deliverPeerInput` below only awaits
+      // already-resolved promises (microtasks), which are guaranteed to run to completion before
+      // that macrotask fires — so this deterministically lands inside the finalizing window
+      // rather than racing it.
+      harness.pty.emitData('draining output');
+      harness.pty.emitExit({ exitCode: 0, signal: null });
+
+      await expect(
+        harness.service.deliverPeerInput(SESSION_ID, 'Hermes', 'too-late'),
+      ).resolves.toBe('no-live-session');
+      expect(harness.pty.writes).toEqual([]);
+
+      await expectEventually(
+        async () =>
+          (await harness.service.getSession('owner-a', { sessionId: SESSION_ID }))?.status ===
+          'exited',
+      );
+    });
+
     it('reads a stripped transcript tail and returns null for an unknown session', async () => {
       const harness = await fixture();
       const plan = await harness.service.prepareLaunch('owner-a', harness.input);
@@ -433,6 +460,36 @@ describe('TerminalService', () => {
       await expect(
         harness.service.readTranscriptTail(UNKNOWN_SESSION_ID, 1_024),
       ).resolves.toBeNull();
+    });
+
+    it('returns the modeled sentinel instead of throwing once paused for shutdown', async () => {
+      const harness = await fixture();
+      const plan = await harness.service.prepareLaunch('owner-a', harness.input);
+      await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+
+      await harness.service.pauseForShutdown();
+
+      await expect(harness.service.deliverPeerInput(SESSION_ID, 'Hermes', 'hi')).resolves.toBe(
+        'no-live-session',
+      );
+      await expect(harness.service.readTranscriptTail(SESSION_ID, 1_024)).resolves.toBeNull();
+    });
+
+    it('returns the modeled sentinel instead of throwing once disposed', async () => {
+      const harness = await fixture();
+      const plan = await harness.service.prepareLaunch('owner-a', harness.input);
+      await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+
+      await harness.service.dispose();
+
+      await expect(harness.service.deliverPeerInput(SESSION_ID, 'Hermes', 'hi')).resolves.toBe(
+        'no-live-session',
+      );
+      await expect(harness.service.readTranscriptTail(SESSION_ID, 1_024)).resolves.toBeNull();
     });
   });
 

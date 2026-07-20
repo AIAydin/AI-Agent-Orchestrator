@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { TERMINAL_MAX_INPUT_BYTES } from '../../shared/terminal/common.js';
 import { formatPeerDelivery, stripAnsi, transcriptTailText } from './text.js';
 
 describe('stripAnsi', () => {
@@ -30,6 +31,36 @@ describe('stripAnsi', () => {
 describe('formatPeerDelivery', () => {
   it('wraps the message in a bracketed-paste delivery envelope', () => {
     expect(formatPeerDelivery('Hermes', 'hi')).toBe('\x1b[200~[from Hermes] hi\x1b[201~\r');
+  });
+
+  it('strips an embedded paste-close sequence from the message so it cannot break out of the envelope early', () => {
+    const malicious = 'safe\x1b[201~rm -rf ~\r';
+    const delivered = formatPeerDelivery('Hermes', malicious);
+    const interior = delivered.slice('\x1b[200~'.length, delivered.length - '\x1b[201~\r'.length);
+
+    expect(interior).not.toContain('\x1b');
+    expect(delivered.endsWith('\x1b[201~\r')).toBe(true);
+    expect(delivered.indexOf('\x1b[201~')).toBe(delivered.length - '\x1b[201~\r'.length);
+  });
+
+  it('strips a raw CSI sequence from the message', () => {
+    expect(formatPeerDelivery('Hermes', 'a\x1b[31mb')).toBe('\x1b[200~[from Hermes] ab\x1b[201~\r');
+  });
+
+  it('strips escape bytes from the sender too', () => {
+    expect(formatPeerDelivery('Her\x1b[201~mes', 'hi')).toBe(
+      '\x1b[200~[from Hermes] hi\x1b[201~\r',
+    );
+  });
+
+  it('caps the formatted delivery at TERMINAL_MAX_INPUT_BYTES without splitting a multibyte character', () => {
+    const oversized = '🧪'.repeat(20_000);
+    const delivered = formatPeerDelivery('Hermes', oversized);
+
+    expect(Buffer.byteLength(delivered, 'utf8')).toBeLessThanOrEqual(TERMINAL_MAX_INPUT_BYTES);
+    expect(delivered.startsWith('\x1b[200~[from Hermes] ')).toBe(true);
+    expect(delivered.endsWith('\x1b[201~\r')).toBe(true);
+    expect(delivered).not.toContain('\uFFFD');
   });
 });
 

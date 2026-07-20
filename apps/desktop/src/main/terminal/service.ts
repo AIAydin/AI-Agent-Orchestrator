@@ -443,9 +443,19 @@ export class TerminalService {
     sender: string,
     message: string,
   ): Promise<'delivered' | 'no-live-session'> {
-    await this.#assertAvailable();
+    if (!(await this.#isAvailableForPeerAccess())) return 'no-live-session';
     const active = this.#active.get(sessionId);
-    if (active === undefined || active.view.status !== 'running' || active.handle === null) {
+    // Mirrors `#assertRunning`'s exact liveness predicate (handle/status/finalizing) rather than
+    // calling it directly, since that method throws and this trust boundary must return the
+    // modeled sentinel instead — including during `#finalize`'s async drain window, where a
+    // session is still `status === 'running'` with a non-null handle but `finalizing === true`
+    // and must not accept writes.
+    if (
+      active === undefined ||
+      active.finalizing ||
+      active.view.status !== 'running' ||
+      active.handle === null
+    ) {
       return 'no-live-session';
     }
     active.handle.write(formatPeerDelivery(sender, message));
@@ -459,7 +469,7 @@ export class TerminalService {
    * not exist.
    */
   public async readTranscriptTail(sessionId: string, maxBytes: number): Promise<string | null> {
-    await this.#assertAvailable();
+    if (!(await this.#isAvailableForPeerAccess())) return null;
     const raw = await this.#transcripts.tail(sessionId, maxBytes);
     if (raw === null) return null;
     return transcriptTailText(raw);
@@ -1242,6 +1252,18 @@ export class TerminalService {
     this.#assertNotDisposed();
     if (this.#paused)
       throw new Error('The terminal service is paused while Forgeboard changes local data.');
+  }
+
+  /**
+   * Same disposed/paused predicate `#assertAvailable` guards on, without throwing. The peer-hub
+   * methods (`deliverPeerInput`, `readTranscriptTail`) are declared to return a modeled sentinel,
+   * never to reject, so a hub HTTP caller coded to those return types can't be surprised by an
+   * uncaught rejection while the service is paused (e.g. mid-`pauseForShutdown`) or disposed.
+   */
+  async #isAvailableForPeerAccess(): Promise<boolean> {
+    if (this.#disposed || this.#paused) return false;
+    await this.#ready;
+    return !this.#disposed && !this.#paused;
   }
 
   #assertNotDisposed(): void {
