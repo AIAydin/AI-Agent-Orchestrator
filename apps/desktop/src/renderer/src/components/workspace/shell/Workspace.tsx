@@ -100,6 +100,11 @@ import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
 import { useAgentRunController } from '../runs/useAgentRunController.js';
 import { useAgentStatusReconciliation } from '../runs/useAgentStatusReconciliation.js';
 import { useAgentWorktreeRecord } from '../runs/useAgentWorktreeAvailability.js';
+import {
+  AgentSessionProvider,
+  type AgentSessionContextValue,
+} from '../runs/agent-session/AgentSessionContext.js';
+import { providerConnectionIdForAdapter } from '../../../lib/provider-connections.js';
 import { effectiveNodeModel } from '../runs/agent-node/model-selection.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
 import { useDurableCanvasHistory } from '../canvas/history/useDurableCanvasHistory.js';
@@ -1465,6 +1470,42 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     ],
   );
 
+  const agentSessionValue = useMemo<AgentSessionContextValue>(
+    () => ({
+      project,
+      settings,
+      runnableAgents,
+      graphReadOnly: collaborationCanvas.graphReadOnly,
+      gateFor: providerGates.gateFor,
+      recheckProvider: (adapterId: string) => {
+        const providerId = providerConnectionIdForAdapter(adapterId);
+        if (providerId !== null) void providerGates.recheck(providerId);
+      },
+      openSettings: onOpenSettings,
+      reportError: onError,
+      updateNodeData,
+      recordHistory: record,
+      nodeTitle: (nodeId: string) =>
+        nodesRef.current.find((node) => node.id === nodeId)?.data.title ?? null,
+      removeAgentContext: removeProjectFileContext,
+      requestDeleteNode: deleteNode,
+    }),
+    [
+      collaborationCanvas.graphReadOnly,
+      deleteNode,
+      onError,
+      onOpenSettings,
+      project,
+      providerGates.gateFor,
+      providerGates.recheck,
+      record,
+      removeProjectFileContext,
+      runnableAgents,
+      settings,
+      updateNodeData,
+    ],
+  );
+
   return (
     <main className="workspace-shell">
       <WorkspaceCommandBar
@@ -1551,6 +1592,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             });
           }}
         />
+        <AgentSessionProvider value={agentSessionValue}>
         <WorkspaceCanvas
           canvas={canvas}
           nodes={displayedGraph.nodes}
@@ -1667,6 +1709,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onAttachAgentContext={attachProjectFileContext}
           onContextDropError={onError}
         />
+        </AgentSessionProvider>
         <WorkspaceInspector
           nodeRegistry={nodeRegistry}
           project={project}
