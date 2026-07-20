@@ -37,7 +37,7 @@ describe('agentSessionLaunch', () => {
     expect(launch.configuration).toEqual({
       executable: '/usr/local/bin/claude',
       arguments: ['--permission-mode', 'plan', '--model', 'claude-sonnet-5'],
-      cwdRelative: '',
+      cwdRelative: '.',
       environmentVariableNames: [],
     });
     expect(launch.profileNote).toBeNull();

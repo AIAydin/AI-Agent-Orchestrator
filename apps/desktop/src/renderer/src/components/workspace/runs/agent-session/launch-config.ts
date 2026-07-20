@@ -66,7 +66,7 @@ export function agentSessionLaunch(
     configuration: {
       executable,
       arguments: args,
-      cwdRelative: '',
+      cwdRelative: '.',
       environmentVariableNames: [],
     },
     profileNote: enforced
