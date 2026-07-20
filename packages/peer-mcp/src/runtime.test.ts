@@ -9,14 +9,22 @@ describe('createStdioLoop', () => {
     const output = new PassThrough();
     let resolveHubCall: (() => void) | undefined;
     const hub: HubClient = {
-      peers: vi.fn(
+      peers: vi.fn<
+        () => Promise<{
+          agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
+        }>
+      >(
         () =>
           new Promise((resolve) => {
             resolveHubCall = () => resolve({ agents: [] });
           }),
       ),
-      message: vi.fn(() => Promise.resolve({ result: 'ok' })),
-      screen: vi.fn(() => Promise.resolve({ text: '' })),
+      message: vi.fn<(to: string, message: string) => Promise<{ result: string }>>(() =>
+        Promise.resolve({ result: 'ok' }),
+      ),
+      screen: vi.fn<(agent: string) => Promise<{ text: string }>>(() =>
+        Promise.resolve({ text: '' }),
+      ),
     };
 
     const chunks: string[] = [];
@@ -53,9 +61,17 @@ describe('createStdioLoop', () => {
     const input = new PassThrough();
     const output = new PassThrough();
     const hub: HubClient = {
-      peers: vi.fn(() => Promise.reject(new Error('boom'))),
-      message: vi.fn(() => Promise.resolve({ result: 'ok' })),
-      screen: vi.fn(() => Promise.resolve({ text: '' })),
+      peers: vi.fn<
+        () => Promise<{
+          agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
+        }>
+      >(() => Promise.reject(new Error('boom'))),
+      message: vi.fn<(to: string, message: string) => Promise<{ result: string }>>(() =>
+        Promise.resolve({ result: 'ok' }),
+      ),
+      screen: vi.fn<(agent: string) => Promise<{ text: string }>>(() =>
+        Promise.resolve({ text: '' }),
+      ),
     };
 
     const done = new Promise<void>((resolve) => {
@@ -79,9 +95,17 @@ describe('createStdioLoop', () => {
     const input = new PassThrough();
     const output = new PassThrough();
     const hub: HubClient = {
-      peers: vi.fn(() => Promise.resolve({ agents: [] })),
-      message: vi.fn(() => Promise.resolve({ result: 'ok' })),
-      screen: vi.fn(() => Promise.resolve({ text: '' })),
+      peers: vi.fn<
+        () => Promise<{
+          agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
+        }>
+      >(() => Promise.resolve({ agents: [] })),
+      message: vi.fn<(to: string, message: string) => Promise<{ result: string }>>(() =>
+        Promise.resolve({ result: 'ok' }),
+      ),
+      screen: vi.fn<(agent: string) => Promise<{ text: string }>>(() =>
+        Promise.resolve({ text: '' }),
+      ),
     };
 
     const done = new Promise<void>((resolve) => {
