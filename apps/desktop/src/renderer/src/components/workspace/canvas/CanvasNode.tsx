@@ -14,8 +14,7 @@ import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
 import { useNodeTypeRegistry } from '../node-registry/NodeRegistryContext.js';
 import { providerTheme } from '../node-registry/provider-themes.js';
-import { AgentSessionNode } from '../runs/agent-session/AgentSessionNode.js';
-import { PreviewNodeFace } from '../previews/PreviewNodeFace.js';
+import { nodeFaceForKind } from './faces/node-face-registry.js';
 import type { NodeKind } from '../node-registry/registry.js';
 import type { RunStatus } from '@forgeboard/core/domain';
 
@@ -192,9 +191,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
   const canChangePresentation = !interactions.readOnly && !data.locked;
   const automaticallySized = groupFrame && data.autoFit === true;
   const isAgent = data.kind === 'agent';
-  const agentWindow = isAgent && !data.collapsed;
-  const previewFace =
-    (data.kind === 'web-preview' || data.kind === 'mobile-preview') && !data.collapsed;
+  const Face = data.collapsed ? null : nodeFaceForKind(data.kind);
   const theme = isAgent ? providerTheme(data.adapterId) : null;
   return (
     <article
@@ -290,11 +287,8 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           </button>
         </WorkspaceTooltip>
       </header>
-      {agentWindow && <AgentSessionNode id={id} data={data} />}
-      {previewFace && (
-        <PreviewNodeFace id={id} kind={data.kind as 'web-preview' | 'mobile-preview'} data={data} />
-      )}
-      {!agentWindow && !previewFace && definition.behaviors.collapsible && !data.collapsed && (
+      {Face !== null && <Face id={id} data={data} />}
+      {Face === null && definition.behaviors.collapsible && !data.collapsed && (
         <div className="node-body">
           <strong>{data.title}</strong>
           <p>{data.description || definition.description}</p>
