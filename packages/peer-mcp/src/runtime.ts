@@ -6,8 +6,12 @@ import { handleMessage, type HubClient } from './protocol.js';
  * spawns an async handler; those handlers are tracked in `pending` so that
  * when `input` closes (stdin EOF), replies for requests still in flight —
  * e.g. a `tools/call` whose hub fetch hasn't resolved yet — are drained
- * before `onDone` fires. `onDone` always runs, regardless of whether any
- * individual handler failed.
+ * before `onDone` fires. Each handler awaits its `output.write` callback, so
+ * a task isn't considered done (and removed from `pending`) until its reply
+ * has actually flushed, not merely been queued — important because callers
+ * (see main.ts) map `onDone` to `process.exit`, which can truncate an
+ * OS pipe's unflushed buffer. `onDone` always runs, regardless of whether
+ * any individual handler failed.
  */
 export function createStdioLoop(
   input: NodeJS.ReadableStream,
@@ -29,7 +33,14 @@ export function createStdioLoop(
       }
       try {
         const reply = await handleMessage(parsed, hub);
-        if (reply !== null) output.write(`${JSON.stringify(reply)}\n`);
+        if (reply !== null) {
+          await new Promise<void>((resolve, reject) => {
+            output.write(`${JSON.stringify(reply)}\n`, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        }
       } catch {
         // handleMessage already converts hub failures into isError replies
         // for tools/call; this is a last-resort guard so one bad request can
