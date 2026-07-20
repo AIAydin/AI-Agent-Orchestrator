@@ -237,21 +237,32 @@ describe('AgentSessionNode', () => {
     expect(screen.getByText('Last run output')).toBeTruthy();
   });
 
-  it('offers Restart to apply once the launched config drifts, and restarts on click', async () => {
+  it('restarts to apply only after the live session goes inactive, not merely after terminate resolves', async () => {
     controller.pendingPlan = REVIEW_PLAN;
     const view = render(nodeTree(nodeData()));
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(controller.confirmLaunch).toHaveBeenCalledOnce();
 
+    // A live session whose launched config has drifted surfaces the Restart-to-apply button.
     controller.pendingPlan = null;
     controller.session = { id: 's1', status: 'running' };
     controller.active = true;
     view.rerender(nodeTree(nodeData({ model: 'gpt-5' })));
 
-    const restart = screen.getByRole('button', { name: 'Restart to apply' });
-    fireEvent.click(restart);
+    fireEvent.click(screen.getByRole('button', { name: 'Restart to apply' }));
     expect(controller.terminate).toHaveBeenCalledOnce();
+
+    // terminate() resolving is NOT enough to relaunch: while the session is still active the real
+    // prepareLaunch guard rejects a relaunch, so the node must wait for the session to go inactive.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(controller.prepareLaunch).not.toHaveBeenCalled();
+
+    // Once the terminated session reports inactive on the next render, the relaunch fires.
+    controller.session = { id: 's1', status: 'exited' };
+    controller.active = false;
+    view.rerender(nodeTree(nodeData({ model: 'gpt-5' })));
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
   });
 

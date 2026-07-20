@@ -1,4 +1,4 @@
-import { useRef, type JSX } from 'react';
+import { useEffect, useRef, type JSX } from 'react';
 
 import type { PermissionProfile } from '../../../../../../shared/application/contracts.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
@@ -15,7 +15,11 @@ import type { TerminalNodeConfiguration } from '../../terminal/types.js';
 import { terminalOperationsFromWindow } from '../../terminal/types.js';
 import { useTerminalNodeController } from '../../terminal/useTerminalNodeController.js';
 import { effectiveNodeModel } from '../agent-node/model-selection.js';
-import { agentSessionLaunch, agentSessionUnavailableReason } from './launch-config.js';
+import {
+  agentSessionLaunch,
+  agentSessionUnavailableReason,
+  modelFlagSupported,
+} from './launch-config.js';
 import { useAgentSession } from './AgentSessionContext.js';
 import './agent-session.css';
 
@@ -76,7 +80,10 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   const unavailableReason = agentSessionUnavailableReason(agent);
   const blocked = gate !== null && gate.state !== 'connected';
   const canStart = unavailableReason === null && !blocked;
-  const modelSelection = agent?.capabilities?.modelSelection === true;
+  // Only surface the Model field when the agent both advertises model selection AND launch-config
+  // maps a model flag for it; otherwise a typed model would be silently dropped from the command.
+  const modelSelection =
+    agent?.capabilities?.modelSelection === true && modelFlagSupported(adapter);
 
   const hasActiveSession = controller.session !== null && controller.active;
   const endedSession = controller.session !== null && !controller.active;
@@ -92,6 +99,28 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
       : `${launch.configuration.executable} ${launch.configuration.arguments.join(' ')}`;
   const configDrifted =
     hasActiveSession && launchedKeyRef.current !== null && launchedKeyRef.current !== currentKey;
+
+  // Restart-to-apply relaunch: terminating and re-launching cannot chain with
+  // `terminate().then(prepareLaunch)` because prepareLaunch's guard still sees the live session and
+  // refuses. Instead, flag the intent, terminate, and let the effect below relaunch once the
+  // controller reports no active session.
+  const pendingRestartRef = useRef(false);
+  const controllerRef = useRef(controller);
+  controllerRef.current = controller;
+
+  useEffect(() => {
+    if (!pendingRestartRef.current || hasActiveSession) return;
+    pendingRestartRef.current = false;
+    void controllerRef.current.prepareLaunch();
+  }, [hasActiveSession]);
+
+  const requestRestartToApply = (): void => {
+    pendingRestartRef.current = true;
+    void controller.terminate().catch((cause: unknown) => {
+      pendingRestartRef.current = false;
+      reportError(cause instanceof Error ? cause.message : 'Could not restart the session.');
+    });
+  };
 
   const contextChips = (data.contextAttachmentIds ?? [])
     .map((cid) => ({ cid, title: nodeTitle(cid) }))
@@ -282,9 +311,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
             type="button"
             className="agent-restart-apply nodrag"
             disabled={readOnly}
-            onClick={() => {
-              void controller.terminate().then(() => controller.prepareLaunch());
-            }}
+            onClick={requestRestartToApply}
           >
             Restart to apply
           </button>
