@@ -17,16 +17,14 @@ Every Agent node's face is a live, scrollable session with its agent — visible
 - **Session start friction:** one explicit Start (with the existing terminal launch review) per session; typing inside the session is the CLI's own instant loop. The provider connection gate (run-gate on connection) still blocks starting.
 - **Provider looks:** distinct brand themes per provider — palette entries per provider, same layout, different identity.
 
-## 1. Node face: embedded provider terminal
+## 1. Node face: a floating app window with the real CLI inside
 
-For `data.kind === 'agent'`, `CanvasNode` renders a new **`AgentSessionNode`** body (replacing the title/description/chip stack):
+Reference: the "October"-style canvas — agent nodes read as **macOS-style app windows** floating on the canvas, each showing a live CLI session. For `data.kind === 'agent'`, `CanvasNode` renders a new **`AgentSessionNode`** with window chrome (replacing the generic node header/body):
 
-- **Terminal area** — `TerminalSurface` (xterm) filling the node, streaming the provider CLI session. Carries `nowheel nodrag` classes so wheel/selection stay in the terminal; the node drags only by its header (`dragHandle` = node header selector).
-- **Idle state** — before a session starts (or after exit): a start card with the provider logo/monogram, a **Start session** button, and the last session's tail if one existed. Session exit shows an exit strip with **Restart**.
-- **Header** — unchanged chrome (kind icon, collapse, status dot) plus **inline title editing** (click the title to edit in place; commits on blur/Enter).
-- **Config row** (above the terminal, compact selects): **Agent**, **Model** (gated on `modelSelection` capability), **Permission profile**. Changes apply to the next session; while a session is live, a **Restart with new settings** affordance appears instead of silently switching.
-- **Context chips** — attached context nodes (`contextAttachmentIds`) render as removable chips on the node; the canvas drop-zone behavior is unchanged.
-- **Run strip** — compact line showing orchestration state: status chip, `lastRunSummary`, cost when present, and an expandable **Last run output** `<details>` with the structured-run transcript (`data.transcript`). This keeps flow-run visibility after the sidebar goes away.
+- **Window title bar** (the drag handle): traffic-light dots — red = delete node (existing delete flow + confirm), yellow = collapse to pill, green = expand toward default size; then **inline-editable title** (the agent's name, e.g. "Hermes") and a dim provider label ("· Claude Code"); status dot on the right. Rounded corners, window drop shadow.
+- **Terminal body** — `TerminalSurface` (xterm) filling the window, streaming the provider CLI session — the actual Claude Code / Codex TUI, dark terminal styling regardless of app theme. Carries `nowheel nodrag` so wheel/selection stay in the terminal.
+- **Idle state** — start card with provider monogram, a **Start session** button, and "not installed" / gate guidance when applicable. Session exit shows an exit strip with the code and **Restart**.
+- **Bottom control strip** (compact, October-style): **Agent** select ▾, **Model**, **Permission profile** ▾, run-status chip + `lastRunSummary`, expandable **Last run output** (structured-run transcript), and context-attachment chips (removable). Config changes apply to the next session; while a session is live a **Restart to apply** affordance appears instead of silently switching.
 - Collapse behavior unchanged (35 px pill). The PTY session keeps running while collapsed.
 
 ## 2. Session lifecycle (reusing terminal infrastructure)
@@ -58,7 +56,7 @@ Selecting an agent node shows **no inspector panel** (the inspector renders noth
 ## 6. Provider-themed nodes
 
 - **Palette:** one entry per runnable provider ("Claude Code", "Codex", "opencode", …) creating an agent node with `adapterId`, themed color, and provider label pre-set. The generic "Agent" entry remains.
-- **Theme map** (`node-registry/provider-themes.ts`): per-provider accent, surface tint, header treatment, monogram/logomark, and matching xterm theme (background/foreground/cursor). Applied via `data-provider` attribute + scoped CSS custom properties; switching the Agent select re-themes live. Unknown providers fall back to generic styling.
+- **Theme map** (`node-registry/provider-themes.ts`): per-provider accent, title-bar tint, and monogram, applied to the window chrome via a `data-provider` attribute + scoped CSS custom properties; switching the Agent select re-themes live. The terminal body stays terminal-dark for every provider (the TUIs bring their own colors). Unknown providers fall back to generic styling.
 
 ## 7. Node sizing
 
