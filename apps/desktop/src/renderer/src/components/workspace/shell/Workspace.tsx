@@ -104,6 +104,7 @@ import {
   AgentSessionProvider,
   type AgentSessionContextValue,
 } from '../runs/agent-session/AgentSessionContext.js';
+import { AGENT_NODE_DRAG_HANDLE } from '../runs/agent-session/AgentSessionNode.js';
 import { providerConnectionIdForAdapter } from '../../../lib/provider-connections.js';
 import { effectiveNodeModel } from '../runs/agent-node/model-selection.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
@@ -643,6 +644,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           selected: true,
           position: position ?? { x: 220 + offset, y: 150 + offset },
           ...initialWorkshopNodeDimensions(kind),
+          ...(kind === 'agent' ? { dragHandle: AGENT_NODE_DRAG_HANDLE } : {}),
           data: {
             kind,
             title: definition.label,

@@ -48,7 +48,7 @@ describe('CanvasNode presentation interactions', () => {
     renderNode(nodeData(), { selected: true, setCollapsed, onResizeStart });
 
     const node = screen.getByRole('article', {
-      name: 'Agent: Implement search',
+      name: 'Task: Implement search',
     });
     expect(node.getAttribute('aria-roledescription')).toBe('canvas node');
     expect(screen.getByText('Build the local index.')).toBeTruthy();
@@ -193,18 +193,13 @@ describe('CanvasNode presentation interactions', () => {
     expect(setCanvasNodeCollapsed(readOnlyNodes, target.id, true, true)).toBe(readOnlyNodes);
   });
 
-  it('shows explicit branch and active-record badges for an assigned Agent run', () => {
-    renderNode(
-      nodeData({
-        branch: 'forgeboard/agent/search',
-        worktreeId: 'worktree-1',
-        worktreeRecordedActive: true,
-      }),
-    );
+  it('marks agent nodes as provider-tinted windows and keeps collapsed agents draggable', () => {
+    renderNode(nodeData({ kind: 'agent', adapterId: 'claude', collapsed: true }));
 
-    const workspace = screen.getByLabelText('Agent Git workspace');
-    expect(workspace.textContent).toContain('Branch · forgeboard/agent/search');
-    expect(workspace.textContent).toContain('Worktree assigned');
+    const node = screen.getByRole('article', { name: 'Agent: Implement search' });
+    expect(node.classList.contains('agent-window')).toBe(true);
+    expect(node.classList.contains('agent-drag-handle')).toBe(true);
+    expect(node.getAttribute('data-provider')).toBe('claude');
   });
 });
 
@@ -264,7 +259,7 @@ function nodeProps(data: WorkshopNodeData, selected: boolean): NodeProps<Worksho
 
 function nodeData(overrides: Partial<WorkshopNodeData> = {}): WorkshopNodeData {
   return {
-    kind: 'agent',
+    kind: 'task',
     title: 'Implement search',
     description: 'Build the local index.',
     status: 'idle',

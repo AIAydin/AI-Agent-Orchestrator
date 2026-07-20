@@ -16,6 +16,8 @@ import { useCanvasNodeInteractions } from './interactions/CanvasNodeInteractionC
 import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
 import { useNodeTypeRegistry } from '../node-registry/NodeRegistryContext.js';
+import { providerTheme } from '../node-registry/provider-themes.js';
+import { AgentSessionNode } from '../runs/agent-session/AgentSessionNode.js';
 import type { NodeKind } from '../node-registry/registry.js';
 import type { RunStatus } from '@forgeboard/core/domain';
 
@@ -194,6 +196,9 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
       : CANVAS_NODE_MINIMUM_DIMENSIONS;
   const canChangePresentation = !interactions.readOnly && !data.locked;
   const automaticallySized = groupFrame && data.autoFit === true;
+  const isAgent = data.kind === 'agent';
+  const agentWindow = isAgent && !data.collapsed;
+  const theme = isAgent ? providerTheme(data.adapterId) : null;
   return (
     <article
       className={[
@@ -201,14 +206,22 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         selected ? 'selected' : '',
         data.collapsed ? 'collapsed' : '',
         groupFrame ? 'group-frame' : '',
+        isAgent ? 'agent-window' : '',
+        isAgent && data.collapsed ? 'agent-drag-handle' : '',
       ]
         .filter(Boolean)
         .join(' ')}
-      style={{ '--node-accent': data.color } as React.CSSProperties}
+      style={
+        {
+          '--node-accent': theme?.accent ?? data.color,
+          '--provider-tint': theme?.titleBarTint ?? 'transparent',
+        } as React.CSSProperties
+      }
       role={groupFrame ? 'group' : undefined}
       aria-roledescription={groupFrame ? 'group' : 'canvas node'}
       aria-label={`${definition.label}: ${data.title}`}
       data-node-kind={data.kind}
+      data-provider={isAgent ? (theme?.id ?? 'generic') : undefined}
     >
       <NodeResizer
         nodeId={id}
@@ -280,7 +293,8 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           </button>
         </WorkspaceTooltip>
       </header>
-      {definition.behaviors.collapsible && !data.collapsed && (
+      {agentWindow && <AgentSessionNode id={id} data={data} />}
+      {!agentWindow && definition.behaviors.collapsible && !data.collapsed && (
         <div className="node-body">
           <strong>{data.title}</strong>
           <p>{data.description || definition.description}</p>

@@ -9,6 +9,7 @@ import type { Snapshot } from '../../model/types.js';
 import { createEdgeData, edgeDataForPersistence } from '../../model/edge-config.js';
 import { hydrateNodeData } from '../../model/helpers.js';
 import { workshopNodeForPersistence } from '../../model/node-persistence.js';
+import { AGENT_NODE_DRAG_HANDLE } from '../../runs/agent-session/AgentSessionNode.js';
 
 export function snapshotForPersistence(snapshot: Snapshot): CanvasHistoryGraph {
   return {
@@ -34,14 +35,18 @@ export function hydrateHistorySnapshot(
   extensionDiscovery: ExtensionDiscoveryView,
 ): Snapshot {
   return {
-    nodes: graph.nodes.map((node) => ({
-      id: node.id,
-      type: 'workshop' as const,
-      position: node.position,
-      ...(node.width === undefined ? {} : { width: node.width }),
-      ...(node.height === undefined ? {} : { height: node.height }),
-      data: hydrateNodeData(node.data, extensionDiscovery),
-    })),
+    nodes: graph.nodes.map((node) => {
+      const data = hydrateNodeData(node.data, extensionDiscovery);
+      return {
+        id: node.id,
+        type: 'workshop' as const,
+        position: node.position,
+        ...(node.width === undefined ? {} : { width: node.width }),
+        ...(node.height === undefined ? {} : { height: node.height }),
+        ...(data.kind === 'agent' ? { dragHandle: AGENT_NODE_DRAG_HANDLE } : {}),
+        data,
+      };
+    }),
     edges: graph.edges.map((edge) => ({
       id: edge.id,
       source: edge.source,
