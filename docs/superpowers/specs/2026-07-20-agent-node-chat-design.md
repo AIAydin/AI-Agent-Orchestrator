@@ -35,18 +35,17 @@ For `data.kind === 'agent'`, `CanvasNode` renders a new **`AgentSessionNode`** b
 - Sessions are keyed per node (existing owner model), survive node deselection, and are terminated by the existing service shutdown rules.
 - **Provider gate kept:** the Start button is blocked (with inline warning + **Refresh status** / **Open settings** actions) while `useAgentProviderGate` reports the provider disconnected/unknown — same copy and actions as today.
 
-## 3. Provider launch resolution (main process)
+## 3. Provider launch resolution (renderer module, existing terminal IPC)
 
-New module `main/agent-sessions/launch-config.ts` maps node config → terminal launch input:
+No main-process changes. A renderer module `runs/agent-session/launch-config.ts` maps node config → the existing `TerminalNodeConfiguration`, and the session flows through the untouched `TerminalService` (launch review, audit, PTY):
 
-- **Executable:** from agent detection (`AgentDetection.executable`, honoring `agentExecutableOverrides`).
+- **Executable:** from agent detection (`AgentDetection.executable`; detection already honors `agentExecutableOverrides`). Missing executable → start card shows "not installed" guidance instead of Start.
 - **Arguments per provider:**
   - `claude`: `['--permission-mode', 'plan']` when profile is `plan-read-only`; `['--model', <model>]` when a model is set.
-  - `codex`: `['-m', <model>]` when a model is set; profile `plan-read-only` adds its read-only sandbox flag.
-  - `opencode` / others: no flags (documented as best-effort; the CLI's own controls apply).
-- **cwd:** project root; for `worktree-write`, the node's persistent worktree — acquired through the same worktree machinery the run pipeline uses (created on first session, reused after).
-- **`docker-isolated`:** not available for interactive sessions in this round — the permission select shows the existing "unavailable" pattern with a reason.
-- Everything flows through the existing `TerminalService` (launch review, audit, PTY) — no new privileged paths.
+  - `codex`: `['--sandbox', 'read-only']` when profile is `plan-read-only`; `['-m', <model>]` when a model is set.
+  - `opencode` / others: no flags (best-effort; the CLI's own controls apply).
+- **cwd:** the project root (`cwdRelative: ''`) for all interactive sessions in this round. The terminal contract restricts cwd to inside the project, and managed run-worktrees live outside it — so `worktree-write` and `docker-isolated` interactive enforcement is **not** available yet. For those profiles the config row shows an inline note: interactive sessions run at the project root with the CLI's own interactive approval prompts as the guardrail; flow runs keep full profile enforcement. A follow-up adds managed-worktree interactive sessions via a main-side session service.
+- **Environment allowlist:** empty (`environmentVariableNames: []`) — provider CLIs read their own config/auth files.
 
 ## 4. Flow runs: unchanged pipeline, visible on the node
 
@@ -70,11 +69,10 @@ Selecting an agent node shows **no inspector panel** (the inspector renders noth
 - Gate warning blocks Start with inline refresh actions (existing copy).
 - Launch failure → inline error strip on the node with Retry.
 - Session exit (crash or clean) → exit strip with code and **Restart**.
-- Worktree acquisition failure for `worktree-write` → inline error, session not started.
 
 ## 9. Testing
 
-- `launch-config` unit tests: per-provider args/cwd matrix (profile × model), override handling, docker-unavailable reason.
+- `launch-config` unit tests: per-provider argument matrix (profile × model), missing-executable handling, project-root cwd, profile-note reasons.
 - `AgentSessionNode` tests: start-card → review → running states, gate blocking, config selects patch node data, restart-after-config-change affordance, run strip renders summary/transcript details, inline title edit commits.
 - `CanvasNode` tests: agent kind renders session body, `data-provider` attribute, drag-handle and `nowheel`/`nodrag` presence, other kinds unchanged.
 - `WorkspaceInspector` tests: agent selection renders no panel.
@@ -82,7 +80,7 @@ Selecting an agent node shows **no inspector panel** (the inspector renders noth
 
 ## Out of scope
 
-- Docker-isolated interactive sessions.
+- Managed-worktree and Docker-isolated interactive sessions (flow runs keep both; interactive follow-up needs a main-side session service).
 - Sidebar removal for non-agent node kinds (follow-up pass).
 - Structured turn model / custom chat renderer / custom slash-command menu (superseded by the real TUI).
 - Driving the interactive TUI from flow orchestration (flows keep the headless pipeline).
