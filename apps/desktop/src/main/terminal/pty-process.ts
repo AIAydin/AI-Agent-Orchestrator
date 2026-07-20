@@ -29,13 +29,75 @@ export type TerminalPtyFactory = (
   beforeSpawn: () => Promise<void>,
 ) => Promise<TerminalPtyHandle>;
 
+/**
+ * The essential, well-known environment variables an interactive program needs simply to function —
+ * inherited from Forgeboard's own process. Without them the child is spawned with an empty
+ * environment: no PATH means `#!/usr/bin/env node` launchers (codex, and most CLI tools) exit
+ * immediately with "env: node: No such file or directory", and no HOME means CLIs cannot find their
+ * config or credentials. This is base infrastructure, not the reviewed environment allowlist: the
+ * allowlist (which sources the same process values by name) is layered on top and wins on conflict,
+ * and blocked names (DYLD_*, LD_*, NODE_OPTIONS, …) are deliberately absent so nothing exploitable
+ * leaks. It matches the documented model that these terminals run with the user's full account.
+ */
+const BASE_ENVIRONMENT_NAMES: readonly string[] =
+  process.platform === 'win32'
+    ? [
+        'SystemRoot',
+        'SystemDrive',
+        'windir',
+        'TEMP',
+        'TMP',
+        'PATH',
+        'PATHEXT',
+        'USERPROFILE',
+        'HOMEDRIVE',
+        'HOMEPATH',
+        'APPDATA',
+        'LOCALAPPDATA',
+        'ProgramData',
+        'ProgramFiles',
+        'ProgramFiles(x86)',
+        'USERNAME',
+        'USERDOMAIN',
+        'COMPUTERNAME',
+        'COMSPEC',
+        'NUMBER_OF_PROCESSORS',
+        'PROCESSOR_ARCHITECTURE',
+      ]
+    : [
+        'HOME',
+        'PATH',
+        'USER',
+        'LOGNAME',
+        'SHELL',
+        'LANG',
+        'LC_ALL',
+        'LC_CTYPE',
+        'TERM',
+        'COLORTERM',
+        'TZ',
+        'TMPDIR',
+      ];
+
+/** Reads the safe base environment from the current process, skipping unset or unsafe values. */
+export function baseTerminalEnvironment(): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const name of BASE_ENVIRONMENT_NAMES) {
+    const value = process.env[name];
+    if (value === undefined || value.includes('\0')) continue;
+    values[name] = value;
+  }
+  return values;
+}
+
 export const createTerminalPty: TerminalPtyFactory = async (launch, beforeSpawn) => {
   await ensureNodePtySpawnHelper();
   const pty = await import('node-pty');
   await beforeSpawn();
   const terminal = pty.spawn(launch.executable, [...launch.arguments], {
     cwd: launch.cwd,
-    env: { ...launch.environment },
+    // Base infrastructure first, then the reviewed allowlist so any user-allowlisted value wins.
+    env: { ...baseTerminalEnvironment(), ...launch.environment },
     name: 'xterm-256color',
     cols: launch.columns,
     rows: launch.rows,
