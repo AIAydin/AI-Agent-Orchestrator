@@ -255,6 +255,11 @@ import type {
   RecoverySnapshotSummary,
 } from './recovery/contracts.js';
 import type {
+  AgentPeersEvent,
+  AgentPeersProvisionInput,
+  AgentPeersProvisionView,
+} from './agent-peers/index.js';
+import type {
   WorkflowApproveHumanDecisionInput,
   WorkflowApproveNodeInput,
   WorkflowArtifactActionInput,
@@ -442,6 +447,10 @@ export interface ForgeboardApi {
     interrupt(input: TerminalSessionTargetInput): Promise<IpcResult<TerminalSessionView>>;
     terminate(input: TerminalSessionTargetInput): Promise<IpcResult<TerminalSessionView>>;
     onEvent(listener: (event: TerminalEvent) => void): () => void;
+  };
+  agentPeers: {
+    provision(input: AgentPeersProvisionInput): Promise<IpcResult<AgentPeersProvisionView>>;
+    onEvent(listener: (event: AgentPeersEvent) => void): () => void;
   };
   previews: {
     listTargets(input: PreviewTargetListInput): Promise<IpcResult<PreviewTargetView[]>>;

@@ -91,6 +91,7 @@ import { createGitReviewNotesApi } from './git-review-notes.js';
 import { createRunHistoryApi } from './runs/history.js';
 import { createRunContinuationApi } from './runs/continuation.js';
 import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
+import { createAgentPeersApi } from './agent-peers/bridge.js';
 import { createTerminalApi } from './terminal/index.js';
 import { createPreviewSurfaceApi } from './preview/surface/index.js';
 import { createProviderConnectionsApi } from './provider-connections/index.js';
@@ -240,6 +241,16 @@ const api: ForgeboardApi = {
     },
   },
   terminal: createTerminalApi(
+    (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+    (channel, listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+  ),
+  agentPeers: createAgentPeersApi(
     (channel, ...args) => ipcRenderer.invoke(channel, ...args),
     (channel, listener) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
