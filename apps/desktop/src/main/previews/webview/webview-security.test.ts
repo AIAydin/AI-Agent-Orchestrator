@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { EventEmitter } from 'node:events';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -61,8 +62,8 @@ class FakeGuestContents extends EventEmitter {
 function createHarness(overrides: Partial<PreviewWebviewSecurityOptions> = {}) {
   const app = new EventEmitter();
   const options: PreviewWebviewSecurityOptions = {
-    confirmOpenExternal: vi.fn(async () => true),
-    openExternal: vi.fn(async () => undefined),
+    confirmOpenExternal: vi.fn(() => Promise.resolve(true)),
+    openExternal: vi.fn(() => Promise.resolve(undefined)),
     audit: vi.fn(),
     ...overrides,
   };
@@ -99,18 +100,13 @@ describe('installPreviewWebviewSecurity', () => {
     const { options, attach } = createHarness();
     const contents = attach();
     contents.windowOpenHandler?.({ url: 'file:///etc/passwd' });
-    await Promise.resolve();
+    await vi.waitFor(() => expect(options.audit).toHaveBeenCalledWith('webview-window-open', 'denied', expect.objectContaining({ reason: 'unsupported-scheme' })));
     expect(options.confirmOpenExternal).not.toHaveBeenCalled();
     expect(options.openExternal).not.toHaveBeenCalled();
-    expect(options.audit).toHaveBeenCalledWith(
-      'webview-window-open',
-      'denied',
-      expect.objectContaining({ reason: 'unsupported-scheme' }),
-    );
   });
 
   it('does not open the link when the native confirmation is cancelled', async () => {
-    const { options, attach } = createHarness({ confirmOpenExternal: vi.fn(async () => false) });
+    const { options, attach } = createHarness({ confirmOpenExternal: vi.fn(() => Promise.resolve(false)) });
     const contents = attach();
     contents.windowOpenHandler?.({ url: 'https://example.com/' });
     await vi.waitFor(() =>
