@@ -112,6 +112,7 @@ interface WorkspaceInspectorProps {
 
 export function WorkspaceInspector(props: WorkspaceInspectorProps) {
   const { selectedNode, selectedEdge } = props;
+  if (selectedNode?.data.kind === 'agent') return null;
   return (
     <aside className="inspector">
       <header>

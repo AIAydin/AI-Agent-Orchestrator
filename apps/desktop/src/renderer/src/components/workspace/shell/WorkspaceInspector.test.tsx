@@ -73,9 +73,13 @@ const testAgent: AgentDetection & { id: 'test-agent' } = {
 };
 
 describe('WorkspaceInspector agent nodes', () => {
-  it('renders nothing for a selected agent node (the node itself is now self-contained)', () => {
-    render(<WorkspaceInspector {...props(settings(), agentNode({}))} />);
+  it('hides the entire inspector shell for a selected agent node (the node itself is now self-contained)', () => {
+    const { container } = render(<WorkspaceInspector {...props(settings(), agentNode({}))} />);
 
+    // Not just the node-kind content — the "Details" header and aside shell are gone too.
+    expect(container.querySelector('aside.inspector')).toBeNull();
+    expect(screen.queryByText('Details')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear selection' })).toBeNull();
     expect(screen.queryByText('Agent run')).toBeNull();
     expect(screen.queryByLabelText('Title')).toBeNull();
     expect(screen.queryByLabelText('Description')).toBeNull();
@@ -83,15 +87,19 @@ describe('WorkspaceInspector agent nodes', () => {
     expect(screen.queryByRole('button', { name: 'Review and run Agent' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Lock' })).toBeNull();
-    // The header still names the selection; only the node-kind content beneath it is gone.
-    expect(screen.getByText('Agent')).toBeTruthy();
+    expect(container.firstChild).toBeNull();
   });
 
-  it('renders nothing for a locked agent node too — lock state is communicated by the node itself', () => {
-    render(<WorkspaceInspector {...props(settings(), agentNode({ locked: true }))} />);
+  it('hides the entire inspector shell for a locked agent node too — lock state is communicated by the node itself', () => {
+    const { container } = render(
+      <WorkspaceInspector {...props(settings(), agentNode({ locked: true }))} />,
+    );
 
+    expect(container.querySelector('aside.inspector')).toBeNull();
+    expect(screen.queryByText('Details')).toBeNull();
     expect(screen.queryByText(/This node is locked/u)).toBeNull();
     expect(screen.queryByRole('group', { name: 'Node settings' })).toBeNull();
+    expect(container.firstChild).toBeNull();
   });
 });
 
