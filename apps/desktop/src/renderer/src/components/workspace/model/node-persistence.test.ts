@@ -41,6 +41,19 @@ describe('workshop node persistence dimensions', () => {
       position: { x: 10, y: 20 },
     });
   });
+
+  it('gives agent nodes the larger session-window dimensions', () => {
+    expect(initialWorkshopNodeDimensions('agent')).toEqual({ width: 560, height: 480 });
+  });
+
+  it('floors persisted agent nodes at the agent minimum', () => {
+    const node = {
+      data: { kind: 'agent' } as WorkshopNode['data'],
+      width: 100,
+      height: 100,
+    };
+    expect(persistedWorkshopNodeDimensions(node)).toEqual({ width: 400, height: 320 });
+  });
 });
 
 function node(

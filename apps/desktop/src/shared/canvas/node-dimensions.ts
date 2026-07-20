@@ -21,3 +21,15 @@ export const GROUP_FRAME_MINIMUM_DIMENSIONS = {
   width: 360,
   height: 240,
 } as const;
+
+/** Initial dimensions for an agent session window (embedded CLI terminal). */
+export const AGENT_NODE_DEFAULT_DIMENSIONS = {
+  width: 560,
+  height: 480,
+} as const;
+
+/** Smallest agent session window that still fits a usable terminal. */
+export const AGENT_NODE_MINIMUM_DIMENSIONS = {
+  width: 400,
+  height: 320,
+} as const;

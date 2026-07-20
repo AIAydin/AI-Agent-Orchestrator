@@ -1,5 +1,7 @@
 import type { CanvasDocument } from '../../../../../shared/application/contracts.js';
 import {
+  AGENT_NODE_DEFAULT_DIMENSIONS,
+  AGENT_NODE_MINIMUM_DIMENSIONS,
   CANVAS_NODE_MINIMUM_DIMENSIONS,
   DEFAULT_CANVAS_NODE_DIMENSIONS,
   DEFAULT_GROUP_FRAME_DIMENSIONS,
@@ -11,9 +13,9 @@ export function initialWorkshopNodeDimensions(kind: NodeKind): {
   readonly width: number;
   readonly height: number;
 } {
-  return kind === 'group-frame'
-    ? { ...DEFAULT_GROUP_FRAME_DIMENSIONS }
-    : { ...DEFAULT_CANVAS_NODE_DIMENSIONS };
+  if (kind === 'group-frame') return { ...DEFAULT_GROUP_FRAME_DIMENSIONS };
+  if (kind === 'agent') return { ...AGENT_NODE_DEFAULT_DIMENSIONS };
+  return { ...DEFAULT_CANVAS_NODE_DIMENSIONS };
 }
 
 export function persistedWorkshopNodeDimensions(
@@ -23,7 +25,9 @@ export function persistedWorkshopNodeDimensions(
   const minimum =
     node.data.kind === 'group-frame'
       ? GROUP_FRAME_MINIMUM_DIMENSIONS
-      : CANVAS_NODE_MINIMUM_DIMENSIONS;
+      : node.data.kind === 'agent'
+        ? AGENT_NODE_MINIMUM_DIMENSIONS
+        : CANVAS_NODE_MINIMUM_DIMENSIONS;
   return {
     width: Math.max(minimum.width, positiveDimension(node.width) ?? fallback.width),
     height: Math.max(minimum.height, positiveDimension(node.height) ?? fallback.height),

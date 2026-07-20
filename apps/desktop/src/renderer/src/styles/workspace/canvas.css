@@ -142,6 +142,10 @@
   min-width: 360px;
   min-height: 240px;
 }
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='agent']:not(.collapsed)) {
+  min-width: 400px;
+  min-height: 320px;
+}
 .react-flow__node-workshop:has(> .canvas-node.collapsed) {
   height: 35px !important;
   min-height: 35px;
