@@ -47,6 +47,18 @@
   background: #28c840;
 }
 
+.agent-title-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  font-weight: 600;
+  font-size: var(--text-sm, 13px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: grab;
+}
+
 .agent-title-input {
   flex: 1;
   min-width: 0;

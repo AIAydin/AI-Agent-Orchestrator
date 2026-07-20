@@ -226,10 +226,36 @@ describe('AgentSessionNode', () => {
     });
   });
 
-  it('records a title change', () => {
+  it('edits the title only after double-clicking the draggable title text', () => {
     renderNode();
-    fireEvent.change(screen.getByLabelText('Node title'), { target: { value: 'Hermes' } });
+    // In display mode the title is static text with no nodrag class, so the whole bar can drag it.
+    const titleText = screen.getByText('Session');
+    expect(titleText.classList.contains('nodrag')).toBe(false);
+    expect(screen.queryByLabelText('Node title')).toBeNull();
+
+    fireEvent.doubleClick(titleText);
+    const input = screen.getByLabelText('Node title');
+    fireEvent.change(input, { target: { value: 'Hermes' } });
+    // The draft commits on Enter, not on every keystroke.
+    expect(spies.updateNodeData).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: 'Enter' });
     expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Hermes' });
+  });
+
+  it('cancels a title edit on Escape without committing', () => {
+    renderNode();
+    fireEvent.doubleClick(screen.getByText('Session'));
+    const input = screen.getByLabelText('Node title');
+    fireEvent.change(input, { target: { value: 'Discarded' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(spies.updateNodeData).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Node title')).toBeNull();
+  });
+
+  it('does not enter title edit mode when read-only', () => {
+    renderNode(nodeData({ locked: true }));
+    fireEvent.doubleClick(screen.getByText('Session'));
+    expect(screen.queryByLabelText('Node title')).toBeNull();
   });
 
   it('shows the last run output when a transcript exists', () => {

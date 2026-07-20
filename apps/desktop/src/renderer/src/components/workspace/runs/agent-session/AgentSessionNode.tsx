@@ -1,4 +1,4 @@
-import { useEffect, useRef, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 
 import type { PermissionProfile } from '../../../../../../shared/application/contracts.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
@@ -57,6 +57,8 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   } = useAgentSession();
   const interactions = useCanvasNodeInteractions();
   const surfaceRef = useRef<TerminalSurfaceHandle | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
 
   const fallbackAdapter = isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'test-agent';
   const adapter = data.adapterId ?? fallbackAdapter;
@@ -129,6 +131,20 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   const lastRunSummary = data.lastRunSummary ?? '';
   const transcript = data.transcript ?? '';
 
+  // The whole title bar is the React Flow drag handle, so the title renders as static, draggable
+  // text; double-clicking swaps it for the editable input (autofocus + select-all). Enter/blur
+  // commits the edit, Escape cancels, and read-only nodes cannot enter edit mode.
+  const beginTitleEdit = (): void => {
+    if (readOnly) return;
+    setTitleDraft(data.title);
+    setEditingTitle(true);
+  };
+  const commitTitleEdit = (): void => {
+    setEditingTitle(false);
+    if (titleDraft !== data.title) updateNodeData(id, { title: titleDraft });
+  };
+  const cancelTitleEdit = (): void => setEditingTitle(false);
+
   return (
     <>
       <div className="agent-window-titlebar agent-drag-handle">
@@ -152,15 +168,34 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
           aria-label="Focus terminal"
           onClick={() => surfaceRef.current?.focus()}
         />
-        <input
-          className="agent-title-input nodrag"
-          aria-label="Node title"
-          name={`node-${id}-title`}
-          value={data.title}
-          disabled={readOnly}
-          onFocus={recordHistory}
-          onChange={(event) => updateNodeData(id, { title: event.target.value })}
-        />
+        {editingTitle ? (
+          <input
+            className="agent-title-input nodrag"
+            aria-label="Node title"
+            name={`node-${id}-title`}
+            value={titleDraft}
+            autoFocus
+            onFocus={(event) => {
+              recordHistory();
+              event.currentTarget.select();
+            }}
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitTitleEdit();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelTitleEdit();
+              }
+            }}
+            onBlur={commitTitleEdit}
+          />
+        ) : (
+          <strong className="agent-title-text" title={data.title} onDoubleClick={beginTitleEdit}>
+            {data.title}
+          </strong>
+        )}
         <span className="agent-provider-label">{theme?.label ?? agent?.label ?? adapter}</span>
         <span
           className={`run-status ${data.status}`}
