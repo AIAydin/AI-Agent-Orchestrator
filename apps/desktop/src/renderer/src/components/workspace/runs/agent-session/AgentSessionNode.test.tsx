@@ -18,7 +18,12 @@ import { AgentSessionProvider, type AgentSessionContextValue } from './AgentSess
 import { AgentSessionNode } from './AgentSessionNode.js';
 
 const controller = {
-  session: null as { id: string; status: string } | null,
+  session: null as {
+    id: string;
+    status: string;
+    exitCode?: number | null;
+    exitSignal?: string | null;
+  } | null,
   sessions: [] as unknown[],
   output: [] as unknown[],
   pendingPlan: null as unknown,
@@ -214,6 +219,16 @@ describe('AgentSessionNode', () => {
     controller.active = true;
     renderNode();
     expect(screen.getByTestId('terminal-surface')).toBeTruthy();
+  });
+
+  it('keeps the terminal surface visible after the session ends and shows the exit code', () => {
+    controller.session = { id: 's1', status: 'failed', exitCode: 127, exitSignal: null };
+    controller.active = false;
+    renderNode();
+    // The final output stays readable instead of collapsing to an exit-only card.
+    expect(screen.getByTestId('terminal-surface')).toBeTruthy();
+    expect(screen.getByText(/Session ended · exit 127/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy();
   });
 
   it('records a permission profile change', () => {

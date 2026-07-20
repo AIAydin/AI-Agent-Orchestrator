@@ -90,6 +90,14 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   const hasActiveSession = controller.session !== null && controller.active;
   const endedSession = controller.session !== null && !controller.active;
 
+  // When a session has ended, the exit code (and any signal) explains why. An empty exit code that
+  // still says "Session ended" hides launch failures, so surface whatever the process reported.
+  const exitCode = controller.session?.exitCode ?? null;
+  const exitSignal = controller.session?.exitSignal ?? null;
+  const exitDetail =
+    (exitCode !== null ? ` · exit ${String(exitCode)}` : '') +
+    (exitSignal !== null ? ` · ${exitSignal}` : '');
+
   // Restart-to-apply: remember the config key that was live when the session was last (re)launched;
   // when the desired launch config drifts from it while a session is live, prompt to restart.
   // Terminal sessions cannot be reconfigured in place, so this surfaces the mismatch instead of
@@ -216,17 +224,31 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
           />
         </div>
       ) : endedSession ? (
-        <div className="agent-exit-strip">
-          <span>Session ended</span>
-          <button
-            type="button"
-            className="button"
-            disabled={readOnly}
-            onClick={() => void controller.prepareLaunch()}
-          >
-            Restart
-          </button>
-        </div>
+        <>
+          {/* Keep the terminal visible after the session dies so its final output (an error, an
+              exit message, a login prompt) stays readable, read-only, instead of vanishing. */}
+          <div className="agent-terminal nowheel nodrag">
+            <TerminalSurface
+              ref={surfaceRef}
+              sessionId={controller.session?.id ?? null}
+              output={controller.output}
+              inputEnabled={false}
+              onInput={() => undefined}
+              onResize={(columns, rows) => controller.resize(columns, rows)}
+            />
+          </div>
+          <div className="agent-exit-strip">
+            <span>Session ended{exitDetail}</span>
+            <button
+              type="button"
+              className="button"
+              disabled={readOnly}
+              onClick={() => void controller.prepareLaunch()}
+            >
+              Restart
+            </button>
+          </div>
+        </>
       ) : (
         <div className="agent-start-card">
           <span className="agent-monogram" aria-hidden="true">
