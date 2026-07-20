@@ -92,7 +92,6 @@ import { createRunHistoryApi } from './runs/history.js';
 import { createRunContinuationApi } from './runs/continuation.js';
 import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
 import { createTerminalApi } from './terminal/index.js';
-import { createPreviewSurfaceApi } from './preview/surface/index.js';
 import { createProviderConnectionsApi } from './provider-connections/index.js';
 import { createUpdatesApi } from './updates/bridge.js';
 import { createDiagramApi } from './diagram/bridge.js';
@@ -265,7 +264,6 @@ const api: ForgeboardApi = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.previewsEvent, handler);
     },
   },
-  previewSurfaces: createPreviewSurfaceApi(ipcRenderer),
   checks: {
     prepare: (input) => invokeValidated(IPC_CHANNELS.checksPrepare, CheckPlanViewSchema, input),
     confirm: (input) =>

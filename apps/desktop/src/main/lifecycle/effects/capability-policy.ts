@@ -221,7 +221,6 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     '@forgeboard/git-engine#RepositoryService',
     'node:fs/promises#rm',
   ]),
-  'previews/preview-ipc.ts': entry('audited-authority', ['electron#shell']),
   'previews/preview-runtime.ts': entry('reviewed-runtime', [
     '@forgeboard/git-engine#RepositoryService',
   ]),
@@ -229,7 +228,6 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     'node:child_process#spawn',
     'process#kill',
   ]),
-  'previews/surface/runtime.ts': entry('reviewed-runtime', ['node:fs/promises#open']),
   'previews/targets/resolver.ts': entry('reviewed-runtime', [
     '@forgeboard/git-engine#RepositoryService',
   ]),

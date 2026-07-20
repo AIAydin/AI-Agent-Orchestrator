@@ -303,6 +303,15 @@ describe('PreviewIpcService launch authority', () => {
     expect(fixture.runtime.restartPrepared).toHaveBeenCalledTimes(1);
     await fixture.service.dispose();
   });
+
+  it('registers no native preview-surface channels after the webview migration', () => {
+    const fixture = createFixture();
+    const surfaceChannels = [...electronMock.handlers.keys()].filter((channel) =>
+      channel.startsWith('preview-surface:'),
+    );
+    expect(surfaceChannels).toEqual([]);
+    return fixture.service.dispose();
+  });
 });
 
 function createFixture(options: { nativeResponse?: number; now?: () => Date } = {}) {

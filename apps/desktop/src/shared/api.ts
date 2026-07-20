@@ -42,7 +42,6 @@ import type {
   CommandReadinessRequest,
   CommandReadinessResult,
 } from './command-readiness/contracts.js';
-import type { PreviewSurfaceApi } from './preview/surface/index.js';
 import type { PreviewTargetListInput, PreviewTargetView } from './preview/targets.js';
 import type {
   ApprovalListInput,
@@ -452,7 +451,6 @@ export interface ForgeboardApi {
     navigate(input: PreviewNavigateInput): Promise<IpcResult<string>>;
     onEvent(listener: (event: PreviewEventEnvelope) => void): () => void;
   };
-  previewSurfaces: PreviewSurfaceApi;
   checks: {
     prepare(input: CheckPrepareInput): Promise<IpcResult<CheckPlanView>>;
     confirm(input: CheckPlanConfirmationInput): Promise<IpcResult<CheckExecutionView | null>>;

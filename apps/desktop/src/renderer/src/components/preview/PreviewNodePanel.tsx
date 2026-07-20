@@ -40,7 +40,7 @@ interface PreviewNodePanelProps {
   onSession: (session: PreviewSessionSnapshot | null) => void;
   onOpenSettings: () => void;
   onError: (message: string) => void;
-  operations?: PreviewRendererOperations | null;
+  operations?: PreviewRendererOperations;
   configurationReadOnly?: boolean;
 }
 
@@ -173,7 +173,6 @@ export function PreviewNodePanel({
   }, [command, data.previewPackageScript, onUpdate, preferredScript, readOnly]);
 
   useEffect(() => {
-    if (!operations) return;
     let active = true;
     void operations
       .listTargets(projectId)
@@ -342,12 +341,6 @@ export function PreviewNodePanel({
         </button>
       </div>
 
-      {!operations ? (
-        <p className="preview-command-guidance" role="status">
-          This build cannot show the preview inside Forgeboard. The local server still runs; install
-          the latest Forgeboard desktop release to view it here.
-        </p>
-      ) : null}
       {session?.failure ? <p className="preview-failure">{session.failure}</p> : null}
       {process ? (
         <dl className="preview-process-details">

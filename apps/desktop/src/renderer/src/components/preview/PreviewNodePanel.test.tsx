@@ -87,7 +87,6 @@ function session(status: PreviewSessionSnapshot['status'] = 'stopped'): PreviewS
 function surfaceOperations(
   overrides: Partial<PreviewRendererOperations> = {},
 ): PreviewRendererOperations {
-  let sequence = 0;
   return {
     listTargets: vi.fn().mockResolvedValue([
       {
@@ -103,68 +102,6 @@ function surfaceOperations(
         available: true,
       },
     ]),
-    createSurface: vi
-      .fn<PreviewRendererOperations['createSurface']>()
-      .mockImplementation((input) => {
-        sequence += 1;
-        return Promise.resolve({
-          surfaceId: `00000000-0000-4000-8000-${String(sequence).padStart(12, '0')}`,
-          projectId: input.projectId,
-          nodeId: input.nodeId,
-          url: input.url,
-          status: 'ready',
-          bounds: input.bounds,
-          touchEmulation: input.touchEmulation,
-          canGoBack: false,
-          canGoForward: false,
-          failure: null,
-        });
-      }),
-    setSurfaceBounds: vi
-      .fn<PreviewRendererOperations['setSurfaceBounds']>()
-      .mockImplementation(({ surfaceId, bounds }) =>
-        Promise.resolve({
-          surfaceId,
-          projectId: PROJECT_ID,
-          nodeId: 'preview-node',
-          url: 'http://127.0.0.1:41001/',
-          status: 'ready',
-          bounds,
-          touchEmulation: false,
-          canGoBack: false,
-          canGoForward: false,
-          failure: null,
-        }),
-      ),
-    navigateSurface: vi
-      .fn<PreviewRendererOperations['navigateSurface']>()
-      .mockImplementation(({ surfaceId, url }) =>
-        Promise.resolve({
-          surfaceId,
-          projectId: PROJECT_ID,
-          nodeId: 'preview-node',
-          url,
-          status: 'ready',
-          bounds: { x: 0, y: 0, width: 640, height: 480, visible: true },
-          touchEmulation: false,
-          canGoBack: true,
-          canGoForward: false,
-          failure: null,
-        }),
-      ),
-    reloadSurface: vi.fn(),
-    navigateSurfaceHistory: vi.fn(),
-    getSurfaceConsole: vi.fn().mockResolvedValue({
-      entries: [],
-      truncated: false,
-      retainedBytes: 0,
-      disclosure:
-        'Console output is captured in memory only, bounded to 500 entries and 256 KiB, and may contain application data.',
-    }),
-    saveSurfaceScreenshot: vi.fn().mockResolvedValue({ saved: true, width: 390, height: 844 }),
-    openSurfaceExternally: vi.fn().mockResolvedValue(true),
-    closeSurface: vi.fn().mockResolvedValue(true),
-    onSurfaceEvent: vi.fn().mockReturnValue(() => undefined),
     ...overrides,
   };
 }

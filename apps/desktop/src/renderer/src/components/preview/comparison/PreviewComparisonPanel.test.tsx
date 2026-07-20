@@ -358,35 +358,5 @@ function renderPanel(
 function surfaceOperations(): PreviewRendererOperations {
   return {
     listTargets: vi.fn(),
-    createSurface: vi.fn<PreviewRendererOperations['createSurface']>().mockImplementation((input) =>
-      Promise.resolve({
-        surfaceId: crypto.randomUUID(),
-        projectId: input.projectId,
-        nodeId: input.nodeId,
-        ...(input.slot === undefined ? {} : { slot: input.slot }),
-        url: input.url,
-        status: 'ready',
-        bounds: input.bounds,
-        canGoBack: false,
-        canGoForward: false,
-        touchEmulation: input.touchEmulation,
-        failure: null,
-      }),
-    ),
-    setSurfaceBounds: vi.fn(),
-    navigateSurface: vi.fn(),
-    reloadSurface: vi.fn(),
-    navigateSurfaceHistory: vi.fn(),
-    getSurfaceConsole: vi.fn().mockResolvedValue({
-      entries: [],
-      truncated: false,
-      retainedBytes: 0,
-      disclosure:
-        'Console output is captured in memory only, bounded to 500 entries and 256 KiB, and may contain application data.',
-    }),
-    saveSurfaceScreenshot: vi.fn(),
-    openSurfaceExternally: vi.fn(),
-    closeSurface: vi.fn().mockResolvedValue(true),
-    onSurfaceEvent: vi.fn().mockReturnValue(() => undefined),
   };
 }
