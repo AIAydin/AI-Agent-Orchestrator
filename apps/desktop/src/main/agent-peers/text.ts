@@ -25,6 +25,15 @@ function sanitizePasteEnvelopePayload(raw: string): string {
   return stripAnsi(raw);
 }
 
+/**
+ * Sender is semantically a short display name (a node title; in practice at most a few hundred
+ * characters), so this cap is generous headroom, not a real-world limit. It exists purely as
+ * defense-in-depth: bounding it to a small, fixed byte budget guarantees the envelope's fixed
+ * overhead (wrapper + `[from <sender>] `) can never itself approach `TERMINAL_MAX_INPUT_BYTES`,
+ * so `message` always gets a meaningful, non-negative budget.
+ */
+const SENDER_MAX_BYTES = 512;
+
 /** Truncates `value` to at most `maxBytes` UTF-8 bytes without splitting a multibyte code point. */
 function truncateToUtf8Bytes(value: string, maxBytes: number): string {
   if (maxBytes <= 0) return '';
@@ -42,15 +51,17 @@ function truncateToUtf8Bytes(value: string, maxBytes: number): string {
 /**
  * Formats a peer message as a bracketed-paste delivery so the receiving PTY's line editor treats
  * it as pasted text rather than typed keystrokes. `sender` and `message` are sanitized first so
- * neither can inject escape sequences that manipulate or close the paste envelope early, and the
- * message body is then truncated (by code point, never mid-character) so the final formatted
- * string never exceeds `TERMINAL_MAX_INPUT_BYTES` — the same cap `sendInput` enforces for
- * owner-typed input — even though the hub is expected to be the primary limiter.
+ * neither can inject escape sequences that manipulate or close the paste envelope early. Both are
+ * then truncated (by code point, never mid-character) — `sender` to `SENDER_MAX_BYTES` and
+ * `message` to whatever budget remains after the envelope's fixed overhead — so the final
+ * formatted string never exceeds `TERMINAL_MAX_INPUT_BYTES` — the same cap `sendInput` enforces
+ * for owner-typed input — even though the hub is expected to be the primary limiter.
  */
 export function formatPeerDelivery(sender: string, message: string): string {
   const safeSender = sanitizePasteEnvelopePayload(sender);
   const safeMessage = sanitizePasteEnvelopePayload(message);
-  const prefix = `\x1b[200~[from ${safeSender}] `;
+  const boundedSender = truncateToUtf8Bytes(safeSender, SENDER_MAX_BYTES);
+  const prefix = `\x1b[200~[from ${boundedSender}] `;
   const suffix = `\x1b[201~\r`;
   const overheadBytes = Buffer.byteLength(prefix, 'utf8') + Buffer.byteLength(suffix, 'utf8');
   const messageBudgetBytes = Math.max(0, TERMINAL_MAX_INPUT_BYTES - overheadBytes);

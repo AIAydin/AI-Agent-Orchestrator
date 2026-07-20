@@ -62,6 +62,16 @@ describe('formatPeerDelivery', () => {
     expect(delivered.endsWith('\x1b[201~\r')).toBe(true);
     expect(delivered).not.toContain('\uFFFD');
   });
+
+  it('caps the formatted delivery at TERMINAL_MAX_INPUT_BYTES even when sender alone is oversized', () => {
+    const oversizedSender = 'x'.repeat(200_000);
+    const delivered = formatPeerDelivery(oversizedSender, 'hi');
+
+    expect(Buffer.byteLength(delivered, 'utf8')).toBeLessThanOrEqual(TERMINAL_MAX_INPUT_BYTES);
+    expect(delivered.startsWith('\x1b[200~')).toBe(true);
+    expect(delivered.endsWith('\x1b[201~\r')).toBe(true);
+    expect(delivered).not.toContain('\uFFFD');
+  });
 });
 
 describe('transcriptTailText', () => {
