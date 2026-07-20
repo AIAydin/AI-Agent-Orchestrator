@@ -31,6 +31,33 @@ export interface WriteProviderPeerMaterialInput {
 
 const NO_HINT_UNAVAILABLE = 'Peer tools unavailable for this agent.';
 
+/** `basename(provisionDir)` -- everything after the final `/` -- flows verbatim into a filename
+ * (codex's `<provisionId>.config.toml`) and, for gemini/opencode, into a JSON object key. A
+ * plain safe token only; nothing that could act as a path segment (`..`, embedded separators) or
+ * otherwise corrupt a filename/key. */
+const PROVISION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const INVALID_PROVISION_ID_HINT =
+  'Peer tools unavailable: provision directory name is not a safe token.';
+
+/** Validates the provision id before it is used in a filename or JSON key. Returns `null` --
+ * rather than sanitizing -- so a path-hostile value is rejected outright instead of silently
+ * mutated into something that merely looks safe. */
+function resolveProvisionId(provisionDir: string): string | null {
+  const id = basename(provisionDir);
+  return PROVISION_ID_PATTERN.test(id) ? id : null;
+}
+
+function unavailableMaterial(hint: string): ProviderPeerMaterial {
+  return {
+    available: false,
+    hint,
+    extraArguments: [],
+    cleanup: async () => {
+      // Nothing was ever written.
+    },
+  };
+}
+
 /**
  * Resolves the `forgeboard-peer-mcp` shim's entry point. Packaged: the extraResources copy
  * (`build.extraResources` in apps/desktop/package.json) lands at
@@ -60,14 +87,7 @@ export async function writeProviderPeerMaterial(
     case 'opencode':
       return await writeOpencodeMaterial(input);
     default:
-      return {
-        available: false,
-        hint: NO_HINT_UNAVAILABLE,
-        extraArguments: [],
-        cleanup: async () => {
-          // Nothing was ever written for an unknown adapter.
-        },
-      };
+      return unavailableMaterial(NO_HINT_UNAVAILABLE);
   }
 }
 
@@ -132,8 +152,9 @@ async function writeClaudeMaterial(
 async function writeCodexMaterial(
   input: WriteProviderPeerMaterialInput,
 ): Promise<ProviderPeerMaterial> {
+  const provisionId = resolveProvisionId(input.provisionDir);
+  if (provisionId === null) return unavailableMaterial(INVALID_PROVISION_ID_HINT);
   const codexHome = resolveCodexHome();
-  const provisionId = basename(input.provisionDir);
   const profileName = `forgeboard-${provisionId}`;
   const profilePath = join(codexHome, `${profileName}.config.toml`);
   const toml = codexProfileToml(process.execPath, shimEntryPath(), input.environment);
@@ -202,23 +223,34 @@ function tomlString(value: string): string {
  * committed by accident); only the non-secret `ELECTRON_RUN_AS_NODE=1` (required so
  * `process.execPath` runs the shim as plain Node rather than launching Electron's GUI) is
  * written. The shim itself reads FORGEBOARD_PEER_URL/TOKEN from its own inherited process.env.
+ *
+ * LIMITATION: every agent session in a project runs at the same project root, so this file is
+ * SHARED by all of them. The entry is keyed `forgeboard-<provisionId>` (provision-scoped, not a
+ * fixed name) so two concurrent gemini sessions on one project write distinct keys instead of
+ * clobbering each other, and `cleanup()` only ever removes its own key -- never destroys the
+ * file or another session's entry. The supported model is still one gemini peer session per
+ * project at a time; running two concurrently is unsupported (both shims end up registered,
+ * i.e. cross-wired) but is now safe from data loss.
  */
 async function writeGeminiMaterial(
   input: WriteProviderPeerMaterialInput,
 ): Promise<ProviderPeerMaterial> {
+  const provisionId = resolveProvisionId(input.provisionDir);
+  if (provisionId === null) return unavailableMaterial(INVALID_PROVISION_ID_HINT);
+  const entryKey = `forgeboard-${provisionId}`;
   const settingsPath = join(input.projectRoot, '.gemini', 'settings.json');
   const entry = {
     command: process.execPath,
     args: [shimEntryPath()],
     env: { ELECTRON_RUN_AS_NODE: '1' },
   };
-  const existedBefore = await mergeJsonEntry(settingsPath, 'mcpServers', 'forgeboard', entry);
+  const existedBefore = await mergeJsonEntry(settingsPath, 'mcpServers', entryKey, entry);
   return {
     available: true,
     hint: null,
     extraArguments: [],
     cleanup: async () => {
-      await cleanupJsonEntry(settingsPath, 'mcpServers', 'forgeboard', existedBefore);
+      await cleanupJsonEntry(settingsPath, 'mcpServers', entryKey, existedBefore);
     },
   };
 }
@@ -239,23 +271,33 @@ async function writeGeminiMaterial(
  * FORGEBOARD_PEER_URL/TOKEN when `opencode run` spawned it. The token is therefore OMITTED from
  * this project-root file for the same accidental-commit reason as gemini; only
  * `ELECTRON_RUN_AS_NODE` is written.
+ *
+ * LIMITATION: same shared-file caveat as gemini above -- `opencode.json` is one file per project
+ * root, shared by every session. The entry is keyed `forgeboard-<provisionId>` so concurrent
+ * opencode sessions on one project write distinct keys, and `cleanup()` only removes its own key
+ * and never destroys the file or another session's entry. One opencode peer session per project
+ * at a time is the supported model; concurrent sessions cross-wire (unsupported) but can no
+ * longer corrupt this file.
  */
 async function writeOpencodeMaterial(
   input: WriteProviderPeerMaterialInput,
 ): Promise<ProviderPeerMaterial> {
+  const provisionId = resolveProvisionId(input.provisionDir);
+  if (provisionId === null) return unavailableMaterial(INVALID_PROVISION_ID_HINT);
+  const entryKey = `forgeboard-${provisionId}`;
   const configPath = join(input.projectRoot, 'opencode.json');
   const entry = {
     type: 'local',
     command: [process.execPath, shimEntryPath()],
     environment: { ELECTRON_RUN_AS_NODE: '1' },
   };
-  const existedBefore = await mergeJsonEntry(configPath, 'mcp', 'forgeboard', entry);
+  const existedBefore = await mergeJsonEntry(configPath, 'mcp', entryKey, entry);
   return {
     available: true,
     hint: null,
     extraArguments: [],
     cleanup: async () => {
-      await cleanupJsonEntry(configPath, 'mcp', 'forgeboard', existedBefore);
+      await cleanupJsonEntry(configPath, 'mcp', entryKey, existedBefore);
     },
   };
 }
@@ -355,7 +397,10 @@ async function unlinkBestEffort(path: string): Promise<void> {
     await unlink(path);
   } catch (error) {
     if (!isEnoent(error)) {
-      // Best-effort: swallow so a cleanup failure can never escape and block teardown.
+      // Best-effort: swallow so a cleanup failure can never escape and block teardown, but a
+      // real delete failure (e.g. EACCES) can leave live token material on disk -- surface it
+      // rather than fail silently.
+      console.warn(`[agent-peers] failed to remove ${path} during peer material cleanup:`, error);
     }
   }
 }

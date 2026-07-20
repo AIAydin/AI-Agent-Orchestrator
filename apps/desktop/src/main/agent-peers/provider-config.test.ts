@@ -201,7 +201,7 @@ describe('writeProviderPeerMaterial', () => {
   });
 
   describe('gemini', () => {
-    it('merges mcpServers.forgeboard into .gemini/settings.json without writing the token/url', async () => {
+    it('merges mcpServers.forgeboard-<provisionId> into .gemini/settings.json without writing the token/url', async () => {
       const material = await writeProviderPeerMaterial({
         adapterId: 'gemini',
         provisionDir,
@@ -212,13 +212,16 @@ describe('writeProviderPeerMaterial', () => {
       expect(material.available).toBe(true);
       expect(material.extraArguments).toEqual([]);
 
+      const provisionId = provisionDir.split('/').pop();
+      const entryKey = `forgeboard-${provisionId}`;
       const settingsPath = join(projectRoot, '.gemini', 'settings.json');
       const parsed = (await readJson(settingsPath)) as {
-        mcpServers: {
-          forgeboard: { command: string; args: string[]; env: Record<string, string> };
-        };
+        mcpServers: Record<
+          string,
+          { command: string; args: string[]; env: Record<string, string> }
+        >;
       };
-      expect(parsed.mcpServers.forgeboard).toEqual({
+      expect(parsed.mcpServers[entryKey]).toEqual({
         command: process.execPath,
         args: [shimEntryPath()],
         env: { ELECTRON_RUN_AS_NODE: '1' },
@@ -248,13 +251,15 @@ describe('writeProviderPeerMaterial', () => {
         environment: ENVIRONMENT,
       });
 
+      const provisionId = provisionDir.split('/').pop();
+      const entryKey = `forgeboard-${provisionId}`;
       const afterWrite = (await readJson(settingsPath)) as {
         theme: string;
         mcpServers: Record<string, unknown>;
       };
       expect(afterWrite.theme).toBe('dark');
       expect(afterWrite.mcpServers['other']).toEqual({ command: 'foo' });
-      expect(afterWrite.mcpServers['forgeboard']).toBeDefined();
+      expect(afterWrite.mcpServers[entryKey]).toBeDefined();
 
       await material.cleanup();
 
@@ -272,9 +277,10 @@ describe('writeProviderPeerMaterial', () => {
         projectRoot,
         environment: ENVIRONMENT,
       });
+      const provisionId = provisionDir.split('/').pop();
       const settingsPath = join(projectRoot, '.gemini', 'settings.json');
       const parsed = (await readJson(settingsPath)) as { mcpServers: Record<string, unknown> };
-      expect(Object.keys(parsed.mcpServers)).toEqual(['forgeboard']);
+      expect(Object.keys(parsed.mcpServers)).toEqual([`forgeboard-${provisionId}`]);
       await material.cleanup();
     });
 
@@ -289,8 +295,9 @@ describe('writeProviderPeerMaterial', () => {
         projectRoot,
         environment: ENVIRONMENT,
       });
+      const provisionId = provisionDir.split('/').pop();
       const parsed = (await readJson(settingsPath)) as { mcpServers: Record<string, unknown> };
-      expect(Object.keys(parsed.mcpServers)).toEqual(['forgeboard']);
+      expect(Object.keys(parsed.mcpServers)).toEqual([`forgeboard-${provisionId}`]);
 
       await material.cleanup();
       // The file pre-existed (even though it was invalid) -- cleanup must never delete it.
@@ -299,10 +306,65 @@ describe('writeProviderPeerMaterial', () => {
       const afterCleanup = (await readJson(settingsPath)) as { mcpServers?: unknown };
       expect(afterCleanup.mcpServers).toBeUndefined();
     });
+
+    it('supports two concurrent gemini provisions on the same project without clobbering each other', async () => {
+      const provisionDirA = await makeTempDir('forgeboard-peer-provision-a-');
+      const provisionDirB = await makeTempDir('forgeboard-peer-provision-b-');
+      try {
+        const settingsPath = join(projectRoot, '.gemini', 'settings.json');
+        const idA = provisionDirA.split('/').pop();
+        const idB = provisionDirB.split('/').pop();
+        const keyA = `forgeboard-${idA}`;
+        const keyB = `forgeboard-${idB}`;
+
+        const materialA = await writeProviderPeerMaterial({
+          adapterId: 'gemini',
+          provisionDir: provisionDirA,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+        const materialB = await writeProviderPeerMaterial({
+          adapterId: 'gemini',
+          provisionDir: provisionDirB,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        const afterBothWrites = (await readJson(settingsPath)) as {
+          mcpServers: Record<string, unknown>;
+        };
+        expect(afterBothWrites.mcpServers[keyA]).toBeDefined();
+        expect(afterBothWrites.mcpServers[keyB]).toBeDefined();
+
+        // Cleaning up the FIRST provision must leave the SECOND's key intact and the file present
+        // -- the file isn't empty yet (B's entry remains), so it's rewritten, not deleted.
+        await materialA.cleanup();
+        const afterFirstCleanup = (await readJson(settingsPath)) as {
+          mcpServers: Record<string, unknown>;
+        };
+        expect(afterFirstCleanup.mcpServers[keyA]).toBeUndefined();
+        expect(afterFirstCleanup.mcpServers[keyB]).toBeDefined();
+        await expect(stat(settingsPath)).resolves.toBeDefined();
+
+        // Cleaning up the SECOND provision removes its key too. It must NOT delete the file:
+        // the file already existed (A created it) before B's own write, so B never qualifies as
+        // the creator and must never be the one to delete it -- even though it is now empty.
+        await materialB.cleanup();
+        const afterSecondCleanup = (await readJson(settingsPath)) as {
+          mcpServers?: Record<string, unknown>;
+        };
+        expect(afterSecondCleanup.mcpServers?.[keyA]).toBeUndefined();
+        expect(afterSecondCleanup.mcpServers?.[keyB]).toBeUndefined();
+        await expect(stat(settingsPath)).resolves.toBeDefined();
+      } finally {
+        await rm(provisionDirA, { recursive: true, force: true });
+        await rm(provisionDirB, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('opencode', () => {
-    it('merges mcp.forgeboard into opencode.json without writing the token/url', async () => {
+    it('merges mcp.forgeboard-<provisionId> into opencode.json without writing the token/url', async () => {
       const material = await writeProviderPeerMaterial({
         adapterId: 'opencode',
         provisionDir,
@@ -313,13 +375,16 @@ describe('writeProviderPeerMaterial', () => {
       expect(material.available).toBe(true);
       expect(material.extraArguments).toEqual([]);
 
+      const provisionId = provisionDir.split('/').pop();
+      const entryKey = `forgeboard-${provisionId}`;
       const configPath = join(projectRoot, 'opencode.json');
       const parsed = (await readJson(configPath)) as {
-        mcp: {
-          forgeboard: { type: string; command: string[]; environment: Record<string, string> };
-        };
+        mcp: Record<
+          string,
+          { type: string; command: string[]; environment: Record<string, string> }
+        >;
       };
-      expect(parsed.mcp.forgeboard).toEqual({
+      expect(parsed.mcp[entryKey]).toEqual({
         type: 'local',
         command: [process.execPath, shimEntryPath()],
         environment: { ELECTRON_RUN_AS_NODE: '1' },
@@ -362,6 +427,57 @@ describe('writeProviderPeerMaterial', () => {
         mcp: { other: { type: 'local', command: ['x'] } },
       });
     });
+
+    it('supports two concurrent opencode provisions on the same project without clobbering each other', async () => {
+      const provisionDirA = await makeTempDir('forgeboard-peer-provision-a-');
+      const provisionDirB = await makeTempDir('forgeboard-peer-provision-b-');
+      try {
+        const configPath = join(projectRoot, 'opencode.json');
+        const idA = provisionDirA.split('/').pop();
+        const idB = provisionDirB.split('/').pop();
+        const keyA = `forgeboard-${idA}`;
+        const keyB = `forgeboard-${idB}`;
+
+        const materialA = await writeProviderPeerMaterial({
+          adapterId: 'opencode',
+          provisionDir: provisionDirA,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+        const materialB = await writeProviderPeerMaterial({
+          adapterId: 'opencode',
+          provisionDir: provisionDirB,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        const afterBothWrites = (await readJson(configPath)) as { mcp: Record<string, unknown> };
+        expect(afterBothWrites.mcp[keyA]).toBeDefined();
+        expect(afterBothWrites.mcp[keyB]).toBeDefined();
+
+        // Cleaning up the FIRST provision must leave the SECOND's key intact and the file present
+        // -- the file isn't empty yet (B's entry remains), so it's rewritten, not deleted.
+        await materialA.cleanup();
+        const afterFirstCleanup = (await readJson(configPath)) as { mcp: Record<string, unknown> };
+        expect(afterFirstCleanup.mcp[keyA]).toBeUndefined();
+        expect(afterFirstCleanup.mcp[keyB]).toBeDefined();
+        await expect(stat(configPath)).resolves.toBeDefined();
+
+        // Cleaning up the SECOND provision removes its key too. It must NOT delete the file:
+        // the file already existed (A created it) before B's own write, so B never qualifies as
+        // the creator and must never be the one to delete it -- even though it is now empty.
+        await materialB.cleanup();
+        const afterSecondCleanup = (await readJson(configPath)) as {
+          mcp?: Record<string, unknown>;
+        };
+        expect(afterSecondCleanup.mcp?.[keyA]).toBeUndefined();
+        expect(afterSecondCleanup.mcp?.[keyB]).toBeUndefined();
+        await expect(stat(configPath)).resolves.toBeDefined();
+      } finally {
+        await rm(provisionDirA, { recursive: true, force: true });
+        await rm(provisionDirB, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('unknown adapter', () => {
@@ -382,6 +498,47 @@ describe('writeProviderPeerMaterial', () => {
       expect(await readdir(projectRoot)).toEqual([]);
 
       await expect(material.cleanup()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('provision id validation', () => {
+    it.each(['codex', 'gemini', 'opencode'] as const)(
+      'rejects a path-hostile provisionDir basename for %s with available:false instead of writing to disk',
+      async (adapterId) => {
+        // Built with string concatenation, not path.join -- join() would normalize away a `..`
+        // segment, defeating the point of this test. The basename must itself be an unsafe
+        // token (space, `!`, `$`) that the safe-token pattern rejects.
+        const hostileProvisionDir = `${tmpdir()}/evil name!with$pecial`;
+
+        const material = await writeProviderPeerMaterial({
+          adapterId,
+          provisionDir: hostileProvisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        expect(material.available).toBe(false);
+        expect(material.hint).toBeTruthy();
+        expect(material.extraArguments).toEqual([]);
+        await expect(material.cleanup()).resolves.toBeUndefined();
+
+        // Nothing should have been written to the project root by the rejected gemini/opencode
+        // writes (and, for codex, nothing under CODEX_HOME either -- checked by an empty
+        // projectRoot here since codex never touches it in the first place).
+        const { readdir } = await import('node:fs/promises');
+        expect(await readdir(projectRoot)).toEqual([]);
+      },
+    );
+
+    it('accepts a plain safe provisionDir basename (the normal case)', async () => {
+      const material = await writeProviderPeerMaterial({
+        adapterId: 'gemini',
+        provisionDir,
+        projectRoot,
+        environment: ENVIRONMENT,
+      });
+      expect(material.available).toBe(true);
+      await material.cleanup();
     });
   });
 });
