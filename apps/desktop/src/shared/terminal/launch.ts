@@ -53,6 +53,13 @@ export const TerminalPrepareLaunchInputSchema = z
     cwdRelative: TerminalRelativeCwdSchema,
     environmentVariableNames: TerminalEnvironmentVariableNamesSchema,
     ...TerminalDimensionsSchema.shape,
+    /**
+     * Opaque hub provision id (never a URL/token value) minted by `AgentPeersService.provision`.
+     * The main process alone resolves it to the real `FORGEBOARD_PEER_URL`/`FORGEBOARD_PEER_TOKEN`
+     * values via `PeerEnvironmentProvider.environmentForProvision` at spawn time — this is the one
+     * sanctioned exception to the names-only launch env contract, and it stays an id over IPC.
+     */
+    peerProvisionId: z.string().uuid().optional(),
   })
   .strict();
 export type TerminalPrepareLaunchInput = z.infer<typeof TerminalPrepareLaunchInputSchema>;

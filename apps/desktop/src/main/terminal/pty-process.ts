@@ -96,8 +96,9 @@ export const createTerminalPty: TerminalPtyFactory = async (launch, beforeSpawn)
   await beforeSpawn();
   const terminal = pty.spawn(launch.executable, [...launch.arguments], {
     cwd: launch.cwd,
-    // Base infrastructure first, then the reviewed allowlist so any user-allowlisted value wins.
-    env: { ...baseTerminalEnvironment(), ...launch.environment },
+    // Base infrastructure first, then the reviewed allowlist, then the main-side-only peer-hub
+    // env last so it always wins — it is never renderer-supplied (see `ResolvedTerminalLaunch`).
+    env: { ...baseTerminalEnvironment(), ...launch.environment, ...launch.peerEnvironment },
     name: 'xterm-256color',
     cols: launch.columns,
     rows: launch.rows,

@@ -15,13 +15,20 @@ import {
   terminalStorageRecord,
   type StoredTerminalSession,
 } from '../storage/terminal/contracts.js';
+import type { ResolvedTerminalLaunch } from './launch-resolution.js';
 import type { TerminalPtyExit, TerminalPtyHandle } from './pty-process.js';
-import { TerminalService, splitTerminalOutput, type TerminalServiceStore } from './service.js';
+import {
+  TerminalService,
+  splitTerminalOutput,
+  type PeerEnvironmentProvider,
+  type TerminalServiceStore,
+} from './service.js';
 
 const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
 const PLAN_ID = '20000000-0000-4000-8000-000000000001';
 const SESSION_ID = '30000000-0000-4000-8000-000000000001';
 const UNKNOWN_SESSION_ID = '40000000-0000-4000-8000-000000000001';
+const PEER_PROVISION_ID = '50000000-0000-4000-8000-000000000001';
 
 describe('TerminalService', () => {
   const services: TerminalService[] = [];
@@ -493,6 +500,132 @@ describe('TerminalService', () => {
     });
   });
 
+  describe('peer environment injection', () => {
+    it('(a) injects the provisioned peer env into the spawned PTY and binds the session', async () => {
+      const provider = new FakePeerEnvironmentProvider();
+      provider.environments.set(PEER_PROVISION_ID, {
+        FORGEBOARD_PEER_URL: 'http://127.0.0.1:41999',
+        FORGEBOARD_PEER_TOKEN: 'super-secret-token',
+      });
+      const harness = await fixture({ peerProvider: provider });
+      const plan = await harness.service.prepareLaunch('owner-a', {
+        ...harness.input,
+        peerProvisionId: PEER_PROVISION_ID,
+      });
+      await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+
+      expect(harness.spawnedLaunch()?.peerEnvironment).toEqual({
+        FORGEBOARD_PEER_URL: 'http://127.0.0.1:41999',
+        FORGEBOARD_PEER_TOKEN: 'super-secret-token',
+      });
+      expect(provider.boundCalls).toEqual([
+        { provisionId: PEER_PROVISION_ID, sessionId: SESSION_ID },
+      ]);
+    });
+
+    it('(b) releases the peer provision exactly once when the session exits', async () => {
+      const provider = new FakePeerEnvironmentProvider();
+      provider.environments.set(PEER_PROVISION_ID, {
+        FORGEBOARD_PEER_URL: 'http://127.0.0.1:41999',
+        FORGEBOARD_PEER_TOKEN: 'super-secret-token',
+      });
+      const harness = await fixture({ peerProvider: provider });
+      const plan = await harness.service.prepareLaunch('owner-a', {
+        ...harness.input,
+        peerProvisionId: PEER_PROVISION_ID,
+      });
+      await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+      expect(provider.releasedSessionIds).toEqual([]);
+
+      harness.pty.emitExit({ exitCode: 0, signal: null });
+      await expectEventually(
+        async () =>
+          (await harness.service.getSession('owner-a', { sessionId: SESSION_ID }))?.status ===
+          'exited',
+      );
+
+      expect(provider.releasedSessionIds).toEqual([SESSION_ID]);
+    });
+
+    it('(b-bonus) releases the peer provision exactly once when the launch fails after spawn', async () => {
+      // Distinct exit route from (b): this exercises the `#launch` catch block's
+      // `#terminateActive(active, 'lost')` path (a checkpoint write failure right after spawn),
+      // not a PTY-initiated exit, to confirm every route into `#finalize` releases exactly once.
+      const provider = new FakePeerEnvironmentProvider();
+      provider.environments.set(PEER_PROVISION_ID, {
+        FORGEBOARD_PEER_URL: 'http://127.0.0.1:41999',
+        FORGEBOARD_PEER_TOKEN: 'super-secret-token',
+      });
+      const harness = await fixture({ peerProvider: provider, failAfterSpawn: true });
+      const plan = await harness.service.prepareLaunch('owner-a', {
+        ...harness.input,
+        peerProvisionId: PEER_PROVISION_ID,
+      });
+
+      await expect(
+        harness.service.confirmLaunch('owner-a', plan.planId, () => Promise.resolve('approved')),
+      ).rejects.toThrow(/simulated terminal metadata write failure/u);
+
+      expect(provider.boundCalls).toEqual([
+        { provisionId: PEER_PROVISION_ID, sessionId: SESSION_ID },
+      ]);
+      expect(provider.releasedSessionIds).toEqual([SESSION_ID]);
+    });
+
+    it('(c) fails the launch with a clear error when the peer provision is unknown or expired', async () => {
+      const provider = new FakePeerEnvironmentProvider();
+      const harness = await fixture({ peerProvider: provider });
+      const plan = await harness.service.prepareLaunch('owner-a', {
+        ...harness.input,
+        peerProvisionId: PEER_PROVISION_ID,
+      });
+
+      await expect(
+        harness.service.confirmLaunch('owner-a', plan.planId, () => Promise.resolve('approved')),
+      ).rejects.toThrow('Peer session expired. Start again.');
+      expect(harness.spawned()).toBe(false);
+      expect(provider.boundCalls).toEqual([]);
+      expect(harness.store.sessions.has(SESSION_ID)).toBe(false);
+    });
+
+    it('(d) leaves the environment and peer provider untouched without a peerProvisionId', async () => {
+      const provider = new FakePeerEnvironmentProvider();
+      const harness = await fixture({ peerProvider: provider });
+      const plan = await harness.service.prepareLaunch('owner-a', harness.input);
+      await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+
+      expect(harness.spawnedLaunch()?.peerEnvironment).toBeUndefined();
+      expect(provider.environmentForProvisionCalls).toEqual([]);
+      expect(provider.boundCalls).toEqual([]);
+    });
+
+    it('(e) discloses the peer environment variable names in the native launch review when attached', async () => {
+      const provider = new FakePeerEnvironmentProvider();
+      provider.environments.set(PEER_PROVISION_ID, {
+        FORGEBOARD_PEER_URL: 'http://127.0.0.1:41999',
+        FORGEBOARD_PEER_TOKEN: 'super-secret-token',
+      });
+      const harness = await fixture({ peerProvider: provider });
+      const plan = await harness.service.prepareLaunch('owner-a', {
+        ...harness.input,
+        peerProvisionId: PEER_PROVISION_ID,
+      });
+      let reviewedNames: readonly string[] = [];
+      await harness.service.confirmLaunch('owner-a', plan.planId, (review) => {
+        reviewedNames = review.exact.environmentVariableNames;
+        return Promise.resolve('approved');
+      });
+
+      expect(reviewedNames).toEqual(['PATH', 'FORGEBOARD_PEER_URL', 'FORGEBOARD_PEER_TOKEN']);
+    });
+  });
+
   async function fixture(
     options: {
       readonly now?: () => Date;
@@ -502,6 +635,7 @@ describe('TerminalService', () => {
       readonly orphanedTranscript?: boolean;
       readonly failRetentionAudit?: boolean;
       readonly failSessionDeletion?: boolean;
+      readonly peerProvider?: PeerEnvironmentProvider;
     } = {},
   ): Promise<{
     readonly service: TerminalService;
@@ -511,6 +645,7 @@ describe('TerminalService', () => {
     readonly project: Project;
     readonly transcriptRoot: string;
     readonly spawned: () => boolean;
+    readonly spawnedLaunch: () => ResolvedTerminalLaunch | undefined;
   }> {
     const root = await realpath(
       await mkdtemp(path.join(os.tmpdir(), 'forgeboard-terminal-service-')),
@@ -535,14 +670,16 @@ describe('TerminalService', () => {
     }
     const pty = new FakePty();
     let didSpawn = false;
+    let lastSpawnedLaunch: ResolvedTerminalLaunch | undefined;
     const ids = [PLAN_ID, SESSION_ID];
     const service = new TerminalService(store, transcriptRoot, () => settings(), {
       ...(options.now === undefined ? {} : { now: options.now }),
       ...(options.planTtlMs === undefined ? {} : { planTtlMs: options.planTtlMs }),
       createId: () => ids.shift() ?? '40000000-0000-4000-8000-000000000001',
-      ptyFactory: async (_launch, beforeSpawn) => {
+      ptyFactory: async (launch, beforeSpawn) => {
         await beforeSpawn();
         didSpawn = true;
+        lastSpawnedLaunch = launch;
         if (options.failAfterSpawn === true) store.failUpdateCount = 1;
         return pty;
       },
@@ -552,6 +689,8 @@ describe('TerminalService', () => {
       maximumTotalTranscriptBytes: 2 * 1_024 * 1_024,
       maximumTranscriptFiles: 10,
     });
+    if (options.peerProvider !== undefined)
+      service.setPeerEnvironmentProvider(options.peerProvider);
     services.push(service);
     return {
       service,
@@ -560,6 +699,7 @@ describe('TerminalService', () => {
       project,
       transcriptRoot,
       spawned: () => didSpawn,
+      spawnedLaunch: () => lastSpawnedLaunch,
       input: {
         projectId: PROJECT_ID,
         nodeId: 'terminal-1',
@@ -690,6 +830,26 @@ function expiredTerminalSession(): TerminalSessionView {
     outputTruncated: false,
     updatedAt: endedAt,
   };
+}
+
+class FakePeerEnvironmentProvider implements PeerEnvironmentProvider {
+  readonly environments = new Map<string, Record<string, string>>();
+  readonly environmentForProvisionCalls: string[] = [];
+  readonly boundCalls: { provisionId: string; sessionId: string }[] = [];
+  readonly releasedSessionIds: string[] = [];
+
+  environmentForProvision(provisionId: string): Record<string, string> | null {
+    this.environmentForProvisionCalls.push(provisionId);
+    return this.environments.get(provisionId) ?? null;
+  }
+
+  bindSession(provisionId: string, sessionId: string): void {
+    this.boundCalls.push({ provisionId, sessionId });
+  }
+
+  releaseSession(sessionId: string): void {
+    this.releasedSessionIds.push(sessionId);
+  }
 }
 
 class FakePty implements TerminalPtyHandle {
