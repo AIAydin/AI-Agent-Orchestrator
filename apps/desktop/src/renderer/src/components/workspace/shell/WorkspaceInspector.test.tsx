@@ -72,114 +72,32 @@ const testAgent: AgentDetection & { id: 'test-agent' } = {
   capabilitySource: 'manifest',
 };
 
-const codexAgent: AgentDetection & { id: 'codex' } = {
-  ...testAgent,
-  id: 'codex',
-  label: 'OpenAI Codex CLI',
-  capabilities: {
-    ...testAgent.capabilities!,
-    resume: true,
-    modelSelection: true,
-  },
-};
-
-describe('WorkspaceInspector Custom permissions', () => {
-  it('disables unsupported model selection and explains the adapter default', () => {
+describe('WorkspaceInspector agent nodes', () => {
+  it('renders nothing for a selected agent node (the node itself is now self-contained)', () => {
     render(<WorkspaceInspector {...props(settings(), agentNode({}))} />);
 
-    expect(screen.getByLabelText<HTMLInputElement>('Model (optional)')).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(screen.getByText(/does not declare model selection/u)).toBeTruthy();
+    expect(screen.queryByText('Agent run')).toBeNull();
+    expect(screen.queryByLabelText('Title')).toBeNull();
+    expect(screen.queryByLabelText('Description')).toBeNull();
+    expect(screen.queryByLabelText('Agent to run')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Review and run Agent' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Lock' })).toBeNull();
+    // The header still names the selection; only the node-kind content beneath it is gone.
+    expect(screen.getByText('Agent')).toBeTruthy();
   });
 
-  it('enables supported model selection and clears it when switching to an unsupported adapter', () => {
-    const onUpdateSelected = vi.fn();
-    const selectedNode = agentNode({ adapterId: 'codex', model: 'gpt-5.1' });
-    render(
-      <WorkspaceInspector
-        {...props(settings(), selectedNode)}
-        runnableAgents={[codexAgent, testAgent]}
-        selectedAdapter="codex"
-        onUpdateSelected={onUpdateSelected}
-      />,
-    );
+  it('renders nothing for a locked agent node too — lock state is communicated by the node itself', () => {
+    render(<WorkspaceInspector {...props(settings(), agentNode({ locked: true }))} />);
 
-    const model = screen.getByLabelText<HTMLInputElement>('Model (optional)');
-    expect(model.disabled).toBe(false);
-    fireEvent.change(model, { target: { value: '' } });
-    expect(onUpdateSelected).toHaveBeenCalledWith({ model: undefined });
-
-    fireEvent.change(screen.getByLabelText('Agent to run'), {
-      target: { value: 'test-agent' },
-    });
-    expect(onUpdateSelected).toHaveBeenCalledWith({
-      adapterId: 'test-agent',
-      model: undefined,
-    });
+    expect(screen.queryByText(/This node is locked/u)).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Node settings' })).toBeNull();
   });
+});
 
-  it('selects and explains Custom while disabling a test-agent Docker pairing', () => {
-    const onUpdateSelected = vi.fn();
-    const selectedNode = agentNode({ permissionProfile: 'custom' });
-    const hostSettings = settings({ defaultPermissionProfile: 'custom' });
-    const view = render(
-      <WorkspaceInspector
-        {...props(hostSettings, selectedNode)}
-        onUpdateSelected={onUpdateSelected}
-      />,
-    );
-
-    const profileSelect = screen.getByRole<HTMLSelectElement>('combobox', {
-      name: 'Permission profile',
-    });
-    expect(profileSelect.value).toBe('custom');
-    expect(
-      screen.getByText(
-        'Custom · Use the access rules from Settings. Docker enforces its limits; rules for runs on this computer are stated to the agent, not enforced by the operating system.',
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText(/review changes before they reach the main branch/u)).toBeTruthy();
-    fireEvent.change(profileSelect, { target: { value: 'worktree-write' } });
-    expect(onUpdateSelected).toHaveBeenCalledWith({
-      permissionProfile: 'worktree-write',
-    });
-
-    const dockerSettings = settings({
-      customPermissionProfile: {
-        ...hostSettings.customPermissionProfile,
-        runtime: 'docker',
-        filesystem: 'assigned-worktree-read-only',
-        ignoredFileRead: 'allow',
-        sensitiveFileRead: 'allow',
-      },
-      dockerEnabled: true,
-      dockerImage: 'example/agent:latest',
-      dockerContainerExecutable: '/usr/local/bin/agent',
-    });
-    view.rerender(
-      <WorkspaceInspector
-        {...props(dockerSettings, agentNode({ permissionProfile: 'custom' }))}
-        onUpdateSelected={onUpdateSelected}
-      />,
-    );
-    const unavailableProfile = screen.getByLabelText<HTMLSelectElement>('Permission profile');
-    const customOption = [...unavailableProfile.options].find(
-      (option) => option.value === 'custom',
-    );
-    expect(unavailableProfile.value).toBe('custom');
-    expect(customOption?.disabled).toBe(true);
-    expect(screen.getByRole('alert').textContent).toMatch(/can't run in Docker/u);
-    expect(screen.getByText(/Nothing starts inside Docker/u)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Review and run Agent' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-  });
-
+describe('WorkspaceInspector Custom permissions', () => {
   it('disables node editing and deletion while preserving unlock and duplicate actions', () => {
-    const selectedNode = agentNode({ locked: true });
+    const selectedNode = whiteboardNode({ locked: true });
     render(<WorkspaceInspector {...props(settings(), selectedNode)} />);
 
     expect(screen.getByText(/This node is locked/u)).toBeTruthy();
@@ -195,15 +113,10 @@ describe('WorkspaceInspector Custom permissions', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Unlock' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('button', { name: 'Duplicate' })).toHaveProperty('disabled', false);
-    expect(screen.getByLabelText('Agent to run')).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Review and run Agent' })).toHaveProperty(
-      'disabled',
-      true,
-    );
   });
 
   it('explains inherited group protection and prevents a misleading child unlock action', () => {
-    const selectedNode = agentNode({ locked: true });
+    const selectedNode = whiteboardNode({ locked: true });
     render(<WorkspaceInspector {...props(settings(), selectedNode)} selectedNodeLockedByGroup />);
 
     expect(screen.getByText(/protected by a locked group frame/u)).toBeTruthy();
@@ -243,25 +156,6 @@ describe('WorkspaceInspector Custom permissions', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save locally' }));
     expect(inspectorProps.onCreateLocalComment).toHaveBeenCalledWith('Private reviewer note');
-  });
-
-  it('keeps Agent configuration and launch controls read-only for collaboration viewers', () => {
-    const selectedNode = agentNode({});
-    const inspectorProps = props(settings(), selectedNode);
-    inspectorProps.collaborationGraphReadOnly = true;
-    render(<WorkspaceInspector {...inspectorProps} />);
-
-    expect(screen.getByLabelText('Agent to run')).toHaveProperty('disabled', true);
-    expect(screen.getByLabelText('Model (optional)')).toHaveProperty('disabled', true);
-    expect(screen.getByRole('combobox', { name: 'Permission profile' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(screen.getByLabelText('Prompt')).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Review and run Agent' })).toHaveProperty(
-      'disabled',
-      true,
-    );
   });
 
   it('passes collaboration read-only authority into preview runtime controls', async () => {
@@ -345,81 +239,6 @@ describe('WorkspaceInspector Custom permissions', () => {
 
     expect(inspectorProps.onFitGroupFrame).toHaveBeenCalledOnce();
     expect(inspectorProps.onArrangeGroupFrame).toHaveBeenCalledWith('horizontal');
-  });
-
-  it('keeps only emergency termination available when an Agent node is locked', () => {
-    const selectedNode = agentNode({
-      locked: true,
-      status: 'running',
-      interactiveInputSupported: true,
-      interruptSupported: true,
-      pauseSupported: false,
-    });
-    const inspectorProps = props(settings(), selectedNode);
-    inspectorProps.agentRunActive = true;
-    render(<WorkspaceInspector {...inspectorProps} />);
-
-    expect(screen.getByLabelText<HTMLSelectElement>('Agent to run')).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(screen.getByLabelText<HTMLTextAreaElement>('Prompt')).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Interrupt Agent' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(screen.getByRole('button', { name: 'Pause or continue Agent process' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(screen.getByRole('button', { name: 'Terminate' })).toHaveProperty('disabled', false);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Terminate' }));
-    expect(inspectorProps.onControlRun).toHaveBeenCalledOnce();
-    expect(inspectorProps.onControlRun).toHaveBeenCalledWith('terminate');
-  });
-
-  it('shows live controls only for a runtime-confirmed active Agent run', () => {
-    const preparedNode = agentNode({
-      runId: '80000000-0000-4000-8000-000000000001',
-      status: 'waiting-for-approval',
-    });
-    const inspectorProps = props(settings(), preparedNode);
-    const { rerender } = render(<WorkspaceInspector {...inspectorProps} />);
-
-    expect(screen.queryByRole('button', { name: 'Interrupt Agent' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Review and run Agent' })).toBeTruthy();
-
-    inspectorProps.agentRunActive = true;
-    rerender(<WorkspaceInspector {...inspectorProps} />);
-    expect(screen.getByRole('button', { name: 'Interrupt Agent' })).toHaveProperty(
-      'disabled',
-      true,
-    );
-    expect(screen.getByLabelText('Message to the running agent')).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Terminate' })).toBeTruthy();
-
-    inspectorProps.selectedNode = agentNode({
-      runId: '80000000-0000-4000-8000-000000000001',
-      status: 'running',
-      interactiveInputSupported: true,
-      interruptSupported: true,
-      pauseSupported: false,
-    });
-    rerender(<WorkspaceInspector {...inspectorProps} />);
-    expect(screen.getByRole('button', { name: 'Interrupt Agent' })).toHaveProperty(
-      'disabled',
-      false,
-    );
-    expect(screen.getByLabelText('Message to the running agent')).toHaveProperty('disabled', false);
-
-    inspectorProps.agentRunActive = false;
-    inspectorProps.selectedNode = agentNode({
-      runId: '80000000-0000-4000-8000-000000000001',
-      status: 'failed',
-    });
-    rerender(<WorkspaceInspector {...inspectorProps} />);
-    expect(screen.queryByRole('button', { name: 'Interrupt Agent' })).toBeNull();
   });
 
   it('wires a selected File node to the real project-relative editor and preserves its lock', async () => {
@@ -673,12 +492,7 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     selectedNodeDeletionProtected: false,
     selectedEdge: null,
     runnableAgents: [testAgent],
-    selectedAdapter: 'test-agent' as const,
-    selectedPermission: selectedNode.data.permissionProfile ?? ('worktree-write' as const),
     previewSession: null,
-    runInput: '',
-    agentRunActive: false,
-    preparingRun: false,
     sharedComments: [],
     localComments: [],
     rejectedSharedCommentEntries: [],
@@ -695,12 +509,6 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     onUpdateEdgeData: vi.fn(),
     onDuplicateSelected: vi.fn(),
     onDeleteSelected: vi.fn(),
-    onRunInputChange: vi.fn(),
-    onSendRunInput: vi.fn(),
-    onControlRun: vi.fn(),
-    onPrepareRun: vi.fn(),
-    onRetryAgentAttempt: vi.fn(),
-    onResumeAgentAttempt: vi.fn(),
     onPreviewSession: vi.fn(),
     onTerminalSessionStatus: vi.fn(),
     testNodeRuntime: {
@@ -726,7 +534,6 @@ function props(settingsValue: AppSettings, selectedNode: WorkshopNode) {
     onOpenGitPrReadiness: vi.fn(),
     collaborationGraphReadOnly: false,
     onAttachAgentContext: vi.fn().mockResolvedValue(undefined),
-    onRemoveAgentContext: vi.fn(),
     onAttachWhiteboardContext: vi.fn().mockReturnValue('Attached whiteboard context.'),
     onOpenSettings: vi.fn(),
     onError: vi.fn(),

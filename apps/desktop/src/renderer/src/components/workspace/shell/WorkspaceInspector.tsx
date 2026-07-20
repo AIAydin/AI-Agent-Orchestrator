@@ -27,7 +27,6 @@ import {
   type ProjectFileSelection,
 } from '../../file-editor/index.js';
 import { WorkflowNodeInspector } from '../workflows/WorkflowNodeInspector.js';
-import { AgentContextDropZone } from '../context-dnd/AgentContextDropZone.js';
 import { FileContextTargetPicker } from '../context-dnd/targets/FileContextTargetPicker.js';
 import {
   writeWorkspaceContextDrag,
@@ -53,12 +52,9 @@ import { OperationalGitPrNodeInspector, type GitPrNodeConfiguration } from '../g
 import { TerminalNodePanel, type TerminalNodeConfiguration } from '../terminal/index.js';
 import { TestNodePanel } from '../workflows/test-node/TestNodePanel.js';
 import type { WorkflowArtifactActionInput } from '../../../../../shared/workflow/contracts.js';
-import { AgentNodePanel } from '../runs/agent-node/AgentNodePanel.js';
-import type { RunHistorySummary } from '../../../../../shared/runs/contracts.js';
 import { NodeRunHistory } from '../node-history/NodeRunHistory.js';
 
 type RunnableAgent = AgentDetection & { id: RunAdapterId };
-type PermissionProfile = NonNullable<WorkshopNode['data']['permissionProfile']>;
 
 interface WorkspaceInspectorProps {
   nodeRegistry?: NodeTypeRegistry;
@@ -72,12 +68,7 @@ interface WorkspaceInspectorProps {
   selectedNodeDeletionProtected: boolean;
   selectedEdge: WorkshopEdge | null;
   runnableAgents: RunnableAgent[];
-  selectedAdapter: RunAdapterId;
-  selectedPermission: PermissionProfile;
   previewSession: PreviewSessionSnapshot | null;
-  runInput: string;
-  agentRunActive: boolean;
-  preparingRun: boolean;
   sharedComments: readonly CollaborationCommentMetadata[];
   localComments: readonly NodeComment[];
   rejectedSharedCommentEntries?: readonly CollaborationRejectedCommentEntry[];
@@ -94,12 +85,6 @@ interface WorkspaceInspectorProps {
   onUpdateEdgeData: (data: WorkshopEdgeData) => void;
   onDuplicateSelected: () => void;
   onDeleteSelected: () => void;
-  onRunInputChange: (value: string) => void;
-  onSendRunInput: (explicitInput?: string) => void;
-  onControlRun: (action: 'pause' | 'continue' | 'interrupt' | 'terminate') => void;
-  onPrepareRun: () => void;
-  onRetryAgentAttempt: (attempt: RunHistorySummary) => void;
-  onResumeAgentAttempt: (attempt: RunHistorySummary) => void;
   onPreviewSession: (session: PreviewSessionSnapshot | null) => void;
   onTerminalSessionStatus: (nodeId: string, status: WorkshopNode['data']['status']) => void;
   testNodeRuntime: {
@@ -120,7 +105,6 @@ interface WorkspaceInspectorProps {
     targetNodeId: string,
     payload: WorkspaceContextDragPayload,
   ) => Promise<void>;
-  onRemoveAgentContext: (targetNodeId: string, attachmentNodeId: string) => void;
   onAttachWhiteboardContext: (sourceNodeId: string, targetNodeId: string) => string;
   onOpenSettings: () => void;
   onError: (message: string) => void;
@@ -177,6 +161,7 @@ function NodeInspector(
   },
 ) {
   const { selectedNode, onRecord, onUpdateSelected } = props;
+  if (selectedNode.data.kind === 'agent') return null;
   const selectedReviewGate =
     selectedNode.data.kind === 'review-gate'
       ? props.workflowExecution?.reviewGates?.find((gate) => gate.nodeId === selectedNode.id)
@@ -382,40 +367,6 @@ function NodeInspector(
           }
           onError={props.onError}
         />
-      )}
-      {selectedNode.data.kind === 'agent' && (
-        <>
-          <AgentNodePanel
-            projectId={props.project.id}
-            selectedNode={selectedNode}
-            selectedAdapter={props.selectedAdapter}
-            selectedPermission={props.selectedPermission}
-            runnableAgents={props.runnableAgents}
-            settings={props.settings}
-            runInput={props.runInput}
-            running={props.agentRunActive}
-            preparingRun={props.preparingRun}
-            configurationReadOnly={configurationReadOnly}
-            onRecord={onRecord}
-            onUpdateSelected={props.onUpdateSelected}
-            onRunInputChange={props.onRunInputChange}
-            onSendRunInput={props.onSendRunInput}
-            onControlRun={props.onControlRun}
-            onPrepareRun={props.onPrepareRun}
-            onRetryAttempt={props.onRetryAgentAttempt}
-            onResumeAttempt={props.onResumeAgentAttempt}
-            onReviewAttempt={(attempt) => props.onOpenGitPrReadiness(attempt.id)}
-          />
-          <AgentContextDropZone
-            agent={selectedNode}
-            nodes={props.nodes}
-            readOnly={selectedNode.data.locked || props.collaborationGraphReadOnly}
-            onAttach={(payload) => props.onAttachAgentContext(selectedNode.id, payload)}
-            onRemove={(attachmentNodeId) =>
-              props.onRemoveAgentContext(selectedNode.id, attachmentNodeId)
-            }
-          />
-        </>
       )}
       {(selectedNode.data.kind === 'web-preview' ||
         selectedNode.data.kind === 'mobile-preview') && (

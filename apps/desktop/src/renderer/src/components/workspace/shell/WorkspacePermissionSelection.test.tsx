@@ -41,10 +41,10 @@ vi.mock('./WorkspaceRail.js', () => ({
     </button>
   ),
 }));
+// The inspector no longer receives or renders permission state for agent nodes (Task 7: the
+// permission-select control now lives on the node itself — see AgentSessionNode.test.tsx).
 vi.mock('./WorkspaceInspector.js', () => ({
-  WorkspaceInspector: ({ selectedPermission }: { selectedPermission: string }) => (
-    <output data-testid="selected-permission">{selectedPermission}</output>
-  ),
+  WorkspaceInspector: () => null,
 }));
 vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
   WorkspaceActivityDrawer: () => null,
@@ -126,6 +126,11 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Workspace permission selection', () => {
+  // Task 7 retired the inspector's agent panel — the permission select itself now lives on
+  // the node (AgentSessionNode.test.tsx: "records a permission profile change"). What remains
+  // to verify at the Workspace level is that Workspace.tsx's own derivation still preserves an
+  // unavailable configured profile — rather than silently substituting a run mode — when it
+  // feeds the run pipeline (useAgentRunController, still used by flow runs / RunApprovalDialog).
   it('preserves an unavailable configured profile instead of silently substituting a run mode', async () => {
     render(
       <Workspace
@@ -149,10 +154,7 @@ describe('Workspace permission selection', () => {
     await waitFor(() => expect(select).toHaveProperty('disabled', false));
     fireEvent.click(select);
 
-    await waitFor(() =>
-      expect(screen.getByTestId('selected-permission').textContent).toBe('custom'),
-    );
-    expect(mocks.controllerInput?.selectedPermission).toBe('custom');
+    await waitFor(() => expect(mocks.controllerInput?.selectedPermission).toBe('custom'));
     expect(mocks.controllerInput?.permissionUnavailableReason).toMatch(/can't run in Docker/u);
   });
 });

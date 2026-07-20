@@ -1746,12 +1746,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           }
           selectedEdge={selectedEdge}
           runnableAgents={runnableAgents}
-          selectedAdapter={selectedAdapter}
-          selectedPermission={selectedPermission}
           previewSession={selectedNode ? (previews.sessions[selectedNode.id] ?? null) : null}
-          runInput={runs.runInput}
-          agentRunActive={runs.selectedRunActive}
-          preparingRun={runs.preparingRun}
           sharedComments={sharedComments}
           localComments={localComments}
           rejectedSharedCommentEntries={rejectedSharedCommentEntries}
@@ -1774,20 +1769,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onUpdateEdgeData={updateEdgeData}
           onDuplicateSelected={duplicateSelected}
           onDeleteSelected={deleteSelected}
-          onRunInputChange={runs.setRunInput}
-          onSendRunInput={(explicitInput) => void runs.sendRunInput(explicitInput)}
-          onControlRun={(action) => void runs.controlRun(action)}
-          onPrepareRun={() => {
-            if (selectedPermissionUnavailableReason !== null) {
-              onError(selectedPermissionUnavailableReason);
-              return;
-            }
-            void runs.prepareSelectedRun();
-          }}
-          onRetryAgentAttempt={(attempt) => void runs.prepareSelectedContinuation('retry', attempt)}
-          onResumeAgentAttempt={(attempt) =>
-            void runs.prepareSelectedContinuation('resume', attempt)
-          }
           onPreviewSession={(session) => {
             if (selectedNode) previews.updateSession(selectedNode.id, session);
           }}
@@ -1825,7 +1806,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           }
           collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
           onAttachAgentContext={attachProjectFileContext}
-          onRemoveAgentContext={removeProjectFileContext}
           onOpenSettings={onOpenSettings}
           onError={onError}
         />
