@@ -126,6 +126,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
         <input
           className="agent-title-input nodrag"
           aria-label="Node title"
+          name={`node-${id}-title`}
           value={data.title}
           disabled={readOnly}
           onFocus={recordHistory}
@@ -216,6 +217,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
         <select
           className="nodrag"
           aria-label="Agent"
+          name={`node-${id}-agent-adapter`}
           value={adapter}
           disabled={readOnly}
           onFocus={recordHistory}
@@ -238,6 +240,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
           <input
             className="nodrag"
             aria-label="Model"
+            name={`node-${id}-agent-model`}
             value={data.model ?? ''}
             disabled={readOnly}
             maxLength={200}
@@ -253,6 +256,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
         <select
           className="nodrag"
           aria-label="Permission profile"
+          name={`node-${id}-permission-profile`}
           value={profile}
           disabled={readOnly}
           onFocus={recordHistory}
