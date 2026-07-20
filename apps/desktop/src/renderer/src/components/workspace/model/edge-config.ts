@@ -42,6 +42,7 @@ export function createEdgeData(
         config: {
           attachmentMode: 'explicit',
           required: booleanValue(candidate?.['required'], true),
+          muted: booleanValue(candidate?.['muted'], false),
           attachmentIds: entityIds(candidate?.['attachmentIds'], [sourceNodeId]),
         },
       };
