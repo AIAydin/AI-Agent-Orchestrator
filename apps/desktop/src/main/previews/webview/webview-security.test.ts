@@ -119,6 +119,25 @@ describe('installPreviewWebviewSecurity', () => {
     expect(options.openExternal).not.toHaveBeenCalled();
   });
 
+  it('never calls openExternal when the allowed-audit call itself throws (fail-closed)', async () => {
+    const audit = vi.fn((action: string, outcome: 'allowed' | 'denied') => {
+      if (action === 'webview-window-open' && outcome === 'allowed') {
+        throw new Error('audit sink unavailable');
+      }
+    });
+    const { options, attach } = createHarness({ audit });
+    const contents = attach();
+    contents.windowOpenHandler?.({ url: 'https://example.com/docs' });
+    await vi.waitFor(() =>
+      expect(options.audit).toHaveBeenCalledWith(
+        'webview-window-open',
+        'denied',
+        expect.objectContaining({ reason: 'handoff-failed' }),
+      ),
+    );
+    expect(options.openExternal).not.toHaveBeenCalled();
+  });
+
   it('pins content navigation to the committed loopback origin', () => {
     const { attach } = createHarness();
     const contents = attach();

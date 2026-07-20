@@ -2,7 +2,7 @@
 
 import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { DeviceFrameHost, type DeviceFrameHandle } from './DeviceFrameHost.js';
 
@@ -59,5 +59,33 @@ describe('DeviceFrameHost', () => {
     expect(container.querySelector('webview')?.getAttribute('src')).toBe(
       'http://127.0.0.1:41000/app',
     );
+  });
+
+  it('disables the "Try again" retry button in read-only mode once the webview reports a failed load', () => {
+    const handle = createRef<DeviceFrameHandle>();
+    const { container } = render(
+      <DeviceFrameHost
+        ref={handle}
+        projectId="p1"
+        nodeId="n1"
+        url="http://127.0.0.1:41000/"
+        presetId="desktop"
+        orientation="portrait"
+        readOnly={true}
+      />,
+    );
+    const webview = container.querySelector('webview');
+    expect(webview).not.toBeNull();
+    fireEvent(
+      webview as Element,
+      Object.assign(new Event('did-fail-load'), {
+        errorCode: -102,
+        errorDescription: 'ERR_CONNECTION_REFUSED',
+        isMainFrame: true,
+      }) as Event,
+    );
+
+    const retryButton = screen.getByRole('button', { name: 'Try again' });
+    expect(retryButton.hasAttribute('disabled')).toBe(true);
   });
 });
