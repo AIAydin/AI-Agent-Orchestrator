@@ -331,6 +331,9 @@ const hub: HubClient = {
   screen: (agent) => call(`/v1/screen?agent=${encodeURIComponent(agent)}`) as never,
 };
 
+// NOTE (review finding, fixed in implementation): track in-flight handler promises and
+// drain them (Promise.allSettled) before exiting on stdin close — the naive exit(0) below
+// drops replies to hub-bound calls still in flight.
 const lines = createInterface({ input: process.stdin });
 lines.on('line', (line) => {
   if (line.trim() === '') return;
