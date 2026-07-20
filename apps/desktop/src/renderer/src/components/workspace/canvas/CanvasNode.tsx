@@ -15,6 +15,7 @@ import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
 import { useNodeTypeRegistry } from '../node-registry/NodeRegistryContext.js';
 import { providerTheme } from '../node-registry/provider-themes.js';
 import { AgentSessionNode } from '../runs/agent-session/AgentSessionNode.js';
+import { PreviewNodeFace } from '../previews/PreviewNodeFace.js';
 import type { NodeKind } from '../node-registry/registry.js';
 import type { RunStatus } from '@forgeboard/core/domain';
 
@@ -149,6 +150,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   previewPackageScript?: string;
   previewReadinessPath?: string;
   previewUrlPath?: string;
+  previewPort?: number | undefined;
   previewPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewSecondaryPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewOrientation?: 'portrait' | 'landscape';
@@ -191,6 +193,8 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
   const automaticallySized = groupFrame && data.autoFit === true;
   const isAgent = data.kind === 'agent';
   const agentWindow = isAgent && !data.collapsed;
+  const previewFace =
+    (data.kind === 'web-preview' || data.kind === 'mobile-preview') && !data.collapsed;
   const theme = isAgent ? providerTheme(data.adapterId) : null;
   return (
     <article
@@ -287,7 +291,10 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         </WorkspaceTooltip>
       </header>
       {agentWindow && <AgentSessionNode id={id} data={data} />}
-      {!agentWindow && definition.behaviors.collapsible && !data.collapsed && (
+      {previewFace && (
+        <PreviewNodeFace id={id} kind={data.kind as 'web-preview' | 'mobile-preview'} data={data} />
+      )}
+      {!agentWindow && !previewFace && definition.behaviors.collapsible && !data.collapsed && (
         <div className="node-body">
           <strong>{data.title}</strong>
           <p>{data.description || definition.description}</p>
