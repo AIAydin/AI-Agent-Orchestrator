@@ -487,6 +487,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         workflows,
         runs,
         terminal,
+        agentPeers,
         previews,
         checks,
         deliveryReadiness,
