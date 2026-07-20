@@ -1459,6 +1459,7 @@ function contextEdge(
     config: {
       attachmentMode: 'explicit',
       required: true,
+      muted: false,
       attachmentIds: [...attachmentIds],
     },
     inspector: {},

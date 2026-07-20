@@ -176,7 +176,12 @@ describe('FileNodeWorkflowContextResolver', () => {
       type: 'context',
       sourceNodeId: 'file-1',
       targetNodeId: 'agent-1',
-      config: { attachmentMode: 'explicit', required: true, attachmentIds: ['file-1'] },
+      config: {
+        attachmentMode: 'explicit',
+        required: true,
+        muted: false,
+        attachmentIds: ['file-1'],
+      },
       inspector: {},
       createdAt: T0,
     };
@@ -346,7 +351,7 @@ describe('FileNodeWorkflowContextResolver', () => {
       type: 'context',
       sourceNodeId: 'brief-1',
       targetNodeId: 'agent-1',
-      config: { attachmentMode: 'explicit', required: true, attachmentIds },
+      config: { attachmentMode: 'explicit', required: true, muted: false, attachmentIds },
       inspector: {},
       createdAt: T0,
     };
