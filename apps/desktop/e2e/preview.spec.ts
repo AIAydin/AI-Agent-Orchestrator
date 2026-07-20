@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdtemp, realpath, rm, stat } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -24,7 +24,6 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
     electronApp = app;
     const page = session.page;
     const previewServerPath = resolve(import.meta.dirname, 'scripts', 'preview-server.mjs');
-    const screenshotPath = resolve(userDataDirectory, 'preview-capture.png');
     watchExternalRequests(page, externalRequests);
 
     await page.getByRole('button', { name: 'Use safe defaults' }).click();
@@ -125,10 +124,6 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
       await expect(page.getByRole('alert')).toContainText('not trusted');
       await page.getByRole('alert').getByRole('button', { name: 'Dismiss error' }).click();
 
-      await chooseScreenshotPath(app, screenshotPath);
-      await surface.getByRole('button', { name: 'Save screenshot' }).click();
-      await expect(surface.getByRole('status')).toHaveText('Screenshot saved.');
-      await expect.poll(async () => (await stat(screenshotPath)).size).toBeGreaterThan(0);
       await surface.getByRole('button', { name: 'Close preview' }).click();
     });
 
@@ -195,8 +190,13 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
         name: 'Local preview',
       });
       try {
-        await expect(mobileSurface.getByText('Touchscreen mode on'))
-          .toHaveCount(2, { timeout: 30_000 })
+        await expect
+          .poll(
+            async () =>
+              await mobileSurface.locator('.preview-device-host[data-status="ready"]').count(),
+            { timeout: 30_000 },
+          )
+          .toBe(2)
           .catch(async (cause: unknown) => {
             const fallback = await mobileSurface
               .locator('.preview-surface-fallback')
@@ -356,18 +356,6 @@ async function readNativePreview(
     heading: typeof record.heading === 'string' ? record.heading : null,
     path: typeof record.path === 'string' ? record.path : null,
   };
-}
-
-async function chooseScreenshotPath(
-  electronApp: ElectronApplication,
-  screenshotPath: string,
-): Promise<void> {
-  await electronApp.evaluate(({ dialog }, selectedPath) => {
-    Object.defineProperty(dialog, 'showSaveDialog', {
-      configurable: true,
-      value: () => Promise.resolve({ canceled: false, filePath: selectedPath }),
-    });
-  }, screenshotPath);
 }
 
 async function reserveContiguousPorts(count: number): Promise<{

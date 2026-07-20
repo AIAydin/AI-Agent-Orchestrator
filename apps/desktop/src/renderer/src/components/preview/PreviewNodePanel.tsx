@@ -334,7 +334,7 @@ export function PreviewNodePanel({
         )}
         <button
           type="button"
-          disabled={readOnly || !ready || !operations}
+          disabled={readOnly || !ready}
           onClick={() => setSurfaceOpen(true)}
           aria-label="Open preview"
         >
@@ -375,7 +375,7 @@ export function PreviewNodePanel({
         </span>
       </div>
 
-      {surfaceOpen && ready && process?.previewUrl && operations ? (
+      {surfaceOpen && ready && process?.previewUrl ? (
         <PreviewSurface
           projectId={projectId}
           nodeId={nodeId}
@@ -385,7 +385,6 @@ export function PreviewNodePanel({
           secondaryPreset={secondaryPreset}
           orientation={orientation}
           sideBySide={data.previewSideBySide === true}
-          operations={operations}
           readOnly={readOnly}
           onClose={() => setSurfaceOpen(false)}
           onError={onError}

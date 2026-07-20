@@ -1,22 +1,11 @@
 import { useRef, useState } from 'react';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Camera,
-  ExternalLink,
-  MonitorPlay,
-  RefreshCw,
-  X,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, ExternalLink, MonitorPlay, RefreshCw, X } from 'lucide-react';
 
 import type { PreviewSessionSnapshot } from '../../../../../shared/application/contracts.js';
-import type {
-  PreviewConsoleView,
-  PreviewSurfaceView,
-} from '../../../../../shared/preview/surface/contracts.js';
 import { PreviewConsole } from '../console/PreviewConsole.js';
-import type { PreviewRendererOperations } from '../controller/operations.js';
 import type { PreviewOrientation, PreviewPresetId } from '../devices/presets.js';
+import { usePreviewConsoleBuffer } from '../webview/usePreviewConsoleBuffer.js';
+import type { PreviewWebviewStatus } from '../webview/PreviewWebview.js';
 import { DeviceFrameHost, type DeviceFrameHandle } from './DeviceFrameHost.js';
 import './PreviewSurface.css';
 
@@ -29,7 +18,6 @@ interface PreviewSurfaceProps {
   secondaryPreset: PreviewPresetId;
   orientation: PreviewOrientation;
   sideBySide: boolean;
-  operations: PreviewRendererOperations;
   readOnly: boolean;
   onClose: () => void;
   onError: (message: string) => void;
@@ -44,15 +32,13 @@ export function PreviewSurface({
   secondaryPreset,
   orientation,
   sideBySide,
-  operations,
   readOnly,
   onClose,
   onError,
 }: PreviewSurfaceProps) {
   const [address, setAddress] = useState(initialUrl);
-  const [actionStatus, setActionStatus] = useState<string | null>(null);
-  const [primaryView, setPrimaryView] = useState<PreviewSurfaceView | null>(null);
-  const [browserConsole, setBrowserConsole] = useState<PreviewConsoleView | null>(null);
+  const [primaryView, setPrimaryView] = useState<PreviewWebviewStatus | null>(null);
+  const consoleBuffer = usePreviewConsoleBuffer();
   const primary = useRef<DeviceFrameHandle | null>(null);
   const secondary = useRef<DeviceFrameHandle | null>(null);
 
@@ -62,7 +48,6 @@ export function PreviewSurface({
   ) {
     const controller = primary.current;
     if (!controller) return;
-    setActionStatus(null);
     try {
       await action(controller);
     } catch (cause) {
@@ -134,45 +119,12 @@ export function PreviewSurface({
             />
           </form>
           <div className="preview-surface-actions">
-            <button
-              type="button"
-              disabled={readOnly || !primaryView}
-              onClick={() =>
-                void perform(async (value) => {
-                  const result = await value.screenshot();
-                  setActionStatus(result?.saved ? 'Screenshot saved.' : 'Screenshot cancelled.');
-                }, 'Could not save the preview screenshot.')
-              }
-              aria-label="Save screenshot"
-            >
-              <Camera size={14} />
-            </button>
-            <button
-              type="button"
-              disabled={readOnly || !primaryView}
-              onClick={() =>
-                void perform(async (value) => {
-                  const opened = await value.openExternal();
-                  setActionStatus(
-                    opened ? 'Opened in your browser.' : 'Opening in the browser was cancelled.',
-                  );
-                }, 'Could not open that address in your browser.')
-              }
-              aria-label="Open in browser"
-            >
-              <ExternalLink size={14} />
-            </button>
             <button type="button" onClick={onClose} aria-label="Close preview">
               <X size={15} />
             </button>
           </div>
         </header>
-        {actionStatus ? (
-          <p className="preview-surface-action-status" role="status">
-            {actionStatus}
-          </p>
-        ) : null}
-        <PreviewConsole session={session} browserConsole={browserConsole} />
+        <PreviewConsole session={session} browserConsole={consoleBuffer.view} />
         <div className={`preview-device-stage ${sideBySide ? 'side-by-side' : ''}`}>
           <DeviceFrameHost
             ref={primary}
@@ -181,10 +133,9 @@ export function PreviewSurface({
             url={initialUrl}
             presetId={primaryPreset}
             orientation={orientation}
-            operations={operations}
             readOnly={readOnly}
             onView={setPrimaryView}
-            onConsole={setBrowserConsole}
+            onConsole={(message) => consoleBuffer.append(message)}
           />
           {sideBySide ? (
             <DeviceFrameHost
@@ -194,7 +145,6 @@ export function PreviewSurface({
               url={initialUrl}
               presetId={secondaryPreset}
               orientation={orientation}
-              operations={operations}
               readOnly={readOnly}
             />
           ) : null}

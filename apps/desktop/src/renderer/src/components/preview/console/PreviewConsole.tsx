@@ -2,7 +2,7 @@ import type { PreviewSessionSnapshot } from '../../../../../shared/application/c
 import type {
   PreviewConsoleEntry,
   PreviewConsoleView,
-} from '../../../../../shared/preview/surface/contracts.js';
+} from '../../../../../shared/preview/console.js';
 import './PreviewConsole.css';
 
 const MAX_RENDERED_LOG_CHARACTERS = 128 * 1024;

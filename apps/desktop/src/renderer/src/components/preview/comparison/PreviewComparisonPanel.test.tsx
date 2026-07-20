@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-/* eslint-disable @typescript-eslint/unbound-method -- bridge members are Vitest mocks. */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,7 +57,7 @@ describe('PreviewComparisonPanel', () => {
       },
     });
     const operations = surfaceOperations();
-    render(
+    const { container } = render(
       <PreviewComparisonPanel
         projectId={PROJECT_ID}
         nodeId="preview-node"
@@ -106,16 +105,15 @@ describe('PreviewComparisonPanel', () => {
       }),
     ]);
     fireEvent.click(screen.getByRole('button', { name: 'Open side-by-side comparison' }));
-    await waitFor(() => expect(operations.createSurface).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(operations.createSurface).mock.calls.map(([input]) => input)).toEqual([
-      expect.objectContaining({
-        slot: 'comparison-left',
-        url: 'http://127.0.0.1:41001/',
-      }),
-      expect.objectContaining({
-        slot: 'comparison-right',
-        url: 'http://127.0.0.1:41002/',
-      }),
+    await waitFor(() => expect(container.querySelectorAll('webview')).toHaveLength(2));
+    const webviews = [...container.querySelectorAll('webview')];
+    expect(webviews.map((element) => element.getAttribute('src'))).toEqual([
+      'http://127.0.0.1:41001/',
+      'http://127.0.0.1:41002/',
+    ]);
+    expect(webviews.map((element) => element.getAttribute('partition'))).toEqual([
+      `preview:${PROJECT_ID}:preview-node:comparison-left`,
+      `preview:${PROJECT_ID}:preview-node:comparison-right`,
     ]);
     cleanup();
     expect(unsubscribe).toHaveBeenCalledOnce();

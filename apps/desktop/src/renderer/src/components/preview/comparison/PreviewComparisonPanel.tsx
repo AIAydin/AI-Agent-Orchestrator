@@ -134,7 +134,6 @@ export function PreviewComparisonPanel(props: PreviewComparisonPanelProps) {
           rightSession={controller.sessions.right!}
           leftPreset={configuration.leftPreset}
           rightPreset={configuration.rightPreset}
-          operations={props.operations}
           readOnly={readOnly}
           onClose={() => setSurfaceOpen(false)}
         />

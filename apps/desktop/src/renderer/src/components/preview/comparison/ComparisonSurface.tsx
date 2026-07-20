@@ -1,7 +1,6 @@
 import { Columns2, X } from 'lucide-react';
 
 import type { PreviewSessionSnapshot } from '../../../../../shared/application/contracts.js';
-import type { PreviewRendererOperations } from '../controller/operations.js';
 import { DeviceFrameHost } from '../surface/DeviceFrameHost.js';
 import type { PreviewPresetId } from '../devices/presets.js';
 import { slotFor } from './useComparisonSessions.js';
@@ -15,7 +14,6 @@ interface ComparisonSurfaceProps {
   rightSession: PreviewSessionSnapshot;
   leftPreset: PreviewPresetId;
   rightPreset: PreviewPresetId;
-  operations: PreviewRendererOperations;
   readOnly: boolean;
   onClose: () => void;
 }
@@ -29,7 +27,6 @@ export function ComparisonSurface({
   rightSession,
   leftPreset,
   rightPreset,
-  operations,
   readOnly,
   onClose,
 }: ComparisonSurfaceProps) {
@@ -68,7 +65,6 @@ export function ComparisonSurface({
               url={leftUrl}
               presetId={leftPreset}
               orientation="portrait"
-              operations={operations}
               readOnly={readOnly}
             />
           </section>
@@ -82,7 +78,6 @@ export function ComparisonSurface({
               url={rightUrl}
               presetId={rightPreset}
               orientation="portrait"
-              operations={operations}
               readOnly={readOnly}
             />
           </section>
