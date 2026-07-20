@@ -651,7 +651,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           selected: true,
           position: position ?? { x: 220 + offset, y: 150 + offset },
           ...initialWorkshopNodeDimensions(kind),
-          ...(kind === 'agent' ? { dragHandle: AGENT_NODE_DRAG_HANDLE } : {}),
           data: {
             kind,
             title: definition.label,
@@ -1125,6 +1124,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         const mutable = !protectedNodeIds.has(node.id);
         return {
           ...displayed,
+          // Single source of truth for the agent-window drag handle, so every creation path
+          // (add, hydrate, collaboration merge, workflow template) restricts dragging to the
+          // title bar. Never clobber a handle a node already carries.
+          ...(node.data.kind === 'agent' && displayed.dragHandle === undefined
+            ? { dragHandle: AGENT_NODE_DRAG_HANDLE }
+            : {}),
           ariaLabel: `${node.data.title}, ${definition.label} node${
             protectedNodeIds.has(node.id) ? ', locked' : ''
           }`,

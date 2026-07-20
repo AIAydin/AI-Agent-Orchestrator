@@ -9,7 +9,6 @@ import type { Snapshot } from '../../model/types.js';
 import { createEdgeData, edgeDataForPersistence } from '../../model/edge-config.js';
 import { hydrateNodeData } from '../../model/helpers.js';
 import { workshopNodeForPersistence } from '../../model/node-persistence.js';
-import { AGENT_NODE_DRAG_HANDLE } from '../../runs/agent-session/AgentSessionNode.js';
 
 export function snapshotForPersistence(snapshot: Snapshot): CanvasHistoryGraph {
   return {
@@ -43,7 +42,6 @@ export function hydrateHistorySnapshot(
         position: node.position,
         ...(node.width === undefined ? {} : { width: node.width }),
         ...(node.height === undefined ? {} : { height: node.height }),
-        ...(data.kind === 'agent' ? { dragHandle: AGENT_NODE_DRAG_HANDLE } : {}),
         data,
       };
     }),
