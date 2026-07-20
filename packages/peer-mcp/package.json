@@ -1,0 +1,17 @@
+{
+  "name": "@forgeboard/peer-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "forgeboard-peer-mcp": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ../.. --project unit src/protocol.test.ts"
+  },
+  "devDependencies": {
+    "tsup": "catalog:"
+  }
+}
