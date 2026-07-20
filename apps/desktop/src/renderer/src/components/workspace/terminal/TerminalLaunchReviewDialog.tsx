@@ -73,8 +73,8 @@ export function TerminalLaunchReviewDialog({
             <span className="eyebrow">Terminal safety review</span>
             <h2 id="terminal-launch-review-title">Review this terminal command</h2>
             <p id="terminal-launch-review-description">
-              Nothing has run yet. Continue only if this command and its access are what you expect.
-              Your computer will then ask you to confirm once more.
+              Nothing has run yet. If this command and its access look right, continue — your
+              computer will then ask you to confirm once more.
             </p>
           </div>
           <WorkspaceTooltip
@@ -149,9 +149,9 @@ export function TerminalLaunchReviewDialog({
             </div>
           </dl>
           <p className="terminal-launch-boundary">
-            Arguments are passed exactly as listed, never rewritten by a shell. Environment variable
-            values are filled in by Forgeboard from your saved settings and are never shown or
-            stored here.
+            Arguments run exactly as listed — no shell rewrites them. The terminal gets standard
+            system variables (PATH, HOME, TERM) plus your allowlisted settings values — values are
+            never shown or stored here.
           </p>
         </div>
 

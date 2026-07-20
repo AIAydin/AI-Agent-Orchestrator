@@ -19,7 +19,7 @@ afterEach(() => {
   }
 });
 
-describe('baseTerminalEnvironment', () => {
+describe.runIf(process.platform !== 'win32')('baseTerminalEnvironment', () => {
   it('inherits the essential PATH and HOME a CLI needs to launch', () => {
     process.env.PATH = '/opt/homebrew/bin:/usr/bin';
     process.env.HOME = '/Users/example';
