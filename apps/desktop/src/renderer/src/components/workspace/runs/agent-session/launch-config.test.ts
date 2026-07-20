@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentDetection } from '../../../../../../shared/application/contracts.js';
-import { agentSessionLaunch, agentSessionUnavailableReason } from './launch-config.js';
+import {
+  agentSessionLaunch,
+  agentSessionUnavailableReason,
+  modelFlagSupported,
+} from './launch-config.js';
 
 const claude: AgentDetection = {
   id: 'claude',
@@ -11,6 +15,13 @@ const claude: AgentDetection = {
   providerDisclosure: 'runs claude',
 };
 const codex: AgentDetection = { ...claude, id: 'codex', label: 'Codex', executable: '/usr/local/bin/codex' };
+const gemini: AgentDetection = { ...claude, id: 'gemini', label: 'Gemini', executable: '/usr/local/bin/gemini' };
+const opencode: AgentDetection = {
+  ...claude,
+  id: 'opencode',
+  label: 'OpenCode',
+  executable: '/usr/local/bin/opencode',
+};
 
 describe('agentSessionUnavailableReason', () => {
   it('requires a detected executable', () => {
@@ -37,9 +48,36 @@ describe('agentSessionLaunch', () => {
     expect(launch.configuration.arguments).toEqual(['--sandbox', 'read-only']);
   });
 
+  it('maps gemini and opencode typed models to the --model flag', () => {
+    expect(
+      agentSessionLaunch(gemini, 'gemini-2.5-pro', 'worktree-write').configuration.arguments,
+    ).toEqual(['--model', 'gemini-2.5-pro']);
+    expect(
+      agentSessionLaunch(opencode, 'anthropic/claude-sonnet', 'worktree-write').configuration
+        .arguments,
+    ).toEqual(['--model', 'anthropic/claude-sonnet']);
+  });
+
   it('notes non-enforceable profiles and passes no flags for them', () => {
     const launch = agentSessionLaunch(claude, undefined, 'worktree-write');
     expect(launch.configuration.arguments).toEqual([]);
     expect(launch.profileNote).toMatch(/project root/i);
+  });
+
+  it('shows the project-root note for the custom profile instead of claiming enforcement', () => {
+    const launch = agentSessionLaunch(claude, undefined, 'custom');
+    expect(launch.configuration.arguments).toEqual([]);
+    expect(launch.profileNote).toMatch(/project root/i);
+  });
+});
+
+describe('modelFlagSupported', () => {
+  it('is true only for adapters that map a typed model to a CLI flag', () => {
+    for (const id of ['claude', 'codex', 'gemini', 'opencode']) {
+      expect(modelFlagSupported(id)).toBe(true);
+    }
+    expect(modelFlagSupported('test-agent')).toBe(false);
+    expect(modelFlagSupported('custom')).toBe(false);
+    expect(modelFlagSupported('acme.custom-agent')).toBe(false);
   });
 });
