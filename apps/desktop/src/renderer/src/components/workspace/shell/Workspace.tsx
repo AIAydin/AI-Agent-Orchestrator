@@ -99,6 +99,7 @@ import type {
   WorkspaceProps,
 } from '../model/types.js';
 import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
+import { useAgentProviderGate } from '../runs/useAgentProviderGate.js';
 import { useAgentRunController } from '../runs/useAgentRunController.js';
 import { useAgentStatusReconciliation } from '../runs/useAgentStatusReconciliation.js';
 import { useAgentWorktreeRecord } from '../runs/useAgentWorktreeAvailability.js';
@@ -962,6 +963,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     (agent): agent is typeof agent & { id: RunAdapterId } =>
       agent.installed && isRunAdapterId(agent.id),
   );
+  const fallbackAdapter = isRunAdapterId(settings.defaultAgent)
+    ? settings.defaultAgent
+    : 'test-agent';
   const selectedAdapter = selectedNode
     ? (selectedNode.data.adapterId ??
       (isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'test-agent'))
@@ -979,6 +983,22 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     selectedNode === null
       ? null
       : permissionProfileUnavailableReason(selectedPermission, settings, selectedAdapter);
+  const selectedNodeKind = selectedNode?.data.kind;
+  const watchedProviderAdapterIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (selectedNodeKind === 'agent') ids.add(selectedAdapter);
+    for (const node of nodes) {
+      if (node.data.kind === 'agent') ids.add(node.data.adapterId ?? fallbackAdapter);
+    }
+    return [...ids].sort((left, right) => left.localeCompare(right));
+  }, [fallbackAdapter, nodes, selectedAdapter, selectedNodeKind]);
+  const providerGates = useAgentProviderGate({
+    adapterIds: watchedProviderAdapterIds,
+    executableOverrides: {
+      codex: settings.agentExecutableOverrides['codex'] ?? '',
+      claude: settings.agentExecutableOverrides['claude'] ?? '',
+    },
+  });
 
   const updateNodeData = useCallback((nodeId: string, data: Partial<WorkshopNode['data']>) => {
     setNodes((items) => {
