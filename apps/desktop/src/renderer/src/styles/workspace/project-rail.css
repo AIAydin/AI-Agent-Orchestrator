@@ -260,6 +260,16 @@
 .template-list button > svg {
   color: var(--text-faint);
 }
+.agent-monogram-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #101210;
+}
 .project-rail > footer {
   padding: 9px;
   border-top: 1px solid var(--line);

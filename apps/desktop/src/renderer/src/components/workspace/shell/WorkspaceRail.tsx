@@ -1,11 +1,16 @@
 import { ChevronRight, Files, GitBranch, Layers3, Search, Workflow } from 'lucide-react';
 
-import type { Project } from '../../../../../shared/application/contracts.js';
+import type {
+  AgentDetection,
+  Project,
+  RunAdapterId,
+} from '../../../../../shared/application/contracts.js';
 import type { ProjectFileBrowserOperations } from '../../file-editor/browser/useProjectFileBrowser.js';
 import type { NodeKind, WorkshopNode } from '../canvas/CanvasNode.js';
 import { WorkspaceProjectTree } from '../context-dnd/WorkspaceProjectTree.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import type { ExtensionTemplate } from '../model/types.js';
+import { providerTheme } from '../node-registry/provider-themes.js';
 import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
 import type { WorkflowTemplate } from '../workflows/templates/catalog.js';
 
@@ -21,9 +26,11 @@ interface WorkspaceRailProps {
   fileOperations: ProjectFileBrowserOperations;
   initializingGit: boolean;
   collaborationGraphReadOnly: boolean;
+  runnableAgents: readonly (AgentDetection & { id: RunAdapterId })[];
   onTabChange: (tab: 'project' | 'nodes') => void;
   onSearchChange: (value: string) => void;
   onAddNode: (kind: NodeKind) => void;
+  onAddAgentNode: (adapterId: RunAdapterId) => void;
   onAddWorkflowTemplate: (template: WorkflowTemplate) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
@@ -46,9 +53,11 @@ export function WorkspaceRail({
   fileOperations,
   initializingGit,
   collaborationGraphReadOnly,
+  runnableAgents,
   onTabChange,
   onSearchChange,
   onAddNode,
+  onAddAgentNode,
   onAddWorkflowTemplate,
   onAddExtensionNode,
   onInitializeGit,
@@ -102,7 +111,9 @@ export function WorkspaceRail({
             nodeRegistry={nodeRegistry}
             initializingGit={initializingGit}
             readOnly={collaborationGraphReadOnly}
+            runnableAgents={runnableAgents}
             onAddNode={onAddNode}
+            onAddAgentNode={onAddAgentNode}
             onAddWorkflowTemplate={onAddWorkflowTemplate}
             onAddExtensionNode={onAddExtensionNode}
             onInitializeGit={onInitializeGit}
@@ -126,7 +137,9 @@ interface ProjectTemplatesProps {
   nodeRegistry: NodeTypeRegistry;
   initializingGit: boolean;
   readOnly: boolean;
+  runnableAgents: readonly (AgentDetection & { id: RunAdapterId })[];
   onAddNode: (kind: NodeKind) => void;
+  onAddAgentNode: (adapterId: RunAdapterId) => void;
   onAddWorkflowTemplate: (template: WorkflowTemplate) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
@@ -140,7 +153,9 @@ function ProjectTemplates({
   nodeRegistry,
   initializingGit,
   readOnly,
+  runnableAgents,
   onAddNode,
+  onAddAgentNode,
   onAddWorkflowTemplate,
   onAddExtensionNode,
   onInitializeGit,
@@ -205,6 +220,32 @@ function ProjectTemplates({
               <ChevronRight size={13} />
             </button>
           ))}
+        </div>
+      </section>
+      <section className="template-section">
+        <header>
+          <h2>Agents</h2>
+          <span>{runnableAgents.length}</span>
+        </header>
+        <div className="template-list">
+          {runnableAgents.map((agent) => {
+            const theme = providerTheme(agent.id);
+            return (
+              <button type="button" key={agent.id} onClick={() => onAddAgentNode(agent.id)}>
+                <span
+                  className="agent-monogram-badge"
+                  style={{ background: theme?.accent ?? '#d4a85b' }}
+                >
+                  {theme?.monogram ?? 'A'}
+                </span>
+                <span>
+                  <strong>{theme?.label ?? agent.label}</strong>
+                  <small>Live CLI session window</small>
+                </span>
+                <ChevronRight size={13} />
+              </button>
+            );
+          })}
         </div>
       </section>
       <section className="template-section">

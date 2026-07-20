@@ -36,6 +36,7 @@ import {
   NODE_KINDS,
   type NodeKind,
   type WorkshopNode,
+  type WorkshopNodeData,
 } from '../canvas/CanvasNode.js';
 import { CommandPalette } from '../../shell/CommandPalette.js';
 import {
@@ -77,6 +78,7 @@ import { WorkspaceInspector } from './WorkspaceInspector.js';
 import { WorkspaceNotifications } from './WorkspaceOverlays.js';
 import { WorkspaceRail } from './WorkspaceRail.js';
 import { nodeRegistryFromTemplates } from '../node-registry/NodeRegistryContext.js';
+import { providerTheme } from '../node-registry/provider-themes.js';
 import { useWorkspaceNodeMutations } from './node-actions/useWorkspaceNodeMutations.js';
 import {
   createEdgeData,
@@ -626,7 +628,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   }, [copySelected, duplicateSelected, pasteClipboard, redo, settings.keyboardPreset, undo]);
 
   const addNode = useCallback(
-    (kind: NodeKind, position?: { x: number; y: number }) => {
+    (
+      kind: NodeKind,
+      position?: { x: number; y: number },
+      dataOverrides?: Partial<WorkshopNodeData>,
+    ) => {
       if (collaborationCanvas.graphReadOnly) {
         reportCollaborationReadOnly();
         return;
@@ -662,6 +668,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
                   childNodeIds: [],
                 }
               : {}),
+            ...dataOverrides,
           },
         },
       ]);
@@ -678,6 +685,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       reportCollaborationReadOnly,
       settings,
     ],
+  );
+
+  const addAgentNode = useCallback(
+    (adapterId: RunAdapterId, position?: { x: number; y: number }) => {
+      const theme = providerTheme(adapterId);
+      addNode('agent', position, {
+        adapterId,
+        ...(theme === null ? {} : { title: theme.label, color: theme.accent }),
+      });
+    },
+    [addNode],
   );
 
   const addExtensionNode = useCallback(
@@ -1571,9 +1589,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           fileOperations={window.forgeboard.files}
           initializingGit={initializingGit}
           collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
+          runnableAgents={runnableAgents}
           onTabChange={setRailTab}
           onSearchChange={setSearch}
           onAddNode={addNode}
+          onAddAgentNode={addAgentNode}
           onAddWorkflowTemplate={addWorkflowTemplate}
           onAddExtensionNode={addExtensionNode}
           onInitializeGit={() => void initializeGit()}
