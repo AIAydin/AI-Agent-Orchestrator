@@ -1,0 +1,97 @@
+import { PassThrough } from 'node:stream';
+import { describe, expect, it, vi } from 'vitest';
+import { createStdioLoop } from './runtime.js';
+import type { HubClient } from './protocol.js';
+
+describe('createStdioLoop', () => {
+  it('drains an in-flight tools/call reply before signaling done, even when input ends immediately', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let resolveHubCall: (() => void) | undefined;
+    const hub: HubClient = {
+      peers: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveHubCall = () => resolve({ agents: [] });
+          }),
+      ),
+      message: vi.fn(() => Promise.resolve({ result: 'ok' })),
+      screen: vi.fn(() => Promise.resolve({ text: '' })),
+    };
+
+    const chunks: string[] = [];
+    output.on('data', (chunk: Buffer) => chunks.push(chunk.toString('utf8')));
+
+    const done = new Promise<void>((resolve) => {
+      createStdioLoop(input, output, hub, resolve);
+    });
+
+    input.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })}\n`);
+    input.write(
+      `${JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'list_agents', arguments: {} },
+      })}\n`,
+    );
+    // stdin closes before the hub fetch for id 2 has resolved.
+    input.end();
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(chunks.join('')).not.toContain('"id":2');
+    resolveHubCall?.();
+
+    await done;
+
+    const combined = chunks.join('');
+    expect(combined).toContain('"id":1');
+    expect(combined).toContain('"id":2');
+  });
+
+  it('signals done even when a handler fails unexpectedly', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const hub: HubClient = {
+      peers: vi.fn(() => Promise.reject(new Error('boom'))),
+      message: vi.fn(() => Promise.resolve({ result: 'ok' })),
+      screen: vi.fn(() => Promise.resolve({ text: '' })),
+    };
+
+    const done = new Promise<void>((resolve) => {
+      createStdioLoop(input, output, hub, resolve);
+    });
+
+    input.write(
+      `${JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'list_agents', arguments: {} },
+      })}\n`,
+    );
+    input.end();
+
+    await expect(done).resolves.toBeUndefined();
+  });
+
+  it('ignores blank lines and malformed JSON without blocking the drain', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const hub: HubClient = {
+      peers: vi.fn(() => Promise.resolve({ agents: [] })),
+      message: vi.fn(() => Promise.resolve({ result: 'ok' })),
+      screen: vi.fn(() => Promise.resolve({ text: '' })),
+    };
+
+    const done = new Promise<void>((resolve) => {
+      createStdioLoop(input, output, hub, resolve);
+    });
+
+    input.write('\n');
+    input.write('not json\n');
+    input.end();
+
+    await expect(done).resolves.toBeUndefined();
+  });
+});

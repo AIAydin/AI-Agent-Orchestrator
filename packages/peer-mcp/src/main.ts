@@ -1,5 +1,5 @@
-import { createInterface } from 'node:readline';
-import { handleMessage, type HubClient } from './protocol.js';
+import type { HubClient } from './protocol.js';
+import { createStdioLoop } from './runtime.js';
 
 const url = process.env['FORGEBOARD_PEER_URL'];
 const token = process.env['FORGEBOARD_PEER_TOKEN'];
@@ -32,18 +32,4 @@ const hub: HubClient = {
   screen: (agent) => call(`/v1/screen?agent=${encodeURIComponent(agent)}`) as never,
 };
 
-const lines = createInterface({ input: process.stdin });
-lines.on('line', (line) => {
-  if (line.trim() === '') return;
-  void (async () => {
-    let parsed: Parameters<typeof handleMessage>[0];
-    try {
-      parsed = JSON.parse(line) as Parameters<typeof handleMessage>[0];
-    } catch {
-      return;
-    }
-    const reply = await handleMessage(parsed, hub);
-    if (reply !== null) process.stdout.write(`${JSON.stringify(reply)}\n`);
-  })();
-});
-lines.on('close', () => process.exit(0));
+createStdioLoop(process.stdin, process.stdout, hub, () => process.exit(0));
