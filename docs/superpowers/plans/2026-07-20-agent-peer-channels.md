@@ -628,7 +628,7 @@ interface ProvisionRecord {
 - Peer view per request: `const canvas = this.store.loadCanvas(provision.projectId)`; `resolvePeers(canvas.nodes, canvas.edges, provision.nodeId)`; caller's own display name = its node title (resolve from `canvas.nodes`).
 - `message` flow: find peer by name → muted? → rate limiter (`Map<edgeId, number[]>` sliding window using injected `now`) → `bridge.findActiveSessionByNode(projectId, peer.nodeId)` → `bridge.deliverPeerInput(sessionId, callerName, message)` → emit `onMessageDelivered({ projectId, edgeId })` → audit. Every branch audits (`allowed` for delivered, `denied` with a `reason` for the rest).
 - `screen` flow: peer by name → live session → `bridge.readTranscriptTail(sessionId, SCREEN_TAIL_BYTES)` → `{ text }` (empty transcript → `{ text: '' }`).
-- Lifecycle: `pauseForShutdown`/`pauseForDataMutation`/`resetForPrivacy` = close server + clear provisions; `resumeAfterPrivacyReset` = no-op (hub restarts lazily); `dispose` = close server, clear listeners.
+- Lifecycle: `pauseForShutdown`/`pauseForDataMutation`/`resetForPrivacy` = run all registered cleanups best-effort (`Promise.allSettled`, mirroring `releaseSession`), then close server + clear provisions; `resumeAfterPrivacyReset` = no-op (hub restarts lazily); `dispose` = run cleanups + close server, clear listeners. (Cleanups delete on-disk provider config carrying peer tokens — dropping them on `resetForPrivacy` would leak exactly what that path scrubs; review finding, fixed.)
 - Tokens: `randomBytes(32).toString('hex')`.
 
 - [ ] **Step 3: Run the new tests — PASS.**
