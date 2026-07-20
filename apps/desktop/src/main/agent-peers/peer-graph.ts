@@ -36,7 +36,7 @@ export function resolvePeers(
         : edge.targetNodeId === nodeId
           ? edge.sourceNodeId
           : null;
-    if (otherId === null) continue;
+    if (otherId === null || otherId === nodeId) continue;
     const other = agents.get(otherId);
     if (other === undefined || peers.some((peer) => peer.nodeId === otherId)) continue;
 

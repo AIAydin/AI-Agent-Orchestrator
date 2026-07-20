@@ -85,6 +85,48 @@ describe('resolvePeers', () => {
       expect.objectContaining({ nodeId: c.id, muted: false }),
     ]);
   });
+
+  it('excludes self-loop context edges from peer resolution', () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const selfLoop = contextEdge('edge-self', a.id, a.id);
+
+    expect(resolvePeers([a], [selfLoop], a.id)).toEqual([]);
+  });
+
+  it('falls back to "Agent" when title is whitespace-only', () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', ' ');
+    const edge = contextEdge('edge-1', a.id, b.id);
+
+    const peers = resolvePeers([a, b], [edge], a.id);
+
+    expect(peers).toEqual([expect.objectContaining({ nodeId: b.id, name: 'Agent' })]);
+  });
+
+  it('treats cross-case title collisions as distinct peers', () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Title');
+    const c = agentNode('agent-c', 'title');
+    const ab = contextEdge('edge-ab', a.id, b.id);
+    const ac = contextEdge('edge-ac', a.id, c.id);
+
+    const peers = resolvePeers([a, b, c], [ab, ac], a.id);
+
+    expect(peers.map((peer) => peer.name)).toEqual(['Title', 'title (2)']);
+  });
+
+  it('dedupes parallel context edges between the same peer pair', () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    const edge1 = contextEdge('edge-1', a.id, b.id);
+    const edge2 = contextEdge('edge-2', a.id, b.id);
+
+    const peers = resolvePeers([a, b], [edge1, edge2], a.id);
+
+    expect(peers).toEqual([
+      { nodeId: b.id, name: 'Agent B', provider: null, edgeId: edge1.id, muted: false },
+    ]);
+  });
 });
 
 describe('findPeerByName', () => {
