@@ -27,6 +27,7 @@ import {
   type TerminalSessionTargetInput,
   type TerminalSessionView,
 } from '../../shared/terminal/index.js';
+import { formatPeerDelivery, transcriptTailText } from '../agent-peers/text.js';
 import type { StoredTerminalSession } from '../storage/terminal/contracts.js';
 import { TerminalTranscriptFiles } from '../storage/terminal/transcript-files.js';
 import {
@@ -412,6 +413,56 @@ export class TerminalService {
       bytes: Buffer.byteLength(parsed.data, 'utf8'),
     });
     return structuredClone(active.view);
+  }
+
+  /**
+   * Trusted, main-side-only lookup: finds the sole running session bound to a canvas node, for
+   * peer-channel delivery. No `ownerId` — every renderer window is untrusted for this purpose, so
+   * only main-process callers (the agent-peer hub) may use it.
+   */
+  public findActiveSessionByNode(projectId: string, nodeId: string): { sessionId: string } | null {
+    for (const [sessionId, active] of this.#active) {
+      if (
+        active.view.projectId === projectId &&
+        active.view.nodeId === nodeId &&
+        active.view.status === 'running'
+      ) {
+        return { sessionId };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Trusted, main-side-only delivery: types a peer's message into a live PTY as bracketed-paste
+   * input, bypassing owner checks since the caller is the in-process agent-peer hub, not a
+   * renderer window.
+   */
+  public async deliverPeerInput(
+    sessionId: string,
+    sender: string,
+    message: string,
+  ): Promise<'delivered' | 'no-live-session'> {
+    await this.#assertAvailable();
+    const active = this.#active.get(sessionId);
+    if (active === undefined || active.view.status !== 'running' || active.handle === null) {
+      return 'no-live-session';
+    }
+    active.handle.write(formatPeerDelivery(sender, message));
+    this.#safeAudit('input', 'allowed', { sessionId, source: 'agent-peer', sender });
+    return 'delivered';
+  }
+
+  /**
+   * Trusted, main-side-only read: returns the ANSI-stripped tail of a session's persisted
+   * transcript (at most the last 200 lines within `maxBytes`), or `null` if the transcript does
+   * not exist.
+   */
+  public async readTranscriptTail(sessionId: string, maxBytes: number): Promise<string | null> {
+    await this.#assertAvailable();
+    const raw = await this.#transcripts.tail(sessionId, maxBytes);
+    if (raw === null) return null;
+    return transcriptTailText(raw);
   }
 
   public async resize(ownerId: string, input: TerminalResizeInput): Promise<TerminalSessionView> {

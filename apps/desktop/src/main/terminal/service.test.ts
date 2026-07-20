@@ -10,6 +10,7 @@ import type {
   TerminalPrepareLaunchInput,
   TerminalSessionView,
 } from '../../shared/terminal/index.js';
+import { formatPeerDelivery } from '../agent-peers/text.js';
 import {
   terminalStorageRecord,
   type StoredTerminalSession,
@@ -20,6 +21,7 @@ import { TerminalService, splitTerminalOutput, type TerminalServiceStore } from 
 const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
 const PLAN_ID = '20000000-0000-4000-8000-000000000001';
 const SESSION_ID = '30000000-0000-4000-8000-000000000001';
+const UNKNOWN_SESSION_ID = '40000000-0000-4000-8000-000000000001';
 
 describe('TerminalService', () => {
   const services: TerminalService[] = [];
@@ -361,6 +363,77 @@ describe('TerminalService', () => {
     await expect(service.assertProjectAvailable(PROJECT_ID)).rejects.toThrow(
       /file already exists|canonical ordinary directory/u,
     );
+  });
+
+  describe('agent peer hooks', () => {
+    it('finds the running session for a project/node pair and forgets it once inactive', async () => {
+      const harness = await fixture();
+      const plan = await harness.service.prepareLaunch('owner-a', harness.input);
+      await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+
+      expect(harness.service.findActiveSessionByNode(PROJECT_ID, 'terminal-1')).toEqual({
+        sessionId: SESSION_ID,
+      });
+      expect(harness.service.findActiveSessionByNode(PROJECT_ID, 'wrong-node')).toBeNull();
+      expect(harness.service.findActiveSessionByNode('wrong-project', 'terminal-1')).toBeNull();
+
+      await harness.service.terminate('owner-a', { sessionId: SESSION_ID });
+      expect(harness.service.findActiveSessionByNode(PROJECT_ID, 'terminal-1')).toBeNull();
+    });
+
+    it('delivers a peer message as a bracketed-paste write and audits it as agent-peer input', async () => {
+      const harness = await fixture();
+      const plan = await harness.service.prepareLaunch('owner-a', harness.input);
+      await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+
+      await expect(harness.service.deliverPeerInput(SESSION_ID, 'Hermes', 'hi')).resolves.toBe(
+        'delivered',
+      );
+      expect(harness.pty.writes).toEqual([formatPeerDelivery('Hermes', 'hi')]);
+      expect(harness.store.audits).toContainEqual([
+        'terminal',
+        'input',
+        'allowed',
+        expect.objectContaining({
+          sessionId: SESSION_ID,
+          source: 'agent-peer',
+          sender: 'Hermes',
+        }),
+      ]);
+    });
+
+    it('reports no-live-session for an unknown or inactive session and writes nothing', async () => {
+      const harness = await fixture();
+
+      await expect(
+        harness.service.deliverPeerInput(UNKNOWN_SESSION_ID, 'Hermes', 'hi'),
+      ).resolves.toBe('no-live-session');
+      expect(harness.pty.writes).toEqual([]);
+    });
+
+    it('reads a stripped transcript tail and returns null for an unknown session', async () => {
+      const harness = await fixture();
+      const plan = await harness.service.prepareLaunch('owner-a', harness.input);
+      await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+      harness.pty.emitData('hello \x1b[31mworld\x1b[0m\r\n');
+      await expectEventually(async () => {
+        const replay = await harness.service.replay('owner-a', { sessionId: SESSION_ID });
+        return replay?.chunks[0]?.data === 'hello \x1b[31mworld\x1b[0m\r\n';
+      });
+
+      await expect(harness.service.readTranscriptTail(SESSION_ID, 1_024)).resolves.toBe(
+        'hello world',
+      );
+      await expect(
+        harness.service.readTranscriptTail(UNKNOWN_SESSION_ID, 1_024),
+      ).resolves.toBeNull();
+    });
   });
 
   async function fixture(
