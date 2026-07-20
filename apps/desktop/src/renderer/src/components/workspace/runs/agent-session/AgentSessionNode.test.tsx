@@ -96,7 +96,7 @@ const spies = {
   requestDeleteNode: vi.fn(),
 };
 
-function contextValue(): AgentSessionContextValue {
+function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentSessionContextValue {
   return {
     project: { id: 'proj-1' } as Project,
     settings,
@@ -111,6 +111,7 @@ function contextValue(): AgentSessionContextValue {
     nodeTitle: spies.nodeTitle,
     removeAgentContext: spies.removeAgentContext,
     requestDeleteNode: spies.requestDeleteNode,
+    ...overrides,
   };
 }
 
@@ -129,9 +130,9 @@ function nodeData(overrides: Partial<WorkshopNodeData> = {}): WorkshopNodeData {
   };
 }
 
-function nodeTree(data: WorkshopNodeData) {
+function nodeTree(data: WorkshopNodeData, contextOverrides: Partial<AgentSessionContextValue> = {}) {
   return (
-    <AgentSessionProvider value={contextValue()}>
+    <AgentSessionProvider value={contextValue(contextOverrides)}>
       <CanvasNodeInteractionProvider readOnly={false} setCollapsed={vi.fn()}>
         <AgentSessionNode id={NODE_ID} data={data} />
       </CanvasNodeInteractionProvider>
@@ -139,8 +140,11 @@ function nodeTree(data: WorkshopNodeData) {
   );
 }
 
-function renderNode(data: WorkshopNodeData = nodeData()) {
-  return render(nodeTree(data));
+function renderNode(
+  data: WorkshopNodeData = nodeData(),
+  contextOverrides: Partial<AgentSessionContextValue> = {},
+) {
+  return render(nodeTree(data, contextOverrides));
 }
 
 const REVIEW_PLAN: TerminalLaunchPlanView = {
@@ -249,5 +253,32 @@ describe('AgentSessionNode', () => {
     fireEvent.click(restart);
     expect(controller.terminate).toHaveBeenCalledOnce();
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+  });
+
+  it('renders the Model input only when the agent supports model selection', () => {
+    renderNode();
+    expect(screen.getByLabelText('Model')).toBeTruthy();
+    cleanup();
+
+    const claudeNoModelSelection: AgentDetection & { id: RunAdapterId } = {
+      ...claude,
+      capabilities: { ...claude.capabilities!, modelSelection: false },
+    };
+    render(nodeTree(nodeData(), { runnableAgents: [claudeNoModelSelection] }));
+    expect(screen.queryByLabelText('Model')).toBeNull();
+  });
+
+  it('disables permission profile options that require Docker when Docker is off', () => {
+    const dockerDisabledSettings: AppSettings = AppSettingsSchema.parse({
+      ...settings,
+      dockerEnabled: false,
+    });
+    renderNode(nodeData(), { settings: dockerDisabledSettings });
+
+    const permissionSelect = screen.getByLabelText('Permission profile') as HTMLSelectElement;
+    const dockerOption = permissionSelect.querySelector('option[value="docker-isolated"]');
+    const worktreeOption = permissionSelect.querySelector('option[value="worktree-write"]');
+    expect(dockerOption?.hasAttribute('disabled')).toBe(true);
+    expect(worktreeOption?.hasAttribute('disabled')).toBe(false);
   });
 });
