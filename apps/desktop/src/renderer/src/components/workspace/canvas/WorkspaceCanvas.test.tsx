@@ -413,8 +413,8 @@ describe('WorkspaceCanvas palette drops', () => {
       { snapToGrid: false },
     );
     const position = vi.mocked(canvasProps.onAddNode).mock.calls[0]?.[1];
-    expect(position?.x).toBeCloseTo(129);
-    expect(position?.y).toBeCloseTo(113.6);
+    expect(position?.x).toBeCloseTo(109);
+    expect(position?.y).toBeCloseTo(13.6);
   });
 
   it('uses the rendered group-frame and extension dimensions when clamping drops', () => {

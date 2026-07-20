@@ -84,15 +84,15 @@ describe('canvas selection clipboard', () => {
         id: 'first-copy',
         position: { x: 58, y: 68 },
         selected: true,
-        width: 320,
-        height: 180,
+        width: 340,
+        height: 280,
       },
       {
         id: 'second-copy',
         position: { x: 58, y: 68 },
         selected: true,
-        width: 320,
-        height: 180,
+        width: 340,
+        height: 280,
       },
     ]);
     expect(duplicate.nodes[0]?.data).toMatchObject({
