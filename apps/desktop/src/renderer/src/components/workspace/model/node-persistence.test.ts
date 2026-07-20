@@ -9,8 +9,8 @@ import {
 
 describe('workshop node persistence dimensions', () => {
   it('assigns canonical dimensions to every newly created ordinary node', () => {
-    expect(initialWorkshopNodeDimensions('task')).toEqual({ width: 320, height: 180 });
     expect(initialWorkshopNodeDimensions('extension')).toEqual({ width: 320, height: 180 });
+    expect(initialWorkshopNodeDimensions('file')).toEqual({ width: 320, height: 180 });
     expect(initialWorkshopNodeDimensions('group-frame')).toEqual({ width: 520, height: 360 });
   });
 
@@ -35,7 +35,7 @@ describe('workshop node persistence dimensions', () => {
   it('serializes an unresized ordinary node with explicit reload-stable dimensions', () => {
     expect(workshopNodeForPersistence(node())).toMatchObject({
       id: 'task-1',
-      type: 'task',
+      type: 'extension',
       width: 320,
       height: 180,
       position: { x: 10, y: 20 },
@@ -76,6 +76,34 @@ describe('workshop node persistence dimensions', () => {
       }),
     ).toEqual({ width: 320, height: 480 });
   });
+
+  it('gives document and status nodes face dimensions', () => {
+    expect(initialWorkshopNodeDimensions('diagram')).toEqual({ width: 480, height: 360 });
+    expect(initialWorkshopNodeDimensions('whiteboard')).toEqual({ width: 560, height: 420 });
+    expect(initialWorkshopNodeDimensions('brief')).toEqual({ width: 440, height: 440 });
+    expect(initialWorkshopNodeDimensions('note-image')).toEqual({ width: 400, height: 360 });
+    expect(initialWorkshopNodeDimensions('task')).toEqual({ width: 340, height: 280 });
+    expect(initialWorkshopNodeDimensions('review-gate')).toEqual({ width: 360, height: 300 });
+    expect(initialWorkshopNodeDimensions('git-pr')).toEqual({ width: 420, height: 380 });
+    expect(initialWorkshopNodeDimensions('test')).toEqual({ width: 400, height: 340 });
+  });
+
+  it('floors persisted document and status nodes at their per-kind minimums', () => {
+    const floored = (kind: WorkshopNode['data']['kind']) =>
+      persistedWorkshopNodeDimensions({
+        data: { kind } as WorkshopNode['data'],
+        width: 10,
+        height: 10,
+      });
+    expect(floored('diagram')).toEqual({ width: 320, height: 240 });
+    expect(floored('whiteboard')).toEqual({ width: 360, height: 280 });
+    expect(floored('brief')).toEqual({ width: 320, height: 280 });
+    expect(floored('note-image')).toEqual({ width: 300, height: 240 });
+    expect(floored('task')).toEqual({ width: 260, height: 200 });
+    expect(floored('review-gate')).toEqual({ width: 280, height: 220 });
+    expect(floored('git-pr')).toEqual({ width: 320, height: 260 });
+    expect(floored('test')).toEqual({ width: 300, height: 240 });
+  });
 });
 
 function node(
@@ -88,7 +116,7 @@ function node(
     position: { x: 10, y: 20 },
     ...dimensions,
     data: {
-      kind: 'task',
+      kind: 'extension',
       title: 'Task',
       description: 'Task',
       status: 'idle',

@@ -154,6 +154,38 @@
   min-width: 320px;
   min-height: 480px;
 }
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='diagram']:not(.collapsed)) {
+  min-width: 320px;
+  min-height: 240px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='whiteboard']:not(.collapsed)) {
+  min-width: 360px;
+  min-height: 280px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='brief']:not(.collapsed)) {
+  min-width: 320px;
+  min-height: 280px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='note-image']:not(.collapsed)) {
+  min-width: 300px;
+  min-height: 240px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='task']:not(.collapsed)) {
+  min-width: 260px;
+  min-height: 200px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='review-gate']:not(.collapsed)) {
+  min-width: 280px;
+  min-height: 220px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='git-pr']:not(.collapsed)) {
+  min-width: 320px;
+  min-height: 260px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='test']:not(.collapsed)) {
+  min-width: 300px;
+  min-height: 240px;
+}
 .react-flow__node-workshop:has(> .canvas-node.collapsed) {
   height: 35px !important;
   min-height: 35px;

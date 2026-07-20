@@ -59,8 +59,8 @@ describe('CanvasNode presentation interactions', () => {
     expect(collapse).toHaveProperty('disabled', false);
     expect(resizer()).toMatchObject({
       visible: 'true',
-      minWidth: '210',
-      minHeight: '92',
+      minWidth: '260',
+      minHeight: '200',
     });
 
     fireEvent.click(collapse);

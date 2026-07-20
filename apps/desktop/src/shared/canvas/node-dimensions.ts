@@ -58,6 +58,25 @@ export const MOBILE_PREVIEW_NODE_MINIMUM_DIMENSIONS = {
   height: 480,
 } as const;
 
+interface NodeDimensions {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Face dimensions for the document & status node kinds (sub-plan 2b). */
+export const DOCUMENT_NODE_DIMENSIONS: Readonly<
+  Record<string, { readonly default: NodeDimensions; readonly minimum: NodeDimensions }>
+> = {
+  diagram: { default: { width: 480, height: 360 }, minimum: { width: 320, height: 240 } },
+  whiteboard: { default: { width: 560, height: 420 }, minimum: { width: 360, height: 280 } },
+  brief: { default: { width: 440, height: 440 }, minimum: { width: 320, height: 280 } },
+  'note-image': { default: { width: 400, height: 360 }, minimum: { width: 300, height: 240 } },
+  task: { default: { width: 340, height: 280 }, minimum: { width: 260, height: 200 } },
+  'review-gate': { default: { width: 360, height: 300 }, minimum: { width: 280, height: 220 } },
+  'git-pr': { default: { width: 420, height: 380 }, minimum: { width: 320, height: 260 } },
+  test: { default: { width: 400, height: 340 }, minimum: { width: 300, height: 240 } },
+};
+
 /** Default dimensions for non-frame node kinds (frames are handled separately). */
 export function defaultNodeDimensionsForKind(kind: string): {
   readonly width: number;
@@ -66,6 +85,8 @@ export function defaultNodeDimensionsForKind(kind: string): {
   if (kind === 'agent') return AGENT_NODE_DEFAULT_DIMENSIONS;
   if (kind === 'web-preview') return WEB_PREVIEW_NODE_DEFAULT_DIMENSIONS;
   if (kind === 'mobile-preview') return MOBILE_PREVIEW_NODE_DEFAULT_DIMENSIONS;
+  const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];
+  if (documentDimensions !== undefined) return documentDimensions.default;
   return DEFAULT_CANVAS_NODE_DIMENSIONS;
 }
 
@@ -77,5 +98,7 @@ export function minimumNodeDimensionsForKind(kind: string): {
   if (kind === 'agent') return AGENT_NODE_MINIMUM_DIMENSIONS;
   if (kind === 'web-preview') return WEB_PREVIEW_NODE_MINIMUM_DIMENSIONS;
   if (kind === 'mobile-preview') return MOBILE_PREVIEW_NODE_MINIMUM_DIMENSIONS;
+  const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];
+  if (documentDimensions !== undefined) return documentDimensions.minimum;
   return CANVAS_NODE_MINIMUM_DIMENSIONS;
 }
