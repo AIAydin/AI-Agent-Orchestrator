@@ -205,6 +205,7 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     '@forgeboard/git-engine#ChangeService',
     '@forgeboard/git-engine#RepositoryService',
   ]),
+  'index.ts': entry('audited-authority', ['electron#shell']), // external-open handoff for preview webviews
   'ipc.ts': entry('audited-authority', [
     '@forgeboard/git-engine#GitRemoteConfigurationService',
     'electron#shell',
