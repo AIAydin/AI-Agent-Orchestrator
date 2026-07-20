@@ -278,12 +278,21 @@ describe('AgentSessionNode', () => {
     expect(screen.getByText('Last run output')).toBeTruthy();
   });
 
+  it('auto-confirms a prepared launch with no in-app review dialog', async () => {
+    controller.pendingPlan = REVIEW_PLAN;
+    renderNode();
+    // Start goes straight to the agent: the prepared plan confirms itself, no review page.
+    await waitFor(() => expect(controller.confirmLaunch).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
+    expect(controller.cancelLaunch).not.toHaveBeenCalled();
+  });
+
   it('restarts to apply only after the live session goes inactive, not merely after terminate resolves', async () => {
     controller.pendingPlan = REVIEW_PLAN;
     const view = render(nodeTree(nodeData()));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(controller.confirmLaunch).toHaveBeenCalledOnce();
+    // The launch auto-confirms (no dialog) as soon as the plan is prepared.
+    await waitFor(() => expect(controller.confirmLaunch).toHaveBeenCalledOnce());
 
     // A live session whose launched config has drifted surfaces the Restart-to-apply button.
     controller.pendingPlan = null;

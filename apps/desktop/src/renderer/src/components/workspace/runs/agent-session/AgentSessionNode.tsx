@@ -9,7 +9,6 @@ import {
   permissionProfileUnavailableReason,
 } from '../../../permissions/permission-profile-ui.js';
 import { useCanvasNodeInteractions } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
-import { TerminalLaunchReviewDialog } from '../../terminal/TerminalLaunchReviewDialog.js';
 import { TerminalSurface, type TerminalSurfaceHandle } from '../../terminal/TerminalSurface.js';
 import type { TerminalNodeConfiguration } from '../../terminal/types.js';
 import { terminalOperationsFromWindow } from '../../terminal/types.js';
@@ -36,7 +35,7 @@ const EMPTY_CONFIGURATION: TerminalNodeConfiguration = {
 
 /**
  * The canvas window that hosts a real CLI session for an agent node. It renders the provider-tinted
- * title bar, the embedded terminal (or a start/exit card), the launch safety review, and a bottom
+ * title bar, the embedded terminal (or a start/exit card), and a bottom
  * strip for choosing the agent, model, permission profile, and context.
  */
 export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeData }): JSX.Element {
@@ -117,12 +116,33 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   const pendingRestartRef = useRef(false);
   const controllerRef = useRef(controller);
   controllerRef.current = controller;
+  const currentKeyRef = useRef(currentKey);
+  currentKeyRef.current = currentKey;
 
   useEffect(() => {
     if (!pendingRestartRef.current || hasActiveSession) return;
     pendingRestartRef.current = false;
     void controllerRef.current.prepareLaunch();
   }, [hasActiveSession]);
+
+  // Agent sessions skip the in-app "Terminal safety review" page: one Start click goes straight to
+  // the agent. As soon as prepareLaunch resolves with a pending plan, auto-confirm it (capturing the
+  // launched config key first, exactly as the removed review dialog did). This also drives the
+  // restart-to-apply and exit-strip Restart flows, since both re-enter through prepareLaunch. The
+  // guard makes the confirm fire once per plan even under React's double-invoked effects. The
+  // main-process native confirmation (if configured) is untouched.
+  const autoConfirmedPlanIdRef = useRef<string | null>(null);
+  const pendingPlanId = controller.pendingPlan?.planId ?? null;
+  useEffect(() => {
+    if (pendingPlanId === null || autoConfirmedPlanIdRef.current === pendingPlanId) return;
+    autoConfirmedPlanIdRef.current = pendingPlanId;
+    launchedKeyRef.current = currentKeyRef.current;
+    void controllerRef.current.confirmLaunch();
+  }, [pendingPlanId]);
+
+  // A plan can still be pending if the node unmounts between prepare and auto-confirm; cancel it so
+  // no reviewed-but-unconfirmed launch is left dangling.
+  useEffect(() => () => void controllerRef.current.cancelLaunch().catch(() => undefined), []);
 
   const requestRestartToApply = (): void => {
     pendingRestartRef.current = true;
@@ -279,20 +299,6 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
               Start session
             </button>
           )}
-        </div>
-      )}
-
-      {controller.pendingPlan !== null && (
-        <div className="agent-review-overlay nodrag nowheel">
-          <TerminalLaunchReviewDialog
-            plan={controller.pendingPlan}
-            busy={controller.busy === 'confirming'}
-            onCancel={() => void controller.cancelLaunch()}
-            onContinue={() => {
-              launchedKeyRef.current = currentKey;
-              void controller.confirmLaunch();
-            }}
-          />
         </div>
       )}
 
