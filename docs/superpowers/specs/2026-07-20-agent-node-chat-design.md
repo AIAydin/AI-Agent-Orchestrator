@@ -5,12 +5,14 @@ Status: Approved
 
 ## Goal
 
-Turn the Agent node on the flow canvas into an embedded, scrollable chat with its agent — the Claude Code chat experience inside the node. Sending a message is instant (no Review & run dialog), output streams back as distinct turns, and agent/model/permission are adjustable from the chat itself. The inspector sidebar shrinks to node metadata only. Agent nodes get a larger default size.
+Turn the Agent node on the flow canvas into an embedded, scrollable chat with its agent — the Claude Code chat experience inside the node. Sending a message is instant (no Review & run dialog), output streams back as distinct turns, slash commands work, and agent/model/permission are adjustable from the chat itself. Provider nodes (Claude Code, Codex, …) are visually distinct. The inspector sidebar shrinks to node metadata only. Agent nodes get a larger default size.
 
 ## Decisions made during brainstorming
 
 - **Chat model:** live session per node. Each Agent node holds one ongoing conversation with its agent. Flow-triggered runs append turns to the same conversation.
 - **Approval:** no per-message or per-run review dialog in the chat path. Safety = permission profile + provider connection gate. Launch details remain visible as activity turns.
+- **Slash commands:** functional passthrough — typing `/goal` makes the agent pursue the goal. Menu built from adapter built-ins plus discovered custom commands.
+- **Provider looks:** distinct brand themes — same chat layout, per-provider visual identity.
 - **Sidebar:** node meta only (title, description, accent, context attachments).
 - **Implementation approach:** structured turns (a real conversation model on node data), not a relocation of the existing single-blob transcript panel.
 
@@ -42,11 +44,12 @@ interface AgentChatTurn {
     collapsed?: boolean            // activity turns render collapsed by default
     action?: 'refresh-provider' | 'retry-run' | 'resend'  // notice/user turn affordances
     failed?: boolean
+    command?: string               // slash command name when the turn originated from one
   }
 }
 ```
 
-- **user** — right-aligned bubble. Flow-triggered prompts get a small "flow" chip (`meta.source === 'flow'`).
+- **user** — right-aligned bubble. Flow-triggered prompts get a small "flow" chip (`meta.source === 'flow'`); slash-command sends show the command styled as a chip.
 - **assistant** — markdown-rendered reply text, streamed in as it arrives.
 - **activity** — dim, collapsible group: lifecycle events, tool/stream noise, worktree created, files changed, the exact launched command.
 - **notice** — inline warnings/errors with action buttons (refresh connection, retry).
@@ -64,7 +67,27 @@ Turns are built in the existing `runs.onEvent` pipeline: `summarizeRunEvent` (`m
 - **Connection gate (kept):** when `useAgentProviderGate` reports a warning, a notice turn appears with **Refresh status** / **Open settings** actions and sending is blocked until the provider is ready. This preserves the existing run-gate-on-connection behavior.
 - Launch details (cwd/worktree, exact command) appear as an activity turn at run start, so auto-approval doesn't hide anything.
 
-## 4. In-chat configuration
+## 4. Slash commands
+
+Typing `/` at the start of the composer opens a filterable, keyboard-navigable command menu (name + one-line description). Selecting inserts the command; sending delivers the full text (e.g. `/goal ship the login fix`) to the agent session like any message — the agent executes the feature. Commands are functional, not decorative.
+
+**Catalog — per adapter, two sources:**
+
+1. **Built-ins** shipped with each adapter definition (Claude Code: `/compact`, `/review`, `/model`, …; Codex: its set). Commands that only work in an interactive TUI and cannot run in our headless/session mode are excluded from that adapter's list.
+2. **Discovered custom commands** via a new IPC surface `agents.listCommands(adapterId, workspacePath)` handled in the main process: scans the provider's command locations (Claude Code: `~/.claude/commands` and `<project>/.claude/commands`; Codex: `~/.codex/prompts`; per-adapter paths defined alongside the adapter). Results are cached per node session and refreshed when the menu opens.
+
+The menu shows built-ins and discovered commands together, filtered as the user types. Unknown `/something` text still sends as-is (free-form passthrough is never blocked).
+
+## 5. Provider-themed nodes
+
+Claude Code nodes, Codex nodes, etc. look clearly different while sharing one chat layout:
+
+- **Palette:** each runnable provider gets its own palette entry ("Claude Code", "Codex", …) that creates an agent node with `adapterId` pre-set. The generic "Agent" entry remains for an unconfigured node.
+- **Theme derives from `adapterId`:** a per-provider theme map (one module) defines brand accent + surface tints, logomark icon, header treatment, and bubble/chip styling. Applied via a `data-provider` attribute on the node root and scoped CSS custom properties — no per-provider components.
+- **Live re-theme:** changing the agent select in the chat re-themes the node instantly (a Claude Code node becomes a Codex node).
+- Providers without a defined theme fall back to the current generic agent styling.
+
+## 6. In-chat configuration
 
 A compact control row sits above the composer with three selects:
 
@@ -74,7 +97,7 @@ A compact control row sits above the composer with three selects:
 
 Changing a select calls `updateNodeData` with the same patches the sidebar panel makes today. Selects (not free-text) per existing UX preference.
 
-## 5. Sidebar → meta only
+## 7. Sidebar → meta only
 
 `WorkspaceInspector` for `kind === 'agent'` keeps:
 
@@ -83,31 +106,35 @@ Changing a select calls `updateNodeData` with the same patches the sidebar panel
 
 `AgentNodePanel` (agent-run config, prompt textarea, live output, run controls, attempt history sections) is retired. Its logic is not deleted — it's rehomed:
 
-- A new **`AgentRunContext`** provider (mounted in `Workspace.tsx`, wrapping `WorkspaceCanvas`) exposes the run controller surface to in-canvas components: `sendMessage(nodeId, text)`, `stop(nodeId)`, `updateNodeData`, provider-gate state, `runnableAgents`, permission options. `AgentNodeChat` consumes it — no prop drilling through React Flow.
+- A new **`AgentRunContext`** provider (mounted in `Workspace.tsx`, wrapping `WorkspaceCanvas`) exposes the run controller surface to in-canvas components: `sendMessage(nodeId, text)`, `stop(nodeId)`, `updateNodeData`, provider-gate state, `runnableAgents`, permission options, and the slash-command catalog. `AgentNodeChat` consumes it — no prop drilling through React Flow.
 - `useAgentProviderGate`, `useAgentRunController`, and continuation hooks are reused behind that context.
 
-## 6. Node sizing
+## 8. Node sizing
 
 - Agent nodes: default **420×540** (today 320×180), minimum **340×360**.
 - Other node kinds keep current defaults (320×180 / 210×92).
 - The node-kind registry gains per-kind default/minimum dimensions; `node-persistence.ts` and `NodeResizer` bounds read from it.
 - Nodes remain freely resizable; the chat flexes to fill.
 
-## 7. Error handling
+## 9. Error handling
 
 - Run fails → notice turn with the error summary and a **Retry** action (re-sends the last user turn as a continuation).
 - Send fails (IPC/launch error) → the user turn is marked failed with a **Resend** affordance.
 - Provider disconnect mid-session → notice turn via the gate, composer blocked until refreshed.
+- Command discovery failure (missing dir, unreadable files) → menu shows built-ins only; no error surfaced unless the user opens the menu (then a dim "custom commands unavailable" row).
 
-## 8. Testing
+## 10. Testing
 
 - **Conversation builder:** unit tests mapping run-event sequences → expected turn arrays (streaming append, activity grouping, caps, migration from `transcript`).
 - **`AgentNodeChat`:** send on Enter / newline on Shift+Enter, composer disabled states under the gate, running-state input routing (sendInput vs new run), stop control, config selects patch node data.
+- **Slash commands:** menu opens on `/`, filters, keyboard selection inserts, unknown commands still send; `agents.listCommands` main-process tests for discovery paths and failure fallback.
+- **Provider themes:** node root carries `data-provider`, theme tokens applied, fallback for unknown providers, palette entries create pre-configured nodes.
 - **`CanvasNode`:** agent kind renders chat body; other kinds unchanged; drag-handle and `nowheel`/`nodrag` classes present.
 - **`WorkspaceInspector`:** agent selection shows meta-only panel; `AgentNodePanel` tests migrate to the new components.
 
 ## Out of scope
 
 - A persistent long-lived process per node (true daemon sessions). The existing run + resume/continuation + mid-run input machinery is the session backbone.
+- Per-provider bespoke node layouts — themes share one chat layout.
 - Changes to non-agent node kinds beyond registry-driven sizing plumbing.
 - Reworking the approval system for flow-level (multi-node) orchestration runs.
