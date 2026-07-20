@@ -54,6 +54,28 @@ describe('workshop node persistence dimensions', () => {
     };
     expect(persistedWorkshopNodeDimensions(node)).toEqual({ width: 400, height: 320 });
   });
+
+  it('gives preview nodes browser-window dimensions', () => {
+    expect(initialWorkshopNodeDimensions('web-preview')).toEqual({ width: 640, height: 480 });
+    expect(initialWorkshopNodeDimensions('mobile-preview')).toEqual({ width: 420, height: 640 });
+  });
+
+  it('floors persisted preview nodes at their per-kind minimums', () => {
+    expect(
+      persistedWorkshopNodeDimensions({
+        data: { kind: 'web-preview' } as WorkshopNode['data'],
+        width: 100,
+        height: 100,
+      }),
+    ).toEqual({ width: 400, height: 300 });
+    expect(
+      persistedWorkshopNodeDimensions({
+        data: { kind: 'mobile-preview' } as WorkshopNode['data'],
+        width: 100,
+        height: 100,
+      }),
+    ).toEqual({ width: 320, height: 480 });
+  });
 });
 
 function node(

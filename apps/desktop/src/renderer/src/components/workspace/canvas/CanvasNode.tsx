@@ -6,10 +6,7 @@ import type {
   PermissionProfile,
 } from '../../../../../shared/application/contracts.js';
 import type { RunHistoryTokenUsage } from '../../../../../shared/runs/contracts.js';
-import {
-  AGENT_NODE_MINIMUM_DIMENSIONS,
-  CANVAS_NODE_MINIMUM_DIMENSIONS,
-} from '../../../../../shared/canvas/node-dimensions.js';
+import { minimumNodeDimensionsForKind } from '../../../../../shared/canvas/node-dimensions.js';
 import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
 import { useCanvasNodeInteractions } from './interactions/CanvasNodeInteractionContext.js';
@@ -189,11 +186,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
   const targetHandles = data.kind === 'extension' ? inputPorts : [{ id: 'input' }];
   const sourceHandles = data.kind === 'extension' ? outputPorts : [{ id: 'output' }];
   const groupFrame = data.kind === 'group-frame';
-  const minimum = groupFrame
-    ? GROUP_FRAME_MINIMUM
-    : data.kind === 'agent'
-      ? AGENT_NODE_MINIMUM_DIMENSIONS
-      : CANVAS_NODE_MINIMUM_DIMENSIONS;
+  const minimum = groupFrame ? GROUP_FRAME_MINIMUM : minimumNodeDimensionsForKind(data.kind);
   const canChangePresentation = !interactions.readOnly && !data.locked;
   const automaticallySized = groupFrame && data.autoFit === true;
   const isAgent = data.kind === 'agent';

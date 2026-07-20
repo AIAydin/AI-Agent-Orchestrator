@@ -146,6 +146,14 @@
   min-width: 400px;
   min-height: 320px;
 }
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='web-preview']:not(.collapsed)) {
+  min-width: 400px;
+  min-height: 300px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='mobile-preview']:not(.collapsed)) {
+  min-width: 320px;
+  min-height: 480px;
+}
 .react-flow__node-workshop:has(> .canvas-node.collapsed) {
   height: 35px !important;
   min-height: 35px;
