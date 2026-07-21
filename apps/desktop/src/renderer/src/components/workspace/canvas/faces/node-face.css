@@ -100,7 +100,8 @@
   gap: 8px;
   font-size: var(--text-xs);
 }
-.node-face-body label {
+.node-face-body label,
+.node-face-body .node-face-field {
   display: flex;
   flex-direction: column;
   gap: 3px;

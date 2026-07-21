@@ -303,8 +303,8 @@ export function TestNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                 <option value="custom">Custom</option>
               </select>
             </label>
-            <label>
-              Program
+            <div className="node-face-field">
+              <span>Program</span>
               <span className="node-face-row">
                 <input
                   name={`node-${id}-face-command-executable`}
@@ -320,7 +320,7 @@ export function TestNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                   Browse
                 </button>
               </span>
-            </label>
+            </div>
             <label>
               Arguments <small>{LITERAL_ARGUMENT_HELP}</small>
               <textarea
