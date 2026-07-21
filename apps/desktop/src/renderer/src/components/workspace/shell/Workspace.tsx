@@ -733,6 +733,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       const binding = createExtensionNodeBinding(extension, definition);
       const id = crypto.randomUUID();
       const offset = nodes.length * 24;
+      const titlesInUse = new Set(nodesRef.current.map((node) => node.data.title));
       pendingNodeSelection.current = id;
       setNodes((items) => [
         ...items.map((node) => ({ ...node, selected: false })),
@@ -744,7 +745,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           ...initialWorkshopNodeDimensions('extension'),
           data: {
             kind: 'extension',
-            title: definition.displayName,
+            title: assignNodeName(titlesInUse),
             description: definition.description,
             status: 'idle',
             locked: false,
