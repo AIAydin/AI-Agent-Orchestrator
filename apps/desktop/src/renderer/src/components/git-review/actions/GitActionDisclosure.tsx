@@ -24,7 +24,7 @@ function PathList({ paths }: { paths: readonly string[] }) {
       {paths.slice(0, MAX_VISIBLE_PATHS).map((path) => (
         <code key={path}>{displayEscapedText(path)}</code>
       ))}
-      {remaining > 0 && <small>+ {remaining} more files in this plan</small>}
+      {remaining > 0 && <small>+ {remaining} more files</small>}
     </div>
   );
 }
@@ -137,7 +137,7 @@ export function GitDiscardDisclosure({
     <DisclosureFrame
       titleId="git-discard-review-title"
       title="Discard these changes?"
-      description="This permanently removes the selected uncommitted changes from this workspace. Forgeboard will ask you to confirm once more."
+      description="Permanently removes these uncommitted changes from this workspace. You'll confirm once more."
       busy={busy}
       danger
       onCancel={onCancel}
@@ -182,7 +182,7 @@ export function GitCommitDisclosure({
     <DisclosureFrame
       titleId="git-commit-review-title"
       title="Review your commit"
-      description="Nothing is committed yet. Continuing opens one final confirmation for exactly these changes."
+      description="Nothing is committed yet — one final confirmation for exactly these changes comes next."
       busy={busy}
       danger={false}
       onCancel={onCancel}

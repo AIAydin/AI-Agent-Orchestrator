@@ -28,8 +28,7 @@ export function LocalComments({ comments, onCreate }: LocalCommentsProps) {
         <small>{comments.length}</small>
       </header>
       <p className="local-comments-privacy">
-        Saved only in this project on this device. Joining or leaving a shared room never shares
-        them.
+        Saved on this device only — shared rooms never see them.
       </p>
       {visible.length === 0 ? (
         <p className="local-comments-empty">

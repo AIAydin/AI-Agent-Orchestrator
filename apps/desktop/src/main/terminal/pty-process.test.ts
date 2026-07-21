@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { baseTerminalEnvironment } from './pty-process.js';
+import { baseTerminalEnvironment, interactiveShellInvocation } from './pty-process.js';
 
 const TOUCHED = [
   'HOME',
@@ -45,5 +45,52 @@ describe.runIf(process.platform !== 'win32')('baseTerminalEnvironment', () => {
     // FORGEBOARD_NULLY is not a base name, so it is never included regardless.
     process.env.FORGEBOARD_NULLY = 'x';
     expect(baseTerminalEnvironment()).not.toHaveProperty('FORGEBOARD_NULLY');
+  });
+});
+
+describe('interactiveShellInvocation', () => {
+  it('wraps the command in a login shell that persists interactively after it exits (POSIX)', () => {
+    const { file, args } = interactiveShellInvocation(
+      '/opt/homebrew/bin/codex',
+      ['--profile', 'forgeboard-abc'],
+      'darwin',
+      '/bin/zsh',
+    );
+    expect(file).toBe('/bin/zsh');
+    // Login shell (-l) sources the profile so PATH resolves node for codex's env-node shebang.
+    expect(args).toEqual([
+      '-l',
+      '-c',
+      "'/opt/homebrew/bin/codex' '--profile' 'forgeboard-abc'; exec '/bin/zsh' -i",
+    ]);
+  });
+
+  it('drops to a persistent interactive shell on ANY exit code (uses ; not &&)', () => {
+    const { args } = interactiveShellInvocation('codex', [], 'darwin', '/bin/zsh');
+    const script = args[2] ?? '';
+    expect(script).toContain('; exec ');
+    expect(script).not.toContain('&&');
+    expect(script.endsWith("exec '/bin/zsh' -i")).toBe(true);
+  });
+
+  it('single-quotes arguments so spaces and quotes cannot break out of the command', () => {
+    const { args } = interactiveShellInvocation(
+      '/bin/my tool',
+      ["it's", 'a b'],
+      'darwin',
+      '/bin/zsh',
+    );
+    expect(args[2]).toBe("'/bin/my tool' 'it'\\''s' 'a b'; exec '/bin/zsh' -i");
+  });
+
+  it('falls back to /bin/zsh when SHELL is unset or not an absolute path', () => {
+    expect(interactiveShellInvocation('codex', [], 'darwin', undefined).file).toBe('/bin/zsh');
+    expect(interactiveShellInvocation('codex', [], 'darwin', 'zsh').file).toBe('/bin/zsh');
+  });
+
+  it('spawns the command directly on Windows (no login-shell contract)', () => {
+    const { file, args } = interactiveShellInvocation('codex.exe', ['--flag'], 'win32', undefined);
+    expect(file).toBe('codex.exe');
+    expect(args).toEqual(['--flag']);
   });
 });

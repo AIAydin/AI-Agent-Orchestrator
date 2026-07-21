@@ -34,7 +34,7 @@ export function GitShippingPanel({
     : review.conflicted
       ? "Fix the merge conflicts in the agent's workspace first."
       : comparison?.ahead === 0
-        ? 'There are no committed agent changes to deliver yet.'
+        ? 'No committed changes to deliver yet.'
         : !deliveryReady
           ? 'Run every required check and approve the quality of the current changes first.'
           : "Forgeboard will double-check the agent's work and the primary branch before delivering.";
@@ -74,9 +74,8 @@ export function GitShippingPanel({
       )}
       {result?.state === 'conflicted' && (
         <p className="git-shipping-result conflict" role="alert">
-          <TriangleAlert size={13} aria-hidden="true" /> Git stopped because of conflicting changes
-          in {result.conflictedPaths.join(', ')}. The affected workspace now contains Git's real
-          conflict state for you to resolve or abort.
+          <TriangleAlert size={13} aria-hidden="true" /> Git stopped at conflicts in{' '}
+          {result.conflictedPaths.join(', ')}. Resolve or abort them in the affected workspace.
         </p>
       )}
     </section>

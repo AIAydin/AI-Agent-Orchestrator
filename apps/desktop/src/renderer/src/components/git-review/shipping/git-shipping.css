@@ -65,14 +65,16 @@
   display: grid;
   gap: 4px;
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: var(--text-2xs);
 }
 
 .git-conflict-versions textarea,
 #git-conflict-merged {
   min-height: 110px;
   resize: vertical;
-  font: 10px/1.45 var(--font-mono);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1.45;
 }
 
 #git-conflict-merged {

@@ -117,7 +117,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
         <p className="git-pr-state warning" role="status">
           <Lock size={14} aria-hidden="true" />
           {props.configurationReadOnly
-            ? 'Your role in this shared project lets you view the saved publish settings, but not change them or publish.'
+            ? 'Your role can view these publish settings, but not change them or publish.'
             : 'Unlock this node before changing settings or publishing.'}
         </p>
       ) : null}
@@ -181,8 +181,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
         controller.agentRunsError === null &&
         controller.agentRuns.length === 0 ? (
           <p className="git-pr-state" role="status">
-            No finished runs to publish yet. Run an agent to the end first, then choose its run
-            above.
+            No finished runs yet. Finish an agent run, then choose it here.
           </p>
         ) : null}
         <div className="git-pr-field-grid">
@@ -216,7 +215,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
                 className={remoteExists ? undefined : 'git-pr-field-error'}
               >
                 {remoteOptions.length === 0
-                  ? "No remotes were found in this run's project copy. Clone a repository through Forgeboard so there is an online copy to publish to."
+                  ? "No remotes were found in this run's project copy. Clone a repository through Forgeboard first."
                   : remoteExists
                     ? `Found in this run's project copy: ${remoteOptions.join(', ')}.`
                     : `No remote named ${configuration.remote} was found. Choose one of: ${remoteOptions.join(', ')}.`}
@@ -340,8 +339,7 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
 
       {pinnedRunMissing ? (
         <p className="git-pr-state warning" role="status">
-          This saved run is not in the recent list. Forgeboard will still verify it when you check
-          it.
+          This saved run is not in the recent list. It's still verified when you check it.
         </p>
       ) : null}
       {staleInspection ? (
@@ -421,11 +419,9 @@ export function GitPrNodeInspector(props: GitPrNodeInspectorProps) {
           </button>
         </div>
         <p>
-          If publishing is blocked, open checks and approval to run the required checks and record a
-          person&apos;s approval in the Git review. Reviewing a push or pull request here changes
-          nothing online. Continue only after checking the branch, latest commit, commits, files,
-          destination, and expiry time — the final confirmation defaults to Cancel, and Forgeboard
-          checks the whole plan again before sending.
+          Blocked? Open checks and approval to run the required checks and record a person&apos;s
+          approval. Reviewing here changes nothing online. The final confirmation defaults to
+          Cancel, and Forgeboard re-checks the whole plan before sending.
         </p>
       </section>
 
@@ -501,7 +497,7 @@ function ExactGitState({ inspection }: { readonly inspection: GitPrInspectionVie
         {inspection.readiness.length === 0 ? (
           <span>
             {inspection.ready
-              ? 'All required checks and approvals have passed. A few last safety checks run when you prepare and confirm a push.'
+              ? 'All required checks and approvals passed. Final safety checks run when you push.'
               : 'Not ready to publish.'}
           </span>
         ) : (
@@ -514,9 +510,8 @@ function ExactGitState({ inspection }: { readonly inspection: GitPrInspectionVie
       </div>
       <small>
         Checked <time dateTime={inspection.inspectedAt}>{inspection.inspectedAt}</time>. This is a
-        snapshot; every confirmation checks the latest commit and results again. Preparing a push
-        also checks the project&apos;s hooks, transfer settings, complete history, and large-file
-        storage (LFS) history.
+        snapshot — every confirmation re-checks the latest commit and results. Preparing a push also
+        checks hooks, transfer settings, and full history (including LFS).
       </small>
     </section>
   );
@@ -606,8 +601,7 @@ function GitHubStatus({ controller }: { readonly controller: GitPrNodeController
       </small>
       {!status.installed ? (
         <p className="git-pr-state warning" role="status">
-          Push still works without it. Install the GitHub CLI only if you want the repository, pull
-          request, and CI actions here.
+          Push still works without it. Install the GitHub CLI for the pull request and CI actions.
         </p>
       ) : !status.authenticated ? (
         <p className="git-pr-state warning" role="status">
@@ -616,13 +610,11 @@ function GitHubStatus({ controller }: { readonly controller: GitPrNodeController
         </p>
       ) : !status.fresh ? (
         <p className="git-pr-state warning" role="status">
-          This GitHub check is more than five minutes old. Check again before creating a pull
-          request or reading CI results.
+          This GitHub check is over five minutes old. Check again before continuing.
         </p>
       ) : !status.headMatchesSource ? (
         <p className="git-pr-state warning" role="status">
-          GitHub doesn&apos;t have this commit on the destination branch yet. Push the reviewed
-          branch, then check again before creating a pull request or relying on CI results.
+          GitHub doesn&apos;t have this commit yet. Push the reviewed branch, then check again.
         </p>
       ) : null}
     </section>
@@ -702,10 +694,7 @@ function PullRequestLink({ url }: { readonly url?: string }) {
       ) : (
         <>
           <CopyUrl url={safeUrl} label="Copy pull request URL" />
-          <small>
-            Saved when the pull request was created. The current settings or the branch&apos;s
-            latest commit may have changed since.
-          </small>
+          <small>Saved when the pull request was created — things may have changed since.</small>
         </>
       )}
     </section>
@@ -788,8 +777,8 @@ function PlanDialog({
           </div>
         </header>
         <p id={descriptionId}>
-          Nothing has changed online yet. Check every field before continuing to the final
-          confirmation, which defaults to Cancel.
+          Nothing has changed online yet. Check each field — the final confirmation defaults to
+          Cancel.
         </p>
         <dl>
           <Fact label="Remote" value={plan.inspection.remote} />
@@ -834,9 +823,9 @@ function PlanDialog({
         ) : null}
         <p className="git-pr-no-force">
           <ShieldCheck size={14} aria-hidden="true" /> Force push is never offered. The latest
-          commit and the approval expiry are checked again right before anything is sent.
+          commit and approval expiry are re-checked right before sending.
           {pullRequest
-            ? ' A GitHub pull request follows its branch, so commits pushed later can change what it contains.'
+            ? ' A pull request follows its branch — commits pushed later change what it contains.'
             : ''}
         </p>
         <footer>

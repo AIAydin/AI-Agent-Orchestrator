@@ -54,15 +54,14 @@ export function TrustCenter({
         <div>
           <strong>Quick check</strong>
           <small>
-            Runs automatically on this page. Checks the local database and confirms your saved
-            records and history are intact.
+            Runs automatically on this page. Confirms your saved records and history are intact.
           </small>
         </div>
         <div>
           <strong>Full check</strong>
           <small>
-            Checks every page of the database in depth, then runs the same checks as the quick
-            check. It can take longer if you have a large history.
+            Checks every database page in depth, plus everything in the quick check. May take longer
+            with a large history.
           </small>
         </div>
       </div>
@@ -109,8 +108,12 @@ export function TrustCenter({
             disabled={checkingMode !== null}
             onClick={() => void runCheck('quick')}
           >
-            <RefreshCw className={checkingMode === 'quick' ? 'spin' : ''} size={14} /> Run quick
-            check
+            <RefreshCw
+              className={checkingMode === 'quick' ? 'spin' : ''}
+              size={14}
+              aria-hidden="true"
+            />{' '}
+            Run quick check
           </button>
           <button
             type="button"
@@ -118,7 +121,7 @@ export function TrustCenter({
             disabled={checkingMode !== null}
             onClick={() => void runCheck('full')}
           >
-            <ShieldCheck size={14} /> Run full check
+            <ShieldCheck size={14} aria-hidden="true" /> Run full check
           </button>
         </div>
       </div>
@@ -126,13 +129,12 @@ export function TrustCenter({
       <div className="trust-audit-explanation">
         <strong>Activity history that reveals tampering</strong>
         <p>
-          As you use Forgeboard, activity entries are only ever added, and each one is linked to the
-          one before it. If someone edits, deletes, or reorders saved entries, the check will fail.
+          Activity entries are only ever added, each linked to the one before it. If someone edits,
+          deletes, or reorders saved entries, the check will fail.
         </p>
         <p>
-          When old entries expire, Forgeboard first saves a linked summary so the remaining history
-          can still be verified. This means unexpected changes can be detected — it cannot stop
-          someone with access to your files from trying.
+          When old entries expire, a linked summary is saved first so the rest can still be
+          verified. Tampering can be detected — not prevented.
         </p>
       </div>
     </SettingsSection>

@@ -24,7 +24,7 @@ export function GitConnectionsSettings({
   return (
     <SettingsSection
       title="Git connections"
-      description="Manage the places where each project stores its code (Git remotes) and the optional GitHub CLI tool, all from the desktop app. Changes you confirm apply right away — they do not use Save settings."
+      description="Manage where each project stores its code (Git remotes) and the optional GitHub CLI. Changes you confirm apply right away."
     >
       <div
         className="git-connections-settings"
@@ -60,8 +60,8 @@ export function GitConnectionsSettings({
           </select>
         </label>
         <p className="git-connections-immediate-note">
-          These changes do not use the Save settings button. Each one shows its own review, then a
-          confirmation from your computer with Cancel pre-selected.
+          These changes do not use the Save settings button. Each one shows a review, then a system
+          confirmation with Cancel pre-selected.
         </p>
         {controller.notice === null ? null : (
           <p

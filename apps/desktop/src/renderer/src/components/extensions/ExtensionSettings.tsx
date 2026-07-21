@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   AlertTriangle,
   BookOpen,
@@ -19,6 +19,7 @@ import type {
   InstalledExtensionView,
 } from '../../../../shared/application/contracts.js';
 import { unwrap } from '../../lib/ipc.js';
+import { trapModalFocus } from '../../lib/modal-focus.js';
 import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 import './ExtensionSettings.css';
@@ -138,8 +139,8 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
         <header>
           <h3>Local extensions</h3>
           <p>
-            Add extensions that connect agents or add items to the canvas. You install everything by
-            picking a folder or file — no code, environment variables, or config files to edit.
+            Add extensions that connect agents or add canvas items. Just pick a folder or file —
+            nothing to configure.
           </p>
         </header>
         <div className="settings-fields">
@@ -150,7 +151,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
               disabled={busy}
               onClick={() => void choose('folder')}
             >
-              <FolderOpen size={15} /> Choose extension folder
+              <FolderOpen size={15} aria-hidden="true" /> Choose extension folder
             </button>
             <button
               className="button"
@@ -158,7 +159,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
               disabled={busy}
               onClick={() => void choose('manifest')}
             >
-              <FileJson size={15} /> Choose extension file
+              <FileJson size={15} aria-hidden="true" /> Choose extension file
             </button>
             <button
               className="button ghost"
@@ -166,25 +167,24 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
               disabled={busy}
               onClick={() => void refresh()}
             >
-              <RefreshCw size={15} /> Refresh
+              <RefreshCw size={15} aria-hidden="true" /> Refresh
             </button>
           </div>
           <div className="extension-safety-note">
-            <ShieldCheck size={17} />
+            <ShieldCheck size={17} aria-hidden="true" />
             <span>
               <strong>Data-only by design</strong>
-              Extension code never runs inside Forgeboard. You review and approve every install or
-              update before anything changes.
+              Extension code never runs inside Forgeboard — you approve every install and update.
             </span>
           </div>
           {error && (
             <div className="extension-message error" role="alert">
-              <AlertTriangle size={15} /> {error}
+              <AlertTriangle size={15} aria-hidden="true" /> {error}
             </div>
           )}
           {notice && (
             <div className="extension-message success" role="status">
-              <ShieldCheck size={15} /> {notice}
+              <ShieldCheck size={15} aria-hidden="true" /> {notice}
             </div>
           )}
           {discovery === null && !error ? (
@@ -200,7 +200,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 </div>
                 {discovery.installed.length === 0 ? (
                   <div className="extension-empty" role="status">
-                    <PackagePlus size={21} />
+                    <PackagePlus size={21} aria-hidden="true" />
                     <strong>No extensions installed yet</strong>
                     <span>Choose an extension folder you downloaded to review and install it.</span>
                   </div>
@@ -212,7 +212,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                         <article className="extension-card" key={extension.manifest.id}>
                           <header>
                             <span className="extension-card-icon">
-                              <PackagePlus size={16} />
+                              <PackagePlus size={16} aria-hidden="true" />
                             </span>
                             <div>
                               <strong>{extension.manifest.name}</strong>
@@ -256,7 +256,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                                   )
                                 }
                               >
-                                <BookOpen size={14} />
+                                <BookOpen size={14} aria-hidden="true" />
                                 {documentationOpen ? 'Hide documentation' : 'Read documentation'}
                               </button>
                               {documentationOpen && (
@@ -273,7 +273,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                               disabled={busy}
                               onClick={() => void choose('folder')}
                             >
-                              <Upload size={14} /> Update from folder
+                              <Upload size={14} aria-hidden="true" /> Update from folder
                             </button>
                             <button
                               className="button ghost extension-remove-trigger"
@@ -284,7 +284,7 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                                 setRemoveTarget(extension);
                               }}
                             >
-                              <Trash2 size={14} /> Remove
+                              <Trash2 size={14} aria-hidden="true" /> Remove
                             </button>
                           </footer>
                         </article>
@@ -295,12 +295,11 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 {discovery.quarantined.length > 0 && (
                   <section className="extension-invalid-list extension-quarantine-list">
                     <h4>
-                      <AlertTriangle size={15} /> Quarantined extensions
+                      <AlertTriangle size={15} aria-hidden="true" /> Quarantined extensions
                     </h4>
                     <p>
-                      These extensions were set aside because they no longer match what you
-                      approved. Their agent tools and canvas items stay turned off until you install
-                      or update them again.
+                      These no longer match what you approved, so they stay turned off until you
+                      install or update them again.
                     </p>
                     {discovery.quarantined.map((entry) => (
                       <div key={`${entry.extensionId}:${entry.ledgerState}`}>
@@ -316,12 +315,10 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
                 {discovery.invalid.length > 0 && (
                   <section className="extension-invalid-list">
                     <h4>
-                      <AlertTriangle size={15} /> Entries that could not be loaded
+                      <AlertTriangle size={15} aria-hidden="true" /> Entries that could not be
+                      loaded
                     </h4>
-                    <p>
-                      Forgeboard skipped these and keeps running safely without them. The reason is
-                      shown below each entry.
-                    </p>
+                    <p>Forgeboard skipped these. Each entry shows why.</p>
                     {discovery.invalid.map((entry) => (
                       <div key={entry.entryName}>
                         <strong>{entry.entryName}</strong>
@@ -337,210 +334,321 @@ export function ExtensionSettings({ onError, onChanged }: ExtensionSettingsProps
       </section>
 
       {plan && (
-        <div className="modal-backdrop extension-review-backdrop" role="presentation">
-          <section
-            className="extension-review-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="extension-review-title"
-          >
-            <header>
-              <span className="modal-title-icon">
-                <ShieldCheck size={19} />
-              </span>
-              <div>
-                <h2 id="extension-review-title">
-                  {plan.operation === 'install'
-                    ? 'Review extension install'
-                    : 'Review extension update'}
-                </h2>
-                <p>This approval applies only to the exact version and permissions shown below.</p>
-              </div>
-              <WorkspaceTooltip
-                content={
-                  busy ? 'Wait for the extension action to finish' : 'Cancel extension review'
-                }
-              >
-                <button
-                  className="icon-button"
-                  type="button"
-                  disabled={busy}
-                  aria-label="Cancel extension review"
-                  onClick={() => {
-                    setPlan(null);
-                    setReviewed(false);
-                  }}
-                >
-                  <X size={17} aria-hidden="true" />
-                </button>
-              </WorkspaceTooltip>
-            </header>
-            <div className="extension-review-content">
-              <div className="extension-plan-title">
-                <strong>{plan.manifest.name}</strong>
-                <span>
-                  {plan.manifest.id} · {plan.manifest.version} · {plan.manifest.publisher}
-                </span>
-                <p>{plan.manifest.description}</p>
-              </div>
-              {plan.operation === 'update' && (
-                <div className="extension-update-path">
-                  Update <strong>{plan.currentVersion}</strong> →{' '}
-                  <strong>{plan.manifest.version}</strong>
-                </div>
-              )}
-              <dl className="extension-plan-facts">
-                <div>
-                  <dt>Manifest fingerprint (SHA-256)</dt>
-                  <dd>
-                    <code>{plan.manifestDigest}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Full package fingerprint (SHA-256)</dt>
-                  <dd>
-                    <code>{plan.snapshotDigest}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Selected folder or file</dt>
-                  <dd>
-                    <code>{plan.sourcePath}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Review expires</dt>
-                  <dd>{new Date(plan.expiresAt).toLocaleString()}</dd>
-                </div>
-              </dl>
-              <section className="extension-review-section">
-                <h3>Requested permissions</h3>
-                <div className="extension-permission-list">
-                  {plan.requestedPermissions.map((permission) => (
-                    <div key={permission}>
-                      <ShieldCheck size={14} />
-                      <span>
-                        <code>{permission}</code>
-                        <small>{PERMISSION_DESCRIPTIONS[permission] ?? permission}</small>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-              <section className="extension-review-section">
-                <h3>What this extension adds</h3>
-                <PlanContributionSummary plan={plan} />
-                <details>
-                  <summary>Show full technical details</summary>
-                  <pre>{plan.manifestJson}</pre>
-                </details>
-              </section>
-              {plan.documentationText !== undefined && (
-                <section className="extension-review-section">
-                  <h3>Extension documentation</h3>
-                  <pre className="extension-documentation">{plan.documentationText}</pre>
-                </section>
-              )}
-              <label className="extension-review-confirmation">
-                <input
-                  type="checkbox"
-                  name="extension-manifest-reviewed"
-                  checked={reviewed}
-                  onChange={(event) => setReviewed(event.target.checked)}
-                />
-                <span>
-                  <strong>I reviewed these exact details and permissions</strong>
-                  <small>
-                    This checkbox alone does not install anything — your system confirmation is
-                    still required. Text inside the package cannot grant approval by itself.
-                  </small>
-                </span>
-              </label>
-            </div>
-            <footer>
-              <button
-                className="button ghost"
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setPlan(null);
-                  setReviewed(false);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="button primary"
-                type="button"
-                disabled={busy || !reviewed}
-                onClick={() => void approve()}
-              >
-                <ShieldCheck size={15} />
-                {plan.operation === 'install' ? 'Continue to confirmation' : 'Confirm update'}
-              </button>
-            </footer>
-          </section>
-        </div>
+        <ExtensionReviewDialog
+          plan={plan}
+          busy={busy}
+          reviewed={reviewed}
+          error={error}
+          onReviewedChange={setReviewed}
+          onCancel={() => {
+            setPlan(null);
+            setReviewed(false);
+          }}
+          onApprove={() => void approve()}
+        />
       )}
 
       {removeTarget && (
-        <div className="modal-backdrop extension-review-backdrop" role="presentation">
-          <section
-            className="extension-remove-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="extension-remove-title"
-          >
-            <header>
-              <span className="modal-title-icon danger-icon">
-                <Trash2 size={19} />
-              </span>
-              <div>
-                <h2 id="extension-remove-title">Remove {removeTarget.manifest.name}?</h2>
-                <p>
-                  This removes the extension from Forgeboard. The folder you originally downloaded
-                  stays on this device. Continuing opens a final system confirmation with Cancel
-                  pre-selected.
-                </p>
-              </div>
-            </header>
-            <label>
-              Type <strong>{removeTarget.manifest.id}</strong> to confirm
-              <input
-                autoFocus
-                name={`extension-remove-${encodeURIComponent(removeTarget.manifest.id)}`}
-                value={removePhrase}
-                onChange={(event) => setRemovePhrase(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') event.preventDefault();
-                }}
-              />
-            </label>
-            <footer>
-              <button
-                className="button ghost"
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setRemoveTarget(null);
-                  setRemovePhrase('');
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="button danger"
-                type="button"
-                disabled={busy || removePhrase !== removeTarget.manifest.id}
-                onClick={() => void remove()}
-              >
-                <Trash2 size={15} /> Continue to confirmation
-              </button>
-            </footer>
-          </section>
-        </div>
+        <ExtensionRemoveDialog
+          target={removeTarget}
+          busy={busy}
+          phrase={removePhrase}
+          error={error}
+          onPhraseChange={setRemovePhrase}
+          onCancel={() => {
+            setRemoveTarget(null);
+            setRemovePhrase('');
+          }}
+          onRemove={() => void remove()}
+        />
       )}
     </>
+  );
+}
+
+function useExtensionDialogFocus(
+  dialog: RefObject<HTMLElement | null>,
+  initialFocus: RefObject<HTMLElement | null>,
+  busy: boolean,
+  onCancel: () => void,
+): void {
+  const cancelRef = useRef(onCancel);
+  const busyRef = useRef(busy);
+  cancelRef.current = onCancel;
+  busyRef.current = busy;
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    (initialFocus.current ?? dialog.current)?.focus();
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      const openDialogs = [
+        ...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'),
+      ];
+      if (openDialogs.at(-1) !== dialog.current) return;
+      trapModalFocus(event, dialog.current);
+      if (event.key !== 'Escape' || busyRef.current) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      cancelRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [dialog, initialFocus]);
+
+  useEffect(() => {
+    if (busy) dialog.current?.focus();
+  }, [busy, dialog]);
+}
+
+function ExtensionReviewDialog({
+  plan,
+  busy,
+  reviewed,
+  error,
+  onReviewedChange,
+  onCancel,
+  onApprove,
+}: {
+  plan: ExtensionInstallPlanView;
+  busy: boolean;
+  reviewed: boolean;
+  error: string | null;
+  onReviewedChange: (reviewed: boolean) => void;
+  onCancel: () => void;
+  onApprove: () => void;
+}) {
+  const dialog = useRef<HTMLElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useExtensionDialogFocus(dialog, closeButton, busy, onCancel);
+
+  return (
+    <div className="modal-backdrop extension-review-backdrop" role="presentation">
+      <section
+        ref={dialog}
+        className="extension-review-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="extension-review-title"
+        aria-describedby="extension-review-description"
+        aria-busy={busy}
+        tabIndex={-1}
+      >
+        <header>
+          <span className="modal-title-icon">
+            <ShieldCheck size={19} aria-hidden="true" />
+          </span>
+          <div>
+            <h2 id="extension-review-title">
+              {plan.operation === 'install'
+                ? 'Review extension install'
+                : 'Review extension update'}
+            </h2>
+            <p id="extension-review-description">
+              This approval applies only to the exact version and permissions shown below.
+            </p>
+          </div>
+          <WorkspaceTooltip
+            content={busy ? 'Wait for the extension action to finish' : 'Cancel extension review'}
+          >
+            <button
+              ref={closeButton}
+              className="icon-button"
+              type="button"
+              disabled={busy}
+              aria-label="Cancel extension review"
+              onClick={onCancel}
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+          </WorkspaceTooltip>
+        </header>
+        <div className="extension-review-content">
+          <div className="extension-plan-title">
+            <strong>{plan.manifest.name}</strong>
+            <span>
+              {plan.manifest.id} · {plan.manifest.version} · {plan.manifest.publisher}
+            </span>
+            <p>{plan.manifest.description}</p>
+          </div>
+          {plan.operation === 'update' && (
+            <div className="extension-update-path">
+              Update <strong>{plan.currentVersion}</strong> →{' '}
+              <strong>{plan.manifest.version}</strong>
+            </div>
+          )}
+          <dl className="extension-plan-facts">
+            <div>
+              <dt>Manifest fingerprint (SHA-256)</dt>
+              <dd>
+                <code>{plan.manifestDigest}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Full package fingerprint (SHA-256)</dt>
+              <dd>
+                <code>{plan.snapshotDigest}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Selected folder or file</dt>
+              <dd>
+                <code>{plan.sourcePath}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Review expires</dt>
+              <dd>{new Date(plan.expiresAt).toLocaleString()}</dd>
+            </div>
+          </dl>
+          <section className="extension-review-section">
+            <h3>Requested permissions</h3>
+            <div className="extension-permission-list">
+              {plan.requestedPermissions.map((permission) => (
+                <div key={permission}>
+                  <ShieldCheck size={14} aria-hidden="true" />
+                  <span>
+                    <code>{permission}</code>
+                    <small>{PERMISSION_DESCRIPTIONS[permission] ?? permission}</small>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="extension-review-section">
+            <h3>What this extension adds</h3>
+            <PlanContributionSummary plan={plan} />
+            <details>
+              <summary>Show full technical details</summary>
+              <pre>{plan.manifestJson}</pre>
+            </details>
+          </section>
+          {plan.documentationText !== undefined && (
+            <section className="extension-review-section">
+              <h3>Extension documentation</h3>
+              <pre className="extension-documentation">{plan.documentationText}</pre>
+            </section>
+          )}
+          <label className="extension-review-confirmation">
+            <input
+              type="checkbox"
+              name="extension-manifest-reviewed"
+              checked={reviewed}
+              onChange={(event) => onReviewedChange(event.target.checked)}
+            />
+            <span>
+              <strong>I reviewed these exact details and permissions</strong>
+              <small>
+                Nothing installs yet — your system confirmation is still required, and text inside
+                the package can’t grant approval by itself.
+              </small>
+            </span>
+          </label>
+        </div>
+        {error && (
+          <div className="extension-message error" role="alert">
+            <AlertTriangle size={15} aria-hidden="true" /> {error}
+          </div>
+        )}
+        <footer>
+          <button className="button ghost" type="button" disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            className="button primary"
+            type="button"
+            disabled={busy || !reviewed}
+            onClick={onApprove}
+          >
+            <ShieldCheck size={15} aria-hidden="true" />
+            {plan.operation === 'install' ? 'Continue to confirmation' : 'Confirm update'}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function ExtensionRemoveDialog({
+  target,
+  busy,
+  phrase,
+  error,
+  onPhraseChange,
+  onCancel,
+  onRemove,
+}: {
+  target: InstalledExtensionView;
+  busy: boolean;
+  phrase: string;
+  error: string | null;
+  onPhraseChange: (phrase: string) => void;
+  onCancel: () => void;
+  onRemove: () => void;
+}) {
+  const dialog = useRef<HTMLElement>(null);
+  const confirmInput = useRef<HTMLInputElement>(null);
+  useExtensionDialogFocus(dialog, confirmInput, busy, onCancel);
+
+  return (
+    <div className="modal-backdrop extension-review-backdrop" role="presentation">
+      <section
+        ref={dialog}
+        className="extension-remove-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="extension-remove-title"
+        aria-describedby="extension-remove-description"
+        aria-busy={busy}
+        tabIndex={-1}
+      >
+        <header>
+          <span className="modal-title-icon danger-icon">
+            <Trash2 size={19} aria-hidden="true" />
+          </span>
+          <div>
+            <h2 id="extension-remove-title">Remove {target.manifest.name}?</h2>
+            <p id="extension-remove-description">
+              The folder you downloaded stays on this device. A final system confirmation follows,
+              with Cancel pre-selected.
+            </p>
+          </div>
+        </header>
+        <label>
+          Type <strong>{target.manifest.id}</strong> to confirm
+          <input
+            ref={confirmInput}
+            name={`extension-remove-${encodeURIComponent(target.manifest.id)}`}
+            value={phrase}
+            onChange={(event) => onPhraseChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.preventDefault();
+            }}
+          />
+        </label>
+        {error && (
+          <div className="extension-message error" role="alert">
+            <AlertTriangle size={15} aria-hidden="true" /> {error}
+          </div>
+        )}
+        <footer>
+          <button className="button ghost" type="button" disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            className="button danger"
+            type="button"
+            disabled={busy || phrase !== target.manifest.id}
+            onClick={onRemove}
+          >
+            <Trash2 size={15} aria-hidden="true" /> Continue to confirmation
+          </button>
+        </footer>
+      </section>
+    </div>
   );
 }
 

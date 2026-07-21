@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -25,6 +25,7 @@ import type {
   Project,
   ProjectRecoveryAssessment,
 } from '../../../../shared/application/contracts.js';
+import { trapModalFocus } from '../../lib/modal-focus.js';
 import { ProjectDialog, type ProjectDialogMode } from './ProjectDialog.js';
 import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
@@ -43,11 +44,50 @@ interface WelcomeProps {
   onOpenSettings: () => void;
 }
 
+type WelcomeBusyAction = 'open' | 'clone' | 'create' | 'demo';
+
 export function Welcome(props: WelcomeProps) {
   const [dialogMode, setDialogMode] = useState<ProjectDialogMode | null>(null);
   const [recovery, setRecovery] = useState<ProjectRecoveryAssessment | null>(null);
   const [recoveryBusy, setRecoveryBusy] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<WelcomeBusyAction | null>(null);
+  const recoveryDialog = useRef<HTMLElement>(null);
+  const recoveryCancelButton = useRef<HTMLButtonElement>(null);
+  const recoveryBusyRef = useRef(false);
+  recoveryBusyRef.current = recoveryBusy !== null;
+  const hasRecovery = recovery !== null;
   const detected = props.agents.filter((agent) => agent.installed && agent.id !== 'test-agent');
+
+  useEffect(() => {
+    if (!props.busy) setBusyAction(null);
+  }, [props.busy]);
+
+  useEffect(() => {
+    if (!hasRecovery) return;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    recoveryCancelButton.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      const openDialogs = [
+        ...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'),
+      ];
+      if (openDialogs.at(-1) !== recoveryDialog.current) return;
+      trapModalFocus(event, recoveryDialog.current);
+      if (event.key !== 'Escape' || recoveryBusyRef.current) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setRecovery(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [hasRecovery]);
+
+  useEffect(() => {
+    if (recoveryBusy !== null) recoveryDialog.current?.focus();
+  }, [recoveryBusy]);
 
   const locateMovedProject = async (projectId: string): Promise<void> => {
     setRecoveryBusy(projectId);
@@ -88,13 +128,13 @@ export function Welcome(props: WelcomeProps) {
   return (
     <main className="welcome-shell">
       <header className="welcome-header">
-        <a className="brand" href="#welcome" aria-label="Forgeboard home">
+        <span className="brand">
           <span className="brand-mark">F</span>
           <span>Forgeboard</span>
           <span className="local-pill">
             <ShieldCheck size={13} /> Local
           </span>
-        </a>
+        </span>
         <WorkspaceTooltip content="Open Forgeboard settings">
           <button
             className="icon-button"
@@ -117,8 +157,8 @@ export function Welcome(props: WelcomeProps) {
             <em>visual workshop.</em>
           </h1>
           <p>
-            Open any project folder, lay out the work visually, and run coding agents in separate
-            copies of your project — with every change held for your review.
+            Open a folder, lay out the work, and run agents in separate copies of your project —
+            every change waits for your review.
           </p>
         </div>
 
@@ -126,7 +166,10 @@ export function Welcome(props: WelcomeProps) {
           <button
             className="start-card primary"
             type="button"
-            onClick={props.onOpen}
+            onClick={() => {
+              setBusyAction('open');
+              props.onOpen();
+            }}
             disabled={props.busy}
           >
             <span className="start-icon">
@@ -134,7 +177,7 @@ export function Welcome(props: WelcomeProps) {
             </span>
             <span>
               <strong>Open a project folder</strong>
-              <small>Choose a folder already on this device</small>
+              <small>Pick a folder on this device</small>
             </span>
             <ArrowRight size={18} />
           </button>
@@ -149,7 +192,7 @@ export function Welcome(props: WelcomeProps) {
             </span>
             <span>
               <strong>Clone a repository</strong>
-              <small>Download a copy from GitHub or another Git host</small>
+              <small>Download from GitHub or another Git host</small>
             </span>
             <ChevronRight size={18} />
           </button>
@@ -164,14 +207,17 @@ export function Welcome(props: WelcomeProps) {
             </span>
             <span>
               <strong>Create a new project</strong>
-              <small>Start fresh with an empty folder on this device</small>
+              <small>Start fresh in an empty folder</small>
             </span>
             <ChevronRight size={18} />
           </button>
           <button
             className="start-card demo"
             type="button"
-            onClick={props.onDemo}
+            onClick={() => {
+              setBusyAction('demo');
+              props.onDemo();
+            }}
             disabled={props.busy}
           >
             <span className="start-icon">
@@ -184,6 +230,12 @@ export function Welcome(props: WelcomeProps) {
             <ChevronRight size={18} />
           </button>
         </div>
+
+        {props.busy && (
+          <p className="welcome-busy" role="status">
+            {busyStatusMessage(busyAction)}
+          </p>
+        )}
 
         <section className="recent-section" aria-labelledby="recent-title">
           <div className="section-heading">
@@ -198,7 +250,7 @@ export function Welcome(props: WelcomeProps) {
               <FolderGit2 size={24} />
               <div>
                 <strong>No recent projects yet</strong>
-                <span>Project folders you open will be listed here.</span>
+                <span>Folders you open will show up here.</span>
               </div>
             </div>
           ) : (
@@ -232,7 +284,10 @@ export function Welcome(props: WelcomeProps) {
                     className="recent-project recent-open"
                     key={project.id}
                     type="button"
-                    onClick={() => props.onOpenRecent(project.path)}
+                    onClick={() => {
+                      setBusyAction('open');
+                      props.onOpenRecent(project.path);
+                    }}
                     disabled={props.busy}
                   >
                     <span className="repo-glyph">
@@ -278,10 +333,12 @@ export function Welcome(props: WelcomeProps) {
           onClose={() => setDialogMode(null)}
           onCreate={(input) => {
             setDialogMode(null);
+            setBusyAction('create');
             props.onCreate(input);
           }}
           onClone={(input) => {
             setDialogMode(null);
+            setBusyAction('clone');
             props.onClone(input);
           }}
         />
@@ -290,10 +347,13 @@ export function Welcome(props: WelcomeProps) {
       {recovery && (
         <div className="modal-backdrop">
           <section
+            ref={recoveryDialog}
             className="modal project-dialog recovery-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="recovery-dialog-title"
+            aria-busy={recoveryBusy !== null}
+            tabIndex={-1}
           >
             <header>
               <span className="modal-title-icon">
@@ -301,10 +361,7 @@ export function Welcome(props: WelcomeProps) {
               </span>
               <div>
                 <h2 id="recovery-dialog-title">Confirm moved project</h2>
-                <p>
-                  Check the folder you picked before Forgeboard updates this project’s saved
-                  location.
-                </p>
+                <p>Check this folder before Forgeboard updates the saved location.</p>
               </div>
               <WorkspaceTooltip
                 content={
@@ -388,11 +445,12 @@ export function Welcome(props: WelcomeProps) {
 
             <p className="recovery-preservation-note">
               Confirming keeps this project’s canvas, snapshots, and run records. Only the saved
-              folder location and its refreshed details change.
+              location and folder details change.
             </p>
 
             <footer>
               <button
+                ref={recoveryCancelButton}
                 className="button ghost"
                 type="button"
                 onClick={() => setRecovery(null)}
@@ -414,4 +472,12 @@ export function Welcome(props: WelcomeProps) {
       )}
     </main>
   );
+}
+
+function busyStatusMessage(action: WelcomeBusyAction | null): string {
+  if (action === 'clone') return 'Cloning — large projects can take a while…';
+  if (action === 'create') return 'Creating the project…';
+  if (action === 'demo') return 'Preparing the demo project…';
+  if (action === 'open') return 'Opening the project…';
+  return 'Working on it…';
 }

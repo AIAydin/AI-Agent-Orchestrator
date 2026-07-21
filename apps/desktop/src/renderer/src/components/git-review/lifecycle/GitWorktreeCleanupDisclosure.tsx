@@ -71,16 +71,16 @@ export function GitWorktreeCleanupDisclosure({
             </h3>
             <p id="git-cleanup-review-description">
               {plan.recovery
-                ? 'Forgeboard picked up where an interrupted cleanup left off and prepared a fresh plan. If you continue, your computer will ask you to confirm — you can still cancel there.'
-                : 'Nothing has been removed yet. If you continue, your computer will ask you to confirm this exact plan — you can still cancel there.'}
+                ? 'Forgeboard prepared a fresh plan for the interrupted cleanup. Your computer will ask you to confirm — you can still cancel there.'
+                : 'Nothing has been removed yet. Your computer will ask you to confirm this exact plan — you can still cancel there.'}
             </p>
           </span>
         </header>
         <div className="git-disclosure-body">
           <p className="git-cleanup-policy">
             {plan.recovery
-              ? "Recovery can continue only after Forgeboard re-checks that the agent's remaining workspace has no unsaved changes and that its branch is fully merged into the recorded base branch. The branch must be deleted — there is no way to force cleanup."
-              : "Forgeboard cleans up only when the agent's workspace has no unsaved changes and its branch is fully merged into the recorded base branch. The branch is always deleted along with the workspace — there is no way to force cleanup."}
+              ? 'Recovery continues only after Forgeboard re-checks the workspace: no unsaved changes, branch merged into the recorded base. The branch must be deleted — there is no way to force cleanup.'
+              : 'Cleanup runs only when the workspace has no unsaved changes and its branch is merged into the recorded base. The branch is always deleted with it — there is no way to force cleanup.'}
           </p>
           <dl>
             <div className="wide">
@@ -125,10 +125,7 @@ export function GitWorktreeCleanupDisclosure({
                 ))}
               </div>
               {plan.dirtyPathsTruncated && (
-                <small>
-                  {plan.dirtyPathCount - plan.dirtyPaths.length} more files with unsaved changes are
-                  not shown.
-                </small>
+                <small>{plan.dirtyPathCount - plan.dirtyPaths.length} more files not shown.</small>
               )}
             </section>
           )}

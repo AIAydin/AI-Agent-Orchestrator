@@ -226,9 +226,7 @@ describe('AgentAttemptHistory', () => {
       'History database unavailable',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    await waitFor(() =>
-      expect(screen.getByText('No attempts have been recorded for this Agent node.')).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText('No attempts yet.')).toBeTruthy());
     expect(listRuns).toHaveBeenCalledTimes(2);
   });
 

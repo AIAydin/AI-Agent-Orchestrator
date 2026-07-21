@@ -56,9 +56,11 @@ export function EnvironmentAllowlistEditor({
         Enter names only, separated by commas. Values are read from this computer each time a
         program starts and are never saved. Do not enter passwords, tokens, or other secrets here.
       </small>
-      {issues[0] !== undefined && (
+      {issues.length > 0 && (
         <small id={issueId} className="environment-editor-issue" role="alert">
-          {issues[0]}
+          {issues.map((issue) => (
+            <span key={issue}>{issue}</span>
+          ))}
         </small>
       )}
     </label>

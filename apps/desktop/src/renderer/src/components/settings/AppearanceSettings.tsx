@@ -43,7 +43,7 @@ export function AppearanceSettings({ draft, setDraft }: SettingsDraftProps) {
         <label className="switch-row">
           <span>
             <strong>Reduce motion</strong>
-            <small>Reduces animations and moving effects on the canvas.</small>
+            <small>Fewer animations and moving effects on the canvas.</small>
           </span>
           <input
             type="checkbox"
@@ -66,7 +66,7 @@ export function AppearanceSettings({ draft, setDraft }: SettingsDraftProps) {
         <label className="switch-row">
           <span>
             <strong>Snap items to grid</strong>
-            <small>Keeps items aligned to the selected grid size when you move them.</small>
+            <small>Keeps moved items aligned to the grid.</small>
           </span>
           <input
             type="checkbox"
@@ -78,7 +78,7 @@ export function AppearanceSettings({ draft, setDraft }: SettingsDraftProps) {
       </SettingsSection>
       <SettingsSection
         title="Keyboard"
-        description="Choose the shortcut that opens the command palette. Undo and redo keep your system's standard shortcuts."
+        description="Pick the shortcut that opens the command palette. Undo and redo stay standard."
       >
         <label>
           Keyboard preset
@@ -95,7 +95,7 @@ export function AppearanceSettings({ draft, setDraft }: SettingsDraftProps) {
             <option value="standard">Standard · Command/Ctrl+K</option>
             <option value="vscode">VS Code · F1 or Command/Ctrl+Shift+P</option>
           </select>
-          <small>The new shortcut starts working right after you save.</small>
+          <small>Takes effect after you save.</small>
         </label>
       </SettingsSection>
     </>

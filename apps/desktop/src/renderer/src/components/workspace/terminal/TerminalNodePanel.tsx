@@ -84,7 +84,7 @@ export function TerminalNodePanel({
 
   const findNext = (): void => {
     if (search.trim() === '') {
-      setSearchNotice('Type something to search the terminal output.');
+      setSearchNotice('Type something to search for.');
       return;
     }
     const found = surfaceRef.current?.findNext(search) ?? false;
@@ -115,15 +115,14 @@ export function TerminalNodePanel({
       {props.configurationReadOnly ? (
         <p className="terminal-state warning" role="status">
           <ShieldAlert size={14} aria-hidden="true" />
-          Your role in this shared project lets you view this terminal and its output, but not
-          start, type in, resize, or change it. Interrupt and Terminate stay available so you can
-          stop a process that is already running.
+          Your role can view this terminal, but not start, type, resize, or change it. Interrupt and
+          Terminate stay available so you can stop a process that is already running.
         </p>
       ) : props.locked ? (
         <p className="terminal-state warning" role="status">
           <ShieldAlert size={14} aria-hidden="true" />
-          Unlock this node to change its settings, type, or start a process. Interrupt and Terminate
-          stay available until the process has fully exited or the session is reported lost.
+          Unlock this node to change settings, type, or start a process. Interrupt and Terminate
+          stay available until the process exits or the session is lost.
         </p>
       ) : null}
 
@@ -161,8 +160,8 @@ export function TerminalNodePanel({
             </button>
           </div>
           <small>
-            Pick a program with the file browser, or type its full path. Forgeboard runs it exactly
-            as written and never builds a shell command.
+            Browse for a program or type its full path. It runs exactly as written — never through a
+            shell.
           </small>
         </div>
 
@@ -228,8 +227,8 @@ export function TerminalNodePanel({
             onChange={(event) => updateConfiguration({ cwdRelative: event.target.value })}
           />
           <small>
-            Use <code>.</code> for the project folder, or a folder inside it such as{' '}
-            <code>apps/desktop</code>. Folders outside the project are not allowed.
+            Use <code>.</code> for the project folder, or one inside it like{' '}
+            <code>apps/desktop</code>. Folders outside the project aren&apos;t allowed.
           </small>
         </div>
 
@@ -351,7 +350,7 @@ export function TerminalNodePanel({
             type="button"
             onClick={() => {
               surfaceRef.current?.clearDisplay();
-              setSearchNotice('Cleared what you see. The saved session output is still kept.');
+              setSearchNotice('Display cleared — the saved output is still kept.');
             }}
           >
             <Eraser size={13} aria-hidden="true" /> Clear display
@@ -375,7 +374,7 @@ export function TerminalNodePanel({
             <div className="terminal-empty-state">
               <TerminalSquare size={22} aria-hidden="true" />
               <strong>No terminal running</strong>
-              <span>Choose a program above, then select Review and start to run it.</span>
+              <span>Pick a program above, then choose Review and start.</span>
             </div>
           ) : null}
         </div>
@@ -389,8 +388,8 @@ export function TerminalNodePanel({
       ) : (
         <p className="terminal-permission-summary">
           <ShieldAlert size={13} aria-hidden="true" />
-          Programs you run here have the same permissions as your user account. Keeping them in the
-          project folder does not limit what they can access.
+          Programs here run with your full user permissions — the project folder doesn&apos;t limit
+          what they can access.
         </p>
       )}
 
@@ -465,13 +464,13 @@ function TerminalSessionEvidence({
       {session.status === 'lost' ? (
         <p className="terminal-state error" role="alert">
           <CircleAlert size={14} aria-hidden="true" />
-          Forgeboard restarted or lost track of this process. You can still read the output, but you
-          can’t type or use the controls. Start a new session to run it again.
+          Forgeboard lost track of this process. You can read the output, but not type or use the
+          controls. Start a new session to run it again.
         </p>
       ) : null}
       {replayWindowLimited ? (
         <p className="terminal-state warning" role="status">
-          Only the most recent output is shown. Earlier output was trimmed and can’t be recovered.
+          Only the most recent output is shown — earlier output was trimmed.
         </p>
       ) : null}
     </section>

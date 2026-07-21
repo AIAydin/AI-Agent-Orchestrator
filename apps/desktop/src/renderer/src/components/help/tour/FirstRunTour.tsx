@@ -17,45 +17,45 @@ const TOUR_STOPS: readonly TourStop[] = [
   {
     id: 'project',
     title: 'Start with a project',
-    summary: 'Open a folder from this computer, create a new one, or explore the built-in demo.',
+    summary: 'Open a folder, create a new one, or explore the demo.',
     icon: FolderGit2,
     steps: () => [
-      '“Open local” opens a folder you choose. “Create empty” and the demo stay entirely on this device.',
-      '“Clone” is the only option here that uses the internet, and only with the Git address you type in.',
-      'Recent projects are just shortcuts on this device. If you move a folder, you can point Forgeboard to its new place.',
+      '“Open local”, “Create empty”, and the demo stay entirely on this device.',
+      'Only “Clone” uses the internet — and only with the Git address you type in.',
+      'Recent projects are just shortcuts. Moved a folder? Point Forgeboard to its new place.',
     ],
   },
   {
     id: 'workspace',
     title: 'Find your workspace',
-    summary: 'Use the rail, canvas, inspector, activity drawer, and command palette together.',
+    summary: 'How the main panels fit together.',
     icon: LayoutDashboard,
     steps: (paletteShortcut) => [
-      'Add items from the left rail, connect them on the canvas, and change settings for the selected item in the right panel (the inspector).',
-      'The activity drawer shows what your runs and checks did while you work.',
-      `Press ${paletteShortcut} to open the command palette, then use the arrow keys and Enter to run an action.`,
+      'Add items from the left rail, connect them on the canvas, and edit the selected one in the inspector on the right.',
+      'The activity drawer shows what your runs and checks did.',
+      `Press ${paletteShortcut} for the command palette — arrow keys and Enter run an action.`,
     ],
   },
   {
     id: 'review',
     title: 'Review before anything runs',
-    summary: 'Forgeboard lets you inspect every launch, Git change, and bit of activity.',
+    summary: 'Inspect every launch and Git change before it happens.',
     icon: BellRing,
     steps: () => [
-      '“Review & run” shows the exact program, arguments, context, provider, and permissions before you approve anything.',
-      'Notifications stay on this device — nothing is sent anywhere.',
-      'Open “Changes” to review your files before you stage, discard, or commit anything.',
+      '“Review & run” shows the exact program, arguments, context, provider, and permissions before you approve.',
+      'Notifications never leave this device.',
+      'Open “Changes” to review files before you stage, discard, or commit.',
     ],
   },
   {
     id: 'help',
     title: 'Get help and control your data',
-    summary: 'Search the built-in guides and find privacy, recovery, and troubleshooting controls.',
+    summary: 'Built-in guides, privacy controls, and recovery tools — all inside the app.',
     icon: BookOpenText,
     steps: () => [
-      'Open Settings → Help & shortcuts to search the built-in guides for setup, keyboard, Git, Docker, recovery, and troubleshooting.',
-      'Open Settings → Data & privacy to see what is stored, manage backups, review what providers can receive, and export or delete your data.',
-      'If something is not available — a run, a preview, a command-line tool, a Docker image, or a project — search Help for the fix. Everyday fixes stay in the app.',
+      'Settings → Help & shortcuts searches the built-in guides: setup, keyboard, Git, Docker, recovery, troubleshooting.',
+      'Settings → Data & privacy shows what’s stored and what providers can receive — back up, export, or delete it there.',
+      'Something unavailable? Search Help — everyday fixes stay in the app.',
     ],
   },
 ] as const;
@@ -107,8 +107,8 @@ export function FirstRunTour({
         <span>Optional guide</span>
         <Heading id={titleId}>Getting started tour</Heading>
         <p>
-          Four quick stops show you around. The tour is built in — it contacts nothing and changes
-          none of your projects or settings.
+          Four quick stops. The tour is built in — it contacts nothing and changes none of your
+          projects or settings.
         </p>
       </header>
 

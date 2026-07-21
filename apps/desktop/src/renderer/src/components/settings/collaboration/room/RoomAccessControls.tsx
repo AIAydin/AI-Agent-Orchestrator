@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import type { AppSettings } from '../../../../../../shared/application/contracts.js';
@@ -20,6 +21,7 @@ export function RoomAccessControls({
 }: RoomAccessControlsProps) {
   const [mode, setMode] = useState<'create' | 'recover'>('create');
   const [adminToken, setAdminToken] = useState('');
+  const [revealed, setRevealed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const submissionLock = useRef(false);
   const disabled = busy || submitting;
@@ -37,6 +39,7 @@ export function RoomAccessControls({
     setSubmitting(true);
     const credential = adminToken;
     setAdminToken('');
+    setRevealed(false);
     const input: RoomAccessInput = {
       serverUrl: settings.collaborationUrl,
       managementBaseUrl: settings.collaborationManagementUrl,
@@ -59,9 +62,8 @@ export function RoomAccessControls({
     <section aria-labelledby="collaboration-room-access-heading">
       <h4 id="collaboration-room-access-heading">Room access</h4>
       <p id="collaboration-room-access-help">
-        Create a room or recover its owner access without editing configuration files. Recovery
-        rotates the owner credential, invalidating it for subsequent requests, messages, and
-        reconnects.
+        Create a room or recover its owner access — no config files. Recovery rotates the owner
+        credential, so the old one stops working right away.
       </p>
       <label>
         Room access action
@@ -76,23 +78,46 @@ export function RoomAccessControls({
           <option value="recover">Recover existing owner access</option>
         </select>
       </label>
-      <label>
-        Server administrator token
-        <input
-          name="collaboration-admin-token"
-          type="password"
-          value={adminToken}
-          disabled={disabled}
-          autoComplete="off"
-          spellCheck={false}
-          aria-describedby="collaboration-admin-token-help"
-          onChange={(event) => setAdminToken(event.target.value)}
-        />
+      <div className="settings-form-field">
+        <label htmlFor="collaboration-admin-token">Server administrator token</label>
+        <span className="path-picker">
+          <input
+            id="collaboration-admin-token"
+            name="collaboration-admin-token"
+            type={revealed ? 'text' : 'password'}
+            value={adminToken}
+            disabled={disabled}
+            autoComplete="off"
+            spellCheck={false}
+            aria-describedby="collaboration-admin-token-help"
+            onChange={(event) => setAdminToken(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              event.preventDefault();
+              if (!disabled && configured) void submit();
+            }}
+          />
+          <button
+            className="icon-button"
+            type="button"
+            aria-label={
+              revealed ? 'Hide server administrator token' : 'Show server administrator token'
+            }
+            disabled={disabled}
+            onClick={() => setRevealed((current) => !current)}
+          >
+            {revealed ? (
+              <EyeOff size={15} aria-hidden="true" />
+            ) : (
+              <Eye size={15} aria-hidden="true" />
+            )}
+          </button>
+        </span>
         <small id="collaboration-admin-token-help">
-          Optional only when the management server permits local loopback bootstrap. This value is
-          cleared immediately and is never saved.
+          Optional only when the server permits local loopback bootstrap. Cleared immediately and
+          never saved.
         </small>
-      </label>
+      </div>
       <button
         className={mode === 'recover' ? 'button danger' : 'button'}
         type="button"

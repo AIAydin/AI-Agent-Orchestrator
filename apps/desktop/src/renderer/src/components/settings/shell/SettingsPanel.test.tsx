@@ -349,6 +349,7 @@ describe('SettingsPanel draft transactions', () => {
             backupsEnabled: true,
             collaborationEnabled: true,
             dockerMountHostCredentials: true,
+            worktreeCleanupPolicy: 'after-retention',
           }),
         })}
       />,
@@ -396,11 +397,7 @@ describe('SettingsPanel draft transactions', () => {
     render(<SettingsPanel {...props()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Data & privacy' }));
 
-    expect(
-      screen.getByText(
-        /Repository, pull request, and build actions run only after you review them/u,
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText(/Actions run only after you review them/u)).toBeTruthy();
     expect(
       screen.getByText(/Pushing code uses your existing Git credentials or SSH setup/u),
     ).toBeTruthy();
@@ -991,7 +988,9 @@ describe('SettingsPanel draft transactions', () => {
     ).toBeTruthy();
 
     const lintEditor = screen.getByRole('group', { name: 'Lint command' });
-    fireEvent.click(within(lintEditor).getByRole('button', { name: 'Browse' }));
+    fireEvent.click(
+      within(lintEditor).getByRole('button', { name: 'Browse executable for Lint command' }),
+    );
     await waitFor(() =>
       expect(within(lintEditor).getByLabelText<HTMLInputElement>('Executable').value).toBe(
         '/usr/local/bin/eslint',
@@ -1110,7 +1109,11 @@ describe('SettingsPanel draft transactions', () => {
     const commandEditor = screen.getByRole('group', {
       name: 'License scan command',
     });
-    fireEvent.click(within(commandEditor).getByRole('button', { name: 'Browse' }));
+    fireEvent.click(
+      within(commandEditor).getByRole('button', {
+        name: 'Browse executable for License scan command',
+      }),
+    );
     await waitFor(() =>
       expect(within(commandEditor).getByLabelText<HTMLInputElement>('Executable').value).toBe(
         '/opt/tools/license-check',
@@ -1212,10 +1215,8 @@ describe('SettingsPanel draft transactions', () => {
     expect(remote.value).toBe('origin');
     fireEvent.change(remote, { target: { value: 'upstream' } });
     expect(screen.getByText(/Forgeboard stores no token/u)).toBeTruthy();
-    const cleanupPolicy = screen.getByLabelText<HTMLSelectElement>(/Cleanup policy/u);
-    expect(cleanupPolicy.disabled).toBe(false);
-    expect([...cleanupPolicy.options].filter((option) => !option.disabled)).toHaveLength(1);
-    expect([...cleanupPolicy.options].find((option) => !option.disabled)?.value).toBe('manual');
+    expect(screen.queryByLabelText(/Cleanup policy/u)).toBeNull();
+    expect(screen.getByText(/asks before deleting a worktree or branch/u)).toBeTruthy();
     expect(screen.queryByText('Tests')).toBeNull();
     expect(screen.queryByText('Lint')).toBeNull();
     expect(screen.queryByText('Typecheck')).toBeNull();
@@ -1360,10 +1361,8 @@ describe('SettingsPanel draft transactions', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Git & previews' }));
-    const cleanupPolicy = screen.getByLabelText<HTMLSelectElement>(/Cleanup policy/u);
-    expect(cleanupPolicy.value).toBe('after-retention');
     expect(screen.getByText(/never runs automatically/u)).toBeTruthy();
-    fireEvent.change(cleanupPolicy, { target: { value: 'manual' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to manual cleanup' }));
     await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));

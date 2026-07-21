@@ -47,8 +47,8 @@ export const runProviderAuthProcess: ProviderAuthProcessRunner = async (command,
     let stdoutBytes = 0;
     let stderrBytes = 0;
     let outputTruncated = false;
-    const statusChunks: Buffer[] = [];
-    let statusBytes = 0;
+    const statusChunks: Record<'stdout' | 'stderr', Buffer[]> = { stdout: [], stderr: [] };
+    const statusBytes: Record<'stdout' | 'stderr', number> = { stdout: 0, stderr: 0 };
     let forceKillTimer: NodeJS.Timeout | undefined;
     let child!: ChildProcess;
 
@@ -94,15 +94,11 @@ export const runProviderAuthProcess: ProviderAuthProcessRunner = async (command,
       if (stream === 'stdout') stdoutBytes += bytes;
       else stderrBytes += bytes;
       if (stdoutBytes + stderrBytes > MAX_DIAGNOSTIC_BYTES) outputTruncated = true;
-      if (
-        stream === 'stdout' &&
-        command.statusOutput !== null &&
-        statusBytes < MAX_DIAGNOSTIC_BYTES
-      ) {
+      if (command.statusOutput !== null && statusBytes[stream] < MAX_DIAGNOSTIC_BYTES) {
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        const captured = buffer.subarray(0, MAX_DIAGNOSTIC_BYTES - statusBytes);
-        statusChunks.push(captured);
-        statusBytes += captured.byteLength;
+        const captured = buffer.subarray(0, MAX_DIAGNOSTIC_BYTES - statusBytes[stream]);
+        statusChunks[stream].push(captured);
+        statusBytes[stream] += captured.byteLength;
       }
       // Non-status output is discarded immediately. Status text is bounded and exists only until
       // close so it can be reduced to a boolean classification, then it becomes unreachable.
@@ -118,9 +114,10 @@ export const runProviderAuthProcess: ProviderAuthProcessRunner = async (command,
         providerStatus:
           command.statusOutput === null
             ? null
-            : classifyProviderStatus(
+            : classifyProviderStatusStreams(
                 command.statusOutput,
-                Buffer.concat(statusChunks, statusBytes).toString('utf8'),
+                Buffer.concat(statusChunks.stdout, statusBytes.stdout).toString('utf8'),
+                Buffer.concat(statusChunks.stderr, statusBytes.stderr).toString('utf8'),
               ),
         diagnostics: boundedDiagnostics(stdoutBytes, stderrBytes, outputTruncated),
       });
@@ -155,6 +152,18 @@ function failedResult(
     providerStatus: null,
     diagnostics: boundedDiagnostics(stdoutBytes, stderrBytes, outputTruncated),
   };
+}
+
+function classifyProviderStatusStreams(
+  kind: Exclude<ProviderAuthCommand['statusOutput'], null>,
+  stdout: string,
+  stderr: string,
+): 'connected' | 'disconnected' | 'unknown' {
+  const primary = classifyProviderStatus(kind, stdout);
+  if (primary !== 'unknown') return primary;
+  // The codex CLI (0.14x) writes "Logged in using …" / "Not logged in" to
+  // stderr, so an empty-stdout result must consult stderr before giving up.
+  return classifyProviderStatus(kind, stderr);
 }
 
 function classifyProviderStatus(

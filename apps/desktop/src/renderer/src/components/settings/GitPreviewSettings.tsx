@@ -53,7 +53,7 @@ export function GitPreviewSettings({
       />
       <SettingsSection
         title="Git worktrees"
-        description="Agents that can change files work in separate copies (worktrees) of your project, so your main copy stays untouched."
+        description="Agents that change files work in separate copies (worktrees), so your main copy stays untouched."
       >
         <label>
           Branch prefix
@@ -79,6 +79,7 @@ export function GitPreviewSettings({
             />
             <button
               type="button"
+              disabled={busy}
               onClick={() =>
                 void perform(async () => {
                   const selected = unwrap(await window.forgeboard.projects.pickParent());
@@ -94,47 +95,29 @@ export function GitPreviewSettings({
             </button>
           </span>
           <small>
-            Forgeboard always shows exactly what will be removed and asks before deleting a worktree
-            or branch.
+            Forgeboard shows what will be removed and asks before deleting a worktree or branch.
           </small>
           <FolderReadinessEvidence status={managedWorktreeReadiness} />
         </div>
-        <label>
-          Cleanup policy
-          <select
-            name="worktree-cleanup-policy"
-            value={draft.worktreeCleanupPolicy}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                worktreeCleanupPolicy: event.target.value as 'manual',
-              })
-            }
-            aria-describedby="worktree-cleanup-policy-help"
-          >
-            <option value="manual">Manual · ask me first</option>
-            {draft.worktreeCleanupPolicy !== 'manual' && (
-              <option value={draft.worktreeCleanupPolicy} disabled>
-                {draft.worktreeCleanupPolicy} · saved but not supported
-              </option>
-            )}
-          </select>
-          <small id="worktree-cleanup-policy-help">
-            Manual cleanup is the only option right now. Automatic cleanup after a merge or after a
-            set time is not offered yet — Forgeboard will only automate deletion when it can show
-            exactly what would be removed.
-          </small>
-        </label>
         {draft.worktreeCleanupPolicy !== 'manual' && (
-          <p className="recovery-guidance warning" role="status">
-            This cleanup policy came from an older version and never runs automatically. Choose
-            Manual before saving.
-          </p>
+          <div>
+            <p className="recovery-guidance warning" role="status">
+              An older version saved the “{draft.worktreeCleanupPolicy}” cleanup policy. It never
+              runs automatically — switch to manual cleanup before saving.
+            </p>
+            <button
+              className="button"
+              type="button"
+              onClick={() => setDraft({ ...draft, worktreeCleanupPolicy: 'manual' })}
+            >
+              Switch to manual cleanup
+            </button>
+          </div>
         )}
       </SettingsSection>
       <SettingsSection
         title="Commit identity"
-        description="Set the name and email Forgeboard puts on its commits. Leave both fields blank to use the Git settings from this repository."
+        description="The name and email on Forgeboard's commits. Leave both blank to use this repository's Git settings."
       >
         <div className="two-column">
           <label>
@@ -147,49 +130,6 @@ export function GitPreviewSettings({
               onChange={(event) => setDraft({ ...draft, gitIdentityName: event.target.value })}
             />
           </label>
-          <div className="settings-form-field">
-            <label htmlFor="external-editor-executable">External application</label>
-            <span className="path-picker">
-              <input
-                id="external-editor-executable"
-                name="external-editor-executable"
-                value={draft.externalEditorExecutable}
-                placeholder="Use the system default"
-                readOnly
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  void chooseExternalApplication((externalEditorExecutable) =>
-                    setDraft((current) => ({
-                      ...current,
-                      externalEditorExecutable,
-                    })),
-                  )
-                }
-              >
-                Browse
-              </button>
-              <button
-                type="button"
-                disabled={draft.externalEditorExecutable === ''}
-                onClick={() =>
-                  setDraft((current) => ({
-                    ...current,
-                    externalEditorExecutable: '',
-                  }))
-                }
-              >
-                Use system default
-              </button>
-            </span>
-            <small>
-              On macOS, choose an application bundle such as Visual Studio Code.app, or choose an
-              exact executable on any platform. Forgeboard reviews the selected identity and opens
-              the workspace without a shell. Leave this empty to use your operating system’s
-              registered application.
-            </small>
-          </div>
           <label>
             Git identity email
             <input
@@ -203,8 +143,8 @@ export function GitPreviewSettings({
           </label>
         </div>
         <small>
-          Fill in both fields or leave both empty. Forgeboard shows the exact name and email again
-          for you to confirm before every commit.
+          Fill in both fields or leave both empty. You'll confirm the exact name and email before
+          every commit.
         </small>
         <GitIdentityCheck
           name={draft.gitIdentityName}
@@ -213,10 +153,53 @@ export function GitPreviewSettings({
           busy={busy}
           perform={perform}
         />
+        <div className="settings-form-field">
+          <label htmlFor="external-editor-executable">External application</label>
+          <span className="path-picker">
+            <input
+              id="external-editor-executable"
+              name="external-editor-executable"
+              value={draft.externalEditorExecutable}
+              placeholder="Use the system default"
+              readOnly
+            />
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void chooseExternalApplication((externalEditorExecutable) =>
+                  setDraft((current) => ({
+                    ...current,
+                    externalEditorExecutable,
+                  })),
+                )
+              }
+            >
+              Browse
+            </button>
+            <button
+              type="button"
+              disabled={draft.externalEditorExecutable === ''}
+              onClick={() =>
+                setDraft((current) => ({
+                  ...current,
+                  externalEditorExecutable: '',
+                }))
+              }
+            >
+              Use system default
+            </button>
+          </span>
+          <small>
+            Pick an application bundle (macOS) such as Visual Studio Code.app, or an exact
+            executable on any platform. Forgeboard opens the workspace without a shell. Leave empty
+            to use your system default.
+          </small>
+        </div>
       </SettingsSection>
       <SettingsSection
         title="Git remote"
-        description="Set the default remote for Git and pull request steps. Every push, GitHub check, and pull request still needs your review before it runs."
+        description="The default remote for Git and pull request steps. Every push, GitHub check, and pull request still needs your review."
       >
         <label>
           Default remote
@@ -234,9 +217,8 @@ export function GitPreviewSettings({
           />
         </label>
         <small id="git-default-remote-help">
-          Before anything is pushed, Forgeboard checks this name against the selected agent's
-          worktree and shows you the exact remote, branch, commits, and files. GitHub sign-in stays
-          with the optional gh tool on your computer; Forgeboard stores no token.
+          Before any push, you'll see the exact remote, branch, commits, and files. GitHub sign-in
+          stays with the optional gh tool; Forgeboard stores no token.
         </small>
         {!gitRemoteValid ? (
           <p id="git-default-remote-error" className="recovery-guidance warning" role="alert">
@@ -247,7 +229,7 @@ export function GitPreviewSettings({
       </SettingsSection>
       <SettingsSection
         title="Development preview"
-        description="Set the command that starts your app in a preview. It is stored as a program plus its arguments, never as shell text. Leave it blank to pick a package script from the project for each preview."
+        description="The command that starts your app in a preview — a program plus arguments, never shell text. Leave blank to pick a package script for each preview."
       >
         <CommandEditor
           label="Development server"
@@ -312,6 +294,7 @@ export function GitPreviewSettings({
           <input
             name="preview-trusted-hosts"
             value={draft.previewTrustedHosts.join(', ')}
+            aria-describedby="preview-trusted-hosts-help"
             onChange={(event) =>
               setDraft({
                 ...draft,
@@ -323,6 +306,10 @@ export function GitPreviewSettings({
             }
           />
         </label>
+        <small id="preview-trusted-hosts-help">
+          Comma-separated host names or addresses allowed to open previews — for example: 127.0.0.1,
+          localhost.
+        </small>
       </SettingsSection>
     </>
   );

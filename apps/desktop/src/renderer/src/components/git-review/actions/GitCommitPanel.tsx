@@ -40,10 +40,11 @@ export function GitCommitPanel({
         rows={3}
         placeholder="Describe the changes"
         disabled={busy}
+        aria-describedby="git-commit-message-reason"
         onChange={(event) => setMessage(event.target.value)}
       />
       <footer>
-        <small>{reason}</small>
+        <small id="git-commit-message-reason">{reason}</small>
         <button
           className="button primary"
           type="submit"

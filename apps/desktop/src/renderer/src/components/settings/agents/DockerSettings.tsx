@@ -34,7 +34,7 @@ export function DockerSettings({
   return (
     <SettingsSection
       title="Extra protection with Docker"
-      description="Optional extra protection. Docker gives each agent only its own project copy, without full access to your computer."
+      description="Optional: Docker gives each agent only its own project copy, not full access to your computer."
     >
       <label className="switch-row">
         <span>
@@ -143,7 +143,9 @@ export function DockerSettings({
           checked={draft.dockerMountHostCredentials}
           disabled={!draft.dockerMountHostCredentials}
           aria-label="Mount host CLI credentials"
-          aria-describedby="docker-host-credentials-help"
+          aria-describedby={
+            draft.dockerMountHostCredentials ? 'docker-host-credentials-help' : undefined
+          }
           onChange={(event) => {
             if (!event.target.checked) {
               setDraft({ ...draft, dockerMountHostCredentials: false });
@@ -153,9 +155,8 @@ export function DockerSettings({
       </label>
       {draft.dockerMountHostCredentials && (
         <p id="docker-host-credentials-help" className="recovery-guidance warning" role="status">
-          Sharing sign-in details never works, and Docker launches fail closed — every run is
-          blocked for safety — while this old setting is on. Turn it off and save Settings. If the
-          agent needs an account, sign in inside the Docker image instead.
+          While this old setting is on, Docker launches fail closed — every run is blocked. Turn it
+          off and save. If the agent needs an account, sign in inside the Docker image instead.
         </p>
       )}
     </SettingsSection>

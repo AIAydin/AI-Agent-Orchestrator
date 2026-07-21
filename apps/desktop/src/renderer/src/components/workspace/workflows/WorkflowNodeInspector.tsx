@@ -76,9 +76,9 @@ function TaskNodeInspector({
             adapterId={assignedAgent.data.adapterId ?? settings.defaultAgent}
           />
           <p>
-            This task uses its assigned agent&apos;s permissions. Change them on{' '}
-            <strong>{assignedAgent.data.title}</strong>. You will see the exact permissions again
-            before the task starts.
+            This task uses its assigned agent&apos;s permissions — change them on{' '}
+            <strong>{assignedAgent.data.title}</strong>. You&apos;ll see them again before the task
+            starts.
           </p>
         </div>
       )}
@@ -160,9 +160,8 @@ function TaskNodeInspector({
         </fieldset>
       )}
       <p>
-        Related files are reference only — the agent can&apos;t read their contents. Add a Context
-        connection if the agent should receive a file&apos;s contents. You still approve the exact
-        setup before anything starts.
+        Related files are reference only — the agent can&apos;t read them. To share a file&apos;s
+        contents, add a Context connection.
       </p>
     </section>
   );
@@ -306,15 +305,15 @@ function ReviewGateInspector({
           ))}
         </select>
         <small>
-          Choose an Agent node that is set up. Forgeboard gives it the exact output to review and
-          the required review format when the workflow runs.
+          Pick a configured Agent node. When the workflow runs, it gets the exact output to review
+          and the required format.
         </small>
       </label>
       {selectedReviewer !== undefined &&
         (selectedReviewer.data.adapterId ?? settings.defaultAgent) === 'test-agent' && (
           <p className="workflow-config-warning" role="status">
-            Test agent is a predictable demo, not a real AI review, and cannot approve Git delivery.
-            Choose Codex or Claude Code when the review must count toward delivery.
+            Test agent is a demo, not a real AI review, and can&apos;t approve Git delivery. Choose
+            Codex or Claude Code when the review must count toward delivery.
           </p>
         )}
       {agentNodes.length === 0 && (
@@ -334,8 +333,8 @@ function ReviewGateInspector({
           <div className="workflow-config-warning" role="alert">
             <p>
               This imported gate points to reviewer agent <code>{node.data.reviewerAgentId}</code>,
-              which is unavailable or unsupported. The gate can&apos;t continue until you remove the
-              requirement.
+              which isn&apos;t available or supported. Remove the requirement so the gate can
+              continue.
             </p>
             <button
               type="button"
@@ -389,10 +388,7 @@ function ReviewGateInspector({
           />
         </label>
       </div>
-      <p>
-        A failed automated check always counts as failed. A reviewer agent can add notes, but it
-        can&apos;t make a failed check pass.
-      </p>
+      <p>A reviewer agent can add notes, but it can&apos;t make a failed check pass.</p>
       <span className="workflow-gate-summary">
         <CheckCircle2 size={13} /> {required.size} required check{required.size === 1 ? '' : 's'}
       </span>
@@ -418,7 +414,7 @@ function ReviewGateEvidence({ gate }: { readonly gate: WorkflowReviewGateView })
       <div aria-label="Selected check evidence">
         <strong>Selected checks</strong>
         {gate.checks.length === 0 ? (
-          <p>No current selected check evidence.</p>
+          <p>No check evidence yet.</p>
         ) : (
           <ul>
             {gate.checks.map((check) => (

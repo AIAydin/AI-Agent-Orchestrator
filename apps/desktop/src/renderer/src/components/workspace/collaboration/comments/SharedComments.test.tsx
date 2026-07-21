@@ -60,7 +60,9 @@ describe('SharedComments', () => {
         onDiscardRejected={vi.fn().mockResolvedValue(false)}
       />,
     );
-    expect(screen.getByText(/Shared comments are optional/u)).toBeTruthy();
+    expect(
+      screen.getByText(/Sharing is off. Private comments above stay on this device/u),
+    ).toBeTruthy();
     expect(screen.queryByText(/This role/u)).toBeNull();
   });
 

@@ -31,6 +31,7 @@ import { unwrap } from '../../lib/ipc.js';
 import { CommandBuilder } from '../configuration/CommandBuilder.js';
 import { FirstRunTour } from '../help/tour/FirstRunTour.js';
 import { ProviderConnectionCards } from '../settings/agents/connections/index.js';
+import { AgentDefaultModelField } from '../settings/fields/AgentDefaultModelField.js';
 import {
   EnvironmentAllowlistEditor,
   environmentAllowlistIssues,
@@ -227,10 +228,7 @@ export function SetupWizard(props: SetupWizardProps) {
               </li>
             ))}
           </ol>
-          <p>
-            Everything here can be changed later in Settings. You won’t need to edit any files by
-            hand.
-          </p>
+          <p>You can change all of this later in Settings.</p>
         </aside>
 
         <section className="setup-content">
@@ -242,9 +240,8 @@ export function SetupWizard(props: SetupWizardProps) {
               <span className="eyebrow">A private workshop on your computer</span>
               <h1 id="setup-title">Ready to build without wiring config files?</h1>
               <p>
-                Forgeboard works right away with a built-in demo that runs entirely on this
-                computer. This short setup can also connect a coding agent you have installed, pick
-                safe defaults, and prepare a preview of your app.
+                The built-in demo works right away, entirely on this computer. This short setup
+                connects a coding agent, picks safe defaults, and prepares your app preview.
               </p>
               <div className="setup-assurances">
                 <div>
@@ -266,8 +263,7 @@ export function SetupWizard(props: SetupWizardProps) {
                   <span>
                     <strong>Changes stay reviewable</strong>
                     <small>
-                      Agents that edit files work in a separate copy of your project, so you review
-                      every change.
+                      Agents edit a separate copy of your project — you review every change.
                     </small>
                   </span>
                 </div>
@@ -280,10 +276,10 @@ export function SetupWizard(props: SetupWizardProps) {
               <span className="eyebrow">
                 <Bot size={14} /> Agent
               </span>
-              <h1 id="setup-title">Choose the agent you want to start with</h1>
+              <h1 id="setup-title">Choose your starting agent</h1>
               <p>
-                Forgeboard runs coding agents installed on this computer and uses the sign-in each
-                one already has. The built-in test agent works offline and is always available.
+                Agents run on this computer with the sign-in they already have. The built-in test
+                agent works offline.
               </p>
               <div className="setup-agent-list" role="radiogroup" aria-label="Default agent">
                 {availableAgents.map((agent) => {
@@ -356,7 +352,7 @@ export function SetupWizard(props: SetupWizardProps) {
                 <div className="setup-provider-connection">
                   <p className="setup-connection-guidance" role="status">
                     {providerStatuses[draft.defaultAgent]?.state === 'connected'
-                      ? `${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} is connected and ready to use as your default.`
+                      ? `${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} is connected and ready.`
                       : `Connect ${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} here or choose the local test agent. You can connect later in Settings.`}
                   </p>
                   <ProviderConnectionCards
@@ -400,23 +396,21 @@ export function SetupWizard(props: SetupWizardProps) {
                               </button>
                             </span>
                           </div>
-                          <label>
-                            Default model (optional)
-                            <input
-                              name={`setup-agent-${draft.defaultAgent}-default-model`}
-                              value={draft.agentDefaultModels[draft.defaultAgent] ?? ''}
-                              placeholder="Leave blank for the tool's usual model"
-                              onChange={(event) =>
-                                setDraft({
-                                  ...draft,
-                                  agentDefaultModels: {
-                                    ...draft.agentDefaultModels,
-                                    [draft.defaultAgent]: event.target.value,
-                                  },
-                                })
-                              }
-                            />
-                          </label>
+                          <AgentDefaultModelField
+                            key={draft.defaultAgent}
+                            agentId={draft.defaultAgent}
+                            name={`setup-agent-${draft.defaultAgent}-default-model`}
+                            value={draft.agentDefaultModels[draft.defaultAgent] ?? ''}
+                            onChange={(model) =>
+                              setDraft({
+                                ...draft,
+                                agentDefaultModels: {
+                                  ...draft.agentDefaultModels,
+                                  [draft.defaultAgent]: model,
+                                },
+                              })
+                            }
+                          />
                           <AgentReadinessPanel
                             agent={selectedAgent}
                             draft={selectedReadinessDraft}
@@ -568,9 +562,7 @@ export function SetupWizard(props: SetupWizardProps) {
                       }
                     />
                   </label>
-                  <small>
-                    Fine-tune how this agent starts and reports results in Settings after setup.
-                  </small>
+                  <small>You can fine-tune this agent later in Settings.</small>
                   {customAgentIncomplete && (
                     <span className="setup-validation" role="status">
                       Choose the program that runs your custom agent to continue.
@@ -607,7 +599,7 @@ export function SetupWizard(props: SetupWizardProps) {
               <div className="setup-choice-grid" role="radiogroup" aria-label="Default permissions">
                 <ChoiceCard
                   title="Plan / read-only"
-                  description="Look at the files you share without changing anything."
+                  description="Read files without changing anything."
                   icon={<ShieldCheck size={20} />}
                   checked={draft.defaultPermissionProfile === 'plan-read-only'}
                   onSelect={() =>
@@ -619,7 +611,7 @@ export function SetupWizard(props: SetupWizardProps) {
                 />
                 <ChoiceCard
                   title="Worktree write"
-                  description="Make changes only in a separate copy of the project that you review."
+                  description="Change only a separate copy that you review."
                   icon={<FolderGit2 size={20} />}
                   checked={draft.defaultPermissionProfile === 'worktree-write'}
                   onSelect={() =>
@@ -634,7 +626,7 @@ export function SetupWizard(props: SetupWizardProps) {
                   description={
                     draft.defaultAgent === 'test-agent'
                       ? 'Pick an agent that can run in Docker first.'
-                      : 'Run the agent in a Docker container, kept apart from the rest of your computer.'
+                      : 'Run in a Docker container, walled off from the rest of your computer.'
                   }
                   icon={<Container size={20} />}
                   checked={draft.defaultPermissionProfile === 'docker-isolated'}
@@ -697,8 +689,8 @@ export function SetupWizard(props: SetupWizardProps) {
                         />
                       </label>
                       <p>
-                        Your passwords and sign-in details stay hidden from the container. CPU and
-                        memory limits can be changed in Settings.
+                        Passwords and sign-in details stay hidden from the container. CPU and memory
+                        limits live in Settings.
                       </p>
                     </>
                   )}
@@ -736,9 +728,8 @@ export function SetupWizard(props: SetupWizardProps) {
               </span>
               <h1 id="setup-title">Set project commands (optional)</h1>
               <p>
-                Leave either command blank to set it up later. Forgeboard can suggest commands from
-                a project you have opened. Arguments are stored separately and run exactly as
-                written — never through a shell.
+                Leave anything blank and set it later. Commands run exactly as written — never
+                through a shell.
               </p>
               <ProjectCommandSuggestions
                 projects={props.projects ?? []}
@@ -798,8 +789,8 @@ export function SetupWizard(props: SetupWizardProps) {
                   onChange={(event) => setDraft({ ...draft, branchPrefix: event.target.value })}
                 />
                 <small>
-                  New branches are named &lt;prefix&gt;&lt;task&gt;/&lt;agent&gt;-&lt;id&gt;.
-                  Examples: forgeboard/ or team/agents/.
+                  Branches are named &lt;prefix&gt;&lt;task&gt;/&lt;agent&gt;-&lt;id&gt; — try
+                  forgeboard/ or team/agents/.
                 </small>
               </label>
               <div className="setup-path-field">
@@ -826,10 +817,7 @@ export function SetupWizard(props: SetupWizardProps) {
               </div>
               <span className="eyebrow">Ready</span>
               <h1 id="setup-title">Your local workshop is ready</h1>
-              <p>
-                Open a project folder, clone one from the web, start a new one, or explore the
-                built-in demo. You can change every choice later in Settings.
-              </p>
+              <p>Open a project folder, clone one, start fresh, or explore the demo.</p>
               <dl className="setup-summary">
                 <div>
                   <dt>Default agent</dt>

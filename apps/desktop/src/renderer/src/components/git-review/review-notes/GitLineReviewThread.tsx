@@ -61,8 +61,7 @@ export function GitLineReviewThread({
             />
           </label>
           <p>
-            A change request only saves your feedback on this computer. It does not approve the AI's
-            work, start an agent, or change your code.
+            Feedback is saved on this computer only. It doesn't start an agent or change your code.
           </p>
           <span>
             <button

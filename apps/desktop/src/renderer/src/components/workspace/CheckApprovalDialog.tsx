@@ -95,17 +95,13 @@ export function CheckApprovalDialog({
             <span className="eyebrow">Check command approval</span>
             <h2 id="check-approval-title">Review the {plan.label} command</h2>
             <p id="check-approval-description">
-              Nothing has run yet. Continue only if everything below is what you expect. If you
-              saved an approval for this exact command, Forgeboard checks that it matches; otherwise
-              it asks you to confirm.
+              Nothing has run yet — approve only if everything below looks right.
             </p>
           </div>
         </header>
         <p id="check-approval-warning" className="check-approval-warning">
-          Project checks run code from this project on your computer, with your account’s
-          permissions. Package scripts can run other commands during install or build. Review recent
-          project changes before running a check. Output is saved in full, so do not run a check
-          that prints passwords or other secrets.
+          This runs the project’s code on your computer, and package scripts can run other commands.
+          Output is saved in full, so don’t run a check that prints secrets.
         </p>
         <dl className="check-disclosure-grid" tabIndex={0} aria-label="Check command details">
           <div className="wide">

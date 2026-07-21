@@ -1,6 +1,8 @@
 import { Play, ShieldCheck } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
 import type { RunApprovalView } from '../../../../../shared/application/contracts.js';
+import { trapModalFocus } from '../../../lib/modal-focus.js';
 import { RunDisclosureDetails, RunDisclosureWarnings } from './RunDisclosureDetails.js';
 
 interface RunApprovalDialogProps {
@@ -18,13 +20,51 @@ export function RunApprovalDialog({
   onCancel,
   onApprove,
 }: RunApprovalDialogProps) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const onCancelRef = useRef(onCancel);
+  const busyRef = useRef(busy);
+  onCancelRef.current = onCancel;
+  busyRef.current = busy;
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog === null) return;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    cancelButtonRef.current?.focus();
+    const onKeyDown = (event: globalThis.KeyboardEvent): void => {
+      const openDialogs = [
+        ...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'),
+      ];
+      if (openDialogs.at(-1) !== dialogRef.current) return;
+      trapModalFocus(event, dialogRef.current);
+      if (event.key !== 'Escape' || busyRef.current) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onCancelRef.current();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      previousFocus?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (busy) dialogRef.current?.focus();
+  }, [busy]);
+
   return (
     <div className="modal-backdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="modal run-approval-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="run-approval-title"
+        aria-busy={busy}
+        tabIndex={-1}
       >
         <header>
           <span className="modal-title-icon">
@@ -59,7 +99,13 @@ export function RunApprovalDialog({
           </dl>
         </div>
         <footer>
-          <button className="button" type="button" disabled={busy} onClick={onCancel}>
+          <button
+            ref={cancelButtonRef}
+            className="button"
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+          >
             Cancel run
           </button>
           <button className="button primary" type="button" disabled={busy} onClick={onApprove}>

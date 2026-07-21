@@ -92,15 +92,21 @@
   border-radius: 12px;
   background: var(--surface);
   box-shadow: 0 3px 12px rgb(30 35 31 / 3%);
-  transition:
-    transform 0.16s ease,
-    border-color 0.16s ease,
-    box-shadow 0.16s ease;
 }
 .start-card:hover {
-  transform: translateY(-2px);
   border-color: var(--line-strong);
   box-shadow: 0 9px 30px rgb(30 35 31 / 8%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .start-card {
+    transition:
+      transform 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+  .start-card:hover {
+    transform: translateY(-2px);
+  }
 }
 .start-card.primary {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
@@ -139,6 +145,14 @@
 }
 .start-card > svg {
   color: var(--text-faint);
+}
+.welcome-busy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-lg);
 }
 .recent-section {
   margin-top: 27px;

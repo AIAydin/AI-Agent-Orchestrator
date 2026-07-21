@@ -95,8 +95,8 @@ export function InviteManagementControls({
         Create invite
       </button>
       <p>
-        Invite history is durable on the server. Links remain only in protected main-process memory,
-        so Copy is available only for invites created in this app session.
+        Invite history lives on the server. Links stay only in protected memory, so Copy works only
+        for invites created in this app session.
       </p>
       <div className="settings-inline-actions">
         <button

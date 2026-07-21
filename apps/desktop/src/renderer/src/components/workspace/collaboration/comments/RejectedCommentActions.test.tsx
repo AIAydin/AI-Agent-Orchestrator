@@ -16,9 +16,7 @@ describe('RejectedCommentActions', () => {
     const view = render(<RejectedCommentActions entry={oldEntry} onDiscard={onDiscard} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete saved copy' }));
-    expect(
-      screen.getByText(/leave and rejoin the shared canvas before sharing more changes/iu),
-    ).toBeTruthy();
+    expect(screen.getByText(/Delete this saved copy\? This cannot be undone/iu)).toBeTruthy();
     view.rerender(<RejectedCommentActions entry={newerEntry} onDiscard={onDiscard} />);
     fireEvent.click(screen.getByRole('button', { name: 'Delete this copy' }));
 

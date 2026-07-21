@@ -14,13 +14,20 @@ export function CollaborationStatus({
   message,
   collaborators,
 }: CollaborationStatusProps) {
+  const warning = connection?.status === 'error' || connection?.status === 'offline';
   return (
     <>
-      <p className="recovery-guidance warning" role="status" aria-live="polite">
-        {message ?? statusText(connection)}{' '}
+      <p
+        className={warning ? 'recovery-guidance warning' : 'recovery-guidance'}
+        role="status"
+        aria-live="polite"
+      >
+        {message ?? statusText(connection)}
         {connection?.status === 'connected' && connection.role !== undefined
-          ? `Your role is ${connection.role}. `
+          ? ` Your role is ${connection.role}.`
           : ''}
+      </p>
+      <p className="recovery-guidance">
         Forgeboard shares only these canvas details: layout, titles, positions, task and review
         status, comments, and who is present. Prompts, file contents, local paths, environment
         variables, credentials, and tokens are never selected automatically. Forgeboard does not

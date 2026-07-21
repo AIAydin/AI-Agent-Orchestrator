@@ -22,9 +22,14 @@ export function ConnectionFields({ settings, setSettings, disabled }: Connection
           value={settings.collaborationUrl}
           disabled={disabled}
           spellCheck={false}
+          aria-describedby="collaboration-url-help"
           onChange={(event) => update({ collaborationUrl: event.target.value })}
         />
       </label>
+      <small id="collaboration-url-help">
+        WebSocket address starting with ws:// or wss:// — for example
+        wss://collaboration.example.com or ws://127.0.0.1:1234.
+      </small>
       <label>
         Collaboration management API URL
         <input
@@ -36,10 +41,9 @@ export function ConnectionFields({ settings, setSettings, disabled }: Connection
           onChange={(event) => update({ collaborationManagementUrl: event.target.value })}
         />
         <small>
-          Used for explicit room and invite management. Use the HTTPS address published by your
-          collaboration administrator. Plain HTTP is accepted only for a server on this device, such
-          as http://127.0.0.1:1234. Forgeboard does not guess this API address from the WebSocket
-          URL.
+          Used for explicit room and invite management — the HTTPS address from your collaboration
+          administrator. Plain HTTP is accepted only for a server on this device, such as
+          http://127.0.0.1:1234. Forgeboard does not guess this API address from the WebSocket URL.
         </small>
       </label>
       <div className="two-column">

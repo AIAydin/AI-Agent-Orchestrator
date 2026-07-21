@@ -31,8 +31,8 @@ export function TestNodePanel(props: TestNodePanelProps) {
 
       <TestNodeConfiguration {...props} />
       <p className="test-node-safety">
-        Forgeboard runs this exact program and arguments directly, with no shell in between. You
-        review the checkout and environment before anything starts.
+        Runs this exact program and arguments — no shell in between. You&apos;ll review the checkout
+        and environment first.
       </p>
       <div className="test-node-actions">
         {current?.active ? (
@@ -84,7 +84,7 @@ export function TestNodePanel(props: TestNodePanelProps) {
       {current?.status === 'lost' && (
         <p className="test-node-recovery" role="alert">
           Forgeboard lost track of the previous run while restarting. Check the saved attempt, then
-          run again when you are ready.
+          run again.
         </p>
       )}
       {current?.statusReason && <p className="test-node-recovery">{current.statusReason}</p>}

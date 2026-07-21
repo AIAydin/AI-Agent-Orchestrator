@@ -23,7 +23,7 @@
 .git-diff-viewer > header strong {
   overflow: hidden;
   font:
-    10px 'SFMono-Regular',
+    var(--text-2xs) 'SFMono-Regular',
     Consolas,
     monospace;
   text-overflow: ellipsis;

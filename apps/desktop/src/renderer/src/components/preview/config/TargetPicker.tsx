@@ -62,7 +62,7 @@ export function TargetPicker({
       {unavailable ? (
         <p className="preview-target-recovery" role="status">
           {selected?.unavailableReason ??
-            "That agent's workspace is no longer available. Choose your main project folder (Primary checkout) or another agent run."}
+            "That agent's workspace is gone. Choose your main project folder or another agent run."}
         </p>
       ) : null}
     </div>

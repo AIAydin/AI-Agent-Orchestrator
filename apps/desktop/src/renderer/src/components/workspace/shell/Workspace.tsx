@@ -76,8 +76,9 @@ import { useProjectStatus } from './status/useProjectStatus.js';
 import { applyNodeDataPatch } from './node-data-patch.js';
 import { WorkflowDecisionDialog } from '../workflows/WorkflowDecisionDialog.js';
 import { WorkspaceInspector } from './WorkspaceInspector.js';
-import { WorkspaceNotifications } from './WorkspaceOverlays.js';
 import { WorkspaceRail } from './WorkspaceRail.js';
+import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
+import { useWorkspaceSidebarLayout } from './useWorkspaceSidebarLayout.js';
 import { nodeRegistryFromTemplates } from '../node-registry/NodeRegistryContext.js';
 import { providerTheme } from '../node-registry/provider-themes.js';
 import { useWorkspaceNodeMutations } from './node-actions/useWorkspaceNodeMutations.js';
@@ -227,7 +228,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const [railTab, setRailTab] = useState<'project' | 'nodes'>('project');
   const [activityOpen, setActivityOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [workflowDecision, setWorkflowDecision] = useState<WorkflowDecisionTarget | null>(null);
   const [initializingGit, setInitializingGit] = useState(false);
   const [search, setSearch] = useState('');
@@ -249,6 +249,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   edgesRef.current = edges;
 
   const projectStatus = useProjectStatus(project);
+  const sidebarLayout = useWorkspaceSidebarLayout();
 
   useEffect(() => {
     loaded.current = false;
@@ -956,18 +957,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     },
     [pendingCanvas, selectedNodeId],
   );
-  const selectedCanvasNodes = nodes.filter((node) => node.selected === true);
-  const selectedWorkflowEligibility = workflowSelectionEligibility(
-    selectedCanvasNodes.length > 0
-      ? selectedCanvasNodes
-      : selectedNode === null
-        ? []
-        : [selectedNode],
-    nodes,
-    edges,
-  );
-  const selectedWorkflowScope = selectedWorkflowEligibility.scope;
-  const canRunWorkflow = runnableWorkflowNodeCount(nodes, edges) > 0;
   const runnableAgents = agents.filter(
     (agent): agent is typeof agent & { id: RunAdapterId } =>
       agent.installed && isRunAdapterId(agent.id),
@@ -976,8 +965,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     ? settings.defaultAgent
     : 'test-agent';
   const selectedAdapter = selectedNode
-    ? (selectedNode.data.adapterId ??
-      (isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'test-agent'))
+    ? (selectedNode.data.adapterId ?? fallbackAdapter)
     : 'test-agent';
   const selectedAgent = runnableAgents.find((agent) => agent.id === selectedAdapter);
   const selectedModel = effectiveNodeModel(
@@ -1008,6 +996,31 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       claude: settings.agentExecutableOverrides['claude'] ?? '',
     },
   });
+  const agentRunBlockReason = useCallback(
+    (node: WorkshopNode): string | null => {
+      if (node.data.kind !== 'agent') return null;
+      const gate = providerGates.gateFor(node.data.adapterId ?? fallbackAdapter);
+      return gate !== null && gate.settled && gate.state !== 'connected'
+        ? gate.blockedReason
+        : null;
+    },
+    [fallbackAdapter, providerGates.gateFor],
+  );
+  const selectedAgentProviderGate =
+    selectedNodeKind === 'agent' ? providerGates.gateFor(selectedAdapter) : null;
+  const selectedCanvasNodes = nodes.filter((node) => node.selected === true);
+  const selectedWorkflowEligibility = workflowSelectionEligibility(
+    selectedCanvasNodes.length > 0
+      ? selectedCanvasNodes
+      : selectedNode === null
+        ? []
+        : [selectedNode],
+    nodes,
+    edges,
+    agentRunBlockReason,
+  );
+  const selectedWorkflowScope = selectedWorkflowEligibility.scope;
+  const canRunWorkflow = runnableWorkflowNodeCount(nodes, edges, agentRunBlockReason) > 0;
 
   const updateNodeData = useCallback((nodeId: string, data: Partial<WorkshopNode['data']>) => {
     setNodes((items) => {
@@ -1056,6 +1069,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     ...(selectedModel === undefined ? {} : { selectedModel }),
     selectedPermission,
     permissionUnavailableReason: selectedPermissionUnavailableReason,
+    verifyAdapterConnection: providerGates.verifyAdapterConnection,
     flushCanvas,
     updateNodeData,
     setEvents,
@@ -1678,17 +1692,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         saveState={saveState}
         canUndo={past.length > 0}
         canRedo={future.length > 0}
-        notificationsOpen={notificationsOpen}
         workflowStatus={
           workflows.activeExecution?.status ?? workflows.currentExecution?.status ?? null
-        }
-        workflowBusy={workflowStartBusy}
-        canRunWorkflow={canRunWorkflow && workflows.mutationsAuthorized}
-        canRunSelected={selectedWorkflowEligibility.runnable && workflows.mutationsAuthorized}
-        runSelectedReason={
-          workflows.mutationsAuthorized
-            ? selectedWorkflowEligibility.reason
-            : 'Your role is view-only: you can see workflow history but cannot start runs.'
         }
         commandPaletteShortcut={commandPaletteShortcutLabel(settings.keyboardPreset)}
         collaborationEnabled={settings.collaborationEnabled}
@@ -1702,14 +1707,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             duration: settings.reducedMotion ? 0 : 240,
           })
         }
-        onRunWorkflow={() => void workflows.start({ kind: 'workflow' })}
-        onRunSelected={() => {
-          if (selectedWorkflowScope === undefined) return;
-          void workflows.start(selectedWorkflowScope);
-        }}
         onOpenGitReview={openProjectGitReview}
         onOpenCommands={() => setPaletteOpen(true)}
-        onToggleNotifications={() => setNotificationsOpen((open) => !open)}
         onOpenSettings={onOpenSettings}
       />
 
@@ -1718,7 +1717,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         onDiscard={collaborationCanvas.discardRejectedComment}
       />
 
-      <div className={`workspace-grid ${activityOpen ? '' : 'activity-closed'}`}>
+      <div
+        className={`workspace-grid ${activityOpen ? '' : 'activity-closed'}`}
+        style={sidebarLayout.gridStyle}
+      >
         <WorkspaceRail
           project={project}
           tab={railTab}
@@ -1755,6 +1757,15 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
               duration: settings.reducedMotion ? 0 : 220,
             });
           }}
+        />
+        <WorkspaceResizeHandle
+          label="Resize project rail"
+          className="rail-resize"
+          edge="start"
+          range={sidebarLayout.rail.range}
+          width={sidebarLayout.rail.width}
+          onResize={sidebarLayout.rail.resize}
+          onReset={sidebarLayout.rail.reset}
         />
         <AgentSessionProvider value={agentSessionValue}>
         <WorkflowRuntimeProvider value={workflowRuntimeValue}>
@@ -1843,6 +1854,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onDeleteNode={deleteNode}
           workflowRunBusy={workflowStartBusy}
           workflowMutationsAuthorized={workflows.mutationsAuthorized}
+          agentRunBlockReason={agentRunBlockReason}
           onRunWorkflowScope={(scope) => void workflows.start(scope)}
           onSelectionChange={({
             nodes: selectedNodes,
@@ -1876,6 +1888,15 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         />
         </WorkflowRuntimeProvider>
         </AgentSessionProvider>
+        <WorkspaceResizeHandle
+          label="Resize details panel"
+          className="inspector-resize"
+          edge="end"
+          range={sidebarLayout.inspector.range}
+          width={sidebarLayout.inspector.width}
+          onResize={sidebarLayout.inspector.resize}
+          onReset={sidebarLayout.inspector.reset}
+        />
         <WorkspaceInspector
           nodeRegistry={nodeRegistry}
           project={project}
@@ -1994,9 +2015,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       )}
       {paletteOpen && (
         <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />
-      )}
-      {notificationsOpen && (
-        <WorkspaceNotifications events={events} onClose={() => setNotificationsOpen(false)} />
       )}
       {gitReview.session !== null && (
         <GitReviewDialog

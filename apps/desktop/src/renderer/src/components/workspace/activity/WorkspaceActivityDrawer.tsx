@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -84,6 +84,8 @@ export function WorkspaceActivityDrawer({
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditState, setAuditState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [auditRefresh, setAuditRefresh] = useState(0);
+  const [eventAnnouncement, setEventAnnouncement] = useState({ message: '', sequence: 0 });
+  const eventsSeenRef = useRef(false);
   const workflowDecisionCount =
     (currentWorkflow?.approvals.length ?? 0) +
     (currentWorkflow?.humanDecisions.length ?? 0) +
@@ -92,6 +94,16 @@ export function WorkspaceActivityDrawer({
   useEffect(() => {
     if (workflowDecisionCount > 0) setTab('workflows');
   }, [workflowDecisionCount]);
+
+  useEffect(() => {
+    const latest = events[0];
+    if (!eventsSeenRef.current) {
+      eventsSeenRef.current = true;
+      return;
+    }
+    if (latest === undefined) return;
+    setEventAnnouncement(({ sequence }) => ({ message: latest, sequence: sequence + 1 }));
+  }, [events]);
 
   useEffect(() => {
     if (tab !== 'audit') return;
@@ -143,6 +155,9 @@ export function WorkspaceActivityDrawer({
           </button>
         </WorkspaceTooltip>
       </header>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        <span key={eventAnnouncement.sequence}>{eventAnnouncement.message}</span>
+      </span>
       {tab === 'activity' && <ActivityPanel events={events} />}
       {tab === 'workflows' && (
         <WorkspaceWorkflowPanel
@@ -275,7 +290,7 @@ function ChangesPanel({
       <header className="drawer-panel-summary">
         <div>
           <strong>Files changed by runs</strong>
-          <small>Each agent saves the files it changed during its latest run.</small>
+          <small>Files each agent changed in its latest run.</small>
         </div>
         <div className="drawer-panel-actions">
           <span>{reports.reduce((total, report) => total + report.files.length, 0)} files</span>
@@ -320,9 +335,7 @@ function ChangesPanel({
           })}
         </div>
       ) : (
-        <DrawerEmpty role="status">
-          Files an agent changes show up here. Run an agent to see them.
-        </DrawerEmpty>
+        <DrawerEmpty role="status">Run an agent to see its changed files here.</DrawerEmpty>
       )}
     </div>
   );
@@ -358,9 +371,7 @@ function AuditPanel({
       {state === 'loading' && !events.length ? (
         <DrawerEmpty role="status">Loading history…</DrawerEmpty>
       ) : state === 'error' ? (
-        <DrawerEmpty role="alert">
-          Forgeboard could not load the history. Use Refresh to try again.
-        </DrawerEmpty>
+        <DrawerEmpty role="alert">Couldn't load history. Refresh to try again.</DrawerEmpty>
       ) : events.length ? (
         <div className="audit-event-list">
           {events.map((event) => (

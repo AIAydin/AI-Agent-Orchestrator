@@ -5,6 +5,11 @@ import type {
   ProviderConnectionId,
   ProviderConnectionStatus,
 } from '../../../../../../shared/provider-connections/index.js';
+import {
+  fetchProviderConnectionStatus,
+  performProviderConnectionAction,
+  providerConnectionErrorMessage,
+} from '../../../../lib/provider-connections.js';
 import { unwrap } from '../../../../lib/ipc.js';
 
 export interface ProviderConnectionView {
@@ -46,17 +51,14 @@ export function useProviderConnections(
     async (providerId: ProviderConnectionId) => {
       update(providerId, { loading: true, error: null });
       try {
-        const override = providerId === 'codex' ? codexOverride : claudeOverride;
-        const status = unwrap(
-          await window.forgeboard.agents.connections.get({
-            providerId,
-            ...(override ? { executableOverride: override } : {}),
-          }),
+        const status = await fetchProviderConnectionStatus(
+          providerId,
+          providerId === 'codex' ? codexOverride : claudeOverride,
         );
         update(providerId, { status, loading: false });
         return status;
       } catch (cause) {
-        update(providerId, { loading: false, error: safeMessage(cause) });
+        update(providerId, { loading: false, error: providerConnectionErrorMessage(cause) });
         return null;
       }
     },
@@ -71,24 +73,15 @@ export function useProviderConnections(
     async (providerId: ProviderConnectionId, action: ProviderConnectionAction) => {
       update(providerId, { activeAction: action, error: null });
       try {
-        const plan = unwrap(
-          await window.forgeboard.agents.connections.prepare({
-            providerId,
-            action,
-            ...((providerId === 'codex' ? codexOverride : claudeOverride)
-              ? { executableOverride: providerId === 'codex' ? codexOverride : claudeOverride }
-              : {}),
-          }),
-        );
-        activePlans.current.set(providerId, plan.planId);
-        const status = unwrap(
-          await window.forgeboard.agents.connections.confirm({
-            planId: plan.planId,
-          }),
+        const status = await performProviderConnectionAction(
+          providerId,
+          action,
+          providerId === 'codex' ? codexOverride : claudeOverride,
+          (planId) => activePlans.current.set(providerId, planId),
         );
         if (status) update(providerId, { status });
       } catch (cause) {
-        update(providerId, { error: safeMessage(cause) });
+        update(providerId, { error: providerConnectionErrorMessage(cause) });
       } finally {
         activePlans.current.delete(providerId);
         update(providerId, { activeAction: null, loading: false });
@@ -104,15 +97,11 @@ export function useProviderConnections(
       try {
         unwrap(await window.forgeboard.agents.connections.cancel({ planId }));
       } catch (cause) {
-        update(providerId, { error: safeMessage(cause) });
+        update(providerId, { error: providerConnectionErrorMessage(cause) });
       }
     },
     [update],
   );
 
   return { views, load, perform, cancel };
-}
-
-function safeMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : 'The provider connection could not be updated.';
 }

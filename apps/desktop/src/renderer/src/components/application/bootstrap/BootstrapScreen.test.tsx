@@ -25,7 +25,7 @@ describe('BootstrapScreen', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'The local database could not be read.',
     );
-    expect(screen.getByText('Your projects and settings have not been changed.')).toBeTruthy();
+    expect(screen.getByText("Your projects and settings weren't changed.")).toBeTruthy();
     expect(container.querySelector('main')?.getAttribute('aria-busy')).toBe('false');
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));

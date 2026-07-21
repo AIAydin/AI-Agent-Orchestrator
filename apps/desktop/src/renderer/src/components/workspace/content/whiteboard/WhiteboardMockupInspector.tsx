@@ -187,9 +187,8 @@ export function WhiteboardMockupInspector({
           <strong>Agent context</strong>
         </header>
         <p>
-          Create an explicit Context connection. Forgeboard discloses a normalized visual
-          specification before the selected agent starts. Embedded files, data URLs, links,
-          bindings, and opaque custom fields are excluded.
+          Creates an explicit Context connection. You review the visual spec before the agent
+          starts. Embedded files, data URLs, links, bindings, and custom fields are never included.
         </p>
         {agents.length === 0 ? (
           <small>Add and unlock an Agent node to share this whiteboard.</small>

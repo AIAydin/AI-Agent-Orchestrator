@@ -52,9 +52,7 @@ export function PreviewConsole({ session, browserConsole = null }: PreviewConsol
           Older output is hidden to keep this view small.
         </p>
       ) : null}
-      <pre aria-label="Preview console output">
-        {rendered || 'Nothing from the server or the page has been logged yet.'}
-      </pre>
+      <pre aria-label="Preview console output">{rendered || 'Nothing logged yet.'}</pre>
     </details>
   );
 }

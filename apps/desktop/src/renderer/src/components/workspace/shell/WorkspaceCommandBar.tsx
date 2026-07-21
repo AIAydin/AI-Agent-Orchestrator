@@ -1,11 +1,9 @@
 import {
-  Bell,
   ChevronDown,
   CircleDot,
   Command,
   GitCompareArrows,
   Maximize2,
-  Play,
   Redo2,
   Settings,
   Undo2,
@@ -26,12 +24,7 @@ interface WorkspaceCommandBarProps {
   saveState: 'saved' | 'saving' | 'error';
   canUndo: boolean;
   canRedo: boolean;
-  notificationsOpen: boolean;
   workflowStatus: string | null;
-  workflowBusy: boolean;
-  canRunWorkflow: boolean;
-  canRunSelected: boolean;
-  runSelectedReason: string;
   commandPaletteShortcut: string;
   collaborationEnabled: boolean;
   sharingStatus: WorkspaceSharingStatus;
@@ -39,11 +32,8 @@ interface WorkspaceCommandBarProps {
   onUndo: () => void;
   onRedo: () => void;
   onFitCanvas: () => void;
-  onRunWorkflow: () => void;
-  onRunSelected: () => void;
   onOpenGitReview: () => void;
   onOpenCommands: () => void;
-  onToggleNotifications: () => void;
   onOpenSettings: () => void;
 }
 
@@ -55,12 +45,7 @@ export function WorkspaceCommandBar({
   saveState,
   canUndo,
   canRedo,
-  notificationsOpen,
   workflowStatus,
-  workflowBusy,
-  canRunWorkflow,
-  canRunSelected,
-  runSelectedReason,
   commandPaletteShortcut,
   collaborationEnabled,
   sharingStatus,
@@ -68,11 +53,8 @@ export function WorkspaceCommandBar({
   onUndo,
   onRedo,
   onFitCanvas,
-  onRunWorkflow,
-  onRunSelected,
   onOpenGitReview,
   onOpenCommands,
-  onToggleNotifications,
   onOpenSettings,
 }: WorkspaceCommandBarProps) {
   return (
@@ -119,34 +101,6 @@ export function WorkspaceCommandBar({
           <Maximize2 size={16} />
         </button>
       </WorkspaceTooltip>
-      <WorkspaceTooltip
-        content={
-          canRunWorkflow
-            ? 'Run every node in the saved canvas workflow'
-            : 'Add an Agent, Test, Review gate, or Diff/review node before running this canvas'
-        }
-      >
-        <button
-          className="workflow-run-trigger"
-          type="button"
-          aria-label="Run canvas"
-          disabled={workflowBusy || !canRunWorkflow}
-          onClick={onRunWorkflow}
-        >
-          <Play size={13} aria-hidden="true" /> Run canvas
-        </button>
-      </WorkspaceTooltip>
-      <WorkspaceTooltip content={runSelectedReason}>
-        <button
-          className="workflow-run-trigger secondary"
-          type="button"
-          aria-label="Run selected"
-          disabled={workflowBusy || !canRunSelected}
-          onClick={onRunSelected}
-        >
-          <Play size={13} aria-hidden="true" /> Run selected
-        </button>
-      </WorkspaceTooltip>
       <div className="command-spacer" />
       {workflowStatus !== null && (
         <WorkspaceTooltip content={`Workflow: ${workflowStatus}`}>
@@ -175,17 +129,6 @@ export function WorkspaceCommandBar({
             ? 'Saving…'
             : 'Save failed'}
       </span>
-      <div className="agent-activity">
-        <span className="avatar-stack">
-          {agents
-            .filter((agent) => agent.installed)
-            .slice(0, 3)
-            .map((agent) => (
-              <span key={agent.id}>{agent.label[0]}</span>
-            ))}
-        </span>
-        <small>agents on this computer</small>
-      </div>
       <WorkspaceTooltip content="See what changed in this project">
         <button className="command-trigger" type="button" onClick={onOpenGitReview}>
           <GitCompareArrows size={14} /> Changes
@@ -194,20 +137,6 @@ export function WorkspaceCommandBar({
       <button className="command-trigger" type="button" onClick={onOpenCommands}>
         <Command size={14} /> Commands <kbd>{commandPaletteShortcut}</kbd>
       </button>
-      <WorkspaceTooltip content="Local notifications">
-        <button
-          id="workspace-notifications-trigger"
-          className="icon-button"
-          type="button"
-          aria-label="Notifications"
-          aria-expanded={notificationsOpen}
-          aria-haspopup="dialog"
-          aria-controls={notificationsOpen ? 'workspace-notifications' : undefined}
-          onClick={onToggleNotifications}
-        >
-          <Bell size={16} />
-        </button>
-      </WorkspaceTooltip>
       <WorkspaceTooltip content="Open Forgeboard settings">
         <button
           className="icon-button"

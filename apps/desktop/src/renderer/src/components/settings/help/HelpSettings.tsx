@@ -29,9 +29,8 @@ export function HelpSettings({
         <span className="eyebrow">Local guide</span>
         <h3 id="help-settings-title">Help & shortcuts</h3>
         <p>
-          Search step-by-step guides for setting up Forgeboard, running agents, reviewing their
-          work, and recovering when something goes wrong. Everything here works offline and only
-          uses the app — no file editing needed.
+          Step-by-step guides for setup, agents, reviews, and recovery. Everything works offline —
+          no file editing needed.
         </p>
       </header>
 

@@ -310,7 +310,7 @@ describe('DiffReviewNodeInspector', () => {
       />,
     );
 
-    expect(screen.getByText(/role in this shared project lets you view/u)).toBeTruthy();
+    expect(screen.getByText(/Your role can view this review/u)).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'Changes to review' })).toHaveProperty(
       'disabled',
       true,

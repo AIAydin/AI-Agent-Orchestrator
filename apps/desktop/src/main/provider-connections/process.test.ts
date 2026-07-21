@@ -30,6 +30,43 @@ describe('runProviderAuthProcess', () => {
     expect(serialized).not.toContain('provider warning');
   });
 
+  it('classifies Codex auth state printed to stderr, where the codex CLI writes it', async () => {
+    const connected = await runProviderAuthProcess({
+      executable: process.execPath,
+      arguments: ['-e', "process.stderr.write('Logged in using ChatGPT')"],
+      cwd: process.cwd(),
+      environment: { PATH: process.env.PATH ?? '' },
+      timeoutMs: 5_000,
+      statusOutput: 'codex',
+    });
+    expect(connected.providerStatus).toBe('connected');
+
+    const disconnected = await runProviderAuthProcess({
+      executable: process.execPath,
+      arguments: ['-e', "process.stderr.write('Not logged in');process.exit(1)"],
+      cwd: process.cwd(),
+      environment: { PATH: process.env.PATH ?? '' },
+      timeoutMs: 5_000,
+      statusOutput: 'codex',
+    });
+    expect(disconnected.providerStatus).toBe('disconnected');
+  });
+
+  it('prefers the stdout classification when both streams carry status text', async () => {
+    const result = await runProviderAuthProcess({
+      executable: process.execPath,
+      arguments: [
+        '-e',
+        "process.stderr.write('Not logged in');process.stdout.write('Logged in using ChatGPT')",
+      ],
+      cwd: process.cwd(),
+      environment: { PATH: process.env.PATH ?? '' },
+      timeoutMs: 5_000,
+      statusOutput: 'codex',
+    });
+    expect(result.providerStatus).toBe('connected');
+  });
+
   it('recognizes only explicit Codex auth state and cancels a live process', async () => {
     const connected = await runProviderAuthProcess({
       executable: process.execPath,

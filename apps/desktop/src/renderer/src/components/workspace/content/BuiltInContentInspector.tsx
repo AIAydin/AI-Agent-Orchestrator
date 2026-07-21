@@ -292,7 +292,7 @@ function ProductBriefInspector({ node, nodes, onRecord, onUpdate }: BuiltInConte
           <Save size={13} /> Save brief version
         </button>
         {versions.length === 0 ? (
-          <p>No saved versions yet. Your edits are still saved automatically with the canvas.</p>
+          <p>No saved versions yet — edits still auto-save with the canvas.</p>
         ) : (
           <ol>
             {versions

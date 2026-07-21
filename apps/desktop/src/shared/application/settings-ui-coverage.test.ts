@@ -13,6 +13,7 @@ describe('ordinary settings UI coverage', () => {
         .filter((entry) => entry.kind === 'legacy-clear')
         .map((entry) => entry.reason),
     ).toEqual([
+      'Manual is the only supported policy; the UI only offers resetting a legacy value.',
       'Unsupported legacy preference; the UI permits only clearing it.',
       'Automatic downloads are unsupported; the UI permits only clearing the legacy value.',
     ]);

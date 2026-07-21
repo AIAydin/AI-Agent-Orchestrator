@@ -23,7 +23,8 @@ describe('ProjectDialog accessibility', () => {
     expect(screen.getByLabelText('Project name').getAttribute('name')).toBe('project-name');
     expect(screen.getByLabelText('Location').getAttribute('name')).toBe('project-location');
     expect(
-      screen.getByRole('checkbox', { name: /Start a Git repository/ }).getAttribute('name'),
+      screen.getByRole('checkbox', { name: /Start a local Git repository/ }).getAttribute('name'),
     ).toBe('project-initialize-git');
+    expect(screen.getByText(/nothing is published to GitHub/i)).toBeTruthy();
   });
 });

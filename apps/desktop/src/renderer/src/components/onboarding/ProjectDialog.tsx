@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FolderOpen, GitFork, X } from 'lucide-react';
 
 import { unwrap } from '../../lib/ipc.js';
+import { trapModalFocus } from '../../lib/modal-focus.js';
 import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 export type ProjectDialogMode = 'create' | 'clone';
@@ -18,7 +19,32 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
   const [name, setName] = useState('');
   const [remote, setRemote] = useState('');
   const [initializeGit, setInitializeGit] = useState(true);
+  const dialog = useRef<HTMLFormElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   const cloneDestination = location && name ? `${location.replace(/[\\/]$/, '')}/${name}` : '';
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.current?.querySelector<HTMLInputElement>('input')?.focus();
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      const openDialogs = [
+        ...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'),
+      ];
+      if (openDialogs.at(-1) !== dialog.current) return;
+      trapModalFocus(event, dialog.current);
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, []);
 
   async function chooseLocation() {
     const path = unwrap(await window.forgeboard.projects.pickParent());
@@ -41,6 +67,7 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <form
+        ref={dialog}
         className="modal project-dialog"
         role="dialog"
         aria-modal="true"
@@ -56,7 +83,7 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
             <p>
               {mode === 'create'
                 ? 'Set everything up here — no files to edit.'
-                : 'Forgeboard will contact the address below to download the project.'}
+                : 'Forgeboard contacts this address to download the project.'}
             </p>
           </div>
           <WorkspaceTooltip content="Close without creating or cloning a project">
@@ -70,7 +97,6 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
           <label>
             Repository URL
             <input
-              autoFocus
               name="project-remote-url"
               required
               value={remote}
@@ -82,7 +108,6 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
         <label>
           Project name
           <input
-            autoFocus={mode === 'create'}
             name="project-name"
             required
             value={name}
@@ -117,8 +142,11 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
               onChange={(event) => setInitializeGit(event.target.checked)}
             />
             <span>
-              <strong>Start a Git repository</strong>
-              <small>Recommended — lets agents work in separate copies you review.</small>
+              <strong>Start a local Git repository</strong>
+              <small>
+                Creates it only on this device — nothing is published to GitHub. Recommended for
+                separate agent copies you review.
+              </small>
             </span>
           </label>
         ) : (
@@ -126,7 +154,7 @@ export function ProjectDialog({ mode, onClose, onCreate, onClone }: ProjectDialo
             <strong>Before Forgeboard connects</strong>
             <span>Download from: {remote || 'not entered yet'}</span>
             <span>Save to: {cloneDestination || 'not chosen yet'}</span>
-            <span>Forgeboard does not store your passwords or sign-in details.</span>
+            <span>Your passwords and sign-in details are never stored.</span>
           </div>
         )}
 

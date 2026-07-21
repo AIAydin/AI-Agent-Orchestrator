@@ -124,11 +124,11 @@ export function AgentAttemptHistory({
         </div>
       ) : null}
       {!history.loading && history.error === null && history.attempts.length === 0 ? (
-        <p>No attempts have been recorded for this Agent node.</p>
+        <p>No attempts yet.</p>
       ) : null}
       {history.attempts.length > 0 ? (
         <ol aria-label="Agent attempts">
-          {history.attempts.map((attempt) => {
+          {[...history.attempts].reverse().map((attempt) => {
             const agent = agents.find((candidate) => candidate.id === attempt.adapterId);
             const retryReason =
               actionUnavailableReason ??
@@ -150,45 +150,6 @@ export function AgentAttemptHistory({
                     </div>
                     <time dateTime={attempt.createdAt}>{formatTimestamp(attempt.createdAt)}</time>
                   </header>
-                  <dl>
-                    <Meta label="Provider" value={agent?.label ?? attempt.adapterId} />
-                    <Meta label="Model" value={attempt.model ?? 'Provider default'} />
-                    <Meta label="Permission" value={permissionLabel(attempt.permissionProfile)} />
-                    <Meta label="Duration" value={formatDuration(attempt)} />
-                    <Meta label="Branch" value={attempt.branch ?? 'Not reported'} />
-                    <Meta label="Worktree" value={worktreeLabel(attempt)} />
-                    <Meta
-                      label="Exit"
-                      value={attempt.exitCode === null ? 'Not reported' : String(attempt.exitCode)}
-                    />
-                    <Meta
-                      label="Files"
-                      value={
-                        attempt.changedFileCount === null
-                          ? 'Not reported'
-                          : String(attempt.changedFileCount)
-                      }
-                    />
-                    <Meta label="Output digest" value={shortDigest(attempt.outputDigest)} />
-                    {attempt.tokenUsage === null ? (
-                      <Meta label="Tokens" value="Not exposed by provider" />
-                    ) : (
-                      tokenUsageRows(attempt.tokenUsage).map((row) => (
-                        <Meta key={row.label} label={row.label} value={row.value} />
-                      ))
-                    )}
-                    <Meta label="Cost" value={costLabel(attempt.costUsd)} />
-                    <Meta
-                      label="Session"
-                      value={
-                        !attempt.providerSessionAvailable
-                          ? 'Not exposed by provider'
-                          : resumeReason === null
-                            ? `Available for resume review (${resumeSourceLabel(attempt.resumeCapabilitySource)})`
-                            : 'Recorded; resume unavailable for this attempt'
-                      }
-                    />
-                  </dl>
                   {attempt.parentRunId !== null ? (
                     <p className="agent-attempt-lineage">
                       Based on attempt <code>{attempt.parentRunId.slice(0, 8)}</code>
@@ -200,17 +161,61 @@ export function AgentAttemptHistory({
                     </p>
                   ) : null}
                   {attempt.outputPreview.trim() !== '' ? (
-                    <details>
+                    <details className="agent-turn-output" open>
                       <summary>Output preview</summary>
                       <pre>{attempt.outputPreview}</pre>
                     </details>
                   ) : null}
+                  <details className="agent-turn-facts">
+                    <summary>Run details</summary>
+                    <dl>
+                      <Meta label="Provider" value={agent?.label ?? attempt.adapterId} />
+                      <Meta label="Model" value={attempt.model ?? 'Provider default'} />
+                      <Meta label="Permission" value={permissionLabel(attempt.permissionProfile)} />
+                      <Meta label="Duration" value={formatDuration(attempt)} />
+                      <Meta label="Branch" value={attempt.branch ?? 'Not reported'} />
+                      <Meta label="Worktree" value={worktreeLabel(attempt)} />
+                      <Meta
+                        label="Exit"
+                        value={
+                          attempt.exitCode === null ? 'Not reported' : String(attempt.exitCode)
+                        }
+                      />
+                      <Meta
+                        label="Files"
+                        value={
+                          attempt.changedFileCount === null
+                            ? 'Not reported'
+                            : String(attempt.changedFileCount)
+                        }
+                      />
+                      <Meta label="Output digest" value={shortDigest(attempt.outputDigest)} />
+                      {attempt.tokenUsage === null ? (
+                        <Meta label="Tokens" value="Not exposed by provider" />
+                      ) : (
+                        tokenUsageRows(attempt.tokenUsage).map((row) => (
+                          <Meta key={row.label} label={row.label} value={row.value} />
+                        ))
+                      )}
+                      <Meta label="Cost" value={costLabel(attempt.costUsd)} />
+                      <Meta
+                        label="Session"
+                        value={
+                          !attempt.providerSessionAvailable
+                            ? 'Not exposed by provider'
+                            : resumeReason === null
+                              ? `Available for resume review (${resumeSourceLabel(attempt.resumeCapabilitySource)})`
+                              : 'Recorded; resume unavailable for this attempt'
+                        }
+                      />
+                    </dl>
+                  </details>
                   <div className="agent-attempt-actions">
                     <WorkspaceTooltip
                       content={
                         retryReason ??
                         (onRetryAttempt === undefined
-                          ? 'Retry wiring is not available in this build.'
+                          ? "Retry isn't available in this build."
                           : 'Review a fresh retry of this attempt.')
                       }
                     >
@@ -227,8 +232,8 @@ export function AgentAttemptHistory({
                       content={
                         resumeReason ??
                         (onResumeAttempt === undefined
-                          ? 'Resume wiring is not available in this build.'
-                          : 'Review a continuation from this interrupted attempt.')
+                          ? "Resume isn't available in this build."
+                          : 'Review a continuation of this attempt.')
                       }
                     >
                       <button
@@ -243,12 +248,12 @@ export function AgentAttemptHistory({
                     <WorkspaceTooltip
                       content={
                         attempt.supersededByNewerAttempt
-                          ? 'A newer resumed attempt owns this worktree authority.'
+                          ? 'A newer resume owns this worktree.'
                           : !attempt.worktreeAvailable
                             ? 'This attempt no longer has an available worktree.'
                             : onReviewAttempt === undefined
-                              ? 'Worktree review wiring is not available in this build.'
-                              : 'Review the changes in this attempt workspace.'
+                              ? "Worktree review isn't available in this build."
+                              : "Review this attempt's changes."
                       }
                     >
                       <button
@@ -281,10 +286,7 @@ export function AgentAttemptHistory({
                         Branch <code>{restorePlan.plan.branch}</code> and all files, commits, and{' '}
                         {restorePlan.plan.dirtyPathCount} uncommitted path(s) stay unchanged.
                       </p>
-                      <p>
-                        A native confirmation will revalidate the exact Git state before restoring
-                        access.
-                      </p>
+                      <p>A native confirmation re-checks the exact Git state first.</p>
                       <div className="agent-attempt-actions">
                         <button
                           type="button"

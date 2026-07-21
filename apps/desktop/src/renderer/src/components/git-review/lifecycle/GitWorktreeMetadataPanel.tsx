@@ -74,11 +74,11 @@ export function GitWorktreeMetadataPanel({
           <p>
             {plan.kind === 'rename-worktree-branch'
               ? `${displayEscapedText(plan.branch)} → ${displayEscapedText(plan.newBranch)}`
-              : `${displayEscapedText(plan.branch)} will be hidden from active Git actions; its folder and branch are retained.`}
+              : `${displayEscapedText(plan.branch)} will be hidden from active Git actions. Its folder and branch are kept.`}
           </p>
           <small>
-            {plan.dirtyPathCount} uncommitted path{plan.dirtyPathCount === 1 ? '' : 's'} will be
-            retained. A native, cancel-default confirmation follows.
+            {plan.dirtyPathCount} uncommitted path{plan.dirtyPathCount === 1 ? '' : 's'} kept. Your
+            computer will ask you to confirm — cancel is the default.
           </small>
           <div>
             <button className="button" type="button" disabled={busy} onClick={onCancelPlan}>

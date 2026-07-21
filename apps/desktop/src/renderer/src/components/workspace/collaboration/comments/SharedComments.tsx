@@ -50,7 +50,7 @@ export function SharedComments({
       </header>
       {visible.length === 0 ? (
         <p className="shared-comments-empty">
-          No comments yet. Anything shared here is visible to everyone working on this canvas.
+          No comments yet. Everything here is visible to everyone on this canvas.
         </p>
       ) : (
         <ol>
@@ -74,8 +74,8 @@ export function SharedComments({
         <aside className="shared-comments-rejected" aria-label="Comments not shared">
           <strong>Not shared</strong>
           <p>
-            These comments could not be shared. Their exact text is saved on this device, so you can
-            review it and try again.
+            These comments couldn't be shared. Their text is saved on this device so you can try
+            again.
           </p>
           <ol>
             {rejectedCommentEntries.slice(-MAX_RENDERED_COMMENTS).map((entry) => {
@@ -109,8 +109,7 @@ export function SharedComments({
             />
           </label>
           <small>
-            Visible to everyone sharing this canvas. Do not include passwords, keys, or other
-            private details.
+            Visible to everyone on this canvas. Don't include passwords, keys, or other secrets.
           </small>
           <button className="button" type="submit" disabled={busy || body.trim() === ''}>
             {busy ? 'Sharing…' : 'Share comment'}
@@ -120,7 +119,7 @@ export function SharedComments({
         <p className="shared-comments-empty">You can read comments, but you cannot add them.</p>
       ) : (
         <p className="shared-comments-empty">
-          Sharing is off. Shared comments are optional; private comments above stay on this device.
+          Sharing is off. Private comments above stay on this device.
         </p>
       )}
     </section>

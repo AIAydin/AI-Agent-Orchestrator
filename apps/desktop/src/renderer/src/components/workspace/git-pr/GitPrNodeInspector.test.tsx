@@ -242,7 +242,7 @@ describe('GitPrNodeInspector', () => {
       />,
     );
     dialog = screen.getByRole('alertdialog', { name: 'Review the pull request' });
-    expect(within(dialog).getByText(/commits pushed later can change/iu)).toBeTruthy();
+    expect(within(dialog).getByText(/commits pushed later change/iu)).toBeTruthy();
     expectText(dialog, 'example/forgeboard', 'Ship remote delivery', 'Exact evidence', 'Draft');
     expectText(
       within(dialog).getByRole('region', { name: 'Commits and changed files' }),
@@ -309,7 +309,7 @@ describe('GitPrNodeInspector', () => {
         controller={controller}
       />,
     );
-    expect(screen.getByText(/role in this shared project lets you view/u)).toBeTruthy();
+    expect(screen.getByText(/Your role can view these publish settings/u)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Review push' })).toHaveProperty('disabled', true);
   });
 

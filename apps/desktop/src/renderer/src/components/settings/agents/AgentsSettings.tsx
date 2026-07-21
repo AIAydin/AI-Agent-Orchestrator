@@ -12,6 +12,7 @@ import type { CommandReadinessStatus } from '../../configuration/useCommandReadi
 import type { DockerReadinessEvidence } from '../../docker/readiness-evidence.js';
 import { AgentReadinessPanel } from '../../readiness/AgentReadinessPanel.js';
 import { permissionProfileNeedsDocker } from '../../permissions/permission-profile-ui.js';
+import { AgentDefaultModelField } from '../fields/AgentDefaultModelField.js';
 import { CustomAgentSettings } from './CustomAgentSettings.js';
 import { DockerSettings } from './DockerSettings.js';
 import { ProviderConnectionCards } from './connections/index.js';
@@ -68,6 +69,7 @@ export function AgentsSettings({
             />
             <button
               type="button"
+              disabled={busy}
               onClick={() =>
                 void perform(async () => {
                   const selected = unwrap(await window.forgeboard.projects.pickExecutable());
@@ -87,23 +89,20 @@ export function AgentsSettings({
             </button>
           </span>
         </div>
-        <label>
-          Default model (optional)
-          <input
-            name={`agent-${agentId}-default-model`}
-            value={draft.agentDefaultModels[agentId] ?? ''}
-            placeholder="Leave blank for the tool's usual model"
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                agentDefaultModels: {
-                  ...draft.agentDefaultModels,
-                  [agentId]: event.target.value,
-                },
-              })
-            }
-          />
-        </label>
+        <AgentDefaultModelField
+          agentId={agentId}
+          name={`agent-${agentId}-default-model`}
+          value={draft.agentDefaultModels[agentId] ?? ''}
+          onChange={(model) =>
+            setDraft({
+              ...draft,
+              agentDefaultModels: {
+                ...draft.agentDefaultModels,
+                [agentId]: model,
+              },
+            })
+          }
+        />
         {entry && (
           <AgentReadinessPanel
             agent={entry.agent}
@@ -130,8 +129,8 @@ export function AgentsSettings({
   return (
     <>
       <SettingsSection
-        title="Provider connections"
-        description="Use the official provider sign-in without API keys, environment variables, or code configuration."
+        title="Coding agents"
+        description="Connect and check every agent in one place. Sign-in stays with each provider — Forgeboard never handles accounts or keys."
       >
         <ProviderConnectionCards
           executableOverrides={{
@@ -152,11 +151,6 @@ export function AgentsSettings({
             claude: providerAdvanced('claude'),
           }}
         />
-      </SettingsSection>
-      <SettingsSection
-        title="Installed tools"
-        description="Forgeboard checks for bundled, custom, Gemini, and OpenCode tools on this computer. It never handles their accounts or sign-in details."
-      >
         <div className="agent-grid">
           {agents
             .filter((agent) => agent.id !== 'codex' && agent.id !== 'claude')
@@ -224,6 +218,7 @@ export function AgentsSettings({
                             />
                             <button
                               type="button"
+                              disabled={busy}
                               onClick={() =>
                                 void perform(async () => {
                                   const selected = unwrap(
@@ -245,23 +240,20 @@ export function AgentsSettings({
                             </button>
                           </span>
                         </div>
-                        <label>
-                          Default model (optional)
-                          <input
-                            name={`agent-${agent.id}-default-model`}
-                            value={draft.agentDefaultModels[agent.id] ?? ''}
-                            placeholder="Leave blank for the tool's usual model"
-                            onChange={(event) =>
-                              setDraft({
-                                ...draft,
-                                agentDefaultModels: {
-                                  ...draft.agentDefaultModels,
-                                  [agent.id]: event.target.value,
-                                },
-                              })
-                            }
-                          />
-                        </label>
+                        <AgentDefaultModelField
+                          agentId={agent.id}
+                          name={`agent-${agent.id}-default-model`}
+                          value={draft.agentDefaultModels[agent.id] ?? ''}
+                          onChange={(model) =>
+                            setDraft({
+                              ...draft,
+                              agentDefaultModels: {
+                                ...draft.agentDefaultModels,
+                                [agent.id]: model,
+                              },
+                            })
+                          }
+                        />
                       </div>
                     )}
                 </div>
@@ -307,7 +299,7 @@ export function AgentsSettings({
             providerStatuses[draft.defaultAgent]?.state !== 'connected' && (
               <small role="status">
                 Connect {draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} above before
-                saving it as the normal default, or choose the local test agent.
+                saving it as the default, or choose the local test agent.
               </small>
             )}
         </label>
@@ -367,7 +359,7 @@ export function AgentsSettings({
               Custom
             </option>
           </select>
-          <small>Set up the Custom profile in the Permissions centre. No config file needed.</small>
+          <small>Set up the Custom profile in the Permissions centre.</small>
         </label>
         <EnvironmentAllowlistEditor
           name="process-environment-allowlist"
@@ -377,7 +369,7 @@ export function AgentsSettings({
       </SettingsSection>
       <SettingsSection
         title="How terminals start"
-        description="Choose the exact program new Terminal nodes use. Forgeboard checks it without running it and never builds a shell command on its own."
+        description="The exact program new Terminal nodes use. Forgeboard checks it without running it and never builds shell commands on its own."
       >
         <div className="settings-form-field">
           <label htmlFor="terminal-shell">Default terminal executable</label>
@@ -410,8 +402,8 @@ export function AgentsSettings({
             </button>
           </span>
           <small id="terminal-shell-help">
-            Use an absolute path or installed command name. Existing Terminal nodes keep their own
-            reviewed executable; this default applies to newly created nodes.
+            Use an absolute path or installed command name. Applies to new Terminal nodes only —
+            existing ones keep their reviewed executable.
           </small>
           <CommandReadinessEvidence status={terminalReadiness} />
         </div>

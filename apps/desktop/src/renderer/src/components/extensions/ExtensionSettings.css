@@ -140,7 +140,7 @@
   place-items: center;
   border-radius: 8px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .extension-card > header > div {
@@ -231,7 +231,7 @@
   padding: 5px 0;
   border: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-strong);
   font-size: var(--text-sm);
 }
 
@@ -467,7 +467,7 @@
 }
 
 .extension-review-section summary {
-  color: var(--accent);
+  color: var(--accent-strong);
   font-size: var(--text-sm);
   cursor: pointer;
 }

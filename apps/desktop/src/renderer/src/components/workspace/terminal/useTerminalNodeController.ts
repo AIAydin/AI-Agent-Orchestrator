@@ -369,7 +369,7 @@ export function useTerminalNodeController({
       const backlog = eventBacklogRef.current.get(launched.id) ?? [];
       eventBacklogRef.current.delete(launched.id);
       setOutput(backlog);
-      setNotice('Terminal started after both review steps.');
+      setNotice('Terminal started.');
       await loadReplay(acceptedSession);
     } catch (cause) {
       setPendingPlanState(null);

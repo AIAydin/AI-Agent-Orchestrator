@@ -37,7 +37,11 @@ export function CommandReadinessEvidence({
       className={`command-readiness-evidence ${result.warning ? 'partial' : 'ready'}`}
       role="status"
     >
-      <CheckCircle2 size={13} aria-hidden="true" />
+      {result.warning ? (
+        <AlertTriangle size={13} aria-hidden="true" />
+      ) : (
+        <CheckCircle2 size={13} aria-hidden="true" />
+      )}
       {result.warning ??
         `${result.projectName ? 'Executable and package context' : 'Executable'} ready; the command was not run.`}
     </span>

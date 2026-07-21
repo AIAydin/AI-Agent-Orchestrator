@@ -1,14 +1,17 @@
 .workspace-project-tree {
   display: grid;
+  /* minmax(0, 1fr) + min-width guards keep any child's intrinsic width (long
+     agent titles in the attach select, long file names) from pushing the whole
+     section wider than the rail. */
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
   gap: 8px;
   padding: 10px 12px 12px;
   border-bottom: 1px solid var(--line);
 }
 
 .workspace-project-tree > header,
-.workspace-project-tree > header > div,
-.workspace-project-tree > nav,
-.workspace-project-tree > nav > span,
 .workspace-project-tree footer {
   display: flex;
   align-items: center;
@@ -19,6 +22,8 @@
 }
 
 .workspace-project-tree > header > div {
+  display: flex;
+  min-width: 0;
   align-items: flex-start;
   flex-direction: column;
   gap: 2px;
@@ -33,6 +38,13 @@
 .workspace-project-tree-list > p {
   color: var(--text-faint);
   font-size: var(--text-xs);
+}
+
+.workspace-project-tree > header span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-project-tree > header button {
@@ -62,71 +74,76 @@
   font-size: var(--text-sm);
 }
 
-.workspace-project-tree > nav {
-  min-width: 0;
-  gap: 2px;
-  overflow-x: auto;
-}
-
-.workspace-project-tree > nav > span {
-  flex: 0 0 auto;
-  gap: 2px;
-}
-
-.workspace-project-tree > nav button {
-  padding: 2px 4px;
-  border: 0;
-  background: transparent;
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-}
-
 .workspace-project-tree-list {
   display: grid;
-  max-height: 220px;
+  align-content: start;
+  min-height: 72px;
+  max-height: 292px;
   overflow-y: auto;
 }
 
-.workspace-project-tree-list > button,
-.workspace-project-tree-list > div {
+.workspace-project-tree-list > .workspace-tooltip-target {
+  display: flex;
+  min-width: 0;
+}
+
+.workspace-project-tree-list > .workspace-tooltip-target > .workspace-project-tree-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.workspace-project-tree-row {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: 14px 16px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 5px;
-  min-height: 30px;
-  padding: 5px 6px;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px 0 4px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text);
+  font-size: var(--text-xs);
   text-align: left;
 }
 
-.workspace-project-tree-list > button[draggable='true'] {
+.workspace-project-tree-row[draggable='true'] {
   cursor: grab;
 }
 
-.workspace-project-tree-list > button:hover:not(:disabled),
-.workspace-project-tree-list > button[aria-selected='true'],
-.workspace-project-tree-list > button[draggable='true']:hover,
-.workspace-project-tree-list > button[draggable='true']:focus-visible {
+.workspace-project-tree-row:hover:not(:disabled),
+.workspace-project-tree-row[aria-selected='true'],
+.workspace-project-tree-row:focus-visible {
   background: var(--surface-subtle);
 }
 
-.workspace-project-tree-list span {
+.workspace-project-tree-row > span {
   overflow: hidden;
-  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.workspace-project-tree-list em {
-  color: var(--text-faint);
-  font-size: var(--text-2xs);
-  font-style: normal;
+.workspace-project-tree-gutter {
+  width: 13px;
+  height: 13px;
 }
 
-.workspace-project-tree-list [aria-disabled='true'] {
+.workspace-project-tree-chevron {
+  color: var(--text-soft);
+}
+
+.workspace-project-tree-chevron.open {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-project-tree-chevron {
+    transition: transform 120ms ease;
+  }
+}
+
+.workspace-project-tree-row[aria-disabled='true'],
+.workspace-project-tree-row:disabled {
   color: var(--text-faint);
   opacity: 0.78;
 }
@@ -141,6 +158,8 @@
 
 .workspace-project-tree-attach {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 6px;
   padding: 8px;
   border: 1px solid var(--line);
@@ -157,7 +176,9 @@
 
 .workspace-project-tree-attach select,
 .workspace-project-tree-attach button {
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
   min-height: 30px;
   font-size: var(--text-xs);
 }

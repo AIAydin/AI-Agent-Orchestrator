@@ -32,7 +32,7 @@ export function NodeRunHistory({ nodeId, executions }: NodeRunHistoryProps) {
       </header>
       {entries.length === 0 ? (
         <p className="node-run-history-empty" role="status">
-          This node has not participated in a saved workflow run yet.
+          No saved workflow runs for this node yet.
         </p>
       ) : (
         <ol>

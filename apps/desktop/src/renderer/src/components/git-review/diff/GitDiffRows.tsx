@@ -107,6 +107,7 @@ function UnifiedDiffTable({
                 />
                 <td aria-hidden="true">{linePrefix(line)}</td>
                 <td>
+                  <LineChangeLabel kind={line.kind} />
                   <DiffCode line={line} showWhitespace={showWhitespace} />
                 </td>
               </tr>
@@ -235,6 +236,7 @@ function SplitDiffCell({
       </td>
       <td className={`git-split-content ${side} ${line.kind}`}>
         <span aria-hidden="true">{linePrefix(line)}</span>
+        <LineChangeLabel kind={line.kind} />
         <DiffCode line={line} showWhitespace={showWhitespace} />
       </td>
     </>
@@ -370,6 +372,12 @@ function DiffCode({ line, showWhitespace }: { line: GitDiffLineView; showWhitesp
       {content || ' '}
     </code>
   );
+}
+
+function LineChangeLabel({ kind }: { kind: GitDiffLineView['kind'] }) {
+  if (kind === 'addition') return <span className="sr-only">{'Added: '}</span>;
+  if (kind === 'deletion') return <span className="sr-only">{'Removed: '}</span>;
+  return null;
 }
 
 function linePrefix(line: GitDiffLineView): string {

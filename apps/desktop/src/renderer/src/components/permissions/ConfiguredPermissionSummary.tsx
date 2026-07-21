@@ -65,8 +65,8 @@ export function ConfiguredPermissionSummary({
 function DockerPreflightNotice() {
   return (
     <small>
-      “Review &amp; run” uses Docker only to check basic engine and image details. Nothing starts
-      inside Docker until you approve the exact launch.
+      “Review &amp; run” only checks basic engine and image details. Nothing starts inside Docker
+      until you approve the exact launch.
     </small>
   );
 }

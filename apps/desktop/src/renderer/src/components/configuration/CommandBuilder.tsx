@@ -56,7 +56,7 @@ export function CommandBuilder({
             <button
               type="button"
               disabled={busy}
-              aria-label={compact ? `Browse executable for ${label}` : undefined}
+              aria-label={`Browse executable for ${label}`}
               onClick={onBrowse}
             >
               Browse

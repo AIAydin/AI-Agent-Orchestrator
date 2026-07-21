@@ -91,7 +91,7 @@
 
 .check-settings-adopt {
   flex: 0 0 auto;
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .check-settings .command-editor {

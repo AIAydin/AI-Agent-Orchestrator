@@ -56,10 +56,14 @@ export function AgentReadinessPanel({
   }
 
   return (
-    <section className={`agent-readiness ${ready ? 'ready' : 'attention'}`} aria-live="polite">
+    <section className={`agent-readiness ${ready ? 'ready' : 'attention'}`}>
       <header>
         <span>
-          {ready ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+          {ready ? (
+            <CheckCircle2 size={15} aria-hidden="true" />
+          ) : (
+            <AlertTriangle size={15} aria-hidden="true" />
+          )}
           <strong>
             {ready ? `${statusSubject} is ready` : `${statusSubject} needs attention`}
           </strong>
@@ -70,27 +74,29 @@ export function AgentReadinessPanel({
           onClick={() => void refresh()}
           aria-label={`Check ${label} again`}
         >
-          <RefreshCw className={checking ? 'spin' : ''} size={13} />
+          <RefreshCw className={checking ? 'spin' : ''} size={13} aria-hidden="true" />
           {checking ? 'Checking…' : 'Check again'}
         </button>
       </header>
 
-      {draft.issue !== null ? (
-        <p role="alert">{draft.issue}</p>
-      ) : result !== null ? (
-        <ReadinessResult result={result} />
-      ) : launchReady ? (
-        <p>
-          Found when Forgeboard opened: version <code>{agent?.version}</code>. Select “Check again”
-          to re-check the current program — nothing is saved.
-        </p>
-      ) : (
-        <p>
-          {agent?.installed
-            ? 'The program was found, but its version has not been checked yet.'
-            : 'No usable program was found. Use Browse to find it, or install the tool and then check again.'}
-        </p>
-      )}
+      <div aria-live="polite">
+        {draft.issue !== null ? (
+          <p role="alert">{draft.issue}</p>
+        ) : result !== null ? (
+          <ReadinessResult result={result} />
+        ) : launchReady ? (
+          <p>
+            Found when Forgeboard opened: version <code>{agent?.version}</code>. “Check again”
+            re-checks the current program — nothing is saved.
+          </p>
+        ) : (
+          <p>
+            {agent?.installed
+              ? 'The program was found, but its version has not been checked yet.'
+              : 'No usable program was found. Use Browse to find it, or install the tool and then check again.'}
+          </p>
+        )}
+      </div>
       {!ready && <p>{agentDependencyGuidance(agent, draft.request?.agentId ?? 'custom')}</p>}
       {checkReadiness === undefined && (
         <p className="agent-readiness-unavailable" role="status">
@@ -99,8 +105,8 @@ export function AgentReadinessPanel({
         </p>
       )}
       <small>
-        This asks the agent for its version and capabilities using your current, unsaved settings.
-        Nothing is saved and no agent run starts.
+        Asks the agent for its version using your current, unsaved settings. Nothing is saved and no
+        run starts.
       </small>
     </section>
   );

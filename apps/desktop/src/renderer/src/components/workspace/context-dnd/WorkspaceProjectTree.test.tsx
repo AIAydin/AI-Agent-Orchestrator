@@ -12,23 +12,55 @@ const PROJECT_ID = '00000000-0000-4000-8000-000000000001';
 afterEach(cleanup);
 
 describe('WorkspaceProjectTree', () => {
-  it('drags only normal openable regular files with no absolute path or content', async () => {
-    const tree = projectTreeOperation();
+  it('expands and collapses folders in place without leaving the tree', async () => {
     render(
       <WorkspaceProjectTree
         projectId={PROJECT_ID}
         operations={{
-          tree,
+          tree: projectTreeOperation(),
           search: vi.fn(),
           read: vi.fn(),
         }}
       />,
     );
 
-    fireEvent.click(await screen.findByRole('treeitem', { name: 'Open folder src' }));
-    const safe = await screen.findByRole('treeitem', {
-      name: 'File src/index.ts',
+    const folder = await screen.findByRole('treeitem', {
+      name: 'Expand folder src',
     });
+    expect(folder.getAttribute('aria-expanded')).toBe('false');
+    expect(folder.getAttribute('aria-level')).toBe('1');
+    expect(screen.queryByRole('treeitem', { name: 'File src/index.ts' })).toBeNull();
+
+    fireEvent.click(folder);
+    const opened = screen.getByRole('treeitem', {
+      name: 'Collapse folder src',
+    });
+    expect(opened.getAttribute('aria-expanded')).toBe('true');
+    const child = screen.getByRole('treeitem', { name: 'File src/index.ts' });
+    expect(child.getAttribute('aria-level')).toBe('2');
+
+    fireEvent.keyDown(opened, { key: 'ArrowLeft' });
+    expect(screen.queryByRole('treeitem', { name: 'File src/index.ts' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('treeitem', { name: 'Expand folder src' }), {
+      key: 'ArrowRight',
+    });
+    expect(screen.getByRole('treeitem', { name: 'File src/index.ts' })).toBeTruthy();
+  });
+
+  it('drags only normal openable regular files with no absolute path or content', async () => {
+    render(
+      <WorkspaceProjectTree
+        projectId={PROJECT_ID}
+        operations={{
+          tree: projectTreeOperation(),
+          search: vi.fn(),
+          read: vi.fn(),
+        }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'Expand folder src' }));
+    const safe = screen.getByRole('treeitem', { name: 'File src/index.ts' });
     expect(safe.getAttribute('draggable')).toBe('true');
     expect(safe.getAttribute('aria-describedby')).toBe(
       screen.getByRole('tooltip', {
@@ -46,9 +78,9 @@ describe('WorkspaceProjectTree', () => {
     });
     expect(transfer.getData(WORKSPACE_CONTEXT_DRAG_MIME)).not.toContain('/tmp/project');
     expect(transfer.getData(WORKSPACE_CONTEXT_DRAG_MIME)).not.toContain('file bytes');
-    fireEvent.click(screen.getByRole('button', { name: 'Go to folder .' }));
+
     const protectedEntry = screen.getByRole('treeitem', {
-      name: 'Protected file .env',
+      name: 'Protected file .env (Sensitive)',
     });
     expect(protectedEntry.getAttribute('draggable')).toBe('false');
     expect(protectedEntry.getAttribute('aria-describedby')).toBe(
@@ -68,22 +100,39 @@ describe('WorkspaceProjectTree', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Search project files' }), {
       target: { value: 'index' },
     });
-    expect(
-      await screen.findByRole('treeitem', {
-        name: 'File src/index.ts',
-      }),
-    ).toBeTruthy();
+    expect(await screen.findByRole('treeitem', { name: 'File src/index.ts' })).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox', { name: 'Search project files' }), {
       target: { value: 'env' },
     });
-    expect(screen.getByRole('treeitem', { name: 'Protected file .env' })).toBeTruthy();
-    expect(
-      screen.queryByRole('treeitem', {
-        name: 'File src/index.ts',
-      }),
-    ).toBeNull();
+    expect(screen.getByRole('treeitem', { name: 'Protected file .env (Sensitive)' })).toBeTruthy();
+    expect(screen.queryByRole('treeitem', { name: 'File src/index.ts' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh project files' }));
     await waitFor(() => expect(tree).toHaveBeenCalledTimes(4));
+  });
+
+  it('reveals a folder from search results by expanding it in the tree', async () => {
+    render(
+      <WorkspaceProjectTree
+        projectId={PROJECT_ID}
+        operations={{
+          tree: projectTreeOperation(),
+          search: vi.fn(),
+          read: vi.fn(),
+        }}
+      />,
+    );
+    await screen.findByRole('treeitem', { name: 'Expand folder src' });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search project files' }), {
+      target: { value: 'src' },
+    });
+    fireEvent.click(screen.getByRole('treeitem', { name: 'Expand folder src' }));
+    expect(
+      screen.getByRole<HTMLInputElement>('textbox', { name: 'Search project files' }).value,
+    ).toBe('');
+    expect(
+      screen.getByRole('treeitem', { name: 'Collapse folder src' }).getAttribute('aria-expanded'),
+    ).toBe('true');
+    expect(screen.getByRole('treeitem', { name: 'File src/index.ts' })).toBeTruthy();
   });
 });
 

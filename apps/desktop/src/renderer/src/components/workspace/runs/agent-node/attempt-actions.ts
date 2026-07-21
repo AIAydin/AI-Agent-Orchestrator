@@ -30,7 +30,7 @@ export function continuationUnavailableReason(
     return 'Restore this attempt’s adapter, model, and permission profile before continuing it.';
   }
   if (attempt.supersededByNewerAttempt) {
-    return 'A newer resumed attempt already owns this continuation target.';
+    return 'A newer resumed attempt already continued this one.';
   }
   if (action === 'retry') {
     return RETRYABLE_STATUSES.has(attempt.status)
@@ -38,13 +38,13 @@ export function continuationUnavailableReason(
       : 'Only a failed, interrupted, terminated, or lost attempt can be retried.';
   }
   if (attempt.status !== 'interrupted') {
-    return 'Only an interrupted provider attempt can be resumed.';
+    return 'Only an interrupted attempt can be resumed.';
   }
   if (!attempt.providerSessionAvailable || !attempt.resumeSupported) {
-    return 'This attempt did not expose both a provider session and declared or probed resume support.';
+    return "This attempt didn't leave a provider session that supports resume.";
   }
   if (attempt.worktreeState !== 'none' && !attempt.worktreeAvailable) {
-    return 'The saved worktree authority is no longer available for resume.';
+    return 'This attempt’s saved worktree is no longer available for resume.';
   }
   return null;
 }

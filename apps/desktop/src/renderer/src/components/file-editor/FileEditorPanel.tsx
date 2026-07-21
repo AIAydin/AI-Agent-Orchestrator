@@ -171,14 +171,14 @@ export function FileEditorPanel({
         {editor.status === 'missing' ? (
           <FileEditorFailure
             title="File not found"
-            detail="This file no longer exists in the project folder. It may have been moved or deleted."
+            detail="This file no longer exists — it may have been moved or deleted."
             onRetry={editor.retry}
           />
         ) : null}
         {editor.status === 'error' ? (
           <FileEditorFailure
             title="Couldn't open this file"
-            detail="Something went wrong while opening this file. Try again."
+            detail="Something went wrong while opening this file."
             onRetry={editor.retry}
           />
         ) : null}

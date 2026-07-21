@@ -49,9 +49,9 @@ export function RemoteConnections({
         <div>
           <h4 id="git-connections-remotes-title">Project remotes</h4>
           <p>
-            A remote is a saved address for a place where this project's code is stored — for
-            example, a GitHub repository. These controls only edit Git settings on this computer;
-            they do not download, upload, or sign in.
+            A remote is a saved address for where this project's code is stored — for example, a
+            GitHub repository. These controls only edit Git settings on this computer; nothing is
+            downloaded, uploaded, or signed in.
           </p>
         </div>
         <button
@@ -142,14 +142,26 @@ export function RemoteConnections({
               placeholder="https://github.com/owner/repository.git"
               value={networkUrl}
               aria-invalid={networkUrl !== '' && !urlValid}
+              aria-describedby={
+                networkUrl !== '' && !urlValid ? 'git-connection-network-url-error' : undefined
+              }
               onChange={(event) => setNetworkUrl(event.target.value)}
             />
+            {networkUrl !== '' && !urlValid ? (
+              <small
+                id="git-connection-network-url-error"
+                className="git-connections-field-error"
+                role="alert"
+              >
+                Use a full HTTPS or SSH Git address without a password or token, such as
+                https://github.com/owner/repository.git or git@github.com:owner/repository.git.
+              </small>
+            ) : null}
           </label>
         </div>
         <small>
-          Use an HTTPS or SSH address without a password or token in it. To use a folder on this
-          computer instead, choose the folder button — its path stays private, and your computer
-          will ask you to confirm.
+          Use an HTTPS or SSH address without a password or token in it. For a folder on this
+          computer, use the folder button — its path stays private and you confirm first.
         </small>
         <div className="git-connections-actions">
           <button

@@ -150,17 +150,16 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
       {props.locked && (
         <p className="node-lock-notice" role="status">
           <Lock size={13} aria-hidden="true" />
-          This node is locked. Its target and display settings can&apos;t change, but you can still
-          open the review if it&apos;s available. Anything that changes files needs its own
-          approval.
+          This node is locked — settings can&apos;t change, but you can still open the review.
+          Anything that changes files needs its own approval.
         </p>
       )}
 
       {!props.locked && props.configurationReadOnly && (
         <p className="node-lock-notice" role="status">
           <Lock size={13} aria-hidden="true" />
-          Your role in this shared project lets you view this review, but not change its shared
-          target or display settings. Display changes made in the review dialog stay on this device.
+          Your role can view this review, but not change its shared settings. Display changes in the
+          review dialog stay on this device.
         </p>
       )}
 
@@ -212,9 +211,8 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
             ))}
           </select>
           <small id={`node-${props.nodeId}-diff-review-target-description`}>
-            The list shows finished agent runs whose project copy is still available or whose
-            cleanup was interrupted. Forgeboard checks the exact run before opening it; a run that
-            needs cleanup can only be opened for cleanup recovery.
+            Finished agent runs whose project copy is still available. Forgeboard checks the exact
+            run before opening; interrupted cleanups open in recovery only.
           </small>
         </label>
 
@@ -253,9 +251,7 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
             />
             <span>
               Show spaces and tabs
-              <small>
-                This only changes how the diff looks; it never hides or deletes changes.
-              </small>
+              <small>Display only — it never hides or deletes changes.</small>
             </span>
           </label>
         </div>
@@ -274,9 +270,8 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
 
       {cleanupRecovery && (
         <p className="diff-review-state warning" role="status">
-          <TriangleAlert size={14} aria-hidden="true" /> Cleanup was interrupted for this run. Its
-          changes can&apos;t be reviewed, but you can open cleanup recovery to finish cleaning up
-          safely.
+          <TriangleAlert size={14} aria-hidden="true" /> Cleanup was interrupted for this run. Open
+          cleanup recovery to finish safely — its changes can&apos;t be reviewed.
         </p>
       )}
 
@@ -293,8 +288,7 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         !summaryMatches && (
           <p className="diff-review-state warning" role="status">
             <TriangleAlert size={14} aria-hidden="true" />
-            The summary belongs to a different target, so it isn&apos;t shown. Open this target to
-            see its current state.
+            The summary belongs to a different target, so it isn&apos;t shown here.
           </p>
         )}
 
@@ -307,8 +301,7 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         runs.length === 0 &&
         !targetIsUnlisted && (
           <p className="diff-review-empty-state">
-            No recent agent runs can be reviewed. Finish an agent run first — the main project
-            folder is always available.
+            No recent agent runs can be reviewed yet. The main project folder is always available.
           </p>
         )}
 
@@ -341,8 +334,8 @@ export function DiffReviewNodeInspector(props: DiffReviewNodeInspectorProps) {
         Refresh summary
       </button>
       <small className="diff-review-boundary-note">
-        This node saves only your chosen target and display settings. Forgeboard finds and checks
-        the real folders every time.
+        Only your target and display settings are saved. Forgeboard re-checks the real folders every
+        time.
       </small>
     </section>
   );

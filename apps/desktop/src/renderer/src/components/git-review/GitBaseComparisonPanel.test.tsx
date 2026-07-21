@@ -53,7 +53,7 @@ describe('GitBaseComparisonPanel', () => {
     );
 
     expect(screen.getByText('No committed changes to compare')).toBeTruthy();
-    expect(screen.getByText(/not committed yet is in the other tab/)).toBeTruthy();
+    expect(screen.getByText(/Uncommitted work is in the other tab/)).toBeTruthy();
   });
 
   it('does not advertise unavailable whole-file actions for a read-only binary comparison', () => {

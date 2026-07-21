@@ -119,10 +119,7 @@ export function GitAgentComparisonPanel({
       <header className="git-agent-comparison-controls">
         <span>
           <strong>Compare committed code from two agents</strong>
-          <small>
-            Forgeboard resolves both saved runs to their owned worktrees. No folder or Git ref comes
-            from this screen.
-          </small>
+          <small>Forgeboard resolves both runs to their own saved worktrees.</small>
         </span>
         <label>
           Other agent run
@@ -197,8 +194,7 @@ export function GitAgentComparisonPanel({
             aheadLabel: 'Only in right agent',
             behindLabel: 'Only in left agent',
             filesLabel: 'Code changed between agents',
-            emptyDescription:
-              'Both agent worktrees point to committed trees with the same content.',
+            emptyDescription: 'Both agents have committed the same content.',
           }}
           {...(displayPreferences === undefined ? {} : { displayPreferences })}
           {...(onDisplayPreferencesChange === undefined ? {} : { onDisplayPreferencesChange })}

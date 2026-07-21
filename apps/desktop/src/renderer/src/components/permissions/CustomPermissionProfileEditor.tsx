@@ -202,10 +202,9 @@ export function CustomPermissionProfileEditor({
         </div>
         <p className="permission-caution">
           <AlertTriangle size={15} aria-hidden="true" />
-          When allowed, the agent can open these files itself if they're already in its worktree;
-          Docker doesn't need a separate approval for that direct read. Forgeboard still never
-          attaches ignored or sensitive files to a prompt without your approval for each file. On
-          this computer these choices are requests to the agent, not a block enforced by the
+          When allowed, the agent can open these files in its worktree on its own. Forgeboard still
+          never attaches ignored or sensitive files to a prompt without your per-file approval. On
+          this computer these choices are requests to the agent, not blocks enforced by the
           operating system.
         </p>
       </fieldset>
@@ -248,8 +247,7 @@ export function CustomPermissionProfileEditor({
           <span>
             <strong>Ask the agent to allow development servers</strong>
             <small>
-              Local servers that preview the app while it's being built. Added to the agent's launch
-              instructions.
+              Local servers that preview the app. Added to the agent's launch instructions.
             </small>
           </span>
           <input
@@ -290,8 +288,8 @@ export function CustomPermissionProfileEditor({
           />
         </label>
         <p>
-          These are requests, not hard limits — an agent, or a program it starts, could still start
-          other processes. They don't affect Preview or Test nodes you run yourself.
+          Requests, not hard limits — the agent could still start other processes. Preview and Test
+          nodes you run yourself aren't affected.
         </p>
       </fieldset>
 
