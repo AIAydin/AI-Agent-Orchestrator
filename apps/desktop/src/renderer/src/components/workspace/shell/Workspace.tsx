@@ -108,6 +108,7 @@ import { useAgentWorktreeRecord } from '../runs/useAgentWorktreeAvailability.js'
 import {
   AgentSessionProvider,
   type AgentSessionContextValue,
+  type CanvasImageNodeEntry,
   type CanvasNodeRosterEntry,
   type CheckProducerEntry,
 } from '../runs/agent-session/AgentSessionContext.js';
@@ -1569,6 +1570,34 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       )
       .join('\n'),
   );
+  const canvasImageNodesSource = useMemo<readonly CanvasImageNodeEntry[]>(
+    () =>
+      nodes
+        .filter((node) => node.data.kind === 'file' && node.data.file?.kind === 'image')
+        .map((node) => {
+          const reference = node.data.file;
+          return {
+            id: node.id,
+            title: node.data.title,
+            projectId: reference?.projectId ?? '',
+            relativePath: reference?.relativePath ?? '',
+            missing: reference?.missing ?? false,
+            ...(reference?.lastKnownHash === undefined
+              ? {}
+              : { lastKnownHash: reference.lastKnownHash }),
+          };
+        }),
+    [nodes],
+  );
+  const canvasImageNodes = useKeyedStable(
+    canvasImageNodesSource,
+    canvasImageNodesSource
+      .map(
+        (entry) =>
+          `${entry.id} ${entry.title} ${entry.projectId} ${entry.relativePath} ${String(entry.missing)} ${entry.lastKnownHash ?? ''}`,
+      )
+      .join('\n'),
+  );
   const checkProducersSource = useMemo<readonly CheckProducerEntry[]>(
     () =>
       nodes
@@ -1616,7 +1645,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         nodesRef.current.find((node) => node.id === nodeId)?.data.title ?? null,
       removeAgentContext: removeProjectFileContext,
       requestDeleteNode: deleteNode,
+      attachWhiteboardContext,
       nodeRoster,
+      canvasImageNodes,
       checkProducers,
       openGitPrReadiness,
       openDiffReview: (nodeId: string, request: DiffReviewOpenRequest) => {
@@ -1626,6 +1657,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       },
     }),
     [
+      attachWhiteboardContext,
+      canvasImageNodes,
       checkProducers,
       collaborationCanvas.graphReadOnly,
       deleteNode,

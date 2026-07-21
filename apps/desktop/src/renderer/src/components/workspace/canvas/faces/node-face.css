@@ -442,3 +442,117 @@ svg.whiteboard-face-preview {
   margin: 0;
   color: #d06870;
 }
+.brief-face-attachment {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.brief-face-attachment span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brief-face-attachment small {
+  color: var(--text-faint);
+}
+.brief-face-variable-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.brief-face-variable-row input,
+.brief-face-variable-row textarea {
+  font-size: var(--text-xs);
+  min-width: 0;
+  flex: 1;
+}
+.note-image-face-reuse {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.note-image-face-reuse label {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.note-image-face-reuse label span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-image-face-reuse small {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.note-image-face-editors {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.note-image-face-editors li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.note-image-face-editors code {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-image-face-missing {
+  color: #c9964f;
+}
+.note-image-face-actions {
+  display: flex;
+  gap: 6px;
+}
+.note-image-face-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.note-image-face-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.whiteboard-face-element,
+.whiteboard-face-context {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.whiteboard-face-element > strong,
+.whiteboard-face-context > strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-soft);
+}
+.whiteboard-face-number-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.whiteboard-face-color-grid {
+  display: flex;
+  gap: 8px;
+}
