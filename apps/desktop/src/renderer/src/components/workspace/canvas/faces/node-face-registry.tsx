@@ -7,6 +7,7 @@ import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.
 import { GitPrNodeFace } from '../../git-pr/GitPrNodeFace.js';
 import { PreviewNodeFace } from '../../previews/PreviewNodeFace.js';
 import { AgentSessionNode } from '../../runs/agent-session/AgentSessionNode.js';
+import { TerminalNodeFace } from '../../terminal/TerminalNodeFace.js';
 import { ReviewGateNodeFace } from '../../workflows/faces/ReviewGateNodeFace.js';
 import { TaskNodeFace } from '../../workflows/faces/TaskNodeFace.js';
 import { TestNodeFace } from '../../workflows/test-node/TestNodeFace.js';
@@ -43,6 +44,7 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   'note-image': NoteImageNodeFace,
   'review-gate': ReviewGateNodeFace,
   task: TaskNodeFace,
+  terminal: TerminalNodeFace,
   test: TestNodeFace,
   whiteboard: WhiteboardNodeFace,
 };

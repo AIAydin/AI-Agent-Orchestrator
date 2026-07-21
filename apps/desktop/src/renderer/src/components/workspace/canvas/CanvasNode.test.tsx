@@ -14,6 +14,17 @@ import {
   type AgentSessionContextValue,
 } from '../runs/agent-session/AgentSessionContext.js';
 
+// The terminal node face is registered (Task 3 of sub-plan 2c) and this suite's placeholder
+// `nodeData()` defaults to `kind: 'terminal'` as its generic-presentation fixture. Mounting the
+// real TerminalNodeFace here would require the full terminal/agent-session provider stack (and
+// window.forgeboard.terminal) that these tests never set up. Stubbing the registry to always
+// return null decouples this suite from every registered face — including file/diff, registered
+// by sibling tasks — so CanvasNode always renders its generic body here, exactly as these
+// collapse/resize/lock assertions expect.
+vi.mock('./faces/node-face-registry.js', () => ({
+  nodeFaceForKind: () => null,
+}));
+
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id, type }: { id: string; type: string }) => (
     <span data-testid={`handle-${type}-${id}`} />

@@ -369,3 +369,18 @@ svg.whiteboard-face-preview {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.terminal-face-surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.terminal-face-surface > .node-face-hint {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+.terminal-face-error {
+  margin: 0;
+  color: #d06870;
+}
