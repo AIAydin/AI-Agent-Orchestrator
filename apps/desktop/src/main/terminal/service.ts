@@ -27,6 +27,7 @@ import {
   type TerminalSessionTargetInput,
   type TerminalSessionView,
 } from '../../shared/terminal/index.js';
+import { formatPeerDelivery, transcriptTailText } from '../agent-peers/text.js';
 import type { StoredTerminalSession } from '../storage/terminal/contracts.js';
 import { TerminalTranscriptFiles } from '../storage/terminal/transcript-files.js';
 import {
@@ -97,6 +98,27 @@ export type TerminalLaunchAuthorizer = (
   review: TerminalLaunchNativeReview,
 ) => Promise<'approved' | 'denied'>;
 
+/**
+ * The main-side-only source of peer-hub env values for a launch. `TerminalService` never sees a
+ * URL/token over IPC — the renderer passes only an opaque `peerProvisionId`, and this provider
+ * (the real implementation is `AgentPeersService`, from Task 6; tests inject a fake) resolves it
+ * to `{ FORGEBOARD_PEER_URL, FORGEBOARD_PEER_TOKEN }` entirely inside the main process.
+ */
+export interface PeerEnvironmentProvider {
+  /** `null` means the provision is unknown, expired, or the hub is not currently listening. */
+  environmentForProvision(provisionId: string): Record<string, string> | null;
+  /** Binds a provision to its spawned session so the hub can invalidate it on session exit. */
+  bindSession(provisionId: string, sessionId: string): void;
+  /** Best-effort, idempotent: a session that was never bound to a provision is a safe no-op. */
+  releaseSession(sessionId: string): void;
+}
+
+/** Disclosed in the native launch review's environment-variable-names list, never their values. */
+const PEER_ENVIRONMENT_VARIABLE_NAMES: readonly string[] = [
+  'FORGEBOARD_PEER_URL',
+  'FORGEBOARD_PEER_TOKEN',
+];
+
 export interface TerminalServiceOptions {
   readonly now?: () => Date;
   readonly createId?: () => string;
@@ -115,6 +137,8 @@ interface PendingLaunch {
   readonly ownerId: string;
   readonly plan: TerminalLaunchPlanView;
   readonly resolved: ResolvedTerminalLaunch;
+  /** Opaque hub provision id from the renderer; never a resolved URL/token (see IPC schema). */
+  readonly peerProvisionId?: string;
 }
 
 interface ActiveTerminal {
@@ -164,6 +188,7 @@ export class TerminalService {
   readonly #forceTerminateMs: number;
   readonly #transcripts: TerminalTranscriptFiles;
   readonly #ready: Promise<void>;
+  #peerProvider: PeerEnvironmentProvider | undefined;
   #paused = false;
   #disposed = false;
 
@@ -208,6 +233,11 @@ export class TerminalService {
     return () => this.#listeners.delete(listener);
   }
 
+  /** Wires (or clears, with `undefined`) the main-side source of peer-hub env for launches. */
+  public setPeerEnvironmentProvider(provider: PeerEnvironmentProvider | undefined): void {
+    this.#peerProvider = provider;
+  }
+
   public async assertProjectAvailable(projectId: string): Promise<void> {
     await this.#assertAvailable();
     this.#project(projectId);
@@ -243,7 +273,14 @@ export class TerminalService {
         permission: TERMINAL_PERMISSION_INDICATOR,
         expiresAt: new Date(this.#now().getTime() + this.#planTtlMs).toISOString(),
       });
-      this.#plans.set(plan.planId, { ownerId, plan, resolved });
+      this.#plans.set(plan.planId, {
+        ownerId,
+        plan,
+        resolved,
+        ...(parsed.peerProvisionId === undefined
+          ? {}
+          : { peerProvisionId: parsed.peerProvisionId }),
+      });
       this.#safeAudit('prepare', 'allowed', {
         planId: plan.planId,
         projectId: plan.projectId,
@@ -281,7 +318,12 @@ export class TerminalService {
         executable: pending.resolved.executable,
         arguments: [...pending.resolved.arguments],
         cwd: pending.resolved.cwd,
-        environmentVariableNames: [...pending.resolved.environmentVariableNames],
+        // Transparency: disclose the peer env NAMES (never values) when a provision is attached,
+        // even though the actual URL/token are only resolved later, in `#launch`, right before spawn.
+        environmentVariableNames:
+          pending.peerProvisionId === undefined
+            ? [...pending.resolved.environmentVariableNames]
+            : [...pending.resolved.environmentVariableNames, ...PEER_ENVIRONMENT_VARIABLE_NAMES],
       },
     });
     assertAuthority();
@@ -412,6 +454,66 @@ export class TerminalService {
       bytes: Buffer.byteLength(parsed.data, 'utf8'),
     });
     return structuredClone(active.view);
+  }
+
+  /**
+   * Trusted, main-side-only lookup: finds the sole running session bound to a canvas node, for
+   * peer-channel delivery. No `ownerId` — every renderer window is untrusted for this purpose, so
+   * only main-process callers (the agent-peer hub) may use it.
+   */
+  public findActiveSessionByNode(projectId: string, nodeId: string): { sessionId: string } | null {
+    for (const [sessionId, active] of this.#active) {
+      if (
+        active.view.projectId === projectId &&
+        active.view.nodeId === nodeId &&
+        active.view.status === 'running'
+      ) {
+        return { sessionId };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Trusted, main-side-only delivery: types a peer's message into a live PTY as bracketed-paste
+   * input, bypassing owner checks since the caller is the in-process agent-peer hub, not a
+   * renderer window.
+   */
+  public async deliverPeerInput(
+    sessionId: string,
+    sender: string,
+    message: string,
+  ): Promise<'delivered' | 'no-live-session'> {
+    if (!(await this.#isAvailableForPeerAccess())) return 'no-live-session';
+    const active = this.#active.get(sessionId);
+    // Mirrors `#assertRunning`'s exact liveness predicate (handle/status/finalizing) rather than
+    // calling it directly, since that method throws and this trust boundary must return the
+    // modeled sentinel instead — including during `#finalize`'s async drain window, where a
+    // session is still `status === 'running'` with a non-null handle but `finalizing === true`
+    // and must not accept writes.
+    if (
+      active === undefined ||
+      active.finalizing ||
+      active.view.status !== 'running' ||
+      active.handle === null
+    ) {
+      return 'no-live-session';
+    }
+    active.handle.write(formatPeerDelivery(sender, message));
+    this.#safeAudit('input', 'allowed', { sessionId, source: 'agent-peer', sender });
+    return 'delivered';
+  }
+
+  /**
+   * Trusted, main-side-only read: returns the ANSI-stripped tail of a session's persisted
+   * transcript (at most the last 200 lines within `maxBytes`), or `null` if the transcript does
+   * not exist.
+   */
+  public async readTranscriptTail(sessionId: string, maxBytes: number): Promise<string | null> {
+    if (!(await this.#isAvailableForPeerAccess())) return null;
+    const raw = await this.#transcripts.tail(sessionId, maxBytes);
+    if (raw === null) return null;
+    return transcriptTailText(raw);
   }
 
   public async resize(ownerId: string, input: TerminalResizeInput): Promise<TerminalSessionView> {
@@ -591,6 +693,9 @@ export class TerminalService {
     pending: PendingLaunch,
     assertAuthority: () => void,
   ): Promise<TerminalSessionView> {
+    // Resolved before any session/transcript resources exist: an unknown or expired provision
+    // must fail with zero side effects, exactly like the other pre-commit checks below.
+    const peerEnvironment = this.#resolvePeerEnvironment(pending.peerProvisionId);
     const sessionId = this.#uniqueSessionId();
     const createdAt = this.#now().toISOString();
     const starting = TerminalSessionViewSchema.parse({
@@ -621,19 +726,24 @@ export class TerminalService {
       await this.#transcripts.delete(sessionId).catch(() => undefined);
       throw error;
     }
-    const active = createActive(ownerId, pending.resolved, starting);
+    const resolved: ResolvedTerminalLaunch =
+      peerEnvironment === undefined ? pending.resolved : { ...pending.resolved, peerEnvironment };
+    const active = createActive(ownerId, resolved, starting);
     this.#active.set(sessionId, active);
     this.#rememberExact(ownerId, starting);
+    if (pending.peerProvisionId !== undefined) {
+      this.#peerProvider?.bindSession(pending.peerProvisionId, sessionId);
+    }
     let exitListenerAttached = false;
     try {
-      const handle = await this.#ptyFactory(pending.resolved, async () => {
+      const handle = await this.#ptyFactory(resolved, async () => {
         assertAuthority();
         await this.#assertAvailable();
         this.#assertPlanFresh(pending.plan);
         this.#assertConcurrency(ownerId, sessionId);
         await assertTerminalLaunchCurrent(
-          pending.resolved,
-          this.store.getProject(pending.resolved.projectId),
+          resolved,
+          this.store.getProject(resolved.projectId),
           this.getSettings(),
         );
         assertAuthority();
@@ -641,10 +751,10 @@ export class TerminalService {
           projectId: starting.projectId,
           nodeId: starting.nodeId,
           sessionId: starting.id,
-          executableName: basename(pending.resolved.executable),
-          argumentCount: pending.resolved.arguments.length,
-          cwdRelative: pending.resolved.cwdRelative,
-          environmentVariableNames: pending.resolved.environmentVariableNames,
+          executableName: basename(resolved.executable),
+          argumentCount: resolved.arguments.length,
+          cwdRelative: resolved.cwdRelative,
+          environmentVariableNames: resolved.environmentVariableNames,
           phase: 'authorized-before-spawn',
         });
       });
@@ -691,6 +801,29 @@ export class TerminalService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Resolves an attached `peerProvisionId` to its main-side-only env values, or `undefined` when
+   * no provision is attached. Throws a clear, user-facing error when the provision cannot be
+   * delivered: either because the provision is genuinely unknown/expired (`environmentForProvision`
+   * returns `null`), or because no provider is wired at all (`undefined`). Both block the launch,
+   * but the latter is a wiring bug that gets an internal audit signal for observability.
+   */
+  #resolvePeerEnvironment(provisionId: string | undefined): Record<string, string> | undefined {
+    if (provisionId === undefined) return undefined;
+    if (this.#peerProvider === undefined) {
+      this.#safeAudit('launch', 'failed', {
+        reason: 'peer-provider-not-configured',
+        provisionId,
+      });
+      throw new Error('Peer session expired. Start again.');
+    }
+    const environment = this.#peerProvider.environmentForProvision(provisionId);
+    if (environment === null) {
+      throw new Error('Peer session expired. Start again.');
+    }
+    return environment;
   }
 
   #onOutput(active: ActiveTerminal, untrustedData: string): void {
@@ -894,6 +1027,16 @@ export class TerminalService {
       });
     } finally {
       this.#active.delete(active.view.id);
+      try {
+        // Unconditional and idempotent: a session that never had a peer provision attached is a
+        // safe no-op for the real provider. `#finalize`'s `finalizing` guard above ensures this
+        // body — and so this call — runs exactly once per session, on every exit route (normal
+        // PTY exit, explicit terminate/interrupt-timeout, and launch-failure teardown all funnel
+        // through here).
+        this.#peerProvider?.releaseSession(active.view.id);
+      } catch {
+        // Best-effort: a peer-hub release failure must not block session teardown.
+      }
       try {
         this.#rememberExact(active.ownerId, active.view);
       } catch {
@@ -1191,6 +1334,18 @@ export class TerminalService {
     this.#assertNotDisposed();
     if (this.#paused)
       throw new Error('The terminal service is paused while Forgeboard changes local data.');
+  }
+
+  /**
+   * Same disposed/paused predicate `#assertAvailable` guards on, without throwing. The peer-hub
+   * methods (`deliverPeerInput`, `readTranscriptTail`) are declared to return a modeled sentinel,
+   * never to reject, so a hub HTTP caller coded to those return types can't be surprised by an
+   * uncaught rejection while the service is paused (e.g. mid-`pauseForShutdown`) or disposed.
+   */
+  async #isAvailableForPeerAccess(): Promise<boolean> {
+    if (this.#disposed || this.#paused) return false;
+    await this.#ready;
+    return !this.#disposed && !this.#paused;
   }
 
   #assertNotDisposed(): void {

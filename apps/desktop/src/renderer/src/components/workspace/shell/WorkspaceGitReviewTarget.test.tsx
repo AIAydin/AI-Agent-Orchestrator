@@ -367,6 +367,7 @@ beforeEach(() => {
     value: {
       canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: canvas() })) },
       runs: { onEvent: vi.fn(() => vi.fn()) },
+      agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
     },
   });
 });

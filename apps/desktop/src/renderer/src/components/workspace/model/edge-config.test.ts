@@ -9,6 +9,7 @@ describe('typed canvas edge configuration', () => {
       config: {
         attachmentMode: 'explicit',
         required: true,
+        muted: false,
         attachmentIds: ['source-node'],
       },
     });
@@ -80,6 +81,18 @@ describe('typed canvas edge configuration', () => {
         stopConditions: ['tests-passed', 'human-accepted'],
         humanEscapeInstructions: 'Ask a human to accept or cancel after the final attempt.',
       },
+    });
+  });
+
+  describe('context edge muted flag', () => {
+    it('defaults muted to false', () => {
+      const data = createEdgeData('context', 'node-1');
+      expect(data).toMatchObject({ edgeType: 'context', config: { muted: false } });
+    });
+
+    it('preserves an explicit muted value', () => {
+      const data = createEdgeData('context', 'node-1', { config: { muted: true } });
+      expect(data.config).toMatchObject({ muted: true });
     });
   });
 });

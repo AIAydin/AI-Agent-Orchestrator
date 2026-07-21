@@ -69,6 +69,41 @@ describe('agentSessionLaunch', () => {
     expect(launch.configuration.arguments).toEqual([]);
     expect(launch.profileNote).toMatch(/project root/i);
   });
+
+  it('appends peer extra arguments after the provider flags and sets peerProvisionId', () => {
+    const launch = agentSessionLaunch(claude, 'claude-sonnet-5', 'plan-read-only', {
+      provisionId: '11111111-1111-4111-8111-111111111111',
+      extraArguments: ['--mcp-config', '/tmp/peer-mcp.json'],
+    });
+    expect(launch.configuration).toEqual({
+      executable: '/usr/local/bin/claude',
+      arguments: [
+        '--permission-mode',
+        'plan',
+        '--model',
+        'claude-sonnet-5',
+        '--mcp-config',
+        '/tmp/peer-mcp.json',
+      ],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+      peerProvisionId: '11111111-1111-4111-8111-111111111111',
+    });
+  });
+
+  it('leaves the configuration unchanged when peers is null', () => {
+    const withoutArg = agentSessionLaunch(claude, undefined, 'worktree-write');
+    const withExplicitNull = agentSessionLaunch(claude, undefined, 'worktree-write', null);
+    for (const launch of [withoutArg, withExplicitNull]) {
+      expect(launch.configuration).toEqual({
+        executable: '/usr/local/bin/claude',
+        arguments: [],
+        cwdRelative: '.',
+        environmentVariableNames: [],
+      });
+      expect('peerProvisionId' in launch.configuration).toBe(false);
+    }
+  });
 });
 
 describe('modelFlagSupported', () => {

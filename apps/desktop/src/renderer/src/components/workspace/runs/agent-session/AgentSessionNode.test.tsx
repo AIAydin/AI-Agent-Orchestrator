@@ -44,8 +44,17 @@ const controller = {
   terminate: vi.fn(async () => {}),
 };
 
+// Captures the options (in particular `configuration`) the node last passed into the controller
+// hook, so tests can assert the peer provision's extraArguments/peerProvisionId reached it.
+const { controllerOptionsHolder } = vi.hoisted(() => ({
+  controllerOptionsHolder: { current: null as { configuration?: unknown } | null },
+}));
+
 vi.mock('../../terminal/useTerminalNodeController.js', () => ({
-  useTerminalNodeController: () => controller,
+  useTerminalNodeController: (options: { configuration?: unknown }) => {
+    controllerOptionsHolder.current = options;
+    return controller;
+  },
 }));
 vi.mock('../../terminal/types.js', () => ({
   terminalOperationsFromWindow: () => ({}),
@@ -53,6 +62,8 @@ vi.mock('../../terminal/types.js', () => ({
 vi.mock('../../terminal/TerminalSurface.js', () => ({
   TerminalSurface: () => <div data-testid="terminal-surface" />,
 }));
+
+const provisionMock = vi.fn();
 
 const claude: AgentDetection & { id: RunAdapterId } = {
   id: 'claude',
@@ -189,14 +200,115 @@ beforeEach(() => {
   controller.error = null;
   controller.notice = null;
   controller.busy = null;
+  controllerOptionsHolder.current = null;
+
+  provisionMock.mockReset();
+  provisionMock.mockResolvedValue({
+    ok: true,
+    value: {
+      provisionId: 'default-provision-id',
+      available: true,
+      hint: null,
+      extraArguments: [],
+    },
+  });
+  (
+    window as unknown as { forgeboard: { agentPeers: { provision: typeof provisionMock } } }
+  ).forgeboard = {
+    agentPeers: { provision: provisionMock },
+  };
 });
 
 describe('AgentSessionNode', () => {
-  it('offers Start session on the start card and prepares a launch on click', () => {
+  it('offers Start session on the start card and prepares a launch on click', async () => {
     renderNode();
     const start = screen.getByRole('button', { name: 'Start session' });
     fireEvent.click(start);
-    expect(controller.prepareLaunch).toHaveBeenCalledOnce();
+    // Peer provisioning now happens before prepareLaunch, so the launch fires only after that
+    // IPC round trip resolves — no longer synchronously within the click handler.
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+  });
+
+  it('provisions peer tools before preparing the launch, threading the material into the configuration', async () => {
+    provisionMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        provisionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        available: true,
+        hint: null,
+        extraArguments: ['--mcp-config', '/tmp/peer-mcp.json'],
+      },
+    });
+    renderNode();
+    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+
+    expect(provisionMock).toHaveBeenCalledWith({
+      projectId: 'proj-1',
+      nodeId: NODE_ID,
+      adapterId: 'claude',
+    });
+    // Provision must resolve, and the resulting configuration reach the controller, before
+    // prepareLaunch fires.
+    const provisionCallOrder = provisionMock.mock.invocationCallOrder[0]!;
+    const prepareLaunchCallOrder = controller.prepareLaunch.mock.invocationCallOrder[0]!;
+    expect(provisionCallOrder).toBeLessThan(prepareLaunchCallOrder);
+
+    const configuration = controllerOptionsHolder.current?.configuration as {
+      arguments: readonly string[];
+      peerProvisionId?: string;
+    };
+    expect(configuration.arguments).toEqual(
+      expect.arrayContaining(['--mcp-config', '/tmp/peer-mcp.json']),
+    );
+    expect(configuration.peerProvisionId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  });
+
+  it('still starts the session and shows a terse hint when peer tools are unavailable', async () => {
+    provisionMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        provisionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        available: false,
+        hint: 'Peer tools unavailable.',
+        extraArguments: [],
+      },
+    });
+    renderNode();
+    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+    expect(await screen.findByText('Peer tools unavailable.')).toBeTruthy();
+  });
+
+  it('still starts the session with a fallback hint when provisioning rejects', async () => {
+    provisionMock.mockRejectedValueOnce(new Error('agent-peers hub unreachable'));
+    renderNode();
+    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+    expect(await screen.findByText('Peer tools unavailable.')).toBeTruthy();
+  });
+
+  it('provisions again on Restart after the session exits, instead of reusing the stale provision', async () => {
+    provisionMock.mockResolvedValue({
+      ok: true,
+      value: {
+        provisionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        available: true,
+        hint: null,
+        extraArguments: [],
+      },
+    });
+    controller.session = { id: 's1', status: 'failed', exitCode: 1, exitSignal: null };
+    controller.active = false;
+    renderNode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restart' }));
+
+    await waitFor(() => expect(provisionMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
   });
 
   it('hides Start behind a provider gate warning and rechecks the provider', () => {
@@ -289,6 +401,75 @@ describe('AgentSessionNode', () => {
     await waitFor(() => expect(controller.confirmLaunch).toHaveBeenCalledOnce());
     expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
     expect(controller.cancelLaunch).not.toHaveBeenCalled();
+  });
+
+  it('re-provisions peer tools fresh when a config-drift restart relaunches the session, instead of reusing the terminated session\'s stale provision', async () => {
+    provisionMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        provisionId: 'first-provision-id',
+        available: true,
+        hint: null,
+        extraArguments: [],
+      },
+    });
+    const view = render(nodeTree(nodeData()));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+    expect(provisionMock).toHaveBeenCalledTimes(1);
+    expect(
+      (controllerOptionsHolder.current?.configuration as { peerProvisionId?: string } | undefined)
+        ?.peerProvisionId,
+    ).toBe('first-provision-id');
+
+    // The launch auto-confirms (no in-app review dialog) and the session goes live.
+    controller.pendingPlan = REVIEW_PLAN;
+    view.rerender(nodeTree(nodeData()));
+    await waitFor(() => expect(controller.confirmLaunch).toHaveBeenCalledOnce());
+
+    controller.pendingPlan = null;
+    controller.session = { id: 's1', status: 'running' };
+    controller.active = true;
+    view.rerender(nodeTree(nodeData()));
+
+    // Config drifts (model change) while the session is live -> "Restart to apply" appears.
+    view.rerender(nodeTree(nodeData({ model: 'gpt-5' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Restart to apply' }));
+    expect(controller.terminate).toHaveBeenCalledOnce();
+
+    // terminate() resolving is not enough to relaunch; the session must go inactive first.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(provisionMock).toHaveBeenCalledTimes(1);
+
+    provisionMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        provisionId: 'second-provision-id',
+        available: true,
+        hint: null,
+        extraArguments: ['--mcp-config', '/tmp/peer-mcp-2.json'],
+      },
+    });
+
+    // The terminated session reports inactive: the relaunch must re-provision fresh (a SECOND
+    // provision() call), never reuse the first (already-consumed) provisionId.
+    controller.session = { id: 's1', status: 'exited' };
+    controller.active = false;
+    view.rerender(nodeTree(nodeData({ model: 'gpt-5' })));
+
+    await waitFor(() => expect(provisionMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledTimes(2));
+
+    const relaunchConfiguration = controllerOptionsHolder.current?.configuration as {
+      arguments: readonly string[];
+      peerProvisionId?: string;
+    };
+    expect(relaunchConfiguration.peerProvisionId).toBe('second-provision-id');
+    expect(relaunchConfiguration.arguments).toEqual(
+      expect.arrayContaining(['--mcp-config', '/tmp/peer-mcp-2.json']),
+    );
   });
 
   it('restarts to apply only after the live session goes inactive, not merely after terminate resolves', async () => {

@@ -682,6 +682,7 @@ export const ContextEdgeSchema = createEdgeSchema(
     .object({
       attachmentMode: z.literal('explicit').default('explicit'),
       required: z.boolean().default(true),
+      muted: z.boolean().default(false),
       attachmentIds: z.array(EntityIdSchema).default([]),
     })
     .strict(),

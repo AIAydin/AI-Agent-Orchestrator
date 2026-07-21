@@ -86,6 +86,8 @@ import { defaultTerminalExecutable } from './settings/defaults/terminal-executab
 import { FolderReadinessIpcService } from './settings/folder-readiness/ipc.js';
 import { FolderReadinessService } from './settings/folder-readiness/service.js';
 import type { LocalStore } from './storage.js';
+import { AgentPeersIpcService } from './agent-peers/ipc.js';
+import { AgentPeersService, type AgentPeersStore } from './agent-peers/service.js';
 import { TerminalIpcService } from './terminal/ipc.js';
 import { TerminalService } from './terminal/service.js';
 import { UpdateIpcService } from './updates/service.js';
@@ -207,6 +209,7 @@ export interface ApplicationServices {
   docker: DockerIpcService;
   runs: RunService;
   terminal: TerminalIpcService;
+  agentPeers: AgentPeersIpcService;
   previews: PreviewIpcService;
   extensions: ExtensionIpcService;
   files: FileIpcService;
@@ -279,14 +282,29 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   });
   const projectClones = new ProjectCloneIpcService(dialog, projects, outbound, runDataOperation);
   const transcripts = join(app.getPath('userData'), 'transcripts');
-  const terminal = new TerminalIpcService(
-    dialog,
-    new TerminalService(store, join(transcripts, 'terminal'), () =>
-      store.getSettings(createDefaultSettings()),
-    ),
-    undefined,
-    (event) => collaboration.assertTerminalMutationAuthorized(event.sender),
+  // Shared with `AgentPeersService` below (`setPeerEnvironmentProvider`) so a single
+  // `TerminalService` instance is the source of truth for both the terminal IPC surface and the
+  // agent-peer hub's session bridge.
+  const terminalCore = new TerminalService(store, join(transcripts, 'terminal'), () =>
+    store.getSettings(createDefaultSettings()),
   );
+  const terminal = new TerminalIpcService(dialog, terminalCore, undefined, (event) =>
+    collaboration.assertTerminalMutationAuthorized(event.sender),
+  );
+  const agentPeersStore: AgentPeersStore = {
+    loadCanvas: (projectId) => {
+      const document = store.loadCanvas(projectId);
+      // `document.nodes`/`.edges` are the legacy generic React-Flow shape; only `.canonical`
+      // carries the parsed domain `CanvasNode[]`/`CanvasEdge[]` `resolvePeers` requires.
+      if (document === undefined || document.canonical === undefined) return null;
+      return { nodes: document.canonical.nodes, edges: document.canonical.edges };
+    },
+    appendAudit: (category, action, outcome, metadata) =>
+      store.appendAudit(category, action, outcome, metadata),
+  };
+  const agentPeersHub = new AgentPeersService(agentPeersStore, terminalCore);
+  terminalCore.setPeerEnvironmentProvider(agentPeersHub);
+  const agentPeers = new AgentPeersIpcService(app, agentPeersHub, store);
   const testAgentPath = app.isPackaged
     ? join(process.resourcesPath, 'test-agent', 'cli.js')
     : resolve(process.cwd(), '../../packages/test-agent/dist/cli.js');
@@ -469,6 +487,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         workflows,
         runs,
         terminal,
+        agentPeers,
         previews,
         checks,
         deliveryReadiness,
@@ -492,6 +511,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     previews.resumeAfterPrivacyReset();
     runs.resumeAfterPrivacyReset();
     terminal.resumeAfterPrivacyReset();
+    agentPeers.resumeAfterPrivacyReset();
     checks.resumeAfterPrivacyReset();
     collaboration.resume();
     workflows.resumeAfterPrivacyReset();
@@ -511,6 +531,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     const operations = [
       runs.pauseForShutdown(),
       terminal.pauseForShutdown(),
+      agentPeers.pauseForShutdown(),
       previews.pauseForShutdown(),
       checks.pauseForShutdown(),
       readiness.pauseForShutdown(),
@@ -537,6 +558,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         await awaitDataServices([
           runs.resetForPrivacy(),
           terminal.resetForPrivacy(),
+          agentPeers.resetForPrivacy(),
           previews.resetForPrivacy(),
           checks.resetForPrivacy(),
           extensions.pauseForDataMutation(),
@@ -555,6 +577,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         deliveryReadiness.pauseForDataMutation();
         await awaitDataServices([
           terminal.pauseForDataMutation(),
+          agentPeers.pauseForDataMutation(),
           providerConnections.pauseForShutdown(),
           extensions.pauseForDataMutation(),
           git.resetForPrivacy(),
@@ -996,6 +1019,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
             await awaitDataServices([
               runs.resetForPrivacy(),
               terminal.resetForPrivacy(),
+              agentPeers.resetForPrivacy(),
               previews.resetForPrivacy(),
               extensions.resetForPrivacy(),
               providerConnections.resetForPrivacy(),
@@ -1035,6 +1059,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   projectClones.registerIpcHandler();
   runs.registerIpcHandlers();
   terminal.registerIpcHandlers();
+  agentPeers.registerIpcHandlers();
   previews.registerIpcHandlers();
   extensions.registerIpcHandlers();
   files.registerIpcHandlers();
@@ -1057,6 +1082,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     docker,
     runs,
     terminal,
+    agentPeers,
     previews,
     extensions,
     files,
@@ -1115,6 +1141,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
         previews.dispose(),
         runs.dispose(),
         terminal.dispose(),
+        agentPeers.dispose(),
         extensions.dispose(),
         git.dispose(),
         deliveryReadiness.dispose(),

@@ -90,6 +90,20 @@ function EdgeConfiguration({
           />
           Don&apos;t let the agent start until this attachment is ready
         </label>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            name={`edge-${edge.id}-context-muted`}
+            checked={data.config.muted}
+            onChange={(event) =>
+              onChange({
+                edgeType: 'context',
+                config: { ...data.config, muted: event.target.checked },
+              })
+            }
+          />
+          Muted
+        </label>
         <small>
           {data.config.attachmentIds.length} attachment
           {data.config.attachmentIds.length === 1 ? '' : 's'} will be shared with the agent before

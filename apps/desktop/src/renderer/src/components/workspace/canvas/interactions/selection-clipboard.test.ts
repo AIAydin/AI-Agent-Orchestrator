@@ -206,6 +206,7 @@ function edge(id: string, source: string, target: string): WorkshopEdge {
       config: {
         attachmentMode: 'explicit',
         required: true,
+        muted: false,
         attachmentIds: [source],
       },
     },

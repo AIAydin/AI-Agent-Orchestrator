@@ -88,6 +88,59 @@ describe('TerminalTranscriptFiles', () => {
     });
   });
 
+  it('returns the full concatenated transcript when it fits within maxBytes', async () => {
+    const files = await fixture(1_024, 4_096, 2);
+    await files.create(FIRST);
+    const afterFirst = await files.append(FIRST, 0, {
+      sequence: 1,
+      data: 'hello ',
+      occurredAt: now(1),
+    });
+    await files.append(FIRST, afterFirst.transcriptBytes, {
+      sequence: 2,
+      data: 'world',
+      occurredAt: now(2),
+    });
+
+    await expect(files.tail(FIRST, 1_024)).resolves.toBe('hello world');
+  });
+
+  it('returns only the trailing maxBytes of the concatenated transcript, on a code point boundary', async () => {
+    const files = await fixture(1_024, 4_096, 2);
+    await files.create(FIRST);
+    const afterFirst = await files.append(FIRST, 0, {
+      sequence: 1,
+      data: 'a'.repeat(10),
+      occurredAt: now(1),
+    });
+    await files.append(FIRST, afterFirst.transcriptBytes, {
+      sequence: 2,
+      data: '🧪bcde',
+      occurredAt: now(2),
+    });
+
+    // Concatenated data is 'aaaaaaaaaa🧪bcde'. The trailing 'bcde' is 4 bytes and '🧪' is 4 more
+    // (8 total). A budget of exactly 8 fits '🧪bcde' whole; a budget of 7 cannot fit '🧪' without
+    // splitting its UTF-8 encoding, so it is dropped entirely rather than emitting a partial
+    // code point — the result stays a well-formed 4-byte 'bcde', one byte under budget.
+    await expect(files.tail(FIRST, 8)).resolves.toBe('🧪bcde');
+    await expect(files.tail(FIRST, 7)).resolves.toBe('bcde');
+  });
+
+  it('returns null for a transcript that does not exist', async () => {
+    const files = await fixture(1_024, 4_096, 2);
+
+    await expect(files.tail(FIRST, 1_024)).resolves.toBeNull();
+  });
+
+  it('rejects a non-positive-integer maxBytes', async () => {
+    const files = await fixture(1_024, 4_096, 2);
+    await files.create(FIRST);
+
+    await expect(files.tail(FIRST, 0)).rejects.toThrow(/positive integer/u);
+    await expect(files.tail(FIRST, 1.5)).rejects.toThrow(/positive integer/u);
+  });
+
   async function fixture(
     maximumBytes: number,
     maximumTotalBytes: number,

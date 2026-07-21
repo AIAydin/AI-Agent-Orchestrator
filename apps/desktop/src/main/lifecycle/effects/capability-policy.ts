@@ -101,6 +101,12 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
   'agent-execution/workspace/snapshot.ts': entry('reviewed-package-capability', [
     '@forgeboard/git-engine#RepositoryService',
   ]),
+  'agent-peers/ipc.ts': entry('audited-authority', ['node:fs/promises#mkdir']),
+  'agent-peers/provider-config.ts': entry('audited-authority', [
+    'node:fs/promises#mkdir',
+    'node:fs/promises#unlink',
+    'node:fs/promises#writeFile',
+  ]),
   'checks/check-process.ts': entry('reviewed-runtime', [
     'node:child_process#spawn',
     'node:fs/promises#open',

@@ -90,7 +90,12 @@ describe('TypedEdgeInspector', () => {
     );
     expect(onChange).toHaveBeenCalledWith({
       edgeType: 'context',
-      config: { attachmentMode: 'explicit', required: false, attachmentIds: ['brief-1'] },
+      config: {
+        attachmentMode: 'explicit',
+        required: false,
+        muted: false,
+        attachmentIds: ['brief-1'],
+      },
     });
   });
 
@@ -161,5 +166,23 @@ describe('TypedEdgeInspector', () => {
     const bounded = onChange.mock.calls.at(-1)?.[0];
     expect(bounded?.edgeType).toBe('revision');
     expect(bounded?.edgeType === 'revision' ? bounded.loop.maximumAttempts : undefined).toBe(7);
+  });
+
+  it('toggles muted on a context edge', () => {
+    const onChange = vi.fn<(data: WorkshopEdgeData) => void>();
+    render(
+      <TypedEdgeInspector
+        edge={edge(createEdgeData('context', 'brief-1'))}
+        nodes={[workshopNode('brief-1', 'brief'), workshopNode('agent-1', 'agent')]}
+        onChange={onChange}
+        onUpdateType={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('Muted'));
+    const called = onChange.mock.calls.at(-1)?.[0];
+    expect(called).toMatchObject({
+      edgeType: 'context',
+      config: { muted: true },
+    });
   });
 });

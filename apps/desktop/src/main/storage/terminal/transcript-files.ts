@@ -236,6 +236,49 @@ export class TerminalTranscriptFiles {
     };
   }
 
+  /**
+   * Returns the trailing `maxBytes` (UTF-8, on a code point boundary) of the transcript's
+   * concatenated output data, or `null` if the transcript does not exist. Unlike `replay`, which
+   * pages forward from a sequence cursor and can only disclose the *earliest* chunks that fit a
+   * byte/chunk budget, this reads the whole bounded transcript and slices from the end — the
+   * shape `replay`'s parameters cannot express.
+   */
+  public async tail(sessionId: string, maxBytes: number): Promise<string | null> {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+      throw new Error('The terminal transcript tail size must be a positive integer.');
+    }
+    return await this.#mutate(async () => await this.#tailUnlocked(sessionId, maxBytes));
+  }
+
+  async #tailUnlocked(sessionId: string, maxBytes: number): Promise<string | null> {
+    await this.initialize();
+    const target = this.#path(sessionId);
+    let content: string;
+    try {
+      const details = await lstat(target);
+      if (!details.isFile() || details.isSymbolicLink() || details.size > this.#maximumBytes) {
+        throw new Error('The terminal transcript is not a bounded ordinary file.');
+      }
+      content = await readFile(target, 'utf8');
+    } catch (error) {
+      if (isMissing(error)) return null;
+      throw error;
+    }
+
+    let data = '';
+    for (const line of content.split('\n')) {
+      if (line === '') continue;
+      let value: unknown;
+      try {
+        value = JSON.parse(line) as unknown;
+      } catch {
+        throw new Error('The private terminal transcript contains invalid JSON.');
+      }
+      data += TerminalOutputChunkSchema.parse(value).data;
+    }
+    return tailBytes(data, maxBytes);
+  }
+
   public async deleteAll(): Promise<void> {
     await this.#mutate(async () => await this.#deleteAllUnlocked());
   }
@@ -417,4 +460,21 @@ function transcriptSessionId(name: string): string | null {
 
 function boundedReplayCursor(afterSequence: number, nextSequence: number): number {
   return Math.min(afterSequence, Math.max(0, nextSequence - 1));
+}
+
+/** Returns the trailing suffix of `value` whose UTF-8 encoding is at most `maxBytes`, without
+ *  splitting a surrogate pair. */
+function tailBytes(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
+  const characters = [...value];
+  let bytes = 0;
+  let start = characters.length;
+  for (let index = characters.length - 1; index >= 0; index -= 1) {
+    const character = characters[index] ?? '';
+    const characterBytes = Buffer.byteLength(character, 'utf8');
+    if (bytes + characterBytes > maxBytes) break;
+    bytes += characterBytes;
+    start = index;
+  }
+  return characters.slice(start).join('');
 }

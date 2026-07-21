@@ -140,6 +140,7 @@ import {
   workflowCanvasReviewGateState,
 } from '../workflows/workflow-node-status.js';
 import { workflowEdgeRuntimePresentation } from '../workflows/workflow-edge-presentation.js';
+import { usePeerTransitPulse } from '../canvas/usePeerTransitPulse.js';
 import {
   WorkflowRuntimeProvider,
   workflowPendingDecision,
@@ -1172,11 +1173,21 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     () => new Map((workflowEvidenceExecution?.edges ?? []).map((edge) => [edge.edgeId, edge])),
     [workflowEvidenceExecution],
   );
+  const pulsingEdges = usePeerTransitPulse((cb) =>
+    window.forgeboard.agentPeers.onEvent((event) => {
+      if (event.projectId === project.id) cb(event);
+    }),
+  );
   const runtimeDisplayedEdges = useMemo(
     () =>
       edges.map((edge) => {
+        const pulsing = pulsingEdges.has(edge.id);
         const runtime = workflowEdgeStates.get(edge.id);
-        if (runtime === undefined) return edge;
+        if (runtime === undefined) {
+          return pulsing
+            ? { ...edge, className: `${edge.className ?? ''} peer-transit`.trim() }
+            : edge;
+        }
         const presentation = workflowEdgeRuntimePresentation(
           runtime,
           edge.data?.edgeType,
@@ -1185,13 +1196,16 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         return {
           ...edge,
           ...presentation,
+          className: pulsing
+            ? `${presentation.className} peer-transit`.trim()
+            : presentation.className,
           style: {
             ...edge.style,
             ...presentation.style,
           },
         };
       }),
-    [edges, workflowEdgeStates],
+    [edges, pulsingEdges, workflowEdgeStates],
   );
   const displayedGraph = useMemo(
     () => projectGroupDisplay(runtimeDisplayedNodes, runtimeDisplayedEdges),

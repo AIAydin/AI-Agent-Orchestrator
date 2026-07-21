@@ -16,6 +16,15 @@
   stroke: var(--accent);
   stroke-width: 2;
 }
+.react-flow__edge.peer-transit .react-flow__edge-path {
+  animation: peer-transit-pulse 0.8s ease-in-out 2;
+}
+@keyframes peer-transit-pulse {
+  50% {
+    stroke-width: 3.5;
+    opacity: 1;
+  }
+}
 .react-flow__edge-text {
   fill: var(--text-soft);
   font-size: var(--text-xs);

@@ -141,6 +141,12 @@
   font-size: var(--text-xs);
 }
 
+.agent-peer-hint {
+  flex-basis: 100%;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
 .agent-restart-apply {
   flex-basis: 100%;
   align-self: flex-start;

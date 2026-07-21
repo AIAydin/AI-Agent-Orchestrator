@@ -1,0 +1,547 @@
+import { randomBytes, randomUUID } from 'node:crypto';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+
+import type { CanvasEdge, CanvasNode } from '@forgeboard/core/domain';
+
+import { findPeerByName, resolvePeers, type PeerDescriptor } from './peer-graph.js';
+
+const RATE_LIMIT_MAX = 6;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const MAX_MESSAGE_BYTES = 60_000;
+const SCREEN_TAIL_BYTES = 64 * 1024;
+/** Provisions that never get bound to a session (spawn failed, etc.) are reclaimed lazily. */
+const PROVISION_EXPIRY_MS = 5 * 60_000;
+
+export interface AgentPeersTerminalBridge {
+  findActiveSessionByNode(projectId: string, nodeId: string): { sessionId: string } | null;
+  deliverPeerInput(
+    sessionId: string,
+    sender: string,
+    message: string,
+  ): Promise<'delivered' | 'no-live-session'>;
+  readTranscriptTail(sessionId: string, maxBytes: number): Promise<string | null>;
+}
+
+export interface AgentPeersStore {
+  loadCanvas(projectId: string): { nodes: CanvasNode[]; edges: CanvasEdge[] } | null;
+  appendAudit(
+    category: string,
+    action: string,
+    outcome: 'allowed' | 'denied' | 'failed',
+    metadata: Record<string, unknown>,
+  ): void;
+}
+
+export interface PeerProvision {
+  readonly provisionId: string;
+  /** `http://127.0.0.1:<port>` — localhost-only, no external interface is ever bound. */
+  readonly url: string;
+}
+
+interface ProvisionRecord {
+  readonly provisionId: string;
+  readonly token: string;
+  readonly projectId: string;
+  readonly nodeId: string;
+  sessionId: string | null;
+  readonly createdAt: number;
+}
+
+interface CallerContext {
+  readonly callerName: string;
+  readonly peers: PeerDescriptor[];
+}
+
+type MessageDeliveredListener = (event: { projectId: string; edgeId: string }) => void;
+
+/**
+ * The agent-peers hub: a localhost-only HTTP server the `peer-mcp` stdio shim calls (via a
+ * per-session bearer token minted by `provision`) to list peers, deliver messages, and read a
+ * peer's screen. Every request is authenticated before any routing decision — there is no
+ * unauthenticated endpoint, not even for error reporting — and the server never binds anything
+ * but `127.0.0.1`, so it is unreachable from outside the machine.
+ */
+export class AgentPeersService {
+  readonly #store: AgentPeersStore;
+  readonly #bridge: AgentPeersTerminalBridge;
+  readonly #now: () => number;
+
+  #server: Server | null = null;
+  #port: number | null = null;
+
+  readonly #provisionsById = new Map<string, ProvisionRecord>();
+  readonly #provisionsByToken = new Map<string, ProvisionRecord>();
+  readonly #provisionIdBySession = new Map<string, string>();
+  readonly #cleanupsByProvision = new Map<string, Array<() => Promise<void>>>();
+  readonly #rateLimitHits = new Map<string, number[]>();
+  readonly #messageListeners = new Set<MessageDeliveredListener>();
+
+  readonly #handleRequest = (request: IncomingMessage, response: ServerResponse): void => {
+    void this.#route(request, response);
+  };
+
+  constructor(
+    store: AgentPeersStore,
+    bridge: AgentPeersTerminalBridge,
+    now: () => number = Date.now,
+  ) {
+    this.#store = store;
+    this.#bridge = bridge;
+    this.#now = now;
+  }
+
+  /** Starts the hub lazily (first call only) and mints a fresh token for this node's session. */
+  async provision(projectId: string, nodeId: string): Promise<PeerProvision> {
+    await this.#ensureListening();
+    this.#pruneExpiredProvisions();
+    const provisionId = randomUUID();
+    const token = randomBytes(32).toString('hex');
+    const record: ProvisionRecord = {
+      provisionId,
+      token,
+      projectId,
+      nodeId,
+      sessionId: null,
+      createdAt: this.#now(),
+    };
+    this.#provisionsById.set(provisionId, record);
+    this.#provisionsByToken.set(token, record);
+    return { provisionId, url: this.#originUrl() };
+  }
+
+  /**
+   * Single consumer: TerminalService, once, at spawn time — the env vars it injects into the
+   * child process so `peer-mcp` can reach the hub.
+   */
+  environmentForProvision(provisionId: string): Record<string, string> | null {
+    this.#pruneExpiredProvisions();
+    const record = this.#provisionsById.get(provisionId);
+    if (record === undefined || this.#port === null) return null;
+    return {
+      FORGEBOARD_PEER_URL: this.#originUrl(),
+      FORGEBOARD_PEER_TOKEN: record.token,
+    };
+  }
+
+  /** Binds a provision to its spawned session, which exempts it from unbound-provision expiry. */
+  bindSession(provisionId: string, sessionId: string): void {
+    const record = this.#provisionsById.get(provisionId);
+    if (record === undefined) return;
+    if (record.sessionId !== null && record.sessionId !== sessionId) {
+      this.#provisionIdBySession.delete(record.sessionId);
+    }
+    record.sessionId = sessionId;
+    this.#provisionIdBySession.set(sessionId, provisionId);
+  }
+
+  /** Invalidates the session's token immediately and runs any registered cleanup, best-effort. */
+  releaseSession(sessionId: string): void {
+    const provisionId = this.#provisionIdBySession.get(sessionId);
+    if (provisionId === undefined) return;
+    this.#provisionIdBySession.delete(sessionId);
+    const record = this.#provisionsById.get(provisionId);
+    if (record !== undefined) {
+      this.#provisionsById.delete(provisionId);
+      this.#provisionsByToken.delete(record.token);
+    }
+    const cleanups = this.#cleanupsByProvision.get(provisionId) ?? [];
+    this.#cleanupsByProvision.delete(provisionId);
+    for (const cleanup of cleanups) {
+      cleanup().catch(() => {
+        // Best-effort: a cleanup failure must not block session teardown.
+      });
+    }
+  }
+
+  /** Task 9 registers provider-config cleanup here, keyed by provision (not session). */
+  registerCleanup(provisionId: string, cleanup: () => Promise<void>): void {
+    const cleanups = this.#cleanupsByProvision.get(provisionId) ?? [];
+    cleanups.push(cleanup);
+    this.#cleanupsByProvision.set(provisionId, cleanups);
+  }
+
+  onMessageDelivered(listener: MessageDeliveredListener): () => void {
+    this.#messageListeners.add(listener);
+    return () => {
+      this.#messageListeners.delete(listener);
+    };
+  }
+
+  async pauseForShutdown(): Promise<void> {
+    await this.#runRegisteredCleanups();
+    await this.#stopServer();
+    this.#clearProvisionState();
+  }
+
+  async pauseForDataMutation(): Promise<void> {
+    await this.#runRegisteredCleanups();
+    await this.#stopServer();
+    this.#clearProvisionState();
+  }
+
+  async resetForPrivacy(): Promise<void> {
+    await this.#runRegisteredCleanups();
+    await this.#stopServer();
+    this.#clearProvisionState();
+  }
+
+  /** No-op: `provision()` restarts the hub lazily the next time it's called. */
+  resumeAfterPrivacyReset(): void {
+    // Intentionally empty.
+  }
+
+  async dispose(): Promise<void> {
+    await this.#runRegisteredCleanups();
+    await this.#stopServer();
+    this.#clearProvisionState();
+    this.#messageListeners.clear();
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // HTTP server lifecycle
+  // ---------------------------------------------------------------------------------------
+
+  async #ensureListening(): Promise<void> {
+    if (this.#server !== null) return;
+    const server = createServer(this.#handleRequest);
+    // Permanent handler: without it, a fault after startup (once the `once` listener below has
+    // either fired and detached, or never fires again) would leave zero 'error' listeners and
+    // crash the process. Best-effort: nothing to do but not let it become unhandled.
+    server.on('error', () => {});
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = server.address();
+    if (address === null || typeof address === 'string') {
+      server.close();
+      throw new Error('agent-peers hub failed to bind a localhost port');
+    }
+    this.#server = server;
+    this.#port = address.port;
+  }
+
+  async #stopServer(): Promise<void> {
+    const server = this.#server;
+    this.#server = null;
+    this.#port = null;
+    if (server === null) return;
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+  }
+
+  #originUrl(): string {
+    return `http://127.0.0.1:${String(this.#port)}`;
+  }
+
+  /**
+   * Runs every still-registered cleanup (i.e. not already run by `releaseSession` for its
+   * provision) before a teardown path wipes provision state, so privacy-sensitive on-disk
+   * artifacts (see `registerCleanup`) are never silently dropped. Best-effort, mirroring
+   * `releaseSession`'s fire-and-forget pattern, but awaited here so a slow cleanup is given the
+   * chance to finish before the caller proceeds — a rejection can never crash teardown.
+   */
+  async #runRegisteredCleanups(): Promise<void> {
+    const cleanups = [...this.#cleanupsByProvision.values()].flat();
+    this.#cleanupsByProvision.clear();
+    await Promise.allSettled(
+      cleanups.map((cleanup) =>
+        cleanup().catch(() => {
+          // Best-effort: a cleanup failure must not block teardown.
+        }),
+      ),
+    );
+  }
+
+  #clearProvisionState(): void {
+    this.#provisionsById.clear();
+    this.#provisionsByToken.clear();
+    this.#provisionIdBySession.clear();
+    this.#rateLimitHits.clear();
+  }
+
+  #pruneExpiredProvisions(): void {
+    const now = this.#now();
+    for (const record of this.#provisionsById.values()) {
+      if (record.sessionId === null && now - record.createdAt > PROVISION_EXPIRY_MS) {
+        this.#provisionsById.delete(record.provisionId);
+        this.#provisionsByToken.delete(record.token);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Routing
+  // ---------------------------------------------------------------------------------------
+
+  async #route(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    try {
+      const token = this.#extractBearerToken(request.headers.authorization);
+      const provision = token === null ? undefined : this.#resolveProvisionByToken(token);
+      if (provision === undefined) {
+        this.#respondJson(response, 401, { error: 'unauthorized' });
+        return;
+      }
+
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      if (request.method === 'GET' && url.pathname === '/v1/peers') {
+        this.#handlePeers(provision, response);
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/v1/message') {
+        await this.#handleMessage(provision, request, response);
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/v1/screen') {
+        await this.#handleScreen(provision, url, response);
+        return;
+      }
+      this.#respondJson(response, 404, { error: 'not-found' });
+    } catch {
+      if (!response.headersSent) this.#respondJson(response, 500, { error: 'internal-error' });
+    }
+  }
+
+  #extractBearerToken(header: string | undefined): string | null {
+    if (header === undefined) return null;
+    const prefix = 'Bearer ';
+    if (!header.startsWith(prefix)) return null;
+    const token = header.slice(prefix.length).trim();
+    return token === '' ? null : token;
+  }
+
+  #resolveProvisionByToken(token: string): ProvisionRecord | undefined {
+    this.#pruneExpiredProvisions();
+    return this.#provisionsByToken.get(token);
+  }
+
+  /**
+   * Resolves the caller's own display name (its node title, not a peer's) and its peer list from
+   * the live canvas. Returns `null` if the project or the caller's own node has since vanished
+   * from the canvas — a condition every route must handle as a graceful 404, never a crash.
+   */
+  #resolveCallerContext(provision: ProvisionRecord): CallerContext | null {
+    const canvas = this.#store.loadCanvas(provision.projectId);
+    if (canvas === null) return null;
+    const callerNode = canvas.nodes.find((node) => node.id === provision.nodeId);
+    if (callerNode === undefined) return null;
+    return {
+      callerName: callerNode.title,
+      peers: resolvePeers(canvas.nodes, canvas.edges, provision.nodeId),
+    };
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // GET /v1/peers
+  // ---------------------------------------------------------------------------------------
+
+  #handlePeers(provision: ProvisionRecord, response: ServerResponse): void {
+    const context = this.#resolveCallerContext(provision);
+    if (context === null) {
+      this.#respondJson(response, 404, { error: 'unknown-node' });
+      return;
+    }
+    const agents = context.peers.map((peer) => ({
+      name: peer.name,
+      provider: peer.provider,
+      live: this.#bridge.findActiveSessionByNode(provision.projectId, peer.nodeId) !== null,
+      muted: peer.muted,
+    }));
+    this.#respondJson(response, 200, { agents });
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // POST /v1/message
+  // ---------------------------------------------------------------------------------------
+
+  async #handleMessage(
+    provision: ProvisionRecord,
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    const body = await this.#readBody(request, MAX_MESSAGE_BYTES);
+    if (body === null) {
+      // The client may still be mid-upload; don't reuse this connection for another request.
+      response.setHeader('Connection', 'close');
+      this.#respondJson(response, 413, { error: 'message-too-large' });
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = body.length === 0 ? {} : JSON.parse(body.toString('utf8'));
+    } catch {
+      this.#respondJson(response, 400, { error: 'invalid-json' });
+      return;
+    }
+    if (typeof parsed !== 'object' || parsed === null) {
+      this.#respondJson(response, 400, { error: 'invalid-body' });
+      return;
+    }
+    const to = (parsed as Record<string, unknown>)['to'];
+    const message = (parsed as Record<string, unknown>)['message'];
+    if (typeof to !== 'string' || typeof message !== 'string') {
+      this.#respondJson(response, 400, { error: 'invalid-body' });
+      return;
+    }
+
+    const context = this.#resolveCallerContext(provision);
+    if (context === null) {
+      this.#respondJson(response, 404, { error: 'unknown-node' });
+      return;
+    }
+
+    const auditBase = {
+      projectId: provision.projectId,
+      nodeId: provision.nodeId,
+      to,
+    };
+    const peer = findPeerByName(context.peers, to);
+    if (peer === undefined) {
+      this.#audit('denied', { ...auditBase, reason: 'unknown-peer' });
+      this.#respondJson(response, 200, { result: 'unknown-peer' });
+      return;
+    }
+    if (peer.muted) {
+      this.#audit('denied', {
+        ...auditBase,
+        edgeId: peer.edgeId,
+        reason: 'muted',
+      });
+      this.#respondJson(response, 200, { result: 'muted' });
+      return;
+    }
+    if (this.#isRateLimited(peer.edgeId)) {
+      this.#audit('denied', {
+        ...auditBase,
+        edgeId: peer.edgeId,
+        reason: 'rate-limited',
+      });
+      this.#respondJson(response, 200, { result: 'rate-limited' });
+      return;
+    }
+    const session = this.#bridge.findActiveSessionByNode(provision.projectId, peer.nodeId);
+    if (session === null) {
+      this.#audit('denied', {
+        ...auditBase,
+        edgeId: peer.edgeId,
+        reason: 'no-live-session',
+      });
+      this.#respondJson(response, 200, { result: 'no-live-session' });
+      return;
+    }
+    const outcome = await this.#bridge.deliverPeerInput(
+      session.sessionId,
+      context.callerName,
+      message,
+    );
+    if (outcome === 'no-live-session') {
+      this.#audit('denied', {
+        ...auditBase,
+        edgeId: peer.edgeId,
+        reason: 'no-live-session',
+      });
+      this.#respondJson(response, 200, { result: 'no-live-session' });
+      return;
+    }
+    this.#audit('allowed', { ...auditBase, edgeId: peer.edgeId });
+    this.#emitMessageDelivered({
+      projectId: provision.projectId,
+      edgeId: peer.edgeId,
+    });
+    this.#respondJson(response, 200, { result: 'delivered' });
+  }
+
+  /** Reads the request body up to `maxBytes`, enforcing the cap while reading — never buffering
+   * an unbounded amount before checking. Returns `null` on overflow. */
+  async #readBody(request: IncomingMessage, maxBytes: number): Promise<Buffer | null> {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of request as AsyncIterable<Buffer>) {
+      total += chunk.byteLength;
+      if (total > maxBytes) return null;
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  }
+
+  /** Sliding 60s window, max 6 per edge. Uses the injected clock so tests are deterministic. */
+  #isRateLimited(edgeId: string): boolean {
+    const now = this.#now();
+    const windowStart = now - RATE_LIMIT_WINDOW_MS;
+    const recent = (this.#rateLimitHits.get(edgeId) ?? []).filter(
+      (timestamp) => timestamp > windowStart,
+    );
+    if (recent.length >= RATE_LIMIT_MAX) {
+      this.#rateLimitHits.set(edgeId, recent);
+      return true;
+    }
+    recent.push(now);
+    this.#rateLimitHits.set(edgeId, recent);
+    return false;
+  }
+
+  #audit(outcome: 'allowed' | 'denied', metadata: Record<string, unknown>): void {
+    try {
+      this.#store.appendAudit('agent-peers', 'message', outcome, metadata);
+    } catch {
+      // Best-effort: an audit failure must not break message delivery.
+    }
+  }
+
+  #emitMessageDelivered(event: { projectId: string; edgeId: string }): void {
+    for (const listener of this.#messageListeners) {
+      try {
+        listener(event);
+      } catch {
+        // A misbehaving listener must not break delivery or other listeners.
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // GET /v1/screen
+  // ---------------------------------------------------------------------------------------
+
+  async #handleScreen(
+    provision: ProvisionRecord,
+    url: URL,
+    response: ServerResponse,
+  ): Promise<void> {
+    const name = (url.searchParams.get('agent') ?? '').trim();
+    if (name === '') {
+      this.#respondJson(response, 400, { error: 'missing-agent' });
+      return;
+    }
+    const context = this.#resolveCallerContext(provision);
+    if (context === null) {
+      this.#respondJson(response, 404, { error: 'unknown-node' });
+      return;
+    }
+    const peer = findPeerByName(context.peers, name);
+    if (peer === undefined) {
+      this.#respondJson(response, 404, { error: 'unknown-peer' });
+      return;
+    }
+    const session = this.#bridge.findActiveSessionByNode(provision.projectId, peer.nodeId);
+    if (session === null) {
+      this.#respondJson(response, 404, { error: 'no-live-session' });
+      return;
+    }
+    const text = await this.#bridge.readTranscriptTail(session.sessionId, SCREEN_TAIL_BYTES);
+    this.#respondJson(response, 200, { text: text ?? '' });
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Response helper
+  // ---------------------------------------------------------------------------------------
+
+  #respondJson(response: ServerResponse, status: number, body: unknown): void {
+    const payload = JSON.stringify(body);
+    response.writeHead(status, {
+      'Content-Type': 'application/json; charset=utf-8',
+    });
+    response.end(payload);
+  }
+}

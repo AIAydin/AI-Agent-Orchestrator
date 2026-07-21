@@ -64,6 +64,13 @@ export interface ResolvedTerminalLaunch {
   readonly cwdRelative: string;
   readonly environment: Readonly<Record<string, string>>;
   readonly environmentVariableNames: readonly string[];
+  /**
+   * Main-side-only peer-hub env (`FORGEBOARD_PEER_URL`/`FORGEBOARD_PEER_TOKEN`), attached by
+   * `TerminalService.#launch` from `PeerEnvironmentProvider.environmentForProvision` once a
+   * session id exists — never part of `environment`/`environmentVariableNames`, which mirror the
+   * renderer-reviewed allowlist, and never resolved by `resolveTerminalLaunch` itself.
+   */
+  readonly peerEnvironment?: Readonly<Record<string, string>>;
   readonly columns: number;
   readonly rows: number;
   readonly rootIdentity: DirectoryIdentity;

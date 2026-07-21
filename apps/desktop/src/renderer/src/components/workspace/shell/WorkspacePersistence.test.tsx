@@ -302,6 +302,7 @@ beforeEach(() => {
         load: vi.fn(() => Promise.resolve({ ok: true, value: canvas() })),
       },
       runs: { onEvent: vi.fn(() => vi.fn()) },
+      agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
     },
   });
 });
@@ -379,6 +380,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -429,6 +431,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -471,6 +474,7 @@ describe('Workspace persistence boundary', () => {
       value: {
         canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     renderWorkspace();
@@ -497,6 +501,7 @@ describe('Workspace persistence boundary', () => {
       value: {
         canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     renderWorkspace();
@@ -527,6 +532,7 @@ describe('Workspace persistence boundary', () => {
         canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
         previews: { stop, onEvent: vi.fn(() => vi.fn()) },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     renderWorkspace();
@@ -558,6 +564,7 @@ describe('Workspace persistence boundary', () => {
         },
         files: { read },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -633,6 +640,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -676,6 +684,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -719,6 +728,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -762,6 +772,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -816,6 +827,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -868,6 +880,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -908,6 +921,7 @@ describe('Workspace persistence boundary', () => {
       value: {
         canvas: { load: vi.fn(() => Promise.resolve({ ok: true, value: document })) },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     renderWorkspace();
@@ -929,6 +943,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
@@ -996,6 +1011,7 @@ describe('Workspace persistence boundary', () => {
           load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
         },
         runs: { onEvent: vi.fn(() => vi.fn()) },
+        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
       },
     });
     render(
