@@ -4,7 +4,7 @@ import type { AppSettings } from '../../../../../shared/application/contracts.js
 import type { WorkflowReviewGateView } from '../../../../../shared/workflow/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { ConfiguredPermissionSummary } from '../../permissions/ConfiguredPermissionSummary.js';
-import { checkProducerId } from './workflow-node-config.js';
+import { checkProducerId, gateLabelFromView, updatedCriteria } from './workflow-node-config.js';
 
 interface WorkflowNodeInspectorProps {
   readonly node: WorkshopNode;
@@ -456,35 +456,6 @@ function boundedInteger(value: string, minimum: number, maximum: number): number
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return minimum;
   return Math.min(maximum, Math.max(minimum, parsed));
-}
-
-function updatedCriteria(
-  previous: NonNullable<WorkshopNode['data']['acceptanceCriteria']>,
-  value: string,
-): NonNullable<WorkshopNode['data']['acceptanceCriteria']> {
-  return value
-    .split('\n')
-    .map((description) => description.trim())
-    .filter(Boolean)
-    .map((description, index) => {
-      const current = previous[index];
-      return current?.description === description
-        ? current
-        : { id: current?.id ?? crypto.randomUUID(), description, satisfied: false };
-    });
-}
-
-function gateLabel(state: WorkshopNode['data']['gateState']): string {
-  return {
-    pending: 'Pending',
-    passed: 'Passed',
-    failed: 'Failed',
-    'waiting-for-human': 'Waiting for you',
-  }[state ?? 'pending'];
-}
-
-function gateLabelFromView(state: WorkflowReviewGateView['status']): string {
-  return gateLabel(state === 'waiting-human' ? 'waiting-for-human' : state);
 }
 
 function reviewerAdapterSupported(adapterId: string): boolean {

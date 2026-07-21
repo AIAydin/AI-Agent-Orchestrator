@@ -13,8 +13,8 @@ import {
 } from './useCanvasGraphInteractions.js';
 
 const terminalApi = {
-  listSessions: vi.fn(async () => ({ ok: true as const, value: [] as unknown[] })),
-  terminate: vi.fn(async () => ({ ok: true as const, value: {} })),
+  listSessions: vi.fn(() => Promise.resolve({ ok: true as const, value: [] as unknown[] })),
+  terminate: vi.fn(() => Promise.resolve({ ok: true as const, value: {} })),
 };
 
 beforeEach(() => {

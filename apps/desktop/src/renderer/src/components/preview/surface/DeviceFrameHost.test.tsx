@@ -1,53 +1,91 @@
 // @vitest-environment jsdom
 
-import '@testing-library/jest-dom/vitest';
+import { createRef } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { DeviceFrameHost, type DeviceFrameHandle } from './DeviceFrameHost.js';
 
-import type { PreviewRendererOperations } from '../controller/operations.js';
-import { DeviceFrameHost } from './DeviceFrameHost.js';
+const navigate = vi.fn(() =>
+  Promise.resolve({ ok: true as const, value: 'http://127.0.0.1:41000/app' }),
+);
 
-describe('DeviceFrameHost', () => {
-  it('keeps failed-surface retry disabled for collaboration read-only viewers', async () => {
-    const { operations, createSurface } = operationsThatFailCreation();
-    render(
-      <DeviceFrameHost
-        projectId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-        nodeId="preview-node"
-        url="http://127.0.0.1:41000/"
-        presetId="iphone"
-        orientation="portrait"
-        operations={operations}
-        readOnly
-      />,
-    );
-
-    expect(await screen.findByText('surface creation failed')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeDisabled();
-    expect(createSurface).toHaveBeenCalledTimes(1);
-  });
+afterEach(cleanup);
+beforeEach(() => {
+  navigate.mockClear();
+  (window as { forgeboard?: unknown }).forgeboard = { previews: { navigate } };
 });
 
-function operationsThatFailCreation(): {
-  operations: PreviewRendererOperations;
-  createSurface: ReturnType<typeof vi.fn>;
-} {
-  const createSurface = vi.fn().mockRejectedValue(new Error('surface creation failed'));
-  return {
-    createSurface,
-    operations: {
-      listTargets: vi.fn(),
-      createSurface,
-      setSurfaceBounds: vi.fn(),
-      navigateSurface: vi.fn(),
-      reloadSurface: vi.fn(),
-      navigateSurfaceHistory: vi.fn(),
-      getSurfaceConsole: vi.fn(),
-      saveSurfaceScreenshot: vi.fn(),
-      openSurfaceExternally: vi.fn(),
-      closeSurface: vi.fn(),
-      onSurfaceEvent: vi.fn(() => vi.fn()),
-    },
-  };
+function renderHost(slot?: 'comparison-left' | 'comparison-right') {
+  const handle = createRef<DeviceFrameHandle>();
+  const { container } = render(
+    <DeviceFrameHost
+      ref={handle}
+      projectId="p1"
+      nodeId="n1"
+      {...(slot === undefined ? {} : { slot })}
+      url="http://127.0.0.1:41000/"
+      presetId="desktop"
+      orientation="portrait"
+      readOnly={false}
+    />,
+  );
+  return { handle, container };
 }
+
+describe('DeviceFrameHost', () => {
+  it('renders a per-node partitioned webview at the preset viewport', () => {
+    const { container } = renderHost();
+    const webview = container.querySelector('webview');
+    expect(webview?.getAttribute('partition')).toBe('preview:p1:n1');
+    expect(webview?.getAttribute('src')).toBe('http://127.0.0.1:41000/');
+  });
+
+  it('uses slot-scoped partitions for comparison frames', () => {
+    const { container } = renderHost('comparison-left');
+    expect(container.querySelector('webview')?.getAttribute('partition')).toBe(
+      'preview:p1:n1:comparison-left',
+    );
+  });
+
+  it('validates address navigation through the previews IPC before loading it', async () => {
+    const { handle, container } = renderHost();
+    await handle.current?.navigate('http://127.0.0.1:41000/app');
+    expect(navigate).toHaveBeenCalledWith({
+      projectId: 'p1',
+      nodeId: 'n1',
+      url: 'http://127.0.0.1:41000/app',
+    });
+    expect(container.querySelector('webview')?.getAttribute('src')).toBe(
+      'http://127.0.0.1:41000/app',
+    );
+  });
+
+  it('disables the "Try again" retry button in read-only mode once the webview reports a failed load', () => {
+    const handle = createRef<DeviceFrameHandle>();
+    const { container } = render(
+      <DeviceFrameHost
+        ref={handle}
+        projectId="p1"
+        nodeId="n1"
+        url="http://127.0.0.1:41000/"
+        presetId="desktop"
+        orientation="portrait"
+        readOnly={true}
+      />,
+    );
+    const webview = container.querySelector('webview');
+    expect(webview).not.toBeNull();
+    fireEvent(
+      webview as Element,
+      Object.assign(new Event('did-fail-load'), {
+        errorCode: -102,
+        errorDescription: 'ERR_CONNECTION_REFUSED',
+        isMainFrame: true,
+      }) as Event,
+    );
+
+    const retryButton = screen.getByRole('button', { name: 'Try again' });
+    expect(retryButton.hasAttribute('disabled')).toBe(true);
+  });
+});

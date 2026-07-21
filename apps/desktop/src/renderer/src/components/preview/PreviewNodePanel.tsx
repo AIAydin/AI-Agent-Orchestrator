@@ -40,7 +40,7 @@ interface PreviewNodePanelProps {
   onSession: (session: PreviewSessionSnapshot | null) => void;
   onOpenSettings: () => void;
   onError: (message: string) => void;
-  operations?: PreviewRendererOperations | null;
+  operations?: PreviewRendererOperations;
   configurationReadOnly?: boolean;
 }
 
@@ -173,7 +173,6 @@ export function PreviewNodePanel({
   }, [command, data.previewPackageScript, onUpdate, preferredScript, readOnly]);
 
   useEffect(() => {
-    if (!operations) return;
     let active = true;
     void operations
       .listTargets(projectId)
@@ -237,10 +236,10 @@ export function PreviewNodePanel({
     <section className="preview-node-panel" aria-label="Preview configuration">
       <header>
         <div>
-          <MonitorPlay size={14} aria-hidden="true" />
+          <MonitorPlay size={14} />
           <h3>Local preview</h3>
         </div>
-        <span className={`preview-runtime-state ${session?.status ?? 'idle'}`} role="status">
+        <span className={`preview-runtime-state ${session?.status ?? 'idle'}`}>
           {session?.status ?? 'idle'}
         </span>
       </header>
@@ -301,8 +300,8 @@ export function PreviewNodePanel({
 
       {targetFailure ? (
         <p className="preview-failure" role="alert">
-          {targetFailure} Your main project folder is still available. Close and reopen this node to
-          try again.
+          {targetFailure} Your main project folder (Primary checkout) is still available. Close and
+          reopen this node to try again.
         </p>
       ) : null}
 
@@ -316,7 +315,7 @@ export function PreviewNodePanel({
             }
             onClick={() => void perform('start')}
           >
-            <Play size={13} aria-hidden="true" /> {busy ? 'Starting…' : 'Start preview'}
+            <Play size={13} /> {busy ? 'Starting…' : 'Start preview'}
           </button>
         ) : (
           <>
@@ -325,34 +324,24 @@ export function PreviewNodePanel({
               disabled={readOnly || busy}
               onClick={() => void perform('restart')}
             >
-              <RefreshCw size={12} aria-hidden="true" /> Restart
+              <RefreshCw size={12} /> Restart
             </button>
             <button type="button" disabled={busy} onClick={() => void perform('stop')}>
-              <Square size={12} aria-hidden="true" /> Stop
+              <Square size={12} /> Stop
             </button>
           </>
         )}
         <button
           type="button"
-          disabled={readOnly || !ready || !operations}
+          disabled={readOnly || !ready}
           onClick={() => setSurfaceOpen(true)}
           aria-label="Open preview"
         >
-          <Maximize2 size={12} aria-hidden="true" /> Open preview
+          <Maximize2 size={12} /> Open preview
         </button>
       </div>
 
-      {!operations ? (
-        <p className="preview-command-guidance" role="status">
-          This build can&apos;t show the preview here. The local server still runs — install the
-          latest desktop release to view it.
-        </p>
-      ) : null}
-      {session?.failure ? (
-        <p className="preview-failure" role="alert">
-          {session.failure}
-        </p>
-      ) : null}
+      {session?.failure ? <p className="preview-failure">{session.failure}</p> : null}
       {process ? (
         <dl className="preview-process-details">
           <div>
@@ -372,14 +361,14 @@ export function PreviewNodePanel({
       <PreviewConsole session={session} />
 
       <div className="preview-security-note">
-        <ShieldCheck size={13} aria-hidden="true" />
+        <ShieldCheck size={13} />
         <span>
           The server only listens on this computer, on an automatically chosen port. The preview
           blocks popups, downloads, and unapproved websites.
         </span>
       </div>
 
-      {surfaceOpen && ready && process?.previewUrl && operations ? (
+      {surfaceOpen && ready && process?.previewUrl ? (
         <PreviewSurface
           projectId={projectId}
           nodeId={nodeId}
@@ -389,7 +378,6 @@ export function PreviewNodePanel({
           secondaryPreset={secondaryPreset}
           orientation={orientation}
           sideBySide={data.previewSideBySide === true}
-          operations={operations}
           readOnly={readOnly}
           onClose={() => setSurfaceOpen(false)}
           onError={onError}

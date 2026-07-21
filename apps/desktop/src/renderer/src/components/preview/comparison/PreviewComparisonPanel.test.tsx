@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-/* eslint-disable @typescript-eslint/unbound-method -- bridge members are Vitest mocks. */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,7 +57,7 @@ describe('PreviewComparisonPanel', () => {
       },
     });
     const operations = surfaceOperations();
-    render(
+    const { container } = render(
       <PreviewComparisonPanel
         projectId={PROJECT_ID}
         nodeId="preview-node"
@@ -106,16 +105,15 @@ describe('PreviewComparisonPanel', () => {
       }),
     ]);
     fireEvent.click(screen.getByRole('button', { name: 'Open side-by-side comparison' }));
-    await waitFor(() => expect(operations.createSurface).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(operations.createSurface).mock.calls.map(([input]) => input)).toEqual([
-      expect.objectContaining({
-        slot: 'comparison-left',
-        url: 'http://127.0.0.1:41001/',
-      }),
-      expect.objectContaining({
-        slot: 'comparison-right',
-        url: 'http://127.0.0.1:41002/',
-      }),
+    await waitFor(() => expect(container.querySelectorAll('webview')).toHaveLength(2));
+    const webviews = [...container.querySelectorAll('webview')];
+    expect(webviews.map((element) => element.getAttribute('src'))).toEqual([
+      'http://127.0.0.1:41001/',
+      'http://127.0.0.1:41002/',
+    ]);
+    expect(webviews.map((element) => element.getAttribute('partition'))).toEqual([
+      `preview:${PROJECT_ID}:preview-node:comparison-left`,
+      `preview:${PROJECT_ID}:preview-node:comparison-right`,
     ]);
     cleanup();
     expect(unsubscribe).toHaveBeenCalledOnce();
@@ -360,35 +358,5 @@ function renderPanel(
 function surfaceOperations(): PreviewRendererOperations {
   return {
     listTargets: vi.fn(),
-    createSurface: vi.fn<PreviewRendererOperations['createSurface']>().mockImplementation((input) =>
-      Promise.resolve({
-        surfaceId: crypto.randomUUID(),
-        projectId: input.projectId,
-        nodeId: input.nodeId,
-        ...(input.slot === undefined ? {} : { slot: input.slot }),
-        url: input.url,
-        status: 'ready',
-        bounds: input.bounds,
-        canGoBack: false,
-        canGoForward: false,
-        touchEmulation: input.touchEmulation,
-        failure: null,
-      }),
-    ),
-    setSurfaceBounds: vi.fn(),
-    navigateSurface: vi.fn(),
-    reloadSurface: vi.fn(),
-    navigateSurfaceHistory: vi.fn(),
-    getSurfaceConsole: vi.fn().mockResolvedValue({
-      entries: [],
-      truncated: false,
-      retainedBytes: 0,
-      disclosure:
-        'Console output is captured in memory only, bounded to 500 entries and 256 KiB, and may contain application data.',
-    }),
-    saveSurfaceScreenshot: vi.fn(),
-    openSurfaceExternally: vi.fn(),
-    closeSurface: vi.fn().mockResolvedValue(true),
-    onSurfaceEvent: vi.fn().mockReturnValue(() => undefined),
   };
 }

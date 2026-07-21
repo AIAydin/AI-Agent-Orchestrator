@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ImagePlus, Link2, RotateCcw, Trash2 } from 'lucide-react';
 
-import type { ProjectImageLoadResult } from '../../../../../../shared/files/images/contracts.js';
 import { MarkdownComposer } from '../../../content/markdown/MarkdownComposer.js';
 import type { WorkshopNode } from '../../canvas/CanvasNode.js';
 import {
@@ -10,6 +9,7 @@ import {
   removeImageReference,
   type NoteImageReference,
 } from './reference-updates.js';
+import { useNoteImagePreviews } from './use-note-image-previews.js';
 import './note-image-inspector.css';
 
 interface NoteImageInspectorProps {
@@ -22,8 +22,6 @@ interface NoteImageInspectorProps {
   readonly onError: (message: string) => void;
 }
 
-type PreviewState = ProjectImageLoadResult | { readonly status: 'loading' };
-
 export function NoteImageInspector({
   projectId,
   node,
@@ -35,82 +33,12 @@ export function NoteImageInspector({
 }: NoteImageInspectorProps) {
   const images = node.data.images ?? [];
   const altText = node.data.altText ?? {};
-  const [previews, setPreviews] = useState<Readonly<Record<string, PreviewState>>>({});
-  const [choosing, setChoosing] = useState(false);
-  const signature = useMemo(
-    () => images.map((image) => `${image.projectId}:${image.relativePath}`).join('\n'),
-    [images],
+  const previews = useNoteImagePreviews(
+    projectId,
+    images,
+    readOnly ? undefined : (reconciled) => onUpdate({ images: reconciled }),
   );
-
-  useEffect(() => {
-    let active = true;
-    if (images.length === 0) {
-      setPreviews({});
-      return () => {
-        active = false;
-      };
-    }
-    setPreviews(
-      Object.fromEntries(images.map((image) => [image.relativePath, { status: 'loading' }])),
-    );
-    void Promise.all(
-      images.map(async (image): Promise<[string, ProjectImageLoadResult]> => {
-        if (image.projectId !== projectId) {
-          return [
-            image.relativePath,
-            {
-              status: 'unavailable',
-              projectId: image.projectId,
-              relativePath: image.relativePath,
-              message: 'This image belongs to a different project and was not loaded.',
-            },
-          ];
-        }
-        try {
-          return [
-            image.relativePath,
-            await window.forgeboard.files.loadImage({
-              projectId,
-              relativePath: image.relativePath,
-            }),
-          ];
-        } catch (cause) {
-          return [
-            image.relativePath,
-            {
-              status: 'unavailable',
-              projectId,
-              relativePath: image.relativePath,
-              message:
-                cause instanceof Error ? cause.message : 'Forgeboard could not load this image.',
-            },
-          ];
-        }
-      }),
-    ).then((loaded) => {
-      if (!active) return;
-      setPreviews(Object.fromEntries(loaded));
-      if (readOnly) return;
-      const byPath = new Map(loaded);
-      let changed = false;
-      const reconciled = images.map((image) => {
-        const preview = byPath.get(image.relativePath);
-        if (preview?.status === 'missing' && !image.missing) {
-          changed = true;
-          return { ...image, missing: true };
-        }
-        if (preview?.status === 'available' && image.missing) {
-          changed = true;
-          return { ...image, missing: false };
-        }
-        return image;
-      });
-      if (changed) onUpdate({ images: reconciled });
-    });
-    return () => {
-      active = false;
-    };
-  }, [projectId, readOnly, signature]);
+  const [choosing, setChoosing] = useState(false);
 
   const imageNodes = nodes.filter(
     (candidate) =>

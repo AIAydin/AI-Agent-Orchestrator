@@ -200,3 +200,11 @@
     grid-row: 2;
   }
 }
+
+.preview-device-webview {
+  width: 100%;
+  height: 100%;
+}
+webview.preview-device-webview {
+  display: flex;
+}

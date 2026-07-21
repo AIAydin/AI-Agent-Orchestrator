@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 
 import { PACKAGED_SMOKE_MARKER } from '../shared/smoke/contracts.js';
 import { attemptContextSnapshotStorageStartup } from './agent-execution/context/snapshot-store/startup.js';
@@ -9,6 +9,11 @@ import { CloseCoordinator } from './lifecycle/close-coordinator.js';
 import { registerIpcHandlers } from './ipc.js';
 import type { ApplicationServices } from './ipc.js';
 import { verifyBundledGit } from './git/git-runtime.js';
+import {
+  hardenAttachingWebviewPreferences,
+  installPreviewWebviewSecurity,
+  shouldAttachPreviewWebview,
+} from './previews/webview/webview-security.js';
 import { openLocalStoreWithStartupDatabaseRecovery } from './recovery/database/startup-adapter/open-store.js';
 import { configurePackagedSmokeProfile, runPackagedApplicationSmoke } from './smoke/packaged.js';
 import { createNonInteractiveSmokeStartupDialog } from './smoke/startup-recovery-dialog.js';
@@ -66,6 +71,33 @@ void app
       return;
     }
     services = registerIpcHandlers(store);
+    installPreviewWebviewSecurity(app, {
+      confirmOpenExternal: async (url) => {
+        const parent = mainWindow;
+        if (!parent || parent.isDestroyed()) return false;
+        const decision = await dialog.showMessageBox(parent, {
+          type: 'warning',
+          title: 'Open link in your browser?',
+          message: 'The preview wants to open a page outside Forgeboard.',
+          detail: url,
+          buttons: ['Cancel', 'Open in browser'],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        });
+        return decision.response === 1;
+      },
+      openExternal: async (url) => {
+        await shell.openExternal(url, { activate: true });
+      },
+      audit: (action, outcome, metadata) => {
+        try {
+          store?.appendAudit('preview-webview', action, outcome, metadata);
+        } catch {
+          // Audit storage failure must not change an enforcement decision.
+        }
+      },
+    });
     closeCoordinator = new CloseCoordinator(dialog, ipcMain);
     mainWindow = createWindow(services, closeCoordinator, packagedSmokeProfile === null);
 
@@ -203,6 +235,7 @@ function createWindow(
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: true,
       webSecurity: true,
       allowRunningInsecureContent: false,
       spellcheck: true,
@@ -239,7 +272,14 @@ function createWindow(
       event.preventDefault();
     }
   });
-  window.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  // Webviews are allowed only for sandboxed, partition-scoped local previews.
+  window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    if (!shouldAttachPreviewWebview(params as unknown as Record<string, unknown>)) {
+      event.preventDefault();
+      return;
+    }
+    hardenAttachingWebviewPreferences(webPreferences as unknown as Record<string, unknown>);
+  });
   if (showWhenReady) window.once('ready-to-show', () => window.show());
 
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;

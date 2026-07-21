@@ -1,18 +1,19 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 
-import type {
-  PreviewConsoleView,
-  PreviewScreenshotResult,
-  PreviewSurfaceView,
-} from '../../../../../shared/preview/surface/contracts.js';
-import type { PreviewRendererOperations } from '../controller/operations.js';
-import { usePreviewSurface } from '../controller/usePreviewSurface.js';
+import type { PreviewConsoleMessage } from '../../../../../shared/preview/console.js';
+import { previewWebviewPartition } from '../../../../../shared/preview/webview-partition.js';
+import { unwrap } from '../../../lib/ipc.js';
 import {
   orientedViewport,
   PREVIEW_DEVICE_PRESETS,
   type PreviewOrientation,
   type PreviewPresetId,
 } from '../devices/presets.js';
+import {
+  PreviewWebview,
+  type PreviewWebviewHandle,
+  type PreviewWebviewStatus,
+} from '../webview/PreviewWebview.js';
 
 interface DeviceFrameHostProps {
   projectId: string;
@@ -21,93 +22,88 @@ interface DeviceFrameHostProps {
   url: string;
   presetId: PreviewPresetId;
   orientation: PreviewOrientation;
-  operations: PreviewRendererOperations;
   readOnly: boolean;
-  onView?: (view: PreviewSurfaceView | null) => void;
-  onConsole?: (view: PreviewConsoleView | null) => void;
+  onView?: (view: PreviewWebviewStatus | null) => void;
+  onConsole?: (message: PreviewConsoleMessage) => void;
 }
 
 export interface DeviceFrameHandle {
   navigate(url: string): Promise<void>;
   reload(): Promise<void>;
   history(direction: 'back' | 'forward'): Promise<void>;
-  screenshot(): Promise<PreviewScreenshotResult | null>;
-  openExternal(): Promise<boolean>;
 }
 
 export const DeviceFrameHost = forwardRef<DeviceFrameHandle, DeviceFrameHostProps>(
   function DeviceFrameHost(
-    {
-      projectId,
-      nodeId,
-      slot,
-      url,
-      presetId,
-      orientation,
-      operations,
-      readOnly,
-      onView,
-      onConsole,
-    },
+    { projectId, nodeId, slot, url, presetId, orientation, readOnly, onView, onConsole },
     ref,
   ) {
-    const hostRef = useRef<HTMLDivElement>(null);
+    const webviewRef = useRef<PreviewWebviewHandle | null>(null);
+    const [view, setView] = useState<PreviewWebviewStatus | null>(null);
     const preset = PREVIEW_DEVICE_PRESETS[presetId];
-    const touchEmulation = preset.family !== 'desktop';
-    const controller = usePreviewSurface({
-      operations,
-      projectId,
-      nodeId,
-      ...(slot === undefined ? {} : { slot }),
-      url,
-      touchEmulation,
-      hostRef,
-    });
     const viewport = orientedViewport(presetId, orientation);
 
-    useEffect(() => onView?.(controller.surface), [controller.surface, onView]);
-    useEffect(() => onConsole?.(controller.consoleView), [controller.consoleView, onConsole]);
     useImperativeHandle(
       ref,
       () => ({
-        navigate: (url) => controller.navigate(url),
-        reload: () => controller.reload(),
-        history: (direction) => controller.history(direction),
-        screenshot: () => controller.screenshot(),
-        openExternal: () => controller.openExternal(),
+        async navigate(candidate: string) {
+          const validated = unwrap(
+            await window.forgeboard.previews.navigate({
+              projectId,
+              nodeId,
+              ...(slot === undefined ? {} : { slot }),
+              url: candidate,
+            }),
+          );
+          webviewRef.current?.navigate(validated);
+        },
+        reload() {
+          webviewRef.current?.reload();
+          return Promise.resolve();
+        },
+        history(direction: 'back' | 'forward') {
+          webviewRef.current?.history(direction);
+          return Promise.resolve();
+        },
       }),
-      [controller],
+      [nodeId, projectId, slot],
     );
 
     return (
       <figure className={`preview-device preview-device-${preset.family}`}>
         <figcaption>
           {preset.label} · {viewport.width} × {viewport.height}
-          {controller.surface?.touchEmulation ? (
-            <span className="preview-touch-badge">Touchscreen mode on</span>
-          ) : null}
         </figcaption>
         <div className="preview-device-shell">
           <div
-            ref={hostRef}
             className="preview-device-host"
-            data-status={controller.surface?.status ?? 'connecting'}
+            data-status={view?.status ?? 'connecting'}
             style={{ width: viewport.width, height: viewport.height }}
             aria-label={`${preset.label} preview`}
           >
-            {!controller.surface || controller.failure ? (
+            <PreviewWebview
+              ref={webviewRef}
+              partition={previewWebviewPartition(projectId, nodeId, slot)}
+              src={url}
+              ariaLabel={`${preset.label} preview page`}
+              className="preview-device-webview"
+              onStatus={(next) => {
+                setView(next);
+                onView?.(next);
+              }}
+              {...(onConsole === undefined ? {} : { onConsole })}
+            />
+            {view?.status === 'failed' ? (
               <div className="preview-surface-fallback">
-                {controller.failure ? (
-                  <>
-                    <strong>Preview unavailable</strong>
-                    <span>{controller.failure}</span>
-                    <button type="button" disabled={readOnly} onClick={controller.retry}>
-                      Try again
-                    </button>
-                  </>
-                ) : (
-                  <span>Opening preview…</span>
-                )}
+                <strong>Preview unavailable</strong>
+                <span>{view.failure ?? 'The page could not load.'}</span>
+                <button
+                  type="button"
+                  disabled={readOnly}
+                  onClick={() => webviewRef.current?.reload()}
+                >
+                  Try again
+                </button>
               </div>
             ) : null}
           </div>

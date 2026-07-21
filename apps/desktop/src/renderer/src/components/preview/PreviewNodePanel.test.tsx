@@ -87,7 +87,6 @@ function session(status: PreviewSessionSnapshot['status'] = 'stopped'): PreviewS
 function surfaceOperations(
   overrides: Partial<PreviewRendererOperations> = {},
 ): PreviewRendererOperations {
-  let sequence = 0;
   return {
     listTargets: vi.fn().mockResolvedValue([
       {
@@ -103,68 +102,6 @@ function surfaceOperations(
         available: true,
       },
     ]),
-    createSurface: vi
-      .fn<PreviewRendererOperations['createSurface']>()
-      .mockImplementation((input) => {
-        sequence += 1;
-        return Promise.resolve({
-          surfaceId: `00000000-0000-4000-8000-${String(sequence).padStart(12, '0')}`,
-          projectId: input.projectId,
-          nodeId: input.nodeId,
-          url: input.url,
-          status: 'ready',
-          bounds: input.bounds,
-          touchEmulation: input.touchEmulation,
-          canGoBack: false,
-          canGoForward: false,
-          failure: null,
-        });
-      }),
-    setSurfaceBounds: vi
-      .fn<PreviewRendererOperations['setSurfaceBounds']>()
-      .mockImplementation(({ surfaceId, bounds }) =>
-        Promise.resolve({
-          surfaceId,
-          projectId: PROJECT_ID,
-          nodeId: 'preview-node',
-          url: 'http://127.0.0.1:41001/',
-          status: 'ready',
-          bounds,
-          touchEmulation: false,
-          canGoBack: false,
-          canGoForward: false,
-          failure: null,
-        }),
-      ),
-    navigateSurface: vi
-      .fn<PreviewRendererOperations['navigateSurface']>()
-      .mockImplementation(({ surfaceId, url }) =>
-        Promise.resolve({
-          surfaceId,
-          projectId: PROJECT_ID,
-          nodeId: 'preview-node',
-          url,
-          status: 'ready',
-          bounds: { x: 0, y: 0, width: 640, height: 480, visible: true },
-          touchEmulation: false,
-          canGoBack: true,
-          canGoForward: false,
-          failure: null,
-        }),
-      ),
-    reloadSurface: vi.fn(),
-    navigateSurfaceHistory: vi.fn(),
-    getSurfaceConsole: vi.fn().mockResolvedValue({
-      entries: [],
-      truncated: false,
-      retainedBytes: 0,
-      disclosure:
-        'Console output is captured in memory only, bounded to 500 entries and 256 KiB, and may contain application data.',
-    }),
-    saveSurfaceScreenshot: vi.fn().mockResolvedValue({ saved: true, width: 390, height: 844 }),
-    openSurfaceExternally: vi.fn().mockResolvedValue(true),
-    closeSurface: vi.fn().mockResolvedValue(true),
-    onSurfaceEvent: vi.fn().mockReturnValue(() => undefined),
     ...overrides,
   };
 }
@@ -419,41 +356,8 @@ describe('PreviewNodePanel', () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
-  it('creates two exact device surfaces and routes screenshot and external open through operations', async () => {
+  it('opens the preview surface with correctly sized, per-node partitioned webviews', async () => {
     installPreviewBridge();
-    vi.stubGlobal('innerWidth', 2000);
-    vi.stubGlobal('innerHeight', 2000);
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      if (this.classList.contains('preview-device-stage')) {
-        return {
-          x: 0,
-          y: 0,
-          top: 0,
-          left: 0,
-          right: 2000,
-          bottom: 2000,
-          width: 2000,
-          height: 2000,
-          toJSON: () => ({}),
-        };
-      }
-      const width = Number.parseInt(this.style.width || '0', 10);
-      const height = Number.parseInt(this.style.height || '0', 10);
-      return {
-        x: 12,
-        y: 64,
-        top: 64,
-        left: 12,
-        right: 12 + width,
-        bottom: 64 + height,
-        width,
-        height,
-        toJSON: () => ({}),
-      };
-    });
-    const operations = surfaceOperations();
     renderPanel({
       project: project({ dev: 'vite' }),
       data: baseData({
@@ -463,59 +367,27 @@ describe('PreviewNodePanel', () => {
         previewSideBySide: true,
       }),
       session: session('ready'),
-      operations,
+      operations: surfaceOperations(),
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Open preview' }));
-    await waitFor(() => expect(operations.createSurface).toHaveBeenCalledTimes(2));
-    const firstCreate = vi.mocked(operations.createSurface).mock.calls[0]?.[0];
-    expect(firstCreate?.projectId).toBe(PROJECT_ID);
-    expect(firstCreate?.nodeId).toBe('preview-node');
-    expect(firstCreate?.url).toBe('http://127.0.0.1:41001/');
-    expect(firstCreate?.bounds.width).toBe(390);
-    expect(firstCreate?.bounds.height).toBe(844);
-    expect(firstCreate?.touchEmulation).toBe(true);
-    const secondCreate = vi.mocked(operations.createSurface).mock.calls[1]?.[0];
-    expect(secondCreate?.touchEmulation).toBe(true);
-    expect(screen.getByLabelText<HTMLElement>('iPhone preview').style.width).toBe('390px');
-    expect(screen.getByLabelText<HTMLElement>('iPhone preview').style.height).toBe('844px');
-    expect(screen.getByLabelText<HTMLElement>('Tablet preview').style.width).toBe('820px');
-    expect(screen.getByLabelText<HTMLElement>('Tablet preview').style.height).toBe('1180px');
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole<HTMLButtonElement>('button', {
-          name: 'Save screenshot',
-        }).disabled,
-      ).toBe(false),
-    );
-    expect(screen.getAllByText('Touchscreen mode on')).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Save screenshot' }));
-    await screen.findByText('Screenshot saved.');
-    fireEvent.click(screen.getByRole('button', { name: 'Open in browser' }));
-    await screen.findByText('Opened in your browser.');
-    expect(operations.saveSurfaceScreenshot).toHaveBeenCalledTimes(1);
-    expect(operations.openSurfaceExternally).toHaveBeenCalledTimes(1);
+    const primaryHost = await screen.findByLabelText<HTMLElement>('iPhone preview');
+    expect(primaryHost.style.width).toBe('390px');
+    expect(primaryHost.style.height).toBe('844px');
+    const secondaryHost = screen.getByLabelText<HTMLElement>('Tablet preview');
+    expect(secondaryHost.style.width).toBe('820px');
+    expect(secondaryHost.style.height).toBe('1180px');
+
+    const webviews = document.querySelectorAll('webview');
+    expect(webviews).toHaveLength(2);
+    expect(
+      [...webviews].every((webview) => webview.getAttribute('src') === 'http://127.0.0.1:41001/'),
+    ).toBe(true);
+    expect(webviews[0]?.getAttribute('partition')).toBe(`preview:${PROJECT_ID}:preview-node`);
 
     fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
-    await waitFor(() => expect(operations.closeSurface).toHaveBeenCalledTimes(2));
-  });
-
-  it('keeps touch emulation off for a desktop surface', async () => {
-    installPreviewBridge();
-    const operations = surfaceOperations();
-    renderPanel({
-      project: project({ dev: 'vite' }),
-      data: baseData({ previewPackageScript: 'dev', previewPreset: 'desktop' }),
-      session: session('ready'),
-      operations,
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open preview' }));
-    await waitFor(() => expect(operations.createSurface).toHaveBeenCalledTimes(1));
-    const input = vi.mocked(operations.createSurface).mock.calls[0]?.[0];
-    expect(input?.touchEmulation).toBe(false);
-    expect(screen.queryByText('Touchscreen mode on')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Local preview' })).toBeNull();
   });
 });
 

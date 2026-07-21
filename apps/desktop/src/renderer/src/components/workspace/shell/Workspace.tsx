@@ -30,6 +30,7 @@ import {
 import { FileDocumentSchema } from '../../../../../shared/files/contracts.js';
 import type { WorkflowExecutionView } from '../../../../../shared/workflow/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
+import { useKeyedStable } from '../../../lib/use-keyed-stable.js';
 import { commandPaletteShortcutLabel, opensCommandPalette } from '../../../lib/keyboard-preset.js';
 import {
   NODE_DEFINITIONS,
@@ -107,6 +108,8 @@ import { useAgentWorktreeRecord } from '../runs/useAgentWorktreeAvailability.js'
 import {
   AgentSessionProvider,
   type AgentSessionContextValue,
+  type CanvasNodeRosterEntry,
+  type CheckProducerEntry,
 } from '../runs/agent-session/AgentSessionContext.js';
 import { AGENT_NODE_DRAG_HANDLE } from '../runs/agent-session/AgentSessionNode.js';
 import { providerConnectionIdForAdapter } from '../../../lib/provider-connections.js';
@@ -120,7 +123,7 @@ import { mergeCollaborationCanvasSnapshot } from '../collaboration/merge-canvas.
 import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
-import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
+import { checkProducerId, initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
 import { buildWorkflowTemplate } from '../workflows/templates/builder.js';
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from '../workflows/templates/catalog.js';
 import { collisionFreeTemplateOrigin } from '../workflows/templates/placement.js';
@@ -139,6 +142,11 @@ import {
 } from '../workflows/workflow-node-status.js';
 import { workflowEdgeRuntimePresentation } from '../workflows/workflow-edge-presentation.js';
 import { usePeerTransitPulse } from '../canvas/usePeerTransitPulse.js';
+import {
+  WorkflowRuntimeProvider,
+  workflowPendingDecision,
+  type WorkflowRuntimeContextValue,
+} from '../workflows/WorkflowRuntimeContext.js';
 import {
   appendLocalComment,
   appendSharedComment,
@@ -1544,6 +1552,52 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     ],
   );
 
+  const nodeRosterSource = useMemo<readonly CanvasNodeRosterEntry[]>(
+    () =>
+      nodes.map((node) => ({
+        id: node.id,
+        title: node.data.title,
+        kind: node.data.kind,
+        locked: node.data.locked,
+      })),
+    [nodes],
+  );
+  const nodeRoster = useKeyedStable(
+    nodeRosterSource,
+    nodeRosterSource
+      .map(
+        (entry) => `${entry.id}\u0000${entry.title}\u0000${entry.kind}\u0000${String(entry.locked)}`,
+      )
+      .join('\n'),
+  );
+  const checkProducersSource = useMemo<readonly CheckProducerEntry[]>(
+    () =>
+      nodes
+        .filter((node) => node.data.kind === 'test')
+        .map((node) => ({
+          nodeId: node.id,
+          producerId: checkProducerId(node),
+          title: node.data.title,
+          checkKind: node.data.checkKind ?? 'test',
+        })),
+    [nodes],
+  );
+  const checkProducers = useKeyedStable(
+    checkProducersSource,
+    checkProducersSource
+      .map(
+        (entry) =>
+          `${entry.nodeId}\u0000${entry.producerId}\u0000${entry.title}\u0000${entry.checkKind}`,
+      )
+      .join('\n'),
+  );
+  const openGitPrReadiness = useCallback(
+    (runId: string) => {
+      gitReview.openTarget({ kind: 'agent-worktree', projectId: project.id, runId });
+    },
+    [gitReview, project.id],
+  );
+
   const agentSessionValue = useMemo<AgentSessionContextValue>(
     () => ({
       project,
@@ -1563,12 +1617,18 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         nodesRef.current.find((node) => node.id === nodeId)?.data.title ?? null,
       removeAgentContext: removeProjectFileContext,
       requestDeleteNode: deleteNode,
+      nodeRoster,
+      checkProducers,
+      openGitPrReadiness,
     }),
     [
+      checkProducers,
       collaborationCanvas.graphReadOnly,
       deleteNode,
+      nodeRoster,
       onError,
       onOpenSettings,
+      openGitPrReadiness,
       project,
       providerGates.gateFor,
       providerGates.recheck,
@@ -1577,6 +1637,48 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       runnableAgents,
       settings,
       updateNodeData,
+    ],
+  );
+
+  const {
+    executions: workflowExecutions,
+    interactionEvents: workflowInteractionEvents,
+    busyAction: workflowBusyAction,
+    mutationsAuthorized: workflowMutationsAuthorized,
+    currentExecution: workflowCurrentExecution,
+    start: workflowStart,
+    cancelNode: workflowCancelNode,
+  } = workflows;
+
+  const workflowRuntimeValue = useMemo<WorkflowRuntimeContextValue>(
+    () => ({
+      executions: workflowExecutions,
+      interactionEvents: workflowInteractionEvents,
+      busyAction: workflowBusyAction,
+      mutationsAuthorized: workflowMutationsAuthorized,
+      reviewGateFor: (nodeId: string) => workflowReviewGates.get(nodeId) ?? null,
+      pendingDecisionFor: (nodeId: string) =>
+        workflowPendingDecision(workflowCurrentExecution, nodeId),
+      requestDecision: setWorkflowDecision,
+      startNode: (nodeId: string) =>
+        void workflowStart({ kind: 'node', nodeId, includeUpstream: false }),
+      cancelNode: (input) => void workflowCancelNode(input),
+      revealArtifact: async (input) => {
+        unwrap(await window.forgeboard.workflows.revealArtifact(input));
+      },
+      openArtifact: async (input) => {
+        unwrap(await window.forgeboard.workflows.openArtifact(input));
+      },
+    }),
+    [
+      workflowReviewGates,
+      workflowExecutions,
+      workflowInteractionEvents,
+      workflowBusyAction,
+      workflowMutationsAuthorized,
+      workflowCurrentExecution,
+      workflowStart,
+      workflowCancelNode,
     ],
   );
 
@@ -1666,6 +1768,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onReset={sidebarLayout.rail.reset}
         />
         <AgentSessionProvider value={agentSessionValue}>
+        <WorkflowRuntimeProvider value={workflowRuntimeValue}>
         <WorkspaceCanvas
           canvas={canvas}
           nodes={displayedGraph.nodes}
@@ -1783,6 +1886,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onAttachAgentContext={attachProjectFileContext}
           onContextDropError={onError}
         />
+        </WorkflowRuntimeProvider>
         </AgentSessionProvider>
         <WorkspaceResizeHandle
           label="Resize details panel"

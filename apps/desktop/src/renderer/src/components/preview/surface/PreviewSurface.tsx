@@ -1,24 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Camera,
-  ExternalLink,
-  MonitorPlay,
-  RefreshCw,
-  X,
-} from 'lucide-react';
-
-import { trapModalFocus } from '../../../lib/modal-focus.js';
+import { useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, ExternalLink, MonitorPlay, RefreshCw, X } from 'lucide-react';
 
 import type { PreviewSessionSnapshot } from '../../../../../shared/application/contracts.js';
-import type {
-  PreviewConsoleView,
-  PreviewSurfaceView,
-} from '../../../../../shared/preview/surface/contracts.js';
 import { PreviewConsole } from '../console/PreviewConsole.js';
-import type { PreviewRendererOperations } from '../controller/operations.js';
 import type { PreviewOrientation, PreviewPresetId } from '../devices/presets.js';
+import { usePreviewConsoleBuffer } from '../webview/usePreviewConsoleBuffer.js';
+import type { PreviewWebviewStatus } from '../webview/PreviewWebview.js';
 import { DeviceFrameHost, type DeviceFrameHandle } from './DeviceFrameHost.js';
 import './PreviewSurface.css';
 
@@ -31,7 +18,6 @@ interface PreviewSurfaceProps {
   secondaryPreset: PreviewPresetId;
   orientation: PreviewOrientation;
   sideBySide: boolean;
-  operations: PreviewRendererOperations;
   readOnly: boolean;
   onClose: () => void;
   onError: (message: string) => void;
@@ -46,43 +32,15 @@ export function PreviewSurface({
   secondaryPreset,
   orientation,
   sideBySide,
-  operations,
   readOnly,
   onClose,
   onError,
 }: PreviewSurfaceProps) {
   const [address, setAddress] = useState(initialUrl);
-  const [actionStatus, setActionStatus] = useState<string | null>(null);
-  const [primaryView, setPrimaryView] = useState<PreviewSurfaceView | null>(null);
-  const [browserConsole, setBrowserConsole] = useState<PreviewConsoleView | null>(null);
+  const [primaryView, setPrimaryView] = useState<PreviewWebviewStatus | null>(null);
+  const consoleBuffer = usePreviewConsoleBuffer();
   const primary = useRef<DeviceFrameHandle | null>(null);
   const secondary = useRef<DeviceFrameHandle | null>(null);
-  const surface = useRef<HTMLElement>(null);
-  const closeButton = useRef<HTMLButtonElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    const previousFocus =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeButton.current?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const openDialogs = [
-        ...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'),
-      ];
-      if (openDialogs.at(-1) !== surface.current) return;
-      trapModalFocus(event, surface.current);
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      closeRef.current();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      previousFocus?.focus();
-    };
-  }, []);
 
   async function perform(
     action: (controller: DeviceFrameHandle) => Promise<unknown>,
@@ -90,7 +48,6 @@ export function PreviewSurface({
   ) {
     const controller = primary.current;
     if (!controller) return;
-    setActionStatus(null);
     try {
       await action(controller);
     } catch (cause) {
@@ -101,16 +58,14 @@ export function PreviewSurface({
   return (
     <div className="preview-surface-backdrop" role="presentation">
       <section
-        ref={surface}
         className="preview-surface"
         role="dialog"
-        tabIndex={-1}
         aria-modal="true"
         aria-labelledby="preview-surface-title"
       >
         <header>
           <div className="preview-surface-heading">
-            <MonitorPlay size={17} aria-hidden="true" />
+            <MonitorPlay size={17} />
             <div>
               <strong id="preview-surface-title">Local preview</strong>
               <small>Runs only on this computer · pages cannot control Forgeboard</small>
@@ -123,7 +78,7 @@ export function PreviewSurface({
               onClick={() => void perform((value) => value.history('back'), 'Could not go back.')}
               aria-label="Go back"
             >
-              <ArrowLeft size={14} aria-hidden="true" />
+              <ArrowLeft size={14} />
             </button>
             <button
               type="button"
@@ -133,7 +88,7 @@ export function PreviewSurface({
               }
               aria-label="Go forward"
             >
-              <ArrowRight size={14} aria-hidden="true" />
+              <ArrowRight size={14} />
             </button>
             <button
               type="button"
@@ -141,7 +96,7 @@ export function PreviewSurface({
               onClick={() => void perform((value) => value.reload(), 'Could not reload preview.')}
               aria-label="Reload preview"
             >
-              <RefreshCw size={14} aria-hidden="true" />
+              <RefreshCw size={14} />
             </button>
           </nav>
           <form
@@ -154,7 +109,7 @@ export function PreviewSurface({
               }, 'That address is not allowed in the preview.');
             }}
           >
-            <ExternalLink size={13} aria-hidden="true" />
+            <ExternalLink size={13} />
             <input
               aria-label="Preview address"
               name={`node-${nodeId}-preview-address`}
@@ -164,45 +119,12 @@ export function PreviewSurface({
             />
           </form>
           <div className="preview-surface-actions">
-            <button
-              type="button"
-              disabled={readOnly || !primaryView}
-              onClick={() =>
-                void perform(async (value) => {
-                  const result = await value.screenshot();
-                  setActionStatus(result?.saved ? 'Screenshot saved.' : 'Screenshot cancelled.');
-                }, 'Could not save the preview screenshot.')
-              }
-              aria-label="Save screenshot"
-            >
-              <Camera size={14} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              disabled={readOnly || !primaryView}
-              onClick={() =>
-                void perform(async (value) => {
-                  const opened = await value.openExternal();
-                  setActionStatus(
-                    opened ? 'Opened in your browser.' : 'Opening in the browser was cancelled.',
-                  );
-                }, 'Could not open that address in your browser.')
-              }
-              aria-label="Open in browser"
-            >
-              <ExternalLink size={14} aria-hidden="true" />
-            </button>
-            <button ref={closeButton} type="button" onClick={onClose} aria-label="Close preview">
-              <X size={15} aria-hidden="true" />
+            <button type="button" onClick={onClose} aria-label="Close preview">
+              <X size={15} />
             </button>
           </div>
         </header>
-        {actionStatus ? (
-          <p className="preview-surface-action-status" role="status">
-            {actionStatus}
-          </p>
-        ) : null}
-        <PreviewConsole session={session} browserConsole={browserConsole} />
+        <PreviewConsole session={session} browserConsole={consoleBuffer.view} />
         <div className={`preview-device-stage ${sideBySide ? 'side-by-side' : ''}`}>
           <DeviceFrameHost
             ref={primary}
@@ -211,10 +133,9 @@ export function PreviewSurface({
             url={initialUrl}
             presetId={primaryPreset}
             orientation={orientation}
-            operations={operations}
             readOnly={readOnly}
             onView={setPrimaryView}
-            onConsole={setBrowserConsole}
+            onConsole={(message) => consoleBuffer.append(message)}
           />
           {sideBySide ? (
             <DeviceFrameHost
@@ -224,7 +145,6 @@ export function PreviewSurface({
               url={initialUrl}
               presetId={secondaryPreset}
               orientation={orientation}
-              operations={operations}
               readOnly={readOnly}
             />
           ) : null}

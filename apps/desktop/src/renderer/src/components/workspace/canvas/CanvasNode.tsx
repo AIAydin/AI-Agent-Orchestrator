@@ -6,10 +6,7 @@ import type {
   PermissionProfile,
 } from '../../../../../shared/application/contracts.js';
 import type { RunHistoryTokenUsage } from '../../../../../shared/runs/contracts.js';
-import {
-  AGENT_NODE_MINIMUM_DIMENSIONS,
-  CANVAS_NODE_MINIMUM_DIMENSIONS,
-} from '../../../../../shared/canvas/node-dimensions.js';
+import { minimumNodeDimensionsForKind } from '../../../../../shared/canvas/node-dimensions.js';
 import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
 import { useCanvasNodeInteractions } from './interactions/CanvasNodeInteractionContext.js';
@@ -17,7 +14,7 @@ import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
 import { useNodeTypeRegistry } from '../node-registry/NodeRegistryContext.js';
 import { providerTheme } from '../node-registry/provider-themes.js';
-import { AgentSessionNode } from '../runs/agent-session/AgentSessionNode.js';
+import { nodeFaceForKind } from './faces/node-face-registry.js';
 import type { NodeKind } from '../node-registry/registry.js';
 import type { RunStatus } from '@forgeboard/core/domain';
 
@@ -152,6 +149,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   previewPackageScript?: string;
   previewReadinessPath?: string;
   previewUrlPath?: string;
+  previewPort?: number | undefined;
   previewPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewSecondaryPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewOrientation?: 'portrait' | 'landscape';
@@ -189,15 +187,11 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
   const targetHandles = data.kind === 'extension' ? inputPorts : [{ id: 'input' }];
   const sourceHandles = data.kind === 'extension' ? outputPorts : [{ id: 'output' }];
   const groupFrame = data.kind === 'group-frame';
-  const minimum = groupFrame
-    ? GROUP_FRAME_MINIMUM
-    : data.kind === 'agent'
-      ? AGENT_NODE_MINIMUM_DIMENSIONS
-      : CANVAS_NODE_MINIMUM_DIMENSIONS;
+  const minimum = groupFrame ? GROUP_FRAME_MINIMUM : minimumNodeDimensionsForKind(data.kind);
   const canChangePresentation = !interactions.readOnly && !data.locked;
   const automaticallySized = groupFrame && data.autoFit === true;
   const isAgent = data.kind === 'agent';
-  const agentWindow = isAgent && !data.collapsed;
+  const Face = data.collapsed ? null : nodeFaceForKind(data.kind);
   const theme = isAgent ? providerTheme(data.adapterId) : null;
   return (
     <article
@@ -300,8 +294,8 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           </button>
         </WorkspaceTooltip>
       </header>
-      {agentWindow && <AgentSessionNode id={id} data={data} />}
-      {!agentWindow && definition.behaviors.collapsible && !data.collapsed && (
+      {Face !== null && <Face id={id} data={data} />}
+      {Face === null && definition.behaviors.collapsible && !data.collapsed && (
         <div className="node-body">
           <strong>{data.title}</strong>
           <p>{data.description || definition.description}</p>

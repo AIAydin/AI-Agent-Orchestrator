@@ -9,6 +9,10 @@ import {
   CanvasNodeInteractionProvider,
   setCanvasNodeCollapsed,
 } from './interactions/CanvasNodeInteractionContext.js';
+import {
+  AgentSessionProvider,
+  type AgentSessionContextValue,
+} from '../runs/agent-session/AgentSessionContext.js';
 
 vi.mock('@xyflow/react', () => ({
   Handle: ({ id, type }: { id: string; type: string }) => (
@@ -48,7 +52,7 @@ describe('CanvasNode presentation interactions', () => {
     renderNode(nodeData(), { selected: true, setCollapsed, onResizeStart });
 
     const node = screen.getByRole('article', {
-      name: 'Task: Implement search',
+      name: 'Terminal: Implement search',
     });
     expect(node.getAttribute('aria-roledescription')).toBe('canvas node');
     expect(screen.getByText('Build the local index.')).toBeTruthy();
@@ -235,9 +239,26 @@ function renderedNode(
       setCollapsed={setCollapsed}
       onResizeStart={onResizeStart}
     >
-      <CanvasNode {...nodeProps(data, selected)} />
+      <AgentSessionProvider value={sessionValue()}>
+        <CanvasNode {...nodeProps(data, selected)} />
+      </AgentSessionProvider>
     </CanvasNodeInteractionProvider>
   );
+}
+
+/**
+ * Minimal in-canvas services stub. Faces mounted here (e.g. the task face,
+ * since these tests default to `kind: 'task'` for generic presentation
+ * coverage) read this context, even though these tests don't exercise it.
+ */
+function sessionValue(): AgentSessionContextValue {
+  return {
+    graphReadOnly: false,
+    updateNodeData: vi.fn(),
+    recordHistory: vi.fn(),
+    nodeRoster: [],
+    checkProducers: [],
+  } as unknown as AgentSessionContextValue;
 }
 
 function nodeProps(data: WorkshopNodeData, selected: boolean): NodeProps<WorkshopNode> {
@@ -259,7 +280,7 @@ function nodeProps(data: WorkshopNodeData, selected: boolean): NodeProps<Worksho
 
 function nodeData(overrides: Partial<WorkshopNodeData> = {}): WorkshopNodeData {
   return {
-    kind: 'task',
+    kind: 'terminal',
     title: 'Implement search',
     description: 'Build the local index.',
     status: 'idle',

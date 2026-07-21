@@ -48,7 +48,8 @@ import { LocalComments } from '../comments/LocalComments.js';
 import type { NodeComment } from '../comments/comment-model.js';
 import { DiffReviewNodeInspector, type DiffReviewOpenRequest } from '../diff-review/index.js';
 import type { DiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
-import { OperationalGitPrNodeInspector, type GitPrNodeConfiguration } from '../git-pr/index.js';
+import { OperationalGitPrNodeInspector } from '../git-pr/index.js';
+import { gitPrConfiguration, gitPrNodeDataPatch } from '../git-pr/configuration.js';
 import { TerminalNodePanel, type TerminalNodeConfiguration } from '../terminal/index.js';
 import { TestNodePanel } from '../workflows/test-node/TestNodePanel.js';
 import type { WorkflowArtifactActionInput } from '../../../../../shared/workflow/contracts.js';
@@ -338,7 +339,7 @@ function NodeInspector(
           nodeId={selectedNode.id}
           locked={selectedNode.data.locked}
           configurationReadOnly={props.collaborationGraphReadOnly}
-          configuration={gitPrConfiguration(selectedNode, props.settings.gitRemote)}
+          configuration={gitPrConfiguration(selectedNode.data, props.settings.gitRemote)}
           nodes={props.nodes}
           agents={props.runnableAgents}
           onRecord={onRecord}
@@ -499,37 +500,6 @@ function terminalSessionNodeStatus(
   if (status === 'interrupted' || status === 'terminated') return 'cancelled';
   if (status === 'exited') return exitCode === 0 ? 'succeeded' : 'failed';
   return 'failed';
-}
-
-function gitPrConfiguration(node: WorkshopNode, defaultRemote: string): GitPrNodeConfiguration {
-  return {
-    ...(node.data.deliveryTarget === undefined
-      ? {}
-      : { targetRunId: node.data.deliveryTarget.runId }),
-    remote: node.data.remote ?? defaultRemote,
-    destinationBranch: node.data.destinationBranch ?? '',
-    baseBranch: node.data.baseBranch ?? 'main',
-    pullRequestTitle: node.data.pullRequestTitle ?? node.data.title,
-    pullRequestBody: node.data.pullRequestBody ?? '',
-    pullRequestDraft: node.data.pullRequestDraft ?? false,
-    ...(node.data.pullRequestUrl === undefined ? {} : { pullRequestUrl: node.data.pullRequestUrl }),
-  };
-}
-
-function gitPrNodeDataPatch(patch: Partial<GitPrNodeConfiguration>): Partial<WorkshopNode['data']> {
-  const data: Partial<WorkshopNode['data']> = {};
-  if ('targetRunId' in patch) {
-    data.deliveryTarget =
-      patch.targetRunId === undefined ? undefined : { kind: 'agent-run', runId: patch.targetRunId };
-  }
-  if (patch.remote !== undefined) data.remote = patch.remote;
-  if (patch.destinationBranch !== undefined) data.destinationBranch = patch.destinationBranch;
-  if (patch.baseBranch !== undefined) data.baseBranch = patch.baseBranch;
-  if (patch.pullRequestTitle !== undefined) data.pullRequestTitle = patch.pullRequestTitle;
-  if (patch.pullRequestBody !== undefined) data.pullRequestBody = patch.pullRequestBody;
-  if (patch.pullRequestDraft !== undefined) data.pullRequestDraft = patch.pullRequestDraft;
-  if ('pullRequestUrl' in patch) data.pullRequestUrl = patch.pullRequestUrl;
-  return data;
 }
 
 function FileNodeEditor({
