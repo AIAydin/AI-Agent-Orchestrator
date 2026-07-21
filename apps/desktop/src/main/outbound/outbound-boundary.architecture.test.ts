@@ -20,7 +20,10 @@ describe('Forgeboard-owned outbound architecture', () => {
     const executor = requiredSource(sources, 'outbound/outbound-executors.ts');
     expect(executor).toContain('assertOutboundExecutionPermit(permit)');
     expect(executor.match(/assertOutboundExecutionPermit\(permit\)/gu)).toHaveLength(3);
-    expect(moduleImportSites(sources, 'node:http')).toEqual(['previews/preview-service.ts']);
+    expect(moduleImportSites(sources, 'node:http')).toEqual([
+      'agent-peers/service.ts',
+      'previews/preview-service.ts',
+    ]);
     expect(moduleImportSites(sources, 'node:https')).toEqual([
       'outbound/outbound-executors.ts',
       'previews/preview-service.ts',
