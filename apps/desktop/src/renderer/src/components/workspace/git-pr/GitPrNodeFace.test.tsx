@@ -156,4 +156,103 @@ describe('GitPrNodeFace', () => {
       true,
     );
   });
+
+  it('triggers the push review from the face once the inspection is ready', () => {
+    controller.current = baseController({ inspection: readyInspection() });
+    renderFace({ remote: 'origin', destinationBranch: 'feature/login', baseBranch: 'main' });
+    const reviewPush = screen.getByRole('button', { name: 'Review push' });
+    expect(reviewPush).toHaveProperty('disabled', false);
+    fireEvent.click(reviewPush);
+    expect(controller.current.preparePush).toHaveBeenCalled();
+  });
+
+  it('keeps the push review disabled until the inspection reports ready', () => {
+    controller.current = baseController({
+      inspection: { ...readyInspection(), ready: false, readiness: ['Needs approval'] },
+    });
+    renderFace({ remote: 'origin', destinationBranch: 'feature/login', baseBranch: 'main' });
+    expect(screen.getByRole('button', { name: 'Review push' })).toHaveProperty('disabled', true);
+  });
+
+  it('confirms the pending plan from the focus-trapped dialog', () => {
+    controller.current = baseController({ pendingPlan: pushPlan() });
+    renderFace();
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to final confirmation' }));
+    expect(controller.current.confirmPlan).toHaveBeenCalled();
+    expect(controller.current.cancelPlan).not.toHaveBeenCalled();
+  });
+
+  it('cancels the pending plan from the dialog', () => {
+    controller.current = baseController({ pendingPlan: pushPlan() });
+    renderFace();
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(controller.current.cancelPlan).toHaveBeenCalled();
+    expect(controller.current.confirmPlan).not.toHaveBeenCalled();
+  });
+
+  it('cancels the pending plan when Escape is pressed', () => {
+    controller.current = baseController({ pendingPlan: pushPlan() });
+    renderFace();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(controller.current.cancelPlan).toHaveBeenCalled();
+  });
+
+  it('shows the pull-request plan details in the confirmation dialog', () => {
+    controller.current = baseController({
+      pendingPlan: {
+        kind: 'pull-request',
+        planId: 'plan-9',
+        expiresAt: '2026-07-21T00:05:00.000Z',
+        ownerRepository: 'acme/app',
+        title: 'Add login',
+        body: 'Ship the login page.',
+        draft: true,
+        inspection: readyInspection(),
+      } as unknown as NonNullable<GitPrNodeController['pendingPlan']>,
+    });
+    renderFace();
+    expect(screen.getByText('Review the pull request')).toBeTruthy();
+    expect(screen.getByText('acme/app')).toBeTruthy();
+    expect(screen.getByText('Ship the login page.')).toBeTruthy();
+  });
 });
+
+function readyInspection(): NonNullable<GitPrNodeController['inspection']> {
+  return {
+    targetRunId: 'run-1',
+    sourceBranch: 'feature/login',
+    sourceOid: 'abc1234',
+    remote: 'origin',
+    remoteDisclosure: 'https://github.com/acme/app',
+    destinationBranch: 'feature/login',
+    requestedBaseBranch: 'main',
+    requestedBaseOid: 'main0000',
+    runBaseRef: 'main',
+    runBaseOid: 'base0000',
+    divergenceBaseOid: 'div00000',
+    commitCount: 3,
+    commits: ['abc1234'],
+    commitsTruncated: false,
+    fileCount: 5,
+    files: [],
+    filesTruncated: false,
+    additions: 120,
+    deletions: 8,
+    ahead: 3,
+    behind: 1,
+    ready: true,
+    readiness: [],
+    inspectedAt: '2026-07-21T00:00:00.000Z',
+  } as unknown as NonNullable<GitPrNodeController['inspection']>;
+}
+
+function pushPlan(): NonNullable<GitPrNodeController['pendingPlan']> {
+  return {
+    kind: 'push',
+    planId: 'plan-1',
+    expiresAt: '2026-07-21T00:05:00.000Z',
+    inspection: readyInspection(),
+  } as unknown as NonNullable<GitPrNodeController['pendingPlan']>;
+}

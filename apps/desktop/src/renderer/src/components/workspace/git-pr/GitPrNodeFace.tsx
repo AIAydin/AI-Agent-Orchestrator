@@ -1,18 +1,29 @@
 import { useCallback, useMemo, type JSX } from 'react';
-import { GitBranch, GitPullRequest, LoaderCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import {
+  GitBranch,
+  GitPullRequest,
+  LoaderCircle,
+  RefreshCw,
+  ShieldCheck,
+  UploadCloud,
+} from 'lucide-react';
 
+import { GITHUB_PULL_REQUEST_BODY_MAX_CHARACTERS } from '../../../../../shared/git/remote/index.js';
 import type { NodeFaceProps } from '../canvas/faces/node-face-registry.js';
 import { useCanvasNodeInteractions } from '../canvas/interactions/CanvasNodeInteractionContext.js';
 import { useAgentSession } from '../runs/agent-session/AgentSessionContext.js';
 import { gitPrConfiguration, gitPrNodeDataPatch } from './configuration.js';
+import { GitPrPlanDialog } from './GitPrPlanDialog.js';
+import type { GitPrNodeController } from './types.js';
 import { useGitPrNodeController } from './useGitPrNodeController.js';
 
 /**
  * Git delivery face: operational strip with the run target, compact
  * branch/remote settings, ahead/behind + commit/file chips, CI/readiness
- * status, and the created pull-request link. Push and pull-request plan
- * confirmations remain in the inspector panel until 2d — they are modal,
- * focus-trapped flows.
+ * status, and the created pull-request link. The push and pull-request plan
+ * confirmations — modal, focus-trapped flows — are now triggered here and
+ * rendered as a focus-trapped dialog (GitPrPlanDialog); the sidebar inspector
+ * is no longer the only place to publish.
  */
 export function GitPrNodeFace({ id, data }: NodeFaceProps): JSX.Element {
   const session = useAgentSession();
@@ -51,6 +62,23 @@ export function GitPrNodeFace({ id, data }: NodeFaceProps): JSX.Element {
       : null;
   const busy = controller.busy !== null;
   const targetRunId = configuration.targetRunId;
+  const selectedRun = controller.agentRuns.find((run) => run.runId === targetRunId);
+  const targetUnavailable =
+    targetRunId === undefined || selectedRun?.worktreeState === 'cleanup-pending';
+  const githubStatus = controller.githubStatus;
+  const githubReady =
+    githubStatus?.authenticated === true &&
+    githubStatus.headMatchesSource === true &&
+    githubStatus.fresh === true;
+  const pullRequestTitleValid =
+    configuration.pullRequestTitle.trim() !== '' &&
+    configuration.pullRequestTitle.length <= 512 &&
+    !configuration.pullRequestTitle.includes('\0') &&
+    isWellFormedUnicode(configuration.pullRequestTitle);
+  const pullRequestBodyValid =
+    configuration.pullRequestBody.length <= GITHUB_PULL_REQUEST_BODY_MAX_CHARACTERS &&
+    !configuration.pullRequestBody.includes('\0') &&
+    isWellFormedUnicode(configuration.pullRequestBody);
 
   const change = (patch: Parameters<typeof gitPrNodeDataPatch>[0]): void => {
     session.recordHistory();
@@ -138,6 +166,39 @@ export function GitPrNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               onChange={(event) => change({ destinationBranch: event.target.value })}
             />
           </label>
+          <label>
+            Pull request title
+            <input
+              name={`node-${id}-git-pr-face-title`}
+              aria-label="Pull request title"
+              maxLength={512}
+              aria-invalid={!pullRequestTitleValid}
+              value={configuration.pullRequestTitle}
+              onChange={(event) => change({ pullRequestTitle: event.target.value })}
+            />
+          </label>
+          <label>
+            Pull request body
+            <textarea
+              name={`node-${id}-git-pr-face-body`}
+              aria-label="Pull request body"
+              rows={3}
+              maxLength={GITHUB_PULL_REQUEST_BODY_MAX_CHARACTERS}
+              aria-invalid={!pullRequestBodyValid}
+              value={configuration.pullRequestBody}
+              onChange={(event) => change({ pullRequestBody: event.target.value })}
+            />
+          </label>
+          <label className="git-pr-face-checkbox">
+            <input
+              type="checkbox"
+              name={`node-${id}-git-pr-face-draft`}
+              aria-label="Create as a draft pull request"
+              checked={configuration.pullRequestDraft}
+              onChange={(event) => change({ pullRequestDraft: event.target.checked })}
+            />
+            Draft pull request
+          </label>
         </fieldset>
 
         <div className="node-face-row git-pr-face-actions">
@@ -156,13 +217,21 @@ export function GitPrNodeFace({ id, data }: NodeFaceProps): JSX.Element {
           </button>
           <button
             type="button"
+            aria-label="Check GitHub sign-in and repository"
+            disabled={readOnly || targetUnavailable || inspection === null || busy}
+            onClick={controller.checkGitHub}
+          >
+            {controller.busy === 'github-status' ? (
+              <LoaderCircle className="spin" size={12} aria-hidden="true" />
+            ) : (
+              <ShieldCheck size={12} aria-hidden="true" />
+            )}
+            GitHub
+          </button>
+          <button
+            type="button"
             aria-label="Check CI results"
-            disabled={
-              targetRunId === undefined ||
-              inspection === null ||
-              controller.githubStatus?.authenticated !== true ||
-              busy
-            }
+            disabled={targetUnavailable || inspection === null || !githubReady || busy}
             onClick={controller.checkCi}
           >
             <RefreshCw size={12} aria-hidden="true" /> CI
@@ -175,7 +244,44 @@ export function GitPrNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               if (targetRunId !== undefined) session.openGitPrReadiness(targetRunId);
             }}
           >
-            <ShieldCheck size={12} aria-hidden="true" /> Open checks and approval
+            <ShieldCheck size={12} aria-hidden="true" /> Checks &amp; approval
+          </button>
+        </div>
+
+        <div className="node-face-row git-pr-face-actions git-pr-face-publish">
+          <button
+            type="button"
+            aria-label="Review push"
+            disabled={readOnly || targetUnavailable || inspection?.ready !== true || busy}
+            onClick={controller.preparePush}
+          >
+            {controller.busy === 'prepare-push' ? (
+              <LoaderCircle className="spin" size={12} aria-hidden="true" />
+            ) : (
+              <UploadCloud size={12} aria-hidden="true" />
+            )}
+            Review push
+          </button>
+          <button
+            type="button"
+            aria-label="Review pull request"
+            disabled={
+              readOnly ||
+              targetUnavailable ||
+              inspection?.ready !== true ||
+              !githubReady ||
+              !pullRequestTitleValid ||
+              !pullRequestBodyValid ||
+              busy
+            }
+            onClick={controller.preparePullRequest}
+          >
+            {controller.busy === 'prepare-pull-request' ? (
+              <LoaderCircle className="spin" size={12} aria-hidden="true" />
+            ) : (
+              <GitPullRequest size={12} aria-hidden="true" />
+            )}
+            Review pull request
           </button>
         </div>
 
@@ -217,12 +323,67 @@ export function GitPrNodeFace({ id, data }: NodeFaceProps): JSX.Element {
           </>
         ) : null}
 
+        {controller.githubError !== null ? (
+          <p role="alert" className="git-pr-face-error">
+            {controller.githubError}
+          </p>
+        ) : githubStatus !== null ? (
+          <p className="git-pr-face-github" role="status">
+            GitHub · {githubStatusLabel(githubStatus)}
+          </p>
+        ) : null}
+
+        {controller.actionError !== null ? (
+          <p role="alert" className="git-pr-face-error">
+            {controller.actionError}
+          </p>
+        ) : null}
+
+        {controller.notice !== null ? (
+          <p className="git-pr-face-notice" role="status">
+            {controller.notice}
+          </p>
+        ) : null}
+
         {configuration.pullRequestUrl !== undefined ? (
           <p className="git-pr-face-link">
             Pull request · <code>{configuration.pullRequestUrl}</code>
           </p>
         ) : null}
       </div>
+
+      {controller.pendingPlan !== null ? (
+        <GitPrPlanDialog
+          plan={controller.pendingPlan}
+          busy={controller.busy}
+          disabled={readOnly}
+          onCancel={controller.cancelPlan}
+          onConfirm={controller.confirmPlan}
+        />
+      ) : null}
     </section>
   );
+}
+
+function githubStatusLabel(status: NonNullable<GitPrNodeController['githubStatus']>): string {
+  if (!status.installed) return 'CLI not installed';
+  if (!status.fresh) return 'Check again';
+  if (!status.authenticated) return 'Sign-in needed';
+  if (!status.headMatchesSource) return 'Push this commit first';
+  return 'Signed in · commit on GitHub';
+}
+
+function isWellFormedUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      if (index + 1 >= value.length) return false;
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return false;
+      index += 1;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
 }
