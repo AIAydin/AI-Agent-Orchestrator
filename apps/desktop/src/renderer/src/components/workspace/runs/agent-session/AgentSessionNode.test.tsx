@@ -32,7 +32,7 @@ const controller = {
   notice: null as string | null,
   active: false,
   replayWindowLimited: false,
-  chooseExecutable: vi.fn(async () => null),
+  chooseExecutable: vi.fn(() => Promise.resolve(null)),
   prepareLaunch: vi.fn(async () => {}),
   confirmLaunch: vi.fn(async () => {}),
   cancelLaunch: vi.fn(async () => {}),
@@ -90,7 +90,7 @@ const NODE_ID = 'node-x';
 
 let gate: AgentProviderGate | null = null;
 const spies = {
-  gateFor: vi.fn((_adapterId: string): AgentProviderGate | null => gate),
+  gateFor: vi.fn((): AgentProviderGate | null => gate),
   recheckProvider: vi.fn(),
   openSettings: vi.fn(),
   reportError: vi.fn(),
@@ -340,7 +340,7 @@ describe('AgentSessionNode', () => {
     });
     renderNode(nodeData(), { settings: dockerDisabledSettings });
 
-    const permissionSelect = screen.getByLabelText('Permission profile') as HTMLSelectElement;
+    const permissionSelect = screen.getByLabelText('Permission profile');
     const dockerOption = permissionSelect.querySelector('option[value="docker-isolated"]');
     const worktreeOption = permissionSelect.querySelector('option[value="worktree-write"]');
     expect(dockerOption?.hasAttribute('disabled')).toBe(true);

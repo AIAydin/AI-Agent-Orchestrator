@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { useEffect, useRef, useState, type JSX } from 'react';
 
 import type { PermissionProfile } from '../../../../../../shared/application/contracts.js';
