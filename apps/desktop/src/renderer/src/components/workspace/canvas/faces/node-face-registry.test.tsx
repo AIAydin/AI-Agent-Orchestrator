@@ -11,6 +11,7 @@ describe('nodeFaceForKind', () => {
     expect(nodeFaceForKind('mobile-preview')).toBeTypeOf('function');
     expect(nodeFaceForKind('brief')).toBeTypeOf('function');
     expect(nodeFaceForKind('diagram')).toBeTypeOf('function');
+    expect(nodeFaceForKind('diff')).toBeTypeOf('function');
     expect(nodeFaceForKind('file')).toBeTypeOf('function');
     expect(nodeFaceForKind('git-pr')).toBeTypeOf('function');
     expect(nodeFaceForKind('note-image')).toBeTypeOf('function');

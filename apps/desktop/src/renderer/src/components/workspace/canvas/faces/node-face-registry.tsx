@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 
 import { BriefNodeFace } from '../../content/BriefNodeFace.js';
 import { DiagramNodeFace } from '../../content/diagram/DiagramNodeFace.js';
+import { DiffNodeFace } from '../../content/diff/DiffNodeFace.js';
 import { FileNodeFace } from '../../content/file/FileNodeFace.js';
 import { NoteImageNodeFace } from '../../content/note-image/NoteImageNodeFace.js';
 import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.js';
@@ -40,6 +41,7 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   },
   brief: BriefNodeFace,
   diagram: DiagramNodeFace,
+  diff: DiffNodeFace,
   file: FileNodeFace,
   'git-pr': GitPrNodeFace,
   'note-image': NoteImageNodeFace,
