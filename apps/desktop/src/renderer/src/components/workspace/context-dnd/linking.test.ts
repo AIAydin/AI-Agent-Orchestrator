@@ -31,8 +31,8 @@ describe('Agent project-file context linking', () => {
     expect(result.nodes[0]?.data.contextAttachmentIds).toEqual(['file-created']);
     expect(result.nodes[1]).toMatchObject({
       id: 'file-created',
-      width: 320,
-      height: 180,
+      width: 640,
+      height: 520,
       data: {
         kind: 'file',
         title: 'index.ts',
