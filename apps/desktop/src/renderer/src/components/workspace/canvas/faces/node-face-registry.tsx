@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 
+import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.js';
 import { PreviewNodeFace } from '../../previews/PreviewNodeFace.js';
 import { AgentSessionNode } from '../../runs/agent-session/AgentSessionNode.js';
 import type { WorkshopNodeData } from '../CanvasNode.js';
@@ -29,6 +30,7 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   'mobile-preview': function MobilePreviewFace({ id, data }: NodeFaceProps) {
     return <PreviewNodeFace id={id} kind="mobile-preview" data={data} />;
   },
+  whiteboard: WhiteboardNodeFace,
 };
 
 export function nodeFaceForKind(kind: string): NodeFaceComponent | null {

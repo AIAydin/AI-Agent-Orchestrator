@@ -132,3 +132,31 @@
   color: var(--text-soft);
   white-space: nowrap;
 }
+.whiteboard-node-face .node-face-body {
+  padding: 0;
+}
+svg.whiteboard-face-preview {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+.whiteboard-face-tools {
+  display: flex;
+  gap: 4px;
+}
+.whiteboard-face-tools button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.whiteboard-face-tools button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
