@@ -132,3 +132,46 @@
   color: var(--text-soft);
   white-space: nowrap;
 }
+.git-pr-face-config {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.git-pr-face-actions {
+  flex-wrap: wrap;
+}
+.git-pr-face-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.git-pr-face-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.git-pr-face-route {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-pr-face-error {
+  margin: 0;
+  color: #d06870;
+}
+.git-pr-face-link {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
