@@ -9,6 +9,12 @@ export interface AgentSessionLaunch {
   readonly profileNote: string | null;
 }
 
+/** Peer-channel material to thread into the launch command, or null when no peer channel applies. */
+export interface AgentSessionPeerLaunchMaterial {
+  readonly provisionId: string;
+  readonly extraArguments: readonly string[];
+}
+
 /**
  * The model CLI flag each adapter accepts, hardcoded here to mirror the manifest `modelArguments`
  * in `@forgeboard/agent-adapters` without importing across the package boundary. An adapter absent
@@ -42,6 +48,7 @@ export function agentSessionLaunch(
   agent: AgentDetection,
   model: string | undefined,
   profile: PermissionProfile,
+  peers: AgentSessionPeerLaunchMaterial | null = null,
 ): AgentSessionLaunch {
   const executable = agent.executable ?? '';
   const trimmedModel = model?.trim() ?? '';
@@ -62,12 +69,14 @@ export function agentSessionLaunch(
   if (modelFlag !== undefined && trimmedModel !== '') {
     args.push(modelFlag, trimmedModel);
   }
+  if (peers !== null) args.push(...peers.extraArguments);
   return {
     configuration: {
       executable,
       arguments: args,
       cwdRelative: '.',
       environmentVariableNames: [],
+      ...(peers !== null ? { peerProvisionId: peers.provisionId } : {}),
     },
     profileNote: enforced
       ? null

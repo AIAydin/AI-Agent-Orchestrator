@@ -312,6 +312,9 @@ export function useTerminalNodeController({
         cwdRelative: configuration.cwdRelative,
         environmentVariableNames: configuration.environmentVariableNames,
         ...dimensionsRef.current,
+        ...(configuration.peerProvisionId
+          ? { peerProvisionId: configuration.peerProvisionId }
+          : {}),
       });
       const plan = unwrap(await operations.prepareLaunch(input));
       if (!mountedRef.current || generation !== generationRef.current) {

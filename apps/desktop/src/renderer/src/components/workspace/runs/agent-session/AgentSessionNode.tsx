@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 
 import type { PermissionProfile } from '../../../../../../shared/application/contracts.js';
+import type { AgentPeersProvisionView } from '../../../../../../shared/agent-peers/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import { isRunAdapterId } from '../../model/helpers.js';
 import { providerTheme } from '../../node-registry/provider-themes.js';
@@ -18,6 +19,7 @@ import {
   agentSessionLaunch,
   agentSessionUnavailableReason,
   modelFlagSupported,
+  type AgentSessionPeerLaunchMaterial,
 } from './launch-config.js';
 import { useAgentSession } from './AgentSessionContext.js';
 import './agent-session.css';
@@ -32,6 +34,9 @@ const EMPTY_CONFIGURATION: TerminalNodeConfiguration = {
   cwdRelative: '',
   environmentVariableNames: [],
 };
+
+/** Shown whenever the hub could not hand back a usable peer channel, whatever the cause. */
+const PEER_TOOLS_UNAVAILABLE_HINT = 'Peer tools unavailable.';
 
 /**
  * The canvas window that hosts a real CLI session for an agent node. It renders the provider-tinted
@@ -59,13 +64,20 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
 
+  // Peer-tool provisioning (Task 10): a single-use grant fetched fresh on every Start/Restart,
+  // never reused across relaunches. `peerMaterial` feeds the launch command; `peerHint` is the
+  // terse, separately-tracked display text (kept apart so "never attempted yet" — both null — is
+  // distinguishable from "attempted and unavailable" once a fallback hint has been resolved).
+  const [peerMaterial, setPeerMaterial] = useState<AgentSessionPeerLaunchMaterial | null>(null);
+  const [peerHint, setPeerHint] = useState<string | null>(null);
+
   const fallbackAdapter = isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'test-agent';
   const adapter = data.adapterId ?? fallbackAdapter;
   const agent = runnableAgents.find((candidate) => candidate.id === adapter);
 
   const model = effectiveNodeModel(agent, data.model, settings.agentDefaultModels[adapter]);
   const profile: PermissionProfile = data.permissionProfile ?? 'worktree-write';
-  const launch = agent ? agentSessionLaunch(agent, model, profile) : null;
+  const launch = agent ? agentSessionLaunch(agent, model, profile, peerMaterial) : null;
 
   const controller = useTerminalNodeController({
     projectId: project.id,
@@ -124,6 +136,72 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
     pendingRestartRef.current = false;
     void controllerRef.current.prepareLaunch();
   }, [hasActiveSession]);
+
+  // Peer-tool provisioning (Task 10): fetched fresh on every Start/Restart click, before
+  // prepareLaunch, so the launched command carries the hub's extraArguments/peerProvisionId.
+  // Calling `controller.prepareLaunch()` synchronously right after `setPeerMaterial` here would
+  // still close over the pre-provisioning `configuration` — React state updates are not visible
+  // until the next render. So, exactly like the restart-to-apply flag above, this defers to an
+  // effect that fires once the render carrying the new peer state (and thus a fresh
+  // `controllerRef.current` bound to the updated configuration) has committed.
+  // `provisioningRef` guards re-entrancy: a rapid double-click on Start/Restart must not fire a
+  // second, overlapping provision call.
+  const provisioningRef = useRef(false);
+  const pendingStartRef = useRef(false);
+  const [provisionAttempt, setProvisionAttempt] = useState(0);
+
+  const startSession = (): void => {
+    if (provisioningRef.current) return;
+    provisioningRef.current = true;
+    void (async () => {
+      try {
+        let view: AgentPeersProvisionView | null = null;
+        try {
+          const result = await window.forgeboard.agentPeers.provision({
+            projectId: project.id,
+            nodeId: id,
+            adapterId: adapter,
+          });
+          view = result.ok ? result.value : null;
+        } catch {
+          view = null;
+        }
+        setPeerMaterial(
+          view === null
+            ? null
+            : { provisionId: view.provisionId, extraArguments: view.extraArguments },
+        );
+        setPeerHint(
+          view === null
+            ? PEER_TOOLS_UNAVAILABLE_HINT
+            : view.available
+              ? null
+              : (view.hint ?? PEER_TOOLS_UNAVAILABLE_HINT),
+        );
+        pendingStartRef.current = true;
+        // A dedicated counter (rather than depending on peerMaterial/peerHint directly) guarantees
+        // the effect below fires even when two consecutive attempts resolve to the same value
+        // (e.g. unavailable twice in a row), which React would otherwise treat as no change.
+        setProvisionAttempt((count) => count + 1);
+      } finally {
+        provisioningRef.current = false;
+      }
+    })();
+  };
+
+  useEffect(() => {
+    if (!pendingStartRef.current) return;
+    pendingStartRef.current = false;
+    void controllerRef.current.prepareLaunch();
+  }, [provisionAttempt]);
+
+  // Single-use: once the session exits, drop the stashed provision so the next Start/Restart
+  // provisions fresh instead of relaunching with a stale provisionId/token.
+  useEffect(() => {
+    if (!endedSession) return;
+    setPeerMaterial(null);
+    setPeerHint(null);
+  }, [endedSession]);
 
   // Agent sessions skip the in-app "Terminal safety review" page: one Start click goes straight to
   // the agent. As soon as prepareLaunch resolves with a pending plan, auto-confirm it (capturing the
@@ -263,7 +341,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
               type="button"
               className="button"
               disabled={readOnly}
-              onClick={() => void controller.prepareLaunch()}
+              onClick={() => startSession()}
             >
               Restart
             </button>
@@ -294,7 +372,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
               type="button"
               className="button primary"
               disabled={readOnly}
-              onClick={() => void controller.prepareLaunch()}
+              onClick={() => startSession()}
             >
               Start session
             </button>
@@ -369,6 +447,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
         {launch?.profileNote != null && (
           <small className="agent-profile-note">{launch.profileNote}</small>
         )}
+        {peerHint !== null && <small className="agent-peer-hint">{peerHint}</small>}
         {configDrifted && (
           <button
             type="button"
