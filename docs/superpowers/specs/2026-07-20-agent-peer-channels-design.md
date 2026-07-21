@@ -82,3 +82,26 @@ The context edge pulses when a message transits it. Delivery is literally typed 
 - Peer tools in the headless flow-run lane.
 - Message history UI on the edge (audit log covers forensics).
 - Shared artifacts/task lists between agents (file system already serves this).
+
+## Implementation deviations of record
+
+Implemented on branch `feature/agent-peer-channels` (tasks 1–12). Where the build diverged from this design, the reasons:
+
+1. **`read_screen` reads main-side transcript files, not renderer xterm serialization.** No serialize addon exists and xterm unmounts when a node collapses; the persisted terminal transcript is always available. `TerminalService.readTranscriptTail` serves the last 64 KiB → ANSI-stripped → last 200 lines.
+
+2. **The mute toggle lives in the existing sidebar `TypedEdgeInspector`,** not a floating edge popover (which does not exist yet). A `muted: boolean` (default false) was added to `ContextEdgeSchema`.
+
+3. **Provider config was verified against the installed CLIs and diverged from the plan's guessed flags:**
+   - **claude** — `--mcp-config <0600 file>` in a per-provision scratch dir under `userData` (never the repo, never argv).
+   - **gemini / opencode** — their MCP-server child *inherits* the parent/PTY env (verified by spawning a real probe server), so the peer token is **omitted** from the project-root config files (`.gemini/settings.json`, `opencode.json`); only `ELECTRON_RUN_AS_NODE` is written. The token reaches the shim via the PTY env (deviation 4).
+   - **codex** — env inheritance was *disproved*, so it uses a `0600` TOML profile under `$CODEX_HOME` selected via `--profile <name>` (only the profile name touches argv).
+
+4. **The peer token is minted and injected entirely main-side.** The renderer passes only an opaque `peerProvisionId` (uuid) over IPC; `FORGEBOARD_PEER_URL`/`FORGEBOARD_PEER_TOKEN` values are resolved from the injected provider and spread into the PTY env at spawn — never over IPC, never logged, never in the renderer schema/event payload.
+
+5. **Message-delivery hardening at the PTY write boundary** (beyond the design's sketch): `sender`/`message` are sanitized (ESC/CSI/OSC/control bytes stripped, `\n` kept) to prevent bracketed-paste escape injection, and the formatted envelope is size-capped to `TERMINAL_MAX_INPUT_BYTES` (sender ≤ 512 bytes, message truncated to fit) — both by code point, never mid-character.
+
+6. **Concurrency limit for gemini/opencode (accepted product decision):** their peer config is merged into a **shared project-root file**, and all agent sessions in a project run at that root. Running **two gemini (or two opencode) peer sessions on the same project at once is unsupported** — they cross-wire (both shims load) — so the supported model is one such session per project at a time. Entry keys are provision-scoped (`forgeboard-<provisionId>`) and cleanup is non-destructive (never deletes a file it did not create or one with other keys) so concurrency never corrupts the file. **claude and codex are fully isolated** (private per-provision files) and unaffected.
+
+7. **Agent-peer events reach only WebContents that have called `provision`** (mirrors the terminal IPC owner model). This is correct for the single-window app — the canvas window is the one that provisions sessions and consumes edge-pulse events. A future multi-window canvas would need wider event fan-out.
+
+8. **The peer hub is admitted to the git-worktree cleanup quiescence** so a provision write cannot race a worktree cleanup.
