@@ -145,6 +145,8 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     collaborationReconnect: true,
     updateChannel: 'stable',
     automaticUpdateDownloads: false,
+    voiceCommandsEnabled: false,
+    voiceAutoRunSafeActions: false,
     ...overrides,
   };
 }

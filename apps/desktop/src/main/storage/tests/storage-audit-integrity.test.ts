@@ -425,5 +425,7 @@ function defaultSettings(): AppSettings {
     collaborationReconnect: true,
     updateChannel: 'stable' as const,
     automaticUpdateDownloads: false,
+    voiceCommandsEnabled: false,
+    voiceAutoRunSafeActions: false,
   };
 }

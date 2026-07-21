@@ -5,6 +5,7 @@ import {
   FolderGit2,
   CircleHelp,
   ListChecks,
+  Mic,
   Palette,
   Puzzle,
   RotateCcw,
@@ -39,6 +40,7 @@ import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadines
 import { useSettingsFolderReadiness } from '../readiness/useSettingsFolderReadiness.js';
 import { settingsCommandDrafts } from './command-drafts.js';
 import { UpdateSettings } from '../updates/UpdateSettings.js';
+import { VoiceSettings } from '../voice/VoiceSettings.js';
 import {
   dockerReadinessIssue,
   type DockerReadinessEvidence,
@@ -51,6 +53,7 @@ export type SettingsTab =
   | 'git'
   | 'checks'
   | 'extensions'
+  | 'voice'
   | 'connectivity'
   | 'help'
   | 'privacy';
@@ -272,6 +275,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
               onClick={() => setTab('connectivity')}
             />
             <SettingsTabButton
+              active={tab === 'voice'}
+              icon={<Mic size={16} />}
+              label="Voice commands"
+              onClick={() => setTab('voice')}
+            />
+            <SettingsTabButton
               active={tab === 'privacy'}
               icon={<Database size={16} />}
               label="Data & privacy"
@@ -347,6 +356,9 @@ export function SettingsPanel(props: SettingsPanelProps) {
                   busy={busy}
                 />
               </>
+            )}
+            {tab === 'voice' && (
+              <VoiceSettings draft={draft} setDraft={setDraft} busy={busy} perform={perform} />
             )}
             {tab === 'privacy' && (
               <PrivacySettings

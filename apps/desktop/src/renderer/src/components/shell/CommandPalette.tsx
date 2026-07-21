@@ -4,11 +4,13 @@ import { Command, CornerDownLeft, Search, X } from 'lucide-react';
 import { trapModalFocus } from '../../lib/modal-focus.js';
 import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
-interface PaletteAction {
+export interface PaletteAction {
   id: string;
   label: string;
   section: string;
   shortcut?: string;
+  voiceAliases?: readonly string[];
+  voiceSafety?: 'safe' | 'confirm';
   run: () => void;
 }
 
