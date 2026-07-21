@@ -10,7 +10,6 @@ import {
 describe('workshop node persistence dimensions', () => {
   it('assigns canonical dimensions to every newly created ordinary node', () => {
     expect(initialWorkshopNodeDimensions('extension')).toEqual({ width: 320, height: 180 });
-    expect(initialWorkshopNodeDimensions('file')).toEqual({ width: 320, height: 180 });
     expect(initialWorkshopNodeDimensions('group-frame')).toEqual({ width: 520, height: 360 });
   });
 
@@ -103,6 +102,24 @@ describe('workshop node persistence dimensions', () => {
     expect(floored('review-gate')).toEqual({ width: 280, height: 220 });
     expect(floored('git-pr')).toEqual({ width: 320, height: 260 });
     expect(floored('test')).toEqual({ width: 300, height: 240 });
+  });
+
+  it('gives terminal, file, and diff nodes face dimensions', () => {
+    expect(initialWorkshopNodeDimensions('terminal')).toEqual({ width: 560, height: 480 });
+    expect(initialWorkshopNodeDimensions('file')).toEqual({ width: 640, height: 520 });
+    expect(initialWorkshopNodeDimensions('diff')).toEqual({ width: 640, height: 560 });
+  });
+
+  it('floors persisted terminal, file, and diff nodes at their per-kind minimums', () => {
+    const floored = (kind: WorkshopNode['data']['kind']) =>
+      persistedWorkshopNodeDimensions({
+        data: { kind } as WorkshopNode['data'],
+        width: 10,
+        height: 10,
+      });
+    expect(floored('terminal')).toEqual({ width: 400, height: 320 });
+    expect(floored('file')).toEqual({ width: 420, height: 360 });
+    expect(floored('diff')).toEqual({ width: 440, height: 360 });
   });
 });
 

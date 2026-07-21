@@ -195,6 +195,18 @@
   min-width: 300px;
   min-height: 240px;
 }
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='terminal']:not(.collapsed)) {
+  min-width: 400px;
+  min-height: 320px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='file']:not(.collapsed)) {
+  min-width: 420px;
+  min-height: 360px;
+}
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='diff']:not(.collapsed)) {
+  min-width: 440px;
+  min-height: 360px;
+}
 .react-flow__node-workshop:has(> .canvas-node.collapsed) {
   height: 35px !important;
   min-height: 35px;

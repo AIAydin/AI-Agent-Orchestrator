@@ -77,6 +77,15 @@ export const DOCUMENT_NODE_DIMENSIONS: Readonly<
   test: { default: { width: 400, height: 340 }, minimum: { width: 300, height: 240 } },
 };
 
+/** Face dimensions for the heavier content node kinds (sub-plan 2c). */
+export const CONTENT_NODE_DIMENSIONS: Readonly<
+  Record<string, { readonly default: NodeDimensions; readonly minimum: NodeDimensions }>
+> = {
+  terminal: { default: { width: 560, height: 480 }, minimum: { width: 400, height: 320 } },
+  file: { default: { width: 640, height: 520 }, minimum: { width: 420, height: 360 } },
+  diff: { default: { width: 640, height: 560 }, minimum: { width: 440, height: 360 } },
+};
+
 /** Default dimensions for non-frame node kinds (frames are handled separately). */
 export function defaultNodeDimensionsForKind(kind: string): {
   readonly width: number;
@@ -85,6 +94,8 @@ export function defaultNodeDimensionsForKind(kind: string): {
   if (kind === 'agent') return AGENT_NODE_DEFAULT_DIMENSIONS;
   if (kind === 'web-preview') return WEB_PREVIEW_NODE_DEFAULT_DIMENSIONS;
   if (kind === 'mobile-preview') return MOBILE_PREVIEW_NODE_DEFAULT_DIMENSIONS;
+  const contentDimensions = CONTENT_NODE_DIMENSIONS[kind];
+  if (contentDimensions !== undefined) return contentDimensions.default;
   const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];
   if (documentDimensions !== undefined) return documentDimensions.default;
   return DEFAULT_CANVAS_NODE_DIMENSIONS;
@@ -98,6 +109,8 @@ export function minimumNodeDimensionsForKind(kind: string): {
   if (kind === 'agent') return AGENT_NODE_MINIMUM_DIMENSIONS;
   if (kind === 'web-preview') return WEB_PREVIEW_NODE_MINIMUM_DIMENSIONS;
   if (kind === 'mobile-preview') return MOBILE_PREVIEW_NODE_MINIMUM_DIMENSIONS;
+  const contentDimensions = CONTENT_NODE_DIMENSIONS[kind];
+  if (contentDimensions !== undefined) return contentDimensions.minimum;
   const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];
   if (documentDimensions !== undefined) return documentDimensions.minimum;
   return CANVAS_NODE_MINIMUM_DIMENSIONS;
