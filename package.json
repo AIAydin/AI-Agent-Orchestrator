@@ -34,16 +34,16 @@
     "smoke:installer": "corepack pnpm --filter @forgeboard/desktop smoke:installer"
   },
   "devDependencies": {
-    "@eslint/js": "9.30.0",
-    "@types/node": "24.0.10",
-    "eslint": "9.30.0",
-    "eslint-config-prettier": "10.1.5",
-    "globals": "16.3.0",
-    "pnpm": "11.13.0",
-    "prettier": "3.6.2",
-    "tsx": "4.20.3",
-    "typescript": "5.8.3",
-    "typescript-eslint": "8.35.1",
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.1.1",
+    "eslint": "10.7.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.7.0",
+    "pnpm": "11.15.1",
+    "prettier": "3.9.6",
+    "tsx": "4.23.1",
+    "typescript": "7.0.2",
+    "typescript-eslint": "8.65.0",
     "vitest": "3.2.4"
   }
 }

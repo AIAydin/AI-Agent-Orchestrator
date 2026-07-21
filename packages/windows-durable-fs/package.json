@@ -21,6 +21,6 @@
   },
   "devDependencies": {
     "electron": "catalog:",
-    "node-gyp": "12.4.0"
+    "node-gyp": "13.0.1"
   }
 }
