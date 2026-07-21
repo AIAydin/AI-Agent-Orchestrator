@@ -224,91 +224,6 @@
   font-size: var(--text-2xs);
   font-weight: 700;
 }
-.agent-run-config {
-  margin: 15px 0;
-  padding: 11px;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
-}
-.agent-run-config > header,
-.agent-run-config > header > div {
-  display: flex;
-  align-items: center;
-}
-.agent-run-config > header {
-  justify-content: space-between;
-  margin-bottom: 11px;
-}
-.agent-run-config > header > div {
-  gap: 6px;
-  color: var(--accent-strong);
-}
-.agent-run-config h3 {
-  margin: 0;
-  color: var(--text);
-  font-size: var(--text-sm);
-}
-.agent-run-config > header > span {
-  padding: 3px 6px;
-  border-radius: 999px;
-  background: var(--surface-raised);
-  color: var(--green);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-}
-.agent-run-config > label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-bottom: 9px;
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-  font-weight: 650;
-}
-.agent-run-config > p {
-  margin: 9px 0 0;
-  color: var(--text-faint);
-  font-size: var(--text-2xs);
-  line-height: 1.5;
-}
-.review-run-button {
-  width: 100%;
-  min-height: 34px;
-  font-size: var(--text-sm);
-}
-.live-run-controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-}
-.live-run-controls > div {
-  grid-column: 1 / -1;
-  display: flex;
-}
-.live-run-controls > div > .workspace-tooltip-target:first-child {
-  flex: 1;
-  min-width: 0;
-}
-.live-run-controls > div > .workspace-tooltip-target:first-child > input {
-  width: 100%;
-}
-.live-run-controls input {
-  min-width: 0;
-  border-radius: 7px 0 0 7px;
-}
-.live-run-controls button {
-  min-height: 32px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-raised);
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-}
-.live-run-controls > div button {
-  border-left: 0;
-  border-radius: 0 7px 7px 0;
-}
 .workflow-node-config {
   display: grid;
   gap: 10px;
@@ -508,10 +423,9 @@
   border-radius: 6px;
   background: var(--surface-raised);
   color: var(--text-soft);
-  font:
-    8px/1.5 'SFMono-Regular',
-    Consolas,
-    monospace;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: var(--text-2xs);
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -686,5 +600,5 @@
 .node-run-history-empty,
 .node-run-history-note {
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
 }

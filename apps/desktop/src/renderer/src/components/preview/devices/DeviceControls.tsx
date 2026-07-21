@@ -51,7 +51,8 @@ export function DeviceControls({
         aria-label={`Rotate to ${orientation === 'portrait' ? 'landscape' : 'portrait'}`}
         onClick={() => onOrientation(orientation === 'portrait' ? 'landscape' : 'portrait')}
       >
-        <RotateCw size={12} /> {orientation === 'portrait' ? 'Portrait' : 'Landscape'}
+        <RotateCw size={12} aria-hidden="true" />{' '}
+        {orientation === 'portrait' ? 'Portrait' : 'Landscape'}
       </button>
       <label className="preview-checkbox-option">
         <input
@@ -76,8 +77,8 @@ export function DeviceControls({
         </label>
       ) : null}
       <p className="preview-capability-note" role="note">
-        Phone and tablet previews automatically act like a touchscreen. Desktop and laptop previews
-        use the mouse as usual.
+        Phone and tablet previews automatically act like a touchscreen; desktop and laptop use the
+        mouse.
       </p>
     </fieldset>
   );

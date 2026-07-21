@@ -36,7 +36,7 @@ describe('Agent attempt continuation eligibility', () => {
         'resume',
         SELECTED,
       ),
-    ).toContain('worktree authority');
+    ).toContain('saved worktree');
   });
 
   it('rejects missing session capability, superseded authority, and changed node configuration', () => {

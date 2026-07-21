@@ -150,8 +150,8 @@ export function RecoverySettings({
 
             {projectOpen && (
               <p className="recovery-guidance">
-                Close the open project before restoring a snapshot, so autosave can't overwrite the
-                restored content. You can still create snapshots while it's open.
+                Close the open project before restoring, so autosave can't overwrite the restored
+                content. Creating snapshots works while it's open.
               </p>
             )}
 

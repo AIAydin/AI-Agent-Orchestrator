@@ -23,8 +23,8 @@ export function GitHubCliSettings({
         <div>
           <h4 id="git-connections-cli-title">GitHub CLI</h4>
           <p>
-            Pick the GitHub CLI program on this computer that reviewed GitHub actions will use.
-            Setting it here does not sign in, contact GitHub, or check access to any project.
+            The GitHub CLI program that reviewed GitHub actions use. Setting it here does not sign
+            in, contact GitHub, or check access to any project.
           </p>
         </div>
         <button
@@ -99,9 +99,8 @@ export function GitHubCliSettings({
         </button>
       </div>
       <small>
-        Automatic looks in the usual install locations on this computer. Choosing a file saves it
-        only after you review it, your computer confirms, and Forgeboard checks its version. Pushing
-        code does not need the GitHub CLI.
+        Automatic looks in the usual install locations. A chosen file is saved only after you review
+        and confirm it and Forgeboard checks its version. Pushing code does not need the GitHub CLI.
       </small>
     </section>
   );
@@ -119,12 +118,12 @@ function cliStateDescription(status: GitHubCliStatusView): string {
     return 'The program file and its version have been checked. Sign-in is checked only when you run a GitHub action that needs it.';
   }
   if (status.state === 'unverified') {
-    return 'A GitHub CLI program was found on this computer. Forgeboard has not checked whether you are signed in or can access any project.';
+    return 'Found on this computer. Sign-in and project access have not been checked.';
   }
   if (status.state === 'changed') {
     return 'The previously chosen file has changed or moved. Choose it again, or switch to automatic detection.';
   }
-  return 'Optional GitHub features — managing repositories, pull requests, and automated checks (CI) — need the GitHub CLI program. Pushing code works without it.';
+  return 'Optional GitHub features — repositories, pull requests, and automated checks (CI) — need the GitHub CLI. Pushing code works without it.';
 }
 
 function cliSourceLabel(source: GitHubCliStatusView['source']): string {

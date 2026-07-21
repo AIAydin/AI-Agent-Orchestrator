@@ -20,8 +20,8 @@ export function RejectedCommentsNotice({ entries, onDiscard }: RejectedCommentsN
         <span>{entries.length}</span>
       </header>
       <p>
-        These comments could not be shared. Delete a saved copy here, or copy its text back from the
-        item's details panel if that item is still on the canvas.
+        These comments couldn't be shared. Delete the saved copy here, or copy the text back from
+        the item's details panel.
       </p>
       <ol>
         {visible.map((entry) => {

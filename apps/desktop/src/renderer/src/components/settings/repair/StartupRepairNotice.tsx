@@ -16,7 +16,7 @@ export function StartupRepairNotice({ repair, onReview, onDismiss }: StartupRepa
       <div>
         <strong>Forgeboard fixed some settings for this version</strong>
         <span>
-          {repair.repairedFieldPaths.length} unsafe old{' '}
+          {repair.repairedFieldPaths.length} unsafe{' '}
           {repair.repairedFieldPaths.length === 1 ? 'value was' : 'values were'} replaced with safe
           ones. The original settings are kept on this computer.
         </span>

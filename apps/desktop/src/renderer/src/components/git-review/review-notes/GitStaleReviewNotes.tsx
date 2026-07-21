@@ -19,7 +19,7 @@ export function GitStaleReviewNotes({
       </summary>
       <p>
         <TriangleAlert size={12} aria-hidden="true" /> These notes no longer match the current
-        changes, so Forgeboard kept them here instead of moving them to different lines.
+        changes, so they're kept here.
       </p>
       <div>
         {notes.map((note) => (

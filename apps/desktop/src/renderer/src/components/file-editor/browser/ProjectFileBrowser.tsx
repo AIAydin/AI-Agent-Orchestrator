@@ -198,7 +198,7 @@ export function ProjectFileBrowser({
             </button>
           ) : null}
           <button type="button" onClick={refreshBrowser} aria-label="Refresh project files">
-            <RefreshCw size={13} />
+            <RefreshCw size={13} aria-hidden="true" />
           </button>
         </div>
       </header>

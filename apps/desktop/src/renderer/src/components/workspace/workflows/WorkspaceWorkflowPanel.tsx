@@ -68,17 +68,14 @@ export function WorkspaceWorkflowPanel({
     >
       {!mutationsAuthorized && (
         <p className="workflow-role-notice" role="status">
-          Your role lets you view workflow history, status, and output, but not start, approve,
-          control, or cancel a run.
+          Your role can view workflow history and output, but not start, approve, control, or cancel
+          a run.
         </p>
       )}
       <header className="drawer-panel-summary workflow-panel-toolbar">
         <div>
           <strong>Workflow runs</strong>
-          <small>
-            Run the saved canvas or a selected node from the toolbar. Decisions stay on this
-            computer.
-          </small>
+          <small>Run the saved canvas or a selected node from the toolbar.</small>
         </div>
         <div className="drawer-panel-actions">
           {executions.length > 0 && (
@@ -116,8 +113,7 @@ export function WorkspaceWorkflowPanel({
 
       {current === null ? (
         <p className="drawer-empty">
-          No workflow runs yet. Save the canvas, then choose Run canvas or Run selected in the
-          toolbar.
+          No runs yet. Save the canvas, then choose Run canvas or Run selected.
         </p>
       ) : (
         <WorkflowExecutionDetails

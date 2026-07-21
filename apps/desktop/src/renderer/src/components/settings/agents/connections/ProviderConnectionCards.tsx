@@ -85,8 +85,7 @@ export function ProviderConnectionCards({
                 ? `Waiting for ${provider.name} sign-in to finish…`
                 : active === 'disconnect'
                   ? 'Disconnecting this local CLI account…'
-                  : (status?.reason ??
-                    `${provider.name} owns the browser sign-in. Forgeboard never sees or stores OAuth tokens.`)}
+                  : (status?.reason ?? `Connect to use your ${provider.name} account.`)}
             </p>
             <small className="provider-privacy-note">
               {provider.name} owns sign-in. Forgeboard never sees or stores OAuth tokens.

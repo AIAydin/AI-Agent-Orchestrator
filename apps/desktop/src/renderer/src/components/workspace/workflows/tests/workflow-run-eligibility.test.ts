@@ -84,6 +84,35 @@ describe('workflow run eligibility', () => {
     });
     expect(workflowSelectionEligibility([first, note], [first, note], []).runnable).toBe(false);
   });
+
+  it('surfaces a provider-connection block for agent nodes and their delegating tasks', () => {
+    const claudeAgent = node('agent', 'agent-claude');
+    claudeAgent.data['adapterId'] = 'claude';
+    const localAgent = node('agent', 'agent-local');
+    localAgent.data['adapterId'] = 'test-agent';
+    const task = node('task', 'task-1');
+    task.data['assigneeId'] = claudeAgent.id;
+    const nodes = [claudeAgent, localAgent, task];
+    const reason = "Claude Code isn't connected. Connect it in Settings → Agents & runtime.";
+    const blockClaude = (candidate: WorkshopNode) =>
+      candidate.data['adapterId'] === 'claude' ? reason : null;
+
+    expect(workflowNodeEligibility(claudeAgent, [], nodes, blockClaude)).toEqual({
+      runnable: false,
+      reason,
+    });
+    expect(workflowNodeEligibility(localAgent, [], nodes, blockClaude).runnable).toBe(true);
+    expect(workflowNodeEligibility(task, [], nodes, blockClaude)).toEqual({
+      runnable: false,
+      reason,
+    });
+    expect(workflowSelectionEligibility([claudeAgent], nodes, [], blockClaude)).toEqual({
+      runnable: false,
+      reason,
+    });
+    expect(runnableWorkflowNodeCount(nodes, [], blockClaude)).toBe(1);
+    expect(runnableWorkflowNodeCount(nodes, [])).toBe(3);
+  });
 });
 
 function node(kind: WorkshopNode['data']['kind'], id: string): WorkshopNode {

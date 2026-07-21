@@ -33,7 +33,7 @@
   place-items: center;
   border-radius: 10px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 .project-dialog h2 {
   margin: 1px 0 5px;
@@ -49,7 +49,7 @@
 .project-dialog > label,
 .project-dialog > .project-form-field,
 .settings-fields > label,
-.settings-fields > .settings-form-field {
+.settings-fields .settings-form-field {
   display: flex;
   flex-direction: column;
   gap: 7px;

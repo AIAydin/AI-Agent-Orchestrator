@@ -189,9 +189,7 @@ export function NoteImageInspector({
       <section className="note-image-picker" aria-label="Local image references">
         <div>
           <strong>Project images</strong>
-          <p>
-            Only image files inside this project are available. Image bytes stay on this device.
-          </p>
+          <p>Only images inside this project. Image bytes stay on this device.</p>
         </div>
         <button type="button" disabled={readOnly || choosing} onClick={() => void choose()}>
           <ImagePlus size={13} /> {choosing ? 'Choosing…' : 'Choose image'}
@@ -224,7 +222,7 @@ export function NoteImageInspector({
 
       {images.length === 0 ? (
         <p className="note-image-empty" role="status">
-          No image is linked. Choose one without editing a path or configuration file.
+          No image linked yet. Use Choose image above.
         </p>
       ) : (
         <ol className="note-image-list">
@@ -311,9 +309,8 @@ export function NoteImageInspector({
         </ol>
       )}
       <p className="note-image-context-disclosure">
-        When attached as agent context, Forgeboard sends the note text, linked-image count, and
-        alternative text for those linked images. It never sends image paths or bytes. Attach a File
-        node separately to disclose file contents.
+        As agent context, Forgeboard sends the note text, image count, and alt text. It never sends
+        image paths or bytes — attach a File node to share file contents.
       </p>
     </section>
   );

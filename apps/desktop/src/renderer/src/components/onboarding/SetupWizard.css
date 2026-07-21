@@ -286,6 +286,13 @@
   pointer-events: none;
 }
 
+.setup-agent-list label:has(input:focus-visible),
+.setup-choice:has(input:focus-visible) {
+  box-shadow:
+    0 0 0 2px var(--surface-raised),
+    0 0 0 4px var(--accent);
+}
+
 .setup-agent-list .status-chip {
   font-size: var(--text-2xs);
 }

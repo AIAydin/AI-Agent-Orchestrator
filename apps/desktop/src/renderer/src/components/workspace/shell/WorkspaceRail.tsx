@@ -1,4 +1,13 @@
-import { ChevronRight, Files, GitBranch, Layers3, Search, Workflow } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronRight,
+  Files,
+  GitBranch,
+  Layers3,
+  Search,
+  ShieldCheck,
+  Workflow,
+} from 'lucide-react';
 
 import type {
   AgentDetection,
@@ -210,7 +219,7 @@ function ProjectTemplates({
               disabled={readOnly}
               onClick={() => onAddWorkflowTemplate(template)}
             >
-              <span style={{ color: '#d4a85b' }}>
+              <span style={{ color: 'var(--yellow)' }}>
                 <Workflow size={15} />
               </span>
               <span>
@@ -346,7 +355,7 @@ function CanvasNodeList({
                 <Icon size={14} />
               </span>
               <span>
-                <strong>{node.data.title}</strong>
+                <strong title={node.data.title}>{node.data.title}</strong>
                 <small>{definition.label}</small>
               </span>
               <span
@@ -367,7 +376,11 @@ function ShieldStatus({ project }: { project: Project }) {
   return (
     <div className="rail-safety">
       <span className={project.health.sensitiveWarnings.length ? 'warning' : 'safe'}>
-        {project.health.sensitiveWarnings.length ? '!' : '✓'}
+        {project.health.sensitiveWarnings.length ? (
+          <AlertTriangle size={12} aria-hidden="true" />
+        ) : (
+          <ShieldCheck size={12} aria-hidden="true" />
+        )}
       </span>
       <div>
         <strong>

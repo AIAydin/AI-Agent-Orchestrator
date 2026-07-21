@@ -176,8 +176,8 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
       </div>
 
       <p className="docker-explanation">
-        The image must already contain this exact agent program. Forgeboard does not assume a
-        general image has your agent installed, and it never downloads an image without asking.
+        The image must already contain this exact agent program — Forgeboard doesn't assume a
+        general image has it installed.
       </p>
 
       <div className="docker-readiness-actions">
@@ -187,7 +187,7 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
           disabled={props.disabled || configuration === null || busy !== null}
           onClick={() => void check()}
         >
-          <RefreshCw size={14} className={busy === 'check' ? 'spin' : ''} />
+          <RefreshCw size={14} className={busy === 'check' ? 'spin' : ''} aria-hidden="true" />
           {busy === 'check' ? 'Checking…' : 'Check Docker'}
         </button>
         <button
@@ -196,14 +196,15 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
           disabled={props.disabled || configuration === null || busy !== null}
           onClick={() => void pull()}
         >
-          <Download size={14} /> {busy === 'pull' ? 'Downloading…' : 'Pull image…'}
+          <Download size={14} aria-hidden="true" />{' '}
+          {busy === 'pull' ? 'Downloading…' : 'Pull image…'}
         </button>
         <small>You will be asked to confirm before anything is downloaded.</small>
       </div>
 
       {configuration === null && (
         <div className="docker-readiness missing" role="status">
-          <AlertTriangle size={15} />
+          <AlertTriangle size={15} aria-hidden="true" />
           <span>
             Enter an image and the full path of the agent program inside it, then run the check.
           </span>
@@ -211,7 +212,7 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
       )}
       {configuration !== null && currentEvidence === null && (
         <div className="docker-readiness missing" role="status">
-          <AlertTriangle size={15} />
+          <AlertTriangle size={15} aria-hidden="true" />
           <span>
             <strong>Docker profile not checked yet</strong>
             <small>Run “Check Docker” before relying on this profile.</small>
@@ -227,7 +228,11 @@ export function DockerConfiguration(props: DockerConfigurationProps) {
 function DockerReadinessStatus({ readiness }: { readiness: DockerReadiness }) {
   return (
     <div className={`docker-readiness ${readiness.available ? 'ready' : 'blocked'}`} role="status">
-      {readiness.available ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+      {readiness.available ? (
+        <CheckCircle2 size={16} aria-hidden="true" />
+      ) : (
+        <AlertTriangle size={16} aria-hidden="true" />
+      )}
       <span>
         <strong>{readiness.available ? 'Docker profile ready' : readinessLabel(readiness)}</strong>
         <small>

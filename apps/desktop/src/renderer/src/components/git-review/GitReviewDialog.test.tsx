@@ -710,7 +710,7 @@ describe('GitReviewDialog', () => {
     });
     expect(disclosure.textContent).toContain('src/private-change.ts');
     expect(disclosure.textContent).toContain('Files with unsaved changes (4)');
-    expect(disclosure.textContent).toContain('3 more files with unsaved changes are not shown');
+    expect(disclosure.textContent).toContain('3 more files not shown');
     expect(disclosure.textContent).toContain('This plan no longer qualifies for a safe cleanup');
     expect(
       screen.getByRole('button', {
@@ -979,17 +979,9 @@ describe('GitReviewDialog', () => {
   it.each<readonly [GitDeliveryRequiredCheckState, string, 'neutral' | 'success' | 'warning']>([
     ['passed', 'The check passed. Delivery status was refreshed.', 'success'],
     ['failed', "The check didn't pass. Delivery stays blocked.", 'warning'],
-    ['cancelled', 'The check was cancelled before it could pass.', 'neutral'],
-    [
-      'lost',
-      "Forgeboard lost the check's final result. Delivery stays blocked — run the check again.",
-      'warning',
-    ],
-    [
-      'stale',
-      'The check result no longer matches the current code. Run the check again.',
-      'warning',
-    ],
+    ['cancelled', 'The check was cancelled.', 'neutral'],
+    ['lost', "The check's result was lost. Run it again — delivery stays blocked.", 'warning'],
+    ['stale', 'The code changed since this check ran. Run it again.', 'warning'],
   ])('uses an honest %s completion notice and tone', async (state, message, tone) => {
     const terminalReadiness = readinessView({
       target: worktreeTarget,
@@ -1087,7 +1079,7 @@ describe('GitReviewDialog', () => {
     render(<GitReviewDialog target={worktreeTarget} projectName="Workshop" onClose={vi.fn()} />);
 
     expect(await screen.findByText('No committed changes to compare')).toBeTruthy();
-    expect(screen.getByText(/not committed yet is in the other tab/)).toBeTruthy();
+    expect(screen.getByText(/Uncommitted work is in the other tab/)).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Uncommitted changes' }));
     expect(screen.getByRole('button', { name: /src\/app\.ts Modified/ })).toBeTruthy();
   });
@@ -1161,7 +1153,7 @@ describe('GitReviewDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Prepare cleanup recovery/u }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(onCleanupSuccess).toHaveBeenCalledWith(
-      'Finished the interrupted cleanup and marked the agent workspace as cleaned up.',
+      'Finished the interrupted cleanup and marked the workspace clean.',
     );
     expect(confirmCleanupMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -1198,7 +1190,7 @@ describe('GitReviewDialog', () => {
     ).toBeTruthy();
     expect(onCleanupTargetReactivated).toHaveBeenCalledWith(
       worktreeTarget,
-      'Verified the agent workspace is intact and made it active again.',
+      'The agent workspace is intact and active again.',
     );
     await waitFor(() => expect(reviewMock).toHaveBeenCalledTimes(2));
   });

@@ -12,7 +12,7 @@
 .note-image-empty,
 .note-image-context-disclosure {
   color: var(--text-muted);
-  font-size: 8px;
+  font-size: var(--text-2xs);
   line-height: 1.5;
   margin: 3px 0 0;
 }
@@ -34,7 +34,7 @@
 
 .note-image-canvas-references summary {
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-2xs);
 }
 
 .note-image-canvas-references label {
@@ -89,7 +89,7 @@
 
 .note-image-preview span {
   color: var(--text-muted);
-  font-size: 8px;
+  font-size: var(--text-2xs);
 }
 
 .note-image-reference-heading,
@@ -101,7 +101,7 @@
 }
 
 .note-image-reference-heading code {
-  font-size: 8px;
+  font-size: var(--text-2xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -109,7 +109,7 @@
 
 .note-image-reference-heading span {
   color: var(--text-muted);
-  font-size: 8px;
+  font-size: var(--text-2xs);
 }
 
 .missing-local-reference {
@@ -118,7 +118,7 @@
   border-radius: 6px;
   color: var(--text-muted);
   display: grid;
-  font-size: 8px;
+  font-size: var(--text-2xs);
   gap: 5px;
   padding: 7px;
 }

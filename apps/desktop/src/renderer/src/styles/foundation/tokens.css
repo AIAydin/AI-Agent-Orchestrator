@@ -8,27 +8,27 @@
   --canvas-grid: #b5bbb5;
   --text: #191d1b;
   --text-soft: #636a65;
-  --text-faint: #8d948f;
+  --text-faint: #6f766f;
   --line: #d9ddd8;
   --line-strong: #c7ccc7;
   --accent: #c98236;
   --accent-strong: #a96321;
   --accent-soft: #f6e7d5;
-  --green: #4d8c66;
+  --green: #3a7354;
   --green-soft: #e1eee5;
-  --red: #b6534b;
+  --red: #a4443c;
   --red-soft: #f5e2df;
-  --yellow: #b47c2f;
+  --yellow: #8a5e20;
   --shadow: 0 18px 60px rgb(27 32 29 / 12%);
   --minimap-mask: rgb(243 244 242 / 78%);
-  --text-2xs: 10px;
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-md: 13px;
-  --text-lg: 14px;
-  --text-xl: 15px;
-  --text-2xl: 17px;
-  --text-3xl: 20px;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
+  --text-3xl: 21px;
   font-family:
     Inter,
     ui-sans-serif,
@@ -50,7 +50,7 @@
   --canvas-grid: #3a433c;
   --text: #edf0ed;
   --text-soft: #9fa8a1;
-  --text-faint: #737d75;
+  --text-faint: #87918a;
   --line: #2d342f;
   --line-strong: #3d463f;
   --accent: #dda45e;
@@ -63,6 +63,29 @@
   --yellow: #d4a456;
   --shadow: 0 20px 70px rgb(0 0 0 / 38%);
   --minimap-mask: rgb(17 20 18 / 78%);
+}
+
+/* Aliases for token names referenced across area styles. They resolve through the
+   canonical tokens above (so they follow the active theme); prefer the canonical
+   names for new code. */
+:root {
+  --amber: var(--yellow);
+  --orange: var(--yellow);
+  --warning: var(--yellow);
+  --success: var(--green);
+  --danger: var(--red);
+  --text-primary: var(--text);
+  --text-muted: var(--text-soft);
+  --muted: var(--text-soft);
+  --surface-active: var(--surface-subtle);
+  --panel: var(--surface-raised);
+  --panel-2: var(--surface-subtle);
+  --border-subtle: var(--line);
+  --border-strong: var(--line-strong);
+  --shadow-sm: var(--shadow);
+  --shadow-lg: var(--shadow);
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --font-mono: var(--mono);
 }
 
 * {

@@ -20,6 +20,7 @@ const continueProcess = vi.fn();
 const sendInput = vi.fn();
 const onError = vi.fn();
 const updateNodeData = vi.fn();
+const verifyAdapterConnection = vi.fn();
 
 beforeEach(() => {
   for (const mock of [
@@ -34,9 +35,11 @@ beforeEach(() => {
     sendInput,
     onError,
     updateNodeData,
+    verifyAdapterConnection,
   ]) {
     mock.mockReset();
   }
+  verifyAdapterConnection.mockResolvedValue(null);
   prepare.mockResolvedValue({ ok: true, value: disclosure() });
   resume.mockResolvedValue({ ok: true, value: disclosure('80000000-0000-4000-8000-000000000002') });
   retry.mockResolvedValue({ ok: true, value: disclosure('80000000-0000-4000-8000-000000000003') });
@@ -77,6 +80,7 @@ describe('useAgentRunController persisted review boundary', () => {
         selectedModel: 'node-model',
         selectedPermission: 'plan-read-only',
         permissionUnavailableReason: null,
+        verifyAdapterConnection,
         flushCanvas: () => Promise.resolve(true),
         updateNodeData,
         setEvents,
@@ -163,6 +167,7 @@ describe('useAgentRunController persisted review boundary', () => {
         selectedAdapter: 'test-agent',
         selectedPermission: 'worktree-write',
         permissionUnavailableReason: null,
+        verifyAdapterConnection,
         flushCanvas: () => {
           flushedPermissions.push(nodeRef.current.data.permissionProfile);
           return Promise.resolve(true);
@@ -258,6 +263,37 @@ describe('useAgentRunController persisted review boundary', () => {
     );
   });
 
+  it('re-checks the reviewed adapter connection at approval time and aborts a disconnected launch', async () => {
+    const hook = renderController(vi.fn().mockResolvedValue(true));
+    await act(async () => await hook.result.current.runs.prepareSelectedRun());
+    verifyAdapterConnection.mockResolvedValueOnce(
+      "Claude Code isn't connected — connect it in Settings → Agents & runtime, then try again.",
+    );
+
+    await act(async () => await hook.result.current.runs.approvePreparedRun());
+
+    expect(verifyAdapterConnection).toHaveBeenCalledWith('test-agent');
+    expect(approve).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(
+      "Claude Code isn't connected — connect it in Settings → Agents & runtime, then try again.",
+    );
+    expect(hook.result.current.runs.disclosure).not.toBeNull();
+
+    await act(async () => await hook.result.current.runs.approvePreparedRun());
+    expect(approve).toHaveBeenCalledWith(disclosure().runId);
+  });
+
+  it('starts a run without interference when the adapter has no provider connection', async () => {
+    const hook = renderController(vi.fn().mockResolvedValue(true));
+    await act(async () => await hook.result.current.runs.prepareSelectedRun());
+
+    await act(async () => await hook.result.current.runs.approvePreparedRun());
+
+    expect(verifyAdapterConnection).toHaveBeenCalledWith('test-agent');
+    expect(approve).toHaveBeenCalledWith(disclosure().runId);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('requires a fresh Review after an approval IPC error consumes stale authority', async () => {
     const hook = renderController(vi.fn().mockResolvedValue(true));
     await act(async () => await hook.result.current.runs.prepareSelectedRun());
@@ -341,6 +377,7 @@ function renderController(flushCanvas: () => Promise<boolean>) {
       selectedAdapter: 'test-agent',
       selectedPermission: 'plan-read-only',
       permissionUnavailableReason: null,
+      verifyAdapterConnection,
       flushCanvas,
       updateNodeData,
       setEvents,
@@ -360,6 +397,7 @@ function renderStatefulController(initialNode = agentNode()) {
       selectedAdapter: 'test-agent',
       selectedPermission: 'plan-read-only',
       permissionUnavailableReason: null,
+      verifyAdapterConnection,
       flushCanvas: () => Promise.resolve(true),
       updateNodeData: (nodeId, data) => {
         setNode((current) =>

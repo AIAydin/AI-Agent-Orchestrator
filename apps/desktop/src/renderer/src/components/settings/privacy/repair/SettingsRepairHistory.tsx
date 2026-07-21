@@ -37,14 +37,11 @@ export function SettingsRepairHistory({ onError, onNotice }: SettingsRepairHisto
   return (
     <SettingsSection
       title="Repaired settings"
-      description="Forgeboard replaced old settings that no longer meet its safety rules. The originals stay on this computer, are left out of normal exports, and are removed when you delete all local data."
+      description="Forgeboard replaced old settings that no longer meet its safety rules. The originals stay on this computer — out of normal exports — until you delete all local data."
     >
       <div className="settings-repair-warning">
         <ShieldAlert size={18} aria-hidden="true" />
-        <span>
-          Check the repaired settings below. If you still need any of them, set them again here in
-          Settings — no code changes needed.
-        </span>
+        <span>If you still need any of these, set them again here in Settings.</span>
       </div>
       <div className="settings-repair-list">
         {repairs.map((repair) => (

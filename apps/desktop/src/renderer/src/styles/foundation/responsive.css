@@ -1,9 +1,9 @@
 @media (max-width: 1180px) {
   .workspace-grid {
-    grid-template-columns: 230px minmax(0, 1fr) 280px;
-  }
-  .agent-activity {
-    display: none;
+    /* Smaller defaults only: user-resized widths (inline custom properties)
+       still win and are re-clamped against the window in the renderer. */
+    --workspace-rail-default: 230px;
+    --workspace-inspector-default: 280px;
   }
 }
 
@@ -51,6 +51,9 @@
     grid-template-columns: 210px minmax(0, 1fr);
     grid-template-areas: 'rail canvas' 'rail activity';
   }
+  .workspace-resize-handle {
+    display: none;
+  }
   .inspector {
     position: fixed;
     z-index: 40;
@@ -63,6 +66,7 @@
 }
 
 :root[data-density='compact'] .template-list button {
+  min-height: 24px;
   padding-block: 5px;
 }
 :root[data-density='compact'] .canvas-node {

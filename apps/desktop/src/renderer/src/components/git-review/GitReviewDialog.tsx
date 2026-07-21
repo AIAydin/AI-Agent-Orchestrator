@@ -11,6 +11,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { unwrap } from '../../lib/ipc.js';
+import { trapModalFocus } from '../../lib/modal-focus.js';
 import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 import type { CheckId } from '../../../../shared/checks/contracts.js';
@@ -130,6 +131,7 @@ export function GitReviewDialog({
     target.kind === 'agent-worktree' ? 'base-comparison' : 'working-tree',
   );
   const closeButton = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const groups = useMemo(
@@ -154,7 +156,7 @@ export function GitReviewDialog({
     controller.busyLabel ??
     cleanupController.busyLabel ??
     readinessBusyLabel ??
-    (externalOpenBusy ? 'Waiting for external workspace confirmation…' : null);
+    (externalOpenBusy ? 'Waiting for confirmation…' : null);
   const actionError = controller.error ?? cleanupController.error ?? deliveryReadiness.error;
   const cleanupRecoveryOnly = target.kind === 'agent-worktree' && cleanupRecovery;
   const deliveryReady =
@@ -175,8 +177,10 @@ export function GitReviewDialog({
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButton.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
+      const disclosureOpen = document.querySelector('.git-action-disclosure') !== null;
+      if (!disclosureOpen) trapModalFocus(event, dialog.current);
       if (event.key !== 'Escape') return;
-      if (document.querySelector('.git-action-disclosure') !== null) return;
+      if (disclosureOpen) return;
       event.preventDefault();
       closeRef.current();
     };
@@ -327,7 +331,7 @@ export function GitReviewDialog({
         gitReviewNotice(
           result.opened
             ? `Opened the ${result.targetKind === 'primary' ? 'main project' : 'agent workspace'} in ${result.application === 'selected' ? 'your selected application' : 'the system default'}${result.branch === null ? '' : ` on ${result.branch}`}.`
-            : 'External open cancelled. No application was launched.',
+            : 'Open cancelled. Nothing was launched.',
           result.opened ? 'success' : 'neutral',
         ),
       );
@@ -346,10 +350,7 @@ export function GitReviewDialog({
       setShippingPlan(null);
       if (result === null) {
         setNotice(
-          gitReviewNotice(
-            'Delivery cancelled. Your main project files were not changed.',
-            'neutral',
-          ),
+          gitReviewNotice("Delivery cancelled. Your main project wasn't changed.", 'neutral'),
         );
       } else if (result !== undefined) {
         setShippingResult(result);
@@ -357,7 +358,7 @@ export function GitReviewDialog({
           gitReviewNotice(
             result.state === 'completed'
               ? `Delivered the reviewed commits to your main project at ${result.headAfter.slice(0, 12)}.`
-              : 'Git stopped at conflicts. Your main project is left with conflicts you can review and fix.',
+              : 'Git stopped at conflicts in your main project. Review and fix them below.',
             result.state === 'completed' ? 'success' : 'warning',
           ),
         );
@@ -369,10 +370,7 @@ export function GitReviewDialog({
     setShippingResult(null);
     setRecoveryState(null);
     setNotice(
-      gitReviewNotice(
-        'Git conflict recovery completed. The affected workspace was refreshed.',
-        'success',
-      ),
+      gitReviewNotice('Git conflict recovery completed. The workspace was refreshed.', 'success'),
     );
     void controller.refresh();
   };
@@ -394,17 +392,12 @@ export function GitReviewDialog({
         return;
       }
       if (outcome.kind === 'cleanup-reconciled') {
-        onCleanupSuccess?.(
-          'Finished the interrupted cleanup and marked the agent workspace as cleaned up.',
-        );
+        onCleanupSuccess?.('Finished the interrupted cleanup and marked the workspace clean.');
         onClose();
       } else {
         setCleanupPlan(outcome);
         if (cleanupRecoveryOnly && !outcome.recovery) {
-          onCleanupTargetReactivated?.(
-            target,
-            'Verified the agent workspace is intact and made it active again.',
-          );
+          onCleanupTargetReactivated?.(target, 'The agent workspace is intact and active again.');
           void controller.refresh();
         }
       }
@@ -495,9 +488,7 @@ export function GitReviewDialog({
       if (result === null) {
         setNotice(gitReviewNotice('Archive cancelled. The workspace remains active.', 'neutral'));
       } else {
-        onCleanupSuccess?.(
-          `Archived ${result.branch}; its worktree, files, and branch were retained.`,
-        );
+        onCleanupSuccess?.(`Archived ${result.branch} — worktree, files, and branch kept.`);
         onClose();
       }
     });
@@ -506,8 +497,10 @@ export function GitReviewDialog({
   return (
     <div className="modal-backdrop git-review-backdrop" role="presentation">
       <section
+        ref={dialog}
         className="modal git-review-dialog"
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby="git-review-title"
         aria-busy={busy || reviewNotes.busy || deliveryReadiness.loading}
@@ -566,7 +559,7 @@ export function GitReviewDialog({
 
         {controller.loading ? (
           <GitReviewState icon={<LoaderCircle className="spin" />} title="Loading changes">
-            Forgeboard is reading the current state of this project's files.
+            Reading this project's files…
           </GitReviewState>
         ) : cleanupRecoveryOnly || controller.review === null ? (
           <>
@@ -700,8 +693,7 @@ export function GitReviewDialog({
             )}
             {reviewNotes.context?.truncated === true && (
               <p className="git-review-note-error" role="status">
-                There are more than 500 review comments here. Resolve or delete older ones to see
-                them all.
+                More than 500 review comments. Resolve or delete older ones to see the rest.
               </p>
             )}
             <GitStaleReviewNotes
@@ -719,8 +711,7 @@ export function GitReviewDialog({
                   icon={<TriangleAlert />}
                   title="Can't compare with the starting point"
                 >
-                  Refresh this review. Forgeboard won't guess a starting point or latest commit on
-                  its own.
+                  Refresh this review — Forgeboard never guesses a starting point.
                 </GitReviewState>
               ) : (
                 <GitBaseComparisonPanel
@@ -924,31 +915,22 @@ function deliveryReadinessNoticeMessage(notice: GitDeliveryReadinessNotice): Git
       return gitReviewNotice("The check didn't pass. Delivery stays blocked.", 'warning');
     }
     if (notice.state === 'cancelled') {
-      return gitReviewNotice('The check was cancelled before it could pass.', 'neutral');
+      return gitReviewNotice('The check was cancelled.', 'neutral');
     }
     if (notice.state === 'lost') {
       return gitReviewNotice(
-        "Forgeboard lost the check's final result. Delivery stays blocked — run the check again.",
+        "The check's result was lost. Run it again — delivery stays blocked.",
         'warning',
       );
     }
     if (notice.state === 'stale') {
-      return gitReviewNotice(
-        'The check result no longer matches the current code. Run the check again.',
-        'warning',
-      );
+      return gitReviewNotice('The code changed since this check ran. Run it again.', 'warning');
     }
     if (notice.state === 'running') {
-      return gitReviewNotice(
-        'The check is still running. Refresh to see its latest state.',
-        'neutral',
-      );
+      return gitReviewNotice('Still running. Refresh for the latest state.', 'neutral');
     }
     if (notice.state === 'queued') {
-      return gitReviewNotice(
-        'The check is waiting to run. Refresh to see its latest state.',
-        'neutral',
-      );
+      return gitReviewNotice('Queued to run. Refresh for the latest state.', 'neutral');
     }
     return gitReviewNotice('No check result was recorded. Delivery stays blocked.', 'warning');
   }

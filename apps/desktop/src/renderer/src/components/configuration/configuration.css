@@ -4,7 +4,7 @@
 
 .command-builder-guidance {
   grid-column: 1 / -1;
-  color: var(--text-faint);
+  color: var(--text-soft);
   font-size: var(--text-xs);
   line-height: 1.45;
 }
@@ -30,7 +30,7 @@
 }
 
 .command-readiness-evidence.partial {
-  color: var(--orange);
+  color: var(--yellow);
 }
 
 .command-readiness-evidence.blocked {
@@ -43,7 +43,7 @@
 }
 
 .environment-editor > small {
-  color: var(--text-faint);
+  color: var(--text-soft);
   font-size: var(--text-xs);
   line-height: 1.45;
 }
@@ -51,6 +51,10 @@
 .environment-editor .environment-editor-issue {
   color: var(--red);
   font-weight: 650;
+}
+
+.environment-editor .environment-editor-issue span {
+  display: block;
 }
 
 .environment-editor.compact {

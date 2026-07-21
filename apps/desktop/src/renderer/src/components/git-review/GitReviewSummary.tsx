@@ -54,7 +54,7 @@ export function GitReviewSummary({ review }: { review: GitReviewView }) {
           </strong>
         </span>
       </div>
-      <WorkspaceTooltip content="Only counts line changes in files Git already tracks. Brand-new and binary files don't add to these totals.">
+      <WorkspaceTooltip content="Only counts line changes in files Git already tracks. New and binary files aren't counted.">
         <div tabIndex={0} role="group" aria-label="Tracked file line changes">
           <FileDiff size={15} aria-hidden="true" />
           <span>

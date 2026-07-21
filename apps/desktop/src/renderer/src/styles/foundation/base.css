@@ -144,10 +144,8 @@ code {
 .button.primary {
   border-color: var(--accent);
   background: var(--accent);
+  /* Dark ink instead of white: white on the light-theme accent is only ~3.1:1. */
   color: #201407;
-}
-:root[data-theme='light'] .button.primary {
-  color: white;
 }
 .button.primary:hover {
   border-color: var(--accent-strong);

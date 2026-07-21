@@ -77,9 +77,9 @@ export function SavedApprovalsSettings({
         </button>
       </header>
       <p>
-        Only exact project check commands you chose to remember appear here. Starting agents,
-        expanding context, pulling Docker images, sending data out, and destructive Git actions
-        still require per-use approval.
+        Only exact check commands you chose to remember appear here. Everything else — starting
+        agents, expanding context, pulling Docker images, sending data out, destructive Git actions
+        — still requires per-use approval.
       </p>
       <label className="switch-row compact">
         <span>

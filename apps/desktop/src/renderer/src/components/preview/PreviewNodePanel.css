@@ -1,9 +1,11 @@
 .preview-node-panel {
+  --preview-accent: #6099c5;
+
   margin: 15px 0;
   padding: 11px;
-  border: 1px solid color-mix(in srgb, #6099c5 48%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--preview-accent) 48%, var(--line));
   border-radius: 9px;
-  background: color-mix(in srgb, #6099c5 8%, var(--surface));
+  background: color-mix(in srgb, var(--preview-accent) 8%, var(--surface));
 }
 
 .preview-node-panel > header,
@@ -21,7 +23,7 @@
 
 .preview-node-panel > header > div {
   gap: 6px;
-  color: #6099c5;
+  color: var(--preview-accent);
 }
 
 .preview-node-panel h3 {

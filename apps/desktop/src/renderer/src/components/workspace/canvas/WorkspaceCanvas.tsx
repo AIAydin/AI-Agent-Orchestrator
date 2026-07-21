@@ -51,7 +51,10 @@ import {
   normalizeCanvasViewport,
 } from './view-state/viewport.js';
 import { useViewportRestore } from './view-state/useViewportRestore.js';
-import { workflowSelectionEligibility } from '../workflows/workflow-run-eligibility.js';
+import {
+  workflowSelectionEligibility,
+  type AgentRunBlockReason,
+} from '../workflows/workflow-run-eligibility.js';
 import {
   CanvasNodeContextMenu,
   type CanvasNodeContextMenuPosition,
@@ -91,6 +94,7 @@ interface WorkspaceCanvasProps {
   onDeleteNode: (nodeId: string) => void;
   workflowRunBusy: boolean;
   workflowMutationsAuthorized: boolean;
+  agentRunBlockReason?: AgentRunBlockReason;
   onRunWorkflowScope: (scope: WorkflowStartInput['scope']) => void;
   onAddNode: (kind: NodeKind, position?: { x: number; y: number }) => void;
   onAddExtensionNode: (template: ExtensionTemplate, position?: { x: number; y: number }) => void;
@@ -132,6 +136,7 @@ export function WorkspaceCanvas({
   onDeleteNode,
   workflowRunBusy,
   workflowMutationsAuthorized,
+  agentRunBlockReason,
   onRunWorkflowScope,
   onAddNode,
   onAddExtensionNode,
@@ -401,6 +406,7 @@ export function WorkspaceCanvas({
                   }));
                 }
               }}
+              nodeDragThreshold={4}
               nodesDraggable={!collaborationGraphReadOnly}
               nodesConnectable={!collaborationGraphReadOnly}
               nodesFocusable
@@ -499,7 +505,12 @@ export function WorkspaceCanvas({
               (() => {
                 const node = nodes.find(({ id }) => id === contextMenu.nodeId);
                 if (node === undefined) return null;
-                const runEligibility = workflowSelectionEligibility([node], nodes, edges);
+                const runEligibility = workflowSelectionEligibility(
+                  [node],
+                  nodes,
+                  edges,
+                  agentRunBlockReason,
+                );
                 const runDisabledReason = !workflowMutationsAuthorized
                   ? 'This collaboration role can inspect workflow history but cannot start execution.'
                   : workflowRunBusy

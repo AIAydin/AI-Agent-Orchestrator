@@ -26,9 +26,7 @@ describe('CheckApprovalDialog', () => {
     expect(dialog.getAttribute('aria-describedby')).toBe(
       'check-approval-description check-approval-warning',
     );
-    expect(
-      screen.getByText(/Project checks run code from this project on your computer/u),
-    ).toBeTruthy();
+    expect(screen.getByText(/runs the project’s code on your computer/u)).toBeTruthy();
     expect(screen.getByText(/Output is saved in full/u)).toBeTruthy();
     expect(screen.getByText(PLAN.approvalFingerprint)).toBeTruthy();
 

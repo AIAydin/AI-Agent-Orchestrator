@@ -121,7 +121,7 @@ describe('GitDeliveryReadinessPanel', () => {
       <GitDeliveryReadinessPanel {...commonProps} selectedCheckIds={[]} />,
     );
 
-    expect(screen.getByText(/Checks required by the workflow are locked/u)).toBeTruthy();
+    expect(screen.getByText(/Workflow checks are locked/u)).toBeTruthy();
     expect(screen.queryByText(/no checks are required/iu)).toBeNull();
     expect(screen.queryByRole('button', { name: /^Run /u })).toBeNull();
     expect(button('Save delivery requirements').disabled).toBe(false);

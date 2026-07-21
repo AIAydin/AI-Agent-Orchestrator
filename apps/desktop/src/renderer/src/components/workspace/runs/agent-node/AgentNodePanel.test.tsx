@@ -7,6 +7,7 @@ import {
   AppSettingsSchema,
   type AgentDetection,
 } from '../../../../../../shared/application/contracts.js';
+import type { AgentProviderGate } from '../useAgentProviderGate.js';
 import type { WorkshopNode } from '../../canvas/CanvasNode.js';
 import { AgentNodePanel } from './AgentNodePanel.js';
 
@@ -190,29 +191,123 @@ describe('AgentNodePanel configuration and usage', () => {
   });
 });
 
-function renderPanel(
-  selectedNode: WorkshopNode,
-  overrides: {
-    readonly onRecord?: () => void;
-    readonly onUpdateSelected?: () => void;
-    readonly onSendRunInput?: (explicitInput?: string) => void;
-    readonly onControlRun?: (action: 'pause' | 'continue' | 'interrupt' | 'terminate') => void;
-    readonly running?: boolean;
-  } = {},
-) {
+describe('AgentNodePanel provider connection run gate', () => {
+  it('blocks the start control with a visible reason while the provider is disconnected', () => {
+    const onRecheckProvider = vi.fn();
+    const onOpenSettings = vi.fn();
+    const onPrepareRun = vi.fn();
+    renderPanel(agentNode({ adapterId: 'claude' }), {
+      providerGate: disconnectedGate(),
+      onRecheckProvider,
+      onOpenSettings,
+      onPrepareRun,
+    });
+
+    const runButton = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Review and run Agent',
+    });
+    expect(runButton.disabled).toBe(true);
+    const tooltip = screen.getByRole('tooltip', {
+      name: "Claude Code isn't connected. Connect it in Settings → Agents & runtime.",
+    });
+    expect(runButton.getAttribute('aria-describedby')).toBe(tooltip.id);
+    expect(screen.getByRole('status').textContent).toContain(
+      "Claude Code isn't connected. Connect it in Settings → Agents & runtime.",
+    );
+
+    fireEvent.click(runButton);
+    expect(onPrepareRun).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    expect(onRecheckProvider).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for a status refresh when the connection state needs one and relabels while busy', () => {
+    const unknownGate = disconnectedGate({
+      state: 'unknown',
+      blockedReason: "Claude Code's connection status needs a refresh. Refresh it, then try again.",
+      warning: "Claude Code's connection status needs a refresh before this agent can run.",
+      actionLabel: 'Refresh status',
+      busyActionLabel: 'Refreshing status…',
+    });
+    const view = renderPanel(agentNode({ adapterId: 'claude' }), { providerGate: unknownGate });
+
+    expect(screen.getByRole('status').textContent).toContain('needs a refresh');
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Review and run Agent' }).disabled,
+    ).toBe(true);
+    expect(screen.getByRole('button', { name: 'Refresh status' })).toBeTruthy();
+
+    view.rerender(
+      <AgentNodePanel
+        {...panelProps(agentNode({ adapterId: 'claude' }), {
+          providerGate: { ...unknownGate, busy: true },
+        })}
+      />,
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Refreshing status…' }).disabled,
+    ).toBe(true);
+  });
+
+  it('unblocks the run without reopening settings after a successful re-check', () => {
+    const view = renderPanel(agentNode({ adapterId: 'claude' }), {
+      providerGate: disconnectedGate(),
+    });
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Review and run Agent' }).disabled,
+    ).toBe(true);
+
+    view.rerender(
+      <AgentNodePanel
+        {...panelProps(agentNode({ adapterId: 'claude' }), {
+          providerGate: disconnectedGate({
+            state: 'connected',
+            blockedReason: null,
+            warning: null,
+          }),
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Review and run Agent' }).disabled,
+    ).toBe(false);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('never gates agents without a provider connection', () => {
+    const onPrepareRun = vi.fn();
+    renderPanel(agentNode({ adapterId: 'test-agent' }), { onPrepareRun });
+
+    const runButton = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Review and run Agent',
+    });
+    expect(runButton.disabled).toBe(false);
+    expect(screen.queryByRole('status')).toBeNull();
+    fireEvent.click(runButton);
+    expect(onPrepareRun).toHaveBeenCalledTimes(1);
+  });
+});
+
+interface PanelOverrides {
+  readonly onRecord?: () => void;
+  readonly onUpdateSelected?: () => void;
+  readonly onSendRunInput?: (explicitInput?: string) => void;
+  readonly onControlRun?: (action: 'pause' | 'continue' | 'interrupt' | 'terminate') => void;
+  readonly running?: boolean;
+  readonly providerGate?: AgentProviderGate | null;
+  readonly onRecheckProvider?: () => void;
+  readonly onOpenSettings?: () => void;
+  readonly onPrepareRun?: () => void;
+}
+
+function renderPanel(selectedNode: WorkshopNode, overrides: PanelOverrides = {}) {
   return render(<AgentNodePanel {...panelProps(selectedNode, overrides)} />);
 }
 
-function panelProps(
-  selectedNode: WorkshopNode,
-  overrides: {
-    readonly onRecord?: () => void;
-    readonly onUpdateSelected?: () => void;
-    readonly onSendRunInput?: (explicitInput?: string) => void;
-    readonly onControlRun?: (action: 'pause' | 'continue' | 'interrupt' | 'terminate') => void;
-    readonly running?: boolean;
-  } = {},
-) {
+function panelProps(selectedNode: WorkshopNode, overrides: PanelOverrides = {}) {
   return {
     projectId: '95000000-0000-4000-8000-000000000001',
     selectedNode,
@@ -229,7 +324,27 @@ function panelProps(
     onRunInputChange: vi.fn(),
     onSendRunInput: overrides.onSendRunInput ?? vi.fn(),
     onControlRun: overrides.onControlRun ?? vi.fn(),
-    onPrepareRun: vi.fn(),
+    onPrepareRun: overrides.onPrepareRun ?? vi.fn(),
+    ...(overrides.providerGate === undefined ? {} : { providerGate: overrides.providerGate }),
+    ...(overrides.onRecheckProvider === undefined
+      ? {}
+      : { onRecheckProvider: overrides.onRecheckProvider }),
+    ...(overrides.onOpenSettings === undefined ? {} : { onOpenSettings: overrides.onOpenSettings }),
+  };
+}
+
+function disconnectedGate(overrides: Partial<AgentProviderGate> = {}): AgentProviderGate {
+  return {
+    providerId: 'claude',
+    productName: 'Claude Code',
+    state: 'disconnected',
+    settled: true,
+    busy: false,
+    blockedReason: "Claude Code isn't connected. Connect it in Settings → Agents & runtime.",
+    warning: "Claude Code isn't connected. Connect it in Settings → Agents & runtime.",
+    actionLabel: 'Check again',
+    busyActionLabel: 'Checking again…',
+    ...overrides,
   };
 }
 

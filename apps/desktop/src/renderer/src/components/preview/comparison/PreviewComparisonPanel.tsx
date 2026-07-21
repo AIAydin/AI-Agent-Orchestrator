@@ -50,8 +50,8 @@ export function PreviewComparisonPanel(props: PreviewComparisonPanelProps) {
         <span>Two real local servers</span>
       </header>
       <p>
-        Choose two agent runs to compare their implementations. Forgeboard resolves each opaque run
-        to its main-owned worktree and asks for native approval before launching either server.
+        Choose two agent runs to compare. Forgeboard asks for your approval before launching either
+        server.
       </p>
       <div className="preview-comparison-configurations">
         <SideConfiguration
@@ -107,13 +107,12 @@ export function PreviewComparisonPanel(props: PreviewComparisonPanelProps) {
       </div>
       {agentTargets.length < 2 ? (
         <p className="preview-target-recovery" role="status">
-          Two agent worktrees are required. Run two agents for this project, then reopen this node.
+          Run two agents for this project first, then reopen this node.
         </p>
       ) : null}
       {duplicate ? (
         <p className="preview-failure" role="alert">
-          Choose two different agent runs; Forgeboard will never show one server twice as a
-          comparison.
+          Choose two different agent runs — one server can't be compared with itself.
         </p>
       ) : null}
       <button

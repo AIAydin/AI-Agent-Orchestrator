@@ -106,7 +106,7 @@ export function UpdateSettings({ currentVersion, draft, setDraft, busy }: Update
   return (
     <SettingsSection
       title="Application updates"
-      description="Forgeboard checks only when you select Check for updates and approve the exact GitHub request. It never downloads or installs updates automatically."
+      description="Forgeboard checks only when you ask and approve the exact GitHub request. Nothing is downloaded or installed automatically."
     >
       <div className="two-column">
         <label>

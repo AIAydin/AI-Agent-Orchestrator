@@ -260,7 +260,14 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           <Icon size={15} aria-hidden="true" />
         </span>
         <span className="node-kind">{definition.label}</span>
-        {data.collapsed && <strong className="collapsed-node-title">{data.title}</strong>}
+        {data.collapsed && (
+          <strong className="collapsed-node-title" title={data.title}>
+            {data.title}
+          </strong>
+        )}
+        {data.collapsed && data.status !== 'idle' && (
+          <span className={`node-status-label ${data.status}`}>{data.status}</span>
+        )}
         <span
           className={`run-status ${data.status}`}
           role="status"

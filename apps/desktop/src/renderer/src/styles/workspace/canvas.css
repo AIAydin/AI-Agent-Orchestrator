@@ -111,7 +111,7 @@
   border: 1px solid var(--line);
   border-radius: 50%;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 .canvas-empty h2 {
   margin: 0;
@@ -274,8 +274,8 @@
   background: var(--text-faint);
 }
 .node-collapse-button {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: grid;
   flex: 0 0 auto;
   place-items: center;
@@ -337,6 +337,14 @@
   font-size: var(--text-2xs);
   text-transform: capitalize;
 }
+.canvas-node > header .node-status-label {
+  flex: 0 0 auto;
+  margin-top: 0;
+  margin-left: auto;
+}
+.canvas-node > header .node-status-label + .run-status {
+  margin-left: 0;
+}
 .node-worktree-badges {
   display: flex;
   flex-wrap: wrap;
@@ -348,7 +356,7 @@
   border: 1px solid color-mix(in srgb, var(--node-accent) 38%, var(--border-subtle));
   border-radius: 999px;
   color: var(--text-soft);
-  font-size: 7px;
+  font-size: var(--text-2xs);
   font-weight: 700;
 }
 .node-handle {

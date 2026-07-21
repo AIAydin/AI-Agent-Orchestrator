@@ -2,11 +2,11 @@ import { unwrap } from '../../../lib/ipc.js';
 import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../../lib/literal-arguments.js';
 import { SettingsSection, type AsyncSettingsProps } from '../shared.js';
 
-export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsProps) {
+export function CustomAgentSettings({ draft, setDraft, busy, perform }: AsyncSettingsProps) {
   return (
     <SettingsSection
       title="Custom tool"
-      description="Run your own command-line tool as an agent by filling in these fields. No config files to edit."
+      description="Run your own command-line tool as an agent. No config files to edit."
     >
       <label className="switch-row">
         <span>
@@ -75,6 +75,7 @@ export function CustomAgentSettings({ draft, setDraft, perform }: AsyncSettingsP
           />
           <button
             type="button"
+            disabled={busy}
             onClick={() =>
               void perform(async () => {
                 const selected = unwrap(await window.forgeboard.projects.pickExecutable());

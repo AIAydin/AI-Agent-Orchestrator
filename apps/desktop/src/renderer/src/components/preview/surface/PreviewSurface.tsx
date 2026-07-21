@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -8,6 +8,8 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react';
+
+import { trapModalFocus } from '../../../lib/modal-focus.js';
 
 import type { PreviewSessionSnapshot } from '../../../../../shared/application/contracts.js';
 import type {
@@ -55,6 +57,32 @@ export function PreviewSurface({
   const [browserConsole, setBrowserConsole] = useState<PreviewConsoleView | null>(null);
   const primary = useRef<DeviceFrameHandle | null>(null);
   const secondary = useRef<DeviceFrameHandle | null>(null);
+  const surface = useRef<HTMLElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButton.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const openDialogs = [
+        ...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'),
+      ];
+      if (openDialogs.at(-1) !== surface.current) return;
+      trapModalFocus(event, surface.current);
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, []);
 
   async function perform(
     action: (controller: DeviceFrameHandle) => Promise<unknown>,
@@ -73,14 +101,16 @@ export function PreviewSurface({
   return (
     <div className="preview-surface-backdrop" role="presentation">
       <section
+        ref={surface}
         className="preview-surface"
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby="preview-surface-title"
       >
         <header>
           <div className="preview-surface-heading">
-            <MonitorPlay size={17} />
+            <MonitorPlay size={17} aria-hidden="true" />
             <div>
               <strong id="preview-surface-title">Local preview</strong>
               <small>Runs only on this computer · pages cannot control Forgeboard</small>
@@ -93,7 +123,7 @@ export function PreviewSurface({
               onClick={() => void perform((value) => value.history('back'), 'Could not go back.')}
               aria-label="Go back"
             >
-              <ArrowLeft size={14} />
+              <ArrowLeft size={14} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -103,7 +133,7 @@ export function PreviewSurface({
               }
               aria-label="Go forward"
             >
-              <ArrowRight size={14} />
+              <ArrowRight size={14} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -111,7 +141,7 @@ export function PreviewSurface({
               onClick={() => void perform((value) => value.reload(), 'Could not reload preview.')}
               aria-label="Reload preview"
             >
-              <RefreshCw size={14} />
+              <RefreshCw size={14} aria-hidden="true" />
             </button>
           </nav>
           <form
@@ -124,7 +154,7 @@ export function PreviewSurface({
               }, 'That address is not allowed in the preview.');
             }}
           >
-            <ExternalLink size={13} />
+            <ExternalLink size={13} aria-hidden="true" />
             <input
               aria-label="Preview address"
               name={`node-${nodeId}-preview-address`}
@@ -145,7 +175,7 @@ export function PreviewSurface({
               }
               aria-label="Save screenshot"
             >
-              <Camera size={14} />
+              <Camera size={14} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -160,10 +190,10 @@ export function PreviewSurface({
               }
               aria-label="Open in browser"
             >
-              <ExternalLink size={14} />
+              <ExternalLink size={14} aria-hidden="true" />
             </button>
-            <button type="button" onClick={onClose} aria-label="Close preview">
-              <X size={15} />
+            <button ref={closeButton} type="button" onClick={onClose} aria-label="Close preview">
+              <X size={15} aria-hidden="true" />
             </button>
           </div>
         </header>

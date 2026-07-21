@@ -20,8 +20,8 @@ export function GitWorktreeCleanupPanel({
         </strong>
         <small>
           {recovery
-            ? 'Forgeboard will check whether this interrupted cleanup already finished, then either mark it done or prepare a fresh safe recovery plan. There is no force option.'
-            : "Only this agent's workspace can be removed, and only after Forgeboard confirms it has no unsaved changes and its branch is fully merged into the recorded base branch. The branch is always deleted too — there is no force option."}
+            ? 'Forgeboard checks whether the interrupted cleanup already finished, then marks it done or prepares a fresh plan. No force option.'
+            : "Removes only this agent's workspace, and only once it has no unsaved changes and its branch is merged into the recorded base. The branch is deleted too — no force option."}
         </small>
       </span>
       <button className="button" type="button" disabled={busy} onClick={onPrepare}>

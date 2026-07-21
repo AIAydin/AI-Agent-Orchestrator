@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Command, CornerDownLeft, Search, X } from 'lucide-react';
 
+import { trapModalFocus } from '../../lib/modal-focus.js';
 import { WorkspaceTooltip } from '../workspace/shell/tooltips/WorkspaceTooltip.js';
 
 interface PaletteAction {
@@ -20,6 +21,9 @@ export function CommandPalette({
 }) {
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const dialog = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   const filtered = useMemo(() => {
     const normalized = query.toLowerCase().trim();
     return normalized
@@ -32,6 +36,30 @@ export function CommandPalette({
   useEffect(() => {
     setActiveIndex(filtered.length > 0 ? 0 : -1);
   }, [filtered]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      const openDialogs = [
+        ...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'),
+      ];
+      if (openDialogs.at(-1) !== dialog.current) return;
+      trapModalFocus(event, dialog.current);
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    const active = filtered[activeIndex];
+    if (!active) return;
+    document.getElementById(paletteOptionId(active.id))?.scrollIntoView?.({ block: 'nearest' });
+  }, [filtered, activeIndex]);
 
   function runActive(): void {
     const action = filtered[activeIndex];
@@ -53,7 +81,13 @@ export function CommandPalette({
       className="modal-backdrop palette-backdrop"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
-      <div className="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div
+        ref={dialog}
+        className="command-palette"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+      >
         <header>
           <Search size={18} />
           <input
@@ -71,9 +105,7 @@ export function CommandPalette({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search actions…"
             onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                onClose();
-              } else if (event.key === 'ArrowDown') {
+              if (event.key === 'ArrowDown') {
                 event.preventDefault();
                 moveActive(1);
               } else if (event.key === 'ArrowUp') {

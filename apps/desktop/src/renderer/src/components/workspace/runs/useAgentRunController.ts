@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
 
 import type {
@@ -14,6 +14,8 @@ import {
   type AgentContinuationAction,
 } from './agent-node/attempt-actions.js';
 
+export type AgentRunControlAction = 'pause' | 'continue' | 'interrupt' | 'terminate';
+
 interface UseAgentRunControllerInput {
   project: Project;
   selectedNode: WorkshopNode | null;
@@ -21,6 +23,12 @@ interface UseAgentRunControllerInput {
   selectedModel?: string;
   selectedPermission: NonNullable<WorkshopNode['data']['permissionProfile']>;
   permissionUnavailableReason: string | null;
+  /**
+   * Fresh provider-connection check at approval time. Resolves to null when
+   * the adapter may launch, or to a cause-and-recovery message that aborts
+   * the launch. Non-provider adapters always resolve to null.
+   */
+  verifyAdapterConnection: (adapterId: RunAdapterId) => Promise<string | null>;
   flushCanvas: () => Promise<boolean>;
   updateNodeData: (nodeId: string, data: Partial<WorkshopNode['data']>) => void;
   setEvents: Dispatch<SetStateAction<string[]>>;
@@ -34,6 +42,7 @@ export function useAgentRunController({
   selectedModel,
   selectedPermission,
   permissionUnavailableReason,
+  verifyAdapterConnection,
   flushCanvas,
   updateNodeData,
   setEvents,
@@ -45,6 +54,10 @@ export function useAgentRunController({
   const [reviewedPrompt, setReviewedPrompt] = useState<string | null>(null);
   const [runInput, setRunInput] = useState('');
   const [activeRunIds, setActiveRunIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [pendingControlAction, setPendingControlAction] = useState<AgentRunControlAction | null>(
+    null,
+  );
+  const pendingControlActionRef = useRef<AgentRunControlAction | null>(null);
 
   const selectedRunId = selectedNode?.data.runId;
   const selectedRunStatus = selectedNode?.data.status;
@@ -246,6 +259,11 @@ export function useAgentRunController({
     if (!disclosure) return;
     setApprovingRun(true);
     try {
+      const connectionIssue = await verifyAdapterConnection(disclosure.adapterId);
+      if (connectionIssue !== null) {
+        onError(connectionIssue);
+        return;
+      }
       if (!(await flushCanvas())) {
         onError('Save the canvas before approving this run.');
         return;
@@ -293,15 +311,21 @@ export function useAgentRunController({
     }
   }
 
-  async function controlRun(action: 'pause' | 'continue' | 'interrupt' | 'terminate') {
+  async function controlRun(action: AgentRunControlAction) {
     const runId = selectedNode?.data.runId;
     if (!runId || !selectedNode) return;
+    if (pendingControlActionRef.current !== null) return;
+    pendingControlActionRef.current = action;
+    setPendingControlAction(action);
     try {
       const result = await window.forgeboard.runs[action](runId);
       unwrap(result);
     } catch (cause) {
       const actionLabel = action === 'terminate' ? 'stop' : action;
       onError(cause instanceof Error ? cause.message : `Could not ${actionLabel} this run.`);
+    } finally {
+      pendingControlActionRef.current = null;
+      setPendingControlAction(null);
     }
   }
 
@@ -336,6 +360,7 @@ export function useAgentRunController({
     approvingRun,
     runInput,
     selectedRunActive,
+    pendingControlAction,
     setRunInput,
     prepareSelectedRun,
     prepareSelectedContinuation,

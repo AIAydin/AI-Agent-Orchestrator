@@ -94,7 +94,9 @@ describe('FileEditorPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
     await waitFor(() => expect(operations.revert).toHaveBeenCalledOnce());
-    expect(await screen.findByText('Reloaded the saved version.')).toBeTruthy();
+    expect(
+      await screen.findByText('Changes discarded. Your unsaved copy was kept in Past versions.'),
+    ).toBeTruthy();
     expect(screen.getByText('Saved')).toBeTruthy();
 
     const draftOption = screen.getByRole<HTMLOptionElement>('option', {

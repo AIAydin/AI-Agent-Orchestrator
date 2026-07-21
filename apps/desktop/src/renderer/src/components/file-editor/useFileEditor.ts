@@ -186,7 +186,12 @@ export function useFileEditor(
       const next = await operations.revert({ projectId, relativePath });
       if (targetKeyRef.current !== operationTarget) return;
       applyDocument(next, 'Reloaded file');
-      setMessage({ kind: 'success', text: 'Reloaded the saved version.' });
+      setMessage({
+        kind: 'success',
+        text: dirty
+          ? 'Changes discarded. Your unsaved copy was kept in Past versions.'
+          : 'Reloaded the saved version.',
+      });
     } catch (cause) {
       if (targetKeyRef.current !== operationTarget) return;
       const failure = operationFailure(

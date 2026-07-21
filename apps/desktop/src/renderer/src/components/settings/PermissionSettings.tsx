@@ -24,7 +24,7 @@ export function PermissionSettings({
     <>
       <SettingsSection
         title="Permission centre"
-        description="Pick the default profile and see exactly what each one allows. Every agent launch still asks for your approval first."
+        description="Pick the default profile and see what each one allows. Every launch still asks for your approval."
       >
         <label>
           Default permission profile
@@ -74,7 +74,7 @@ export function PermissionSettings({
       </SettingsSection>
       <SettingsSection
         title="Custom profile"
-        description="Set up one reusable profile with ordinary controls — no editing of code, JSON, or environment files."
+        description="One reusable profile with ordinary controls — no code, JSON, or environment files to edit."
       >
         <CustomPermissionProfileEditor
           draft={draft}
@@ -86,7 +86,7 @@ export function PermissionSettings({
       </SettingsSection>
       <SettingsSection
         title="Saved approvals"
-        description="Review and revoke approvals you chose to remember. Changes here apply right away — they are not part of the unsaved settings draft."
+        description="Review and revoke remembered approvals. Changes apply right away — they're not part of the settings draft."
       >
         <SavedApprovalsSettings activeProject={activeProject} busy={busy} onError={onError} />
       </SettingsSection>

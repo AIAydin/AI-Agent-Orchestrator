@@ -128,16 +128,14 @@ export function PreviewConfiguration({
 
       {selectedScript ? (
         <p className="preview-command-help">
-          Found in the <code>package.json</code> file at the root of your main project folder (the
-          primary checkout). When the preview runs in an agent's workspace, Forgeboard looks for the
-          same script there and will not start if it is missing. It passes fixed arguments to{' '}
-          <code>{selectedScript.executable}</code>; finding scripts never runs them.{' '}
-          {commandDependencyGuidance(selectedScript.executable, 'preview')}
+          From the <code>package.json</code> at the root of your main project. In an agent's
+          workspace, Forgeboard looks for the same script and won't start without it. Finding
+          scripts never runs them. {commandDependencyGuidance(selectedScript.executable, 'preview')}
         </p>
       ) : stalePackageScript ? (
         <p className="preview-command-guidance" role="status">
-          That script is not available where the preview will run. Pick another script from
-          package.json, or type the command yourself.
+          That script isn't available where the preview runs. Pick another, or type the command
+          yourself.
         </p>
       ) : null}
 
@@ -256,10 +254,7 @@ function LiteralCommandEditor({
           }}
         />
       </label>
-      <p>
-        Each line is passed to the program exactly as written. Forgeboard does not split or
-        reinterpret these values.
-      </p>
+      <p>Each line goes to the program exactly as written — never split or reinterpreted.</p>
     </fieldset>
   );
 }

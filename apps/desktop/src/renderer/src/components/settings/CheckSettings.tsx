@@ -133,7 +133,7 @@ export function CheckSettings({
     <div className="check-settings">
       <SettingsSection
         title="Project checks"
-        description="Choose the commands Forgeboard runs to check your project. Each command is stored as a program plus its own arguments, never as a shell line. Package scripts may still run other project code and hooks."
+        description="Pick the commands Forgeboard runs to check your project. Each is a program plus arguments, never a shell line. Package scripts may still run other project code and hooks."
       >
         <ProjectScriptSummary
           activeProject={activeProject}
@@ -194,7 +194,7 @@ export function CheckSettings({
 
       <SettingsSection
         title="Custom checks"
-        description="Add your own checks here — no config files to edit. Custom checks use the same program-plus-arguments format as the checks above."
+        description="Add your own checks — same program-plus-arguments format, no config files to edit."
       >
         <div className="check-settings-custom-toolbar">
           <p aria-live="polite">
@@ -308,8 +308,8 @@ function ProjectScriptSummary({
       <div className="check-settings-project-summary" role="status">
         <strong>No project is open</strong>
         <p>
-          Open a project and Forgeboard will find its check scripts for you. You can always set up
-          commands manually below.
+          Open a project and Forgeboard will find its check scripts. You can also set up commands
+          manually below.
         </p>
       </div>
     );
@@ -333,7 +333,7 @@ function ProjectScriptSummary({
       </div>
       <p>
         {detectedCount > 0
-          ? 'Using a found script stores your package manager as the program, with “run” and the script name as its arguments. The package manager may still run other scripts and hooks from the project.'
+          ? 'A found script is stored as your package manager plus “run” and the script name. It may still run other project scripts and hooks.'
           : manager === 'unknown'
             ? 'Choose commands manually, or reopen the project after installing its package manager.'
             : 'No lint, typecheck, test, or build scripts were found. Set up the commands manually below.'}

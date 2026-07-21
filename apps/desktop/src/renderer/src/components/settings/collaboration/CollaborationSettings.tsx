@@ -201,7 +201,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
       const result = await collaboration.createInvite(input);
       if (!result.ok) return setMessage(result.error.message);
       if (result.value === null) return setMessage('Invite creation was cancelled.');
-      setMessage('Invite created. Refresh invite history to review and copy it securely.');
+      setMessage('Invite created. Refresh invite history to review and copy it.');
     });
   }
 
@@ -307,7 +307,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
   return (
     <SettingsSection
       title="Self-hosted collaboration"
-      description="Work with others in real time through a server your team runs. Join a room only when you choose to; access tokens and invite links are never saved."
+      description="Work with others in real time through a server your team runs. Access tokens and invite links are never saved."
     >
       <label className="switch-row">
         <span>

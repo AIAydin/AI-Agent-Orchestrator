@@ -95,9 +95,9 @@ export function PrivacySettings({
             <span>
               <strong>GitHub CLI</strong>
               <small>
-                Optional GitHub sign-in on this computer. Repository, pull request, and build
-                actions run only after you review them, and Forgeboard never stores your token.
-                Pushing code uses your existing Git credentials or SSH setup.
+                Optional GitHub sign-in on this computer. Actions run only after you review them;
+                Forgeboard never stores your token. Pushing code uses your existing Git credentials
+                or SSH setup.
               </small>
             </span>
             <span className="status-chip">On demand</span>
@@ -208,8 +208,7 @@ export function PrivacySettings({
           <span>
             <strong>Local backups</strong>
             <small>
-              Save verified copies of the database to a folder you choose, and remove older copies
-              automatically.
+              Saves verified copies of the database to a folder you choose and removes old ones.
             </small>
           </span>
           <input
@@ -257,16 +256,14 @@ export function PrivacySettings({
                 />
                 <small id="backup-retention-help">
                   Applies to each backup folder. If cleanup fails, you'll see it under Backup
-                  activity, and a few extra files may remain for a while.
+                  activity and a few extra files may remain.
                 </small>
               </label>
             </div>
             <label className="switch-row">
               <span>
                 <strong>Back up unsaved changes when quitting</strong>
-                <small>
-                  When you quit, Forgeboard makes one final verified backup if anything changed.
-                </small>
+                <small>One last verified backup on quit if anything changed.</small>
               </span>
               <input
                 type="checkbox"
@@ -286,6 +283,7 @@ export function PrivacySettings({
                 />
                 <button
                   type="button"
+                  disabled={busy}
                   onClick={() =>
                     void perform(async () => {
                       const selected = unwrap(await window.forgeboard.projects.pickParent());
@@ -373,7 +371,7 @@ export function PrivacySettings({
       />
       <SettingsSection
         title="Export and import"
-        description="One file covers your settings, projects, canvases, runs, checks, snapshots, and activity history. Files in your project folders and extension folders stay where they are."
+        description="One file covers your settings, projects, canvases, runs, checks, snapshots, and activity history. Project and extension folders stay where they are."
       >
         <div className="button-row">
           <button
@@ -422,7 +420,7 @@ export function PrivacySettings({
       </SettingsSection>
       <SettingsSection
         title="Delete local data"
-        description="This stops running agents, checks, and previews, then deletes your settings, recent projects, canvases, snapshots, run and check history, activity records, installed extensions, and every backup Forgeboard has recorded — including ones in folders you no longer use. If a backup file is missing, a warning lets you cancel or skip it; a skipped copy may still exist outside Forgeboard. Your project folders and agent worktrees are files on disk, so they are not deleted."
+        description="Stops running agents, checks, and previews, then deletes your settings, projects, canvases, snapshots, history, extensions, and every backup Forgeboard has recorded — even in folders you no longer use. If a backup file is missing you can cancel or skip it; a skipped copy may still exist outside Forgeboard. Project folders and agent worktrees stay on disk."
       >
         <div className="danger-zone">
           <label>
@@ -467,7 +465,7 @@ function BackupHealthSummary({ health }: { health: BackupHealth }) {
       {health.lastError ? `${health.lastError} ` : ''}
       {health.lastVerifiedAt === null
         ? 'No verified backup on record.'
-        : `Last verified backup created ${formatDate(health.lastVerifiedAt)} · ${formatBytes(health.lastVerifiedSizeBytes ?? 0)} · checksum ${health.lastVerifiedSha256Prefix}… · ${health.verifiedBackupCount} on record. This is a history of created backups; Forgeboard does not keep watching these files.`}
+        : `Last verified backup created ${formatDate(health.lastVerifiedAt)} · ${formatBytes(health.lastVerifiedSizeBytes ?? 0)} · checksum ${health.lastVerifiedSha256Prefix}… · ${health.verifiedBackupCount} on record. History only — Forgeboard does not keep watching these files.`}
     </small>
   );
 }

@@ -9,6 +9,12 @@ export interface WorkflowNodeEligibility {
   readonly reason: string;
 }
 
+/**
+ * Resolves why an agent node cannot launch right now (for example its
+ * provider connection is disconnected), or null when nothing blocks it.
+ */
+export type AgentRunBlockReason = (node: WorkshopNode) => string | null;
+
 export interface WorkflowSelectionEligibility extends WorkflowNodeEligibility {
   readonly scope?: WorkflowStartInput['scope'];
 }
@@ -30,8 +36,15 @@ export function workflowNodeEligibility(
   node: WorkshopNode,
   edges: readonly WorkshopEdge[],
   allNodes: readonly WorkshopNode[] = [],
+  agentRunBlockReason?: AgentRunBlockReason,
 ): WorkflowNodeEligibility {
-  if (node.data.kind === 'agent' || node.data.kind === 'test' || node.data.kind === 'review-gate') {
+  if (node.data.kind === 'agent') {
+    const blocked = agentRunBlockReason?.(node) ?? null;
+    return blocked === null
+      ? { runnable: true, reason: 'Run this node and everything it depends on' }
+      : { runnable: false, reason: blocked };
+  }
+  if (node.data.kind === 'test' || node.data.kind === 'review-gate') {
     return { runnable: true, reason: 'Run this node and everything it depends on' };
   }
   if (
@@ -54,14 +67,17 @@ export function workflowNodeEligibility(
         reason: 'Choose an agent for this task before running it.',
       };
     }
-    if (
-      !allNodes.some((candidate) => candidate.id === assigneeId && candidate.data.kind === 'agent')
-    ) {
+    const assignee = allNodes.find(
+      (candidate) => candidate.id === assigneeId && candidate.data.kind === 'agent',
+    );
+    if (assignee === undefined) {
       return {
         runnable: false,
         reason: 'The agent chosen for this task is missing or is no longer an agent node.',
       };
     }
+    const blocked = agentRunBlockReason?.(assignee) ?? null;
+    if (blocked !== null) return { runnable: false, reason: blocked };
     return {
       runnable: true,
       reason: 'Run this task with its assigned agent and everything it depends on',
@@ -76,14 +92,18 @@ export function workflowNodeEligibility(
 export function runnableWorkflowNodeCount(
   nodes: readonly WorkshopNode[],
   edges: readonly WorkshopEdge[],
+  agentRunBlockReason?: AgentRunBlockReason,
 ): number {
-  return nodes.filter((node) => workflowNodeEligibility(node, edges, nodes).runnable).length;
+  return nodes.filter(
+    (node) => workflowNodeEligibility(node, edges, nodes, agentRunBlockReason).runnable,
+  ).length;
 }
 
 export function workflowSelectionEligibility(
   selectedNodes: readonly WorkshopNode[],
   allNodes: readonly WorkshopNode[],
   edges: readonly WorkshopEdge[],
+  agentRunBlockReason?: AgentRunBlockReason,
 ): WorkflowSelectionEligibility {
   if (selectedNodes.length === 0) {
     return { runnable: false, reason: 'Select a node that can run' };
@@ -93,7 +113,8 @@ export function workflowSelectionEligibility(
     const childIds = descendantIds(allNodes, group.id);
     const runnableChildren = allNodes.filter(
       (node) =>
-        childIds.includes(node.id) && workflowNodeEligibility(node, edges, allNodes).runnable,
+        childIds.includes(node.id) &&
+        workflowNodeEligibility(node, edges, allNodes, agentRunBlockReason).runnable,
     );
     return runnableChildren.length === 0
       ? {
@@ -107,7 +128,7 @@ export function workflowSelectionEligibility(
         };
   }
   for (const node of selectedNodes) {
-    const eligibility = workflowNodeEligibility(node, edges, allNodes);
+    const eligibility = workflowNodeEligibility(node, edges, allNodes, agentRunBlockReason);
     if (!eligibility.runnable) return eligibility;
   }
   const ids = [...new Set(selectedNodes.map((node) => node.id))].sort((left, right) =>

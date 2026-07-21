@@ -69,10 +69,7 @@ export function GitDiffViewer({
       <section className="git-diff-empty" aria-label="Change preview">
         <FileQuestion size={30} aria-hidden="true" />
         <strong>Select a changed file</strong>
-        <p>
-          Pick a file from the list to see its changes here. Forgeboard shows one file at a time so
-          large reviews stay fast.
-        </p>
+        <p>Pick a file from the list to see its changes.</p>
       </section>
     );
   }
@@ -107,7 +104,7 @@ export function GitDiffViewer({
     <section className="git-diff-viewer" aria-label={`Changes in ${file.path}`}>
       <header>
         <span>
-          <strong>{file.path}</strong>
+          <strong title={file.path}>{file.path}</strong>
           {diff?.oldPath !== null && diff?.oldPath !== undefined && diff.oldPath !== file.path && (
             <small>renamed from {diff.oldPath}</small>
           )}
@@ -158,14 +155,13 @@ export function GitDiffViewer({
       )}
       {file.area === 'untracked' ? (
         <GitDiffNotice>
-          This file is new and not tracked by Git yet. Add the whole file to a commit to start
-          tracking it.
+          Git isn't tracking this file yet. Add the whole file to a commit to start.
         </GitDiffNotice>
       ) : diff?.binary === true ? (
         <GitDiffNotice>
           {readOnly
             ? "This file isn't text, so its committed changes can't be shown here."
-            : "This file isn't text, so it can't be shown or changed in sections. Use the whole-file button in the file list instead."}
+            : "This file isn't text, so it can't be shown in sections. Use the whole-file button in the file list instead."}
         </GitDiffNotice>
       ) : diff === undefined || diff.hunks.length === 0 ? (
         <GitDiffNotice>Forgeboard can't show the changed lines for this file.</GitDiffNotice>

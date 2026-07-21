@@ -15,6 +15,7 @@ import type {
 } from '../../../../../shared/readiness/contracts.js';
 import type { ProviderConnectionId } from '../../../../../shared/provider-connections/index.js';
 import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadiness.js';
+import { CUSTOM_MODEL_CHOICE } from '../fields/AgentDefaultModelField.js';
 import { AgentsSettings } from './AgentsSettings.js';
 
 const baseSettings = AppSettingsSchema.parse({
@@ -165,9 +166,80 @@ describe('AgentsSettings readiness', () => {
   });
 });
 
-function Harness({ checkAgentReadiness }: { readonly checkAgentReadiness: CheckAgentReadiness }) {
-  const [draft, setDraft] = useState<AppSettings>(baseSettings);
-  const readiness = useSettingsAgentReadiness(draft, baseSettings, agents, checkAgentReadiness);
+describe('AgentsSettings default model selection', () => {
+  const readyCodex: AgentReadinessResult = {
+    schemaVersion: 1,
+    agentId: 'codex',
+    state: 'ready',
+    ready: true,
+    source: 'automatic',
+    executable: '/canonical/bin/codex',
+    version: '2.4.0',
+    checkedAt: '2026-07-15T18:00:00.000Z',
+    reason: null,
+    warnings: [],
+  };
+  const checkAgentReadiness: CheckAgentReadiness = () => Promise.resolve(readyCodex);
+
+  it('offers known Codex models in a select without the free-text input', () => {
+    render(<Harness checkAgentReadiness={checkAgentReadiness} />);
+
+    const select = screen.getByLabelText<HTMLSelectElement>('Default model (optional)');
+    expect(select.tagName).toBe('SELECT');
+    expect(screen.queryByLabelText('Custom model id')).toBeNull();
+
+    fireEvent.change(select, { target: { value: 'gpt-5.1-codex' } });
+    expect(select.value).toBe('gpt-5.1-codex');
+    expect(screen.queryByLabelText('Custom model id')).toBeNull();
+
+    fireEvent.change(select, { target: { value: '' } });
+    expect(select.value).toBe('');
+  });
+
+  it('reveals the free-text input only for the Custom choice', () => {
+    render(<Harness checkAgentReadiness={checkAgentReadiness} />);
+
+    const select = screen.getByLabelText<HTMLSelectElement>('Default model (optional)');
+    fireEvent.change(select, { target: { value: CUSTOM_MODEL_CHOICE } });
+    const input = screen.getByLabelText<HTMLInputElement>('Custom model id');
+    fireEvent.change(input, { target: { value: 'my-org/fine-tuned-codex' } });
+    expect(input.value).toBe('my-org/fine-tuned-codex');
+    expect(select.value).toBe(CUSTOM_MODEL_CHOICE);
+
+    fireEvent.change(select, { target: { value: 'gpt-5' } });
+    expect(select.value).toBe('gpt-5');
+    expect(screen.queryByLabelText('Custom model id')).toBeNull();
+  });
+
+  it('shows a previously saved custom model through the revealed input', () => {
+    render(
+      <Harness
+        checkAgentReadiness={checkAgentReadiness}
+        initialSettings={{
+          ...baseSettings,
+          agentDefaultModels: { codex: 'my-org/fine-tuned-codex' },
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText<HTMLSelectElement>('Default model (optional)').value).toBe(
+      CUSTOM_MODEL_CHOICE,
+    );
+    expect(screen.getByLabelText<HTMLInputElement>('Custom model id').value).toBe(
+      'my-org/fine-tuned-codex',
+    );
+  });
+});
+
+function Harness({
+  checkAgentReadiness,
+  initialSettings = baseSettings,
+}: {
+  readonly checkAgentReadiness: CheckAgentReadiness;
+  readonly initialSettings?: AppSettings;
+}) {
+  const [draft, setDraft] = useState<AppSettings>(initialSettings);
+  const readiness = useSettingsAgentReadiness(draft, initialSettings, agents, checkAgentReadiness);
   return (
     <AgentsSettings
       agents={agents}

@@ -32,9 +32,7 @@ describe('Git diff review feedback', () => {
     renderViewer(controller);
 
     fireEvent.click(screen.getByRole('button', { name: 'Comment on old line 1' }));
-    expect(
-      screen.getByText(/does not approve the AI's work, start an agent, or change your code/),
-    ).toBeTruthy();
+    expect(screen.getByText(/doesn't start an agent or change your code/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Your feedback on old line 1'), {
       target: { value: 'Restore the deleted null guard.' },
     });
@@ -98,7 +96,7 @@ describe('Git diff review feedback', () => {
 
     fireEvent.click(screen.getByText('1 note from an earlier version of these changes'));
     expect(
-      screen.getByText(/kept them here instead of moving them to different lines/),
+      screen.getByText(/no longer match the current changes, so they're kept here/),
     ).toBeTruthy();
     expect(screen.getByText(/src\/deleted.ts · old line 1 · review/)).toBeTruthy();
     expect(screen.getByText('Preserve the original behavior.')).toBeTruthy();

@@ -101,7 +101,7 @@ function GitFileGroup({
                 >
                   <FileCode2 size={13} aria-hidden="true" />
                   <span>
-                    <strong>{file.path}</strong>
+                    <strong title={file.path}>{file.path}</strong>
                     <small>
                       {statusLabel(file)}
                       {file.diff && ` · +${stats.additions} −${stats.deletions}`}

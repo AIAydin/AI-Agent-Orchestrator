@@ -35,8 +35,7 @@ export function WorkspaceChecksPanel({
         <div>
           <strong>Project checks</strong>
           <small>
-            Run real commands on this computer. You approve each command first, and the full output
-            is kept.
+            Runs real commands on this computer. You approve each one first; full output is kept.
           </small>
         </div>
         <button type="button" aria-label="Configure project checks" onClick={onOpenSettings}>

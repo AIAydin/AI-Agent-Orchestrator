@@ -220,7 +220,6 @@ vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
     </div>
   ),
 }));
-vi.mock('./WorkspaceOverlays.js', () => ({ WorkspaceNotifications: () => null }));
 vi.mock('../../shell/CommandPalette.js', () => ({
   CommandPalette: ({
     actions,

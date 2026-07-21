@@ -237,10 +237,10 @@ export function PreviewNodePanel({
     <section className="preview-node-panel" aria-label="Preview configuration">
       <header>
         <div>
-          <MonitorPlay size={14} />
+          <MonitorPlay size={14} aria-hidden="true" />
           <h3>Local preview</h3>
         </div>
-        <span className={`preview-runtime-state ${session?.status ?? 'idle'}`}>
+        <span className={`preview-runtime-state ${session?.status ?? 'idle'}`} role="status">
           {session?.status ?? 'idle'}
         </span>
       </header>
@@ -301,8 +301,8 @@ export function PreviewNodePanel({
 
       {targetFailure ? (
         <p className="preview-failure" role="alert">
-          {targetFailure} Your main project folder (Primary checkout) is still available. Close and
-          reopen this node to try again.
+          {targetFailure} Your main project folder is still available. Close and reopen this node to
+          try again.
         </p>
       ) : null}
 
@@ -316,7 +316,7 @@ export function PreviewNodePanel({
             }
             onClick={() => void perform('start')}
           >
-            <Play size={13} /> {busy ? 'Starting…' : 'Start preview'}
+            <Play size={13} aria-hidden="true" /> {busy ? 'Starting…' : 'Start preview'}
           </button>
         ) : (
           <>
@@ -325,10 +325,10 @@ export function PreviewNodePanel({
               disabled={readOnly || busy}
               onClick={() => void perform('restart')}
             >
-              <RefreshCw size={12} /> Restart
+              <RefreshCw size={12} aria-hidden="true" /> Restart
             </button>
             <button type="button" disabled={busy} onClick={() => void perform('stop')}>
-              <Square size={12} /> Stop
+              <Square size={12} aria-hidden="true" /> Stop
             </button>
           </>
         )}
@@ -338,17 +338,21 @@ export function PreviewNodePanel({
           onClick={() => setSurfaceOpen(true)}
           aria-label="Open preview"
         >
-          <Maximize2 size={12} /> Open preview
+          <Maximize2 size={12} aria-hidden="true" /> Open preview
         </button>
       </div>
 
       {!operations ? (
         <p className="preview-command-guidance" role="status">
-          This build cannot show the preview inside Forgeboard. The local server still runs; install
-          the latest Forgeboard desktop release to view it here.
+          This build can&apos;t show the preview here. The local server still runs — install the
+          latest desktop release to view it.
         </p>
       ) : null}
-      {session?.failure ? <p className="preview-failure">{session.failure}</p> : null}
+      {session?.failure ? (
+        <p className="preview-failure" role="alert">
+          {session.failure}
+        </p>
+      ) : null}
       {process ? (
         <dl className="preview-process-details">
           <div>
@@ -368,7 +372,7 @@ export function PreviewNodePanel({
       <PreviewConsole session={session} />
 
       <div className="preview-security-note">
-        <ShieldCheck size={13} />
+        <ShieldCheck size={13} aria-hidden="true" />
         <span>
           The server only listens on this computer, on an automatically chosen port. The preview
           blocks popups, downloads, and unapproved websites.

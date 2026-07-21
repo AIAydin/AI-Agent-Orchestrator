@@ -67,8 +67,8 @@ export function GitShippingDisclosure({
           <span>
             <h3 id="git-shipping-review-title">Review delivery to the primary branch</h3>
             <p id="git-shipping-review-description">
-              Nothing has changed yet. If you continue, your computer will ask you to confirm this
-              exact delivery — you can still cancel there.
+              Nothing has changed yet. Your computer will ask you to confirm this exact delivery —
+              you can still cancel there.
             </p>
           </span>
         </header>
@@ -138,7 +138,7 @@ export function GitShippingDisclosure({
               : `${displayEscapedText(qualityApproval.actorLabel)} approved these exact check results ${formatTime(qualityApproval.approvedAt)}.`}{' '}
             Forgeboard re-checks this evidence (
             <code>{plan.readiness.evidenceFingerprint.slice(0, 12)}</code>) before you confirm and
-            again before it updates the primary branch.
+            again before delivery.
           </small>
           <small>
             Plan expires at{' '}

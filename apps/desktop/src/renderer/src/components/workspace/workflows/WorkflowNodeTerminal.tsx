@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Send, StopCircle } from 'lucide-react';
 
 import {
@@ -30,6 +30,8 @@ export function WorkflowNodeTerminal({
   onInterrupt,
 }: WorkflowNodeTerminalProps) {
   const [input, setInput] = useState('');
+  const outputRef = useRef<HTMLPreElement | null>(null);
+  const stickToEndRef = useRef(true);
   const output = useMemo(
     () =>
       events
@@ -41,6 +43,13 @@ export function WorkflowNodeTerminal({
     [events],
   );
 
+  useEffect(() => {
+    const element = outputRef.current;
+    if (element !== null && stickToEndRef.current) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [output]);
+
   async function send(): Promise<void> {
     if (input.length === 0 || input.includes('\0')) return;
     const accepted = await onSendInput({ executionId, nodeId, attempt, data: input });
@@ -49,9 +58,22 @@ export function WorkflowNodeTerminal({
 
   return (
     <section className="workflow-node-terminal" aria-label={`Live controls for ${title}`}>
-      <pre aria-label={`Live output for ${title}`} aria-live="polite">
+      <pre
+        ref={outputRef}
+        aria-label={`Live output for ${title}`}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          stickToEndRef.current =
+            element.scrollHeight - element.scrollTop - element.clientHeight < 40;
+        }}
+      >
         {output === '' ? 'Waiting for live output…' : output}
       </pre>
+      <p role="status">
+        {output === ''
+          ? `Attempt ${attempt} is running — waiting for live output.`
+          : `Attempt ${attempt} is running — live output is streaming.`}
+      </p>
       <label>
         <span>Send input to the running program</span>
         <textarea

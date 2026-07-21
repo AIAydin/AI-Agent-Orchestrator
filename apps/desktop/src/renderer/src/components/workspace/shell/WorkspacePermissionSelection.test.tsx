@@ -49,7 +49,6 @@ vi.mock('./WorkspaceInspector.js', () => ({
 vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
   WorkspaceActivityDrawer: () => null,
 }));
-vi.mock('./WorkspaceOverlays.js', () => ({ WorkspaceNotifications: () => null }));
 vi.mock('../../shell/CommandPalette.js', () => ({ CommandPalette: () => null }));
 vi.mock('../../git-review/GitReviewDialog.js', () => ({ GitReviewDialog: () => null }));
 vi.mock('../runs/RunApprovalDialog.js', () => ({ RunApprovalDialog: () => null }));

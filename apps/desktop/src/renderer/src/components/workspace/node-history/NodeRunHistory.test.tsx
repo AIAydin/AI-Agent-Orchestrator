@@ -11,7 +11,7 @@ describe('NodeRunHistory', () => {
     render(<NodeRunHistory nodeId="note-node" executions={[]} />);
 
     expect(screen.getByRole('heading', { name: 'Workflow run history' })).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toMatch(/has not participated/iu);
+    expect(screen.getByRole('status').textContent).toMatch(/No saved workflow runs/iu);
     expect(screen.getByText(/saved locally and restored/iu)).toBeTruthy();
   });
 

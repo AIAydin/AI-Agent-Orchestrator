@@ -19,7 +19,7 @@ afterEach(cleanup);
 describe('project-file to Agent context UI workflow', () => {
   it('drags a safe project-tree file into the selected Agent and shows the durable link', async () => {
     render(<TreeToSelectedAgentHarness />);
-    fireEvent.click(await screen.findByRole('treeitem', { name: 'Open folder docs' }));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'Expand folder docs' }));
     const source = await screen.findByRole('treeitem', {
       name: 'File docs/brief.md',
     });
@@ -36,7 +36,7 @@ describe('project-file to Agent context UI workflow', () => {
 
   it('attaches a keyboard-selected project-tree file to the chosen Agent', async () => {
     render(<TreeToSelectedAgentHarness />);
-    fireEvent.click(await screen.findByRole('treeitem', { name: 'Open folder docs' }));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'Expand folder docs' }));
     fireEvent.click(
       await screen.findByRole('treeitem', {
         name: 'File docs/brief.md',

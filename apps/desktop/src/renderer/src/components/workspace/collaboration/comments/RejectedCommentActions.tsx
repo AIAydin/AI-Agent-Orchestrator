@@ -30,10 +30,7 @@ export function RejectedCommentActions({ entry, onDiscard }: RejectedCommentActi
 
   return (
     <div className="rejected-comment-discard-confirmation" role="group" aria-label="Confirm delete">
-      <span>
-        Delete this saved copy? This cannot be undone. Leave and rejoin the shared canvas before
-        sharing more changes.
-      </span>
+      <span>Delete this saved copy? This cannot be undone.</span>
       <button type="button" disabled={busy} onClick={() => setPendingEntry(null)}>
         Keep saved copy
       </button>

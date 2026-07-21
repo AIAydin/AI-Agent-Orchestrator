@@ -82,12 +82,12 @@ export function AgentContextDropZone({
       {readOnly ? (
         <p className="agent-context-read-only" role="status">
           <Lock size={13} aria-hidden="true" />
-          Unlock this agent and make sure you have edit access to change these files.
+          Unlock this agent and get edit access to change these files.
         </p>
       ) : (
         <p>
-          Drop a project file or a file editor tab here to share it with this agent. Forgeboard
-          checks the saved file again before the agent runs.
+          Drop a project file or editor tab here to share it with this agent. The saved file is
+          checked again before the agent runs.
         </p>
       )}
       {pending ? <p role="status">Checking the saved file…</p> : null}
@@ -97,7 +97,7 @@ export function AgentContextDropZone({
         </p>
       ) : null}
       {attachmentIds.length === 0 ? (
-        <p className="agent-context-empty">No files shared with this agent yet.</p>
+        <p className="agent-context-empty">No files shared yet.</p>
       ) : (
         <ul>
           {attachmentIds.map((attachmentNodeId) => {
@@ -108,12 +108,14 @@ export function AgentContextDropZone({
               reference === undefined ||
               reference.kind !== 'file' ||
               reference.missing;
+            const attachmentTitle = node?.data.title ?? 'File no longer available';
+            const attachmentPath = reference?.relativePath ?? attachmentNodeId;
             return (
               <li key={attachmentNodeId} className={unavailable ? 'unavailable' : ''}>
                 <FileCode2 size={13} aria-hidden="true" />
                 <span>
-                  <strong>{node?.data.title ?? 'File no longer available'}</strong>
-                  <code>{reference?.relativePath ?? attachmentNodeId}</code>
+                  <strong title={attachmentTitle}>{attachmentTitle}</strong>
+                  <code title={attachmentPath}>{attachmentPath}</code>
                   {unavailable ? (
                     <small>This file can't be found — remove it or relink it.</small>
                   ) : null}

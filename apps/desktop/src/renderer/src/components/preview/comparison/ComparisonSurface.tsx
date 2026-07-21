@@ -1,6 +1,8 @@
 import { Columns2, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
 import type { PreviewSessionSnapshot } from '../../../../../shared/application/contracts.js';
+import { trapModalFocus } from '../../../lib/modal-focus.js';
 import type { PreviewRendererOperations } from '../controller/operations.js';
 import { DeviceFrameHost } from '../surface/DeviceFrameHost.js';
 import type { PreviewPresetId } from '../devices/presets.js';
@@ -33,6 +35,33 @@ export function ComparisonSurface({
   readOnly,
   onClose,
 }: ComparisonSurfaceProps) {
+  const surface = useRef<HTMLElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButton.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const openDialogs = [
+        ...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'),
+      ];
+      if (openDialogs.at(-1) !== surface.current) return;
+      trapModalFocus(event, surface.current);
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, []);
+
   const leftUrl = previewUrl(leftSession);
   const rightUrl = previewUrl(rightSession);
   if (!leftUrl || !rightUrl) return null;
@@ -40,21 +69,28 @@ export function ComparisonSurface({
   return (
     <div className="preview-surface-backdrop" role="presentation">
       <section
+        ref={surface}
         className="preview-surface preview-comparison-surface"
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby="preview-comparison-title"
       >
         <header>
           <div className="preview-surface-heading">
-            <Columns2 size={17} />
+            <Columns2 size={17} aria-hidden="true" />
             <div>
               <strong id="preview-comparison-title">Agent worktree comparison</strong>
               <small>Two isolated local servers · two independently secured native surfaces</small>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close worktree comparison">
-            <X size={15} />
+          <button
+            ref={closeButton}
+            type="button"
+            onClick={onClose}
+            aria-label="Close worktree comparison"
+          >
+            <X size={15} aria-hidden="true" />
           </button>
         </header>
         <div className="preview-comparison-stage">

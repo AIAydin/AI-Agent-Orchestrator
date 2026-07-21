@@ -22,7 +22,7 @@ export function BootstrapScreen({ error, onRetry }: BootstrapScreenProps) {
           <button className="button primary" type="button" onClick={onRetry}>
             <RotateCcw size={15} aria-hidden="true" /> Try again
           </button>
-          <small>Your projects and settings have not been changed.</small>
+          <small>Your projects and settings weren&apos;t changed.</small>
         </>
       ) : (
         <>

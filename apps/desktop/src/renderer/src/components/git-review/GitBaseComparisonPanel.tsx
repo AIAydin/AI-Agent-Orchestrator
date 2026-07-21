@@ -41,7 +41,7 @@ const basePresentation: GitComparisonPresentation = {
   behindLabel: 'Only at starting point',
   filesLabel: 'Committed changes',
   emptyDescription:
-    "The agent's latest commit matches its starting point. Anything not committed yet is in the other tab.",
+    "The agent's latest commit matches its starting point. Uncommitted work is in the other tab.",
 };
 
 export function GitBaseComparisonPanel(props: Omit<GitComparisonPanelProps, 'presentation'>) {

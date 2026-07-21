@@ -92,8 +92,8 @@ export function WorkflowDecisionDialog(props: WorkflowDecisionDialogProps) {
           </div>
         </header>
         <p id="workflow-decision-warning" className="workflow-decision-warning">
-          This decision applies only to this run and this attempt. Forgeboard will ask you to
-          confirm once more before anything changes.
+          This applies only to this run and attempt. You&apos;ll confirm once more before anything
+          changes.
         </p>
         <DecisionBody {...props} />
         <footer>

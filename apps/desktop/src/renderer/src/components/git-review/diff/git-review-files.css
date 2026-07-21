@@ -75,7 +75,7 @@
 .git-file-select strong {
   overflow: hidden;
   font:
-    9px 'SFMono-Regular',
+    var(--text-2xs) 'SFMono-Regular',
     Consolas,
     monospace;
   text-overflow: ellipsis;

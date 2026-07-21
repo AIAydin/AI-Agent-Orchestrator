@@ -191,10 +191,7 @@ export function GitDeliveryReadinessPanel({
               {view.staleReason}
             </p>
           )}
-          <p role="status">
-            Choose a completed workflow run and save its requirements before running delivery
-            checks.
-          </p>
+          <p role="status">Choose a completed workflow run and save its requirements first.</p>
         </div>
       ) : (
         <ul className="git-delivery-checks" aria-label="Required delivery checks">
@@ -219,8 +216,7 @@ export function GitDeliveryReadinessPanel({
           <span>
             <strong id={qualityTitleId}>Human quality approval</strong>
             <small>
-              This approval is separate from the final confirmation your computer asks for, and it
-              never replaces a required check.
+              Separate from your computer's final confirmation. It never replaces a required check.
             </small>
           </span>
           <button
@@ -346,8 +342,7 @@ function CheckRequirementSelector({
         <span>
           <strong>Verified workflow execution</strong>
           <small id={workflowHelpId}>
-            Options are verified and supplied by Forgeboard. Changing execution invalidates earlier
-            delivery evidence.
+            Verified by Forgeboard. Switching runs invalidates earlier delivery evidence.
           </small>
         </span>
         <select
@@ -415,14 +410,14 @@ function CheckRequirementSelector({
       <div className="git-delivery-requirement-actions">
         <small id={helpId} role="status">
           {configuredCount === 0
-            ? 'Set up at least one check before you can require it for delivery.'
+            ? 'Set up at least one check in Settings first.'
             : selectedWorkflowExecutionId === null
-              ? 'Choose a completed workflow run whose review gates passed. Refresh if it is missing.'
+              ? "Choose a workflow run whose review gates passed. Refresh if it's missing."
               : !valid
-                ? `The workflow requirements and optional extras can contain up to ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} different checks that are set up.`
+                ? `Pick up to ${String(GIT_DELIVERY_READINESS_MAX_REQUIRED_CHECKS)} configured checks.`
                 : prepared
                   ? 'This workflow run and these checks are locked to the changes you reviewed.'
-                  : 'Checks required by the workflow are locked. You can add optional checks before saving; later changes make earlier results and approvals out of date.'}
+                  : 'Workflow checks are locked. Add optional ones before saving — later changes reset earlier results and approvals.'}
         </small>
         <button
           className="button"
@@ -534,8 +529,7 @@ function QualityApprovalMessage({
     return (
       <p id={id} className="git-delivery-quality-message" role="status">
         <CircleDashed size={12} aria-hidden="true" />
-        Save at least one required check before approving quality. This ties the approval to exactly
-        these changes.
+        Save at least one required check first — approval is tied to exactly these changes.
       </p>
     );
   }
@@ -543,8 +537,7 @@ function QualityApprovalMessage({
     return (
       <p id={id} className="git-delivery-quality-message stale" role="alert">
         <TriangleAlert size={12} aria-hidden="true" />
-        The required-check selection changed. Save the new selection before running checks or
-        approving quality — earlier results won't be reused.
+        The check selection changed. Save it again — earlier results won't be reused.
       </p>
     );
   }
@@ -560,9 +553,7 @@ function QualityApprovalMessage({
     );
   }
   if (state === 'stale') {
-    const checksFirst = allRequiredChecksPassed
-      ? ''
-      : ' Every required check must pass before quality can be approved again.';
+    const checksFirst = allRequiredChecksPassed ? '' : ' All required checks must pass first.';
     const sameSourceEvidenceChanged =
       previousApproval !== null &&
       gitDeliverySourceFingerprintsEqual(
@@ -573,9 +564,9 @@ function QualityApprovalMessage({
       <p id={id} className="git-delivery-quality-message stale" role="alert">
         <TriangleAlert size={12} aria-hidden="true" />
         {previousApproval === null
-          ? `An earlier approval is out of date because the changes or check results changed. Review and approve again.${checksFirst}`
+          ? `An earlier approval no longer matches these changes. Review and approve again.${checksFirst}`
           : sameSourceEvidenceChanged
-            ? `${previousApproval.actorLabel} approved these changes, but the check results changed afterward. Review the latest results and approve again.${checksFirst}`
+            ? `${previousApproval.actorLabel} approved these changes, but the check results changed afterward. Review and approve again.${checksFirst}`
             : previousApproval.sourceFingerprint.sourceHead !==
                 readiness.sourceFingerprint.sourceHead
               ? `${previousApproval.actorLabel} approved version ${shortOid(previousApproval.sourceFingerprint.sourceHead)}, but the current version is ${shortOid(readiness.sourceFingerprint.sourceHead)}. Review and approve again.${checksFirst}`
@@ -594,7 +585,7 @@ function QualityApprovalMessage({
   return (
     <p id={id} className="git-delivery-quality-message" role="status">
       <CircleDashed size={12} aria-hidden="true" />
-      No one has approved the quality of these exact changes and check setup yet.
+      No one has approved these exact changes yet.
     </p>
   );
 }

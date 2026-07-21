@@ -97,7 +97,7 @@ export function GitConflictRecoveryPanel({
         }),
       );
       setResolutionPlan(null);
-      if (result === null) setMessage('Resolution cancelled. The file and index were not changed.');
+      if (result === null) setMessage('Resolution cancelled. Nothing was changed.');
       else if (result.inspection === null) {
         setInspection(null);
         setSelectedPath(null);
@@ -168,14 +168,13 @@ export function GitConflictRecoveryPanel({
       </strong>
       {conflictedPaths.length > 0 ? (
         <p>
-          Git is paused with real conflicts in {conflictedPaths.join(', ')}. Resolve and stage every
-          file in this workspace, then review Continue; or review Abort to restore the pre-operation
-          state.
+          Git is paused on conflicts in {conflictedPaths.join(', ')}. Resolve and stage each file,
+          then review Continue — or review Abort to restore the previous state.
         </p>
       ) : (
         <p>
-          Git is paused with every conflict staged. Review Continue to finish the operation, or
-          review Abort to restore its pre-operation state.
+          Every conflict is staged. Review Continue to finish, or review Abort to restore the
+          previous state.
         </p>
       )}
       {inspection !== null && selected !== null && (

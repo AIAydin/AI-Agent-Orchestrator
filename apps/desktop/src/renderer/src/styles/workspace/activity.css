@@ -155,10 +155,9 @@
 .check-command-list code {
   overflow-wrap: anywhere;
   color: var(--text-soft);
-  font:
-    8px/1.45 'SFMono-Regular',
-    Consolas,
-    monospace;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: var(--text-2xs);
+  line-height: 1.45;
 }
 .drawer-status,
 .check-state,
@@ -180,7 +179,7 @@
   color: var(--red);
 }
 .check-state.not-run {
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 .check-command-list article > code {
   display: block;
