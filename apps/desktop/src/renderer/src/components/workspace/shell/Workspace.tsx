@@ -110,6 +110,7 @@ import {
   type AgentSessionContextValue,
   type CanvasNodeRosterEntry,
   type CheckProducerEntry,
+  type FileTargetEntry,
 } from '../runs/agent-session/AgentSessionContext.js';
 import { AGENT_NODE_DRAG_HANDLE } from '../runs/agent-session/AgentSessionNode.js';
 import { providerConnectionIdForAdapter } from '../../../lib/provider-connections.js';
@@ -1558,6 +1559,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         title: node.data.title,
         kind: node.data.kind,
         locked: node.data.locked,
+        ...(node.data.adapterId === undefined ? {} : { adapterId: node.data.adapterId }),
       })),
     [nodes],
   );
@@ -1565,7 +1567,28 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     nodeRosterSource,
     nodeRosterSource
       .map(
-        (entry) => `${entry.id}\u0000${entry.title}\u0000${entry.kind}\u0000${String(entry.locked)}`,
+        (entry) =>
+          `${entry.id}\u0000${entry.title}\u0000${entry.kind}\u0000${String(entry.locked)}\u0000${entry.adapterId ?? ''}`,
+      )
+      .join('\n'),
+  );
+  const fileTargetsSource = useMemo<readonly FileTargetEntry[]>(
+    () =>
+      nodes
+        .filter((node) => node.data.kind === 'file' && node.data.file !== undefined)
+        .map((node) => ({
+          nodeId: node.id,
+          title: node.data.title,
+          file: node.data.file!,
+        })),
+    [nodes],
+  );
+  const fileTargets = useKeyedStable(
+    fileTargetsSource,
+    fileTargetsSource
+      .map(
+        (entry) =>
+          `${entry.nodeId}\u0000${entry.file.projectId}\u0000${entry.file.relativePath}\u0000${entry.file.kind}\u0000${String(entry.file.missing)}\u0000${entry.file.lastKnownHash ?? ''}`,
       )
       .join('\n'),
   );
@@ -1618,6 +1641,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       requestDeleteNode: deleteNode,
       nodeRoster,
       checkProducers,
+      fileTargets,
       openGitPrReadiness,
       openDiffReview: (nodeId: string, request: DiffReviewOpenRequest) => {
         const node = nodesRef.current.find((candidate) => candidate.id === nodeId);
@@ -1629,6 +1653,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       checkProducers,
       collaborationCanvas.graphReadOnly,
       deleteNode,
+      fileTargets,
       gitReview,
       nodeRoster,
       onError,

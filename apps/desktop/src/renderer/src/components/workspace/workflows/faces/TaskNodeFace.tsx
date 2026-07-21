@@ -12,6 +12,11 @@ export function TaskNodeFace({ id, data }: NodeFaceProps): JSX.Element {
   const readOnly = session.graphReadOnly || data.locked || interactions.readOnly;
   const agents = session.nodeRoster.filter((entry) => entry.kind === 'agent');
   const criteria = data.acceptanceCriteria ?? [];
+  const fileTargets = session.fileTargets;
+  const relatedFiles = data.relatedFiles ?? [];
+  const relatedPaths = new Set(
+    relatedFiles.map((file) => `${file.projectId}:${file.relativePath}`),
+  );
 
   const update = (patch: Parameters<typeof session.updateNodeData>[1]): void => {
     session.updateNodeData(id, patch);
@@ -159,6 +164,45 @@ export function TaskNodeFace({ id, data }: NodeFaceProps): JSX.Element {
             </button>
           </div>
         ))}
+
+        {fileTargets.length > 0 ? (
+          <>
+            <div className="node-face-list-header">
+              <strong>
+                Related files <span>{relatedPaths.size}</span>
+              </strong>
+            </div>
+            {fileTargets.map((target) => {
+              const key = `${target.file.projectId}:${target.file.relativePath}`;
+              return (
+                <label className="node-face-row" key={target.nodeId}>
+                  <input
+                    type="checkbox"
+                    name={`node-${id}-related-file-${target.nodeId}`}
+                    checked={relatedPaths.has(key)}
+                    aria-label={`Relate ${target.file.relativePath}`}
+                    disabled={readOnly}
+                    onFocus={() => session.recordHistory()}
+                    onChange={(event) => {
+                      const next = relatedFiles.filter(
+                        (candidate) =>
+                          `${candidate.projectId}:${candidate.relativePath}` !== key,
+                      );
+                      update({
+                        relatedFiles: event.target.checked ? [...next, target.file] : next,
+                      });
+                    }}
+                  />
+                  <span className="task-face-related-file">{target.file.relativePath}</span>
+                </label>
+              );
+            })}
+            <p className="node-face-hint task-face-related-note">
+              Related files are reference only — the agent can&apos;t read them. To share a
+              file&apos;s contents, add a Context connection.
+            </p>
+          </>
+        ) : null}
       </fieldset>
     </section>
   );

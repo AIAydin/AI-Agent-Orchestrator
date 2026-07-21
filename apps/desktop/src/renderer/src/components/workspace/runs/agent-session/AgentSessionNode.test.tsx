@@ -131,6 +131,7 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     requestDeleteNode: spies.requestDeleteNode,
     nodeRoster: [],
     checkProducers: [],
+    fileTargets: [],
     openGitPrReadiness: spies.openGitPrReadiness,
     openDiffReview: spies.openDiffReview,
     ...overrides,

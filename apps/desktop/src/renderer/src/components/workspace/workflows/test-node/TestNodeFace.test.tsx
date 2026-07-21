@@ -20,6 +20,8 @@ const startNode = vi.fn();
 const cancelNode = vi.fn();
 const revealArtifact = vi.fn(() => Promise.resolve(undefined));
 const openArtifact = vi.fn(() => Promise.resolve(undefined));
+const updateNodeData = vi.fn();
+const recordHistory = vi.fn();
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -27,15 +29,24 @@ beforeEach(() => {
   cancelNode.mockClear();
   revealArtifact.mockClear();
   openArtifact.mockClear();
+  updateNodeData.mockClear();
+  recordHistory.mockClear();
 });
 
 function sessionValue(): AgentSessionContextValue {
   return {
     project: { id: 'p1' },
     graphReadOnly: false,
-    updateNodeData: vi.fn(),
-    recordHistory: vi.fn(),
+    updateNodeData,
+    recordHistory,
     reportError: vi.fn(),
+    settings: {
+      lintCommand: { executable: 'pnpm', arguments: ['lint'] },
+      typecheckCommand: { executable: 'pnpm', arguments: ['typecheck'] },
+      testCommand: { executable: 'pnpm', arguments: ['test'] },
+      buildCommand: { executable: 'pnpm', arguments: ['build'] },
+      customChecks: [],
+    },
   } as unknown as AgentSessionContextValue;
 }
 
@@ -161,5 +172,68 @@ describe('TestNodeFace', () => {
     cleanup();
     renderFace({}, runtimeValue([], { mutationsAuthorized: false }));
     expect(screen.getByRole('button', { name: 'Review and run' })).toHaveProperty('disabled', true);
+  });
+
+  it('keeps command configuration behind the configure popover', () => {
+    renderFace();
+    expect(screen.queryByLabelText('Program')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Configure test command' }));
+    const program = screen.getByLabelText('Program');
+    expect(program).toHaveProperty('value', 'pnpm');
+    fireEvent.change(program, { target: { value: 'yarn' } });
+    expect(updateNodeData).toHaveBeenCalledWith('n1', {
+      command: { executable: 'yarn', arguments: ['test'], environmentNames: [] },
+    });
+  });
+
+  it('applies a saved command preset from the popover', () => {
+    renderFace();
+    fireEvent.click(screen.getByRole('button', { name: 'Configure test command' }));
+    fireEvent.change(screen.getByLabelText('Saved command'), { target: { value: 'lint' } });
+    expect(updateNodeData).toHaveBeenCalledWith('n1', {
+      command: { executable: 'pnpm', arguments: ['lint'] },
+      checkKind: 'lint',
+      runIds: ['lint'],
+    });
+  });
+
+  it('shows the full output and previous attempts', () => {
+    const runtime = runtimeValue([
+      execution({
+        nodeRuns: [{ nodeId: 'n1', attempt: 2, status: 'failed' }],
+        testResults: [
+          {
+            nodeId: 'n1',
+            attempt: 2,
+            checkExecutionId: 'chk-2',
+            status: 'failed',
+            output: 'FAIL current output',
+            outputTruncated: false,
+            summary: { parser: 'jest', passed: 0, failed: 1, skipped: 0, total: 1 },
+            startedAt: '2026-07-20T09:00:00.000Z',
+            endedAt: '2026-07-20T09:01:00.000Z',
+            artifacts: [],
+          },
+          {
+            nodeId: 'n1',
+            attempt: 1,
+            checkExecutionId: 'chk-1',
+            status: 'passed',
+            output: 'PASS earlier output',
+            outputTruncated: false,
+            summary: { parser: 'jest', passed: 1, failed: 0, skipped: 0, total: 1 },
+            startedAt: '2026-07-20T08:00:00.000Z',
+            endedAt: '2026-07-20T08:01:00.000Z',
+            artifacts: [],
+          },
+        ],
+      }),
+    ]);
+    renderFace({}, runtime);
+    const outputs = screen.getAllByLabelText('Test output');
+    expect(outputs[0]).toHaveProperty('textContent', 'FAIL current output');
+    expect(outputs[1]).toHaveProperty('textContent', 'PASS earlier output');
+    expect(screen.getByText('Previous attempts')).toBeTruthy();
+    expect(screen.getByText('Attempt 1 · Passed')).toBeTruthy();
   });
 });
