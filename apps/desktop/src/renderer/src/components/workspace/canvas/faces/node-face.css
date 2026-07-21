@@ -369,3 +369,54 @@ svg.whiteboard-face-preview {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.diff-face-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, 34%) 1fr;
+  gap: 8px;
+}
+.diff-face-files {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+}
+.diff-face-totals {
+  margin: 0 0 4px;
+  color: var(--text-soft);
+}
+.diff-face-files ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.diff-face-files button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  text-align: left;
+  cursor: pointer;
+}
+.diff-face-files button.active {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+}
+.diff-face-files strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.diff-face-viewer {
+  min-height: 0;
+  overflow: auto;
+}
