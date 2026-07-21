@@ -427,3 +427,177 @@
   border-radius: 2px !important;
   background: var(--node-accent) !important;
 }
+
+/* Node-header inline rename + details popover (settings / comments / history). Additive block:
+   these homes duplicate what the WorkspaceInspector offers, onto the node itself. */
+.canvas-node-title {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.canvas-node-title-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 2px 6px;
+  border: 1px solid var(--node-accent);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+.canvas-node-title-input:focus-visible {
+  outline: 2px solid var(--node-accent);
+  outline-offset: 1px;
+}
+.canvas-node-details {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+}
+.node-details-button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+}
+.node-details-button:hover,
+.node-details-button:focus-visible,
+.node-details-button[aria-expanded='true'] {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+.node-details-button:focus-visible {
+  outline: 2px solid var(--node-accent);
+  outline-offset: 1px;
+}
+.node-details-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: 320px;
+  max-height: 460px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface-raised);
+  box-shadow: 0 12px 32px rgb(21 25 22 / 18%);
+  cursor: default;
+}
+.node-details-popover-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+.node-details-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+.node-details-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  font-weight: 650;
+}
+.node-details-tab:hover,
+.node-details-tab:focus-visible {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+.node-details-tab.selected {
+  background: color-mix(in srgb, var(--node-accent) 15%, var(--surface));
+  color: var(--node-accent);
+}
+.node-details-tab:focus-visible {
+  outline: 2px solid var(--node-accent);
+  outline-offset: 1px;
+}
+.node-details-close {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+}
+.node-details-close:hover,
+.node-details-close:focus-visible {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+.node-details-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 10px;
+}
+.node-details-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.node-details-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-soft);
+  font-size: var(--text-2xs);
+  font-weight: 650;
+}
+.node-details-fields textarea {
+  resize: vertical;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+}
+.node-details-fields textarea:focus-visible {
+  outline: 2px solid var(--node-accent);
+  outline-offset: 1px;
+}
+.node-details-fields input[type='color'] {
+  width: 46px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.node-details-fields:disabled {
+  opacity: 0.55;
+}
