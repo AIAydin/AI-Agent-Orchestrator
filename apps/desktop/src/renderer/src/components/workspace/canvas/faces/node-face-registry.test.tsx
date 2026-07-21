@@ -9,6 +9,8 @@ describe('nodeFaceForKind', () => {
     expect(nodeFaceForKind('agent')).toBeTypeOf('function');
     expect(nodeFaceForKind('web-preview')).toBeTypeOf('function');
     expect(nodeFaceForKind('mobile-preview')).toBeTypeOf('function');
+    expect(nodeFaceForKind('brief')).toBeTypeOf('function');
+    expect(nodeFaceForKind('note-image')).toBeTypeOf('function');
   });
 
   it('returns null for kinds that keep the generic node body', () => {
