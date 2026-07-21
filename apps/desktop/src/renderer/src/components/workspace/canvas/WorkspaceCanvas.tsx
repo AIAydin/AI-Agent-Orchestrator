@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -9,6 +9,7 @@ import {
   ReactFlow,
   type Connection,
   type EdgeChange,
+  type EdgeTypes,
   type NodeChange,
   type OnNodeDrag,
   type OnSelectionChangeParams,
@@ -29,8 +30,11 @@ import {
   type WorkspaceContextDragPayload,
 } from '../context-dnd/contracts.js';
 import { resolveFileNodeContextDrop } from '../context-dnd/node-drag-link.js';
-import type { ExtensionTemplate, WorkshopEdge } from '../model/types.js';
+import type { EdgeKind, ExtensionTemplate, WorkshopEdge } from '../model/types.js';
+import type { WorkshopEdgeData } from '../model/edge-config.js';
 import { initialWorkshopNodeDimensions } from '../model/node-persistence.js';
+import { TypedConnectionEdge } from './TypedConnectionEdge.js';
+import { EdgeConfigProvider } from './EdgeConfigContext.js';
 import { AlignmentGuides } from './interactions/AlignmentGuides.js';
 import {
   alignmentGuidesForDrag,
@@ -60,6 +64,10 @@ import {
   type CanvasNodeContextMenuPosition,
 } from './context-menu/CanvasNodeContextMenu.js';
 
+// Override the built-in `smoothstep` edge with our own renderer so every edge
+// (all created with `type: 'smoothstep'`) shows the on-canvas config popover.
+const WORKSHOP_EDGE_TYPES: EdgeTypes = { smoothstep: TypedConnectionEdge };
+
 interface OpenNodeContextMenu {
   readonly nodeId: string;
   readonly position: CanvasNodeContextMenuPosition;
@@ -88,6 +96,9 @@ interface WorkspaceCanvasProps {
     recordUndoCheckpoint: boolean,
   ) => CanvasKeyboardMoveSummary;
   onSelectionChange: (selection: OnSelectionChangeParams<WorkshopNode, WorkshopEdge>) => void;
+  edgeConfigNodes: readonly WorkshopNode[];
+  onUpdateEdgeType: (edgeType: EdgeKind) => void;
+  onUpdateEdgeData: (data: WorkshopEdgeData) => void;
   onInspectNode: (nodeId: string) => void;
   onSetNodeLocked: (nodeId: string, locked: boolean) => void;
   onDuplicateNode: (nodeId: string) => void;
@@ -130,6 +141,9 @@ export function WorkspaceCanvas({
   onNodeResizeStart,
   onKeyboardMove,
   onSelectionChange,
+  edgeConfigNodes,
+  onUpdateEdgeType,
+  onUpdateEdgeData,
   onInspectNode,
   onSetNodeLocked,
   onDuplicateNode,
@@ -157,6 +171,16 @@ export function WorkspaceCanvas({
     sequence: 0,
   });
   const [contextMenu, setContextMenu] = useState<OpenNodeContextMenu | null>(null);
+
+  const edgeConfigValue = useMemo(
+    () => ({
+      nodes: edgeConfigNodes,
+      graphReadOnly: collaborationGraphReadOnly,
+      onUpdateEdgeType,
+      onUpdateEdgeData,
+    }),
+    [edgeConfigNodes, collaborationGraphReadOnly, onUpdateEdgeType, onUpdateEdgeData],
+  );
 
   const openContextMenu = (
     node: WorkshopNode,
@@ -301,11 +325,13 @@ export function WorkspaceCanvas({
             setCollapsed={onSetNodeCollapsed}
             onResizeStart={onNodeResizeStart}
           >
+            <EdgeConfigProvider value={edgeConfigValue}>
             <ReactFlow<WorkshopNode, WorkshopEdge>
               aria-label={`${canvas.name} canvas`}
               nodes={nodes}
               edges={edges}
               nodeTypes={WORKSHOP_NODE_TYPES}
+              edgeTypes={WORKSHOP_EDGE_TYPES}
               onInit={onInstance}
               defaultViewport={normalizeCanvasViewport(canvas.viewport)}
               onMoveEnd={(_event, viewport) => {
@@ -544,6 +570,7 @@ export function WorkspaceCanvas({
                   />
                 );
               })()}
+            </EdgeConfigProvider>
           </CanvasNodeInteractionProvider>
         </NodeRegistryProvider>
       ) : (
