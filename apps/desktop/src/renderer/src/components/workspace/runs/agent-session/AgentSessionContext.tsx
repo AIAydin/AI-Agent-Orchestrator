@@ -11,6 +11,8 @@ export interface CanvasNodeRosterEntry {
   readonly title: string;
   readonly kind: string;
   readonly locked: boolean;
+  /** Configured run adapter, present for `agent` nodes (used by reviewer selection). */
+  readonly adapterId?: string;
 }
 
 /** Test nodes that can satisfy a review gate's required checks. */
@@ -19,6 +21,19 @@ export interface CheckProducerEntry {
   readonly producerId: string;
   readonly title: string;
   readonly checkKind: 'lint' | 'typecheck' | 'test' | 'build' | 'custom';
+}
+
+/** File nodes (with a resolved reference) selectable as a task's related files. */
+export interface FileTargetEntry {
+  readonly nodeId: string;
+  readonly title: string;
+  readonly file: {
+    readonly projectId: string;
+    readonly relativePath: string;
+    readonly kind: 'file' | 'directory' | 'image' | 'artifact';
+    readonly missing: boolean;
+    readonly lastKnownHash?: string;
+  };
 }
 
 /**
@@ -60,6 +75,7 @@ export interface AgentSessionContextValue {
   readonly nodeRoster: readonly CanvasNodeRosterEntry[];
   readonly canvasImageNodes: readonly CanvasImageNodeEntry[];
   readonly checkProducers: readonly CheckProducerEntry[];
+  readonly fileTargets: readonly FileTargetEntry[];
   openGitPrReadiness(runId: string): void;
   openDiffReview(nodeId: string, request: DiffReviewOpenRequest): void;
 }

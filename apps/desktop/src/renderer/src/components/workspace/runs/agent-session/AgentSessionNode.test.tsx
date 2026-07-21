@@ -138,6 +138,7 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     nodeRoster: [],
     canvasImageNodes: [],
     checkProducers: [],
+    fileTargets: [],
     openGitPrReadiness: spies.openGitPrReadiness,
     openDiffReview: spies.openDiffReview,
     ...overrides,

@@ -469,6 +469,95 @@ svg.whiteboard-face-preview {
   color: var(--accent);
   cursor: pointer;
 }
+.task-face-related-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-face-related-note {
+  margin: 0;
+  max-width: none;
+  text-align: left;
+}
+/* Config popovers reuse .node-face-popover; these are the fieldset resets and
+   sub-blocks the ported review-gate and test config need. */
+.review-gate-face-config,
+.test-face-config {
+  border: 1px solid var(--line-strong);
+  margin: 0;
+}
+.review-gate-face-config[disabled],
+.test-face-config[disabled] {
+  opacity: 0.6;
+}
+.review-gate-face-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.review-gate-face-config .task-face-grid input,
+.test-face-config input,
+.test-face-config select,
+.test-face-config textarea {
+  font-size: var(--text-xs);
+  min-width: 0;
+}
+.test-face-config .node-face-row input {
+  flex: 1;
+}
+.review-gate-face-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  color: var(--text-soft);
+}
+.review-gate-face-evidence p {
+  margin: 0;
+}
+.review-gate-face-evidence strong {
+  color: var(--text-soft);
+}
+.review-gate-face-evidence code {
+  font-family: ui-monospace, monospace;
+}
+.test-face-output {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  font-family: ui-monospace, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.test-face-empty {
+  margin: 0;
+  color: var(--text-faint);
+}
+.test-face-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.test-face-history-list summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text-soft);
+}
+.test-face-history-list time {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
 .brief-face-versions {
   margin: 0;
   padding: 0;

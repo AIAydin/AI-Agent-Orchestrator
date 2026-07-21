@@ -9,15 +9,18 @@ import {
   AgentSessionProvider,
   type AgentSessionContextValue,
 } from '../../runs/agent-session/AgentSessionContext.js';
+import type { FileTargetEntry } from '../../runs/agent-session/AgentSessionContext.js';
 import { TaskNodeFace } from './TaskNodeFace.js';
 
 const updateNodeData = vi.fn();
 const recordHistory = vi.fn();
+let fileTargets: FileTargetEntry[] = [];
 
 afterEach(cleanup);
 beforeEach(() => {
   updateNodeData.mockClear();
   recordHistory.mockClear();
+  fileTargets = [];
 });
 
 function sessionValue(): AgentSessionContextValue {
@@ -31,8 +34,16 @@ function sessionValue(): AgentSessionContextValue {
       { id: 'file-1', title: 'Spec', kind: 'file', locked: false },
     ],
     checkProducers: [],
+    fileTargets,
   } as unknown as AgentSessionContextValue;
 }
+
+const specFile = {
+  projectId: 'p1',
+  relativePath: 'src/spec.ts',
+  kind: 'file' as const,
+  missing: false,
+};
 
 function nodeData(overrides: Partial<WorkshopNodeData> = {}): WorkshopNodeData {
   return {
@@ -90,5 +101,26 @@ describe('TaskNodeFace', () => {
     renderFace({ locked: true });
     expect(screen.getByLabelText('Task status')).toHaveProperty('disabled', true);
     expect(screen.getByLabelText('Assigned agent')).toHaveProperty('disabled', true);
+  });
+
+  it('relates a file node when its box is checked', () => {
+    fileTargets = [{ nodeId: 'file-1', title: 'Spec', file: specFile }];
+    renderFace();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Relate src/spec.ts' }));
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { relatedFiles: [specFile] });
+  });
+
+  it('unrelates an already-related file when unchecked', () => {
+    fileTargets = [{ nodeId: 'file-1', title: 'Spec', file: specFile }];
+    renderFace({ relatedFiles: [specFile] });
+    const box = screen.getByRole('checkbox', { name: 'Relate src/spec.ts' });
+    expect(box).toHaveProperty('checked', true);
+    fireEvent.click(box);
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { relatedFiles: [] });
+  });
+
+  it('offers no related-files picker without file targets', () => {
+    renderFace();
+    expect(screen.queryByRole('checkbox', { name: 'Relate src/spec.ts' })).toBeNull();
   });
 });
