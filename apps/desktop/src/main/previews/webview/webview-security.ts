@@ -21,7 +21,16 @@ interface WebContentsCreatedApp {
 /** Embedder-side attach guard: preview partitions only, no preload, loopback (or blank) src. */
 export function shouldAttachPreviewWebview(params: Record<string, unknown>): boolean {
   if (!isPreviewWebviewPartition(params['partition'])) return false;
-  if (typeof params['preload'] === 'string' || typeof params['preloadURL'] === 'string') {
+  // Electron always includes preload/preloadURL in attach params, defaulting to
+  // an empty string when the renderer sets none. Only a NON-empty value means an
+  // actual preload was requested — reject those; the empty-string default is fine
+  // (and is force-cleared by hardenAttachingWebviewPreferences anyway).
+  const preload = params['preload'];
+  const preloadURL = params['preloadURL'];
+  if (
+    (typeof preload === 'string' && preload !== '') ||
+    (typeof preloadURL === 'string' && preloadURL !== '')
+  ) {
     return false;
   }
   const src = typeof params['src'] === 'string' ? params['src'] : 'about:blank';
