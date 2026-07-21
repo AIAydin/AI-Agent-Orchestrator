@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 
+import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.js';
 import { GitPrNodeFace } from '../../git-pr/GitPrNodeFace.js';
 import { PreviewNodeFace } from '../../previews/PreviewNodeFace.js';
 import { AgentSessionNode } from '../../runs/agent-session/AgentSessionNode.js';
@@ -31,6 +32,7 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
     return <PreviewNodeFace id={id} kind="mobile-preview" data={data} />;
   },
   'git-pr': GitPrNodeFace,
+  whiteboard: WhiteboardNodeFace,
 };
 
 export function nodeFaceForKind(kind: string): NodeFaceComponent | null {
