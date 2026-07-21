@@ -12,8 +12,10 @@ describe('nodeFaceForKind', () => {
     expect(nodeFaceForKind('brief')).toBeTypeOf('function');
     expect(nodeFaceForKind('diagram')).toBeTypeOf('function');
     expect(nodeFaceForKind('diff')).toBeTypeOf('function');
+    expect(nodeFaceForKind('extension')).toBeTypeOf('function');
     expect(nodeFaceForKind('file')).toBeTypeOf('function');
     expect(nodeFaceForKind('git-pr')).toBeTypeOf('function');
+    expect(nodeFaceForKind('group-frame')).toBeTypeOf('function');
     expect(nodeFaceForKind('note-image')).toBeTypeOf('function');
     expect(nodeFaceForKind('review-gate')).toBeTypeOf('function');
     expect(nodeFaceForKind('task')).toBeTypeOf('function');
@@ -23,8 +25,6 @@ describe('nodeFaceForKind', () => {
   });
 
   it('returns null for kinds that keep the generic node body', () => {
-    expect(nodeFaceForKind('group-frame')).toBeNull();
-    expect(nodeFaceForKind('extension')).toBeNull();
     expect(nodeFaceForKind('unknown-kind')).toBeNull();
   });
 });

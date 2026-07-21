@@ -1318,9 +1318,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   ];
 
   const {
+    arrangeGroupFrame,
     arrangeSelectedGroupFrame,
     deleteNode,
     deleteSelected,
+    fitGroupFrame,
     fitSelectedGroupFrame,
     setNodeLocked,
     updateSelected,
@@ -1640,6 +1642,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       openSettings: onOpenSettings,
       reportError: onError,
       updateNodeData,
+      fitGroupFrame,
+      arrangeGroupFrame,
       recordHistory: record,
       nodeTitle: (nodeId: string) =>
         nodesRef.current.find((node) => node.id === nodeId)?.data.title ?? null,
@@ -1657,11 +1661,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       },
     }),
     [
+      arrangeGroupFrame,
       attachWhiteboardContext,
       canvasImageNodes,
       checkProducers,
       collaborationCanvas.graphReadOnly,
       deleteNode,
+      fitGroupFrame,
       gitReview,
       nodeRoster,
       onError,

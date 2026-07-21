@@ -91,14 +91,13 @@ export function useWorkspaceNodeMutations(options: WorkspaceNodeMutationOptions)
     updateNodeData(selectedNode.id, data);
   }
 
-  function fitSelectedGroupFrame() {
+  function fitGroupFrame(nodeId: string) {
     if (graphReadOnly) {
       reportReadOnly();
       return;
     }
-    if (selectedNode?.data.kind !== 'group-frame') return;
     const currentNodes = nodesRef.current;
-    const currentFrame = currentNodes.find(({ id }) => id === selectedNode.id);
+    const currentFrame = currentNodes.find(({ id }) => id === nodeId);
     if (currentFrame?.data.kind !== 'group-frame') return;
     if (lockedCanvasNodeIds(currentNodes).has(currentFrame.id)) {
       setEvents((items) =>
@@ -115,14 +114,18 @@ export function useWorkspaceNodeMutations(options: WorkspaceNodeMutationOptions)
     );
   }
 
-  function arrangeSelectedGroupFrame(layout: GroupLayout) {
+  function fitSelectedGroupFrame() {
+    if (selectedNode?.data.kind !== 'group-frame') return;
+    fitGroupFrame(selectedNode.id);
+  }
+
+  function arrangeGroupFrame(nodeId: string, layout: GroupLayout) {
     if (graphReadOnly) {
       reportReadOnly();
       return;
     }
-    if (selectedNode?.data.kind !== 'group-frame') return;
     const currentNodes = nodesRef.current;
-    const currentFrame = currentNodes.find(({ id }) => id === selectedNode.id);
+    const currentFrame = currentNodes.find(({ id }) => id === nodeId);
     if (currentFrame?.data.kind !== 'group-frame') return;
     if (lockedCanvasNodeIds(currentNodes).has(currentFrame.id)) {
       setEvents((items) =>
@@ -151,6 +154,11 @@ export function useWorkspaceNodeMutations(options: WorkspaceNodeMutationOptions)
         [`Fitted ${currentFrame.data.title} to its arranged members.`, ...items].slice(0, 30),
       );
     }
+  }
+
+  function arrangeSelectedGroupFrame(layout: GroupLayout) {
+    if (selectedNode?.data.kind !== 'group-frame') return;
+    arrangeGroupFrame(selectedNode.id, layout);
   }
 
   function setNodeLocked(nodeId: string, locked: boolean) {
@@ -219,9 +227,11 @@ export function useWorkspaceNodeMutations(options: WorkspaceNodeMutationOptions)
   }
 
   return {
+    arrangeGroupFrame,
     arrangeSelectedGroupFrame,
     deleteNode,
     deleteSelected,
+    fitGroupFrame,
     fitSelectedGroupFrame,
     setNodeLocked,
     updateSelected,

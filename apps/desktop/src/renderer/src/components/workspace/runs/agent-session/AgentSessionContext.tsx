@@ -49,6 +49,8 @@ export interface AgentSessionContextValue {
   openSettings(): void;
   reportError(message: string): void;
   updateNodeData(nodeId: string, data: Partial<WorkshopNodeData>): void;
+  fitGroupFrame(nodeId: string): void;
+  arrangeGroupFrame(nodeId: string, layout: NonNullable<WorkshopNodeData['layout']>): void;
   recordHistory(): void;
   nodeTitle(nodeId: string): string | null;
   removeAgentContext(agentNodeId: string, attachmentNodeId: string): void;

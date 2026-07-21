@@ -583,10 +583,28 @@ svg.whiteboard-face-preview {
   margin: 0;
   color: #d06870;
 }
+.canvas-node[data-node-kind='extension']:not(.collapsed),
+.canvas-node[data-node-kind='group-frame']:not(.collapsed) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.canvas-node[data-node-kind='extension']:not(.collapsed) > header,
+.canvas-node[data-node-kind='group-frame']:not(.collapsed) > header {
+  flex: 0 0 auto;
+}
 .brief-face-attachment {
   flex-direction: row;
   align-items: center;
   gap: 6px;
+}
+.group-frame-face-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.group-frame-face-hint {
+  color: var(--text-faint);
 }
 .brief-face-attachment span {
   flex: 1;
