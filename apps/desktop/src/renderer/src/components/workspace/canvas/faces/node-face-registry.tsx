@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 
+import { DiagramNodeFace } from '../../content/diagram/DiagramNodeFace.js';
 import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.js';
 import { GitPrNodeFace } from '../../git-pr/GitPrNodeFace.js';
 import { PreviewNodeFace } from '../../previews/PreviewNodeFace.js';
@@ -31,6 +32,7 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   'mobile-preview': function MobilePreviewFace({ id, data }: NodeFaceProps) {
     return <PreviewNodeFace id={id} kind="mobile-preview" data={data} />;
   },
+  diagram: DiagramNodeFace,
   'git-pr': GitPrNodeFace,
   whiteboard: WhiteboardNodeFace,
 };

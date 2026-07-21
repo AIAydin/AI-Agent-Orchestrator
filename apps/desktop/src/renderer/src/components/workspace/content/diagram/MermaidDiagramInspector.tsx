@@ -1,15 +1,12 @@
 import { Download, Eye, FilePenLine, PanelsTopLeft } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { SafeSvgImage } from '../../../content/svg/SafeSvgImage.js';
 import type { WorkshopNode } from '../../canvas/CanvasNode.js';
-import { renderMermaidDiagram } from './mermaid-renderer.js';
+import { useMermaidDiagram } from './use-mermaid-diagram.js';
 import './mermaid-diagram.css';
 
 type DiagramMode = 'edit' | 'split' | 'preview';
-type DiagramRenderState =
-  | { readonly source: string; readonly status: 'rendered'; readonly svg: string }
-  | { readonly source: string; readonly status: 'error'; readonly message: string };
 
 interface MermaidDiagramInspectorProps {
   readonly node: WorkshopNode;
@@ -26,40 +23,9 @@ export function MermaidDiagramInspector({
 }: MermaidDiagramInspectorProps) {
   const source = node.data.mermaidSource ?? '';
   const [mode, setMode] = useState<DiagramMode>('split');
-  const [renderState, setRenderState] = useState<DiagramRenderState | null>(null);
   const [exportState, setExportState] = useState<'idle' | 'saving'>('idle');
   const [notice, setNotice] = useState<string | null>(null);
-  const renderSequence = useRef(0);
-  const currentRender = renderState?.source === source ? renderState : null;
-  const renderedSvg = currentRender?.status === 'rendered' ? currentRender.svg : null;
-  const renderError = currentRender?.status === 'error' ? currentRender.message : null;
-
-  useEffect(() => {
-    const sequence = ++renderSequence.current;
-    setRenderState(null);
-    if (source.trim() === '') {
-      return;
-    }
-    const timeout = window.setTimeout(() => {
-      void renderMermaidDiagram(source)
-        .then((svg) => {
-          if (sequence !== renderSequence.current) return;
-          setRenderState({ source, status: 'rendered', svg });
-        })
-        .catch((error: unknown) => {
-          if (sequence !== renderSequence.current) return;
-          setRenderState({
-            source,
-            status: 'error',
-            message:
-              error instanceof Error
-                ? error.message
-                : 'This Mermaid diagram could not be rendered.',
-          });
-        });
-    }, 180);
-    return () => window.clearTimeout(timeout);
-  }, [source]);
+  const { svg: renderedSvg, error: renderError, rendering } = useMermaidDiagram(source);
 
   const exportSvg = async (): Promise<void> => {
     if (renderedSvg === null || exportState === 'saving') return;
@@ -129,7 +95,7 @@ export function MermaidDiagramInspector({
             className="mermaid-diagram-preview"
             role="region"
             aria-label="Mermaid preview"
-            aria-busy={source.trim() !== '' && renderedSvg === null && renderError === null}
+            aria-busy={rendering}
           >
             {source.trim() === '' ? <p>Add Mermaid source to see a preview.</p> : null}
             {renderError !== null ? <p role="alert">{renderError}</p> : null}
