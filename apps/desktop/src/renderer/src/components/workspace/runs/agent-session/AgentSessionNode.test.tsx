@@ -110,6 +110,8 @@ const spies = {
   nodeTitle: vi.fn((): string | null => null),
   removeAgentContext: vi.fn(),
   requestDeleteNode: vi.fn(),
+  fitGroupFrame: vi.fn(),
+  arrangeGroupFrame: vi.fn(),
   openGitPrReadiness: vi.fn(),
   openDiffReview: vi.fn(),
 };
@@ -125,6 +127,8 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     openSettings: spies.openSettings,
     reportError: spies.reportError,
     updateNodeData: spies.updateNodeData,
+    fitGroupFrame: spies.fitGroupFrame,
+    arrangeGroupFrame: spies.arrangeGroupFrame,
     recordHistory: spies.recordHistory,
     nodeTitle: spies.nodeTitle,
     removeAgentContext: spies.removeAgentContext,

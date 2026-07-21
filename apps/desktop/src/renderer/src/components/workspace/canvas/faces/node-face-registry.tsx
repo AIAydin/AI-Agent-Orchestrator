@@ -6,6 +6,8 @@ import { DiffNodeFace } from '../../content/diff/DiffNodeFace.js';
 import { FileNodeFace } from '../../content/file/FileNodeFace.js';
 import { NoteImageNodeFace } from '../../content/note-image/NoteImageNodeFace.js';
 import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.js';
+import { ExtensionNodeFace } from '../../content/ExtensionNodeFace.js';
+import { GroupFrameNodeFace } from '../GroupFrameNodeFace.js';
 import { GitPrNodeFace } from '../../git-pr/GitPrNodeFace.js';
 import { PreviewNodeFace } from '../../previews/PreviewNodeFace.js';
 import { AgentSessionNode } from '../../runs/agent-session/AgentSessionNode.js';
@@ -43,8 +45,10 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   brief: BriefNodeFace,
   diagram: DiagramNodeFace,
   diff: DiffNodeFace,
+  extension: ExtensionNodeFace,
   file: FileNodeFace,
   'git-pr': GitPrNodeFace,
+  'group-frame': GroupFrameNodeFace,
   'note-image': NoteImageNodeFace,
   'review-gate': ReviewGateNodeFace,
   task: TaskNodeFace,
