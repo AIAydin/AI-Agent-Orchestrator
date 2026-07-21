@@ -1880,6 +1880,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             setSelectedNodeId(null);
             setSelectedEdgeId(selectedEdges[0]?.id ?? null);
           }}
+          edgeConfigNodes={nodes}
+          onUpdateEdgeType={updateEdgeType}
+          onUpdateEdgeData={updateEdgeData}
           onAddNode={addNode}
           onAddExtensionNode={addExtensionNode}
           collaborationAwareness={collaborationCanvas.awareness}

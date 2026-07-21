@@ -512,6 +512,29 @@
   flex: 0 0 auto;
   margin-top: 1px;
 }
+/* On-canvas edge configuration popover (EdgeLabelRenderer anchor + card). */
+.edge-config-popover-anchor {
+  position: absolute;
+  /* EdgeLabelRenderer sets pointer-events:none on its container; re-enable here. */
+  pointer-events: all;
+  z-index: 6;
+}
+.edge-config-popover {
+  width: 264px;
+  max-height: 60vh;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+.edge-config-popover .node-edit-fields {
+  margin: 0;
+}
+.edge-config-popover .node-lock-notice {
+  margin: 0 0 8px;
+}
 .inspector-empty {
   padding: 35px 20px;
   text-align: center;
