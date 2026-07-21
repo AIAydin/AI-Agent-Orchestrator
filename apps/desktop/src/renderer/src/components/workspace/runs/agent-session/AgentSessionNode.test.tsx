@@ -99,6 +99,7 @@ const spies = {
   nodeTitle: vi.fn((): string | null => null),
   removeAgentContext: vi.fn(),
   requestDeleteNode: vi.fn(),
+  openGitPrReadiness: vi.fn(),
 };
 
 function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentSessionContextValue {
@@ -116,6 +117,9 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     nodeTitle: spies.nodeTitle,
     removeAgentContext: spies.removeAgentContext,
     requestDeleteNode: spies.requestDeleteNode,
+    nodeRoster: [],
+    checkProducers: [],
+    openGitPrReadiness: spies.openGitPrReadiness,
     ...overrides,
   };
 }

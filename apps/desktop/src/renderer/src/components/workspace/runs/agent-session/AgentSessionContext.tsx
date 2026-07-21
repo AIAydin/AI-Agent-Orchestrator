@@ -4,6 +4,22 @@ import type { AgentDetection, AppSettings, Project, RunAdapterId } from '../../.
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import type { AgentProviderGate } from '../useAgentProviderGate.js';
 
+/** Low-churn snapshot of canvas nodes for faces that need cross-node options. */
+export interface CanvasNodeRosterEntry {
+  readonly id: string;
+  readonly title: string;
+  readonly kind: string;
+  readonly locked: boolean;
+}
+
+/** Test nodes that can satisfy a review gate's required checks. */
+export interface CheckProducerEntry {
+  readonly nodeId: string;
+  readonly producerId: string;
+  readonly title: string;
+  readonly checkKind: 'lint' | 'typecheck' | 'test' | 'build' | 'custom';
+}
+
 /**
  * Workspace services exposed to components rendered inside canvas nodes.
  * React Flow nodes can't receive props directly from Workspace, so
@@ -23,6 +39,9 @@ export interface AgentSessionContextValue {
   nodeTitle(nodeId: string): string | null;
   removeAgentContext(agentNodeId: string, attachmentNodeId: string): void;
   requestDeleteNode(nodeId: string): void;
+  readonly nodeRoster: readonly CanvasNodeRosterEntry[];
+  readonly checkProducers: readonly CheckProducerEntry[];
+  openGitPrReadiness(runId: string): void;
 }
 
 const AgentSessionContext = createContext<AgentSessionContextValue | null>(null);
