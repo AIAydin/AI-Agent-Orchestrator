@@ -353,6 +353,11 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
   'storage/writes.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),
   'storage.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),
   'terminal/pty-process.ts': entry('reviewed-runtime', ['node:fs/promises#chmod']),
+  'voice/service.ts': entry('audited-authority', [
+    'node:fs/promises#mkdir',
+    'node:fs/promises#rm',
+    'node:fs/promises#writeFile',
+  ]),
   'whiteboard/export-service.ts': entry('audited-authority', ['node:fs/promises#writeFile']),
   'workflow/exact-check/runtime/artifact-actions.ts': entry('reviewed-runtime', [
     'node:fs/promises#mkdir',

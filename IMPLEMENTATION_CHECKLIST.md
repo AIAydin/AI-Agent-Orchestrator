@@ -86,6 +86,9 @@ not be reclassified as future work.
 - [x] Light/dark/system themes, density/motion controls, contrast, focus, labels, and reduced motion.
 - [x] Guided first-run tour, searchable local documentation, shortcuts, privacy, and troubleshooting.
 - [x] Command palette, notifications, contextual menus, tooltips, and robust empty/error/loading states.
+- [x] Opt-in local voice commands with UI-managed model install/removal, main-window audio-only
+      permission, bounded non-persistent recording, offline transcription, deterministic registered
+      action matching, and confirmation for workflow/project actions.
 
 ## Infinite canvas and nodes
 
@@ -1798,3 +1801,18 @@ unchecked when only a subset of their required behavior has proof.
   184 remain honestly open because the private repository still has no published GitHub Release and
   hosted Windows/Linux installation plus signing/notarization evidence requires restored GitHub
   Actions billing and the optional platform credentials.
+- 2026-07-21: Forgeboard gained an opt-in local voice-command path backed by pinned Transformers.js,
+  ONNX Runtime, and the exact `onnx-community/whisper-tiny.en` revision. Settings owns model
+  install/removal and safe-action auto-run; the one-time model download uses the main outbound gate
+  and cancel-default native disclosure, while subsequent loads force remote models off. Only the
+  opted-in main window receives audio-only media permission, recordings are capped at 30 seconds
+  and never persisted, IPC validates normalized 16 kHz PCM, and transcripts match only the shared
+  command-palette registry. Agent/provider creation, task/brief/template creation, view, review, and
+  settings actions can run automatically when enabled; workflow execution and project closing
+  remain confirmation-class actions. Privacy deletion removes the downloaded model. The real pinned
+  q8 model loaded from cache and transcribed a 16 kHz buffer with remote loading disabled. Desktop
+  strict typecheck, production build, dependency audit, and 59 focused Settings, architecture,
+  permission, model-state, registry,
+  contract, matcher, and audio tests passed.
+  `Workspace.tsx` was split below 2,000 lines. The structure gate still reports only three inherited
+  direct-file-count failures in `apps/desktop/e2e`, `workspace/shell`, and `workspace/workflows`.

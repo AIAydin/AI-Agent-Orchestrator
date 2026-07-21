@@ -91,6 +91,7 @@ import { AgentPeersService, type AgentPeersStore } from './agent-peers/service.j
 import { TerminalIpcService } from './terminal/ipc.js';
 import { TerminalService } from './terminal/service.js';
 import { UpdateIpcService } from './updates/service.js';
+import { VoiceIpcService } from './voice/service.js';
 import { createWorkflowRuntimeComposition } from './workflow/host/composition.js';
 import { WorkflowIpcService } from './workflow/host/ipc.js';
 import { ExactCheckExecutor } from './workflow/exact-check/executor.js';
@@ -197,6 +198,8 @@ export function createDefaultSettings(): AppSettings {
     collaborationReconnect: true,
     updateChannel: 'prerelease',
     automaticUpdateDownloads: false,
+    voiceCommandsEnabled: false,
+    voiceAutoRunSafeActions: false,
   };
 }
 
@@ -222,6 +225,7 @@ export interface ApplicationServices {
   workflows: WorkflowIpcService;
   recovery: RecoveryIpcService;
   updates: UpdateIpcService;
+  voice: VoiceIpcService;
   prepareToQuit(): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -277,6 +281,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     (action, outcome, metadata) => store.appendAudit('export', action, outcome, metadata),
   );
   const updates = new UpdateIpcService(dialog, shell, store, () => app.getVersion(), outbound);
+  const voice = new VoiceIpcService(dialog, store, app.getPath('userData'), outbound);
   const collaboration = new CollaborationIpcService(dialog, outbound, {
     store,
   });
@@ -1031,6 +1036,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
               docker.pauseForShutdown(),
               recovery.pauseForExternalDataMutation(),
               collaboration.resetForPrivacy(),
+              voice.resetForPrivacy(),
             ]);
           },
           deleteData: async (approvedMissingBackupIds) => {
@@ -1053,6 +1059,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   diagramExports.registerIpcHandler();
   whiteboardExports.registerIpcHandler();
   updates.registerIpcHandlers();
+  voice.registerIpcHandlers();
   folderReadiness.registerIpcHandler();
   readiness.registerIpcHandler();
   providerConnections.registerIpcHandlers();
@@ -1075,6 +1082,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   return {
     settings,
     updates,
+    voice,
     folderReadiness,
     readiness,
     providerConnections,
@@ -1111,6 +1119,7 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
       diagramExports.dispose();
       whiteboardExports.dispose();
       updates.dispose();
+      voice.dispose();
       folderReadiness.dispose();
       await files.dispose();
       await recovery.dispose();

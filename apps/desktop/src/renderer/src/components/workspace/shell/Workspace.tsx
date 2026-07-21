@@ -30,7 +30,6 @@ import {
 import { FileDocumentSchema } from '../../../../../shared/files/contracts.js';
 import type { WorkflowExecutionView } from '../../../../../shared/workflow/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
-import { useKeyedStable } from '../../../lib/use-keyed-stable.js';
 import { commandPaletteShortcutLabel, opensCommandPalette } from '../../../lib/keyboard-preset.js';
 import {
   NODE_DEFINITIONS,
@@ -40,6 +39,9 @@ import {
   type WorkshopNodeData,
 } from '../canvas/CanvasNode.js';
 import { CommandPalette } from '../../shell/CommandPalette.js';
+import { VoiceCommandControl } from '../voice/VoiceCommandControl.js';
+import { createWorkspacePaletteActions } from '../actions/palette-actions.js';
+import { updateWorkspaceEdgeData } from '../actions/edge-actions.js';
 import {
   createExtensionNodeBinding,
   extensionTemplateKey,
@@ -108,9 +110,8 @@ import { useAgentWorktreeRecord } from '../runs/useAgentWorktreeAvailability.js'
 import {
   AgentSessionProvider,
   type AgentSessionContextValue,
-  type CanvasNodeRosterEntry,
-  type CheckProducerEntry,
 } from '../runs/agent-session/AgentSessionContext.js';
+import { useAgentSessionContextLists } from '../runs/agent-session/context-lists.js';
 import { AGENT_NODE_DRAG_HANDLE } from '../runs/agent-session/AgentSessionNode.js';
 import { providerConnectionIdForAdapter } from '../../../lib/provider-connections.js';
 import { effectiveNodeModel } from '../runs/agent-node/model-selection.js';
@@ -123,7 +124,7 @@ import { mergeCollaborationCanvasSnapshot } from '../collaboration/merge-canvas.
 import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
-import { checkProducerId, initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
+import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
 import { buildWorkflowTemplate } from '../workflows/templates/builder.js';
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from '../workflows/templates/catalog.js';
 import { collisionFreeTemplateOrigin } from '../workflows/templates/placement.js';
@@ -1434,162 +1435,34 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       return;
     }
     record();
-    setEdges((items) =>
-      items.map((edge) =>
-        edge.id === selectedEdge.id ? { ...edge, label: data.edgeType, data } : edge,
-      ),
-    );
+    setEdges((items) => updateWorkspaceEdgeData(items, selectedEdge.id, data));
   }
 
-  const paletteActions = useMemo(
-    () => [
-      {
-        id: 'add-agent',
-        label: 'Add an agent',
-        section: 'Canvas',
-        run: () => addNode('agent'),
-      },
-      {
-        id: 'add-task',
-        label: 'Add a task',
-        section: 'Canvas',
-        run: () => addNode('task'),
-      },
-      {
-        id: 'add-brief',
-        label: 'Add a product brief',
-        section: 'Canvas',
-        run: () => addNode('brief'),
-      },
-      ...extensionTemplates.map((template) => ({
-        id: `add-extension-${template.key}`,
-        label: `Add ${template.definition.displayName}`,
-        section: `Extension · ${template.extension.manifest.name}`,
-        run: () => addExtensionNode(template),
-      })),
-      ...WORKFLOW_TEMPLATES.map((template) => ({
-        id: `add-workflow-template-${template.id}`,
-        label: `Add ${template.name} workflow`,
-        section: 'Workflow templates',
-        run: () => addWorkflowTemplate(template),
-      })),
-      {
-        id: 'fit',
-        label: 'Zoom to fit the canvas',
-        section: 'View',
-        shortcut: 'F',
-        run: () =>
-          void instance?.fitView({
-            padding: 0.18,
-            duration: settings.reducedMotion ? 0 : 240,
-          }),
-      },
-      ...(canRunWorkflow && workflows.mutationsAuthorized
-        ? [
-            {
-              id: 'run-workflow',
-              label: 'Run the saved canvas workflow',
-              section: 'Workflow',
-              run: () => {
-                if (!workflowStartBusy) void workflows.start({ kind: 'workflow' });
-              },
-            },
-          ]
-        : []),
-      ...(selectedNode === null ||
-      selectedWorkflowScope === undefined ||
-      !workflows.mutationsAuthorized
-        ? []
-        : [
-            {
-              id: 'run-selected-workflow-node',
-              label: `Run ${selectedNode.data.title} and everything it needs`,
-              section: 'Workflow',
-              run: () => {
-                if (!workflowStartBusy) {
-                  void workflows.start(selectedWorkflowScope);
-                }
-              },
-            },
-          ]),
-      {
-        id: 'git-review',
-        label: 'Review Git changes',
-        section: 'Project',
-        run: openProjectGitReview,
-      },
-      {
-        id: 'settings',
-        label: 'Open settings',
-        section: 'Application',
-        shortcut: '⌘,',
-        run: onOpenSettings,
-      },
-      {
-        id: 'close',
-        label: 'Close project',
-        section: 'Project',
-        run: () => void closeProject(),
-      },
-    ],
-    [
-      addExtensionNode,
-      addNode,
-      addWorkflowTemplate,
-      canRunWorkflow,
-      closeProject,
-      extensionTemplates,
-      instance,
-      onOpenSettings,
-      openProjectGitReview,
-      project.id,
-      selectedNode,
-      selectedWorkflowScope,
-      settings.reducedMotion,
-      workflowStartBusy,
-      workflows,
-    ],
-  );
+  const paletteActions = createWorkspacePaletteActions({
+    runnableAgents,
+    extensionTemplates,
+    workflowTemplates: WORKFLOW_TEMPLATES,
+    selectedNodeTitle: selectedNode?.data.title ?? null,
+    selectedWorkflowScope,
+    canRunWorkflow,
+    workflowMutationsAuthorized: workflows.mutationsAuthorized,
+    workflowStartBusy,
+    addNode,
+    addAgentNode,
+    addExtensionNode,
+    addWorkflowTemplate,
+    fitCanvas: () =>
+      void instance?.fitView({
+        padding: 0.18,
+        duration: settings.reducedMotion ? 0 : 240,
+      }),
+    startWorkflow: (scope) => void workflows.start(scope),
+    openGitReview: openProjectGitReview,
+    openSettings: onOpenSettings,
+    closeProject: () => void closeProject(),
+  });
 
-  const nodeRosterSource = useMemo<readonly CanvasNodeRosterEntry[]>(
-    () =>
-      nodes.map((node) => ({
-        id: node.id,
-        title: node.data.title,
-        kind: node.data.kind,
-        locked: node.data.locked,
-      })),
-    [nodes],
-  );
-  const nodeRoster = useKeyedStable(
-    nodeRosterSource,
-    nodeRosterSource
-      .map(
-        (entry) => `${entry.id}\u0000${entry.title}\u0000${entry.kind}\u0000${String(entry.locked)}`,
-      )
-      .join('\n'),
-  );
-  const checkProducersSource = useMemo<readonly CheckProducerEntry[]>(
-    () =>
-      nodes
-        .filter((node) => node.data.kind === 'test')
-        .map((node) => ({
-          nodeId: node.id,
-          producerId: checkProducerId(node),
-          title: node.data.title,
-          checkKind: node.data.checkKind ?? 'test',
-        })),
-    [nodes],
-  );
-  const checkProducers = useKeyedStable(
-    checkProducersSource,
-    checkProducersSource
-      .map(
-        (entry) =>
-          `${entry.nodeId}\u0000${entry.producerId}\u0000${entry.title}\u0000${entry.checkKind}`,
-      )
-      .join('\n'),
-  );
+  const { nodeRoster, checkProducers } = useAgentSessionContextLists(nodes);
   const openGitPrReadiness = useCallback(
     (runId: string) => {
       gitReview.openTarget({ kind: 'agent-worktree', projectId: project.id, runId });
@@ -2021,6 +1894,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       {paletteOpen && (
         <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />
       )}
+      <VoiceCommandControl
+        settings={settings}
+        actions={paletteActions}
+        onOpenSettings={onOpenSettings}
+        onError={onError}
+      />
       {gitReview.session !== null && (
         <GitReviewDialog
           target={gitReview.session.target}

@@ -10,6 +10,9 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   node-pty: true
+  onnxruntime-node: true
+  protobufjs: false
+  sharp: false
   '@forgeboard/windows-durable-fs': true
 
 catalog:
