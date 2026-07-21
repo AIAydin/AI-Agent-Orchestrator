@@ -134,23 +134,30 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   useEffect(() => {
     if (!pendingRestartRef.current || hasActiveSession) return;
     pendingRestartRef.current = false;
-    void controllerRef.current.prepareLaunch();
+    // Re-provision fresh rather than calling `prepareLaunch` directly here: `prepareLaunch` would
+    // still carry whatever `peerMaterial` is stashed from the just-terminated session — its
+    // already-consumed provisionId/token — which violates the single-use provision contract.
+    // Routing through `provisionAndRelaunch` (declared below, alongside Start's identical needs)
+    // gets the relaunched session its own fresh grant, exactly like Start and exit-strip Restart
+    // already do.
+    provisionAndRelaunch();
   }, [hasActiveSession]);
 
-  // Peer-tool provisioning (Task 10): fetched fresh on every Start/Restart click, before
-  // prepareLaunch, so the launched command carries the hub's extraArguments/peerProvisionId.
-  // Calling `controller.prepareLaunch()` synchronously right after `setPeerMaterial` here would
-  // still close over the pre-provisioning `configuration` — React state updates are not visible
-  // until the next render. So, exactly like the restart-to-apply flag above, this defers to an
-  // effect that fires once the render carrying the new peer state (and thus a fresh
-  // `controllerRef.current` bound to the updated configuration) has committed.
-  // `provisioningRef` guards re-entrancy: a rapid double-click on Start/Restart must not fire a
-  // second, overlapping provision call.
+  // Peer-tool provisioning (Task 10): a fresh, single-use grant is fetched before every relaunch —
+  // Start, exit-strip Restart, AND the config-drift relaunch effect above all funnel through
+  // `provisionAndRelaunch`, so every newly launched session gets its OWN provisionId, never one a
+  // previously-terminated session already consumed. Calling `controller.prepareLaunch()`
+  // synchronously right after `setPeerMaterial` here would still close over the pre-provisioning
+  // `configuration` — React state updates are not visible until the next render. So, exactly like
+  // the restart-to-apply flag above, this defers to an effect that fires once the render carrying
+  // the new peer state (and thus a fresh `controllerRef.current` bound to the updated configuration)
+  // has committed. `provisioningRef` guards re-entrancy: a rapid double-click on Start/Restart must
+  // not fire a second, overlapping provision call.
   const provisioningRef = useRef(false);
   const pendingStartRef = useRef(false);
   const [provisionAttempt, setProvisionAttempt] = useState(0);
 
-  const startSession = (): void => {
+  const provisionAndRelaunch = (): void => {
     if (provisioningRef.current) return;
     provisioningRef.current = true;
     void (async () => {
@@ -188,6 +195,8 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
       }
     })();
   };
+
+  const startSession = (): void => provisionAndRelaunch();
 
   useEffect(() => {
     if (!pendingStartRef.current) return;

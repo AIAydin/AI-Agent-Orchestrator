@@ -399,6 +399,75 @@ describe('AgentSessionNode', () => {
     expect(controller.cancelLaunch).not.toHaveBeenCalled();
   });
 
+  it('re-provisions peer tools fresh when a config-drift restart relaunches the session, instead of reusing the terminated session\'s stale provision', async () => {
+    provisionMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        provisionId: 'first-provision-id',
+        available: true,
+        hint: null,
+        extraArguments: [],
+      },
+    });
+    const view = render(nodeTree(nodeData()));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+    expect(provisionMock).toHaveBeenCalledTimes(1);
+    expect(
+      (controllerOptionsHolder.current?.configuration as { peerProvisionId?: string } | undefined)
+        ?.peerProvisionId,
+    ).toBe('first-provision-id');
+
+    // The launch auto-confirms (no in-app review dialog) and the session goes live.
+    controller.pendingPlan = REVIEW_PLAN;
+    view.rerender(nodeTree(nodeData()));
+    await waitFor(() => expect(controller.confirmLaunch).toHaveBeenCalledOnce());
+
+    controller.pendingPlan = null;
+    controller.session = { id: 's1', status: 'running' };
+    controller.active = true;
+    view.rerender(nodeTree(nodeData()));
+
+    // Config drifts (model change) while the session is live -> "Restart to apply" appears.
+    view.rerender(nodeTree(nodeData({ model: 'gpt-5' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Restart to apply' }));
+    expect(controller.terminate).toHaveBeenCalledOnce();
+
+    // terminate() resolving is not enough to relaunch; the session must go inactive first.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(provisionMock).toHaveBeenCalledTimes(1);
+
+    provisionMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        provisionId: 'second-provision-id',
+        available: true,
+        hint: null,
+        extraArguments: ['--mcp-config', '/tmp/peer-mcp-2.json'],
+      },
+    });
+
+    // The terminated session reports inactive: the relaunch must re-provision fresh (a SECOND
+    // provision() call), never reuse the first (already-consumed) provisionId.
+    controller.session = { id: 's1', status: 'exited' };
+    controller.active = false;
+    view.rerender(nodeTree(nodeData({ model: 'gpt-5' })));
+
+    await waitFor(() => expect(provisionMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledTimes(2));
+
+    const relaunchConfiguration = controllerOptionsHolder.current?.configuration as {
+      arguments: readonly string[];
+      peerProvisionId?: string;
+    };
+    expect(relaunchConfiguration.peerProvisionId).toBe('second-provision-id');
+    expect(relaunchConfiguration.arguments).toEqual(
+      expect.arrayContaining(['--mcp-config', '/tmp/peer-mcp-2.json']),
+    );
+  });
+
   it('restarts to apply only after the live session goes inactive, not merely after terminate resolves', async () => {
     controller.pendingPlan = REVIEW_PLAN;
     const view = render(nodeTree(nodeData()));
