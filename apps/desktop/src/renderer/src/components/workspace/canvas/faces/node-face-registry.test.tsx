@@ -9,8 +9,10 @@ describe('nodeFaceForKind', () => {
     expect(nodeFaceForKind('agent')).toBeTypeOf('function');
     expect(nodeFaceForKind('web-preview')).toBeTypeOf('function');
     expect(nodeFaceForKind('mobile-preview')).toBeTypeOf('function');
+    expect(nodeFaceForKind('brief')).toBeTypeOf('function');
     expect(nodeFaceForKind('diagram')).toBeTypeOf('function');
     expect(nodeFaceForKind('git-pr')).toBeTypeOf('function');
+    expect(nodeFaceForKind('note-image')).toBeTypeOf('function');
     expect(nodeFaceForKind('test')).toBeTypeOf('function');
     expect(nodeFaceForKind('whiteboard')).toBeTypeOf('function');
   });
