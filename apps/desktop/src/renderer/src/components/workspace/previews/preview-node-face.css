@@ -48,6 +48,34 @@
   opacity: 0.5;
   cursor: default;
 }
+.preview-face-devserver,
+.preview-face-configure {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.preview-face-configure {
+  padding: 0;
+  width: 22px;
+  justify-content: center;
+}
+.preview-face-configure[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--text);
+}
+.preview-face-devserver:disabled,
+.preview-face-configure:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .preview-face-status {
   margin-left: auto;
   color: var(--text-faint);
@@ -81,9 +109,76 @@ webview.preview-face-webview {
   color: var(--text-faint);
   font-size: var(--text-xs);
 }
+.preview-face-stage {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  overflow: auto;
+}
+.preview-face-stage.side-by-side {
+  align-items: flex-start;
+}
 .preview-face-device {
   margin: 8px auto auto;
   overflow: hidden;
+}
+.preview-face-stage .preview-face-device {
+  margin: 8px 0 0;
+}
+.preview-face-popover {
+  position: absolute;
+  inset: 6px 6px auto auto;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(220px, calc(100% - 12px));
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  font-size: var(--text-xs);
+}
+.preview-face-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-soft);
+}
+.preview-face-row select {
+  font-size: var(--text-xs);
+}
+.preview-face-orient,
+.preview-face-settings-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.preview-face-orient:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.preview-face-settings-link {
+  margin-top: 2px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 5px 5px;
+}
+.preview-face-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-soft);
 }
 .preview-face-device-frame {
   transform-origin: top left;
