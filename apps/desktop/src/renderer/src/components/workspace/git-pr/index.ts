@@ -1,9 +1,4 @@
 export { gitPrConfiguration, gitPrNodeDataPatch } from './configuration.js';
-export { GitPrNodeInspector, type GitPrNodeInspectorProps } from './GitPrNodeInspector.js';
-export {
-  OperationalGitPrNodeInspector,
-  type OperationalGitPrNodeInspectorProps,
-} from './OperationalGitPrNodeInspector.js';
 export {
   useGitPrNodeController,
   type UseGitPrNodeControllerOptions,

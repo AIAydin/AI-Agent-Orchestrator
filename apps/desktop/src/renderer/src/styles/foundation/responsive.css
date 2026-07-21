@@ -1,9 +1,8 @@
 @media (max-width: 1180px) {
   .workspace-grid {
-    /* Smaller defaults only: user-resized widths (inline custom properties)
-       still win and are re-clamped against the window in the renderer. */
+    /* Smaller default only: a user-resized width (inline custom property)
+       still wins and is re-clamped against the window in the renderer. */
     --workspace-rail-default: 230px;
-    --workspace-inspector-default: 280px;
   }
 }
 
@@ -53,15 +52,6 @@
   }
   .workspace-resize-handle {
     display: none;
-  }
-  .inspector {
-    position: fixed;
-    z-index: 40;
-    right: 0;
-    top: 48px;
-    bottom: 0;
-    width: 320px;
-    box-shadow: -10px 0 30px rgb(0 0 0 / 18%);
   }
 }
 

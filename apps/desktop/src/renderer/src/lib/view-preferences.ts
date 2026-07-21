@@ -8,12 +8,10 @@ const STORAGE_KEY = 'forgeboard.view-preferences.v1';
 
 export interface ViewPreferences {
   readonly railWidth: number | null;
-  readonly inspectorWidth: number | null;
 }
 
 export const EMPTY_VIEW_PREFERENCES: ViewPreferences = {
   railWidth: null,
-  inspectorWidth: null,
 };
 
 function storedWidth(value: unknown): number | null {
@@ -31,7 +29,6 @@ export function loadViewPreferences(): ViewPreferences {
     const record = parsed as Record<string, unknown>;
     return {
       railWidth: storedWidth(record['railWidth']),
-      inspectorWidth: storedWidth(record['inspectorWidth']),
     };
   } catch {
     return EMPTY_VIEW_PREFERENCES;

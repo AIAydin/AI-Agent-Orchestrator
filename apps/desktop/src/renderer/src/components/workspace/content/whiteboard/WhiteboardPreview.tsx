@@ -1,4 +1,5 @@
 import type { WhiteboardDocument, WhiteboardElement } from './model.js';
+import './whiteboard.css';
 
 export function WhiteboardPreview({
   document,

@@ -8,9 +8,6 @@ import {
 } from '../../../lib/view-preferences.js';
 import {
   clampSidebarWidth,
-  INSPECTOR_DEFAULT_WIDTH,
-  INSPECTOR_WIDTH_RANGE,
-  NARROW_INSPECTOR_DEFAULT_WIDTH,
   NARROW_RAIL_DEFAULT_WIDTH,
   RAIL_DEFAULT_WIDTH,
   RAIL_WIDTH_RANGE,
@@ -33,7 +30,6 @@ export interface SidebarLayoutControls {
 export interface WorkspaceSidebarLayout {
   readonly gridStyle: CSSProperties;
   readonly rail: SidebarLayoutControls;
-  readonly inspector: SidebarLayoutControls;
 }
 
 function narrowLayoutMatches(): boolean {
@@ -41,20 +37,18 @@ function narrowLayoutMatches(): boolean {
 }
 
 /**
- * Owns the user-adjustable widths of the project rail and inspector columns.
- * `null` means "use the stylesheet default", so responsive defaults keep
- * applying until the user drags a divider.
+ * Owns the user-adjustable width of the project rail column. `null` means "use
+ * the stylesheet default", so responsive defaults keep applying until the user
+ * drags the divider.
  */
 export function useWorkspaceSidebarLayout(): WorkspaceSidebarLayout {
   const [preferences, setPreferences] = useState<ViewPreferences>(loadViewPreferences);
   const [narrowLayout, setNarrowLayout] = useState(narrowLayoutMatches);
 
   const railDefault = narrowLayout ? NARROW_RAIL_DEFAULT_WIDTH : RAIL_DEFAULT_WIDTH;
-  const inspectorDefault = narrowLayout ? NARROW_INSPECTOR_DEFAULT_WIDTH : INSPECTOR_DEFAULT_WIDTH;
   const railWidth = preferences.railWidth ?? railDefault;
-  const inspectorWidth = preferences.inspectorWidth ?? inspectorDefault;
-  const effectiveWidths = useRef({ railWidth, inspectorWidth });
-  effectiveWidths.current = { railWidth, inspectorWidth };
+  const effectiveWidths = useRef({ railWidth });
+  effectiveWidths.current = { railWidth };
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return undefined;
@@ -68,20 +62,13 @@ export function useWorkspaceSidebarLayout(): WorkspaceSidebarLayout {
     const reclamp = () => {
       if (window.innerWidth <= STACKED_LAYOUT_MAX_WIDTH) return;
       setPreferences((current) => {
-        if (current.railWidth === null && current.inspectorWidth === null) return current;
+        if (current.railWidth === null) return current;
         const clamped = reclampSidebarWidths(effectiveWidths.current, window.innerWidth);
         const nextRail =
           current.railWidth === null && clamped.railWidth === effectiveWidths.current.railWidth
             ? null
             : clamped.railWidth;
-        const nextInspector =
-          current.inspectorWidth === null &&
-          clamped.inspectorWidth === effectiveWidths.current.inspectorWidth
-            ? null
-            : clamped.inspectorWidth;
-        return current.railWidth === nextRail && current.inspectorWidth === nextInspector
-          ? current
-          : { railWidth: nextRail, inspectorWidth: nextInspector };
+        return current.railWidth === nextRail ? current : { ...current, railWidth: nextRail };
       });
     };
     let trailing: number | null = null;
@@ -110,26 +97,9 @@ export function useWorkspaceSidebarLayout(): WorkspaceSidebarLayout {
   }, [preferences]);
 
   const resizeRail = useCallback((width: number) => {
-    const next = clampSidebarWidth(
-      width,
-      RAIL_WIDTH_RANGE,
-      effectiveWidths.current.inspectorWidth,
-      window.innerWidth,
-    );
+    const next = clampSidebarWidth(width, RAIL_WIDTH_RANGE, 0, window.innerWidth);
     setPreferences((current) =>
       current.railWidth === next ? current : { ...current, railWidth: next },
-    );
-  }, []);
-
-  const resizeInspector = useCallback((width: number) => {
-    const next = clampSidebarWidth(
-      width,
-      INSPECTOR_WIDTH_RANGE,
-      effectiveWidths.current.railWidth,
-      window.innerWidth,
-    );
-    setPreferences((current) =>
-      current.inspectorWidth === next ? current : { ...current, inspectorWidth: next },
     );
   }, []);
 
@@ -139,22 +109,13 @@ export function useWorkspaceSidebarLayout(): WorkspaceSidebarLayout {
     );
   }, []);
 
-  const resetInspector = useCallback(() => {
-    setPreferences((current) =>
-      current.inspectorWidth === null ? current : { ...current, inspectorWidth: null },
-    );
-  }, []);
-
   const gridStyle = useMemo<CSSProperties>(() => {
     const style: Record<string, string> = {};
     if (preferences.railWidth !== null) {
       style['--workspace-rail-width'] = `${String(preferences.railWidth)}px`;
     }
-    if (preferences.inspectorWidth !== null) {
-      style['--workspace-inspector-width'] = `${String(preferences.inspectorWidth)}px`;
-    }
     return style as CSSProperties;
-  }, [preferences.inspectorWidth, preferences.railWidth]);
+  }, [preferences.railWidth]);
 
   return {
     gridStyle,
@@ -163,12 +124,6 @@ export function useWorkspaceSidebarLayout(): WorkspaceSidebarLayout {
       range: RAIL_WIDTH_RANGE,
       resize: resizeRail,
       reset: resetRail,
-    },
-    inspector: {
-      width: inspectorWidth,
-      range: INSPECTOR_WIDTH_RANGE,
-      resize: resizeInspector,
-      reset: resetInspector,
     },
   };
 }

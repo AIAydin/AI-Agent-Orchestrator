@@ -71,134 +71,109 @@ vi.mock('./WorkspaceCommandBar.js', () => ({
     </div>
   ),
 }));
-vi.mock('../canvas/WorkspaceCanvas.js', () => ({
-  WorkspaceCanvas: ({
-    nodes,
-    onSelectionChange,
-  }: {
-    nodes: WorkshopNode[];
-    onSelectionChange: (selection: { nodes: WorkshopNode[]; edges: [] }) => void;
-  }) => (
-    <div>
-      <output data-testid="workspace-node-state">
-        {JSON.stringify(
-          nodes.map((node) => ({
-            id: node.id,
-            kind: node.data.kind,
-            locked: node.data.locked,
-            reviewTarget: node.data.reviewTarget,
-            viewMode: node.data.viewMode,
-            showWhitespace: node.data.showWhitespace,
-          })),
-        )}
-      </output>
-      {nodes.map((node) => (
-        <button
-          key={node.id}
-          type="button"
-          onClick={() => onSelectionChange({ nodes: [node], edges: [] })}
-        >
-          Select {node.data.title}
-        </button>
-      ))}
-    </div>
-  ),
-}));
+vi.mock('../canvas/WorkspaceCanvas.js', async () => {
+  // The Diff-node review/target/lock controls that used to live in the inspector
+  // now live on the Diff node face, which reaches Workspace through the (real)
+  // AgentSession context. The mock tracks the selected node and drives the same
+  // context handlers, so these git-review-target tests keep their live path.
+  const React = await import('react');
+  const { useAgentSession } = await import('../runs/agent-session/AgentSessionContext.js');
+  const MOCK_PROJECT_ID = '70000000-0000-4000-8000-000000000011';
+  const MOCK_RUN_ID = '70000000-0000-4000-8000-000000000012';
+  return {
+    WorkspaceCanvas: ({
+      nodes,
+      onSelectionChange,
+    }: {
+      nodes: WorkshopNode[];
+      onSelectionChange: (selection: { nodes: WorkshopNode[]; edges: [] }) => void;
+    }) => {
+      const session = useAgentSession();
+      const [selectedId, setSelectedId] = React.useState<string | null>(null);
+      const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
+      const isDiff = selectedNode?.data.kind === 'diff';
+      const openReview = (purpose: DiffReviewOpenRequest['purpose']): void => {
+        if (!isDiff || selectedNode === null) return;
+        const configuredTarget = selectedNode.data.reviewTarget ?? { kind: 'primary' as const };
+        session.openDiffReview(selectedNode.id, {
+          target:
+            configuredTarget.kind === 'primary'
+              ? { kind: 'primary', projectId: MOCK_PROJECT_ID }
+              : {
+                  kind: 'agent-worktree',
+                  projectId: MOCK_PROJECT_ID,
+                  runId: configuredTarget.runId,
+                },
+          preferences: {
+            viewMode: selectedNode.data.viewMode ?? 'split',
+            showWhitespace: selectedNode.data.showWhitespace ?? false,
+          },
+          purpose,
+        });
+      };
+      return (
+        <div>
+          <output data-testid="workspace-node-state">
+            {JSON.stringify(
+              nodes.map((node) => ({
+                id: node.id,
+                kind: node.data.kind,
+                locked: node.data.locked,
+                reviewTarget: node.data.reviewTarget,
+                viewMode: node.data.viewMode,
+                showWhitespace: node.data.showWhitespace,
+              })),
+            )}
+          </output>
+          <output data-testid="selected-node-id">{selectedNode?.id ?? ''}</output>
+          {nodes.map((node) => (
+            <button
+              key={node.id}
+              type="button"
+              onClick={() => {
+                setSelectedId(node.id);
+                onSelectionChange({ nodes: [node], edges: [] });
+              }}
+            >
+              Select {node.data.title}
+            </button>
+          ))}
+          <button type="button" disabled={!isDiff} onClick={() => openReview('review')}>
+            Open selected Diff review
+          </button>
+          <button type="button" disabled={!isDiff} onClick={() => openReview('cleanup-recovery')}>
+            Open selected cleanup recovery
+          </button>
+          <button
+            type="button"
+            disabled={!isDiff}
+            onClick={() => {
+              if (!isDiff || selectedNode === null) return;
+              session.recordHistory();
+              session.updateNodeData(selectedNode.id, {
+                reviewTarget: { kind: 'agent-run', runId: MOCK_RUN_ID },
+              });
+            }}
+          >
+            Retarget selected Diff
+          </button>
+          <button
+            type="button"
+            disabled={!isDiff}
+            onClick={() => {
+              if (!isDiff || selectedNode === null) return;
+              session.recordHistory();
+              session.updateNodeData(selectedNode.id, { locked: true });
+            }}
+          >
+            Lock selected Diff
+          </button>
+        </div>
+      );
+    },
+  };
+});
 vi.mock('./WorkspaceRail.js', () => ({ WorkspaceRail: () => null }));
-vi.mock('./WorkspaceInspector.js', () => ({
-  WorkspaceInspector: ({
-    project,
-    selectedNode,
-    onRecord,
-    onUpdateSelected,
-    onOpenDiffReview,
-  }: {
-    project: Project;
-    selectedNode: WorkshopNode | null;
-    onRecord: () => void;
-    onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
-    onOpenDiffReview: (request: DiffReviewOpenRequest) => void;
-  }) => {
-    const isDiff = selectedNode?.data.kind === 'diff';
-    return (
-      <div>
-        <output data-testid="selected-node-id">{selectedNode?.id ?? ''}</output>
-        <button
-          type="button"
-          disabled={!isDiff}
-          onClick={() => {
-            if (!isDiff || selectedNode === null) return;
-            const configuredTarget = selectedNode.data.reviewTarget ?? { kind: 'primary' as const };
-            onOpenDiffReview({
-              target:
-                configuredTarget.kind === 'primary'
-                  ? { kind: 'primary', projectId: project.id }
-                  : {
-                      kind: 'agent-worktree',
-                      projectId: project.id,
-                      runId: configuredTarget.runId,
-                    },
-              preferences: {
-                viewMode: selectedNode.data.viewMode ?? 'split',
-                showWhitespace: selectedNode.data.showWhitespace ?? false,
-              },
-              purpose: 'review',
-            });
-          }}
-        >
-          Open selected Diff review
-        </button>
-        <button
-          type="button"
-          disabled={!isDiff || selectedNode?.data.reviewTarget?.kind !== 'agent-run'}
-          onClick={() => {
-            if (
-              !isDiff ||
-              selectedNode === null ||
-              selectedNode.data.reviewTarget?.kind !== 'agent-run'
-            ) {
-              return;
-            }
-            onOpenDiffReview({
-              target: {
-                kind: 'agent-worktree',
-                projectId: project.id,
-                runId: selectedNode.data.reviewTarget.runId,
-              },
-              preferences: {
-                viewMode: selectedNode.data.viewMode ?? 'split',
-                showWhitespace: selectedNode.data.showWhitespace ?? false,
-              },
-              purpose: 'cleanup-recovery',
-            });
-          }}
-        >
-          Open selected cleanup recovery
-        </button>
-        <button
-          type="button"
-          disabled={!isDiff}
-          onClick={() => {
-            onRecord();
-            onUpdateSelected({ reviewTarget: { kind: 'agent-run', runId: RUN_ID } });
-          }}
-        >
-          Retarget selected Diff
-        </button>
-        <button
-          type="button"
-          disabled={!isDiff}
-          onClick={() => {
-            onRecord();
-            onUpdateSelected({ locked: true });
-          }}
-        >
-          Lock selected Diff
-        </button>
-      </div>
-    );
-  },
-}));
 vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
   WorkspaceActivityDrawer: ({
     changeReports,

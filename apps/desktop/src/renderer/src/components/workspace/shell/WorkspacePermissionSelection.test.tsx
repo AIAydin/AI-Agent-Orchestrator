@@ -41,11 +41,6 @@ vi.mock('./WorkspaceRail.js', () => ({
     </button>
   ),
 }));
-// The inspector no longer receives or renders permission state for agent nodes (Task 7: the
-// permission-select control now lives on the node itself — see AgentSessionNode.test.tsx).
-vi.mock('./WorkspaceInspector.js', () => ({
-  WorkspaceInspector: () => null,
-}));
 vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
   WorkspaceActivityDrawer: () => null,
 }));

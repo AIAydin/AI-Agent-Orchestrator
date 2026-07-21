@@ -101,16 +101,13 @@ kbd {
 }
 .workspace-grid {
   --workspace-rail-default: 260px;
-  --workspace-inspector-default: 320px;
 
   position: relative;
   min-height: 0;
   display: grid;
-  grid-template-columns:
-    var(--workspace-rail-width, var(--workspace-rail-default)) minmax(0, 1fr)
-    var(--workspace-inspector-width, var(--workspace-inspector-default));
+  grid-template-columns: var(--workspace-rail-width, var(--workspace-rail-default)) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) 190px;
-  grid-template-areas: 'rail canvas inspector' 'rail activity inspector';
+  grid-template-areas: 'rail canvas' 'rail activity';
 }
 .workspace-grid.activity-closed {
   grid-template-rows: minmax(0, 1fr) 0;
@@ -144,9 +141,6 @@ kbd {
 }
 .workspace-resize-handle.rail-resize {
   left: calc(var(--workspace-rail-width, var(--workspace-rail-default)) - 4px);
-}
-.workspace-resize-handle.inspector-resize {
-  right: calc(var(--workspace-inspector-width, var(--workspace-inspector-default)) - 4px);
 }
 .workspace-tooltip-target {
   position: relative;

@@ -12,6 +12,7 @@ import {
   type NoteImageReference,
 } from './reference-updates.js';
 import { useNoteImagePreviews } from './use-note-image-previews.js';
+import './note-image-inspector.css';
 
 /**
  * Note & image face: markdown plus an image grid; images are added through the
