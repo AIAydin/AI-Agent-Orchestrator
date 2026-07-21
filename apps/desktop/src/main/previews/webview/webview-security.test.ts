@@ -227,6 +227,16 @@ describe('shouldAttachPreviewWebview', () => {
     expect(
       shouldAttachPreviewWebview({ partition: 'preview:p1:n1', src: ALLOWED, preload: '/tmp/x.js' }),
     ).toBe(false);
+    // Electron always sends preload/preloadURL, defaulting to '' when the
+    // renderer requests none — the empty-string default must NOT block the attach.
+    expect(
+      shouldAttachPreviewWebview({
+        partition: 'preview:p1:n1',
+        src: ALLOWED,
+        preload: '',
+        preloadURL: '',
+      }),
+    ).toBe(true);
   });
 });
 
