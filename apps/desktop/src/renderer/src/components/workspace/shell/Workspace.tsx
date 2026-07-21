@@ -150,6 +150,10 @@ import {
   type WorkflowRuntimeContextValue,
 } from '../workflows/WorkflowRuntimeContext.js';
 import {
+  NodeCommentsProvider,
+  type NodeCommentsContextValue,
+} from '../canvas/node-details/NodeCommentsContext.js';
+import {
   appendLocalComment,
   appendSharedComment,
   localCommentsForNode,
@@ -1726,6 +1730,53 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     ],
   );
 
+  // Per-node comment data + mutators for the node-header details popover. These mirror the
+  // selected-node comment wiring the WorkspaceInspector receives as props (createSharedComment /
+  // createLocalComment above), but parameterized by node id so the popover works on any node — not
+  // only the inspector's current selection. Purely additive: the inspector's own props are
+  // unchanged, so removing the inspector later leaves this untouched.
+  const nodeCommentsValue = useMemo<NodeCommentsContextValue>(
+    () => ({
+      localCommentsFor: (nodeId) => localCommentsForNode(pendingCanvas, nodeId),
+      sharedCommentsFor: (nodeId) => collaborationCommentsForNode(pendingCanvas, nodeId),
+      rejectedSharedCommentsFor: (nodeId) =>
+        collaborationCanvas.rejectedCommentEntries.filter(
+          (entry) => entry.comment.nodeId === nodeId,
+        ),
+      createLocalComment: (nodeId, body) => {
+        if (pendingCanvas === null || body.trim() === '') return false;
+        const next = appendLocalComment(pendingCanvas, nodeId, body, {
+          id: `local:${crypto.randomUUID()}`,
+          createdAt: new Date().toISOString(),
+        });
+        if (next === null || next === pendingCanvas) return false;
+        setCanvas(next);
+        setEvents((items) =>
+          ['Saved a private comment on this computer.', ...items].slice(0, 80),
+        );
+        return true;
+      },
+      createSharedComment: async (nodeId, body) => {
+        const comment = await collaborationCanvas.createComment(nodeId, body);
+        if (comment === null) return false;
+        setCanvas((current) => appendSharedComment(current, nodeId, comment));
+        setEvents((items) => ['Shared a comment.', ...items].slice(0, 80));
+        return true;
+      },
+      discardRejectedComment: collaborationCanvas.discardRejectedComment,
+      canComment: collaborationCanvas.canComment,
+      roomEnabled: settings.collaborationEnabled,
+    }),
+    [
+      collaborationCanvas.canComment,
+      collaborationCanvas.createComment,
+      collaborationCanvas.discardRejectedComment,
+      collaborationCanvas.rejectedCommentEntries,
+      pendingCanvas,
+      settings.collaborationEnabled,
+    ],
+  );
+
   return (
     <main className="workspace-shell">
       <WorkspaceCommandBar
@@ -1813,6 +1864,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         />
         <AgentSessionProvider value={agentSessionValue}>
         <WorkflowRuntimeProvider value={workflowRuntimeValue}>
+        <NodeCommentsProvider value={nodeCommentsValue}>
         <WorkspaceCanvas
           canvas={canvas}
           nodes={displayedGraph.nodes}
@@ -1933,6 +1985,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onAttachAgentContext={attachProjectFileContext}
           onContextDropError={onError}
         />
+        </NodeCommentsProvider>
         </WorkflowRuntimeProvider>
         </AgentSessionProvider>
         <WorkspaceResizeHandle
