@@ -63,8 +63,8 @@ describe('CanvasNode presentation interactions', () => {
     expect(collapse).toHaveProperty('disabled', false);
     expect(resizer()).toMatchObject({
       visible: 'true',
-      minWidth: '210',
-      minHeight: '92',
+      minWidth: '400',
+      minHeight: '320',
     });
 
     fireEvent.click(collapse);
@@ -247,8 +247,8 @@ function renderedNode(
 }
 
 /**
- * Minimal in-canvas services stub. Faces mounted here (e.g. the task face,
- * since these tests default to `kind: 'task'` for generic presentation
+ * Minimal in-canvas services stub. Faces mounted here (e.g. the terminal node,
+ * since these tests default to `kind: 'terminal'` for generic presentation
  * coverage) read this context, even though these tests don't exercise it.
  */
 function sessionValue(): AgentSessionContextValue {
