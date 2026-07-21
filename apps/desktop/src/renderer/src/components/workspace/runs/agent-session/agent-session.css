@@ -20,6 +20,8 @@
   align-items: center;
   gap: 7px;
   height: 34px;
+  /* Never let the flex column crush the title bar out of view when the node is short. */
+  flex: 0 0 34px;
   padding: 0 10px;
   background: linear-gradient(var(--provider-tint), transparent), var(--surface-raised);
   border-bottom: 1px solid var(--line);
