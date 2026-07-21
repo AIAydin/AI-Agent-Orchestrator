@@ -110,6 +110,7 @@ const spies = {
   nodeTitle: vi.fn((): string | null => null),
   removeAgentContext: vi.fn(),
   requestDeleteNode: vi.fn(),
+  attachWhiteboardContext: vi.fn((): string => ''),
   openGitPrReadiness: vi.fn(),
   openDiffReview: vi.fn(),
 };
@@ -129,7 +130,9 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     nodeTitle: spies.nodeTitle,
     removeAgentContext: spies.removeAgentContext,
     requestDeleteNode: spies.requestDeleteNode,
+    attachWhiteboardContext: spies.attachWhiteboardContext,
     nodeRoster: [],
+    canvasImageNodes: [],
     checkProducers: [],
     openGitPrReadiness: spies.openGitPrReadiness,
     openDiffReview: spies.openDiffReview,
