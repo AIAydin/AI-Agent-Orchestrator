@@ -90,11 +90,45 @@ export function baseTerminalEnvironment(): Record<string, string> {
   return values;
 }
 
+/** Single-quotes a token for safe interpolation into a POSIX shell command string. */
+function shellQuote(token: string): string {
+  return `'${token.replaceAll("'", "'\\''")}'`;
+}
+
+/**
+ * Builds the spawn invocation for a terminal command. On POSIX platforms the command runs inside
+ * the user's interactive **login** shell, which does two things a direct spawn cannot:
+ *
+ *  1. It sources the user's login profile so PATH resolves the real tool locations. Without this a
+ *     GUI-launched app (Finder/Dock) inherits a minimal PATH (`/usr/bin:/bin`), and
+ *     `#!/usr/bin/env node` CLIs such as codex die immediately with
+ *     "env: node: No such file or directory" because node is not on that PATH.
+ *  2. After the command exits it `exec`s a fresh interactive shell (`exec <shell> -i`), so a
+ *     Ctrl+C (or any exit) that quits the CLI leaves a shell prompt the user can keep typing in,
+ *     rather than a dead terminal. The `;` (not `&&`) means the shell is reached on any exit code.
+ *
+ * Windows has no equivalent login-shell contract, so the command is spawned directly.
+ */
+export function interactiveShellInvocation(
+  executable: string,
+  args: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+  shellPath: string | undefined = process.env['SHELL'],
+): { readonly file: string; readonly args: readonly string[] } {
+  if (platform === 'win32') {
+    return { file: executable, args: [...args] };
+  }
+  const shell = shellPath !== undefined && shellPath.startsWith('/') ? shellPath : '/bin/zsh';
+  const command = [executable, ...args].map(shellQuote).join(' ');
+  return { file: shell, args: ['-l', '-c', `${command}; exec ${shellQuote(shell)} -i`] };
+}
+
 export const createTerminalPty: TerminalPtyFactory = async (launch, beforeSpawn) => {
   await ensureNodePtySpawnHelper();
   const pty = await import('node-pty');
   await beforeSpawn();
-  const terminal = pty.spawn(launch.executable, [...launch.arguments], {
+  const invocation = interactiveShellInvocation(launch.executable, launch.arguments);
+  const terminal = pty.spawn(invocation.file, [...invocation.args], {
     cwd: launch.cwd,
     // Base infrastructure first, then the reviewed allowlist, then the main-side-only peer-hub
     // env last so it always wins — it is never renderer-supplied (see `ResolvedTerminalLaunch`).
