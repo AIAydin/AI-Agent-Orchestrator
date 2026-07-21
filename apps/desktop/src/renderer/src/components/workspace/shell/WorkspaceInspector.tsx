@@ -38,7 +38,6 @@ import type {
   CollaborationCommentMetadata,
   CollaborationRejectedCommentEntry,
 } from '../../../../../shared/collaboration/index.js';
-import type { TerminalSessionStatus } from '../../../../../shared/terminal/index.js';
 import type {
   WorkflowExecutionView,
   WorkflowInteractionEventEnvelope,
@@ -50,7 +49,12 @@ import { DiffReviewNodeInspector, type DiffReviewOpenRequest } from '../diff-rev
 import type { DiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 import { OperationalGitPrNodeInspector } from '../git-pr/index.js';
 import { gitPrConfiguration, gitPrNodeDataPatch } from '../git-pr/configuration.js';
-import { TerminalNodePanel, type TerminalNodeConfiguration } from '../terminal/index.js';
+import { TerminalNodePanel } from '../terminal/index.js';
+import {
+  terminalCommandConfiguration,
+  terminalNodeConfiguration,
+  terminalSessionNodeStatus,
+} from '../terminal/node-configuration.js';
 import { TestNodePanel } from '../workflows/test-node/TestNodePanel.js';
 import type { WorkflowArtifactActionInput } from '../../../../../shared/workflow/contracts.js';
 import { NodeRunHistory } from '../node-history/NodeRunHistory.js';
@@ -354,7 +358,7 @@ function NodeInspector(
           nodeId={selectedNode.id}
           locked={selectedNode.data.locked}
           configurationReadOnly={props.collaborationGraphReadOnly}
-          configuration={terminalNodeConfiguration(selectedNode, props.settings)}
+          configuration={terminalNodeConfiguration(selectedNode.data, props.settings)}
           onRecord={onRecord}
           onConfigurationChange={(configuration) =>
             onUpdateSelected({
@@ -464,42 +468,6 @@ function NodeInspector(
       </div>
     </div>
   );
-}
-
-function terminalNodeConfiguration(
-  node: WorkshopNode,
-  settings: AppSettings,
-): TerminalNodeConfiguration {
-  const command = node.data.command;
-  return {
-    executable: command?.executable ?? settings.terminalShell,
-    arguments: command?.arguments ?? [],
-    cwdRelative: command?.cwdRelative ?? '.',
-    environmentVariableNames: command?.environmentNames ?? settings.envAllowlist,
-  };
-}
-
-function terminalCommandConfiguration(
-  configuration: TerminalNodeConfiguration,
-): NonNullable<WorkshopNode['data']['command']> {
-  return {
-    executable: configuration.executable,
-    arguments: [...configuration.arguments],
-    cwdRelative: configuration.cwdRelative,
-    environmentNames: [...configuration.environmentVariableNames],
-  };
-}
-
-function terminalSessionNodeStatus(
-  status: TerminalSessionStatus | undefined,
-  exitCode: number | null | undefined,
-): WorkshopNode['data']['status'] {
-  if (status === undefined) return 'idle';
-  if (status === 'starting') return 'queued';
-  if (status === 'running') return 'running';
-  if (status === 'interrupted' || status === 'terminated') return 'cancelled';
-  if (status === 'exited') return exitCode === 0 ? 'succeeded' : 'failed';
-  return 'failed';
 }
 
 function FileNodeEditor({
