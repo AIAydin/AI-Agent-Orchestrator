@@ -1007,8 +1007,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     },
     [fallbackAdapter, providerGates.gateFor],
   );
-  const selectedAgentProviderGate =
-    selectedNodeKind === 'agent' ? providerGates.gateFor(selectedAdapter) : null;
   const selectedCanvasNodes = nodes.filter((node) => node.selected === true);
   const selectedWorkflowEligibility = workflowSelectionEligibility(
     selectedCanvasNodes.length > 0
