@@ -369,3 +369,10 @@ svg.whiteboard-face-preview {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.file-node-face .node-face-body {
+  padding: 0;
+}
+.file-node-face .file-editor-workspace {
+  flex: 1;
+  min-height: 0;
+}

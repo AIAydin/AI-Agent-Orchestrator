@@ -11,6 +11,7 @@ describe('nodeFaceForKind', () => {
     expect(nodeFaceForKind('mobile-preview')).toBeTypeOf('function');
     expect(nodeFaceForKind('brief')).toBeTypeOf('function');
     expect(nodeFaceForKind('diagram')).toBeTypeOf('function');
+    expect(nodeFaceForKind('file')).toBeTypeOf('function');
     expect(nodeFaceForKind('git-pr')).toBeTypeOf('function');
     expect(nodeFaceForKind('note-image')).toBeTypeOf('function');
     expect(nodeFaceForKind('review-gate')).toBeTypeOf('function');
@@ -21,7 +22,6 @@ describe('nodeFaceForKind', () => {
 
   it('returns null for kinds that keep the generic node body', () => {
     expect(nodeFaceForKind('group-frame')).toBeNull();
-    expect(nodeFaceForKind('file')).toBeNull();
     expect(nodeFaceForKind('extension')).toBeNull();
     expect(nodeFaceForKind('unknown-kind')).toBeNull();
   });

@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 
 import { BriefNodeFace } from '../../content/BriefNodeFace.js';
 import { DiagramNodeFace } from '../../content/diagram/DiagramNodeFace.js';
+import { FileNodeFace } from '../../content/file/FileNodeFace.js';
 import { NoteImageNodeFace } from '../../content/note-image/NoteImageNodeFace.js';
 import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.js';
 import { GitPrNodeFace } from '../../git-pr/GitPrNodeFace.js';
@@ -39,6 +40,7 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   },
   brief: BriefNodeFace,
   diagram: DiagramNodeFace,
+  file: FileNodeFace,
   'git-pr': GitPrNodeFace,
   'note-image': NoteImageNodeFace,
   'review-gate': ReviewGateNodeFace,
