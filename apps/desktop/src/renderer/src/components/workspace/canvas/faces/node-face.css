@@ -132,3 +132,32 @@
   color: var(--text-soft);
   white-space: nowrap;
 }
+.test-face-command {
+  display: block;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.test-face-summary {
+  margin: 0;
+  color: var(--text-soft);
+}
+.test-face-warning {
+  margin: 0;
+  color: #c9964f;
+}
+.test-face-artifacts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.test-face-artifacts code {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
