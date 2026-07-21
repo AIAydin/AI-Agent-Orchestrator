@@ -122,21 +122,36 @@ describe('writeProviderPeerMaterial', () => {
   });
 
   describe('codex', () => {
-    let codexHome: string;
+    // `resolveCodexHome` deliberately ignores a `CODEX_HOME` override in the main process's own
+    // env and always writes under `join(homedir(), '.codex')` -- the location codex-in-the-PTY
+    // resolves, since the PTY env (baseTerminalEnvironment + the agent session's empty
+    // environmentVariableNames + peerEnvironment) never carries CODEX_HOME. So these tests mock
+    // `HOME` (which `os.homedir()` reads live on every call -- see node:os) to get a
+    // deterministic, isolated write location, mirroring the same temp-dir/env-mocking style the
+    // old CODEX_HOME-based setup used.
+    let homeDir: string;
+    const originalHome = process.env['HOME'];
     const originalCodexHome = process.env['CODEX_HOME'];
 
     beforeEach(async () => {
-      codexHome = await makeTempDir('forgeboard-codex-home-');
-      process.env['CODEX_HOME'] = codexHome;
+      homeDir = await makeTempDir('forgeboard-codex-fakehome-');
+      process.env['HOME'] = homeDir;
+      delete process.env['CODEX_HOME'];
     });
 
     afterEach(async () => {
+      if (originalHome === undefined) delete process.env['HOME'];
+      else process.env['HOME'] = originalHome;
       if (originalCodexHome === undefined) delete process.env['CODEX_HOME'];
       else process.env['CODEX_HOME'] = originalCodexHome;
-      await rm(codexHome, { recursive: true, force: true });
+      await rm(homeDir, { recursive: true, force: true });
     });
 
-    it('never puts the token/url in argv; writes them to a 0600 profile TOML under CODEX_HOME instead', async () => {
+    function codexHomeDir(): string {
+      return join(homeDir, '.codex');
+    }
+
+    it('never puts the token/url in argv; writes them to a 0600 profile TOML under join(homedir(), ".codex") instead', async () => {
       const material = await writeProviderPeerMaterial({
         adapterId: 'codex',
         provisionDir,
@@ -158,7 +173,7 @@ describe('writeProviderPeerMaterial', () => {
       const profileName = material.extraArguments[1];
       expect(profileName).toMatch(/^forgeboard-/);
 
-      const profilePath = join(codexHome, `${profileName}.config.toml`);
+      const profilePath = join(codexHomeDir(), `${profileName}.config.toml`);
       const toml = await readFile(profilePath, 'utf8');
       expect(toml).toContain('[mcp_servers.forgeboard]');
       expect(toml).toContain(`command = "${process.execPath}"`);
@@ -195,8 +210,39 @@ describe('writeProviderPeerMaterial', () => {
         environment: ENVIRONMENT,
       });
       const profileName = material.extraArguments[1];
-      await rm(join(codexHome, `${profileName}.config.toml`));
+      await rm(join(codexHomeDir(), `${profileName}.config.toml`));
       await expect(material.cleanup()).resolves.toBeUndefined();
+    });
+
+    it('ignores a custom CODEX_HOME set in the main process env, writing under join(homedir(), ".codex") instead -- proving the main-process write location and the PTY-process read location provably agree even when CODEX_HOME diverges (Option A of the whole-branch review finding)', async () => {
+      const customCodexHome = await makeTempDir('forgeboard-codex-custom-home-');
+      try {
+        process.env['CODEX_HOME'] = customCodexHome;
+
+        const material = await writeProviderPeerMaterial({
+          adapterId: 'codex',
+          provisionDir,
+          projectRoot,
+          environment: ENVIRONMENT,
+        });
+
+        const profileName = material.extraArguments[1];
+
+        // Written where codex-in-the-PTY actually resolves ($HOME/.codex -- the PTY env never
+        // carries CODEX_HOME, see baseTerminalEnvironment() in terminal/pty-process.ts).
+        const homeProfilePath = join(codexHomeDir(), `${profileName}.config.toml`);
+        await expect(stat(homeProfilePath)).resolves.toBeDefined();
+
+        // NOT written under the custom CODEX_HOME -- that would only be visible to the main
+        // process, never to codex running inside the PTY.
+        const customProfilePath = join(customCodexHome, `${profileName}.config.toml`);
+        await expect(stat(customProfilePath)).rejects.toMatchObject({ code: 'ENOENT' });
+
+        await material.cleanup();
+        await expect(stat(homeProfilePath)).rejects.toMatchObject({ code: 'ENOENT' });
+      } finally {
+        await rm(customCodexHome, { recursive: true, force: true });
+      }
     });
   });
 

@@ -145,9 +145,11 @@ async function writeClaudeMaterial(
  * `env` block's values -- including our two secret-shaped test values -- arrived in the child's
  * process.env; the base config's other real `mcp_servers` entries kept working alongside it,
  * i.e. this is an additive layer, not a wholesale replace). That file is written at 0600 under
- * CODEX_HOME (honoring a `CODEX_HOME` env override if present, else `~/.codex`), named after the
- * provision so concurrent provisions never collide, and only the profile *name* -- never the
- * token -- appears in `extraArguments`/argv.
+ * `join(homedir(), '.codex')` -- deliberately NOT a `CODEX_HOME` override read from the main
+ * process's own environment, since codex actually runs inside the terminal PTY, whose env can
+ * never carry a custom `CODEX_HOME` (see `resolveCodexHome` below for the full argument) -- named
+ * after the provision so concurrent provisions never collide, and only the profile *name* -- never
+ * the token -- appears in `extraArguments`/argv.
  */
 async function writeCodexMaterial(
   input: WriteProviderPeerMaterialInput,
@@ -170,9 +172,26 @@ async function writeCodexMaterial(
   };
 }
 
+/**
+ * Deliberately ignores a `CODEX_HOME` override in the MAIN process's own environment.
+ *
+ * codex actually runs inside the terminal PTY, not the main process, and the PTY's environment
+ * is built by `baseTerminalEnvironment()` (apps/desktop/src/main/terminal/pty-process.ts) -- a
+ * fixed allowlist that does not include `CODEX_HOME` -- layered with the reviewed allowlist
+ * (empty for agent sessions: `environmentVariableNames: []`, see
+ * apps/desktop/src/renderer/src/components/workspace/runs/agent-session/launch-config.ts) and
+ * the peer-hub's `peerEnvironment` (only ever `FORGEBOARD_PEER_URL`/`FORGEBOARD_PEER_TOKEN`, see
+ * `AgentPeersService.environmentForProvision`). So codex-in-the-PTY can never see a custom
+ * `CODEX_HOME` and always resolves its config home to `join(homedir(), '.codex')`. If this
+ * function preferred `process.env['CODEX_HOME']` as read here (main-process env), a main process
+ * launched from a shell that exports a custom `CODEX_HOME` would write the `--profile` TOML to a
+ * directory codex-in-the-PTY never reads, and `--profile forgeboard-<id>` would fail to resolve
+ * -- potentially failing the entire codex session, not just peer tools. Always writing to the
+ * same `join(homedir(), '.codex')` the PTY resolves keeps the write location and the read
+ * location provably in agreement.
+ */
 function resolveCodexHome(): string {
-  const override = process.env['CODEX_HOME']?.trim();
-  return override && override !== '' ? override : join(homedir(), '.codex');
+  return join(homedir(), '.codex');
 }
 
 function codexProfileToml(
