@@ -132,3 +132,22 @@
   color: var(--text-soft);
   white-space: nowrap;
 }
+.diagram-face-editor {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  font-family: ui-monospace, monospace;
+}
+.diagram-face-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+.diagram-face-preview img,
+.diagram-face-preview svg {
+  max-width: 100%;
+  max-height: 100%;
+}
