@@ -197,6 +197,24 @@ describe('CanvasNode presentation interactions', () => {
     expect(setCanvasNodeCollapsed(readOnlyNodes, target.id, true, true)).toBe(readOnlyNodes);
   });
 
+  it('shows the node name as the header’s primary text for a faceless kind, with the kind icon beside it', () => {
+    const { container } = renderNode(nodeData({ kind: 'terminal', title: 'Implement search' }));
+
+    const header = container.querySelector('header');
+    expect(header?.querySelector('.node-title')?.textContent).toBe('Implement search');
+    expect(screen.getByRole('img', { name: 'Terminal' })).toBeTruthy();
+  });
+
+  it('shows the node name as the header’s primary text for a Face-based kind too, with the kind icon beside it', () => {
+    const { container } = renderNode(
+      nodeData({ kind: 'brief', title: 'Search redesign brief', description: '' }),
+    );
+
+    const header = container.querySelector('header');
+    expect(header?.querySelector('.node-title')?.textContent).toBe('Search redesign brief');
+    expect(screen.getByRole('img', { name: 'Product brief' })).toBeTruthy();
+  });
+
   it('marks agent nodes as provider-tinted windows and keeps collapsed agents draggable', () => {
     renderNode(nodeData({ kind: 'agent', adapterId: 'claude', collapsed: true }));
 

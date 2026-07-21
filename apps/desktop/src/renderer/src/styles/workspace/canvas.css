@@ -265,15 +265,7 @@
   background: color-mix(in srgb, var(--node-accent) 15%, var(--surface));
   color: var(--node-accent);
 }
-.node-kind {
-  flex: 0 0 auto;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-faint);
-  font-size: var(--text-2xs);
-  font-weight: 750;
-}
-.collapsed-node-title {
+.node-title {
   min-width: 0;
   overflow: hidden;
   color: var(--text);

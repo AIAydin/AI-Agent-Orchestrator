@@ -81,6 +81,8 @@ import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import { useWorkspaceSidebarLayout } from './useWorkspaceSidebarLayout.js';
 import { nodeRegistryFromTemplates } from '../node-registry/NodeRegistryContext.js';
 import { providerTheme } from '../node-registry/provider-themes.js';
+import { migrateGenericNodeTitles } from '../node-registry/node-name-migration.js';
+import { assignNodeName } from '../node-registry/node-names.js';
 import { useWorkspaceNodeMutations } from './node-actions/useWorkspaceNodeMutations.js';
 import {
   createEdgeData,
@@ -245,8 +247,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const collaborationGraphReadOnlyRef = useRef(false);
   const pendingNodeSelection = useRef<string | null>(null);
   const extensionDiscoveryRef = useRef(extensionDiscovery);
+  const settingsRef = useRef(settings);
   nodesRef.current = nodes;
   edgesRef.current = edges;
+  settingsRef.current = settings;
 
   const projectStatus = useProjectStatus(project);
   const sidebarLayout = useWorkspaceSidebarLayout();
@@ -266,9 +270,22 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           { nodes: document.nodes, edges: document.edges },
           extensionDiscoveryRef.current,
         );
+        // Distinct-node-names migration: backfill friendly names onto nodes whose title is still
+        // empty or the bare generic kind/provider label. Runs once here, on this device's own
+        // load from disk — never inside `hydrateHistorySnapshot` itself, since that function also
+        // rehydrates every undo/redo history snapshot and every incoming collaboration snapshot
+        // (see `applyCollaborationSnapshot` below); folding the migration in there would rename
+        // nodes inside historical snapshots and re-fire on every remote update. Skipped entirely
+        // while this canvas is shared: independent migrations from different collaborators, even
+        // though deterministic here, would still publish near-simultaneously and could trip the
+        // "changed since last sync" guard in `tryApplySnapshot`. Manual rename (which already
+        // enforces uniqueness) and creation-time assignment remain available for shared canvases.
+        const migratedNodes = settingsRef.current.collaborationEnabled
+          ? graph.nodes
+          : migrateGenericNodeTitles(graph.nodes);
         setCanvas(document);
         setViewport(normalizeCanvasViewport(document.viewport));
-        setNodes(graph.nodes);
+        setNodes(migratedNodes);
         setEdges(graph.edges);
         replaceHistory(
           history.past.map((snapshot) =>
@@ -652,7 +669,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       record();
       const definition = NODE_DEFINITIONS[kind];
       const id = crypto.randomUUID();
-      const offset = nodes.length * 24;
+      const currentNodes = nodesRef.current;
+      const offset = currentNodes.length * 24;
+      const titlesInUse = new Set(currentNodes.map((node) => node.data.title));
       pendingNodeSelection.current = id;
       setNodes((items) => [
         ...items.map((node) => ({ ...node, selected: false })),
@@ -664,7 +683,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           ...initialWorkshopNodeDimensions(kind),
           data: {
             kind,
-            title: definition.label,
+            title: assignNodeName(titlesInUse),
             description: definition.description,
             status: 'idle',
             locked: false,
@@ -689,13 +708,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       }, 250);
       setEvents((items) => [`Added ${definition.label} node.`, ...items].slice(0, 30));
     },
-    [
-      collaborationCanvas.graphReadOnly,
-      nodes.length,
-      record,
-      reportCollaborationReadOnly,
-      settings,
-    ],
+    [collaborationCanvas.graphReadOnly, record, reportCollaborationReadOnly, settings],
   );
 
   const addAgentNode = useCallback(
@@ -703,7 +716,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       const theme = providerTheme(adapterId);
       addNode('agent', position, {
         adapterId,
-        ...(theme === null ? {} : { title: theme.label, color: theme.accent }),
+        ...(theme === null ? {} : { color: theme.accent }),
       });
     },
     [addNode],

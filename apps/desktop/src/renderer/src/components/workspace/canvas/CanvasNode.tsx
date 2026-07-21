@@ -250,15 +250,17 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         />
       ))}
       <header>
-        <span className="node-kind-icon">
+        <span
+          className="node-kind-icon"
+          role="img"
+          aria-label={definition.label}
+          title={definition.label}
+        >
           <Icon size={15} aria-hidden="true" />
         </span>
-        <span className="node-kind">{definition.label}</span>
-        {data.collapsed && (
-          <strong className="collapsed-node-title" title={data.title}>
-            {data.title}
-          </strong>
-        )}
+        <strong className="node-title" title={data.title}>
+          {data.title}
+        </strong>
         {data.collapsed && data.status !== 'idle' && (
           <span className={`node-status-label ${data.status}`}>{data.status}</span>
         )}
@@ -297,7 +299,6 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
       {Face !== null && <Face id={id} data={data} />}
       {Face === null && definition.behaviors.collapsible && !data.collapsed && (
         <div className="node-body">
-          <strong>{data.title}</strong>
           <p>{data.description || definition.description}</p>
           {data.status !== 'idle' && (
             <span className={`node-status-label ${data.status}`}>

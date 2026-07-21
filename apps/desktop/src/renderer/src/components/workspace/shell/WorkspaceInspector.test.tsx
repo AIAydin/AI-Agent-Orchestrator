@@ -463,6 +463,57 @@ describe('WorkspaceInspector Custom permissions', () => {
   });
 });
 
+describe('WorkspaceInspector Title field distinct naming', () => {
+  it('lets the user type freely, including through an emptied intermediate value, without committing per keystroke', () => {
+    const selectedNode = whiteboardNode({});
+    const inspectorProps = props(settings(), selectedNode);
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    const title = screen.getByLabelText<HTMLInputElement>('Title');
+    fireEvent.change(title, { target: { value: '' } });
+    expect(title.value).toBe('');
+    fireEvent.change(title, { target: { value: 'New Name' } });
+    expect(title.value).toBe('New Name');
+    expect(inspectorProps.onUpdateSelected).not.toHaveBeenCalled();
+  });
+
+  it('auto-suffixes a colliding title once the edit commits on blur', () => {
+    const selectedNode = whiteboardNode({});
+    const inspectorProps = props(settings(), selectedNode);
+    inspectorProps.nodes = [
+      selectedNode,
+      { ...agentNode({}), id: 'agent-1', data: { ...agentNode({}).data, title: 'Atlas' } },
+    ];
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    const title = screen.getByLabelText<HTMLInputElement>('Title');
+    fireEvent.change(title, { target: { value: 'Atlas' } });
+    fireEvent.blur(title);
+    expect(inspectorProps.onUpdateSelected).toHaveBeenCalledWith({ title: 'Atlas 2' });
+  });
+
+  it('falls back to an assigned friendly name when the committed title is empty', () => {
+    const selectedNode = whiteboardNode({});
+    const inspectorProps = props(settings(), selectedNode);
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    const title = screen.getByLabelText<HTMLInputElement>('Title');
+    fireEvent.change(title, { target: { value: '   ' } });
+    fireEvent.blur(title);
+    expect(inspectorProps.onUpdateSelected).toHaveBeenCalledWith({ title: 'Hermes' });
+  });
+
+  it('does not call onUpdateSelected when blurring without a real change', () => {
+    const selectedNode = whiteboardNode({});
+    const inspectorProps = props(settings(), selectedNode);
+    render(<WorkspaceInspector {...inspectorProps} />);
+
+    const title = screen.getByLabelText<HTMLInputElement>('Title');
+    fireEvent.blur(title);
+    expect(inspectorProps.onUpdateSelected).not.toHaveBeenCalled();
+  });
+});
+
 describe('WorkspaceInspector whiteboard read-only operations', () => {
   it('keeps safe local export outside the disabled configuration fieldset', async () => {
     const exportSvg = vi.fn().mockResolvedValue({ ok: true, value: { fileName: 'Board.svg' } });

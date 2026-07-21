@@ -373,6 +373,31 @@ describe('AgentSessionNode', () => {
     expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Hermes' });
   });
 
+  it('auto-suffixes a rename that collides with another node on the canvas', () => {
+    renderNode(nodeData(), {
+      nodeRoster: [
+        { id: NODE_ID, title: 'Session', kind: 'agent', locked: false },
+        { id: 'node-y', title: 'Atlas', kind: 'agent', locked: false },
+      ],
+    });
+    fireEvent.doubleClick(screen.getByText('Session'));
+    const input = screen.getByLabelText('Node title');
+    fireEvent.change(input, { target: { value: 'Atlas' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Atlas 2' });
+  });
+
+  it('falls back to an assigned friendly name when the rename is emptied out', () => {
+    renderNode(nodeData(), {
+      nodeRoster: [{ id: NODE_ID, title: 'Session', kind: 'agent', locked: false }],
+    });
+    fireEvent.doubleClick(screen.getByText('Session'));
+    const input = screen.getByLabelText('Node title');
+    fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Hermes' });
+  });
+
   it('cancels a title edit on Escape without committing', () => {
     renderNode();
     fireEvent.doubleClick(screen.getByText('Session'));

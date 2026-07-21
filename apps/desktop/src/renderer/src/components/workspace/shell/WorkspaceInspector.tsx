@@ -11,6 +11,7 @@ import type {
 } from '../../../../../shared/application/contracts.js';
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
+import { ensureUniqueNodeName } from '../node-registry/node-names.js';
 import { WorkspaceTooltip } from './tooltips/WorkspaceTooltip.js';
 import { DeclarativeExtensionInspector } from '../../extensions/DeclarativeExtensionInspector.js';
 import { PreviewNodePanel } from '../../preview/PreviewNodePanel.js';
@@ -164,6 +165,9 @@ function NodeInspector(
 ) {
   const { selectedNode, onRecord, onUpdateSelected } = props;
   if (selectedNode.data.kind === 'agent') return null;
+  const titlesInUse = new Set(
+    props.nodes.filter((node) => node.id !== selectedNode.id).map((node) => node.data.title),
+  );
   const selectedReviewGate =
     selectedNode.data.kind === 'review-gate'
       ? props.workflowExecution?.reviewGates?.find((gate) => gate.nodeId === selectedNode.id)
@@ -191,15 +195,13 @@ function NodeInspector(
         disabled={configurationReadOnly}
         aria-label="Node settings"
       >
-        <label>
-          Title
-          <input
-            name={`node-${selectedNode.id}-title`}
-            value={selectedNode.data.title}
-            onFocus={onRecord}
-            onChange={(event) => onUpdateSelected({ title: event.target.value })}
-          />
-        </label>
+        <NodeTitleField
+          key={selectedNode.id}
+          selectedNode={selectedNode}
+          titlesInUse={titlesInUse}
+          onRecord={onRecord}
+          onUpdateSelected={onUpdateSelected}
+        />
         <label>
           Description
           <textarea
@@ -463,6 +465,47 @@ function NodeInspector(
         </WorkspaceTooltip>
       </div>
     </div>
+  );
+}
+
+/**
+ * The inspector's Title field. Keeps its own draft so uniqueness is only enforced when the edit
+ * commits (blur), not on every keystroke — running `ensureUniqueNodeName` live on `onChange`
+ * would collapse an intermediate empty value (e.g. select-all before retyping) to an assigned
+ * name mid-edit, and would auto-suffix a partial match while the user is still typing past it.
+ * Keyed by `selectedNode.id` at the call site so switching the selected node remounts the draft
+ * from that node's current title.
+ */
+function NodeTitleField(props: {
+  selectedNode: WorkshopNode;
+  titlesInUse: ReadonlySet<string>;
+  onRecord: () => void;
+  onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
+}) {
+  const { selectedNode, titlesInUse, onRecord, onUpdateSelected } = props;
+  const [draft, setDraft] = useState(selectedNode.data.title);
+  const commit = (): void => {
+    const next = ensureUniqueNodeName(draft, titlesInUse);
+    if (next !== selectedNode.data.title) onUpdateSelected({ title: next });
+    if (next !== draft) setDraft(next);
+  };
+  return (
+    <label>
+      Title
+      <input
+        name={`node-${selectedNode.id}-title`}
+        value={draft}
+        onFocus={onRecord}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    </label>
   );
 }
 
