@@ -2,6 +2,8 @@ import type { JSX } from 'react';
 
 import { PreviewNodeFace } from '../../previews/PreviewNodeFace.js';
 import { AgentSessionNode } from '../../runs/agent-session/AgentSessionNode.js';
+import { ReviewGateNodeFace } from '../../workflows/faces/ReviewGateNodeFace.js';
+import { TaskNodeFace } from '../../workflows/faces/TaskNodeFace.js';
 import type { WorkshopNodeData } from '../CanvasNode.js';
 import './node-face.css';
 
@@ -29,6 +31,8 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   'mobile-preview': function MobilePreviewFace({ id, data }: NodeFaceProps) {
     return <PreviewNodeFace id={id} kind="mobile-preview" data={data} />;
   },
+  task: TaskNodeFace,
+  'review-gate': ReviewGateNodeFace,
 };
 
 export function nodeFaceForKind(kind: string): NodeFaceComponent | null {

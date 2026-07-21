@@ -132,3 +132,54 @@
   color: var(--text-soft);
   white-space: nowrap;
 }
+.node-face-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  color: var(--text-soft);
+}
+.node-face-list-header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.node-face-list-header button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.task-face-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.review-gate-face-toggle {
+  flex-direction: row;
+}
+.review-gate-face-producer small {
+  color: var(--text-faint);
+  margin-left: 4px;
+}
+.review-gate-face-reasons {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--text-soft);
+}
+.review-gate-face-decide {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+}

@@ -3,6 +3,7 @@ import type {
   CommandConfiguration,
 } from '../../../../../shared/application/contracts.js';
 import { CheckIdSchema, type CheckKind } from '../../../../../shared/checks/contracts.js';
+import type { WorkflowReviewGateView } from '../../../../../shared/workflow/contracts.js';
 import type { NodeKind, WorkshopCommandConfiguration, WorkshopNode } from '../canvas/CanvasNode.js';
 import { permissionProfileUnavailableReason } from '../../permissions/permission-profile-ui.js';
 
@@ -132,4 +133,33 @@ function isCustomCheckId(value: string | undefined): value is string {
   if (value === undefined) return false;
   const parsed = CheckIdSchema.safeParse(value);
   return parsed.success && !BUILT_IN_CHECK_KINDS.has(parsed.data as CheckKind);
+}
+
+export function updatedCriteria(
+  previous: NonNullable<WorkshopNode['data']['acceptanceCriteria']>,
+  value: string,
+): NonNullable<WorkshopNode['data']['acceptanceCriteria']> {
+  return value
+    .split('\n')
+    .map((description) => description.trim())
+    .filter(Boolean)
+    .map((description, index) => {
+      const current = previous[index];
+      return current?.description === description
+        ? current
+        : { id: current?.id ?? crypto.randomUUID(), description, satisfied: false };
+    });
+}
+
+export function gateLabel(state: WorkshopNode['data']['gateState']): string {
+  return {
+    pending: 'Pending',
+    passed: 'Passed',
+    failed: 'Failed',
+    'waiting-for-human': 'Waiting for you',
+  }[state ?? 'pending'];
+}
+
+export function gateLabelFromView(state: WorkflowReviewGateView['status']): string {
+  return gateLabel(state === 'waiting-human' ? 'waiting-for-human' : state);
 }
