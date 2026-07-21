@@ -129,6 +129,7 @@ import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from '../workflows/template
 import { collisionFreeTemplateOrigin } from '../workflows/templates/placement.js';
 import { useDiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 import { useDiffReviewSession } from '../diff-review/useDiffReviewSession.js';
+import type { DiffReviewOpenRequest } from '../diff-review/index.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { linkProjectFileToAgent, removeProjectFileFromAgent } from '../context-dnd/linking.js';
 import {
@@ -1620,11 +1621,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       nodeRoster,
       checkProducers,
       openGitPrReadiness,
+      openDiffReview: (nodeId: string, request: DiffReviewOpenRequest) => {
+        const node = nodesRef.current.find((candidate) => candidate.id === nodeId);
+        if (node?.data.kind !== 'diff') return;
+        gitReview.openNodeReview(nodeId, node.data.reviewTarget, request);
+      },
     }),
     [
       checkProducers,
       collaborationCanvas.graphReadOnly,
       deleteNode,
+      gitReview,
       nodeRoster,
       onError,
       onOpenSettings,

@@ -2,6 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 
 import type { AgentDetection, AppSettings, Project, RunAdapterId } from '../../../../../../shared/application/contracts.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
+import type { DiffReviewOpenRequest } from '../../diff-review/DiffReviewNodeInspector.js';
 import type { AgentProviderGate } from '../useAgentProviderGate.js';
 
 /** Low-churn snapshot of canvas nodes for faces that need cross-node options. */
@@ -42,6 +43,7 @@ export interface AgentSessionContextValue {
   readonly nodeRoster: readonly CanvasNodeRosterEntry[];
   readonly checkProducers: readonly CheckProducerEntry[];
   openGitPrReadiness(runId: string): void;
+  openDiffReview(nodeId: string, request: DiffReviewOpenRequest): void;
 }
 
 const AgentSessionContext = createContext<AgentSessionContextValue | null>(null);
