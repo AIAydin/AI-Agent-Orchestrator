@@ -1,0 +1,30 @@
+.markdown-composer {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.markdown-composer-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  justify-content: space-between;
+}
+
+.markdown-composer-header > label {
+  font-size: var(--text-md);
+  font-weight: 650;
+}
+
+.markdown-composer textarea {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  line-height: 1.45;
+  min-height: 11rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.markdown-read-only {
+  color: var(--text-muted, #a8adba);
+}
