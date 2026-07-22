@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { forwardRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -278,6 +279,87 @@ describe('PreviewNodeFace', () => {
       expect(screen.queryByRole('button', { name: 'Stop dev server' })).toBeNull();
       // Reload stays available.
       expect(screen.getByRole('button', { name: 'Reload preview' })).toBeTruthy();
+    });
+
+    it('does not mount the external webview on a port→URL transition until origin registration resolves', async () => {
+      // Reproduces the black-screen race: a node starts in port/empty mode.
+      // The user types a URL, the parent re-renders this node with the new
+      // `url` in its data — while `setAllowedOrigin` is still pending. The
+      // buggy code computes a *stale* mount-time `originReady` on the very
+      // render that flips `isExternalUrl` to true, so the external webview
+      // briefly gets mounted with the unregistered URL before the
+      // registration effect corrects it a moment later. Because React
+      // flushes that correcting effect synchronously within this test's
+      // `act()`-wrapped `rerender`, inspecting the DOM *after* rerender
+      // returns can't see the transient bad render — so this test mocks
+      // `PreviewWebview` to record every `src` it is rendered with, across
+      // every render pass (including the transient one), and asserts the
+      // external URL never appears among them until after registration
+      // resolves.
+      const resolvers: Array<() => void> = [];
+      previewsSetAllowedOrigin.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolvers.push(() => resolve({ ok: true, value: null }));
+          }),
+      );
+
+      const renderedSrcs: Array<string | null> = [];
+      vi.resetModules();
+      vi.doMock('../../preview/webview/PreviewWebview.js', () => ({
+        PreviewWebview: forwardRef<unknown, { src: string | null }>((props, ref) => {
+          void ref;
+          renderedSrcs.push(props.src);
+          return null;
+        }),
+      }));
+
+      const [
+        { PreviewNodeFace: RaceFace },
+        { CanvasNodeInteractionProvider: RaceInteractionProvider },
+        { AgentSessionProvider: RaceSessionProvider },
+      ] = await Promise.all([
+        import('./PreviewNodeFace.js'),
+        import('../canvas/interactions/CanvasNodeInteractionContext.js'),
+        import('../runs/agent-session/AgentSessionContext.js'),
+      ]);
+
+      const { rerender } = render(
+        <RaceInteractionProvider readOnly={false} setCollapsed={() => undefined}>
+          <RaceSessionProvider value={sessionValue()}>
+            <RaceFace id="n1" kind="web-preview" data={nodeData()} />
+          </RaceSessionProvider>
+        </RaceInteractionProvider>,
+      );
+      expect(renderedSrcs).toHaveLength(0);
+
+      rerender(
+        <RaceInteractionProvider readOnly={false} setCollapsed={() => undefined}>
+          <RaceSessionProvider value={sessionValue()}>
+            <RaceFace
+              id="n1"
+              kind="web-preview"
+              data={nodeData({ url: 'https://app.staging.com/dashboard' })}
+            />
+          </RaceSessionProvider>
+        </RaceInteractionProvider>,
+      );
+
+      // Registration for the new origin is in flight. Across every render
+      // pass triggered by this transition, the webview must never have been
+      // given the unregistered external src.
+      expect(previewsSetAllowedOrigin).toHaveBeenCalledWith({
+        projectId: 'p1',
+        nodeId: 'n1',
+        origin: 'https://app.staging.com',
+      });
+      expect(renderedSrcs).not.toContain('https://app.staging.com/dashboard');
+
+      resolvers.forEach((resolve) => resolve());
+      await waitFor(() => expect(renderedSrcs).toContain('https://app.staging.com/dashboard'));
+
+      vi.doUnmock('../../preview/webview/PreviewWebview.js');
+      vi.resetModules();
     });
 
     it('suppresses the dev-server auto-port bridge while in URL mode', () => {

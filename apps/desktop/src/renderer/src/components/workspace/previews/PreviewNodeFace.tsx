@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { Play, RotateCw, Settings, Settings2, Square } from 'lucide-react';
 
-import type { PreviewSessionSnapshot, PreviewStartInput } from '../../../../../shared/application/contracts.js';
-import { detectedPreviewScripts, preferredPreviewScript } from '../../../../../shared/preview/command.js';
+import type {
+  PreviewSessionSnapshot,
+  PreviewStartInput,
+} from '../../../../../shared/application/contracts.js';
+import {
+  detectedPreviewScripts,
+  preferredPreviewScript,
+} from '../../../../../shared/preview/command.js';
 import type { PreviewCommand, PreviewTarget } from '../../../../../shared/preview/targets.js';
 import { previewWebviewPartition } from '../../../../../shared/preview/webview-partition.js';
 import { unwrap } from '../../../lib/ipc.js';
@@ -87,8 +93,15 @@ export function PreviewNodeFace({
   // In URL mode the guest's origin must be registered with the main process
   // BEFORE the webview mounts with the external `src` — otherwise the very
   // first top-level request could race the security pin. Loopback mode has
-  // nothing to register and is ready immediately.
-  const [originReady, setOriginReady] = useState(!isExternalUrl);
+  // nothing to register and is ready immediately. `registeredOrigin` tracks
+  // the origin the main process has *confirmed* registered for this node, so
+  // `originReady` reflects actual registration state on every render rather
+  // than a one-time value computed at mount — a port→URL transition (typing
+  // a URL into a previously-loopback node) must not read as ready just
+  // because the node started in loopback mode.
+  const [registeredOrigin, setRegisteredOrigin] = useState<string | null>(null);
+  const originReady =
+    !isExternalUrl || (externalOrigin !== null && registeredOrigin === externalOrigin);
   const mountedSrc = originReady ? src : null;
   const showsDeviceStage = mountedSrc !== null && (kind === 'mobile-preview' || sideBySide);
 
@@ -172,15 +185,18 @@ export function PreviewNodeFace({
   // including on unmount (the node's guest going away).
   useEffect(() => {
     if (!isExternalUrl) {
-      setOriginReady(true);
+      setRegisteredOrigin(null);
       return;
     }
     if (externalOrigin === null) {
-      setOriginReady(false);
+      setRegisteredOrigin(null);
       return;
     }
     if (typeof window === 'undefined' || !window.forgeboard) {
-      setOriginReady(true);
+      // No bridge to register against (e.g. non-Electron test harness) —
+      // nothing will ever confirm registration, so fail open rather than
+      // wedging the gate forever.
+      setRegisteredOrigin(externalOrigin);
       return;
     }
     const bridge = window.forgeboard;
@@ -191,20 +207,21 @@ export function PreviewNodeFace({
         ]
       : [{ projectId: project.id, nodeId: id }];
     let active = true;
-    setOriginReady(false);
+    setRegisteredOrigin(null);
     void Promise.all(
       keys.map((key) =>
         bridge.previews.setAllowedOrigin({ ...key, origin: externalOrigin }).then(unwrap),
       ),
     )
       .then(() => {
-        if (active) setOriginReady(true);
+        if (active) setRegisteredOrigin(externalOrigin);
       })
       .catch(() => {
-        if (active) setOriginReady(false);
+        if (active) setRegisteredOrigin(null);
       });
     return () => {
       active = false;
+      setRegisteredOrigin(null);
       for (const key of keys) {
         void bridge.previews.setAllowedOrigin({ ...key, origin: null }).catch(() => undefined);
       }
