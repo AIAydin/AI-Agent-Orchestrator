@@ -3,12 +3,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { createStdioLoop } from './runtime.js';
 import type { HubClient } from './protocol.js';
 
+const previewMethods = {
+  previews: vi.fn(() => Promise.resolve({ previews: [] })),
+  readPreview: vi.fn(() => Promise.resolve({ url: '', title: '', text: '', dom: '', console: [] })),
+  screenshotPreview: vi.fn(() => Promise.resolve({ mimeType: 'image/png', data: '' })),
+} satisfies Pick<HubClient, 'previews' | 'readPreview' | 'screenshotPreview'>;
+
 describe('createStdioLoop', () => {
   it('drains an in-flight tools/call reply before signaling done, even when input ends immediately', async () => {
     const input = new PassThrough();
     const output = new PassThrough();
     let resolveHubCall: (() => void) | undefined;
     const hub: HubClient = {
+      ...previewMethods,
       peers: vi.fn<
         () => Promise<{
           agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
@@ -61,6 +68,7 @@ describe('createStdioLoop', () => {
     const input = new PassThrough();
     const output = new PassThrough();
     const hub: HubClient = {
+      ...previewMethods,
       peers: vi.fn<
         () => Promise<{
           agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
@@ -110,6 +118,7 @@ describe('createStdioLoop', () => {
     });
 
     const hub: HubClient = {
+      ...previewMethods,
       peers: vi.fn<
         () => Promise<{
           agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
@@ -150,6 +159,7 @@ describe('createStdioLoop', () => {
     const input = new PassThrough();
     const output = new PassThrough();
     const hub: HubClient = {
+      ...previewMethods,
       peers: vi.fn<
         () => Promise<{
           agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];

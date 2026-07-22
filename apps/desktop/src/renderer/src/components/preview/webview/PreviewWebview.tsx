@@ -37,6 +37,7 @@ interface PreviewWebviewProps {
   src: string;
   ariaLabel: string;
   className?: string | undefined;
+  allowPopups?: boolean | undefined;
   onStatus?: ((status: PreviewWebviewStatus) => void) | undefined;
   onConsole?: ((message: PreviewConsoleMessage) => void) | undefined;
 }
@@ -48,12 +49,22 @@ interface PreviewWebviewProps {
  * methods are guarded so the component stays inert (and testable) under jsdom.
  */
 export const PreviewWebview = forwardRef<PreviewWebviewHandle, PreviewWebviewProps>(
-  function PreviewWebview({ partition, src, ariaLabel, className, onStatus, onConsole }, ref) {
+  function PreviewWebview(
+    { partition, src, ariaLabel, className, allowPopups = false, onStatus, onConsole },
+    ref,
+  ) {
     const elementRef = useRef<PreviewWebviewElement | null>(null);
     const onStatusRef = useRef(onStatus);
     onStatusRef.current = onStatus;
     const onConsoleRef = useRef(onConsole);
     onConsoleRef.current = onConsole;
+
+    useEffect(() => {
+      const element = elementRef.current;
+      if (!element) return;
+      if (allowPopups) element.setAttribute('allowpopups', '');
+      else element.removeAttribute('allowpopups');
+    }, [allowPopups]);
 
     useEffect(() => {
       const element = elementRef.current;
@@ -69,12 +80,13 @@ export const PreviewWebview = forwardRef<PreviewWebviewHandle, PreviewWebviewPro
         current = {
           ...current,
           ...patch,
-          canGoBack: element.canGoBack?.() ?? false,
-          canGoForward: element.canGoForward?.() ?? false,
+          canGoBack: readHistoryAvailability(element, 'canGoBack'),
+          canGoForward: readHistoryAvailability(element, 'canGoForward'),
         };
         onStatusRef.current?.(current);
       };
       const listeners: ReadonlyArray<readonly [string, EventListener]> = [
+        ['dom-ready', () => publish({})],
         ['did-start-loading', () => publish({ status: 'loading', failure: null })],
         [
           'did-stop-loading',
@@ -82,7 +94,9 @@ export const PreviewWebview = forwardRef<PreviewWebviewHandle, PreviewWebviewPro
         ],
         [
           'did-fail-load',
-          ((event: Event & { errorCode?: number; errorDescription?: string; isMainFrame?: boolean }) => {
+          ((
+            event: Event & { errorCode?: number; errorDescription?: string; isMainFrame?: boolean },
+          ) => {
             if (event.isMainFrame === false || event.errorCode === -3) return;
             publish({
               status: 'failed',
@@ -102,7 +116,14 @@ export const PreviewWebview = forwardRef<PreviewWebviewHandle, PreviewWebviewPro
         ],
         [
           'console-message',
-          ((event: Event & { level?: unknown; message?: unknown; line?: unknown; sourceId?: unknown }) => {
+          ((
+            event: Event & {
+              level?: unknown;
+              message?: unknown;
+              line?: unknown;
+              sourceId?: unknown;
+            },
+          ) => {
             onConsoleRef.current?.({
               level: consoleLevel(event.level),
               message:
@@ -168,11 +189,24 @@ export const PreviewWebview = forwardRef<PreviewWebviewHandle, PreviewWebviewPro
 );
 
 function consoleLevel(level: unknown): PreviewConsoleLevel {
-  if (level === 'debug' || level === 'info' || level === 'warning' || level === 'error') return level;
+  if (level === 'debug' || level === 'info' || level === 'warning' || level === 'error')
+    return level;
   if (typeof level === 'number') {
     if (level >= 3) return 'error';
     if (level === 2) return 'warning';
     if (level === 0) return 'debug';
   }
   return 'info';
+}
+
+function readHistoryAvailability(
+  element: PreviewWebviewElement,
+  method: 'canGoBack' | 'canGoForward',
+): boolean {
+  try {
+    return element[method]?.() ?? false;
+  } catch {
+    // Electron throws until the webview is attached and has emitted dom-ready.
+    return false;
+  }
 }

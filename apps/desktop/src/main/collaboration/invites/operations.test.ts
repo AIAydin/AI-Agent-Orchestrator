@@ -78,7 +78,11 @@ describe('CollaborationInviteOperations', () => {
     await expect(operations.copy(authority, connection, INVITE_ID)).resolves.toBe(false);
     expect(clipboard.writeText).not.toHaveBeenCalled();
     await expect(operations.copy(authority, connection, INVITE_ID)).resolves.toBe(true);
-    expect(clipboard.writeText).toHaveBeenCalledExactlyOnceWith(INVITE_LINK);
+    expect(clipboard.writeText).toHaveBeenCalledOnce();
+    const copiedLink = new URL(String(clipboard.writeText.mock.calls[0]?.[0]));
+    expect(copiedLink.hash).toBe(`#token=${INVITE_TOKEN}`);
+    expect(copiedLink.searchParams.get('server')).toBe('wss://collab.example/socket');
+    expect(copiedLink.searchParams.get('management')).toBe('https://collab.example/control/');
 
     await expect(operations.revoke(authority, connection, INVITE_ID)).resolves.toBeNull();
     expect(http.revokeInvite).not.toHaveBeenCalled();

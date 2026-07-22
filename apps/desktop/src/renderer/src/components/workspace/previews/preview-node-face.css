@@ -25,12 +25,16 @@
 }
 .preview-face-port {
   display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
   align-items: center;
   gap: 5px;
   color: var(--text-soft);
 }
 .preview-face-port input {
-  width: 64px;
+  flex: 1 1 auto;
+  min-width: 72px;
+  width: auto;
   font-size: var(--text-xs);
 }
 .preview-face-reload {
@@ -195,5 +199,11 @@ webview.preview-face-webview {
   border-radius: 6px;
   background: color-mix(in srgb, #d06870 18%, var(--surface));
   color: var(--text);
+  font-size: var(--text-2xs);
+}
+.preview-face-address-error {
+  margin: 0;
+  padding: 2px 10px;
+  color: #d06870;
   font-size: var(--text-2xs);
 }

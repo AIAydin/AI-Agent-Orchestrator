@@ -6,7 +6,7 @@ declare module 'react' {
       webview: React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
         src?: string;
         partition?: string;
-        allowpopups?: string;
+        allowpopups?: boolean;
       };
     }
   }

@@ -464,6 +464,38 @@ unchecked when only a subset of their required behavior has proof.
   Eight new focused geometry, keyboard, renderer-interaction, lock, and undo tests passed alongside
   targeted lint/format checks and the structure gate. The broad canvas checklist item remains
   unchecked because comments and complete grouping/containment behavior are not yet proven.
+- 2026-07-22: expanded Agent nodes expose their full title bar as an explicit React Flow drag
+  handle, with a visible grip, grab/grabbing feedback, and touch-safe movement while the embedded
+  terminal remains interactive. Collapsed Agent nodes retain their whole-node drag handle, and the
+  existing canvas change/autosave path persists completed positions. Twenty-nine focused Agent and
+  canvas-node tests passed with targeted lint, desktop typecheck, and diff validation.
+- 2026-07-22: Mobile Preview canvas faces now preserve the selected device's real CSS viewport width
+  while fitting their height to the available node body. The page therefore fills the preview node
+  at a readable mobile breakpoint instead of shrinking the entire phone into unused black space;
+  narrower resized nodes still scale proportionally. Focused layout and face coverage verifies both
+  full-size and constrained-node behavior.
+- 2026-07-22: the source-development renderer now binds explicitly to port 5174 with strict-port
+  enforcement, so Forgeboard fails clearly instead of silently moving to another port when 5174 is
+  unavailable. User-configured Web and Mobile Preview ports remain independent.
+- 2026-07-22: Web and Mobile Preview address fields accept bare local ports, loopback URLs, and
+  public HTTPS addresses. Public sites never mount inside Electron: both renderer selection and the
+  main-process webview attachment guard enforce loopback-only guests. External addresses instead
+  open in visible Google Chrome with a per-node dedicated profile and private fd-only DevTools pipe,
+  so normal Chrome navigation and Google OAuth can work without exposing the user's personal Chrome
+  profile or a network debugging port. The node shows bounded screenshots and offers Focus,
+  Disconnect, and native-confirmed profile clearing; privacy reset erases every companion profile.
+  The Chrome node is interactive: it forwards validated resize, pointer, wheel, keyboard, paste,
+  back, forward, and reload events over that private pipe, restores replaced page sessions, and
+  returns focus to Forgeboard after launch while retaining a native-Chrome escape hatch for OS-level
+  sign-in dialogs. Chrome pushes compressed frames only as page pixels change; Forgeboard
+  acknowledges them immediately, transfers each frame sequence once, and maps the resulting image
+  edge-to-edge onto the exact node viewport instead of repeatedly polling full PNG screenshots.
+- 2026-07-22: connected-agent browser reads remain a separate default-off permission that is
+  reauthorized against a direct, unmuted Context edge on each request. Authorized reads expose only
+  bounded visible text, sanitized DOM, and PNG screenshots; form state, scripts, styles, and console
+  logs are excluded, changing the address revokes consent, and cross-origin tab navigation cannot
+  inherit prior consent. Sixty-five focused Chrome transport,
+  lifecycle, webview-boundary, agent bridge, and renderer tests pass alongside workspace typecheck.
 - 2026-07-15: a real main-process workflow recovery integration scenario now runs bundled
   deterministic child processes in five production-managed Git worktrees. It proves live SIGINT
   interruption, workflow cancellation with process termination, deliberate exit-code-7 failure,
@@ -1816,6 +1848,64 @@ unchecked when only a subset of their required behavior has proof.
   contract, matcher, and audio tests passed.
   `Workspace.tsx` was split below 2,000 lines. The structure gate still reports only three inherited
   direct-file-count failures in `apps/desktop/e2e`, `workspace/shell`, and `workspace/workflows`.
+- 2026-07-22: voice-model installation was repaired after a runtime allowlist regression rejected
+  the already-declared `voice-model-download` action and `model-registry` destination before native
+  approval. Both are now accepted by the outbound gate, with a focused regression test, while the
+  Voice settings use the shared aligned switch-row presentation instead of an undefined class.
+  Twelve outbound-gate tests, the local voice-state test, desktop strict typecheck, formatting, and
+  diff whitespace validation passed.
+- 2026-07-22: voice commands gained deterministic parameterized intents without an AI routing
+  dependency. `tell`/`ask`/`prompt` binds free-form text to one exact live Agent title, preserves
+  casing and punctuation, and requires confirmation before sending input to an active run or
+  filling an idle Agent prompt for review. `connect`/`link` binds two exact live node titles and
+  requires confirmation before adding a context edge, enabling spoken Agent-to-Agent, tool, preview,
+  and Video context wiring. Duplicate names, missing nodes, read-only canvases, locks, and duplicate
+  connections fail closed. Seven focused registry and matcher tests passed; the desktop typecheck
+  reached only an unrelated concurrent Preview test fixture error in the existing dirty tree.
+- 2026-07-21: native terminal approval gained an explicit UI-managed 30-day trust option for the
+  exact project, canonical executable identity, arguments, working-folder identity, and disclosed
+  environment-variable names. Unchanged launches reuse the durable main-process approval without a
+  second native prompt; any scope change misses the cryptographic fingerprint and requires review
+  again. Settings lists the human-readable grant and revokes it immediately. Twenty-three focused
+  fingerprint, native-confirmation, IPC-security, and Settings tests passed, as did all 29 terminal
+  service tests, desktop strict typecheck, focused zero-warning lint, formatting, production build,
+  and diff whitespace validation. The complete 2,901-test unit suite had one unrelated concurrent
+  preview-port expectation race; that nine-test preview file passed immediately in isolation. The
+  repository-wide structure and production-control gates remain red on pre-existing workspace
+  shell/folder limits and an unrelated inert project-tree button, so no false green gate claim is
+  recorded here.
+- 2026-07-22: the canvas gained a production Video node for project-contained MP4, WebM, and Ogg
+  files. Selection validates canonical containment, ignore/sensitive-file policy, symlinks, and file
+  signatures in Electron main; renderer playback uses expiring opaque capabilities through a secure
+  streaming protocol, so absolute paths never cross preload. Dragging a configured Video node onto
+  an Agent explicitly grants a digest-bound context note containing the source-relative path, exact
+  size, and SHA-256 while leaving large media in place for video-capable agent tools. The focused
+  video transport, persisted context, and context-linking run passed 35 tests, and desktop strict
+  typecheck passed. Follow-up chooser verification covers the ordinary external-file path: a video
+  selected outside the project is signature-checked and copied without overwrite into the project's
+  `forgeboard-videos` folder before playback and agent sharing. All three focused video-service
+  tests and desktop strict typecheck passed after that correction.
+  Claude and other connected agent sessions now receive a `list_videos` Forgeboard MCP tool plus
+  initialization guidance. The authenticated localhost hub returns only configured Video nodes
+  explicitly attached to the caller or joined by an unmuted context edge, with project-relative
+  path and availability metadata; unrelated videos and absolute paths remain private. Seven MCP
+  protocol tests, four stdio runtime tests, all 22 agent-peer hub tests, the rebuilt MCP shim, and
+  desktop strict typecheck passed.
+- 2026-07-22: **Settings → Connectivity** was simplified around the two ordinary user goals:
+  paste one invite to join, or create/recover a room. Identity and live status stay visible, while
+  server endpoints, collaborator ID, reconnect policy, direct access tokens, and administrator
+  credentials are grouped under clearly labeled advanced disclosures. Newly copied invites now
+  carry the exact validated, credential-free management and WebSocket endpoints while keeping the
+  secret token in the URL fragment; token-only legacy invites remain valid. Pasting a new invite
+  updates the unsaved server draft and joining enables collaboration only after a successful
+  connection. Eight focused contract, main-authority, renderer, room-management, and Settings files
+  passed 84 tests, focused zero-warning lint and diff whitespace validation passed, the
+  collaboration-server typecheck passed, and the production desktop build plus real two-profile
+  invite Electron journey passed. The broader room-management journey completed its collaboration
+  operations and then hit an unrelated current-tree canvas assertion for a missing Product brief
+  node. Workspace typecheck is currently blocked by the concurrently edited PreviewNodeFace test
+  fixture, and the structure gate reports the existing oversized Workspace file plus five unrelated
+  direct-file-count violations; none is presented as connectivity completion evidence.
 - 2026-07-22: the Whiteboard/Mockup node is now an actual drawing surface. Previously its SVG was
   inert — nothing on the canvas handled pointer events, so shapes could only be added from the Tools
   popover at a fixed staircase position and were repositioned by typing numbers. A persistent tool

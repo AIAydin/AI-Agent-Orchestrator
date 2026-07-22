@@ -29,4 +29,41 @@ describe('preview surface URL policy', () => {
     );
     expect(redactedConsoleSource('https://example.com/app.js?secret=yes')).toBeNull();
   });
+
+  it('still accepts loopback URLs when an unrelated allowed origin is configured', () => {
+    expect(
+      validatedSurfaceUrl('http://127.0.0.1:41000/app', {
+        allowedOrigin: 'https://app.staging.com',
+      }).port,
+    ).toBe('41000');
+  });
+
+  it('accepts the configured external origin and rejects any other remote origin', () => {
+    const url = validatedSurfaceUrl('https://app.staging.com/dashboard', {
+      allowedOrigin: 'https://app.staging.com',
+    });
+    expect(url.hostname).toBe('app.staging.com');
+    expect(() =>
+      validatedSurfaceUrl('https://evil.example.com/', {
+        allowedOrigin: 'https://app.staging.com',
+      }),
+    ).toThrow('loopback');
+  });
+
+  it('rejects credentials and non-http(s) schemes even for the configured origin', () => {
+    expect(() =>
+      validatedSurfaceUrl('https://user:pass@app.staging.com/', {
+        allowedOrigin: 'https://app.staging.com',
+      }),
+    ).toThrow('credentials');
+    expect(() =>
+      validatedSurfaceUrl('file:///tmp/x', { allowedOrigin: 'https://app.staging.com' }),
+    ).toThrow('HTTP');
+  });
+
+  it('does not require an explicit port for the configured external origin', () => {
+    expect(() =>
+      validatedSurfaceUrl('https://app.staging.com/', { allowedOrigin: 'https://app.staging.com' }),
+    ).not.toThrow();
+  });
 });

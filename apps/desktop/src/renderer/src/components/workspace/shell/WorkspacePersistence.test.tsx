@@ -6,8 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AppSettingsSchema,
+  ExtensionCanvasNodeTypeViewSchema,
+  InstalledExtensionViewSchema,
   type AppSettings,
   type CanvasDocument,
+  type InstalledExtensionView,
   type Project,
 } from '../../../../../shared/application/contracts.js';
 import type { FileDocument } from '../../../../../shared/files/contracts.js';
@@ -18,7 +21,7 @@ import {
 import type { WorkshopNode } from '../canvas/CanvasNode.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { Workspace } from './Workspace.js';
-import type { WorkspaceHandle } from '../model/types.js';
+import type { ExtensionTemplate, WorkspaceHandle } from '../model/types.js';
 
 const mocks = vi.hoisted(() => ({
   flushCanvas: vi.fn<() => Promise<boolean>>(),
@@ -216,7 +219,23 @@ vi.mock('../canvas/WorkspaceCanvas.js', async () => {
     },
   };
 });
-vi.mock('./WorkspaceRail.js', () => ({ WorkspaceRail: () => null }));
+vi.mock('./WorkspaceRail.js', () => ({
+  WorkspaceRail: ({
+    extensionTemplates,
+    onAddExtensionNode,
+  }: {
+    extensionTemplates: ExtensionTemplate[];
+    onAddExtensionNode: (template: ExtensionTemplate) => void;
+  }) => (
+    <div>
+      {extensionTemplates.map((template) => (
+        <button key={template.key} type="button" onClick={() => onAddExtensionNode(template)}>
+          {`Add ${template.definition.displayName}`}
+        </button>
+      ))}
+    </div>
+  ),
+}));
 vi.mock('../activity/WorkspaceActivityDrawer.js', () => ({
   WorkspaceActivityDrawer: ({ events }: { events: string[] }) => (
     <output data-testid="workspace-events">{JSON.stringify(events)}</output>
@@ -286,6 +305,45 @@ vi.mock('../workflows/useWorkflowRuns.js', () => ({
     cancel: vi.fn(),
   }),
 }));
+
+const extensionCanvasNodeType = ExtensionCanvasNodeTypeViewSchema.parse({
+  id: 'pull-request',
+  displayName: 'GitHub PR',
+  description: 'Opens a pull request from the active branch.',
+  category: 'Git',
+  icon: 'git-branch',
+  color: '#4F46E5',
+  capabilities: [],
+  fields: [],
+  ports: [],
+});
+
+const installedExtension: InstalledExtensionView = InstalledExtensionViewSchema.parse({
+  record: {
+    schemaVersion: 1,
+    extensionId: 'example.git-tools',
+    version: '1.0.0',
+    manifestDigest: 'a'.repeat(64),
+    snapshotDigest: 'b'.repeat(64),
+    grantedPermissions: [],
+    sourcePath: '/tmp/example.git-tools',
+    installedAt: '2026-07-14T16:00:00.000Z',
+    updatedAt: '2026-07-14T16:00:00.000Z',
+  },
+  manifest: {
+    schemaVersion: 1,
+    id: 'example.git-tools',
+    name: 'Example git tools',
+    version: '1.0.0',
+    description: 'Adds Git extension nodes.',
+    publisher: 'Example',
+    requestedPermissions: [],
+    contributes: { agentAdapters: [], canvasNodeTypes: [extensionCanvasNodeType] },
+  },
+  manifestJson: '{}',
+  trustState: 'active',
+  approvedAt: '2026-07-14T16:00:00.000Z',
+});
 
 beforeEach(() => {
   mocks.collaborationGraphReadOnly = false;
@@ -979,6 +1037,40 @@ describe('Workspace persistence boundary', () => {
     expect(screen.getByTestId('workspace-events').textContent).toMatch(
       /view-only, so you cannot change the canvas/u,
     );
+  });
+});
+
+describe('Workspace extension node naming', () => {
+  it('assigns two extension nodes created from the same template distinct friendly titles', () => {
+    render(
+      <Workspace
+        project={project()}
+        settings={settings()}
+        agents={[]}
+        extensionDiscovery={{
+          registryPath: '/tmp/extensions.json',
+          installed: [installedExtension],
+          quarantined: [],
+          invalid: [],
+        }}
+        onClose={vi.fn()}
+        onProjectUpdated={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onError={vi.fn()}
+      />,
+    );
+
+    const addButton = screen.getByRole('button', { name: 'Add GitHub PR' });
+    fireEvent.click(addButton);
+    fireEvent.click(addButton);
+
+    const extensionNodes = canvasNodes().filter((node) => node.data.kind === 'extension');
+    expect(extensionNodes).toHaveLength(2);
+    const titles = extensionNodes.map((node) => node.data.title);
+    // Distinct, friendly names — never both carrying the raw template displayName.
+    expect(new Set(titles).size).toBe(2);
+    expect(titles).not.toContain('GitHub PR');
+    expect(titles).toEqual(['Hermes', 'Atlas']);
   });
 });
 

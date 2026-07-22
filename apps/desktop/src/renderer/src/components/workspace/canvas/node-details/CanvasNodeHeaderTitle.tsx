@@ -68,7 +68,7 @@ export function CanvasNodeHeaderTitle({
 
   return (
     <strong
-      className="canvas-node-title"
+      className="node-title canvas-node-title"
       title={title}
       {...(readOnly ? {} : { onDoubleClick: begin })}
     >

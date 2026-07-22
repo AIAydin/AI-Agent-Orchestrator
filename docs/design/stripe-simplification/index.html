@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forgeboard — Stripe-inspired UI previews</title>
+    <style>
+      :root {
+        --ink: #0a2540;
+        --muted: #425466;
+        --faint: #6b7c93;
+        --line: #e3e8ee;
+        --bg: #f6f9fc;
+        --accent: #635bff;
+        --accent-hover: #5148e0;
+        --radius: 8px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Ubuntu, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 880px; margin: 0 auto; padding: 64px 32px 96px; }
+      .eyebrow {
+        font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
+        text-transform: uppercase; color: var(--accent); margin: 0 0 8px;
+      }
+      h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; }
+      .lede { font-size: 16px; line-height: 1.6; color: var(--muted); margin: 0 0 40px; max-width: 620px; }
+      .card {
+        background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+        box-shadow: 0 1px 3px rgba(10, 37, 64, 0.05);
+        padding: 24px; margin-bottom: 16px;
+        display: block; text-decoration: none; color: inherit;
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+      }
+      a.card:hover { box-shadow: 0 6px 16px rgba(10, 37, 64, 0.08); transform: translateY(-1px); }
+      .card h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+      .card p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+      .card .meta { margin-top: 14px; font-size: 13px; font-weight: 500; color: var(--accent); }
+      .tokens { margin-top: 48px; }
+      .swatches { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+      .swatch { width: 96px; }
+      .swatch .chip { height: 44px; border-radius: 6px; border: 1px solid var(--line); }
+      .swatch .name { font-size: 11px; color: var(--faint); margin-top: 6px; }
+      .principles { margin-top: 48px; font-size: 14px; color: var(--muted); line-height: 1.7; }
+      .principles h2 { font-size: 16px; color: var(--ink); margin: 0 0 10px; }
+      .principles ul { margin: 0; padding-left: 18px; }
+      .principles li { margin-bottom: 6px; }
+      code { background: #eef2f7; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <p class="eyebrow">Forgeboard · Design exploration</p>
+      <h1>Three Stripe-inspired directions</h1>
+      <p class="lede">
+        Draft previews for simplifying the Forgeboard UI toward Stripe's design language: one accent
+        color, hairline borders, quiet surfaces, and typography doing the heavy lifting. Each
+        preview covers the two main screens — Home (today's Welcome) and the Board (today's
+        Workspace). Open them, compare, and we'll refine the direction you like.
+      </p>
+
+      <a class="card" href="./variant-a-dashboard.html">
+        <h2>A — Sidebar dashboard</h2>
+        <p>
+          Closest to the Stripe Dashboard. Persistent left nav with projects, KPI cards up top,
+          recent projects as a clean table, and the board framed by a slim inspector. Familiar,
+          scannable, low-risk.
+        </p>
+        <div class="meta">Open preview →</div>
+      </a>
+
+      <a class="card" href="./variant-b-minimal.html">
+        <h2>B — Minimal light</h2>
+        <p>
+          The aggressive simplification. No sidebar, no persistent panels: a centered column at
+          home, and a borderless canvas with one floating toolbar on the board. Almost everything
+          is whitespace and type; chrome appears on demand.
+        </p>
+        <div class="meta">Open preview →</div>
+      </a>
+
+      <a class="card" href="./variant-c-console.html">
+        <h2>C — Command-first console</h2>
+        <p>
+          Data-table first, like Stripe's payments view. A command bar anchors the top, agent runs
+          become the primary list, and the board is one tab over. Dense but disciplined — for
+          keyboard-heavy daily use.
+        </p>
+        <div class="meta">Open preview →</div>
+      </a>
+
+      <div class="tokens">
+        <p class="eyebrow">Shared tokens</p>
+        <div class="swatches">
+          <div class="swatch"><div class="chip" style="background: #0a2540"></div><div class="name">ink · #0A2540</div></div>
+          <div class="swatch"><div class="chip" style="background: #425466"></div><div class="name">muted · #425466</div></div>
+          <div class="swatch"><div class="chip" style="background: #e3e8ee"></div><div class="name">line · #E3E8EE</div></div>
+          <div class="swatch"><div class="chip" style="background: #f6f9fc"></div><div class="name">bg · #F6F9FC</div></div>
+          <div class="swatch"><div class="chip" style="background: #635bff"></div><div class="name">accent · #635BFF</div></div>
+          <div class="swatch"><div class="chip" style="background: #15b53f"></div><div class="name">ok · #15B53F</div></div>
+        </div>
+      </div>
+
+      <div class="principles">
+        <h2>What "simpler" means here</h2>
+        <ul>
+          <li>One accent color (<code>#635BFF</code>) reserved for primary actions and links; status comes from small dots, not colored panels.</li>
+          <li>Hairline borders (<code>1px #E3E8EE</code>) and near-invisible shadows instead of heavy frames and layered panels.</li>
+          <li>Eyebrow labels (11px, uppercase, letter-spaced) replace boxed section headers.</li>
+          <li>Secondary actions hide until hover; one obvious primary action per screen.</li>
+          <li>Density comes from tables and lists, not from squeezing cards.</li>
+        </ul>
+      </div>
+    </div>
+  </body>
+</html>

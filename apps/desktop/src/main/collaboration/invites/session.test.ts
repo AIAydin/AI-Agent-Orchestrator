@@ -218,7 +218,10 @@ describe('CollaborationInviteSessionAuthority', () => {
       },
     ]);
     expect(JSON.stringify(authority.createdInviteViews(lease))).not.toContain('invite-token');
-    expect(authority.inviteLinkForCopy(lease, invite().id)).toBe(invite().url);
+    const copiedLink = new URL(authority.inviteLinkForCopy(lease, invite().id));
+    expect(copiedLink.hash).toBe('#token=invite-token');
+    expect(copiedLink.searchParams.get('server')).toBe('wss://collab.example/ws');
+    expect(copiedLink.searchParams.get('management')).toBe('https://collab.example/control/');
     expect(authority.authorizeRevoke(lease, invite().id)).toEqual(binding());
     expect(() => authority.authorizeRevoke(lease, 'b2e65f4c-52b0-4645-a907-1aab06b1b933')).toThrow(
       'Refresh invite history',

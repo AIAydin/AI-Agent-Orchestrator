@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { useEffect, useRef, useState, type JSX } from 'react';
+import { GripHorizontal } from 'lucide-react';
 
 import type { PermissionProfile } from '../../../../../../shared/application/contracts.js';
 import type { AgentPeersProvisionView } from '../../../../../../shared/agent-peers/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import { isRunAdapterId } from '../../model/helpers.js';
 import { providerTheme } from '../../node-registry/provider-themes.js';
+import { ensureUniqueNodeName } from '../../node-registry/node-names.js';
 import {
   PERMISSION_PROFILE_OPTIONS,
   permissionProfileUnavailableReason,
@@ -59,6 +61,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
     nodeTitle,
     removeAgentContext,
     requestDeleteNode,
+    nodeRoster,
   } = useAgentSession();
   const interactions = useCanvasNodeInteractions();
   const surfaceRef = useRef<TerminalSurfaceHandle | null>(null);
@@ -257,13 +260,21 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   };
   const commitTitleEdit = (): void => {
     setEditingTitle(false);
-    if (titleDraft !== data.title) updateNodeData(id, { title: titleDraft });
+    const titlesInUse = new Set(
+      nodeRoster.filter((entry) => entry.id !== id).map((entry) => entry.title),
+    );
+    const nextTitle = ensureUniqueNodeName(titleDraft, titlesInUse);
+    if (nextTitle !== data.title) updateNodeData(id, { title: nextTitle });
   };
   const cancelTitleEdit = (): void => setEditingTitle(false);
 
   return (
     <>
-      <div className="agent-window-titlebar agent-drag-handle">
+      <div
+        className="agent-window-titlebar agent-drag-handle"
+        role="group"
+        aria-label={`Move ${data.title} agent node`}
+      >
         <button
           type="button"
           className="traffic close nodrag"
@@ -284,6 +295,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
           aria-label="Focus terminal"
           onClick={() => surfaceRef.current?.focus()}
         />
+        <GripHorizontal className="agent-drag-grip" size={15} aria-hidden="true" />
         {editingTitle ? (
           <input
             className="agent-title-input nodrag"

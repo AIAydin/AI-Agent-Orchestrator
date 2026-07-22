@@ -48,6 +48,10 @@ export default defineConfig({
   renderer: {
     root: resolve(import.meta.dirname, 'src/renderer'),
     plugins: [react()],
+    server: {
+      port: 5174,
+      strictPort: true,
+    },
     build: {
       outDir: resolve(import.meta.dirname, 'dist/renderer'),
       emptyOutDir: true,

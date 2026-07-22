@@ -312,6 +312,7 @@ async function connectProfile(
   await page.getByRole('button', { name: 'Settings' }).click();
   const settings = page.locator('.settings-modal');
   await settings.getByRole('button', { name: 'Connectivity', exact: true }).click();
+  await settings.getByText('Server and advanced options').click();
   await settings.getByRole('checkbox', { name: /Enable collaboration/u }).check();
   await settings.getByLabel('Collaboration server URL').fill(server.webSocketUrl);
   await settings
@@ -320,7 +321,7 @@ async function connectProfile(
   await settings.getByLabel('Collaboration display name').fill(identity.displayName);
   await settings.getByLabel('Collaborator ID').fill(identity.subject);
   await settings.getByLabel('Collaboration room').fill('invite-e2e-room');
-  await settings.getByLabel('Session access token').fill(identity.token);
+  await settings.locator('input[name="collaboration-access-token"]').fill(identity.token);
   const dialogIndex = await queueCollaborationDialog(app, 1);
   await settings.getByRole('button', { name: 'Connect with access token' }).click();
   await waitForCollaborationDialog(app, dialogIndex);

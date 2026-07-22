@@ -1,0 +1,21 @@
+.video-node-face-body {
+  align-items: center;
+  background: #080a0b;
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.video-node-face-body video {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.video-node-context-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin: 0;
+  padding: 6px 10px;
+}

@@ -1,9 +1,18 @@
-import { randomBytes, randomUUID } from 'node:crypto';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { randomBytes, randomUUID } from "node:crypto";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 
-import type { CanvasEdge, CanvasNode } from '@forgeboard/core/domain';
+import type { CanvasEdge, CanvasNode } from "@forgeboard/core/domain";
 
-import { findPeerByName, resolvePeers, type PeerDescriptor } from './peer-graph.js';
+import {
+  findPeerByName,
+  resolvePeers,
+  type PeerDescriptor,
+} from "./peer-graph.js";
 
 const RATE_LIMIT_MAX = 6;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -13,23 +22,49 @@ const SCREEN_TAIL_BYTES = 64 * 1024;
 const PROVISION_EXPIRY_MS = 5 * 60_000;
 
 export interface AgentPeersTerminalBridge {
-  findActiveSessionByNode(projectId: string, nodeId: string): { sessionId: string } | null;
+  findActiveSessionByNode(
+    projectId: string,
+    nodeId: string,
+  ): { sessionId: string } | null;
   deliverPeerInput(
     sessionId: string,
     sender: string,
     message: string,
-  ): Promise<'delivered' | 'no-live-session'>;
-  readTranscriptTail(sessionId: string, maxBytes: number): Promise<string | null>;
+  ): Promise<"delivered" | "no-live-session">;
+  readTranscriptTail(
+    sessionId: string,
+    maxBytes: number,
+  ): Promise<string | null>;
 }
 
 export interface AgentPeersStore {
-  loadCanvas(projectId: string): { nodes: CanvasNode[]; edges: CanvasEdge[] } | null;
+  loadCanvas(
+    projectId: string,
+  ): { nodes: CanvasNode[]; edges: CanvasEdge[] } | null;
   appendAudit(
     category: string,
     action: string,
-    outcome: 'allowed' | 'denied' | 'failed',
+    outcome: "allowed" | "denied" | "failed",
     metadata: Record<string, unknown>,
   ): void;
+}
+
+export interface AgentPeersPreviewBridge {
+  isLive(projectId: string, nodeId: string): boolean;
+  inspect(
+    projectId: string,
+    nodeId: string,
+  ): Promise<{
+    url: string;
+    title: string;
+    text: string;
+    dom: string;
+    console: readonly string[];
+  }>;
+  screenshot(
+    projectId: string,
+    nodeId: string,
+  ): Promise<{ mimeType: "image/png"; data: string }>;
 }
 
 export interface PeerProvision {
@@ -52,7 +87,10 @@ interface CallerContext {
   readonly peers: PeerDescriptor[];
 }
 
-type MessageDeliveredListener = (event: { projectId: string; edgeId: string }) => void;
+type MessageDeliveredListener = (event: {
+  projectId: string;
+  edgeId: string;
+}) => void;
 
 /**
  * The agent-peers hub: a localhost-only HTTP server the `peer-mcp` stdio shim calls (via a
@@ -65,6 +103,7 @@ export class AgentPeersService {
   readonly #store: AgentPeersStore;
   readonly #bridge: AgentPeersTerminalBridge;
   readonly #now: () => number;
+  readonly #previews: AgentPeersPreviewBridge | null;
 
   #server: Server | null = null;
   #port: number | null = null;
@@ -76,7 +115,10 @@ export class AgentPeersService {
   readonly #rateLimitHits = new Map<string, number[]>();
   readonly #messageListeners = new Set<MessageDeliveredListener>();
 
-  readonly #handleRequest = (request: IncomingMessage, response: ServerResponse): void => {
+  readonly #handleRequest = (
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): void => {
     void this.#route(request, response);
   };
 
@@ -84,10 +126,12 @@ export class AgentPeersService {
     store: AgentPeersStore,
     bridge: AgentPeersTerminalBridge,
     now: () => number = Date.now,
+    previews: AgentPeersPreviewBridge | null = null,
   ) {
     this.#store = store;
     this.#bridge = bridge;
     this.#now = now;
+    this.#previews = previews;
   }
 
   /** Starts the hub lazily (first call only) and mints a fresh token for this node's session. */
@@ -95,7 +139,7 @@ export class AgentPeersService {
     await this.#ensureListening();
     this.#pruneExpiredProvisions();
     const provisionId = randomUUID();
-    const token = randomBytes(32).toString('hex');
+    const token = randomBytes(32).toString("hex");
     const record: ProvisionRecord = {
       provisionId,
       token,
@@ -207,15 +251,15 @@ export class AgentPeersService {
     // Permanent handler: without it, a fault after startup (once the `once` listener below has
     // either fired and detached, or never fires again) would leave zero 'error' listeners and
     // crash the process. Best-effort: nothing to do but not let it become unhandled.
-    server.on('error', () => {});
+    server.on("error", () => {});
     await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => resolve());
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => resolve());
     });
     const address = server.address();
-    if (address === null || typeof address === 'string') {
+    if (address === null || typeof address === "string") {
       server.close();
-      throw new Error('agent-peers hub failed to bind a localhost port');
+      throw new Error("agent-peers hub failed to bind a localhost port");
     }
     this.#server = server;
     this.#port = address.port;
@@ -264,7 +308,10 @@ export class AgentPeersService {
   #pruneExpiredProvisions(): void {
     const now = this.#now();
     for (const record of this.#provisionsById.values()) {
-      if (record.sessionId === null && now - record.createdAt > PROVISION_EXPIRY_MS) {
+      if (
+        record.sessionId === null &&
+        now - record.createdAt > PROVISION_EXPIRY_MS
+      ) {
         this.#provisionsById.delete(record.provisionId);
         this.#provisionsByToken.delete(record.token);
       }
@@ -275,40 +322,64 @@ export class AgentPeersService {
   // Routing
   // ---------------------------------------------------------------------------------------
 
-  async #route(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  async #route(
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
     try {
       const token = this.#extractBearerToken(request.headers.authorization);
-      const provision = token === null ? undefined : this.#resolveProvisionByToken(token);
+      const provision =
+        token === null ? undefined : this.#resolveProvisionByToken(token);
       if (provision === undefined) {
-        this.#respondJson(response, 401, { error: 'unauthorized' });
+        this.#respondJson(response, 401, { error: "unauthorized" });
         return;
       }
 
-      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-      if (request.method === 'GET' && url.pathname === '/v1/peers') {
+      const url = new URL(request.url ?? "/", "http://127.0.0.1");
+      if (request.method === "GET" && url.pathname === "/v1/peers") {
         this.#handlePeers(provision, response);
         return;
       }
-      if (request.method === 'POST' && url.pathname === '/v1/message') {
+      if (request.method === "POST" && url.pathname === "/v1/message") {
         await this.#handleMessage(provision, request, response);
         return;
       }
-      if (request.method === 'GET' && url.pathname === '/v1/screen') {
+      if (request.method === "GET" && url.pathname === "/v1/screen") {
         await this.#handleScreen(provision, url, response);
         return;
       }
-      this.#respondJson(response, 404, { error: 'not-found' });
+      if (request.method === "GET" && url.pathname === "/v1/previews") {
+        this.#handlePreviews(provision, response);
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/videos") {
+        this.#handleVideos(provision, response);
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/v1/preview") {
+        await this.#handlePreviewRead(provision, url, response);
+        return;
+      }
+      if (
+        request.method === "GET" &&
+        url.pathname === "/v1/preview/screenshot"
+      ) {
+        await this.#handlePreviewScreenshot(provision, url, response);
+        return;
+      }
+      this.#respondJson(response, 404, { error: "not-found" });
     } catch {
-      if (!response.headersSent) this.#respondJson(response, 500, { error: 'internal-error' });
+      if (!response.headersSent)
+        this.#respondJson(response, 500, { error: "internal-error" });
     }
   }
 
   #extractBearerToken(header: string | undefined): string | null {
     if (header === undefined) return null;
-    const prefix = 'Bearer ';
+    const prefix = "Bearer ";
     if (!header.startsWith(prefix)) return null;
     const token = header.slice(prefix.length).trim();
-    return token === '' ? null : token;
+    return token === "" ? null : token;
   }
 
   #resolveProvisionByToken(token: string): ProvisionRecord | undefined {
@@ -324,7 +395,9 @@ export class AgentPeersService {
   #resolveCallerContext(provision: ProvisionRecord): CallerContext | null {
     const canvas = this.#store.loadCanvas(provision.projectId);
     if (canvas === null) return null;
-    const callerNode = canvas.nodes.find((node) => node.id === provision.nodeId);
+    const callerNode = canvas.nodes.find(
+      (node) => node.id === provision.nodeId,
+    );
     if (callerNode === undefined) return null;
     return {
       callerName: callerNode.title,
@@ -339,13 +412,17 @@ export class AgentPeersService {
   #handlePeers(provision: ProvisionRecord, response: ServerResponse): void {
     const context = this.#resolveCallerContext(provision);
     if (context === null) {
-      this.#respondJson(response, 404, { error: 'unknown-node' });
+      this.#respondJson(response, 404, { error: "unknown-node" });
       return;
     }
     const agents = context.peers.map((peer) => ({
       name: peer.name,
       provider: peer.provider,
-      live: this.#bridge.findActiveSessionByNode(provision.projectId, peer.nodeId) !== null,
+      live:
+        this.#bridge.findActiveSessionByNode(
+          provision.projectId,
+          peer.nodeId,
+        ) !== null,
       muted: peer.muted,
     }));
     this.#respondJson(response, 200, { agents });
@@ -363,32 +440,32 @@ export class AgentPeersService {
     const body = await this.#readBody(request, MAX_MESSAGE_BYTES);
     if (body === null) {
       // The client may still be mid-upload; don't reuse this connection for another request.
-      response.setHeader('Connection', 'close');
-      this.#respondJson(response, 413, { error: 'message-too-large' });
+      response.setHeader("Connection", "close");
+      this.#respondJson(response, 413, { error: "message-too-large" });
       return;
     }
 
     let parsed: unknown;
     try {
-      parsed = body.length === 0 ? {} : JSON.parse(body.toString('utf8'));
+      parsed = body.length === 0 ? {} : JSON.parse(body.toString("utf8"));
     } catch {
-      this.#respondJson(response, 400, { error: 'invalid-json' });
+      this.#respondJson(response, 400, { error: "invalid-json" });
       return;
     }
-    if (typeof parsed !== 'object' || parsed === null) {
-      this.#respondJson(response, 400, { error: 'invalid-body' });
+    if (typeof parsed !== "object" || parsed === null) {
+      this.#respondJson(response, 400, { error: "invalid-body" });
       return;
     }
-    const to = (parsed as Record<string, unknown>)['to'];
-    const message = (parsed as Record<string, unknown>)['message'];
-    if (typeof to !== 'string' || typeof message !== 'string') {
-      this.#respondJson(response, 400, { error: 'invalid-body' });
+    const to = (parsed as Record<string, unknown>)["to"];
+    const message = (parsed as Record<string, unknown>)["message"];
+    if (typeof to !== "string" || typeof message !== "string") {
+      this.#respondJson(response, 400, { error: "invalid-body" });
       return;
     }
 
     const context = this.#resolveCallerContext(provision);
     if (context === null) {
-      this.#respondJson(response, 404, { error: 'unknown-node' });
+      this.#respondJson(response, 404, { error: "unknown-node" });
       return;
     }
 
@@ -399,36 +476,39 @@ export class AgentPeersService {
     };
     const peer = findPeerByName(context.peers, to);
     if (peer === undefined) {
-      this.#audit('denied', { ...auditBase, reason: 'unknown-peer' });
-      this.#respondJson(response, 200, { result: 'unknown-peer' });
+      this.#audit("denied", { ...auditBase, reason: "unknown-peer" });
+      this.#respondJson(response, 200, { result: "unknown-peer" });
       return;
     }
     if (peer.muted) {
-      this.#audit('denied', {
+      this.#audit("denied", {
         ...auditBase,
         edgeId: peer.edgeId,
-        reason: 'muted',
+        reason: "muted",
       });
-      this.#respondJson(response, 200, { result: 'muted' });
+      this.#respondJson(response, 200, { result: "muted" });
       return;
     }
     if (this.#isRateLimited(peer.edgeId)) {
-      this.#audit('denied', {
+      this.#audit("denied", {
         ...auditBase,
         edgeId: peer.edgeId,
-        reason: 'rate-limited',
+        reason: "rate-limited",
       });
-      this.#respondJson(response, 200, { result: 'rate-limited' });
+      this.#respondJson(response, 200, { result: "rate-limited" });
       return;
     }
-    const session = this.#bridge.findActiveSessionByNode(provision.projectId, peer.nodeId);
+    const session = this.#bridge.findActiveSessionByNode(
+      provision.projectId,
+      peer.nodeId,
+    );
     if (session === null) {
-      this.#audit('denied', {
+      this.#audit("denied", {
         ...auditBase,
         edgeId: peer.edgeId,
-        reason: 'no-live-session',
+        reason: "no-live-session",
       });
-      this.#respondJson(response, 200, { result: 'no-live-session' });
+      this.#respondJson(response, 200, { result: "no-live-session" });
       return;
     }
     const outcome = await this.#bridge.deliverPeerInput(
@@ -436,26 +516,29 @@ export class AgentPeersService {
       context.callerName,
       message,
     );
-    if (outcome === 'no-live-session') {
-      this.#audit('denied', {
+    if (outcome === "no-live-session") {
+      this.#audit("denied", {
         ...auditBase,
         edgeId: peer.edgeId,
-        reason: 'no-live-session',
+        reason: "no-live-session",
       });
-      this.#respondJson(response, 200, { result: 'no-live-session' });
+      this.#respondJson(response, 200, { result: "no-live-session" });
       return;
     }
-    this.#audit('allowed', { ...auditBase, edgeId: peer.edgeId });
+    this.#audit("allowed", { ...auditBase, edgeId: peer.edgeId });
     this.#emitMessageDelivered({
       projectId: provision.projectId,
       edgeId: peer.edgeId,
     });
-    this.#respondJson(response, 200, { result: 'delivered' });
+    this.#respondJson(response, 200, { result: "delivered" });
   }
 
   /** Reads the request body up to `maxBytes`, enforcing the cap while reading — never buffering
    * an unbounded amount before checking. Returns `null` on overflow. */
-  async #readBody(request: IncomingMessage, maxBytes: number): Promise<Buffer | null> {
+  async #readBody(
+    request: IncomingMessage,
+    maxBytes: number,
+  ): Promise<Buffer | null> {
     const chunks: Buffer[] = [];
     let total = 0;
     for await (const chunk of request as AsyncIterable<Buffer>) {
@@ -482,9 +565,12 @@ export class AgentPeersService {
     return false;
   }
 
-  #audit(outcome: 'allowed' | 'denied', metadata: Record<string, unknown>): void {
+  #audit(
+    outcome: "allowed" | "denied",
+    metadata: Record<string, unknown>,
+  ): void {
     try {
-      this.#store.appendAudit('agent-peers', 'message', outcome, metadata);
+      this.#store.appendAudit("agent-peers", "message", outcome, metadata);
     } catch {
       // Best-effort: an audit failure must not break message delivery.
     }
@@ -509,28 +595,245 @@ export class AgentPeersService {
     url: URL,
     response: ServerResponse,
   ): Promise<void> {
-    const name = (url.searchParams.get('agent') ?? '').trim();
-    if (name === '') {
-      this.#respondJson(response, 400, { error: 'missing-agent' });
+    const name = (url.searchParams.get("agent") ?? "").trim();
+    if (name === "") {
+      this.#respondJson(response, 400, { error: "missing-agent" });
       return;
     }
     const context = this.#resolveCallerContext(provision);
     if (context === null) {
-      this.#respondJson(response, 404, { error: 'unknown-node' });
+      this.#respondJson(response, 404, { error: "unknown-node" });
       return;
     }
     const peer = findPeerByName(context.peers, name);
     if (peer === undefined) {
-      this.#respondJson(response, 404, { error: 'unknown-peer' });
+      this.#respondJson(response, 404, { error: "unknown-peer" });
       return;
     }
-    const session = this.#bridge.findActiveSessionByNode(provision.projectId, peer.nodeId);
+    const session = this.#bridge.findActiveSessionByNode(
+      provision.projectId,
+      peer.nodeId,
+    );
     if (session === null) {
-      this.#respondJson(response, 404, { error: 'no-live-session' });
+      this.#respondJson(response, 404, { error: "no-live-session" });
       return;
     }
-    const text = await this.#bridge.readTranscriptTail(session.sessionId, SCREEN_TAIL_BYTES);
-    this.#respondJson(response, 200, { text: text ?? '' });
+    const text = await this.#bridge.readTranscriptTail(
+      session.sessionId,
+      SCREEN_TAIL_BYTES,
+    );
+    this.#respondJson(response, 200, { text: text ?? "" });
+  }
+
+  // ---------------------------------------------------------------------------------------
+  // Read-only connected preview access
+  // ---------------------------------------------------------------------------------------
+
+  #handlePreviews(provision: ProvisionRecord, response: ServerResponse): void {
+    const connected = this.#connectedPreviews(provision);
+    if (connected === null) {
+      this.#respondJson(response, 404, { error: "unknown-node" });
+      return;
+    }
+    this.#respondJson(response, 200, {
+      previews: connected.map((entry) => ({
+        id: entry.node.id,
+        name: entry.node.title,
+        kind: entry.node.type,
+        readable: entry.node.data.agentBrowserAccess,
+        live:
+          this.#previews?.isLive(provision.projectId, entry.node.id) ?? false,
+      })),
+    });
+  }
+
+  #handleVideos(provision: ProvisionRecord, response: ServerResponse): void {
+    const videos = this.#connectedVideos(provision);
+    if (videos === null) {
+      this.#respondJson(response, 404, { error: "unknown-node" });
+      return;
+    }
+    this.#auditVideoList(
+      provision,
+      videos.map((node) => node.id),
+    );
+    this.#respondJson(response, 200, {
+      videos: videos.map((node) => ({
+        id: node.id,
+        name: node.title,
+        relativePath: node.data.file!.relativePath,
+        available: node.data.file!.missing === false,
+      })),
+    });
+  }
+
+  #connectedVideos(
+    provision: ProvisionRecord,
+  ): Array<Extract<CanvasNode, { type: "video" }>> | null {
+    const canvas = this.#store.loadCanvas(provision.projectId);
+    if (canvas === null) return null;
+    const caller = canvas.nodes.find((node) => node.id === provision.nodeId);
+    if (caller === undefined || caller.type !== "agent") return null;
+    const approvedIds = new Set(caller.data.contextAttachmentIds);
+    for (const edge of canvas.edges) {
+      if (edge.type !== "context" || edge.config.muted) continue;
+      if (edge.sourceNodeId === caller.id) approvedIds.add(edge.targetNodeId);
+      if (edge.targetNodeId === caller.id) approvedIds.add(edge.sourceNodeId);
+    }
+    return canvas.nodes.filter(
+      (node): node is Extract<CanvasNode, { type: "video" }> =>
+        node.type === "video" &&
+        approvedIds.has(node.id) &&
+        node.data.file !== undefined &&
+        node.data.file.projectId === provision.projectId &&
+        node.data.file.kind === "file",
+    );
+  }
+
+  #auditVideoList(
+    provision: ProvisionRecord,
+    videoIds: readonly string[],
+  ): void {
+    try {
+      this.#store.appendAudit("agent-peers", "list-videos", "allowed", {
+        projectId: provision.projectId,
+        nodeId: provision.nodeId,
+        videoIds: [...videoIds],
+      });
+    } catch {
+      // Audit storage failure must not expose more data or crash the request.
+    }
+  }
+
+  async #handlePreviewRead(
+    provision: ProvisionRecord,
+    url: URL,
+    response: ServerResponse,
+  ): Promise<void> {
+    const previewId = (url.searchParams.get("previewId") ?? "").trim();
+    const preview = this.#authorizedPreview(provision, previewId);
+    if (preview === null) {
+      this.#auditPreview(provision, previewId, "denied");
+      this.#respondJson(response, 403, { error: "preview-access-denied" });
+      return;
+    }
+    if (this.#previews === null) {
+      this.#respondJson(response, 404, { error: "preview-not-live" });
+      return;
+    }
+    try {
+      const inspection = await this.#previews.inspect(
+        provision.projectId,
+        preview.node.id,
+      );
+      this.#auditPreview(provision, preview.node.id, "allowed");
+      this.#respondJson(response, 200, inspection);
+    } catch {
+      this.#respondJson(response, 404, { error: "preview-not-live" });
+    }
+  }
+
+  async #handlePreviewScreenshot(
+    provision: ProvisionRecord,
+    url: URL,
+    response: ServerResponse,
+  ): Promise<void> {
+    const previewId = (url.searchParams.get("previewId") ?? "").trim();
+    const preview = this.#authorizedPreview(provision, previewId);
+    if (preview === null) {
+      this.#auditPreview(provision, previewId, "denied");
+      this.#respondJson(response, 403, { error: "preview-access-denied" });
+      return;
+    }
+    if (this.#previews === null) {
+      this.#respondJson(response, 404, { error: "preview-not-live" });
+      return;
+    }
+    try {
+      const screenshot = await this.#previews.screenshot(
+        provision.projectId,
+        preview.node.id,
+      );
+      this.#auditPreview(provision, preview.node.id, "allowed", "screenshot");
+      this.#respondJson(response, 200, screenshot);
+    } catch {
+      this.#respondJson(response, 404, { error: "preview-not-live" });
+    }
+  }
+
+  #connectedPreviews(provision: ProvisionRecord): Array<{
+    node: Extract<CanvasNode, { type: "web-preview" | "mobile-preview" }>;
+    edgeId: string;
+  }> | null {
+    const canvas = this.#store.loadCanvas(provision.projectId);
+    if (
+      canvas === null ||
+      !canvas.nodes.some((node) => node.id === provision.nodeId)
+    )
+      return null;
+    const previews = new Map<
+      string,
+      Extract<CanvasNode, { type: "web-preview" | "mobile-preview" }>
+    >();
+    for (const node of canvas.nodes) {
+      if (node.type === "web-preview" || node.type === "mobile-preview")
+        previews.set(node.id, node);
+    }
+    const connected: Array<{
+      node: Extract<CanvasNode, { type: "web-preview" | "mobile-preview" }>;
+      edgeId: string;
+    }> = [];
+    for (const edge of canvas.edges) {
+      if (edge.type !== "context" || edge.config.muted) continue;
+      const otherId =
+        edge.sourceNodeId === provision.nodeId
+          ? edge.targetNodeId
+          : edge.targetNodeId === provision.nodeId
+            ? edge.sourceNodeId
+            : null;
+      if (otherId === null) continue;
+      const node = previews.get(otherId);
+      if (
+        node !== undefined &&
+        !connected.some((entry) => entry.node.id === node.id)
+      ) {
+        connected.push({ node, edgeId: edge.id });
+      }
+    }
+    return connected;
+  }
+
+  #authorizedPreview(
+    provision: ProvisionRecord,
+    previewId: string,
+  ): {
+    node: Extract<CanvasNode, { type: "web-preview" | "mobile-preview" }>;
+    edgeId: string;
+  } | null {
+    if (previewId === "") return null;
+    return (
+      this.#connectedPreviews(provision)?.find(
+        (entry) =>
+          entry.node.id === previewId && entry.node.data.agentBrowserAccess,
+      ) ?? null
+    );
+  }
+
+  #auditPreview(
+    provision: ProvisionRecord,
+    previewId: string,
+    outcome: "allowed" | "denied",
+    action = "read-preview",
+  ): void {
+    try {
+      this.#store.appendAudit("agent-peers", action, outcome, {
+        projectId: provision.projectId,
+        nodeId: provision.nodeId,
+        previewId,
+      });
+    } catch {
+      // Audit storage failure must not expose more data or crash the request.
+    }
   }
 
   // ---------------------------------------------------------------------------------------
@@ -540,7 +843,7 @@ export class AgentPeersService {
   #respondJson(response: ServerResponse, status: number, body: unknown): void {
     const payload = JSON.stringify(body);
     response.writeHead(status, {
-      'Content-Type': 'application/json; charset=utf-8',
+      "Content-Type": "application/json; charset=utf-8",
     });
     response.end(payload);
   }

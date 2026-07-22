@@ -2,7 +2,17 @@ import { isIP } from 'node:net';
 
 const LOOPBACK_NAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
-export function validatedSurfaceUrl(candidate: string): URL {
+/**
+ * Validates a preview surface URL. Loopback addresses (dev-server mode) are
+ * always allowed and still require an explicit port. When `allowedOrigin` is
+ * supplied (URL mode — an external site the renderer configured for this
+ * node), a URL whose origin matches it is also accepted, with no port
+ * requirement (external sites commonly rely on the default 80/443 port).
+ */
+export function validatedSurfaceUrl(
+  candidate: string,
+  opts?: { allowedOrigin?: string | undefined },
+): URL {
   let url: URL;
   try {
     url = new URL(candidate);
@@ -15,11 +25,12 @@ export function validatedSurfaceUrl(candidate: string): URL {
   if (url.username !== '' || url.password !== '') {
     throw new Error('Preview surface URLs cannot contain credentials.');
   }
-  if (!isLoopbackHost(url.hostname)) {
-    throw new Error('Preview surfaces can connect only to loopback addresses.');
+  if (isLoopbackHost(url.hostname)) {
+    if (url.port === '') throw new Error('Preview surface URLs require an allocated local port.');
+    return url;
   }
-  if (url.port === '') throw new Error('Preview surface URLs require an allocated local port.');
-  return url;
+  if (opts?.allowedOrigin !== undefined && url.origin === opts.allowedOrigin) return url;
+  throw new Error('Preview surfaces can connect only to loopback addresses.');
 }
 
 export function isAllowedSurfaceRequest(candidate: string, allowed: URL): boolean {

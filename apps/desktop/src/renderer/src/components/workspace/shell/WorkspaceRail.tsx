@@ -1,11 +1,9 @@
 import {
-  AlertTriangle,
   ChevronRight,
   Files,
   GitBranch,
   Layers3,
   Search,
-  ShieldCheck,
   Workflow,
 } from 'lucide-react';
 
@@ -131,9 +129,6 @@ export function WorkspaceRail({
       ) : (
         <CanvasNodeList nodes={nodes} nodeRegistry={nodeRegistry} onSelectNode={onSelectNode} />
       )}
-      <footer>
-        <ShieldStatus project={project} />
-      </footer>
     </aside>
   );
 }
@@ -369,31 +364,5 @@ function CanvasNodeList({
         {!nodes.length && <p role="status">No matching nodes on this canvas.</p>}
       </div>
     </section>
-  );
-}
-
-function ShieldStatus({ project }: { project: Project }) {
-  return (
-    <div className="rail-safety">
-      <span className={project.health.sensitiveWarnings.length ? 'warning' : 'safe'}>
-        {project.health.sensitiveWarnings.length ? (
-          <AlertTriangle size={12} aria-hidden="true" />
-        ) : (
-          <ShieldCheck size={12} aria-hidden="true" />
-        )}
-      </span>
-      <div>
-        <strong>
-          {project.health.sensitiveWarnings.length
-            ? 'Private files need attention'
-            : 'Private file protection on'}
-        </strong>
-        <small>
-          {project.health.sensitiveWarnings.length
-            ? `${project.health.sensitiveWarnings.length} warning${project.health.sensitiveWarnings.length === 1 ? '' : 's'} found`
-            : 'Ignored files and credentials stay hidden from agents'}
-        </small>
-      </div>
-    </div>
   );
 }

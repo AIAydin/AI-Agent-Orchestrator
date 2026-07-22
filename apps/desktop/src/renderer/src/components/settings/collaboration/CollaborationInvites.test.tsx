@@ -12,12 +12,38 @@ import type { CollaborationConnection } from '../../../../../shared/collaboratio
 import { CollaborationSettings } from './CollaborationSettings.js';
 
 const PRIVATE_LINK = 'forgeboard://collaboration/invite#token=PRIVATE_INVITE_TOKEN';
+const CONNECTED_LINK =
+  'forgeboard://collaboration/invite?management=https%3A%2F%2Fnew.example.test%2Fcontrol%2F&server=wss%3A%2F%2Fnew.example.test%2Fsocket#token=CONNECTED_INVITE_TOKEN';
 const INVITE_ID = '95c8589e-b738-4506-9ea9-7578f062f294';
 const NOW = '2026-07-17T12:00:00.000Z';
 
 afterEach(cleanup);
 
 describe('collaboration invite settings', () => {
+  it('configures the exact server from a new one-paste invite', async () => {
+    const api = installApi();
+    api.joinInvite.mockResolvedValue({
+      ok: false,
+      error: { code: 'cancelled', message: 'Cancelled.', retryable: false },
+    });
+    render(<Harness />);
+
+    fireEvent.change(screen.getByLabelText('Invite link'), {
+      target: { value: CONNECTED_LINK },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Join room' }));
+
+    await waitFor(() => expect(api.joinInvite).toHaveBeenCalledOnce());
+    expect(api.joinInvite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serverUrl: 'wss://new.example.test/socket',
+        managementBaseUrl: 'https://new.example.test/control/',
+        inviteLink: CONNECTED_LINK,
+      }),
+    );
+    expect(document.body.textContent).not.toContain('CONNECTED_INVITE_TOKEN');
+  });
+
   it('joins with exact configured identity and clears the link after success', async () => {
     const api = installApi();
     let resolveJoin: ((value: unknown) => void) | undefined;
@@ -31,7 +57,7 @@ describe('collaboration invite settings', () => {
     const inviteLink = screen.getByLabelText<HTMLInputElement>(/Invite link/u);
     fireEvent.change(inviteLink, { target: { value: PRIVATE_LINK } });
     const joinButton = screen.getByRole<HTMLButtonElement>('button', {
-      name: 'Join with invite',
+      name: 'Join room',
     });
     act(() => {
       joinButton.click();
@@ -71,7 +97,7 @@ describe('collaboration invite settings', () => {
 
     const inviteLink = screen.getByLabelText<HTMLInputElement>(/Invite link/u);
     fireEvent.change(inviteLink, { target: { value: PRIVATE_LINK } });
-    fireEvent.click(screen.getByRole('button', { name: 'Join with invite' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Join room' }));
 
     expect(await screen.findByText(/This invite is invalid/u)).toBeTruthy();
     expect(inviteLink.value).toBe('');

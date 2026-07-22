@@ -1,9 +1,9 @@
-import { AGENT_CONTEXT_ATTACHMENT_LIMIT } from '@forgeboard/core/domain';
+import { AGENT_CONTEXT_ATTACHMENT_LIMIT } from "@forgeboard/core/domain";
 
-import type { FileDocument } from '../../../../../shared/files/contracts.js';
-import { NODE_DEFINITIONS, type WorkshopNode } from '../canvas/CanvasNode.js';
-import { initialWorkshopNodeDimensions } from '../model/node-persistence.js';
-import type { WorkspaceContextDragPayload } from './contracts.js';
+import type { FileDocument } from "../../../../../shared/files/contracts.js";
+import { NODE_DEFINITIONS, type WorkshopNode } from "../canvas/CanvasNode.js";
+import { initialWorkshopNodeDimensions } from "../model/node-persistence.js";
+import type { WorkspaceContextDragPayload } from "./contracts.js";
 
 export const MAX_AGENT_CONTEXT_ATTACHMENTS = AGENT_CONTEXT_ATTACHMENT_LIMIT;
 
@@ -26,32 +26,41 @@ export function linkProjectFileToAgent(input: {
   readonly newNodeId: string;
 }): AgentContextLinkResult {
   const target = input.nodes.find((node) => node.id === input.targetNodeId);
-  if (target === undefined || target.data.kind !== 'agent') {
-    return failure('Files can only be attached to an agent.');
+  if (target === undefined || target.data.kind !== "agent") {
+    return failure("Files can only be attached to an agent.");
   }
-  if (target.data.locked) return failure('Unlock the agent before changing its files.');
-  if (input.payload.projectId !== input.projectId || input.document.projectId !== input.projectId) {
-    return failure('The dragged file belongs to another project.');
+  if (target.data.locked)
+    return failure("Unlock the agent before changing its files.");
+  if (
+    input.payload.projectId !== input.projectId ||
+    input.document.projectId !== input.projectId
+  ) {
+    return failure("The dragged file belongs to another project.");
   }
   if (
     input.document.relativePath !== input.payload.relativePath ||
     input.document.projectId !== input.payload.projectId
   ) {
-    return failure("The file on disk doesn't match the file you dragged. Try again.");
+    return failure(
+      "The file on disk doesn't match the file you dragged. Try again.",
+    );
   }
 
   const attachmentIds = target.data.contextAttachmentIds ?? [];
   const sameFileAttachment = attachmentIds.find((attachmentId) => {
     const attachment = input.nodes.find((node) => node.id === attachmentId);
     return (
-      attachment?.data.kind === 'file' &&
-      attachment.data.file?.kind === 'file' &&
+      (attachment?.data.kind === "file" || attachment?.data.kind === "video") &&
+      attachment.data.file?.kind === "file" &&
       !attachment.data.file.missing &&
       attachment.data.file.projectId === input.projectId &&
       attachment.data.file.relativePath === input.payload.relativePath
     );
   });
-  if (sameFileAttachment !== undefined && sameFileAttachment !== input.payload.sourceNodeId) {
+  if (
+    sameFileAttachment !== undefined &&
+    sameFileAttachment !== input.payload.sourceNodeId
+  ) {
     return {
       ok: true,
       nodes: [...input.nodes],
@@ -104,10 +113,11 @@ export function removeProjectFileFromAgent(input: {
   readonly nodes: readonly WorkshopNode[];
 }): AgentContextLinkResult {
   const target = input.nodes.find((node) => node.id === input.targetNodeId);
-  if (target === undefined || target.data.kind !== 'agent') {
-    return failure('Files can only be removed from an agent.');
+  if (target === undefined || target.data.kind !== "agent") {
+    return failure("Files can only be removed from an agent.");
   }
-  if (target.data.locked) return failure('Unlock the agent before changing its files.');
+  if (target.data.locked)
+    return failure("Unlock the agent before changing its files.");
   const current = target.data.contextAttachmentIds ?? [];
   if (!current.includes(input.attachmentNodeId)) {
     return {
@@ -126,7 +136,9 @@ export function removeProjectFileFromAgent(input: {
             ...node,
             data: {
               ...node.data,
-              contextAttachmentIds: current.filter((id) => id !== input.attachmentNodeId),
+              contextAttachmentIds: current.filter(
+                (id) => id !== input.attachmentNodeId,
+              ),
             },
           }
         : node,
@@ -159,15 +171,22 @@ function resolveSourceNode(input: {
     input.payload.sourceNodeId === undefined
       ? undefined
       : input.nodes.find((node) => node.id === input.payload.sourceNodeId);
-  if (input.payload.sourceNodeId !== undefined && explicitSource === undefined) {
-    return failure('The dragged file is no longer on the canvas.');
+  if (
+    input.payload.sourceNodeId !== undefined &&
+    explicitSource === undefined
+  ) {
+    return failure("The dragged file is no longer on the canvas.");
   }
   if (explicitSource !== undefined) {
     const invalid = invalidFileSource(explicitSource, input);
     if (invalid !== null) return failure(invalid);
     return {
       ok: true,
-      nodes: updateFileHash(input.nodes, explicitSource.id, input.document.sha256),
+      nodes: updateFileHash(
+        input.nodes,
+        explicitSource.id,
+        input.document.sha256,
+      ),
       node: withFileHash(explicitSource, input.document.sha256),
       created: false,
       repaired:
@@ -178,17 +197,20 @@ function resolveSourceNode(input: {
 
   const reusable = input.nodes.find(
     (node) =>
-      node.data.kind === 'file' &&
+      node.data.kind === "file" &&
       node.data.file?.projectId === input.projectId &&
       node.data.file.relativePath === input.payload.relativePath,
   );
   if (reusable !== undefined) {
     if (reusable.data.locked) {
-      return failure('Unlock the existing file before sharing it with an agent.');
+      return failure(
+        "Unlock the existing file before sharing it with an agent.",
+      );
     }
-    if (reusable.data.file?.kind === 'file') {
+    if (reusable.data.file?.kind === "file") {
       const repaired =
-        reusable.data.file.missing || reusable.data.file.lastKnownHash !== input.document.sha256;
+        reusable.data.file.missing ||
+        reusable.data.file.lastKnownHash !== input.document.sha256;
       const nextNode = {
         ...reusable,
         data: {
@@ -198,7 +220,9 @@ function resolveSourceNode(input: {
       };
       return {
         ok: true,
-        nodes: input.nodes.map((node) => (node.id === reusable.id ? nextNode : node)),
+        nodes: input.nodes.map((node) =>
+          node.id === reusable.id ? nextNode : node,
+        ),
         node: nextNode,
         created: false,
         repaired,
@@ -210,18 +234,20 @@ function resolveSourceNode(input: {
   const fileDefinition = NODE_DEFINITIONS.file;
   const node: WorkshopNode = {
     id: input.newNodeId,
-    type: 'workshop',
+    type: "workshop",
     selected: false,
     position: {
       x: target.position.x - 320,
-      y: target.position.y + (target.data.contextAttachmentIds?.length ?? 0) * 36,
+      y:
+        target.position.y +
+        (target.data.contextAttachmentIds?.length ?? 0) * 36,
     },
-    ...initialWorkshopNodeDimensions('file'),
+    ...initialWorkshopNodeDimensions("file"),
     data: {
-      kind: 'file',
+      kind: "file",
       title: fileName(input.payload.relativePath),
       description: fileDefinition.description,
-      status: 'idle',
+      status: "idle",
       locked: false,
       collapsed: false,
       color: fileDefinition.color,
@@ -231,7 +257,13 @@ function resolveSourceNode(input: {
   if (input.nodes.some((candidate) => candidate.id === node.id)) {
     return failure("The file couldn't be added to the canvas. Try again.");
   }
-  return { ok: true, nodes: [...input.nodes, node], node, created: true, repaired: false };
+  return {
+    ok: true,
+    nodes: [...input.nodes, node],
+    node,
+    created: true,
+    repaired: false,
+  };
 }
 
 function invalidFileSource(
@@ -241,21 +273,27 @@ function invalidFileSource(
     readonly payload: WorkspaceContextDragPayload;
   },
 ): string | null {
-  if (node.data.kind !== 'file' || node.data.file === undefined) {
-    return 'Only a file that is set up on the canvas can be shared with an agent.';
+  if (
+    (node.data.kind !== "file" && node.data.kind !== "video") ||
+    node.data.file === undefined
+  ) {
+    return "Only a file or video that is set up on the canvas can be shared with an agent.";
   }
-  if (node.data.locked) return 'Unlock the file before sharing it with an agent.';
+  if (node.data.locked)
+    return "Unlock the file before sharing it with an agent.";
   if (
     node.data.file.projectId !== input.projectId ||
     node.data.file.projectId !== input.payload.projectId
   ) {
-    return 'This file belongs to another project.';
+    return "This file belongs to another project.";
   }
   if (node.data.file.relativePath !== input.payload.relativePath) {
-    return 'This file no longer matches the tab you dragged.';
+    return "This file no longer matches the tab you dragged.";
   }
-  if (node.data.file.missing) return 'This file is missing. Choose a replacement first.';
-  if (node.data.file.kind !== 'file') return 'Only regular files can be shared with an agent.';
+  if (node.data.file.missing)
+    return "This file is missing. Choose a replacement first.";
+  if (node.data.file.kind !== "file")
+    return "Only regular files can be shared with an agent.";
   return null;
 }
 
@@ -264,7 +302,9 @@ function updateFileHash(
   nodeId: string,
   sha256: string | null,
 ): WorkshopNode[] {
-  return nodes.map((node) => (node.id === nodeId ? withFileHash(node, sha256) : node));
+  return nodes.map((node) =>
+    node.id === nodeId ? withFileHash(node, sha256) : node,
+  );
 }
 
 function withFileHash(node: WorkshopNode, sha256: string | null): WorkshopNode {
@@ -283,22 +323,28 @@ function withFileHash(node: WorkshopNode, sha256: string | null): WorkshopNode {
 }
 
 function verifiedReference(
-  input: { readonly projectId: string; readonly payload: WorkspaceContextDragPayload },
+  input: {
+    readonly projectId: string;
+    readonly payload: WorkspaceContextDragPayload;
+  },
   sha256: string | null,
-): NonNullable<WorkshopNode['data']['file']> {
+): NonNullable<WorkshopNode["data"]["file"]> {
   return {
     projectId: input.projectId,
     relativePath: input.payload.relativePath,
-    kind: 'file',
+    kind: "file",
     missing: false,
     ...(sha256 === null ? {} : { lastKnownHash: sha256 }),
   };
 }
 
 function fileName(relativePath: string): string {
-  return relativePath.split('/').at(-1) ?? relativePath;
+  return relativePath.split("/").at(-1) ?? relativePath;
 }
 
-function failure(message: string): { readonly ok: false; readonly message: string } {
+function failure(message: string): {
+  readonly ok: false;
+  readonly message: string;
+} {
   return { ok: false, message };
 }

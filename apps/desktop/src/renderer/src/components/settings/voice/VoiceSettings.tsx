@@ -1,11 +1,16 @@
-import { Download, Mic, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Download, Mic, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import type { VoiceModelStatus } from '../../../../../shared/voice/contracts.js';
-import { unwrap } from '../../../lib/ipc.js';
-import { SettingsSection, type AsyncSettingsProps } from '../shared.js';
+import type { VoiceModelStatus } from "../../../../../shared/voice/contracts.js";
+import { unwrap } from "../../../lib/ipc.js";
+import { SettingsSection, type AsyncSettingsProps } from "../shared.js";
 
-export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsProps) {
+export function VoiceSettings({
+  draft,
+  setDraft,
+  busy,
+  perform,
+}: AsyncSettingsProps) {
   const [model, setModel] = useState<VoiceModelStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -16,7 +21,10 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
       .then(unwrap)
       .then((status) => active && setModel(status))
       .catch((error: unknown) => {
-        if (active) setMessage(error instanceof Error ? error.message : 'Model status failed.');
+        if (active)
+          setMessage(
+            error instanceof Error ? error.message : "Model status failed.",
+          );
       });
     return () => {
       active = false;
@@ -29,9 +37,9 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
       const status = unwrap(await window.forgeboard.voice.install());
       setModel(status);
       setMessage(
-        status.state === 'ready'
-          ? 'The voice model is installed. Transcription now stays on this device.'
-          : 'The model download was cancelled.',
+        status.state === "ready"
+          ? "The voice model is installed. Transcription now stays on this device."
+          : "The model download was cancelled.",
       );
     });
   }
@@ -41,16 +49,18 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
     await perform(async () => {
       const status = unwrap(await window.forgeboard.voice.remove());
       setModel(status);
-      if (status.state === 'not-installed') {
+      if (status.state === "not-installed") {
         setDraft((current) => ({ ...current, voiceCommandsEnabled: false }));
-        setMessage('The local voice model was removed. Save settings to keep voice disabled.');
+        setMessage(
+          "The local voice model was removed. Save settings to keep voice disabled.",
+        );
       } else {
-        setMessage('Model removal was cancelled.');
+        setMessage("Model removal was cancelled.");
       }
     });
   }
 
-  const ready = model?.state === 'ready';
+  const ready = model?.state === "ready";
   return (
     <SettingsSection
       title="Local voice commands"
@@ -68,7 +78,12 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
 
       <div className="button-row">
         {!ready ? (
-          <button className="button" type="button" disabled={busy} onClick={() => void install()}>
+          <button
+            className="button"
+            type="button"
+            disabled={busy}
+            onClick={() => void install()}
+          >
             <Download size={14} aria-hidden="true" /> Install local model
           </button>
         ) : (
@@ -83,10 +98,12 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
         )}
       </div>
 
-      <label className="toggle-row">
+      <label className="switch-row">
         <span>
           <strong>Enable voice commands</strong>
-          <small>Allows microphone access only in the main Forgeboard window.</small>
+          <small>
+            Allows microphone access only in the main Forgeboard window.
+          </small>
         </span>
         <input
           type="checkbox"
@@ -105,12 +122,12 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
         />
       </label>
 
-      <label className="toggle-row">
+      <label className="switch-row">
         <span>
           <strong>Run safe actions automatically</strong>
           <small>
-            Creation and view actions run after transcription. Closing projects and starting work
-            still require confirmation.
+            Creation and view actions run after transcription. Closing projects
+            and starting work still require confirmation.
           </small>
         </span>
         <input
@@ -128,8 +145,9 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
       </label>
 
       <p className="recovery-guidance">
-        The one-time model install contacts Hugging Face only after a native approval. Once
-        installed, Forgeboard disables remote model loading and performs transcription offline.
+        The one-time model install contacts Hugging Face only after a native
+        approval. Once installed, Forgeboard disables remote model loading and
+        performs transcription offline.
       </p>
       {message && <p role="status">{message}</p>}
     </SettingsSection>
@@ -137,10 +155,10 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
 }
 
 function modelStatusLabel(status: VoiceModelStatus | null): string {
-  if (status === null) return 'Checking local model…';
-  if (status.state === 'ready') return 'Installed · local only';
-  if (status.state === 'installing') return 'Installing…';
-  if (status.state === 'loading') return 'Loading locally…';
-  if (status.state === 'error') return status.detail ?? 'Model needs attention';
-  return 'Not installed';
+  if (status === null) return "Checking local model…";
+  if (status.state === "ready") return "Installed · local only";
+  if (status.state === "installing") return "Installing…";
+  if (status.state === "loading") return "Loading locally…";
+  if (status.state === "error") return status.detail ?? "Model needs attention";
+  return "Not installed";
 }

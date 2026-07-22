@@ -45,6 +45,20 @@ const ACTIVE: ApprovalView = {
   },
 };
 
+const TRUSTED_LAUNCH: ApprovalView = {
+  ...ACTIVE,
+  record: {
+    ...ACTIVE.record,
+    id: '20000000-0000-4000-8000-000000000002',
+    scope: {
+      ...ACTIVE.record.scope,
+      action: 'agent-launch',
+      resourceFingerprint: 'b'.repeat(64),
+    },
+    reason: 'Trusted exact claude launch in /tmp/project.',
+  },
+};
+
 const list = vi.fn();
 const revoke = vi.fn();
 
@@ -80,6 +94,17 @@ describe('SavedApprovalsSettings', () => {
       }),
     );
     expect(screen.getByText(/per-use approval/iu)).toBeTruthy();
+    expect(screen.getByText('Remembered exact project check.')).toBeTruthy();
+  });
+
+  it('shows trusted local launches with an immediate revoke control', async () => {
+    list.mockResolvedValue({ ok: true, value: [TRUSTED_LAUNCH] });
+    render(<SavedApprovalsSettings activeProject={PROJECT} busy={false} onError={vi.fn()} />);
+
+    expect(
+      await screen.findByRole('button', { name: 'Revoke Trusted agent or terminal launch' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Trusted exact claude launch in /tmp/project.')).toBeTruthy();
   });
 
   it('can request inactive approvals through the UI', async () => {

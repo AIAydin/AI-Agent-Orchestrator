@@ -42,6 +42,7 @@ import {
   type TerminalPtyFactory,
   type TerminalPtyHandle,
 } from './pty-process.js';
+import { trustedTerminalLaunchFingerprint } from './trusted-launch.js';
 
 const DEFAULT_PLAN_TTL_MS = 60_000;
 const MAX_PENDING_PLANS = 128;
@@ -86,6 +87,7 @@ export interface TerminalServiceStore {
 
 export interface TerminalLaunchNativeReview {
   readonly view: TerminalLaunchPlanView;
+  readonly approvalFingerprint: string;
   readonly exact: {
     readonly executable: string;
     readonly arguments: readonly string[];
@@ -312,18 +314,25 @@ export class TerminalService {
       this.getSettings(),
     );
     assertAuthority();
+    const environmentVariableNames =
+      pending.peerProvisionId === undefined
+        ? [...pending.resolved.environmentVariableNames]
+        : [...pending.resolved.environmentVariableNames, ...PEER_ENVIRONMENT_VARIABLE_NAMES];
     const decision = await authorize({
       view: structuredClone(pending.plan),
+      approvalFingerprint: trustedTerminalLaunchFingerprint({
+        executable: pending.resolved.executableIdentity,
+        arguments: pending.resolved.arguments,
+        cwd: pending.resolved.cwdIdentity,
+        environmentVariableNames,
+      }),
       exact: {
         executable: pending.resolved.executable,
         arguments: [...pending.resolved.arguments],
         cwd: pending.resolved.cwd,
         // Transparency: disclose the peer env NAMES (never values) when a provision is attached,
         // even though the actual URL/token are only resolved later, in `#launch`, right before spawn.
-        environmentVariableNames:
-          pending.peerProvisionId === undefined
-            ? [...pending.resolved.environmentVariableNames]
-            : [...pending.resolved.environmentVariableNames, ...PEER_ENVIRONMENT_VARIABLE_NAMES],
+        environmentVariableNames,
       },
     });
     assertAuthority();

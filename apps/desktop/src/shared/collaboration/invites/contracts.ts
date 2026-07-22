@@ -69,12 +69,7 @@ export const CollaborationInviteLinkSchema = z
         message: 'Collaboration invite links cannot contain credentials.',
       });
     }
-    if (url.search !== '') {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Collaboration invite links cannot contain query parameters.',
-      });
-    }
+    validateInviteConnectionParameters(url, context);
     const parameters = new URLSearchParams(url.hash.slice(1));
     if ([...parameters.keys()].some((key) => key !== 'token')) {
       context.addIssue({
@@ -92,11 +87,78 @@ export const CollaborationInviteLinkSchema = z
   });
 export type CollaborationInviteLink = z.infer<typeof CollaborationInviteLinkSchema>;
 
+export interface CollaborationInviteConnection {
+  readonly serverUrl: string;
+  readonly managementBaseUrl: string;
+}
+
+/** Reads the credential-free connection bundle added by Forgeboard when an invite is copied. */
+export function collaborationInviteConnectionFromLink(
+  rawLink: string,
+): CollaborationInviteConnection | null {
+  const link = CollaborationInviteLinkSchema.parse(rawLink);
+  const parameters = new URL(link).searchParams;
+  const serverUrl = parameters.get('server');
+  const managementBaseUrl = parameters.get('management');
+  if (serverUrl === null || managementBaseUrl === null) return null;
+  return {
+    serverUrl: CollaborationServerUrlSchema.parse(serverUrl),
+    managementBaseUrl: CollaborationManagementUrlSchema.parse(managementBaseUrl),
+  };
+}
+
+/** Adds exact, non-secret endpoints so a recipient can join from one pasted invite link. */
+export function collaborationInviteLinkWithConnection(
+  rawLink: string,
+  rawConnection: CollaborationInviteConnection,
+): CollaborationInviteLink {
+  const link = new URL(CollaborationInviteLinkSchema.parse(rawLink));
+  const serverUrl = CollaborationServerUrlSchema.parse(rawConnection.serverUrl);
+  const managementBaseUrl = CollaborationManagementUrlSchema.parse(rawConnection.managementBaseUrl);
+  link.searchParams.set('management', managementBaseUrl);
+  link.searchParams.set('server', serverUrl);
+  return CollaborationInviteLinkSchema.parse(link.toString());
+}
+
 export function collaborationInviteTokenFromLink(rawLink: string): string {
   const link = CollaborationInviteLinkSchema.parse(rawLink);
   return CollaborationInviteTokenSchema.parse(
     new URLSearchParams(new URL(link).hash.slice(1)).get('token'),
   );
+}
+
+function validateInviteConnectionParameters(url: URL, context: z.RefinementCtx): void {
+  const parameters = url.searchParams;
+  const keys = [...parameters.keys()];
+  if (keys.some((key) => key !== 'management' && key !== 'server')) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Collaboration invite links can contain only connection endpoints.',
+    });
+    return;
+  }
+  const managementValues = parameters.getAll('management');
+  const serverValues = parameters.getAll('server');
+  if (managementValues.length === 0 && serverValues.length === 0) return;
+  if (managementValues.length !== 1 || serverValues.length !== 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Collaboration invite links must contain both connection endpoints exactly once.',
+    });
+    return;
+  }
+  if (!CollaborationManagementUrlSchema.safeParse(managementValues[0]).success) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'The invite management endpoint is invalid.',
+    });
+  }
+  if (!CollaborationServerUrlSchema.safeParse(serverValues[0]).success) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'The invite WebSocket endpoint is invalid.',
+    });
+  }
 }
 
 export const CollaborationInviteSchema = z

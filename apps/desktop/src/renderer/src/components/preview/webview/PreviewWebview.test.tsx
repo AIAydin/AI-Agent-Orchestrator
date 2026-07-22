@@ -39,6 +39,19 @@ describe('PreviewWebview', () => {
     expect(element.getAttribute('aria-label')).toBe('Web preview');
   });
 
+  it('only enables popup windows when explicitly requested', () => {
+    const { container } = render(
+      <PreviewWebview
+        partition="persist:preview:p1:n1"
+        src="https://miro.com/"
+        ariaLabel="Signed-in preview"
+        allowPopups
+        onStatus={() => undefined}
+      />,
+    );
+    expect(container.querySelector('webview')?.hasAttribute('allowpopups')).toBe(true);
+  });
+
   it('reports loading, ready, and failure transitions', () => {
     const { element, onStatus } = renderWebview();
     fireEvent(element, new Event('did-start-loading'));
@@ -74,6 +87,35 @@ describe('PreviewWebview', () => {
     expect(onStatus).toHaveBeenLastCalledWith(
       expect.objectContaining({ url: 'http://localhost:5173/about', canGoBack: true }),
     );
+  });
+
+  it('stays mounted while Electron history methods are unavailable before dom-ready', () => {
+    const prototype = HTMLElement.prototype as PreviewWebviewElement;
+    Object.defineProperties(prototype, {
+      canGoBack: {
+        configurable: true,
+        value: vi.fn(() => {
+          throw new Error('The WebView must emit dom-ready first.');
+        }),
+      },
+      canGoForward: {
+        configurable: true,
+        value: vi.fn(() => {
+          throw new Error('The WebView must emit dom-ready first.');
+        }),
+      },
+    });
+
+    try {
+      const { element, onStatus } = renderWebview();
+      expect(element).not.toBeNull();
+      expect(onStatus).toHaveBeenLastCalledWith(
+        expect.objectContaining({ canGoBack: false, canGoForward: false }),
+      );
+    } finally {
+      delete prototype.canGoBack;
+      delete prototype.canGoForward;
+    }
   });
 
   it('forwards mapped console messages', () => {

@@ -152,10 +152,14 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   previewReadinessPath?: string;
   previewUrlPath?: string;
   previewPort?: number | undefined;
+  /** A configured external web URL (origin-pinned); mutually exclusive with `previewPort`. */
+  url?: string | undefined;
   previewPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewSecondaryPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewOrientation?: 'portrait' | 'landscape';
   previewSideBySide?: boolean;
+  browserAuthenticationEnabled?: boolean;
+  agentBrowserAccess?: boolean;
   previewComparison?: {
     leftTarget?: { kind: 'agent-run'; runId: string };
     rightTarget?: { kind: 'agent-run'; runId: string };
@@ -252,26 +256,27 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         />
       ))}
       <header>
-        <span className="node-kind-icon">
+        <span
+          className="node-kind-icon"
+          role="img"
+          aria-label={definition.label}
+          title={definition.label}
+        >
           <Icon size={15} aria-hidden="true" />
         </span>
-        <span className="node-kind">{definition.label}</span>
         {/* Agent nodes keep their own inline rename (in AgentSessionNode's title bar), so the
             generic header only shows their collapsed title as static text. Every other kind gets
-            the double-click-to-rename header title. */}
-        {isAgent
-          ? data.collapsed && (
-              <strong className="collapsed-node-title" title={data.title}>
-                {data.title}
-              </strong>
-            )
-          : (
-              <CanvasNodeHeaderTitle
-                id={id}
-                title={data.title}
-                readOnly={!canChangePresentation}
-              />
-            )}
+            the double-click-to-rename header title — the node name is the header's primary text,
+            with the kind conveyed by the icon beside it. */}
+        {isAgent ? (
+          data.collapsed && (
+            <strong className="collapsed-node-title" title={data.title}>
+              {data.title}
+            </strong>
+          )
+        ) : (
+          <CanvasNodeHeaderTitle id={id} title={data.title} readOnly={!canChangePresentation} />
+        )}
         {data.collapsed && data.status !== 'idle' && (
           <span className={`node-status-label ${data.status}`}>{data.status}</span>
         )}
@@ -284,11 +289,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         {/* Agent nodes surface their settings/comments/history through their own window, so the
             generic details popover is only mounted for the other node kinds. */}
         {!isAgent && (
-          <CanvasNodeDetailsPopover
-            id={id}
-            data={data}
-            readOnly={!canChangePresentation}
-          />
+          <CanvasNodeDetailsPopover id={id} data={data} readOnly={!canChangePresentation} />
         )}
         <WorkspaceTooltip
           content={
@@ -319,7 +320,6 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
       {Face !== null && <Face id={id} data={data} />}
       {Face === null && definition.behaviors.collapsible && !data.collapsed && (
         <div className="node-body">
-          <strong>{data.title}</strong>
           <p>{data.description || definition.description}</p>
           {data.status !== 'idle' && (
             <span className={`node-status-label ${data.status}`}>
