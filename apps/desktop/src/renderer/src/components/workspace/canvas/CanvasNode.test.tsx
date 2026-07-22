@@ -215,7 +215,7 @@ describe('CanvasNode presentation interactions', () => {
     expect(screen.getByRole('img', { name: 'Product brief' })).toBeTruthy();
   });
 
-  it('marks agent nodes as provider-tinted windows and keeps collapsed agents draggable', () => {
+  it('marks agent nodes as provider-tinted windows and makes the whole collapsed node draggable', () => {
     renderNode(nodeData({ kind: 'agent', adapterId: 'claude', collapsed: true }));
 
     const node = screen.getByRole('article', { name: 'Agent: Implement search' });

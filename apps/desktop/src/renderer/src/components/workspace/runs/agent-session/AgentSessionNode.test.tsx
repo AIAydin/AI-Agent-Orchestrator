@@ -359,6 +359,8 @@ describe('AgentSessionNode', () => {
 
   it('edits the title only after double-clicking the draggable title text', () => {
     renderNode();
+    const titleBar = screen.getByLabelText('Move Session agent node');
+    expect(titleBar.classList.contains('agent-drag-handle')).toBe(true);
     // In display mode the title is static text with no nodrag class, so the whole bar can drag it.
     const titleText = screen.getByText('Session');
     expect(titleText.classList.contains('nodrag')).toBe(false);

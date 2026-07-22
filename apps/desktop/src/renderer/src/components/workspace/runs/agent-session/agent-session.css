@@ -26,6 +26,18 @@
   background: linear-gradient(var(--provider-tint), transparent), var(--surface-raised);
   border-bottom: 1px solid var(--line);
   cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.agent-window-titlebar:active {
+  cursor: grabbing;
+}
+
+.agent-drag-grip {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  pointer-events: none;
 }
 
 .traffic {

@@ -9,7 +9,7 @@ import {
   AgentSessionProvider,
   type AgentSessionContextValue,
 } from '../runs/agent-session/AgentSessionContext.js';
-import { PreviewNodeFace } from './PreviewNodeFace.js';
+import { mobilePreviewLayout, PreviewNodeFace } from './PreviewNodeFace.js';
 
 const updateNodeData = vi.fn();
 const recordHistory = vi.fn();
@@ -57,6 +57,25 @@ function renderFace(
 }
 
 describe('PreviewNodeFace', () => {
+  it('fills the mobile node height without shrinking the preset CSS width', () => {
+    expect(mobilePreviewLayout({ width: 390, height: 844 }, { width: 420, height: 600 })).toEqual({
+      scale: 1,
+      renderedWidth: 390,
+      renderedHeight: 584,
+      frameHeight: 584,
+    });
+  });
+
+  it('scales only when the node is narrower than the mobile preset', () => {
+    const layout = mobilePreviewLayout({ width: 390, height: 844 }, { width: 316, height: 500 });
+    expect(layout).toMatchObject({
+      scale: 300 / 390,
+      renderedWidth: 300,
+      renderedHeight: 484,
+    });
+    expect(layout.frameHeight).toBeCloseTo(629.2);
+  });
+
   it('shows only a port input and hint while no port is set', () => {
     const { container } = renderFace('web-preview');
     expect(screen.getByLabelText('Preview port')).toHaveProperty('value', '');

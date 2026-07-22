@@ -17,6 +17,29 @@ import { useCanvasNodeInteractions } from '../canvas/interactions/CanvasNodeInte
 import { useAgentSession } from '../runs/agent-session/AgentSessionContext.js';
 import './preview-node-face.css';
 
+interface MobilePreviewLayout {
+  readonly scale: number;
+  readonly renderedWidth: number;
+  readonly renderedHeight: number;
+  readonly frameHeight: number;
+}
+
+/** Keeps the preset's real CSS width while using all available node height. */
+export function mobilePreviewLayout(
+  viewport: { readonly width: number; readonly height: number },
+  available: { readonly width: number; readonly height: number },
+): MobilePreviewLayout {
+  const renderedHeight = Math.max(1, available.height - 16);
+  const renderedWidthLimit = Math.max(1, available.width - 16);
+  const scale = Math.min(renderedWidthLimit / viewport.width, 1);
+  return {
+    scale,
+    renderedWidth: viewport.width * scale,
+    renderedHeight,
+    frameHeight: renderedHeight / scale,
+  };
+}
+
 /**
  * Port-only preview face: one compact port input plus an in-DOM webview that
  * fills the node body ("literally just inputting a port and it showing up").
@@ -38,19 +61,23 @@ export function PreviewNodeFace({
   const webviewRef = useRef<PreviewWebviewHandle | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const readOnly = graphReadOnly || data.locked || interactions.readOnly;
+  const orientation: PreviewOrientation =
+    data.previewOrientation === 'landscape' ? 'landscape' : 'portrait';
+  const viewport = orientedViewport(previewPreset(data.previewPreset, 'iphone'), orientation);
 
   const port = normalizedPort(data.previewPort);
   const [draft, setDraft] = useState(port === null ? '' : String(port));
   const [status, setStatus] = useState<PreviewWebviewStatus | null>(null);
-  const [scale, setScale] = useState(1);
+  const [mobileLayout, setMobileLayout] = useState<MobilePreviewLayout>({
+    scale: 1,
+    renderedWidth: viewport.width,
+    renderedHeight: viewport.height,
+    frameHeight: viewport.height,
+  });
 
   useEffect(() => {
     setDraft(port === null ? '' : String(port));
   }, [port]);
-
-  const orientation: PreviewOrientation =
-    data.previewOrientation === 'landscape' ? 'landscape' : 'portrait';
-  const viewport = orientedViewport(previewPreset(data.previewPreset, 'iphone'), orientation);
 
   useEffect(() => {
     if (kind !== 'mobile-preview' || typeof ResizeObserver === 'undefined') return;
@@ -59,9 +86,7 @@ export function PreviewNodeFace({
     const update = (): void => {
       const rect = body.getBoundingClientRect();
       if (rect.width < 1 || rect.height < 1) return;
-      setScale(
-        Math.min((rect.width - 16) / viewport.width, (rect.height - 16) / viewport.height, 1),
-      );
+      setMobileLayout(mobilePreviewLayout(viewport, rect));
     };
     update();
     const observer = new ResizeObserver(update);
@@ -128,14 +153,17 @@ export function PreviewNodeFace({
         ) : kind === 'mobile-preview' ? (
           <div
             className="preview-face-device"
-            style={{ width: viewport.width * scale, height: viewport.height * scale }}
+            style={{
+              width: mobileLayout.renderedWidth,
+              height: mobileLayout.renderedHeight,
+            }}
           >
             <div
               className="preview-face-device-frame"
               style={{
                 width: viewport.width,
-                height: viewport.height,
-                transform: `scale(${String(scale)})`,
+                height: mobileLayout.frameHeight,
+                transform: `scale(${String(mobileLayout.scale)})`,
               }}
             >
               <PreviewWebview

@@ -282,13 +282,14 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
   });
   const projectClones = new ProjectCloneIpcService(dialog, projects, outbound, runDataOperation);
   const transcripts = join(app.getPath('userData'), 'transcripts');
+  const approvals = new ApprovalService(store);
   // Shared with `AgentPeersService` below (`setPeerEnvironmentProvider`) so a single
   // `TerminalService` instance is the source of truth for both the terminal IPC surface and the
   // agent-peer hub's session bridge.
   const terminalCore = new TerminalService(store, join(transcripts, 'terminal'), () =>
     store.getSettings(createDefaultSettings()),
   );
-  const terminal = new TerminalIpcService(dialog, terminalCore, undefined, (event) =>
+  const terminal = new TerminalIpcService(dialog, terminalCore, approvals, undefined, (event) =>
     collaboration.assertTerminalMutationAuthorized(event.sender),
   );
   const agentPeersStore: AgentPeersStore = {
@@ -329,7 +330,6 @@ export function registerIpcHandlers(store: LocalStore): ApplicationServices {
     docker,
   );
   const integrity = new IntegrityService(store);
-  const approvals = new ApprovalService(store);
   const extensions = new ExtensionIpcService(app, dialog, store);
   const backups = new AutomaticBackupCoordinator(
     store,

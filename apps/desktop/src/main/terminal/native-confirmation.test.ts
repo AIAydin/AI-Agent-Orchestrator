@@ -21,7 +21,7 @@ describe('native terminal confirmation', () => {
 
     await expect(
       confirmTerminalLaunch(dialog, parent, review, () => checks.push('current')),
-    ).resolves.toBe('approved');
+    ).resolves.toEqual({ decision: 'approved', remember: false });
 
     expect(checks).toEqual(['current', 'show', 'current']);
     expect(shown).toMatchObject({
@@ -30,16 +30,30 @@ describe('native terminal confirmation', () => {
       defaultId: 0,
       cancelId: 0,
       noLink: true,
+      checkboxLabel: 'Trust this exact launch for this project for 30 days',
+      checkboxChecked: false,
     });
     expect(shown?.detail).toContain('Program: "/private/tools/zsh"');
     expect(shown?.detail).toContain('Folder to run in: "/private/project/apps/desktop"');
     expect(shown?.detail).toContain('1. "-l"');
     expect(shown?.detail).toContain('"PATH", "TERM"');
     expect(shown?.detail).toContain('not sandboxed');
-    expect(shown?.detail).toContain('You can use this approval only once, and it expires at');
+    expect(shown?.detail).toContain('This one-time launch approval expires at');
     expect(shown?.detail).toContain(
       'Forgeboard rechecks the exact program identity, project, and folder immediately before starting it.',
     );
+  });
+
+  it('returns an explicit remembered decision only after native approval', async () => {
+    const showMessageBox = vi.fn(() => Promise.resolve({ response: 1, checkboxChecked: true }));
+    await expect(
+      confirmTerminalLaunch(
+        { showMessageBox } as unknown as Pick<Dialog, 'showMessageBox'>,
+        parent,
+        nativeReview(),
+        () => undefined,
+      ),
+    ).resolves.toEqual({ decision: 'approved', remember: true });
   });
 
   it('escapes control and directional text and fails closed when ownership changes', async () => {
@@ -68,6 +82,7 @@ function nativeReview(
   exactOverrides: Partial<TerminalLaunchNativeReview['exact']> = {},
 ): TerminalLaunchNativeReview {
   return {
+    approvalFingerprint: 'a'.repeat(64),
     view: {
       kind: 'terminal-launch',
       planId: '10000000-0000-4000-8000-000000000001',
