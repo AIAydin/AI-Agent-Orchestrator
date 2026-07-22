@@ -83,6 +83,10 @@
   flex: 1;
   min-height: 0;
   background: #0d0f12;
+  /* The xterm host inside is `position: absolute; inset: 0`. Without a positioned
+     container here it anchors to the whole `.agent-window` and covers the drag
+     title bar, making the node undraggable once a session mounts. Contain it. */
+  position: relative;
 }
 
 .agent-terminal > div {
