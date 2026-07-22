@@ -1,0 +1,62 @@
+.whiteboard-canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  /* Trackpad and touch drags must draw, not scroll the node body. */
+  touch-action: none;
+  cursor: crosshair;
+  outline: none;
+}
+.whiteboard-canvas:focus-visible {
+  outline: 1px solid var(--accent, #c482aa);
+  outline-offset: -1px;
+}
+.whiteboard-canvas-outline {
+  stroke: var(--accent, #c482aa);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+.whiteboard-canvas-handle {
+  fill: var(--surface-raised, #1b1b1b);
+  stroke: var(--accent, #c482aa);
+  stroke-width: 1.5;
+  cursor: nwse-resize;
+}
+.whiteboard-tool-strip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.whiteboard-tool-strip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.whiteboard-tool-strip button[aria-pressed='true'] {
+  border-color: var(--line-strong);
+  background: var(--surface-sunken, rgb(255 255 255 / 0.08));
+  color: var(--text);
+}
+.whiteboard-tool-strip button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.whiteboard-text-editor {
+  position: absolute;
+  z-index: 4;
+  min-width: 120px;
+  padding: 2px 4px;
+  border: 1px solid var(--accent, #c482aa);
+  border-radius: 4px;
+  background: #ffffff;
+  color: #334155;
+  font-family: system-ui, sans-serif;
+  font-size: var(--text-xs);
+}

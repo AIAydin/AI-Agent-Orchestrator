@@ -10,11 +10,9 @@ import { arrowEndpoints, strokePath, type WhiteboardElement } from '../model.js'
 export function WhiteboardShape({
   element,
   selected,
-  onSelect,
 }: {
   readonly element: WhiteboardElement;
   readonly selected: boolean;
-  readonly onSelect?: (() => void) | undefined;
 }): JSX.Element {
   const common = {
     fill: element.backgroundColor,
@@ -22,7 +20,6 @@ export function WhiteboardShape({
     strokeWidth: element.strokeWidth,
     opacity: element.opacity / 100,
     strokeDasharray: selected ? '6 4' : undefined,
-    onPointerDown: onSelect,
   };
   if (element.type === 'rectangle') {
     return (
@@ -61,12 +58,11 @@ export function WhiteboardShape({
         strokeLinejoin="round"
         opacity={element.opacity / 100}
         strokeDasharray={selected ? '6 4' : undefined}
-        onPointerDown={onSelect}
       />
     );
   }
   if (element.type === 'arrow') {
-    return <ArrowShape element={element} selected={selected} onSelect={onSelect} />;
+    return <ArrowShape element={element} selected={selected} />;
   }
   return (
     <text
@@ -78,7 +74,6 @@ export function WhiteboardShape({
       opacity={element.opacity / 100}
       stroke={selected ? element.strokeColor : 'none'}
       strokeDasharray={selected ? '6 4' : undefined}
-      onPointerDown={onSelect}
     >
       {element.text ?? ''}
     </text>
@@ -88,11 +83,9 @@ export function WhiteboardShape({
 function ArrowShape({
   element,
   selected,
-  onSelect,
 }: {
   readonly element: WhiteboardElement;
   readonly selected: boolean;
-  readonly onSelect?: (() => void) | undefined;
 }): JSX.Element {
   const { start, end } = arrowEndpoints(element);
   const angle = Math.atan2(end[1] - start[1], end[0] - start[0]);
@@ -105,7 +98,6 @@ function ArrowShape({
       strokeWidth={element.strokeWidth}
       opacity={element.opacity / 100}
       strokeDasharray={selected ? '6 4' : undefined}
-      onPointerDown={onSelect}
     >
       <line x1={start[0]} y1={start[1]} x2={end[0]} y2={end[1]} />
       <polyline
