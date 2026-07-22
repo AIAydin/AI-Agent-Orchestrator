@@ -194,6 +194,22 @@ beforeEach(() => {
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
     value: {
+      voice: {
+        status: vi.fn(() =>
+          Promise.resolve({
+            ok: true,
+            value: {
+              state: 'ready',
+              modelId: 'onnx-community/whisper-tiny.en',
+              revision: '2575352d61be1bf7225cf8f8b268a4678025fc58',
+              localOnly: true,
+            },
+          }),
+        ),
+        install: vi.fn(),
+        remove: vi.fn(),
+        transcribe: vi.fn(),
+      },
       settings: {
         update: updateSettings,
         reset: resetSettings,
@@ -356,7 +372,7 @@ describe('SettingsPanel draft transactions', () => {
     );
 
     const entries = Object.entries(SETTINGS_UI_MANIFEST);
-    expect(entries).toHaveLength(58);
+    expect(entries).toHaveLength(60);
     expect(entries.filter(([, entry]) => entry.kind === 'first-run')).toHaveLength(1);
     for (const tab of [
       'Appearance',
@@ -365,6 +381,7 @@ describe('SettingsPanel draft transactions', () => {
       'Git & previews',
       'Checks',
       'Connectivity',
+      'Voice commands',
       'Data & privacy',
     ] as const) {
       fireEvent.click(screen.getByRole('button', { name: tab }));

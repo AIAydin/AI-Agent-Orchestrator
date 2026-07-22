@@ -30,7 +30,6 @@ import {
 import { FileDocumentSchema } from '../../../../../shared/files/contracts.js';
 import type { WorkflowExecutionView } from '../../../../../shared/workflow/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
-import { useKeyedStable } from '../../../lib/use-keyed-stable.js';
 import { commandPaletteShortcutLabel, opensCommandPalette } from '../../../lib/keyboard-preset.js';
 import {
   NODE_DEFINITIONS,
@@ -40,6 +39,9 @@ import {
   type WorkshopNodeData,
 } from '../canvas/CanvasNode.js';
 import { CommandPalette } from '../../shell/CommandPalette.js';
+import { VoiceCommandControl } from '../voice/VoiceCommandControl.js';
+import { createWorkspacePaletteActions } from '../actions/palette-actions.js';
+import { updateWorkspaceEdgeData } from '../actions/edge-actions.js';
 import {
   createExtensionNodeBinding,
   extensionTemplateKey,
@@ -75,7 +77,6 @@ import { WorkspaceCommandBar } from './WorkspaceCommandBar.js';
 import { useProjectStatus } from './status/useProjectStatus.js';
 import { applyNodeDataPatch } from './node-data-patch.js';
 import { WorkflowDecisionDialog } from '../workflows/WorkflowDecisionDialog.js';
-import { WorkspaceInspector } from './WorkspaceInspector.js';
 import { WorkspaceRail } from './WorkspaceRail.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import { useWorkspaceSidebarLayout } from './useWorkspaceSidebarLayout.js';
@@ -110,11 +111,13 @@ import { useAgentWorktreeRecord } from '../runs/useAgentWorktreeAvailability.js'
 import {
   AgentSessionProvider,
   type AgentSessionContextValue,
-  type CanvasNodeRosterEntry,
-  type CheckProducerEntry,
+  type CanvasImageNodeEntry,
+  type FileTargetEntry,
 } from '../runs/agent-session/AgentSessionContext.js';
+import { useAgentSessionContextLists } from '../runs/agent-session/context-lists.js';
 import { AGENT_NODE_DRAG_HANDLE } from '../runs/agent-session/AgentSessionNode.js';
 import { providerConnectionIdForAdapter } from '../../../lib/provider-connections.js';
+import { useKeyedStable } from '../../../lib/use-keyed-stable.js';
 import { effectiveNodeModel } from '../runs/agent-node/model-selection.js';
 import { useCanvasPersistence } from '../canvas/useCanvasPersistence.js';
 import { useDurableCanvasHistory } from '../canvas/history/useDurableCanvasHistory.js';
@@ -125,12 +128,13 @@ import { mergeCollaborationCanvasSnapshot } from '../collaboration/merge-canvas.
 import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
-import { checkProducerId, initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
+import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
 import { buildWorkflowTemplate } from '../workflows/templates/builder.js';
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from '../workflows/templates/catalog.js';
 import { collisionFreeTemplateOrigin } from '../workflows/templates/placement.js';
 import { useDiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 import { useDiffReviewSession } from '../diff-review/useDiffReviewSession.js';
+import type { DiffReviewOpenRequest } from '../diff-review/index.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { linkProjectFileToAgent, removeProjectFileFromAgent } from '../context-dnd/linking.js';
 import {
@@ -149,6 +153,10 @@ import {
   workflowPendingDecision,
   type WorkflowRuntimeContextValue,
 } from '../workflows/WorkflowRuntimeContext.js';
+import {
+  NodeCommentsProvider,
+  type NodeCommentsContextValue,
+} from '../canvas/node-details/NodeCommentsContext.js';
 import {
   appendLocalComment,
   appendSharedComment,
@@ -366,7 +374,11 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     });
   }, []);
 
-  const previews = useWorkspacePreviews({
+  // Called for its side effects only (syncing preview node status into the
+  // canvas, logging preview lifecycle activity, and stopping sessions on
+  // unmount). Preview node faces read their own live session over IPC, so the
+  // returned session map no longer has a consumer now that the inspector is gone.
+  useWorkspacePreviews({
     projectId: project.id,
     nodes,
     setNodes,
@@ -929,48 +941,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     workflowRevisionFingerprint,
     onError,
   });
-  const sharedComments = useMemo(
-    () => collaborationCommentsForNode(pendingCanvas, selectedNodeId),
-    [pendingCanvas, selectedNodeId],
-  );
-  const localComments = useMemo(
-    () => localCommentsForNode(pendingCanvas, selectedNodeId),
-    [pendingCanvas, selectedNodeId],
-  );
-  const rejectedSharedCommentEntries = useMemo(
-    () =>
-      selectedNodeId === null
-        ? []
-        : collaborationCanvas.rejectedCommentEntries.filter(
-            (entry) => entry.comment.nodeId === selectedNodeId,
-          ),
-    [collaborationCanvas.rejectedCommentEntries, selectedNodeId],
-  );
-  const createSharedComment = useCallback(
-    async (body: string): Promise<boolean> => {
-      if (selectedNodeId === null) return false;
-      const comment = await collaborationCanvas.createComment(selectedNodeId, body);
-      if (comment === null) return false;
-      setCanvas((current) => appendSharedComment(current, selectedNodeId, comment));
-      setEvents((items) => ['Shared a comment.', ...items].slice(0, 80));
-      return true;
-    },
-    [collaborationCanvas.createComment, selectedNodeId],
-  );
-  const createLocalComment = useCallback(
-    (body: string): boolean => {
-      if (pendingCanvas === null || selectedNodeId === null || body.trim() === '') return false;
-      const next = appendLocalComment(pendingCanvas, selectedNodeId, body, {
-        id: `local:${crypto.randomUUID()}`,
-        createdAt: new Date().toISOString(),
-      });
-      if (next === null || next === pendingCanvas) return false;
-      setCanvas(next);
-      setEvents((items) => ['Saved a private comment on this computer.', ...items].slice(0, 80));
-      return true;
-    },
-    [pendingCanvas, selectedNodeId],
-  );
   const runnableAgents = agents.filter(
     (agent): agent is typeof agent & { id: RunAdapterId } =>
       agent.installed && isRunAdapterId(agent.id),
@@ -1020,8 +990,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     },
     [fallbackAdapter, providerGates.gateFor],
   );
-  const selectedAgentProviderGate =
-    selectedNodeKind === 'agent' ? providerGates.gateFor(selectedAdapter) : null;
   const selectedCanvasNodes = nodes.filter((node) => node.selected === true);
   const selectedWorkflowEligibility = workflowSelectionEligibility(
     selectedCanvasNodes.length > 0
@@ -1150,11 +1118,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     () => removalProtectedCanvasNodeIds(nodes, edges),
     [edges, nodes],
   );
-  const selectedNodeLockedByGroup =
-    selectedNode !== null && protectedNodeIds.has(selectedNode.id) && !selectedNode.data.locked;
-  const inspectorSelectedNode = selectedNodeLockedByGroup
-    ? { ...selectedNode, data: { ...selectedNode.data, locked: true } }
-    : selectedNode;
   const runtimeDisplayedNodes = useMemo(
     () =>
       nodes.map((node) => {
@@ -1332,12 +1295,10 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   ];
 
   const {
-    arrangeSelectedGroupFrame,
+    arrangeGroupFrame,
     deleteNode,
-    deleteSelected,
-    fitSelectedGroupFrame,
+    fitGroupFrame,
     setNodeLocked,
-    updateSelected,
   } = useWorkspaceNodeMutations({
     projectId: project.id,
     graphReadOnly: collaborationCanvas.graphReadOnly,
@@ -1449,159 +1410,79 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       return;
     }
     record();
-    setEdges((items) =>
-      items.map((edge) =>
-        edge.id === selectedEdge.id ? { ...edge, label: data.edgeType, data } : edge,
-      ),
-    );
+    setEdges((items) => updateWorkspaceEdgeData(items, selectedEdge.id, data));
   }
 
-  const paletteActions = useMemo(
-    () => [
-      {
-        id: 'add-agent',
-        label: 'Add an agent',
-        section: 'Canvas',
-        run: () => addNode('agent'),
-      },
-      {
-        id: 'add-task',
-        label: 'Add a task',
-        section: 'Canvas',
-        run: () => addNode('task'),
-      },
-      {
-        id: 'add-brief',
-        label: 'Add a product brief',
-        section: 'Canvas',
-        run: () => addNode('brief'),
-      },
-      ...extensionTemplates.map((template) => ({
-        id: `add-extension-${template.key}`,
-        label: `Add ${template.definition.displayName}`,
-        section: `Extension · ${template.extension.manifest.name}`,
-        run: () => addExtensionNode(template),
-      })),
-      ...WORKFLOW_TEMPLATES.map((template) => ({
-        id: `add-workflow-template-${template.id}`,
-        label: `Add ${template.name} workflow`,
-        section: 'Workflow templates',
-        run: () => addWorkflowTemplate(template),
-      })),
-      {
-        id: 'fit',
-        label: 'Zoom to fit the canvas',
-        section: 'View',
-        shortcut: 'F',
-        run: () =>
-          void instance?.fitView({
-            padding: 0.18,
-            duration: settings.reducedMotion ? 0 : 240,
-          }),
-      },
-      ...(canRunWorkflow && workflows.mutationsAuthorized
-        ? [
-            {
-              id: 'run-workflow',
-              label: 'Run the saved canvas workflow',
-              section: 'Workflow',
-              run: () => {
-                if (!workflowStartBusy) void workflows.start({ kind: 'workflow' });
-              },
-            },
-          ]
-        : []),
-      ...(selectedNode === null ||
-      selectedWorkflowScope === undefined ||
-      !workflows.mutationsAuthorized
-        ? []
-        : [
-            {
-              id: 'run-selected-workflow-node',
-              label: `Run ${selectedNode.data.title} and everything it needs`,
-              section: 'Workflow',
-              run: () => {
-                if (!workflowStartBusy) {
-                  void workflows.start(selectedWorkflowScope);
-                }
-              },
-            },
-          ]),
-      {
-        id: 'git-review',
-        label: 'Review Git changes',
-        section: 'Project',
-        run: openProjectGitReview,
-      },
-      {
-        id: 'settings',
-        label: 'Open settings',
-        section: 'Application',
-        shortcut: '⌘,',
-        run: onOpenSettings,
-      },
-      {
-        id: 'close',
-        label: 'Close project',
-        section: 'Project',
-        run: () => void closeProject(),
-      },
-    ],
-    [
-      addExtensionNode,
-      addNode,
-      addWorkflowTemplate,
-      canRunWorkflow,
-      closeProject,
-      extensionTemplates,
-      instance,
-      onOpenSettings,
-      openProjectGitReview,
-      project.id,
-      selectedNode,
-      selectedWorkflowScope,
-      settings.reducedMotion,
-      workflowStartBusy,
-      workflows,
-    ],
-  );
+  const paletteActions = createWorkspacePaletteActions({
+    runnableAgents,
+    extensionTemplates,
+    workflowTemplates: WORKFLOW_TEMPLATES,
+    selectedNodeTitle: selectedNode?.data.title ?? null,
+    selectedWorkflowScope,
+    canRunWorkflow,
+    workflowMutationsAuthorized: workflows.mutationsAuthorized,
+    workflowStartBusy,
+    addNode,
+    addAgentNode,
+    addExtensionNode,
+    addWorkflowTemplate,
+    fitCanvas: () =>
+      void instance?.fitView({
+        padding: 0.18,
+        duration: settings.reducedMotion ? 0 : 240,
+      }),
+    startWorkflow: (scope) => void workflows.start(scope),
+    openGitReview: openProjectGitReview,
+    openSettings: onOpenSettings,
+    closeProject: () => void closeProject(),
+  });
 
-  const nodeRosterSource = useMemo<readonly CanvasNodeRosterEntry[]>(
-    () =>
-      nodes.map((node) => ({
-        id: node.id,
-        title: node.data.title,
-        kind: node.data.kind,
-        locked: node.data.locked,
-      })),
-    [nodes],
-  );
-  const nodeRoster = useKeyedStable(
-    nodeRosterSource,
-    nodeRosterSource
-      .map(
-        (entry) => `${entry.id}\u0000${entry.title}\u0000${entry.kind}\u0000${String(entry.locked)}`,
-      )
-      .join('\n'),
-  );
-  const checkProducersSource = useMemo<readonly CheckProducerEntry[]>(
+  const { nodeRoster, checkProducers } = useAgentSessionContextLists(nodes);
+  const fileTargetsSource = useMemo<readonly FileTargetEntry[]>(
     () =>
       nodes
-        .filter((node) => node.data.kind === 'test')
+        .filter((node) => node.data.kind === 'file' && node.data.file !== undefined)
         .map((node) => ({
           nodeId: node.id,
-          producerId: checkProducerId(node),
           title: node.data.title,
-          checkKind: node.data.checkKind ?? 'test',
+          file: node.data.file!,
         })),
     [nodes],
   );
-  const checkProducers = useKeyedStable(
-    checkProducersSource,
-    checkProducersSource
+  const fileTargets = useKeyedStable(
+    fileTargetsSource,
+    fileTargetsSource
       .map(
         (entry) =>
-          `${entry.nodeId}\u0000${entry.producerId}\u0000${entry.title}\u0000${entry.checkKind}`,
+          `${entry.nodeId}\u0000${entry.file.projectId}\u0000${entry.file.relativePath}\u0000${entry.file.kind}\u0000${String(entry.file.missing)}\u0000${entry.file.lastKnownHash ?? ''}`,
+      )
+      .join('\n'),
+  );
+  const canvasImageNodesSource = useMemo<readonly CanvasImageNodeEntry[]>(
+    () =>
+      nodes
+        .filter((node) => node.data.kind === 'file' && node.data.file?.kind === 'image')
+        .map((node) => {
+          const reference = node.data.file;
+          return {
+            id: node.id,
+            title: node.data.title,
+            projectId: reference?.projectId ?? '',
+            relativePath: reference?.relativePath ?? '',
+            missing: reference?.missing ?? false,
+            ...(reference?.lastKnownHash === undefined
+              ? {}
+              : { lastKnownHash: reference.lastKnownHash }),
+          };
+        }),
+    [nodes],
+  );
+  const canvasImageNodes = useKeyedStable(
+    canvasImageNodesSource,
+    canvasImageNodesSource
+      .map(
+        (entry) =>
+          `${entry.id} ${entry.title} ${entry.projectId} ${entry.relativePath} ${String(entry.missing)} ${entry.lastKnownHash ?? ''}`,
       )
       .join('\n'),
   );
@@ -1626,19 +1507,35 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       openSettings: onOpenSettings,
       reportError: onError,
       updateNodeData,
+      fitGroupFrame,
+      arrangeGroupFrame,
       recordHistory: record,
       nodeTitle: (nodeId: string) =>
         nodesRef.current.find((node) => node.id === nodeId)?.data.title ?? null,
       removeAgentContext: removeProjectFileContext,
       requestDeleteNode: deleteNode,
+      attachWhiteboardContext,
       nodeRoster,
+      canvasImageNodes,
       checkProducers,
+      fileTargets,
       openGitPrReadiness,
+      openDiffReview: (nodeId: string, request: DiffReviewOpenRequest) => {
+        const node = nodesRef.current.find((candidate) => candidate.id === nodeId);
+        if (node?.data.kind !== 'diff') return;
+        gitReview.openNodeReview(nodeId, node.data.reviewTarget, request);
+      },
     }),
     [
+      arrangeGroupFrame,
+      attachWhiteboardContext,
+      canvasImageNodes,
       checkProducers,
       collaborationCanvas.graphReadOnly,
       deleteNode,
+      fileTargets,
+      fitGroupFrame,
+      gitReview,
       nodeRoster,
       onError,
       onOpenSettings,
@@ -1693,6 +1590,53 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       workflowCurrentExecution,
       workflowStart,
       workflowCancelNode,
+    ],
+  );
+
+  // Per-node comment data + mutators for the node-header details popover. These mirror the
+  // selected-node comment wiring the WorkspaceInspector receives as props (createSharedComment /
+  // createLocalComment above), but parameterized by node id so the popover works on any node — not
+  // only the inspector's current selection. Purely additive: the inspector's own props are
+  // unchanged, so removing the inspector later leaves this untouched.
+  const nodeCommentsValue = useMemo<NodeCommentsContextValue>(
+    () => ({
+      localCommentsFor: (nodeId) => localCommentsForNode(pendingCanvas, nodeId),
+      sharedCommentsFor: (nodeId) => collaborationCommentsForNode(pendingCanvas, nodeId),
+      rejectedSharedCommentsFor: (nodeId) =>
+        collaborationCanvas.rejectedCommentEntries.filter(
+          (entry) => entry.comment.nodeId === nodeId,
+        ),
+      createLocalComment: (nodeId, body) => {
+        if (pendingCanvas === null || body.trim() === '') return false;
+        const next = appendLocalComment(pendingCanvas, nodeId, body, {
+          id: `local:${crypto.randomUUID()}`,
+          createdAt: new Date().toISOString(),
+        });
+        if (next === null || next === pendingCanvas) return false;
+        setCanvas(next);
+        setEvents((items) =>
+          ['Saved a private comment on this computer.', ...items].slice(0, 80),
+        );
+        return true;
+      },
+      createSharedComment: async (nodeId, body) => {
+        const comment = await collaborationCanvas.createComment(nodeId, body);
+        if (comment === null) return false;
+        setCanvas((current) => appendSharedComment(current, nodeId, comment));
+        setEvents((items) => ['Shared a comment.', ...items].slice(0, 80));
+        return true;
+      },
+      discardRejectedComment: collaborationCanvas.discardRejectedComment,
+      canComment: collaborationCanvas.canComment,
+      roomEnabled: settings.collaborationEnabled,
+    }),
+    [
+      collaborationCanvas.canComment,
+      collaborationCanvas.createComment,
+      collaborationCanvas.discardRejectedComment,
+      collaborationCanvas.rejectedCommentEntries,
+      pendingCanvas,
+      settings.collaborationEnabled,
     ],
   );
 
@@ -1783,6 +1727,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         />
         <AgentSessionProvider value={agentSessionValue}>
         <WorkflowRuntimeProvider value={workflowRuntimeValue}>
+        <NodeCommentsProvider value={nodeCommentsValue}>
         <WorkspaceCanvas
           canvas={canvas}
           nodes={displayedGraph.nodes}
@@ -1889,6 +1834,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             setSelectedNodeId(null);
             setSelectedEdgeId(selectedEdges[0]?.id ?? null);
           }}
+          edgeConfigNodes={nodes}
+          onUpdateEdgeType={updateEdgeType}
+          onUpdateEdgeData={updateEdgeData}
           onAddNode={addNode}
           onAddExtensionNode={addExtensionNode}
           collaborationAwareness={collaborationCanvas.awareness}
@@ -1900,94 +1848,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onAttachAgentContext={attachProjectFileContext}
           onContextDropError={onError}
         />
+        </NodeCommentsProvider>
         </WorkflowRuntimeProvider>
         </AgentSessionProvider>
-        <WorkspaceResizeHandle
-          label="Resize details panel"
-          className="inspector-resize"
-          edge="end"
-          range={sidebarLayout.inspector.range}
-          width={sidebarLayout.inspector.width}
-          onResize={sidebarLayout.inspector.resize}
-          onReset={sidebarLayout.inspector.reset}
-        />
-        <WorkspaceInspector
-          nodeRegistry={nodeRegistry}
-          project={project}
-          settings={settings}
-          canvas={canvas}
-          workflowExecution={workflowEvidenceExecution}
-          nodes={nodes}
-          selectedNode={inspectorSelectedNode}
-          selectedNodeLockedByGroup={selectedNodeLockedByGroup}
-          selectedNodeDeletionProtected={
-            selectedNode !== null && removalProtectedNodeIds.has(selectedNode.id)
-          }
-          selectedEdge={selectedEdge}
-          runnableAgents={runnableAgents}
-          previewSession={selectedNode ? (previews.sessions[selectedNode.id] ?? null) : null}
-          sharedComments={sharedComments}
-          localComments={localComments}
-          rejectedSharedCommentEntries={rejectedSharedCommentEntries}
-          canComment={collaborationCanvas.canComment}
-          onCreateComment={createSharedComment}
-          onCreateLocalComment={createLocalComment}
-          onDiscardRejectedComment={collaborationCanvas.discardRejectedComment}
-          onClearSelection={() => {
-            setSelectedNodeId(null);
-            setSelectedEdgeId(null);
-            setNodes((items) => items.map((node) => ({ ...node, selected: false })));
-            setEdges((items) => items.map((edge) => ({ ...edge, selected: false })));
-          }}
-          onRecord={record}
-          onUpdateSelected={updateSelected}
-          onAttachWhiteboardContext={attachWhiteboardContext}
-          onFitGroupFrame={fitSelectedGroupFrame}
-          onArrangeGroupFrame={arrangeSelectedGroupFrame}
-          onUpdateEdgeType={updateEdgeType}
-          onUpdateEdgeData={updateEdgeData}
-          onDuplicateSelected={duplicateSelected}
-          onDeleteSelected={deleteSelected}
-          onPreviewSession={(session) => {
-            if (selectedNode) previews.updateSession(selectedNode.id, session);
-          }}
-          onTerminalSessionStatus={(nodeId, status) => updateNodeData(nodeId, { status })}
-          testNodeRuntime={{
-            executions: workflows.executions,
-            interactionEvents: workflows.interactionEvents,
-            busyAction: workflows.busyAction,
-            mutationsAuthorized: workflows.mutationsAuthorized,
-            onStart: (nodeId) =>
-              void workflows.start({
-                kind: 'node',
-                nodeId,
-                includeUpstream: false,
-              }),
-            onCancel: (input) => void workflows.cancelNode(input),
-            onRevealArtifact: async (input) => {
-              unwrap(await window.forgeboard.workflows.revealArtifact(input));
-            },
-            onOpenArtifact: async (input) => {
-              unwrap(await window.forgeboard.workflows.openArtifact(input));
-            },
-          }}
-          diffReview={diffReview}
-          onOpenDiffReview={(request) => {
-            if (selectedNode?.data.kind !== 'diff') return;
-            gitReview.openNodeReview(selectedNode.id, selectedNode.data.reviewTarget, request);
-          }}
-          onOpenGitPrReadiness={(runId) =>
-            gitReview.openTarget({
-              kind: 'agent-worktree',
-              projectId: project.id,
-              runId,
-            })
-          }
-          collaborationGraphReadOnly={collaborationCanvas.graphReadOnly}
-          onAttachAgentContext={attachProjectFileContext}
-          onOpenSettings={onOpenSettings}
-          onError={onError}
-        />
         <WorkspaceActivityDrawer
           events={events}
           changeReports={changeReports}
@@ -2030,6 +1893,12 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       {paletteOpen && (
         <CommandPalette actions={paletteActions} onClose={() => setPaletteOpen(false)} />
       )}
+      <VoiceCommandControl
+        settings={settings}
+        actions={paletteActions}
+        onOpenSettings={onOpenSettings}
+        onError={onError}
+      />
       {gitReview.session !== null && (
         <GitReviewDialog
           target={gitReview.session.target}

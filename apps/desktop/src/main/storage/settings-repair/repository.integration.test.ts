@@ -391,5 +391,7 @@ function settings(): AppSettings {
     collaborationReconnect: true,
     updateChannel: 'stable',
     automaticUpdateDownloads: false,
+    voiceCommandsEnabled: false,
+    voiceAutoRunSafeActions: false,
   };
 }

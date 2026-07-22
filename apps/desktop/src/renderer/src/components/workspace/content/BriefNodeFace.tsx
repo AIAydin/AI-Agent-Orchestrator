@@ -7,9 +7,8 @@ import { useCanvasNodeInteractions } from '../canvas/interactions/CanvasNodeInte
 import { useAgentSession } from '../runs/agent-session/AgentSessionContext.js';
 
 /**
- * Product-brief face: markdown, checklist, and done conditions edit in place;
- * version history lives in a popover. Attachments and prompt variables stay in
- * the inspector panel until 2d.
+ * Product-brief face: markdown, checklist, done conditions, attachments, and
+ * prompt variables all edit in place; version history lives in a popover.
  */
 export function BriefNodeFace({ id, data }: NodeFaceProps): JSX.Element {
   const session = useAgentSession();
@@ -20,6 +19,13 @@ export function BriefNodeFace({ id, data }: NodeFaceProps): JSX.Element {
   const criteria = data.acceptanceCriteria ?? [];
   const versions = data.versions ?? [];
   const latestVersion = versions.at(-1);
+  const attachmentIds = new Set(data.attachmentIds ?? []);
+  const attachmentCandidates = session.nodeRoster.filter(
+    (candidate) =>
+      candidate.id !== id &&
+      ['file', 'task', 'diagram', 'note-image'].includes(candidate.kind),
+  );
+  const variables = Object.entries(data.variables ?? {});
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const update = (patch: Parameters<typeof session.updateNodeData>[1]): void => {
@@ -195,6 +201,112 @@ export function BriefNodeFace({ id, data }: NodeFaceProps): JSX.Element {
           </div>
         ))}
 
+        <div className="node-face-list-header">
+          <strong>
+            Attached items <span>{attachmentIds.size}</span>
+          </strong>
+        </div>
+        {attachmentCandidates.length === 0 ? (
+          <p className="node-face-hint">
+            Add a file, task, diagram, or note to the canvas to attach it here.
+          </p>
+        ) : (
+          attachmentCandidates.map((candidate) => (
+            <label className="brief-face-attachment" key={candidate.id}>
+              <input
+                type="checkbox"
+                name={`brief-face-attachment-${candidate.id}`}
+                aria-label={`Attach ${candidate.title}`}
+                checked={attachmentIds.has(candidate.id)}
+                disabled={readOnly}
+                onFocus={() => session.recordHistory()}
+                onChange={(event) => {
+                  const next = new Set(attachmentIds);
+                  if (event.target.checked) next.add(candidate.id);
+                  else next.delete(candidate.id);
+                  update({ attachmentIds: [...next] });
+                }}
+              />
+              <span>{candidate.title}</span>
+              <small>{candidate.kind}</small>
+            </label>
+          ))
+        )}
+
+        <div className="node-face-list-header">
+          <strong>
+            Prompt variables <span>{variables.length}</span>
+          </strong>
+          <button
+            type="button"
+            aria-label="Add prompt variable"
+            disabled={readOnly}
+            onClick={() => {
+              session.recordHistory();
+              const name = uniqueVariableName(data.variables ?? {});
+              update({ variables: { ...(data.variables ?? {}), [name]: '' } });
+            }}
+          >
+            <Plus size={12} aria-hidden="true" /> Add
+          </button>
+        </div>
+        {variables.length === 0 ? (
+          <p className="node-face-hint">
+            No variables yet. Add one to reuse the same text in agent prompts.
+          </p>
+        ) : null}
+        {variables.map(([name, value], index) => (
+          <div className="brief-face-variable-row" key={name}>
+            <input
+              name="brief-face-variable-name"
+              value={name}
+              readOnly={readOnly}
+              aria-label={`Variable name ${index + 1}`}
+              onFocus={() => session.recordHistory()}
+              onChange={(event) => {
+                const nextName = normalizedVariableName(event.target.value);
+                if (
+                  nextName === '' ||
+                  (nextName !== name && variables.some(([key]) => key === nextName))
+                ) {
+                  return;
+                }
+                update({ variables: renamedVariable(data.variables ?? {}, name, nextName) });
+              }}
+            />
+            <textarea
+              name="brief-face-variable-value"
+              rows={2}
+              value={value}
+              readOnly={readOnly}
+              aria-label={`Variable value ${name}`}
+              onFocus={() => session.recordHistory()}
+              onChange={(event) =>
+                update({
+                  variables: {
+                    ...(data.variables ?? {}),
+                    [name]: event.target.value.slice(0, 100_000),
+                  },
+                })
+              }
+            />
+            <button
+              type="button"
+              className="icon-button danger-text"
+              aria-label={`Remove variable ${name}`}
+              disabled={readOnly}
+              onClick={() => {
+                session.recordHistory();
+                const next = { ...(data.variables ?? {}) };
+                delete next[name];
+                update({ variables: next });
+              }}
+            >
+              <Trash2 size={12} aria-hidden="true" />
+            </button>
+          </div>
+        ))}
+
         {historyOpen ? (
           <div className="node-face-popover" role="dialog" aria-label="Brief version history">
             <button
@@ -247,5 +359,28 @@ export function BriefNodeFace({ id, data }: NodeFaceProps): JSX.Element {
         ) : null}
       </div>
     </section>
+  );
+}
+
+function uniqueVariableName(variables: Readonly<Record<string, string>>): string {
+  let index = Object.keys(variables).length + 1;
+  while (`variable_${index}` in variables) index += 1;
+  return `variable_${index}`;
+}
+
+function normalizedVariableName(value: string): string {
+  return value
+    .trim()
+    .replace(/[^A-Za-z0-9_]/gu, '_')
+    .slice(0, 128);
+}
+
+function renamedVariable(
+  variables: Readonly<Record<string, string>>,
+  previous: string,
+  next: string,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(variables).map(([name, value]) => [name === previous ? next : name, value]),
   );
 }

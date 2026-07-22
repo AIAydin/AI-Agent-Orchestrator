@@ -20,12 +20,15 @@ beforeEach(() => {
   recordHistory.mockClear();
 });
 
-function sessionValue(): AgentSessionContextValue {
+function sessionValue(
+  roster: AgentSessionContextValue['nodeRoster'] = [],
+): AgentSessionContextValue {
   return {
     project: { id: 'p1' },
     graphReadOnly: false,
     updateNodeData,
     recordHistory,
+    nodeRoster: roster,
   } as unknown as AgentSessionContextValue;
 }
 
@@ -42,10 +45,13 @@ function nodeData(overrides: Partial<WorkshopNodeData> = {}): WorkshopNodeData {
   } as WorkshopNodeData;
 }
 
-function renderFace(overrides: Partial<WorkshopNodeData> = {}) {
+function renderFace(
+  overrides: Partial<WorkshopNodeData> = {},
+  roster: AgentSessionContextValue['nodeRoster'] = [],
+) {
   return render(
     <CanvasNodeInteractionProvider readOnly={false} setCollapsed={() => undefined}>
-      <AgentSessionProvider value={sessionValue()}>
+      <AgentSessionProvider value={sessionValue(roster)}>
         <BriefNodeFace id="n1" data={nodeData(overrides)} />
       </AgentSessionProvider>
     </CanvasNodeInteractionProvider>,
@@ -97,5 +103,33 @@ describe('BriefNodeFace', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /Restore brief version/ }));
     expect(updateNodeData).toHaveBeenCalledWith('n1', { markdown: '# v1' });
+  });
+
+  it('toggles canvas attachments from the roster', () => {
+    renderFace({}, [
+      { id: 'file-1', title: 'Spec file', kind: 'file', locked: false },
+      { id: 'n1', title: 'Login brief', kind: 'brief', locked: false },
+    ]);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Attach Spec file' }));
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { attachmentIds: ['file-1'] });
+    // The brief itself is never offered as an attachment candidate.
+    expect(screen.queryByRole('checkbox', { name: 'Attach Login brief' })).toBeNull();
+  });
+
+  it('adds a prompt variable in place', () => {
+    renderFace();
+    fireEvent.click(screen.getByRole('button', { name: 'Add prompt variable' }));
+    expect(recordHistory).toHaveBeenCalled();
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { variables: { variable_1: '' } });
+  });
+
+  it('edits and removes prompt variables', () => {
+    renderFace({ variables: { tone: 'friendly' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Variable value tone' }), {
+      target: { value: 'formal' },
+    });
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { variables: { tone: 'formal' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove variable tone' }));
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { variables: {} });
   });
 });

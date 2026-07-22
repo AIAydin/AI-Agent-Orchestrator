@@ -10,6 +10,8 @@ import { minimumNodeDimensionsForKind } from '../../../../../shared/canvas/node-
 import type { ExtensionNodeAvailability } from '../../extensions/extension-nodes.js';
 import { permissionProfileLabel } from '../../permissions/permission-profile-ui.js';
 import { useCanvasNodeInteractions } from './interactions/CanvasNodeInteractionContext.js';
+import { CanvasNodeHeaderTitle } from './node-details/CanvasNodeHeaderTitle.js';
+import { CanvasNodeDetailsPopover } from './node-details/CanvasNodeDetailsPopover.js';
 import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 import { GROUP_FRAME_MINIMUM } from './interactions/groups/group-dimensions.js';
 import { useNodeTypeRegistry } from '../node-registry/NodeRegistryContext.js';
@@ -258,9 +260,23 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         >
           <Icon size={15} aria-hidden="true" />
         </span>
-        <strong className="node-title" title={data.title}>
-          {data.title}
-        </strong>
+        {/* Agent nodes keep their own inline rename (in AgentSessionNode's title bar), so the
+            generic header only shows their collapsed title as static text. Every other kind gets
+            the double-click-to-rename header title — the node name is the header's primary text,
+            with the kind conveyed by the icon beside it. */}
+        {isAgent
+          ? data.collapsed && (
+              <strong className="collapsed-node-title" title={data.title}>
+                {data.title}
+              </strong>
+            )
+          : (
+              <CanvasNodeHeaderTitle
+                id={id}
+                title={data.title}
+                readOnly={!canChangePresentation}
+              />
+            )}
         {data.collapsed && data.status !== 'idle' && (
           <span className={`node-status-label ${data.status}`}>{data.status}</span>
         )}
@@ -270,6 +286,15 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
           aria-label={`Status: ${data.status}`}
         />
         {data.locked && <Lock size={12} aria-label="Locked" />}
+        {/* Agent nodes surface their settings/comments/history through their own window, so the
+            generic details popover is only mounted for the other node kinds. */}
+        {!isAgent && (
+          <CanvasNodeDetailsPopover
+            id={id}
+            data={data}
+            readOnly={!canChangePresentation}
+          />
+        )}
         <WorkspaceTooltip
           content={
             interactions.readOnly

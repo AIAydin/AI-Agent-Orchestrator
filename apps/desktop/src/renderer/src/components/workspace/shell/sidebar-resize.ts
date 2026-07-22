@@ -1,7 +1,6 @@
 /**
- * Pure sizing rules for the draggable workspace sidebars (project rail and
- * inspector). Kept free of DOM access so the clamp and keyboard behavior can
- * be unit-tested without layout.
+ * Pure sizing rules for the draggable workspace project rail. Kept free of DOM
+ * access so the clamp and keyboard behavior can be unit-tested without layout.
  */
 
 export interface SidebarRange {
@@ -13,15 +12,12 @@ export interface SidebarRange {
 export type SidebarEdge = 'start' | 'end';
 
 export const RAIL_WIDTH_RANGE: SidebarRange = { min: 180, max: 480 };
-export const INSPECTOR_WIDTH_RANGE: SidebarRange = { min: 240, max: 560 };
 
 /** The canvas column must always keep at least this much room. */
 export const CANVAS_MIN_WIDTH = 320;
 
 export const RAIL_DEFAULT_WIDTH = 260;
-export const INSPECTOR_DEFAULT_WIDTH = 320;
 export const NARROW_RAIL_DEFAULT_WIDTH = 230;
-export const NARROW_INSPECTOR_DEFAULT_WIDTH = 280;
 
 export const KEYBOARD_RESIZE_STEP = 16;
 export const KEYBOARD_RESIZE_LARGE_STEP = 64;
@@ -45,36 +41,30 @@ export function clampSidebarWidth(
 
 export interface SidebarWidths {
   readonly railWidth: number;
-  readonly inspectorWidth: number;
 }
 
 /**
- * Re-clamps both stored widths after the window resizes. When the pair no
- * longer fits alongside the minimum canvas width, the inspector gives up
- * space first, then the rail; neither goes below its minimum.
+ * Re-clamps the stored rail width after the window resizes. The rail gives up
+ * space when it no longer fits alongside the minimum canvas width, but never
+ * goes below its own minimum.
  */
 export function reclampSidebarWidths(widths: SidebarWidths, windowWidth: number): SidebarWidths {
   let rail = Math.round(
     Math.max(RAIL_WIDTH_RANGE.min, Math.min(widths.railWidth, RAIL_WIDTH_RANGE.max)),
   );
-  let inspector = Math.round(
-    Math.max(INSPECTOR_WIDTH_RANGE.min, Math.min(widths.inspectorWidth, INSPECTOR_WIDTH_RANGE.max)),
-  );
-  const overflow = rail + inspector + CANVAS_MIN_WIDTH - windowWidth;
+  const overflow = rail + CANVAS_MIN_WIDTH - windowWidth;
   if (overflow > 0) {
-    const inspectorConcession = Math.min(overflow, inspector - INSPECTOR_WIDTH_RANGE.min);
-    inspector -= inspectorConcession;
-    rail = Math.max(RAIL_WIDTH_RANGE.min, rail - (overflow - inspectorConcession));
+    rail = Math.max(RAIL_WIDTH_RANGE.min, rail - overflow);
   }
-  return { railWidth: rail, inspectorWidth: inspector };
+  return { railWidth: rail };
 }
 
 /**
  * Maps a key press on a resize handle to the width the sidebar should request
  * next, or null when the key is not a resize key. Arrow directions follow the
  * handle's on-screen movement: pressing ArrowRight moves the divider right,
- * which grows a start-edge sidebar (the rail) and shrinks an end-edge sidebar
- * (the inspector). The caller still clamps the result.
+ * which grows a start-edge sidebar (the rail) and shrinks an end-edge sidebar.
+ * The caller still clamps the result.
  */
 export function keyboardSidebarWidth(
   key: string,

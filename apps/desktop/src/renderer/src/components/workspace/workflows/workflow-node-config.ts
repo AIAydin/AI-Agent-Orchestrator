@@ -80,10 +80,15 @@ export function commandPresets(settings: AppSettings): readonly WorkflowCommandP
 }
 
 export function checkProducerId(node: WorkshopNode): string {
-  const kind = node.data.checkKind ?? 'test';
+  return checkProducerIdFor(node.data, node.id);
+}
+
+/** Data-based variant of {@link checkProducerId} for callers holding only `data` + `id` (faces). */
+export function checkProducerIdFor(data: WorkshopNode['data'], nodeId: string): string {
+  const kind = data.checkKind ?? 'test';
   if (kind !== 'custom') return kind;
-  const configured = node.data.runIds?.[0];
-  return isCustomCheckId(configured) ? configured : node.id;
+  const configured = data.runIds?.[0];
+  return isCustomCheckId(configured) ? configured : nodeId;
 }
 
 export function producerIdForCheckKind(kind: CheckKind, current: string | undefined): string {
@@ -106,13 +111,20 @@ export function parseLineList(value: string): string[] {
 }
 
 export function normalizedCommand(node: WorkshopNode): WorkshopCommandConfiguration {
+  return normalizedCommandFor(node.data);
+}
+
+/** Data-based variant of {@link normalizedCommand} for callers holding only `data` (faces). */
+export function normalizedCommandFor(
+  data: WorkshopNode['data'],
+): WorkshopCommandConfiguration {
   return {
-    executable: node.data.command?.executable ?? '',
-    arguments: [...(node.data.command?.arguments ?? [])],
-    ...(node.data.command?.cwdRelative === undefined
+    executable: data.command?.executable ?? '',
+    arguments: [...(data.command?.arguments ?? [])],
+    ...(data.command?.cwdRelative === undefined
       ? {}
-      : { cwdRelative: node.data.command.cwdRelative }),
-    environmentNames: [...(node.data.command?.environmentNames ?? [])],
+      : { cwdRelative: data.command.cwdRelative }),
+    environmentNames: [...(data.command?.environmentNames ?? [])],
   };
 }
 
@@ -162,4 +174,23 @@ export function gateLabel(state: WorkshopNode['data']['gateState']): string {
 
 export function gateLabelFromView(state: WorkflowReviewGateView['status']): string {
   return gateLabel(state === 'waiting-human' ? 'waiting-for-human' : state);
+}
+
+/** Adapters that can act as a review-gate reviewer agent. */
+export function reviewerAdapterSupported(adapterId: string): boolean {
+  return adapterId === 'test-agent' || adapterId === 'codex' || adapterId === 'claude';
+}
+
+/** Option label for a reviewer agent, distinguishing the deterministic test fixture. */
+export function reviewerOptionLabel(title: string, adapterId: string): string {
+  return adapterId === 'test-agent'
+    ? `${title} · Test agent (deterministic fixture)`
+    : `${title} · ${adapterId}`;
+}
+
+/** Clamp a text-input integer into [minimum, maximum], falling back to the minimum. */
+export function boundedInteger(value: string, minimum: number, maximum: number): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return minimum;
+  return Math.min(maximum, Math.max(minimum, parsed));
 }

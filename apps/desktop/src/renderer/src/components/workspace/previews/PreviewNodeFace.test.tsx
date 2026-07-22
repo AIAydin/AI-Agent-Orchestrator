@@ -13,19 +13,46 @@ import { PreviewNodeFace } from './PreviewNodeFace.js';
 
 const updateNodeData = vi.fn();
 const recordHistory = vi.fn();
+const openSettings = vi.fn();
+const reportError = vi.fn();
 
-afterEach(cleanup);
+const previewsGet = vi.fn(() => Promise.resolve({ ok: true, value: null }));
+const previewsStart = vi.fn(() => Promise.resolve({ ok: true, value: null }));
+const previewsStop = vi.fn(() => Promise.resolve({ ok: true, value: null }));
+const previewsOnEvent = vi.fn(() => () => undefined);
+
+afterEach(() => {
+  cleanup();
+  delete (window as unknown as { forgeboard?: unknown }).forgeboard;
+});
 beforeEach(() => {
   updateNodeData.mockClear();
   recordHistory.mockClear();
+  openSettings.mockClear();
+  reportError.mockClear();
+  previewsGet.mockClear();
+  previewsStart.mockClear();
+  previewsStop.mockClear();
+  previewsOnEvent.mockClear();
+  (window as unknown as { forgeboard: unknown }).forgeboard = {
+    previews: {
+      get: previewsGet,
+      start: previewsStart,
+      stop: previewsStop,
+      onEvent: previewsOnEvent,
+    },
+  };
 });
 
 function sessionValue(graphReadOnly = false): AgentSessionContextValue {
   return {
-    project: { id: 'p1' },
+    project: { id: 'p1', health: { packageManager: 'pnpm', scripts: { dev: 'vite' } } },
+    settings: { developmentCommand: { executable: '', arguments: [] } },
     graphReadOnly,
     updateNodeData,
     recordHistory,
+    openSettings,
+    reportError,
   } as unknown as AgentSessionContextValue;
 }
 
@@ -107,5 +134,41 @@ describe('PreviewNodeFace', () => {
     cleanup();
     renderFace('web-preview', {}, true);
     expect(screen.getByLabelText('Preview port')).toHaveProperty('disabled', true);
+  });
+
+  it('starts the dev server through the previews IPC when a script is available', () => {
+    renderFace('web-preview');
+    const start = screen.getByRole('button', { name: 'Start dev server' });
+    expect(start).toHaveProperty('disabled', false);
+    fireEvent.click(start);
+    expect(previewsStart).toHaveBeenCalledTimes(1);
+    expect(previewsStart).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'p1', nodeId: 'n1', packageScript: 'dev' }),
+    );
+  });
+
+  it('selects a device preset from the config popover', () => {
+    renderFace('mobile-preview', { previewPort: 5173 });
+    fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+    const select = screen.getByLabelText('Main device');
+    fireEvent.change(select, { target: { value: 'laptop' } });
+    expect(recordHistory).toHaveBeenCalled();
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { previewPreset: 'laptop' });
+  });
+
+  it('toggles orientation and side-by-side comparison from the config popover', () => {
+    renderFace('mobile-preview', { previewPort: 5173 });
+    fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate to landscape' }));
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { previewOrientation: 'landscape' });
+    fireEvent.click(screen.getByLabelText('Compare side by side'));
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { previewSideBySide: true });
+  });
+
+  it('opens project settings from the config popover', () => {
+    renderFace('web-preview');
+    fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open project settings' }));
+    expect(openSettings).toHaveBeenCalled();
   });
 });

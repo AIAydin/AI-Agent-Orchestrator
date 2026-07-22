@@ -81,31 +81,51 @@ vi.mock('./WorkspaceCommandBar.js', () => ({
     </div>
   ),
 }));
-vi.mock('../canvas/WorkspaceCanvas.js', () => ({
-  WorkspaceCanvas: ({
-    nodes,
-    onNodesChange,
-    onKeyboardMove,
-    onSelectionChange,
-    onDuplicateNode,
-    onDeleteNode,
-    onRunWorkflowScope,
-    collaborationGraphReadOnly,
-  }: {
-    nodes: WorkshopNode[];
-    onNodesChange: (
-      changes: Array<
-        { type: 'select'; id: string; selected: boolean } | { type: 'remove'; id: string }
-      >,
-    ) => void;
-    onKeyboardMove: (movement: { x: number; y: number }, recordUndoCheckpoint: boolean) => unknown;
-    onSelectionChange: (selection: { nodes: WorkshopNode[]; edges: [] }) => void;
-    onDuplicateNode: (nodeId: string) => void;
-    onDeleteNode: (nodeId: string) => void;
-    onRunWorkflowScope: (scope: { kind: 'node'; nodeId: string; includeUpstream: boolean }) => void;
-    collaborationGraphReadOnly: boolean;
-  }) => (
-    <div>
+vi.mock('../canvas/WorkspaceCanvas.js', async () => {
+  // The group fit/arrange controls that used to live in the inspector now live
+  // on the group-frame node face, which reaches the Workspace mutation handlers
+  // through the (real) AgentSession context. The mock consumes that same context
+  // so these persistence tests still exercise fit/arrange through their live path.
+  const { useAgentSession } = await import('../runs/agent-session/AgentSessionContext.js');
+  return {
+    WorkspaceCanvas: ({
+      nodes,
+      onNodesChange,
+      onKeyboardMove,
+      onSelectionChange,
+      onDuplicateNode,
+      onDeleteNode,
+      onRunWorkflowScope,
+      onAttachAgentContext,
+      collaborationGraphReadOnly,
+    }: {
+      nodes: WorkshopNode[];
+      onNodesChange: (
+        changes: Array<
+          { type: 'select'; id: string; selected: boolean } | { type: 'remove'; id: string }
+        >,
+      ) => void;
+      onKeyboardMove: (
+        movement: { x: number; y: number },
+        recordUndoCheckpoint: boolean,
+      ) => unknown;
+      onSelectionChange: (selection: { nodes: WorkshopNode[]; edges: [] }) => void;
+      onDuplicateNode: (nodeId: string) => void;
+      onDeleteNode: (nodeId: string) => void;
+      onRunWorkflowScope: (scope: {
+        kind: 'node';
+        nodeId: string;
+        includeUpstream: boolean;
+      }) => void;
+      onAttachAgentContext: (
+        targetNodeId: string,
+        payload: WorkspaceContextDragPayload,
+      ) => Promise<void>;
+      collaborationGraphReadOnly: boolean;
+    }) => {
+      const session = useAgentSession();
+      return (
+        <div>
       <output data-testid="canvas-node-positions">
         {JSON.stringify(nodes.map(({ id, position }) => ({ id, position })))}
       </output>
@@ -172,9 +192,33 @@ vi.mock('../canvas/WorkspaceCanvas.js', () => ({
       >
         Inspect last node
       </button>
-    </div>
-  ),
-}));
+      <button
+        type="button"
+        onClick={() =>
+          void onAttachAgentContext('agent-node', {
+            schemaVersion: 1,
+            kind: 'project-file',
+            projectId: '70000000-0000-4000-8000-000000000001',
+            relativePath: 'src/context.ts',
+          })
+        }
+      >
+        Attach project file
+      </button>
+      <button type="button" onClick={() => nodes[0] && session.fitGroupFrame(nodes[0].id)}>
+        Fit inspected group
+      </button>
+      <button
+        type="button"
+        onClick={() => nodes[0] && session.arrangeGroupFrame(nodes[0].id, 'vertical')}
+      >
+        Arrange inspected group
+      </button>
+        </div>
+      );
+    },
+  };
+});
 vi.mock('./WorkspaceRail.js', () => ({
   WorkspaceRail: ({
     extensionTemplates,
@@ -189,52 +233,6 @@ vi.mock('./WorkspaceRail.js', () => ({
           {`Add ${template.definition.displayName}`}
         </button>
       ))}
-    </div>
-  ),
-}));
-vi.mock('./WorkspaceInspector.js', () => ({
-  WorkspaceInspector: ({
-    onAttachAgentContext,
-    onFitGroupFrame,
-    onArrangeGroupFrame,
-    onUpdateSelected,
-    onDeleteSelected,
-  }: {
-    onAttachAgentContext: (
-      targetNodeId: string,
-      payload: WorkspaceContextDragPayload,
-    ) => Promise<void>;
-    onFitGroupFrame: () => void;
-    onArrangeGroupFrame: (layout: 'vertical') => void;
-    onUpdateSelected: (data: Partial<WorkshopNode['data']>) => void;
-    onDeleteSelected: () => void;
-  }) => (
-    <div>
-      <button
-        type="button"
-        onClick={() =>
-          void onAttachAgentContext('agent-node', {
-            schemaVersion: 1,
-            kind: 'project-file',
-            projectId: '70000000-0000-4000-8000-000000000001',
-            relativePath: 'src/context.ts',
-          })
-        }
-      >
-        Attach project file
-      </button>
-      <button type="button" onClick={onFitGroupFrame}>
-        Fit inspected group
-      </button>
-      <button type="button" onClick={() => onArrangeGroupFrame('vertical')}>
-        Arrange inspected group
-      </button>
-      <button type="button" onClick={() => onUpdateSelected({ childNodeIds: ['member'] })}>
-        Assign member to inspected group
-      </button>
-      <button type="button" onClick={onDeleteSelected}>
-        Delete inspected node
-      </button>
     </div>
   ),
 }));
@@ -863,70 +861,6 @@ describe('Workspace persistence boundary', () => {
     );
   });
 
-  it('re-fits both target and donor automatic frames after inspector reassignment', async () => {
-    const target = groupFrameCanvasNode('target', 0, []);
-    const donor = groupFrameCanvasNode('donor', 106, ['member', 'retained']);
-    const document = canvas([
-      { ...target, data: { ...target.data, autoFit: true } },
-      {
-        ...donor,
-        position: { x: 106, y: 6 },
-        width: 628,
-        height: 240,
-        data: { ...donor.data, autoFit: true },
-      },
-      sizedCanvasNode('member', 130, 80, 210, 92),
-      sizedCanvasNode('retained', 500, 80, 210, 92),
-    ]);
-    Object.defineProperty(window, 'forgeboard', {
-      configurable: true,
-      value: {
-        canvas: {
-          load: vi.fn(() => Promise.resolve({ ok: true, value: document })),
-        },
-        runs: { onEvent: vi.fn(() => vi.fn()) },
-        agentPeers: { onEvent: vi.fn(() => vi.fn()), provision: vi.fn() },
-      },
-    });
-    render(
-      <Workspace
-        project={project()}
-        settings={settings()}
-        agents={[]}
-        extensionDiscovery={{
-          registryPath: '/tmp/extensions.json',
-          installed: [],
-          quarantined: [],
-          invalid: [],
-        }}
-        onClose={vi.fn()}
-        onProjectUpdated={vi.fn()}
-        onOpenSettings={vi.fn()}
-        onError={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => expect(canvasNodes()).toHaveLength(4));
-    fireEvent.click(screen.getByRole('button', { name: 'Inspect first node' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Assign member to inspected group' }));
-
-    await waitFor(() => {
-      const current = canvasNodes();
-      expect(current.find(({ id }) => id === 'target')).toMatchObject({
-        position: { x: 55, y: 6 },
-        width: 360,
-        height: 240,
-        data: { childNodeIds: ['member'] },
-      });
-      expect(current.find(({ id }) => id === 'donor')).toMatchObject({
-        position: { x: 425, y: 6 },
-        width: 360,
-        height: 240,
-        data: { childNodeIds: ['retained'] },
-      });
-    });
-  });
-
   it('does not delete an unlocked frame when that would ungroup a locked child', async () => {
     const group = groupFrameCanvasNode('group-frame', 0, ['locked-member']);
     const member = sizedCanvasNode('locked-member', 130, 80, 210, 92);
@@ -960,8 +894,7 @@ describe('Workspace persistence boundary', () => {
     );
 
     await waitFor(() => expect(canvasNodes()).toHaveLength(2));
-    fireEvent.click(screen.getByRole('button', { name: 'Inspect first node' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete inspected node' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Context delete first node' }));
 
     expect(canvasNodes()).toHaveLength(2);
     expect(screen.getByTestId('workspace-events').textContent).toMatch(/protected members/u);

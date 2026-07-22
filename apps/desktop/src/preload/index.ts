@@ -97,6 +97,11 @@ import { createProviderConnectionsApi } from './provider-connections/index.js';
 import { createUpdatesApi } from './updates/bridge.js';
 import { createDiagramApi } from './diagram/bridge.js';
 import { createWhiteboardApi } from './whiteboard/bridge.js';
+import {
+  VOICE_IPC_CHANNELS,
+  VoiceModelStatusSchema,
+  VoiceTranscriptionSchema,
+} from '../shared/voice/contracts.js';
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -135,6 +140,13 @@ const api: ForgeboardApi = {
     },
   },
   updates: createUpdatesApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
+  voice: {
+    status: () => invokeValidated(VOICE_IPC_CHANNELS.status, VoiceModelStatusSchema),
+    install: () => invokeValidated(VOICE_IPC_CHANNELS.install, VoiceModelStatusSchema),
+    remove: () => invokeValidated(VOICE_IPC_CHANNELS.remove, VoiceModelStatusSchema),
+    transcribe: (input) =>
+      invokeValidated(VOICE_IPC_CHANNELS.transcribe, VoiceTranscriptionSchema, input),
+  },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
     update: (settings) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, settings),

@@ -22,6 +22,28 @@
 .canvas-node[data-node-kind='test']:not(.collapsed) > header {
   flex: 0 0 auto;
 }
+.canvas-node[data-node-kind='terminal']:not(.collapsed),
+.canvas-node[data-node-kind='file']:not(.collapsed),
+.canvas-node[data-node-kind='diff']:not(.collapsed) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.canvas-node[data-node-kind='terminal']:not(.collapsed) > header,
+.canvas-node[data-node-kind='file']:not(.collapsed) > header,
+.canvas-node[data-node-kind='diff']:not(.collapsed) > header {
+  flex: 0 0 auto;
+}
+.node-face-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgb(0 0 0 / 0.45);
+}
 .node-face {
   flex: 1;
   min-height: 0;
@@ -78,7 +100,8 @@
   gap: 8px;
   font-size: var(--text-xs);
 }
-.node-face-body label {
+.node-face-body label,
+.node-face-body .node-face-field {
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -174,6 +197,147 @@
 .git-pr-face-link {
   margin: 0;
   overflow-wrap: anywhere;
+}
+.git-pr-face-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.git-pr-face-checkbox input {
+  flex: 0 0 auto;
+  width: auto;
+}
+.git-pr-face-github,
+.git-pr-face-notice {
+  margin: 0;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+/* Push / pull-request confirmation modal, triggered from the git-pr face.
+   Full-viewport focus-trapped dialog (see GitPrPlanDialog). */
+.git-pr-face-plan-backdrop {
+  z-index: 1000;
+}
+.git-pr-face-plan-dialog {
+  width: min(640px, calc(100vw - 48px));
+  max-width: 640px;
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+.git-pr-face-plan-dialog > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.git-pr-face-plan-dialog h2 {
+  margin: 0;
+}
+.git-pr-face-plan-dialog p {
+  margin: 0;
+}
+.git-pr-face-plan-dialog .eyebrow {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.git-pr-face-plan-dialog dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  margin: 0;
+}
+.git-pr-face-plan-dialog dl div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.git-pr-face-plan-dialog dt {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+}
+.git-pr-face-plan-dialog dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.git-pr-face-plan-dialog code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.git-pr-face-plan-evidence,
+.git-pr-face-plan-evidence-list,
+.git-pr-face-plan-body {
+  display: grid;
+  gap: 6px;
+}
+.git-pr-face-plan-evidence-list ol,
+.git-pr-face-plan-evidence-list ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 20px;
+}
+.git-pr-face-plan-evidence-list li {
+  align-items: baseline;
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+}
+.git-pr-face-plan-evidence-list li > span {
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+.git-pr-face-plan-body pre {
+  margin: 0;
+  padding: 10px;
+  max-height: 200px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  white-space: pre-wrap;
+}
+.git-pr-face-plan-no-force {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--text-soft);
+}
+.git-pr-face-plan-dialog footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.git-pr-face-plan-dialog footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.git-pr-face-plan-confirm {
+  border-color: var(--accent-strong);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.git-pr-face-plan-dialog footer button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .whiteboard-node-face .node-face-body {
   padding: 0;
@@ -306,6 +470,95 @@ svg.whiteboard-face-preview {
   color: var(--accent);
   cursor: pointer;
 }
+.task-face-related-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-face-related-note {
+  margin: 0;
+  max-width: none;
+  text-align: left;
+}
+/* Config popovers reuse .node-face-popover; these are the fieldset resets and
+   sub-blocks the ported review-gate and test config need. */
+.review-gate-face-config,
+.test-face-config {
+  border: 1px solid var(--line-strong);
+  margin: 0;
+}
+.review-gate-face-config[disabled],
+.test-face-config[disabled] {
+  opacity: 0.6;
+}
+.review-gate-face-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.review-gate-face-config .task-face-grid input,
+.test-face-config input,
+.test-face-config select,
+.test-face-config textarea {
+  font-size: var(--text-xs);
+  min-width: 0;
+}
+.test-face-config .node-face-row input {
+  flex: 1;
+}
+.review-gate-face-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  color: var(--text-soft);
+}
+.review-gate-face-evidence p {
+  margin: 0;
+}
+.review-gate-face-evidence strong {
+  color: var(--text-soft);
+}
+.review-gate-face-evidence code {
+  font-family: ui-monospace, monospace;
+}
+.test-face-output {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  font-family: ui-monospace, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.test-face-empty {
+  margin: 0;
+  color: var(--text-faint);
+}
+.test-face-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.test-face-history-list summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text-soft);
+}
+.test-face-history-list time {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
 .brief-face-versions {
   margin: 0;
   padding: 0;
@@ -346,4 +599,209 @@ svg.whiteboard-face-preview {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.file-node-face .node-face-body {
+  padding: 0;
+}
+.file-node-face .file-editor-workspace {
+  flex: 1;
+  min-height: 0;
+}
+.diff-face-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, 34%) 1fr;
+  gap: 8px;
+}
+.diff-face-files {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+}
+.diff-face-totals {
+  margin: 0 0 4px;
+  color: var(--text-soft);
+}
+.diff-face-files ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.diff-face-files button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  text-align: left;
+  cursor: pointer;
+}
+.diff-face-files button.active {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+}
+.diff-face-files strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.diff-face-viewer {
+  min-height: 0;
+  overflow: auto;
+}
+.terminal-face-surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.terminal-face-surface > .node-face-hint {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+.terminal-face-error {
+  margin: 0;
+  color: #d06870;
+}
+.canvas-node[data-node-kind='extension']:not(.collapsed),
+.canvas-node[data-node-kind='group-frame']:not(.collapsed) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.canvas-node[data-node-kind='extension']:not(.collapsed) > header,
+.canvas-node[data-node-kind='group-frame']:not(.collapsed) > header {
+  flex: 0 0 auto;
+}
+.brief-face-attachment {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.group-frame-face-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.group-frame-face-hint {
+  color: var(--text-faint);
+}
+.brief-face-attachment span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brief-face-attachment small {
+  color: var(--text-faint);
+}
+.brief-face-variable-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.brief-face-variable-row input,
+.brief-face-variable-row textarea {
+  font-size: var(--text-xs);
+  min-width: 0;
+  flex: 1;
+}
+.note-image-face-reuse {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.note-image-face-reuse label {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.note-image-face-reuse label span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-image-face-reuse small {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.note-image-face-editors {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.note-image-face-editors li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.note-image-face-editors code {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-image-face-missing {
+  color: #c9964f;
+}
+.note-image-face-actions {
+  display: flex;
+  gap: 6px;
+}
+.note-image-face-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.note-image-face-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.whiteboard-face-element,
+.whiteboard-face-context {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.whiteboard-face-element > strong,
+.whiteboard-face-context > strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-soft);
+}
+.whiteboard-face-number-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.whiteboard-face-color-grid {
+  display: flex;
+  gap: 8px;
 }

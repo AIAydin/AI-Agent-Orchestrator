@@ -6,7 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import { PACKAGED_SMOKE_MARKER } from '../shared/smoke/contracts.js';
 import { attemptContextSnapshotStorageStartup } from './agent-execution/context/snapshot-store/startup.js';
 import { CloseCoordinator } from './lifecycle/close-coordinator.js';
-import { registerIpcHandlers } from './ipc.js';
+import { createDefaultSettings, registerIpcHandlers } from './ipc.js';
 import type { ApplicationServices } from './ipc.js';
 import { verifyBundledGit } from './git/git-runtime.js';
 import {
@@ -18,6 +18,7 @@ import { openLocalStoreWithStartupDatabaseRecovery } from './recovery/database/s
 import { configurePackagedSmokeProfile, runPackagedApplicationSmoke } from './smoke/packaged.js';
 import { createNonInteractiveSmokeStartupDialog } from './smoke/startup-recovery-dialog.js';
 import type { LocalStore } from './storage.js';
+import { allowsForgeboardMicrophone } from './security/microphone-permission.js';
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
@@ -293,10 +294,14 @@ function createWindow(
 
 function configureSessionSecurity(): void {
   session.defaultSession.on('will-download', (event) => event.preventDefault());
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false);
-  });
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionRequestHandler(
+    (webContents, permission, callback, details) => {
+      callback(isAllowedMicrophoneRequest(webContents, permission, details, true));
+    },
+  );
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, _origin, details) =>
+    isAllowedMicrophoneRequest(webContents, permission, details, false),
+  );
   session.defaultSession.webRequest.onBeforeRequest(
     { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] },
     (details, callback) => callback({ cancel: !isLoopbackNetworkUrl(details.url) }),
@@ -331,6 +336,33 @@ function configureSessionSecurity(): void {
       },
     });
   });
+}
+
+function isAllowedMicrophoneRequest(
+  webContents: Electron.WebContents | null,
+  permission: string,
+  details: unknown,
+  requireAudioDetail: boolean,
+): boolean {
+  return allowsForgeboardMicrophone({
+    permission,
+    isMainWindow:
+      webContents !== null &&
+      mainWindow !== null &&
+      !mainWindow.isDestroyed() &&
+      webContents === mainWindow.webContents,
+    voiceCommandsEnabled: voiceCommandsAreEnabled(),
+    details,
+    requireAudioDetail,
+  });
+}
+
+function voiceCommandsAreEnabled(): boolean {
+  try {
+    return store?.getSettings(createDefaultSettings()).voiceCommandsEnabled === true;
+  } catch {
+    return false;
+  }
 }
 
 export function isLoopbackNetworkUrl(value: string): boolean {

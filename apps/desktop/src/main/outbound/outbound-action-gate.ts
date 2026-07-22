@@ -35,6 +35,7 @@ export type ForgeboardOutboundAction =
   | 'collaboration-member-revoke'
   | 'collaboration-audit-list'
   | 'diagnostics-send'
+  | 'voice-model-download'
   | 'update-check';
 
 export type OutboundDestinationKind =
@@ -43,6 +44,7 @@ export type OutboundDestinationKind =
   | 'github'
   | 'collaboration-server'
   | 'diagnostics-endpoint'
+  | 'model-registry'
   | 'release-server';
 
 export interface OutboundDestinationDisclosure {

@@ -6,6 +6,7 @@ import type { NodeFaceProps } from '../../canvas/faces/node-face-registry.js';
 import { useCanvasNodeInteractions } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
 import { useAgentSession } from '../../runs/agent-session/AgentSessionContext.js';
 import { useMermaidDiagram } from './use-mermaid-diagram.js';
+import './mermaid-diagram.css';
 
 /** Diagram face: rendered Mermaid SVG with a source editor that toggles in place. */
 export function DiagramNodeFace({ id, data }: NodeFaceProps): JSX.Element {

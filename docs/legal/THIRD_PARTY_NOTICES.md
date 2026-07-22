@@ -3,6 +3,28 @@
 Forgeboard is distributed under the MIT License. Its desktop installers also contain the
 following separately licensed software.
 
+## Transformers.js 3.8.1
+
+Source: <https://github.com/huggingface/transformers.js/tree/3.8.1>
+
+Licensed under the Apache License 2.0. The complete license text is distributed with the installed
+`@huggingface/transformers` package.
+
+## ONNX Runtime Node 1.21.0
+
+Source: <https://github.com/microsoft/onnxruntime/tree/v1.21.0>
+
+Licensed under the MIT License. Platform-native ONNX Runtime libraries are used only for local
+model inference.
+
+## Whisper Tiny English ONNX model
+
+Model revision: <https://huggingface.co/onnx-community/whisper-tiny.en/tree/2575352d61be1bf7225cf8f8b268a4678025fc58>
+
+The optional model is downloaded only after user approval and is derived from OpenAI Whisper Tiny
+English. Whisper source and model weights are licensed under the MIT License:
+<https://github.com/openai/whisper/blob/main/LICENSE>.
+
 ## Dugite 3.2.2
 
 Source: <https://github.com/desktop/dugite/tree/v3.2.2>

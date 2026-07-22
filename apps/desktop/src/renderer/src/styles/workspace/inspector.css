@@ -1,38 +1,9 @@
-.inspector {
-  grid-area: inspector;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--line);
-  background: var(--surface);
-}
-.inspector > header {
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px 0 13px;
-  border-bottom: 1px solid var(--line);
-}
-.inspector > header > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.inspector > header span {
-  font-size: var(--text-md);
-  font-weight: 650;
-}
-.inspector > header small {
-  color: var(--text-faint);
-  font-size: var(--text-xs);
-}
-.inspector-content {
-  min-height: 0;
-  padding: 14px 12px;
-  overflow-y: auto;
-}
-.inspector-content > label,
+/*
+ * Inspector-sidebar chrome has been removed. The classes that remain here are
+ * reused on canvas: the node-edit fields + lock notice and the edge-config
+ * popover (edge popover), the declarative-extension and workflow-node-config
+ * blocks (node faces), and the node-run-history card (node details popover).
+ */
 .node-edit-fields > label {
   display: flex;
   flex-direction: column;
@@ -66,71 +37,6 @@
 }
 .node-lock-notice svg {
   flex: 0 0 auto;
-}
-.inspector-file-editor {
-  height: min(52vh, 500px);
-  min-height: 340px;
-  margin: 14px 0;
-}
-.file-node-reference {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 14px 0 8px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-raised);
-}
-.file-node-reference > div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-.file-node-reference > div:last-child {
-  justify-items: end;
-}
-.file-node-reference span,
-.file-node-reference em,
-.file-node-reference-guidance {
-  color: var(--text-faint);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-}
-.file-node-reference code {
-  overflow: hidden;
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.file-node-reference em {
-  color: var(--amber);
-  font-style: normal;
-}
-.file-node-reference button {
-  min-height: 27px;
-  padding: 4px 7px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  color: inherit;
-  font-size: var(--text-xs);
-}
-.file-node-reference-guidance {
-  margin: 14px 0 8px;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
-}
-.inspector textarea {
-  resize: vertical;
-  line-height: 1.4;
-}
-.inspector input[type='color'] {
-  padding: 4px;
 }
 .declarative-extension-inspector {
   display: grid;
@@ -353,34 +259,6 @@
 .workflow-gate-summary {
   color: var(--accent);
 }
-.inspector-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 4px;
-  margin: 15px 0;
-}
-.inspector-actions button {
-  min-height: 45px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-raised);
-  color: var(--text-soft);
-  font-size: var(--text-xs);
-}
-.inspector-actions button:hover {
-  border-color: var(--line-strong);
-  color: var(--text);
-}
-.inspector-actions .danger-text {
-  color: var(--red);
-}
-.context-box,
-.run-history,
 .edge-explanation {
   margin-top: 13px;
   padding: 11px;
@@ -388,52 +266,11 @@
   border-radius: 8px;
   background: var(--surface-subtle);
 }
-.context-box header,
-.run-history header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.context-box h3,
-.run-history h3 {
-  margin: 0;
-  font-size: var(--text-sm);
-}
-.context-box header span {
-  margin-left: auto;
-  padding: 2px 5px;
-  border-radius: 999px;
-  background: var(--surface-raised);
-  color: var(--text-faint);
-  font-size: var(--text-2xs);
-}
-.context-box p,
-.run-history p,
 .edge-explanation p {
   margin: 7px 0 0;
   color: var(--text-soft);
   font-size: var(--text-xs);
   line-height: 1.5;
-}
-.run-history pre {
-  max-height: 150px;
-  margin: 8px 0 0;
-  padding: 8px;
-  overflow: auto;
-  border-radius: 6px;
-  background: var(--surface-raised);
-  color: var(--text-soft);
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  font-size: var(--text-2xs);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.run-history > strong {
-  display: block;
-  margin-top: 8px;
-  color: var(--green);
-  font-size: var(--text-xs);
 }
 .edge-explanation strong {
   text-transform: capitalize;
@@ -512,35 +349,28 @@
   flex: 0 0 auto;
   margin-top: 1px;
 }
-.inspector-empty {
-  padding: 35px 20px;
-  text-align: center;
-  color: var(--text-faint);
+/* On-canvas edge configuration popover (EdgeLabelRenderer anchor + card). */
+.edge-config-popover-anchor {
+  position: absolute;
+  /* EdgeLabelRenderer sets pointer-events:none on its container; re-enable here. */
+  pointer-events: all;
+  z-index: 6;
 }
-.inspector-empty h3 {
-  margin: 10px 0 5px;
-  color: var(--text);
-  font-size: var(--text-lg);
+.edge-config-popover {
+  width: 264px;
+  max-height: 60vh;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
 }
-.inspector-empty p {
+.edge-config-popover .node-edit-fields {
   margin: 0;
-  font-size: var(--text-xs);
-  line-height: 1.5;
 }
-.inspector-empty dl {
-  margin-top: 24px;
-  text-align: left;
-}
-.inspector-empty dl div {
-  display: flex;
-  justify-content: space-between;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--text-xs);
-}
-.inspector-empty dd {
-  margin: 0;
-  color: var(--text-soft);
+.edge-config-popover .node-lock-notice {
+  margin: 0 0 8px;
 }
 .node-run-history {
   display: grid;

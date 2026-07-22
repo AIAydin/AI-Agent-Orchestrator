@@ -7,6 +7,7 @@ export type SettingsUiTab =
   | 'Git & previews'
   | 'Checks'
   | 'Connectivity'
+  | 'Voice commands'
   | 'Data & privacy';
 
 export type SettingsValidationClass =
@@ -179,4 +180,6 @@ export const SETTINGS_UI_MANIFEST = {
     validation: 'schema',
     reason: 'Automatic downloads are unsupported; the UI permits only clearing the legacy value.',
   },
+  voiceCommandsEnabled: ui('Voice commands', label('Enable voice commands')),
+  voiceAutoRunSafeActions: ui('Voice commands', label('Run safe actions automatically')),
 } as const satisfies Record<keyof AppSettings, SettingsFieldUiEntry>;

@@ -2,11 +2,16 @@ import type { JSX } from 'react';
 
 import { BriefNodeFace } from '../../content/BriefNodeFace.js';
 import { DiagramNodeFace } from '../../content/diagram/DiagramNodeFace.js';
+import { DiffNodeFace } from '../../content/diff/DiffNodeFace.js';
+import { FileNodeFace } from '../../content/file/FileNodeFace.js';
 import { NoteImageNodeFace } from '../../content/note-image/NoteImageNodeFace.js';
 import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.js';
+import { ExtensionNodeFace } from '../../content/ExtensionNodeFace.js';
+import { GroupFrameNodeFace } from '../GroupFrameNodeFace.js';
 import { GitPrNodeFace } from '../../git-pr/GitPrNodeFace.js';
 import { PreviewNodeFace } from '../../previews/PreviewNodeFace.js';
 import { AgentSessionNode } from '../../runs/agent-session/AgentSessionNode.js';
+import { TerminalNodeFace } from '../../terminal/TerminalNodeFace.js';
 import { ReviewGateNodeFace } from '../../workflows/faces/ReviewGateNodeFace.js';
 import { TaskNodeFace } from '../../workflows/faces/TaskNodeFace.js';
 import { TestNodeFace } from '../../workflows/test-node/TestNodeFace.js';
@@ -39,10 +44,15 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   },
   brief: BriefNodeFace,
   diagram: DiagramNodeFace,
+  diff: DiffNodeFace,
+  extension: ExtensionNodeFace,
+  file: FileNodeFace,
   'git-pr': GitPrNodeFace,
+  'group-frame': GroupFrameNodeFace,
   'note-image': NoteImageNodeFace,
   'review-gate': ReviewGateNodeFace,
   task: TaskNodeFace,
+  terminal: TerminalNodeFace,
   test: TestNodeFace,
   whiteboard: WhiteboardNodeFace,
 };

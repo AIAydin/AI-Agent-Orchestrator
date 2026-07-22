@@ -34,6 +34,7 @@
     "@forgeboard/ui": "workspace:*",
     "@forgeboard/windows-durable-fs": "workspace:*",
     "@hocuspocus/provider": "catalog:",
+    "@huggingface/transformers": "3.8.1",
     "@tanstack/react-query": "catalog:",
     "@xmldom/xmldom": "^0.9.10",
     "@xterm/addon-fit": "catalog:",
@@ -78,6 +79,7 @@
     ],
     "asarUnpack": [
       "**/node-pty/**",
+      "**/onnxruntime-node/**",
       "**/@forgeboard/windows-durable-fs/**",
       "**/dugite/git/**"
     ],
@@ -118,6 +120,9 @@
       "icon": "build/icon.png",
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Forgeboard uses the microphone only while you record a local voice command. Audio is transcribed on this device and is not saved."
+      },
       "target": [
         "dmg",
         "zip"

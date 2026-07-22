@@ -275,6 +275,11 @@ import type {
   WorkflowReviewDecisionInput,
   WorkflowStartInput,
 } from './workflow/contracts.js';
+import type {
+  VoiceModelStatus,
+  VoiceTranscription,
+  VoiceTranscriptionInput,
+} from './voice/contracts.js';
 
 export interface ForgeboardApi {
   app: {
@@ -285,6 +290,12 @@ export interface ForgeboardApi {
     check(input: UpdateCheckInput): Promise<IpcResult<UpdateCheckResult | null>>;
     cancel(): Promise<IpcResult<UpdateCancelResult>>;
     openRelease(input: { releaseId: number }): Promise<IpcResult<boolean>>;
+  };
+  voice: {
+    status(): Promise<IpcResult<VoiceModelStatus>>;
+    install(): Promise<IpcResult<VoiceModelStatus>>;
+    remove(): Promise<IpcResult<VoiceModelStatus>>;
+    transcribe(input: VoiceTranscriptionInput): Promise<IpcResult<VoiceTranscription>>;
   };
   settings: {
     get(): Promise<IpcResult<AppSettings>>;
