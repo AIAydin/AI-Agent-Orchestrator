@@ -1,0 +1,154 @@
+.chrome-companion-surface {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  place-items: center;
+  background: #0d1113;
+}
+
+.chrome-companion-browser {
+  display: grid;
+  grid-template-rows: 36px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.chrome-companion-toolbar {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 4px 7px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.chrome-companion-toolbar button,
+.chrome-companion-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 28px;
+  min-height: 26px;
+  padding: 5px 7px;
+  color: var(--text-primary);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+}
+
+.chrome-companion-toolbar button:focus-visible,
+.chrome-companion-stage:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.chrome-companion-live-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: 3px;
+  background: #67c587;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgb(103 197 135 / 12%);
+}
+
+.chrome-companion-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chrome-companion-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  cursor: default;
+  background: #080b0d;
+  user-select: none;
+  touch-action: none;
+}
+
+.chrome-companion-stage[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.chrome-companion-snapshot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.chrome-companion-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  place-items: center;
+}
+
+.chrome-companion-agent-badge,
+.chrome-companion-readonly {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 4px 7px;
+  color: var(--warning-text, #e5b867);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.chrome-companion-readonly {
+  right: auto;
+  left: 8px;
+  color: var(--text-secondary);
+}
+
+.chrome-companion-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  width: min(440px, calc(100% - 32px));
+  padding: 16px;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgb(0 0 0 / 35%);
+}
+
+.chrome-companion-card p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chrome-companion-error {
+  color: var(--warning-text, #e5b867) !important;
+}
+
+.chrome-companion-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 6px;
+}

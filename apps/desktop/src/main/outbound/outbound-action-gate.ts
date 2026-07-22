@@ -1,51 +1,51 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from "node:crypto";
 
 const DEFAULT_APPROVAL_TTL_MS = 5 * 60_000;
 const MAX_PENDING_PLANS = 256;
 const MAX_PENDING_PLANS_PER_OWNER = 16;
 const SAFE_ERROR_KINDS = new Set([
-  'Error',
-  'TypeError',
-  'RangeError',
-  'ReferenceError',
-  'SyntaxError',
-  'URIError',
-  'AggregateError',
-  'AbortError',
-  'OutboundDisclosureChangedError',
+  "Error",
+  "TypeError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "URIError",
+  "AggregateError",
+  "AbortError",
+  "OutboundDisclosureChangedError",
 ]);
 
 export type ForgeboardOutboundAction =
-  | 'docker-image-pull'
-  | 'git-clone'
-  | 'git-push'
-  | 'github-status-check'
-  | 'github-pull-request'
-  | 'github-ci-status'
-  | 'collaboration-connect'
-  | 'collaboration-invite-create'
-  | 'collaboration-invite-list'
-  | 'collaboration-invite-redeem'
-  | 'collaboration-invite-revoke'
-  | 'collaboration-room-bootstrap'
-  | 'collaboration-owner-recover'
-  | 'collaboration-owner-refresh'
-  | 'collaboration-members-list'
-  | 'collaboration-member-update'
-  | 'collaboration-member-revoke'
-  | 'collaboration-audit-list'
-  | 'diagnostics-send'
-  | 'voice-model-download'
-  | 'update-check';
+  | "docker-image-pull"
+  | "git-clone"
+  | "git-push"
+  | "github-status-check"
+  | "github-pull-request"
+  | "github-ci-status"
+  | "collaboration-connect"
+  | "collaboration-invite-create"
+  | "collaboration-invite-list"
+  | "collaboration-invite-redeem"
+  | "collaboration-invite-revoke"
+  | "collaboration-room-bootstrap"
+  | "collaboration-owner-recover"
+  | "collaboration-owner-refresh"
+  | "collaboration-members-list"
+  | "collaboration-member-update"
+  | "collaboration-member-revoke"
+  | "collaboration-audit-list"
+  | "diagnostics-send"
+  | "voice-model-download"
+  | "update-check";
 
 export type OutboundDestinationKind =
-  | 'container-registry'
-  | 'git-remote'
-  | 'github'
-  | 'collaboration-server'
-  | 'diagnostics-endpoint'
-  | 'model-registry'
-  | 'release-server';
+  | "container-registry"
+  | "git-remote"
+  | "github"
+  | "collaboration-server"
+  | "diagnostics-endpoint"
+  | "model-registry"
+  | "release-server";
 
 export interface OutboundDestinationDisclosure {
   readonly kind: OutboundDestinationKind;
@@ -80,14 +80,14 @@ export interface OutboundApprovalPlan {
 
 export interface OutboundConfirmationBoundary {
   /** Must resolve only after a main-process-owned, cancel-default confirmation. */
-  confirm(plan: OutboundApprovalPlan): Promise<'approved' | 'denied'>;
+  confirm(plan: OutboundApprovalPlan): Promise<"approved" | "denied">;
 }
 
 export interface OutboundAuditSink {
   appendAudit(
     category: string,
     action: string,
-    outcome: 'allowed' | 'denied' | 'failed',
+    outcome: "allowed" | "denied" | "failed",
     metadata: Record<string, unknown>,
   ): unknown;
 }
@@ -102,13 +102,15 @@ export interface ConfirmOutboundActionInput<Value> {
   readonly planId: string;
   readonly confirmation: OutboundConfirmationBoundary;
   /** Rebuilds the exact disclosure immediately before the outbound action starts. */
-  readonly currentDisclosure: () => OutboundActionDisclosure | Promise<OutboundActionDisclosure>;
+  readonly currentDisclosure: () =>
+    | OutboundActionDisclosure
+    | Promise<OutboundActionDisclosure>;
   readonly execute: (permit: OutboundExecutionPermit) => Value | Promise<Value>;
 }
 
 export type OutboundActionResult<Value> =
-  | { readonly outcome: 'denied' }
-  | { readonly outcome: 'allowed'; readonly value: Value };
+  | { readonly outcome: "denied" }
+  | { readonly outcome: "allowed"; readonly value: Value };
 
 export interface OutboundActionGateOptions {
   readonly now?: () => Date;
@@ -116,7 +118,9 @@ export interface OutboundActionGateOptions {
   readonly approvalTtlMs?: number;
 }
 
-const OUTBOUND_EXECUTION_PERMIT = Symbol('forgeboard-outbound-execution-permit');
+const OUTBOUND_EXECUTION_PERMIT = Symbol(
+  "forgeboard-outbound-execution-permit",
+);
 
 /** Opaque proof that the exact, current action passed a per-use native approval. */
 export interface OutboundExecutionPermit {
@@ -127,9 +131,13 @@ const EXECUTION_PERMIT: OutboundExecutionPermit = Object.freeze({
   [OUTBOUND_EXECUTION_PERMIT]: true as const,
 });
 
-export function assertOutboundExecutionPermit(permit: OutboundExecutionPermit): void {
+export function assertOutboundExecutionPermit(
+  permit: OutboundExecutionPermit,
+): void {
   if (permit !== EXECUTION_PERMIT) {
-    throw new Error('Forgeboard-owned outbound execution requires a gate-issued permit.');
+    throw new Error(
+      "Forgeboard-owned outbound execution requires a gate-issued permit.",
+    );
   }
 }
 
@@ -152,8 +160,11 @@ export class OutboundActionGate {
     this.#now = options.now ?? (() => new Date());
     this.#createId = options.createId ?? randomUUID;
     this.#approvalTtlMs = options.approvalTtlMs ?? DEFAULT_APPROVAL_TTL_MS;
-    if (!Number.isSafeInteger(this.#approvalTtlMs) || this.#approvalTtlMs <= 0) {
-      throw new Error('Outbound approval TTL must be a positive safe integer.');
+    if (
+      !Number.isSafeInteger(this.#approvalTtlMs) ||
+      this.#approvalTtlMs <= 0
+    ) {
+      throw new Error("Outbound approval TTL must be a positive safe integer.");
     }
   }
 
@@ -161,13 +172,16 @@ export class OutboundActionGate {
   public recordRequiredAudit(
     category: string,
     action: string,
-    outcome: 'allowed' | 'denied' | 'failed',
+    outcome: "allowed" | "denied" | "failed",
     metadata: Record<string, unknown>,
   ): void {
     this.audit.appendAudit(category, action, outcome, metadata);
   }
 
-  public prepare(ownerId: string, disclosure: OutboundActionDisclosure): OutboundApprovalPlan {
+  public prepare(
+    ownerId: string,
+    disclosure: OutboundActionDisclosure,
+  ): OutboundApprovalPlan {
     assertOwnerId(ownerId);
     assertDisclosure(disclosure);
     this.#discardExpiredPlans();
@@ -188,7 +202,7 @@ export class OutboundActionGate {
       ) ||
       this.#plans.has(plan.id)
     ) {
-      throw new Error('Outbound approval IDs must be unique UUIDs.');
+      throw new Error("Outbound approval IDs must be unique UUIDs.");
     }
     this.#plans.set(plan.id, plan);
     return publicPlan(plan);
@@ -199,30 +213,45 @@ export class OutboundActionGate {
   ): Promise<OutboundActionResult<Value>> {
     const plan = this.#takePlan(input.ownerId, input.planId);
     const audit = auditMetadata(plan);
-    let decision: 'approved' | 'denied';
+    let decision: "approved" | "denied";
     try {
       decision = await input.confirmation.confirm(publicPlan(plan));
     } catch (error) {
-      this.audit.appendAudit('external-send', plan.disclosure.action, 'failed', {
-        ...audit,
-        failureKind: 'native-confirmation-failed',
-        errorKind: safeErrorKind(error),
-      });
+      this.audit.appendAudit(
+        "external-send",
+        plan.disclosure.action,
+        "failed",
+        {
+          ...audit,
+          failureKind: "native-confirmation-failed",
+          errorKind: safeErrorKind(error),
+        },
+      );
       throw error;
     }
-    if (decision !== 'approved') {
-      this.audit.appendAudit('external-send', plan.disclosure.action, 'denied', {
-        ...audit,
-        reason: 'native-confirmation-cancelled',
-      });
-      return { outcome: 'denied' };
+    if (decision !== "approved") {
+      this.audit.appendAudit(
+        "external-send",
+        plan.disclosure.action,
+        "denied",
+        {
+          ...audit,
+          reason: "native-confirmation-cancelled",
+        },
+      );
+      return { outcome: "denied" };
     }
     if (plan.expiresAtMs <= this.#now().getTime()) {
-      this.audit.appendAudit('external-send', plan.disclosure.action, 'denied', {
-        ...audit,
-        reason: 'approval-expired-after-confirmation',
-      });
-      return { outcome: 'denied' };
+      this.audit.appendAudit(
+        "external-send",
+        plan.disclosure.action,
+        "denied",
+        {
+          ...audit,
+          reason: "approval-expired-after-confirmation",
+        },
+      );
+      return { outcome: "denied" };
     }
 
     try {
@@ -232,40 +261,55 @@ export class OutboundActionGate {
         throw new OutboundDisclosureChangedError();
       }
       if (plan.expiresAtMs <= this.#now().getTime()) {
-        this.audit.appendAudit('external-send', plan.disclosure.action, 'denied', {
-          ...audit,
-          reason: 'approval-expired-after-revalidation',
-        });
-        return { outcome: 'denied' };
+        this.audit.appendAudit(
+          "external-send",
+          plan.disclosure.action,
+          "denied",
+          {
+            ...audit,
+            reason: "approval-expired-after-revalidation",
+          },
+        );
+        return { outcome: "denied" };
       }
     } catch (error) {
-      this.audit.appendAudit('external-send', plan.disclosure.action, 'failed', {
-        ...audit,
-        failureKind:
-          error instanceof OutboundDisclosureChangedError
-            ? 'approved-disclosure-changed'
-            : 'outbound-action-failed',
-        errorKind: safeErrorKind(error),
-      });
+      this.audit.appendAudit(
+        "external-send",
+        plan.disclosure.action,
+        "failed",
+        {
+          ...audit,
+          failureKind:
+            error instanceof OutboundDisclosureChangedError
+              ? "approved-disclosure-changed"
+              : "outbound-action-failed",
+          errorKind: safeErrorKind(error),
+        },
+      );
       throw error;
     }
     // Persist the exact authorization before the irreversible external effect. If the audit sink
     // fails, execution never receives the gate-issued permit.
-    this.audit.appendAudit('external-send', plan.disclosure.action, 'allowed', {
+    this.audit.appendAudit("external-send", plan.disclosure.action, "allowed", {
       ...audit,
-      phase: 'authorized-before-execution',
+      phase: "authorized-before-execution",
     });
     try {
       return {
-        outcome: 'allowed',
+        outcome: "allowed",
         value: await input.execute(EXECUTION_PERMIT),
       };
     } catch (error) {
-      this.audit.appendAudit('external-send', plan.disclosure.action, 'failed', {
-        ...audit,
-        failureKind: 'outbound-action-failed',
-        errorKind: safeErrorKind(error),
-      });
+      this.audit.appendAudit(
+        "external-send",
+        plan.disclosure.action,
+        "failed",
+        {
+          ...audit,
+          failureKind: "outbound-action-failed",
+          errorKind: safeErrorKind(error),
+        },
+      );
       throw error;
     }
   }
@@ -276,7 +320,7 @@ export class OutboundActionGate {
     for (const [id, plan] of this.#plans) {
       if (plan.ownerId !== ownerId) continue;
       try {
-        this.#auditPlanDenial(plan, 'owner-closed');
+        this.#auditPlanDenial(plan, "owner-closed");
       } catch (error) {
         auditFailure ??= error;
       }
@@ -285,7 +329,7 @@ export class OutboundActionGate {
     if (auditFailure !== undefined) {
       throw auditFailure instanceof Error
         ? auditFailure
-        : new Error('Outbound owner-revocation audit failed.');
+        : new Error("Outbound owner-revocation audit failed.");
     }
   }
 
@@ -295,18 +339,18 @@ export class OutboundActionGate {
     const plan = this.#plans.get(planId);
     if (plan === undefined) {
       this.#discardExpiredPlans();
-      this.#auditUnknownPlan(ownerId, planId, 'cancel-plan-not-found');
+      this.#auditUnknownPlan(ownerId, planId, "cancel-plan-not-found");
       return;
     }
     if (plan.ownerId !== ownerId) {
-      this.#auditPlanDenial(plan, 'cancel-owner-mismatch', ownerId);
+      this.#auditPlanDenial(plan, "cancel-owner-mismatch", ownerId);
       return;
     }
     this.#auditPlanDenial(
       plan,
       plan.expiresAtMs <= this.#now().getTime()
-        ? 'approval-expired-before-cancel'
-        : 'renderer-plan-cancelled',
+        ? "approval-expired-before-cancel"
+        : "renderer-plan-cancelled",
     );
     this.#plans.delete(planId);
   }
@@ -316,22 +360,22 @@ export class OutboundActionGate {
     const plan = this.#plans.get(planId);
     if (plan === undefined) {
       this.#discardExpiredPlans();
-      this.#auditUnknownPlan(ownerId, planId, 'consume-plan-not-found');
+      this.#auditUnknownPlan(ownerId, planId, "consume-plan-not-found");
       throw new Error(
-        'The outbound approval is missing, expired, already used, or belongs to another owner.',
+        "The outbound approval is missing, expired, already used, or belongs to another owner.",
       );
     }
     if (plan.ownerId !== ownerId) {
-      this.#auditPlanDenial(plan, 'consume-owner-mismatch', ownerId);
+      this.#auditPlanDenial(plan, "consume-owner-mismatch", ownerId);
       throw new Error(
-        'The outbound approval is missing, expired, already used, or belongs to another owner.',
+        "The outbound approval is missing, expired, already used, or belongs to another owner.",
       );
     }
     if (plan.expiresAtMs <= this.#now().getTime()) {
-      this.#auditPlanDenial(plan, 'approval-expired-before-confirmation');
+      this.#auditPlanDenial(plan, "approval-expired-before-confirmation");
       this.#plans.delete(planId);
       throw new Error(
-        'The outbound approval is missing, expired, already used, or belongs to another owner.',
+        "The outbound approval is missing, expired, already used, or belongs to another owner.",
       );
     }
     this.#plans.delete(planId);
@@ -342,7 +386,7 @@ export class OutboundActionGate {
     const now = this.#now().getTime();
     for (const [id, plan] of this.#plans) {
       if (plan.expiresAtMs > now) continue;
-      this.#auditPlanDenial(plan, 'approval-expired-unused');
+      this.#auditPlanDenial(plan, "approval-expired-unused");
       this.#plans.delete(id);
     }
   }
@@ -355,28 +399,34 @@ export class OutboundActionGate {
     while (ownerPlans.length >= MAX_PENDING_PLANS_PER_OWNER) {
       const oldest = ownerPlans.shift();
       if (oldest !== undefined) {
-        this.#auditPlanDenial(oldest, 'owner-plan-capacity-evicted');
+        this.#auditPlanDenial(oldest, "owner-plan-capacity-evicted");
         this.#plans.delete(oldest.id);
       }
     }
     while (this.#plans.size >= MAX_PENDING_PLANS) {
       const oldest = byExpiry.shift();
       if (oldest === undefined) break;
-      this.#auditPlanDenial(oldest, 'global-plan-capacity-evicted');
+      this.#auditPlanDenial(oldest, "global-plan-capacity-evicted");
       this.#plans.delete(oldest.id);
     }
   }
 
-  #auditPlanDenial(plan: PendingOutboundPlan, reason: string, requesterOwnerId?: string): void {
-    this.audit.appendAudit('external-send', plan.disclosure.action, 'denied', {
+  #auditPlanDenial(
+    plan: PendingOutboundPlan,
+    reason: string,
+    requesterOwnerId?: string,
+  ): void {
+    this.audit.appendAudit("external-send", plan.disclosure.action, "denied", {
       ...auditMetadata(plan),
       reason,
-      ...(requesterOwnerId === undefined ? {} : { requesterOwnerSha256: sha256(requesterOwnerId) }),
+      ...(requesterOwnerId === undefined
+        ? {}
+        : { requesterOwnerSha256: sha256(requesterOwnerId) }),
     });
   }
 
   #auditUnknownPlan(ownerId: string, planId: string, reason: string): void {
-    this.audit.appendAudit('external-send', 'approval-plan', 'denied', {
+    this.audit.appendAudit("external-send", "approval-plan", "denied", {
       ownerSha256: sha256(ownerId),
       planIdSha256: sha256(planId),
       reason,
@@ -386,8 +436,10 @@ export class OutboundActionGate {
 
 export class OutboundDisclosureChangedError extends Error {
   public constructor() {
-    super('The outbound destination or action changed after approval. Review it again.');
-    this.name = 'OutboundDisclosureChangedError';
+    super(
+      "The outbound destination or action changed after approval. Review it again.",
+    );
+    this.name = "OutboundDisclosureChangedError";
   }
 }
 
@@ -401,7 +453,7 @@ function publicPlan(plan: PendingOutboundPlan): OutboundApprovalPlan {
 }
 
 function disclosureFingerprint(disclosure: OutboundActionDisclosure): string {
-  return createHash('sha256').update(JSON.stringify(disclosure)).digest('hex');
+  return createHash("sha256").update(JSON.stringify(disclosure)).digest("hex");
 }
 
 function auditMetadata(plan: PendingOutboundPlan): Record<string, unknown> {
@@ -409,58 +461,63 @@ function auditMetadata(plan: PendingOutboundPlan): Record<string, unknown> {
     actionKind: plan.disclosure.action,
     destinationKind: plan.disclosure.destination.kind,
     disclosureSha256: plan.disclosureSha256,
-    destinationSha256: createHash('sha256')
+    destinationSha256: createHash("sha256")
       .update(JSON.stringify(plan.disclosure.destination))
-      .digest('hex'),
+      .digest("hex"),
     ownerSha256: sha256(plan.ownerId),
-    approvalMode: 'single-use',
+    approvalMode: "single-use",
   };
 }
 
 function sha256(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function assertOwnerId(ownerId: string): void {
   if (ownerId.length < 1 || ownerId.length > 512 || containsControl(ownerId)) {
-    throw new Error('Outbound approval owner IDs must be bounded single-line values.');
+    throw new Error(
+      "Outbound approval owner IDs must be bounded single-line values.",
+    );
   }
 }
 
 function assertDisclosure(disclosure: OutboundActionDisclosure): void {
   const allowedActions = new Set<ForgeboardOutboundAction>([
-    'docker-image-pull',
-    'git-clone',
-    'git-push',
-    'github-status-check',
-    'github-pull-request',
-    'github-ci-status',
-    'collaboration-connect',
-    'collaboration-invite-create',
-    'collaboration-invite-list',
-    'collaboration-invite-redeem',
-    'collaboration-invite-revoke',
-    'collaboration-room-bootstrap',
-    'collaboration-owner-recover',
-    'collaboration-owner-refresh',
-    'collaboration-members-list',
-    'collaboration-member-update',
-    'collaboration-member-revoke',
-    'collaboration-audit-list',
-    'diagnostics-send',
-    'update-check',
+    "docker-image-pull",
+    "git-clone",
+    "git-push",
+    "github-status-check",
+    "github-pull-request",
+    "github-ci-status",
+    "collaboration-connect",
+    "collaboration-invite-create",
+    "collaboration-invite-list",
+    "collaboration-invite-redeem",
+    "collaboration-invite-revoke",
+    "collaboration-room-bootstrap",
+    "collaboration-owner-recover",
+    "collaboration-owner-refresh",
+    "collaboration-members-list",
+    "collaboration-member-update",
+    "collaboration-member-revoke",
+    "collaboration-audit-list",
+    "diagnostics-send",
+    "voice-model-download",
+    "update-check",
   ]);
   const allowedDestinations = new Set<OutboundDestinationKind>([
-    'container-registry',
-    'git-remote',
-    'github',
-    'collaboration-server',
-    'diagnostics-endpoint',
-    'release-server',
+    "container-registry",
+    "git-remote",
+    "github",
+    "collaboration-server",
+    "diagnostics-endpoint",
+    "model-registry",
+    "release-server",
   ]);
-  if (!allowedActions.has(disclosure.action)) throw new Error('Unsupported outbound action.');
+  if (!allowedActions.has(disclosure.action))
+    throw new Error("Unsupported outbound action.");
   if (!allowedDestinations.has(disclosure.destination.kind)) {
-    throw new Error('Unsupported outbound destination kind.');
+    throw new Error("Unsupported outbound destination kind.");
   }
   const values = [
     disclosure.title,
@@ -471,10 +528,18 @@ function assertDisclosure(disclosure: OutboundActionDisclosure): void {
     disclosure.destination.resource,
     disclosure.destination.transport,
   ];
-  if (values.some((value) => value.length < 1 || value.length > 32_768 || containsControl(value))) {
-    throw new Error('Outbound disclosures must contain bounded non-empty values.');
+  if (
+    values.some(
+      (value) =>
+        value.length < 1 || value.length > 32_768 || containsControl(value),
+    )
+  ) {
+    throw new Error(
+      "Outbound disclosures must contain bounded non-empty values.",
+    );
   }
-  if (disclosure.details.length > 32) throw new Error('Outbound disclosure has too many fields.');
+  if (disclosure.details.length > 32)
+    throw new Error("Outbound disclosure has too many fields.");
   const labels = new Set<string>();
   for (const detail of disclosure.details) {
     if (
@@ -483,10 +548,10 @@ function assertDisclosure(disclosure: OutboundActionDisclosure): void {
       containsControl(detail.label) ||
       detail.value.length < 1 ||
       detail.value.length > 32_768 ||
-      detail.value.includes('\0') ||
+      detail.value.includes("\0") ||
       labels.has(detail.label)
     ) {
-      throw new Error('Outbound disclosure fields must be unique and bounded.');
+      throw new Error("Outbound disclosure fields must be unique and bounded.");
     }
     labels.add(detail.label);
   }
@@ -500,6 +565,6 @@ function containsControl(value: string): boolean {
 }
 
 function safeErrorKind(error: unknown): string {
-  if (!(error instanceof Error)) return 'unknown-error';
-  return SAFE_ERROR_KINDS.has(error.name) ? error.name : 'Error';
+  if (!(error instanceof Error)) return "unknown-error";
+  return SAFE_ERROR_KINDS.has(error.name) ? error.name : "Error";
 }

@@ -1,10 +1,12 @@
 import { Eye, EyeOff } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import type { AppSettings } from '../../../../../shared/application/contracts.js';
+import { collaborationInviteConnectionFromLink } from '../../../../../shared/collaboration/index.js';
 
 interface InviteJoinControlsProps {
   readonly settings: AppSettings;
+  readonly setSettings: Dispatch<SetStateAction<AppSettings>>;
   readonly disabled: boolean;
   readonly clearSignal: number;
   readonly onJoin: (inviteLink: string) => Promise<void>;
@@ -12,6 +14,7 @@ interface InviteJoinControlsProps {
 
 export function InviteJoinControls({
   settings,
+  setSettings,
   disabled,
   clearSignal,
   onJoin,
@@ -25,7 +28,6 @@ export function InviteJoinControls({
     setRevealed(false);
   }, [clearSignal]);
   const hasRequiredSettings =
-    settings.collaborationEnabled &&
     settings.collaborationUrl.trim() !== '' &&
     settings.collaborationManagementUrl.trim() !== '' &&
     settings.collaborationSubject.trim() !== '' &&
@@ -40,6 +42,21 @@ export function InviteJoinControls({
     setHasLink(false);
     setRevealed(false);
     await onJoin(inviteLink);
+  }
+
+  function updateLink(value: string): void {
+    setHasLink(value.trim() !== '');
+    try {
+      const connection = collaborationInviteConnectionFromLink(value);
+      if (connection === null) return;
+      setSettings((current) => ({
+        ...current,
+        collaborationUrl: connection.serverUrl,
+        collaborationManagementUrl: connection.managementBaseUrl,
+      }));
+    } catch {
+      // Validation remains at the trusted preload boundary. Keep partial pasted text private here.
+    }
   }
 
   return (
@@ -57,7 +74,7 @@ export function InviteJoinControls({
             autoComplete="off"
             spellCheck={false}
             aria-describedby="collaboration-invite-link-help"
-            onChange={(event) => setHasLink(event.currentTarget.value.trim() !== '')}
+            onChange={(event) => updateLink(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key !== 'Enter') return;
               event.preventDefault();
@@ -79,8 +96,8 @@ export function InviteJoinControls({
           </button>
         </span>
         <small id="collaboration-invite-link-help">
-          Paste a trusted invite link. It is sent only to the configured management API and clears
-          after every attempt.
+          New Forgeboard invites include the server connection automatically. The link is kept only
+          for this attempt and clears immediately after you join.
         </small>
       </div>
       <button
@@ -89,7 +106,7 @@ export function InviteJoinControls({
         disabled={disabled || !hasRequiredSettings || !hasLink}
         onClick={() => void submit()}
       >
-        Join with invite
+        Join room
       </button>
     </div>
   );

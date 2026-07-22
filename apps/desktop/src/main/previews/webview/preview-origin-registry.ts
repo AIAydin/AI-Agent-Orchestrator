@@ -18,28 +18,50 @@
  * comparison mounts two partitions at once).
  */
 export interface PreviewOriginRegistry {
-  setAllowedOrigin(partition: string, origin: string | null): void;
+  setConfiguration(
+    partition: string,
+    configuration: { origin: string | null; authenticationEnabled: boolean } | null,
+  ): void;
   /** Direct partition lookup — used at `will-attach-webview` time, when the partition string is already known. */
   allowedOriginForPartition(partition: string): string | null;
   /** Session-identity lookup — used from a guest's own handlers, which have no public API for their partition name. */
   allowedOriginForGuestSession(guestSession: unknown): string | null;
+  authenticationEnabledForGuestSession(guestSession: unknown): boolean;
+  partitionForGuestSession(guestSession: unknown): string | null;
 }
 
 export function createPreviewOriginRegistry(
   resolvePartitionSession: (partition: string) => unknown,
 ): PreviewOriginRegistry {
-  const origins = new Map<string, string>();
+  const configurations = new Map<
+    string,
+    { origin: string | null; authenticationEnabled: boolean }
+  >();
   return {
-    setAllowedOrigin(partition, origin) {
-      if (origin === null) origins.delete(partition);
-      else origins.set(partition, origin);
+    setConfiguration(partition, configuration) {
+      if (configuration === null) configurations.delete(partition);
+      else configurations.set(partition, configuration);
     },
     allowedOriginForPartition(partition) {
-      return origins.get(partition) ?? null;
+      return configurations.get(partition)?.origin ?? null;
     },
     allowedOriginForGuestSession(guestSession) {
-      for (const [partition, origin] of origins) {
-        if (resolvePartitionSession(partition) === guestSession) return origin;
+      for (const [partition, configuration] of configurations) {
+        if (resolvePartitionSession(partition) === guestSession) return configuration.origin;
+      }
+      return null;
+    },
+    authenticationEnabledForGuestSession(guestSession) {
+      for (const [partition, configuration] of configurations) {
+        if (resolvePartitionSession(partition) === guestSession) {
+          return configuration.authenticationEnabled;
+        }
+      }
+      return false;
+    },
+    partitionForGuestSession(guestSession) {
+      for (const partition of configurations.keys()) {
+        if (resolvePartitionSession(partition) === guestSession) return partition;
       }
       return null;
     },

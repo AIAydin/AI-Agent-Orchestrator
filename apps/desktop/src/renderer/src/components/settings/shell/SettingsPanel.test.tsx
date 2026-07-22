@@ -1006,7 +1006,9 @@ describe('SettingsPanel draft transactions', () => {
 
     const lintEditor = screen.getByRole('group', { name: 'Lint command' });
     fireEvent.click(
-      within(lintEditor).getByRole('button', { name: 'Browse executable for Lint command' }),
+      within(lintEditor).getByRole('button', {
+        name: 'Browse executable for Lint command',
+      }),
     );
     await waitFor(() =>
       expect(within(lintEditor).getByLabelText<HTMLInputElement>('Executable').value).toBe(
@@ -1238,10 +1240,10 @@ describe('SettingsPanel draft transactions', () => {
     expect(screen.queryByText('Lint')).toBeNull();
     expect(screen.queryByText('Typecheck')).toBeNull();
     expect(screen.queryByText('Build')).toBeNull();
-    expect(screen.queryByText('Self-hosted collaboration')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Collaboration' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Connectivity' }));
-    expect(screen.getByRole('heading', { name: 'Self-hosted collaboration' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Collaboration' })).toBeTruthy();
     const collaborationEnabled = screen.getByRole<HTMLInputElement>('checkbox', {
       name: /Enable collaboration/u,
     });

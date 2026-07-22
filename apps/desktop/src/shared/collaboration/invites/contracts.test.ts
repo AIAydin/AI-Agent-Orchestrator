@@ -9,6 +9,8 @@ import {
   CollaborationInviteRedeemResponseSchema,
   CollaborationInviteSessionBindingSchema,
   CollaborationInviteSchema,
+  collaborationInviteConnectionFromLink,
+  collaborationInviteLinkWithConnection,
   collaborationInviteTokenFromLink,
 } from './contracts.js';
 
@@ -77,11 +79,27 @@ describe('collaboration invite contracts', () => {
     expect(collaborationInviteTokenFromLink(`http://127.0.0.1/join#token=${TOKEN}`)).toBe(TOKEN);
   });
 
+  it('round-trips exact credential-free connection endpoints in a one-paste invite', () => {
+    const connectedLink = collaborationInviteLinkWithConnection(LINK, {
+      serverUrl: 'wss://collab.example/socket',
+      managementBaseUrl: 'https://collab.example/control',
+    });
+    expect(collaborationInviteConnectionFromLink(connectedLink)).toEqual({
+      serverUrl: 'wss://collab.example/socket',
+      managementBaseUrl: 'https://collab.example/control/',
+    });
+    expect(collaborationInviteTokenFromLink(connectedLink)).toBe(TOKEN);
+    expect(new URL(connectedLink).searchParams.get('token')).toBeNull();
+    expect(collaborationInviteConnectionFromLink(LINK)).toBeNull();
+  });
+
   it('rejects ambiguous, exposed, credentialed, and unsupported invite links', () => {
     const invalid = [
       'ftp://collab.example/invite#token=value',
       'https://user:secret@collab.example/invite#token=value',
       'https://collab.example/invite?token=value#token=value',
+      'https://collab.example/invite?management=https%3A%2F%2Fcollab.example#token=value',
+      'https://collab.example/invite?management=https%3A%2F%2Fcollab.example&server=https%3A%2F%2Fremote.example#token=value',
       'https://collab.example/invite',
       'https://collab.example/invite#token=',
       'https://collab.example/invite#token=one&token=two',

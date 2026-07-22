@@ -1,13 +1,21 @@
-import { Check, LoaderCircle, Mic, MicOff, Play, Settings2, X } from 'lucide-react';
-import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import {
+  Check,
+  LoaderCircle,
+  Mic,
+  MicOff,
+  Play,
+  Settings2,
+  X,
+} from "lucide-react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
-import { VOICE_MAX_SECONDS } from '../../../../../shared/voice/contracts.js';
-import type { AppSettings } from '../../../../../shared/application/contracts.js';
-import { unwrap } from '../../../lib/ipc.js';
-import { trapModalFocus } from '../../../lib/modal-focus.js';
-import type { PaletteAction } from '../../shell/CommandPalette.js';
-import { joinVoiceChunks, resampleVoiceAudio } from './audio.js';
-import { matchVoiceAction, type VoiceActionMatch } from './action-matcher.js';
+import { VOICE_MAX_SECONDS } from "../../../../../shared/voice/contracts.js";
+import type { AppSettings } from "../../../../../shared/application/contracts.js";
+import { unwrap } from "../../../lib/ipc.js";
+import { trapModalFocus } from "../../../lib/modal-focus.js";
+import type { PaletteAction } from "../../shell/CommandPalette.js";
+import { joinVoiceChunks, resampleVoiceAudio } from "./audio.js";
+import { matchVoiceAction, type VoiceActionMatch } from "./action-matcher.js";
 
 interface ActiveRecording {
   readonly context: AudioContext;
@@ -24,6 +32,9 @@ interface VoiceCommandControlProps {
   readonly actions: readonly PaletteAction[];
   readonly onOpenSettings: () => void;
   readonly onError: (message: string) => void;
+  readonly resolveParameterizedAction?: (
+    transcript: string,
+  ) => VoiceActionMatch | null;
 }
 
 export function VoiceCommandControl({
@@ -31,9 +42,12 @@ export function VoiceCommandControl({
   actions,
   onOpenSettings,
   onError,
+  resolveParameterizedAction,
 }: VoiceCommandControlProps) {
-  const [state, setState] = useState<'idle' | 'requesting' | 'recording' | 'transcribing'>('idle');
-  const [transcript, setTranscript] = useState('');
+  const [state, setState] = useState<
+    "idle" | "requesting" | "recording" | "transcribing"
+  >("idle");
+  const [transcript, setTranscript] = useState("");
   const [match, setMatch] = useState<VoiceActionMatch | null>(null);
   const [autoRan, setAutoRan] = useState(false);
   const recording = useRef<ActiveRecording | null>(null);
@@ -41,31 +55,33 @@ export function VoiceCommandControl({
 
   useEffect(() => () => void stopAndDiscard(recording), []);
   useEffect(() => {
-    if (transcript === '') return;
+    if (transcript === "") return;
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (dialog.current === null) return;
       trapModalFocus(event, dialog.current);
-      if (event.key !== 'Escape') return;
+      if (event.key !== "Escape") return;
       event.preventDefault();
-      setTranscript('');
+      setTranscript("");
       setMatch(null);
       setAutoRan(false);
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [transcript]);
   if (!settings.voiceCommandsEnabled) return null;
 
   async function start(): Promise<void> {
-    setTranscript('');
+    setTranscript("");
     setMatch(null);
     setAutoRan(false);
     let stream: MediaStream | null = null;
     let context: AudioContext | null = null;
-    setState('requesting');
+    setState("requesting");
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Microphone recording is unavailable on this computer.');
+        throw new Error(
+          "Microphone recording is unavailable on this computer.",
+        );
       }
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -87,7 +103,10 @@ export function VoiceCommandControl({
       source.connect(processor);
       processor.connect(silentGain);
       silentGain.connect(context.destination);
-      const timeout = window.setTimeout(() => void finish(), VOICE_MAX_SECONDS * 1_000);
+      const timeout = window.setTimeout(
+        () => void finish(),
+        VOICE_MAX_SECONDS * 1_000,
+      );
       recording.current = {
         context,
         stream,
@@ -97,12 +116,16 @@ export function VoiceCommandControl({
         chunks,
         timeout,
       };
-      setState('recording');
+      setState("recording");
     } catch (error) {
       stream?.getTracks().forEach((track) => track.stop());
-      if (context !== null && context.state !== 'closed') await context.close();
-      setState('idle');
-      onError(error instanceof Error ? error.message : 'Forgeboard could not open the microphone.');
+      if (context !== null && context.state !== "closed") await context.close();
+      setState("idle");
+      onError(
+        error instanceof Error
+          ? error.message
+          : "Forgeboard could not open the microphone.",
+      );
     }
   }
 
@@ -118,36 +141,48 @@ export function VoiceCommandControl({
     active.stream.getTracks().forEach((track) => track.stop());
     await active.context.close();
     const samples = new Float32Array(
-      resampleVoiceAudio(joinVoiceChunks(active.chunks), active.context.sampleRate),
+      resampleVoiceAudio(
+        joinVoiceChunks(active.chunks),
+        active.context.sampleRate,
+      ),
     );
     if (samples.length < 4_000) {
-      setState('idle');
-      onError('Hold the recording a little longer so Forgeboard can hear the command.');
+      setState("idle");
+      onError(
+        "Hold the recording a little longer so Forgeboard can hear the command.",
+      );
       return;
     }
-    setState('transcribing');
+    setState("transcribing");
     try {
-      const result = unwrap(await window.forgeboard.voice.transcribe({ samples }));
-      const nextMatch = matchVoiceAction(result.text, actions);
+      const result = unwrap(
+        await window.forgeboard.voice.transcribe({ samples }),
+      );
+      const nextMatch =
+        matchVoiceAction(result.text, actions) ??
+        resolveParameterizedAction?.(result.text) ??
+        null;
       setTranscript(result.text);
       setMatch(nextMatch);
       if (
         nextMatch !== null &&
-        nextMatch.action.voiceSafety === 'safe' &&
+        nextMatch.action.voiceSafety === "safe" &&
         settings.voiceAutoRunSafeActions
       ) {
         nextMatch.action.run();
         setAutoRan(true);
       }
     } catch (error) {
-      onError(error instanceof Error ? error.message : 'Local transcription failed.');
+      onError(
+        error instanceof Error ? error.message : "Local transcription failed.",
+      );
     } finally {
-      setState('idle');
+      setState("idle");
     }
   }
 
   function closeResult(): void {
-    setTranscript('');
+    setTranscript("");
     setMatch(null);
     setAutoRan(false);
   }
@@ -156,28 +191,32 @@ export function VoiceCommandControl({
     <>
       <button
         type="button"
-        className={`voice-command-button ${state === 'recording' ? 'recording' : ''}`}
-        aria-label={state === 'recording' ? 'Stop voice command recording' : 'Start voice command'}
-        disabled={state === 'requesting' || state === 'transcribing'}
-        onClick={() => (state === 'recording' ? void finish() : void start())}
+        className={`voice-command-button ${state === "recording" ? "recording" : ""}`}
+        aria-label={
+          state === "recording"
+            ? "Stop voice command recording"
+            : "Start voice command"
+        }
+        disabled={state === "requesting" || state === "transcribing"}
+        onClick={() => (state === "recording" ? void finish() : void start())}
       >
-        {state === 'requesting' || state === 'transcribing' ? (
+        {state === "requesting" || state === "transcribing" ? (
           <LoaderCircle className="spin" size={16} aria-hidden="true" />
-        ) : state === 'recording' ? (
+        ) : state === "recording" ? (
           <MicOff size={16} aria-hidden="true" />
         ) : (
           <Mic size={16} aria-hidden="true" />
         )}
-        {state === 'recording'
-          ? 'Stop & transcribe'
-          : state === 'requesting'
-            ? 'Opening mic…'
-          : state === 'transcribing'
-            ? 'Listening…'
-            : 'Talk'}
+        {state === "recording"
+          ? "Stop & transcribe"
+          : state === "requesting"
+            ? "Opening mic…"
+            : state === "transcribing"
+              ? "Listening…"
+              : "Talk"}
       </button>
 
-      {transcript !== '' && (
+      {transcript !== "" && (
         <div className="modal-backdrop voice-command-backdrop">
           <div
             ref={dialog}
@@ -205,7 +244,11 @@ export function VoiceCommandControl({
             {match === null ? (
               <div className="inline-notice" role="alert">
                 <p>No registered Forgeboard action matched that phrase.</p>
-                <button className="button ghost" type="button" onClick={onOpenSettings}>
+                <button
+                  className="button ghost"
+                  type="button"
+                  onClick={onOpenSettings}
+                >
                   <Settings2 size={14} aria-hidden="true" /> Voice settings
                 </button>
               </div>
@@ -238,7 +281,9 @@ export function VoiceCommandControl({
   );
 }
 
-async function stopAndDiscard(recording: MutableRefObject<ActiveRecording | null>) {
+async function stopAndDiscard(
+  recording: MutableRefObject<ActiveRecording | null>,
+) {
   const active = recording.current;
   if (active === null) return;
   recording.current = null;

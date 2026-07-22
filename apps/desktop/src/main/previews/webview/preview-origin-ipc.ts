@@ -34,8 +34,16 @@ export function registerPreviewOriginIpc(ipc: IpcMainLike, registry: PreviewOrig
       }
       const input = PreviewSetAllowedOriginInputSchema.parse(rawInput);
       const origin = validatedAllowedOrigin(input.origin);
-      const partition = previewWebviewPartition(input.projectId, input.nodeId, input.slot);
-      registry.setAllowedOrigin(partition, origin);
+      const partition = previewWebviewPartition(
+        input.projectId,
+        input.nodeId,
+        input.slot,
+        input.authenticationEnabled,
+      );
+      registry.setConfiguration(
+        partition,
+        input.active ? { origin, authenticationEnabled: input.authenticationEnabled } : null,
+      );
       return { ok: true, value: null };
     } catch (error) {
       return {

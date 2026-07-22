@@ -15,8 +15,17 @@ function harness() {
     }),
   };
   registerPreviewOriginIpc(ipc, registry);
-  const invoke = (input: unknown, event: Record<string, unknown> = trustedEvent()) =>
-    handlers.get(IPC_CHANNELS.previewsSetAllowedOrigin)?.(event, input);
+  const invoke = (input: unknown, event: Record<string, unknown> = trustedEvent()) => {
+    const normalized =
+      typeof input === 'object' && input !== null
+        ? {
+            active: (input as Record<string, unknown>)['origin'] !== null,
+            authenticationEnabled: false,
+            ...input,
+          }
+        : input;
+    return handlers.get(IPC_CHANNELS.previewsSetAllowedOrigin)?.(event, normalized);
+  };
   return { registry, invoke };
 }
 
@@ -51,6 +60,20 @@ describe('registerPreviewOriginIpc', () => {
       'https://app.staging.com',
     );
     expect(registry.allowedOriginForGuestSession(`preview:${PROJECT_ID}:n1`)).toBeNull();
+  });
+
+  it('registers authentication-enabled previews under a persistent partition', async () => {
+    const { registry, invoke } = harness();
+    await invoke({
+      projectId: PROJECT_ID,
+      nodeId: 'n1',
+      origin: 'https://miro.com',
+      active: true,
+      authenticationEnabled: true,
+    });
+    const partition = `persist:preview:${PROJECT_ID}:n1`;
+    expect(registry.allowedOriginForGuestSession(partition)).toBe('https://miro.com');
+    expect(registry.authenticationEnabledForGuestSession(partition)).toBe(true);
   });
 
   it('clears the origin when passed null', async () => {

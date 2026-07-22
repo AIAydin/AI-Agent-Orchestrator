@@ -25,12 +25,16 @@
 }
 .preview-face-port {
   display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
   align-items: center;
   gap: 5px;
   color: var(--text-soft);
 }
 .preview-face-port input {
-  width: 64px;
+  flex: 1 1 auto;
+  min-width: 72px;
+  width: auto;
   font-size: var(--text-xs);
 }
 .preview-face-reload {

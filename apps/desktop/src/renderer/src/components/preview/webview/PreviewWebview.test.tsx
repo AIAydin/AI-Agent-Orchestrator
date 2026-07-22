@@ -39,6 +39,19 @@ describe('PreviewWebview', () => {
     expect(element.getAttribute('aria-label')).toBe('Web preview');
   });
 
+  it('only enables popup windows when explicitly requested', () => {
+    const { container } = render(
+      <PreviewWebview
+        partition="persist:preview:p1:n1"
+        src="https://miro.com/"
+        ariaLabel="Signed-in preview"
+        allowPopups
+        onStatus={() => undefined}
+      />,
+    );
+    expect(container.querySelector('webview')?.hasAttribute('allowpopups')).toBe(true);
+  });
+
   it('reports loading, ready, and failure transitions', () => {
     const { element, onStatus } = renderWebview();
     fireEvent(element, new Event('did-start-loading'));

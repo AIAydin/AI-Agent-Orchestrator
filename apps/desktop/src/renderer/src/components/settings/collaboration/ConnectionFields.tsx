@@ -15,57 +15,8 @@ export function ConnectionFields({ settings, setSettings, disabled }: Connection
 
   return (
     <>
-      <label>
-        Collaboration server URL
-        <input
-          name="collaboration-url"
-          value={settings.collaborationUrl}
-          disabled={disabled}
-          spellCheck={false}
-          aria-describedby="collaboration-url-help"
-          onChange={(event) => update({ collaborationUrl: event.target.value })}
-        />
-      </label>
-      <small id="collaboration-url-help">
-        WebSocket address starting with ws:// or wss:// — for example
-        wss://collaboration.example.com or ws://127.0.0.1:1234.
-      </small>
-      <label>
-        Collaboration management API URL
-        <input
-          name="collaboration-management-url"
-          value={settings.collaborationManagementUrl}
-          disabled={disabled}
-          spellCheck={false}
-          placeholder="https://collaboration.example.com"
-          onChange={(event) => update({ collaborationManagementUrl: event.target.value })}
-        />
-        <small>
-          Used for explicit room and invite management — the HTTPS address from your collaboration
-          administrator. Plain HTTP is accepted only for a server on this device, such as
-          http://127.0.0.1:1234. Forgeboard does not guess this API address from the WebSocket URL.
-        </small>
-      </label>
       <div className="two-column">
-        <label>
-          Collaboration display name
-          <input
-            name="collaboration-display-name"
-            value={settings.collaborationDisplayName}
-            disabled={disabled}
-            onChange={(event) => update({ collaborationDisplayName: event.target.value })}
-          />
-        </label>
-        <label>
-          Collaboration room
-          <input
-            name="collaboration-room"
-            value={settings.collaborationRoom}
-            disabled={disabled}
-            spellCheck={false}
-            onChange={(event) => update({ collaborationRoom: event.target.value })}
-          />
-        </label>
+        <ServerUrlField settings={settings} disabled={disabled} update={update} />
       </div>
       <div className="two-column">
         <label>
@@ -76,16 +27,6 @@ export function ConnectionFields({ settings, setSettings, disabled }: Connection
             disabled={disabled}
             spellCheck={false}
             onChange={(event) => update({ collaborationSubject: event.target.value })}
-          />
-        </label>
-        <label>
-          Collaborator color
-          <input
-            name="collaboration-color"
-            type="color"
-            value={settings.collaborationColor}
-            disabled={disabled}
-            onChange={(event) => update({ collaborationColor: event.target.value })}
           />
         </label>
       </div>
@@ -101,6 +42,109 @@ export function ConnectionFields({ settings, setSettings, disabled }: Connection
           disabled={disabled}
           onChange={(event) => update({ collaborationReconnect: event.target.checked })}
         />
+      </label>
+    </>
+  );
+}
+
+export function CollaborationProfileFields({
+  settings,
+  setSettings,
+  disabled,
+}: ConnectionFieldsProps) {
+  function update(patch: Partial<AppSettings>): void {
+    setSettings((current) => ({ ...current, ...patch }));
+  }
+
+  return (
+    <div className="collaboration-profile-fields">
+      <label>
+        Your name
+        <input
+          name="collaboration-display-name"
+          aria-label="Collaboration display name"
+          value={settings.collaborationDisplayName}
+          disabled={disabled}
+          autoComplete="name"
+          onChange={(event) => update({ collaborationDisplayName: event.target.value })}
+        />
+      </label>
+      <label className="collaboration-color-field">
+        Your color
+        <input
+          name="collaboration-color"
+          aria-label="Collaborator color"
+          type="color"
+          value={settings.collaborationColor}
+          disabled={disabled}
+          onChange={(event) => update({ collaborationColor: event.target.value })}
+        />
+      </label>
+    </div>
+  );
+}
+
+export function CollaborationRoomField({ settings, setSettings, disabled }: ConnectionFieldsProps) {
+  return (
+    <label>
+      Room name
+      <input
+        name="collaboration-room"
+        aria-label="Collaboration room"
+        value={settings.collaborationRoom}
+        disabled={disabled}
+        spellCheck={false}
+        onChange={(event) =>
+          setSettings((current) => ({
+            ...current,
+            collaborationRoom: event.target.value,
+          }))
+        }
+      />
+    </label>
+  );
+}
+
+function ServerUrlField({
+  settings,
+  disabled,
+  update,
+}: {
+  settings: AppSettings;
+  disabled: boolean;
+  update: (patch: Partial<AppSettings>) => void;
+}) {
+  return (
+    <>
+      <label>
+        Collaboration server URL
+        <input
+          name="collaboration-url"
+          aria-label="Collaboration server URL"
+          value={settings.collaborationUrl}
+          disabled={disabled}
+          spellCheck={false}
+          aria-describedby="collaboration-url-help"
+          onChange={(event) => update({ collaborationUrl: event.target.value })}
+        />
+        <small id="collaboration-url-help">
+          The ws:// or wss:// address from your administrator.
+        </small>
+      </label>
+      <label>
+        Collaboration management API URL
+        <input
+          name="collaboration-management-url"
+          aria-label="Collaboration management API URL"
+          value={settings.collaborationManagementUrl}
+          disabled={disabled}
+          spellCheck={false}
+          placeholder="https://collaboration.example.com"
+          onChange={(event) => update({ collaborationManagementUrl: event.target.value })}
+        />
+        <small>
+          Used to create rooms and redeem invites. HTTP is accepted only on this device.
+        </small>
       </label>
     </>
   );

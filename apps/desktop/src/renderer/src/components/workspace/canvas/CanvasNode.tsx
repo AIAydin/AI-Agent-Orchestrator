@@ -158,6 +158,8 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   previewSecondaryPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewOrientation?: 'portrait' | 'landscape';
   previewSideBySide?: boolean;
+  browserAuthenticationEnabled?: boolean;
+  agentBrowserAccess?: boolean;
   previewComparison?: {
     leftTarget?: { kind: 'agent-run'; runId: string };
     rightTarget?: { kind: 'agent-run'; runId: string };
@@ -266,19 +268,15 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
             generic header only shows their collapsed title as static text. Every other kind gets
             the double-click-to-rename header title — the node name is the header's primary text,
             with the kind conveyed by the icon beside it. */}
-        {isAgent
-          ? data.collapsed && (
-              <strong className="collapsed-node-title" title={data.title}>
-                {data.title}
-              </strong>
-            )
-          : (
-              <CanvasNodeHeaderTitle
-                id={id}
-                title={data.title}
-                readOnly={!canChangePresentation}
-              />
-            )}
+        {isAgent ? (
+          data.collapsed && (
+            <strong className="collapsed-node-title" title={data.title}>
+              {data.title}
+            </strong>
+          )
+        ) : (
+          <CanvasNodeHeaderTitle id={id} title={data.title} readOnly={!canChangePresentation} />
+        )}
         {data.collapsed && data.status !== 'idle' && (
           <span className={`node-status-label ${data.status}`}>{data.status}</span>
         )}
@@ -291,11 +289,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         {/* Agent nodes surface their settings/comments/history through their own window, so the
             generic details popover is only mounted for the other node kinds. */}
         {!isAgent && (
-          <CanvasNodeDetailsPopover
-            id={id}
-            data={data}
-            readOnly={!canChangePresentation}
-          />
+          <CanvasNodeDetailsPopover id={id} data={data} readOnly={!canChangePresentation} />
         )}
         <WorkspaceTooltip
           content={

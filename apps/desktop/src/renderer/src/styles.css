@@ -4,6 +4,7 @@
 @import './styles/shell/welcome.css';
 @import './styles/shell/dialogs.css';
 @import './styles/shell/settings.css';
+@import './styles/shell/settings-collaboration.css';
 @import './styles/workspace/workspace-shell.css';
 @import './styles/workspace/project-rail.css';
 @import './styles/workspace/canvas.css';

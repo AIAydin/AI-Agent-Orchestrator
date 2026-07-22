@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const CURRENT_SCHEMA_VERSION = 1 as const;
 
@@ -6,21 +6,21 @@ export const EntityIdSchema = z
   .string()
   .min(1)
   .max(128)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/, 'Invalid entity identifier');
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/, "Invalid entity identifier");
 
 export const TimestampSchema = z.string().datetime({ offset: true });
 export const RelativePathSchema = z
   .string()
   .min(1)
   .max(4096)
-  .refine((value) => !value.includes('\0'), 'Paths cannot contain NUL bytes')
+  .refine((value) => !value.includes("\0"), "Paths cannot contain NUL bytes")
   .refine(
-    (value) => !value.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(value),
-    'Path must be relative',
+    (value) => !value.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(value),
+    "Path must be relative",
   )
   .refine(
-    (value) => !value.replaceAll('\\', '/').split('/').includes('..'),
-    'Path cannot traverse outside its root',
+    (value) => !value.replaceAll("\\", "/").split("/").includes(".."),
+    "Path cannot traverse outside its root",
   );
 
 export type JsonValue =
@@ -43,31 +43,41 @@ export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 );
 
 export const RunStatusSchema = z.enum([
-  'queued',
-  'running',
-  'waiting-for-approval',
-  'paused',
-  'cancelling',
-  'failed',
-  'succeeded',
-  'cancelled',
-  'lost',
+  "queued",
+  "running",
+  "waiting-for-approval",
+  "paused",
+  "cancelling",
+  "failed",
+  "succeeded",
+  "cancelled",
+  "lost",
 ]);
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 
-export const NodeStatusSchema = z.enum(['draft', 'ready', ...RunStatusSchema.options, 'blocked']);
+export const NodeStatusSchema = z.enum([
+  "draft",
+  "ready",
+  ...RunStatusSchema.options,
+  "blocked",
+]);
 export type NodeStatus = z.infer<typeof NodeStatusSchema>;
 
-export const PointSchema = z.object({ x: z.number().finite(), y: z.number().finite() }).strict();
+export const PointSchema = z
+  .object({ x: z.number().finite(), y: z.number().finite() })
+  .strict();
 export const SizeSchema = z
-  .object({ width: z.number().finite().positive(), height: z.number().finite().positive() })
+  .object({
+    width: z.number().finite().positive(),
+    height: z.number().finite().positive(),
+  })
   .strict();
 
 export const LocalFileReferenceSchema = z
   .object({
     projectId: EntityIdSchema,
     relativePath: RelativePathSchema,
-    kind: z.enum(['file', 'directory', 'image', 'artifact']),
+    kind: z.enum(["file", "directory", "image", "artifact"]),
     missing: z.boolean().default(false),
     lastKnownHash: z.string().min(8).max(256).optional(),
   })
@@ -77,7 +87,7 @@ export const CommentSchema = z
   .object({
     id: EntityIdSchema,
     authorId: EntityIdSchema,
-    scope: z.enum(['local', 'shared']).optional(),
+    scope: z.enum(["local", "shared"]).optional(),
     body: z.string().min(1).max(100_000),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema.optional(),
@@ -104,7 +114,7 @@ const baseNodeShape = {
   locked: z.boolean().default(false),
   groupId: EntityIdSchema.optional(),
   comments: z.array(CommentSchema).default([]),
-  status: NodeStatusSchema.default('draft'),
+  status: NodeStatusSchema.default("draft"),
   runHistoryIds: z.array(EntityIdSchema).default([]),
   inspector: z.record(JsonValueSchema).default({}),
   resources: ResourceRequirementsSchema.default({}),
@@ -142,16 +152,39 @@ export const AGENT_CONTEXT_ATTACHMENT_LIMIT = 256;
 
 const AgentTokenUsageSchema = z
   .object({
-    inputTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
-    cachedInputTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
-    outputTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
-    totalTokens: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+    inputTokens: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(1_000_000_000_000)
+      .optional(),
+    cachedInputTokens: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(1_000_000_000_000)
+      .optional(),
+    outputTokens: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(1_000_000_000_000)
+      .optional(),
+    totalTokens: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(1_000_000_000_000)
+      .optional(),
   })
   .strict()
-  .refine((usage) => Object.keys(usage).length > 0, 'Token usage cannot be empty.');
+  .refine(
+    (usage) => Object.keys(usage).length > 0,
+    "Token usage cannot be empty.",
+  );
 
 export const AgentNodeSchema = createNodeSchema(
-  'agent',
+  "agent",
   z
     .object({
       adapterId: EntityIdSchema.optional(),
@@ -162,7 +195,7 @@ export const AgentNodeSchema = createNodeSchema(
       // Persisted canvases predate the execution cap and must remain openable without silently
       // discarding selected context. UI linking and every run boundary enforce the limit above.
       contextAttachmentIds: z.array(EntityIdSchema).default([]),
-      promptDraft: z.string().max(1_000_000).default(''),
+      promptDraft: z.string().max(1_000_000).default(""),
       activeSessionId: EntityIdSchema.optional(),
       streamedOutputArtifactId: EntityIdSchema.optional(),
       pauseSupported: z.boolean().default(false),
@@ -170,7 +203,10 @@ export const AgentNodeSchema = createNodeSchema(
       resumeSupported: z.boolean().default(false),
       tokenUsage: AgentTokenUsageSchema.optional(),
       cost: z
-        .object({ amount: z.number().finite().nonnegative(), currency: z.string().length(3) })
+        .object({
+          amount: z.number().finite().nonnegative(),
+          currency: z.string().length(3),
+        })
         .strict()
         .optional(),
     })
@@ -178,10 +214,10 @@ export const AgentNodeSchema = createNodeSchema(
 );
 
 export const ProductBriefNodeSchema = createNodeSchema(
-  'product-brief',
+  "product-brief",
   z
     .object({
-      markdown: z.string().max(2_000_000).default(''),
+      markdown: z.string().max(2_000_000).default(""),
       checklist: z
         .array(
           z
@@ -213,24 +249,31 @@ export const ProductBriefNodeSchema = createNodeSchema(
 );
 
 export const TaskNodeSchema = createNodeSchema(
-  'task',
+  "task",
   z
     .object({
-      description: z.string().max(1_000_000).default(''),
-      priority: z.enum(['low', 'normal', 'high', 'urgent']).default('normal'),
+      description: z.string().max(1_000_000).default(""),
+      priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
       assigneeId: EntityIdSchema.optional(),
       dependencyTaskIds: z.array(EntityIdSchema).default([]),
       acceptanceCriteria: z.array(AcceptanceCriterionSchema).default([]),
       relatedFiles: z.array(LocalFileReferenceSchema).default([]),
       taskStatus: z
-        .enum(['backlog', 'ready', 'in-progress', 'review', 'done', 'cancelled'])
-        .default('backlog'),
+        .enum([
+          "backlog",
+          "ready",
+          "in-progress",
+          "review",
+          "done",
+          "cancelled",
+        ])
+        .default("backlog"),
     })
     .strict(),
 );
 
 export const FileNodeSchema = createNodeSchema(
-  'file',
+  "file",
   z
     .object({
       file: LocalFileReferenceSchema.optional(),
@@ -243,11 +286,16 @@ export const FileNodeSchema = createNodeSchema(
     .strict(),
 );
 
-export const DiffReviewTargetSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('primary') }).strict(),
+export const VideoNodeSchema = createNodeSchema(
+  "video",
+  z.object({ file: LocalFileReferenceSchema.optional() }).strict(),
+);
+
+export const DiffReviewTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("primary") }).strict(),
   z
     .object({
-      kind: z.literal('agent-run'),
+      kind: z.literal("agent-run"),
       runId: z.string().uuid(),
     })
     .strict(),
@@ -255,7 +303,7 @@ export const DiffReviewTargetSchema = z.discriminatedUnion('kind', [
 export type DiffReviewTarget = z.infer<typeof DiffReviewTargetSchema>;
 
 export const DiffReviewNodeSchema = createNodeSchema(
-  'diff-review',
+  "diff-review",
   z
     .object({
       // The main process resolves this opaque identity. Persisted canvases never carry a checkout
@@ -265,25 +313,29 @@ export const DiffReviewNodeSchema = createNodeSchema(
       headRef: z.string().min(1).max(1024).optional(),
       worktreeId: EntityIdSchema.optional(),
       files: z.array(RelativePathSchema).default([]),
-      viewMode: z.enum(['split', 'unified']).default('split'),
+      viewMode: z.enum(["split", "unified"]).default("split"),
       showWhitespace: z.boolean().default(false),
       ignoreWhitespace: z.boolean().default(false),
-      hunkDecisions: z.record(z.enum(['pending', 'accepted', 'rejected'])).default({}),
+      hunkDecisions: z
+        .record(z.enum(["pending", "accepted", "rejected"]))
+        .default({}),
       lineCommentIds: z.array(EntityIdSchema).default([]),
       revisionRequest: z.string().max(200_000).optional(),
-      approval: z.enum(['pending', 'approved', 'changes-requested']).default('pending'),
+      approval: z
+        .enum(["pending", "approved", "changes-requested"])
+        .default("pending"),
     })
     .strict(),
 );
 
 export const TerminalNodeSchema = createNodeSchema(
-  'terminal',
+  "terminal",
   z
     .object({
       cwdRelative: RelativePathSchema.optional(),
       processStatus: z
-        .enum(['idle', 'starting', 'running', 'stopped', 'failed', 'lost'])
-        .default('idle'),
+        .enum(["idle", "starting", "running", "stopped", "failed", "lost"])
+        .default("idle"),
       permissionProfileId: EntityIdSchema.optional(),
       command: CommandSpecSchema.optional(),
       ptySessionId: EntityIdSchema.optional(),
@@ -293,33 +345,43 @@ export const TerminalNodeSchema = createNodeSchema(
     .strict(),
 );
 
-const PreviewTargetSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('primary') }).strict(),
-  z.object({ kind: z.literal('agent-run'), runId: z.string().uuid() }).strict(),
+const PreviewTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("primary") }).strict(),
+  z.object({ kind: z.literal("agent-run"), runId: z.string().uuid() }).strict(),
 ]);
 
 const PreviewUrlPathSchema = z
   .string()
   .min(1)
   .max(4096)
-  .refine((value) => value.startsWith('/') && !value.startsWith('//') && !value.includes('\0'), {
-    message: 'Preview paths must be absolute URL paths.',
-  });
+  .refine(
+    (value) =>
+      value.startsWith("/") && !value.startsWith("//") && !value.includes("\0"),
+    {
+      message: "Preview paths must be absolute URL paths.",
+    },
+  );
 
-const PreviewPresetSchema = z.enum(['desktop', 'laptop', 'iphone', 'pixel', 'tablet']);
+const PreviewPresetSchema = z.enum([
+  "desktop",
+  "laptop",
+  "iphone",
+  "pixel",
+  "tablet",
+]);
 
 const PreviewComparisonSchema = z
   .object({
     leftTarget: z
-      .object({ kind: z.literal('agent-run'), runId: z.string().uuid() })
+      .object({ kind: z.literal("agent-run"), runId: z.string().uuid() })
       .strict()
       .optional(),
     rightTarget: z
-      .object({ kind: z.literal('agent-run'), runId: z.string().uuid() })
+      .object({ kind: z.literal("agent-run"), runId: z.string().uuid() })
       .strict()
       .optional(),
-    leftPreset: PreviewPresetSchema.default('desktop'),
-    rightPreset: PreviewPresetSchema.default('desktop'),
+    leftPreset: PreviewPresetSchema.default("desktop"),
+    rightPreset: PreviewPresetSchema.default("desktop"),
   })
   .strict()
   .superRefine((comparison, context) => {
@@ -329,31 +391,33 @@ const PreviewComparisonSchema = z
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['rightTarget'],
-        message: 'Preview comparison targets must be different agent runs.',
+        path: ["rightTarget"],
+        message: "Preview comparison targets must be different agent runs.",
       });
     }
   });
 
 const PreviewConfigurationShape = {
-  target: PreviewTargetSchema.default({ kind: 'primary' }),
+  target: PreviewTargetSchema.default({ kind: "primary" }),
   command: CommandSpecSchema.optional(),
   packageScript: z
     .string()
     .regex(/^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/u)
     .optional(),
-  cwdRelative: RelativePathSchema.default('.'),
-  readinessPath: PreviewUrlPathSchema.default('/'),
-  urlPath: PreviewUrlPathSchema.default('/'),
+  cwdRelative: RelativePathSchema.default("."),
+  readinessPath: PreviewUrlPathSchema.default("/"),
+  urlPath: PreviewUrlPathSchema.default("/"),
   preset: PreviewPresetSchema.optional(),
   secondaryPreset: PreviewPresetSchema.optional(),
-  orientation: z.enum(['portrait', 'landscape']).default('portrait'),
+  orientation: z.enum(["portrait", "landscape"]).default("portrait"),
   sideBySide: z.boolean().default(false),
+  browserAuthenticationEnabled: z.boolean().default(false),
+  agentBrowserAccess: z.boolean().default(false),
   comparison: PreviewComparisonSchema.optional(),
 } as const;
 
 export const WebPreviewNodeSchema = createNodeSchema(
-  'web-preview',
+  "web-preview",
   z
     .object({
       ...PreviewConfigurationShape,
@@ -376,13 +440,13 @@ const MobileViewportSchema = z
     name: z.string().min(1).max(200),
     width: z.number().int().positive().max(8192),
     height: z.number().int().positive().max(8192),
-    orientation: z.enum(['portrait', 'landscape']),
+    orientation: z.enum(["portrait", "landscape"]),
     touch: z.boolean().default(true),
   })
   .strict();
 
 export const MobilePreviewNodeSchema = createNodeSchema(
-  'mobile-preview',
+  "mobile-preview",
   z
     .object({
       ...PreviewConfigurationShape,
@@ -402,15 +466,17 @@ export const TestArtifactPathSchema = z
   .max(1_024)
   .refine(
     (value) =>
-      !value.includes('\\') &&
-      !value.startsWith('/') &&
-      !value.includes('\0') &&
-      value.split('/').every((part) => part !== '' && part !== '.' && part !== '..'),
-    'Artifact paths must be normalized project-relative paths.',
+      !value.includes("\\") &&
+      !value.startsWith("/") &&
+      !value.includes("\0") &&
+      value
+        .split("/")
+        .every((part) => part !== "" && part !== "." && part !== ".."),
+    "Artifact paths must be normalized project-relative paths.",
   );
 
 export const TestNodeSchema = createNodeSchema(
-  'test',
+  "test",
   z
     .object({
       command: CommandSpecSchema.optional(),
@@ -431,7 +497,7 @@ export const TestNodeSchema = createNodeSchema(
           if (new Set(paths).size !== paths.length) {
             context.addIssue({
               code: z.ZodIssueCode.custom,
-              message: 'Artifact paths must be unique.',
+              message: "Artifact paths must be unique.",
             });
           }
         })
@@ -441,7 +507,7 @@ export const TestNodeSchema = createNodeSchema(
 );
 
 export const ReviewGateNodeSchema = createNodeSchema(
-  'review-gate',
+  "review-gate",
   z
     .object({
       humanApprovalRequired: z.boolean().default(true),
@@ -456,40 +522,50 @@ export const ReviewGateNodeSchema = createNodeSchema(
         })
         .strict()
         .default({ maximumIterations: 3, backoffMs: 0 }),
-      gateState: z.enum(['pending', 'passed', 'failed', 'waiting-for-human']).default('pending'),
+      gateState: z
+        .enum(["pending", "passed", "failed", "waiting-for-human"])
+        .default("pending"),
     })
     .strict(),
 );
 
 export const GitPullRequestDeliveryTargetSchema = z
   .object({
-    kind: z.literal('agent-run'),
+    kind: z.literal("agent-run"),
     runId: z.string().uuid(),
   })
   .strict();
-export type GitPullRequestDeliveryTarget = z.infer<typeof GitPullRequestDeliveryTargetSchema>;
+export type GitPullRequestDeliveryTarget = z.infer<
+  typeof GitPullRequestDeliveryTargetSchema
+>;
 
 const GitRemoteNameSchema = z
   .string()
   .min(1)
   .max(128)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'Invalid Git remote name');
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Invalid Git remote name");
 
 const GitBranchNameSchema = z
   .string()
   .min(1)
   .max(1_024)
-  .refine(isSafeGitBranchName, 'Invalid Git branch name');
+  .refine(isSafeGitBranchName, "Invalid Git branch name");
 
 const PullRequestTitleSchema = z
   .string()
   .max(512)
-  .refine((value) => !value.includes('\0'), 'Pull request text cannot contain NUL bytes');
+  .refine(
+    (value) => !value.includes("\0"),
+    "Pull request text cannot contain NUL bytes",
+  );
 
 const PullRequestBodySchema = z
   .string()
   .max(32_768)
-  .refine((value) => !value.includes('\0'), 'Pull request text cannot contain NUL bytes');
+  .refine(
+    (value) => !value.includes("\0"),
+    "Pull request text cannot contain NUL bytes",
+  );
 
 const PullRequestWebUrlSchema = z
   .string()
@@ -497,11 +573,11 @@ const PullRequestWebUrlSchema = z
   .url()
   .refine(
     isCredentialFreePullRequestUrl,
-    'Pull request URLs must be credential-free HTTP(S) pull request links',
+    "Pull request URLs must be credential-free HTTP(S) pull request links",
   );
 
 export const GitPullRequestNodeSchema = createNodeSchema(
-  'git-pr',
+  "git-pr",
   z
     .object({
       // Main resolves this opaque persisted identity. Every branch, OID, path, check, and URL below
@@ -520,8 +596,8 @@ export const GitPullRequestNodeSchema = createNodeSchema(
       ahead: z.number().int().nonnegative().default(0),
       behind: z.number().int().nonnegative().default(0),
       mergeReadiness: z
-        .enum(['unknown', 'ready', 'conflicts', 'checks-failing'])
-        .default('unknown'),
+        .enum(["unknown", "ready", "conflicts", "checks-failing"])
+        .default("unknown"),
       pullRequestUrl: PullRequestWebUrlSchema.optional(),
       checkIds: z.array(EntityIdSchema).default([]),
     })
@@ -529,16 +605,16 @@ export const GitPullRequestNodeSchema = createNodeSchema(
 );
 
 function isSafeGitBranchName(value: string): boolean {
-  if (value.trim() !== value || value === '@') return false;
+  if (value.trim() !== value || value === "@") return false;
   if (
-    value.startsWith('/') ||
-    value.endsWith('/') ||
-    value.startsWith('.') ||
-    value.endsWith('.') ||
-    value.endsWith('.lock') ||
-    value.includes('..') ||
-    value.includes('//') ||
-    value.includes('@{') ||
+    value.startsWith("/") ||
+    value.endsWith("/") ||
+    value.startsWith(".") ||
+    value.endsWith(".") ||
+    value.endsWith(".lock") ||
+    value.includes("..") ||
+    value.includes("//") ||
+    value.includes("@{") ||
     /[\\\s~^:?*[\]]/u.test(value)
   ) {
     return false;
@@ -549,13 +625,13 @@ function isSafeGitBranchName(value: string): boolean {
       return code < 32 || code === 127;
     }) &&
     value
-      .split('/')
+      .split("/")
       .every(
         (segment) =>
-          segment !== '' &&
-          !segment.startsWith('.') &&
-          !segment.endsWith('.') &&
-          !segment.endsWith('.lock'),
+          segment !== "" &&
+          !segment.startsWith(".") &&
+          !segment.endsWith(".") &&
+          !segment.endsWith(".lock"),
       )
   );
 }
@@ -564,12 +640,12 @@ function isCredentialFreePullRequestUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     return (
-      (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
-      parsed.hostname !== '' &&
-      parsed.username === '' &&
-      parsed.password === '' &&
-      parsed.search === '' &&
-      parsed.hash === '' &&
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      parsed.hostname !== "" &&
+      parsed.username === "" &&
+      parsed.password === "" &&
+      parsed.search === "" &&
+      parsed.hash === "" &&
       /^\/[^/]+\/[^/]+\/pull\/[1-9]\d*\/?$/u.test(parsed.pathname)
     );
   } catch {
@@ -578,10 +654,10 @@ function isCredentialFreePullRequestUrl(value: string): boolean {
 }
 
 export const DiagramNodeSchema = createNodeSchema(
-  'diagram',
+  "diagram",
   z
     .object({
-      mermaidSource: z.string().max(2_000_000).default(''),
+      mermaidSource: z.string().max(2_000_000).default(""),
       exportArtifactIds: z.array(EntityIdSchema).default([]),
       lastRenderError: z.string().max(20_000).optional(),
       agentEditable: z.boolean().default(true),
@@ -590,7 +666,7 @@ export const DiagramNodeSchema = createNodeSchema(
 );
 
 export const WhiteboardMockupNodeSchema = createNodeSchema(
-  'whiteboard-mockup',
+  "whiteboard-mockup",
   z
     .object({
       excalidraw: JsonValueSchema.default({}),
@@ -602,10 +678,10 @@ export const WhiteboardMockupNodeSchema = createNodeSchema(
 );
 
 export const NoteImageNodeSchema = createNodeSchema(
-  'note-image',
+  "note-image",
   z
     .object({
-      markdown: z.string().max(1_000_000).default(''),
+      markdown: z.string().max(1_000_000).default(""),
       images: z.array(LocalFileReferenceSchema).default([]),
       altText: z.record(z.string().max(10_000)).default({}),
     })
@@ -613,19 +689,26 @@ export const NoteImageNodeSchema = createNodeSchema(
 );
 
 export const GroupFrameNodeSchema = createNodeSchema(
-  'group-frame',
+  "group-frame",
   z
     .object({
-      purpose: z.enum(['product-surface', 'workflow-stage', 'feature-area', 'custom']),
+      purpose: z.enum([
+        "product-surface",
+        "workflow-stage",
+        "feature-area",
+        "custom",
+      ]),
       childNodeIds: z.array(EntityIdSchema).default([]),
-      layout: z.enum(['freeform', 'horizontal', 'vertical', 'grid']).default('freeform'),
+      layout: z
+        .enum(["freeform", "horizontal", "vertical", "grid"])
+        .default("freeform"),
       autoFit: z.boolean().default(false),
     })
     .strict(),
 );
 
 export const ExtensionNodeSchema = createNodeSchema(
-  'extension',
+  "extension",
   z
     .object({
       extensionId: EntityIdSchema,
@@ -633,16 +716,19 @@ export const ExtensionNodeSchema = createNodeSchema(
       nodeTypeId: EntityIdSchema,
       definition: JsonValueSchema,
       values: z.record(JsonValueSchema).default({}),
-      availability: z.enum(['active', 'quarantined', 'unavailable']).default('active'),
+      availability: z
+        .enum(["active", "quarantined", "unavailable"])
+        .default("active"),
     })
     .strict(),
 );
 
-export const CanvasNodeSchema = z.discriminatedUnion('type', [
+export const CanvasNodeSchema = z.discriminatedUnion("type", [
   AgentNodeSchema,
   ProductBriefNodeSchema,
   TaskNodeSchema,
   FileNodeSchema,
+  VideoNodeSchema,
   DiffReviewNodeSchema,
   TerminalNodeSchema,
   WebPreviewNodeSchema,
@@ -657,7 +743,7 @@ export const CanvasNodeSchema = z.discriminatedUnion('type', [
   ExtensionNodeSchema,
 ]);
 export type CanvasNode = z.infer<typeof CanvasNodeSchema>;
-export type CanvasNodeType = CanvasNode['type'];
+export type CanvasNodeType = CanvasNode["type"];
 
 const edgeBaseShape = {
   id: EntityIdSchema,
@@ -677,10 +763,10 @@ const createEdgeSchema = <TType extends string, TConfig extends z.ZodTypeAny>(
 ) => z.object({ ...edgeBaseShape, type: z.literal(type), config }).strict();
 
 export const ContextEdgeSchema = createEdgeSchema(
-  'context',
+  "context",
   z
     .object({
-      attachmentMode: z.literal('explicit').default('explicit'),
+      attachmentMode: z.literal("explicit").default("explicit"),
       required: z.boolean().default(true),
       muted: z.boolean().default(false),
       attachmentIds: z.array(EntityIdSchema).default([]),
@@ -688,52 +774,64 @@ export const ContextEdgeSchema = createEdgeSchema(
     .strict(),
 );
 export const ExecuteEdgeSchema = createEdgeSchema(
-  'execute',
+  "execute",
   z
     .object({
-      trigger: z.enum(['on-success', 'on-completion']).default('on-success'),
-      approval: z.enum(['none', 'human', 'review-gate']).default('none'),
+      trigger: z.enum(["on-success", "on-completion"]).default("on-success"),
+      approval: z.enum(["none", "human", "review-gate"]).default("none"),
       approvalGateNodeId: EntityIdSchema.optional(),
     })
     .strict()
     .superRefine((value, context) => {
-      if (value.approval === 'review-gate' && value.approvalGateNodeId === undefined) {
+      if (
+        value.approval === "review-gate" &&
+        value.approvalGateNodeId === undefined
+      ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['approvalGateNodeId'],
-          message: 'A review gate is required',
+          path: ["approvalGateNodeId"],
+          message: "A review gate is required",
         });
       }
-      if (value.approval !== 'review-gate' && value.approvalGateNodeId !== undefined) {
+      if (
+        value.approval !== "review-gate" &&
+        value.approvalGateNodeId !== undefined
+      ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['approvalGateNodeId'],
-          message: 'Only review-gate approval accepts a gate node',
+          path: ["approvalGateNodeId"],
+          message: "Only review-gate approval accepts a gate node",
         });
       }
     }),
 );
 export const OutputEdgeSchema = createEdgeSchema(
-  'output',
+  "output",
   z
     .object({
-      outputKind: z.enum(['branch', 'diff', 'preview', 'test-result', 'artifact']),
+      outputKind: z.enum([
+        "branch",
+        "diff",
+        "preview",
+        "test-result",
+        "artifact",
+      ]),
       required: z.boolean().default(true),
     })
     .strict(),
 );
 export const ReviewEdgeSchema = createEdgeSchema(
-  'review',
+  "review",
   z
     .object({
-      reviewer: z.enum(['human', 'agent', 'gate']),
+      reviewer: z.enum(["human", "agent", "gate"]),
       requireApproval: z.boolean().default(true),
       structuredFindings: z.boolean().default(true),
     })
     .strict(),
 );
 export const RevisionEdgeSchema = createEdgeSchema(
-  'revision',
+  "revision",
   z
     .object({
       loopId: EntityIdSchema.optional(),
@@ -742,11 +840,13 @@ export const RevisionEdgeSchema = createEdgeSchema(
     .strict(),
 );
 export const DependencyEdgeSchema = createEdgeSchema(
-  'dependency',
-  z.object({ requiredStatus: z.literal('succeeded').default('succeeded') }).strict(),
+  "dependency",
+  z
+    .object({ requiredStatus: z.literal("succeeded").default("succeeded") })
+    .strict(),
 );
 
-export const CanvasEdgeSchema = z.discriminatedUnion('type', [
+export const CanvasEdgeSchema = z.discriminatedUnion("type", [
   ContextEdgeSchema,
   ExecuteEdgeSchema,
   OutputEdgeSchema,
@@ -755,7 +855,7 @@ export const CanvasEdgeSchema = z.discriminatedUnion('type', [
   DependencyEdgeSchema,
 ]);
 export type CanvasEdge = z.infer<typeof CanvasEdgeSchema>;
-export type CanvasEdgeType = CanvasEdge['type'];
+export type CanvasEdgeType = CanvasEdge["type"];
 
 export const RevisionLoopSchema = z
   .object({
@@ -766,7 +866,7 @@ export const RevisionLoopSchema = z
     revisionEdgeId: EntityIdSchema,
     maximumAttempts: z.number().int().min(1).max(100),
     stopConditions: z
-      .array(z.enum(['review-approved', 'tests-passed', 'human-accepted']))
+      .array(z.enum(["review-approved", "tests-passed", "human-accepted"]))
       .min(1)
       .max(3),
     humanEscapeHatch: z
@@ -839,7 +939,7 @@ export const RepositoryLocationSchema = z
   .object({
     path: z.string().min(1).max(4096),
     canonicalPath: z.string().min(1).max(4096),
-    status: z.enum(['available', 'missing', 'moved', 'unauthorized']),
+    status: z.enum(["available", "missing", "moved", "unauthorized"]),
     lastVerifiedAt: TimestampSchema,
   })
   .strict();
@@ -865,8 +965,8 @@ export const ProjectSchema = z
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['defaultCanvasId'],
-        message: 'The default canvas must belong to the project',
+        path: ["defaultCanvasId"],
+        message: "The default canvas must belong to the project",
       });
     }
   });
@@ -881,9 +981,16 @@ export const CheckResultSchema = z
     reviewedNodeId: EntityIdSchema.optional(),
     reviewedNodeAttempt: z.number().int().positive().optional(),
     reviewedOutputDigest: z.string().min(8).max(256).optional(),
-    kind: z.enum(['lint', 'typecheck', 'test', 'build', 'custom']),
+    kind: z.enum(["lint", "typecheck", "test", "build", "custom"]),
     command: CommandSpecSchema,
-    status: z.enum(['queued', 'running', 'passed', 'failed', 'cancelled', 'lost']),
+    status: z.enum([
+      "queued",
+      "running",
+      "passed",
+      "failed",
+      "cancelled",
+      "lost",
+    ]),
     exitCode: z.number().int().min(-1).max(255).optional(),
     startedAt: TimestampSchema.optional(),
     endedAt: TimestampSchema.optional(),
@@ -900,7 +1007,14 @@ export const TaskRecordSchema = z
     projectId: EntityIdSchema,
     canvasId: EntityIdSchema,
     nodeId: EntityIdSchema,
-    status: z.enum(['backlog', 'ready', 'in-progress', 'review', 'done', 'cancelled']),
+    status: z.enum([
+      "backlog",
+      "ready",
+      "in-progress",
+      "review",
+      "done",
+      "cancelled",
+    ]),
     acceptanceCriteria: z.array(AcceptanceCriterionSchema),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
@@ -935,8 +1049,15 @@ export const WorktreeRecordSchema = z
     canonicalPath: z.string().min(1).max(4096),
     baseCommit: z.string().regex(/^[0-9a-f]{7,64}$/i),
     ownerAdapterId: EntityIdSchema,
-    status: z.enum(['provisioning', 'active', 'archived', 'cleanup-pending', 'removed', 'lost']),
-    cleanupPolicy: z.enum(['manual', 'after-merge', 'after-retention']),
+    status: z.enum([
+      "provisioning",
+      "active",
+      "archived",
+      "cleanup-pending",
+      "removed",
+      "lost",
+    ]),
+    cleanupPolicy: z.enum(["manual", "after-merge", "after-retention"]),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
   })
@@ -949,7 +1070,7 @@ export const SnapshotRecordSchema = z
     id: EntityIdSchema,
     projectId: EntityIdSchema,
     canvasId: EntityIdSchema,
-    kind: z.enum(['autosave', 'manual', 'undo-checkpoint', 'recovery']),
+    kind: z.enum(["autosave", "manual", "undo-checkpoint", "recovery"]),
     sequence: z.number().int().nonnegative(),
     contentHash: z.string().min(8).max(256),
     storageReference: z.string().min(1).max(4096),
@@ -966,8 +1087,8 @@ export const CollaborationRecordSchema = z
     canvasId: EntityIdSchema,
     roomId: EntityIdSchema,
     enabled: z.boolean(),
-    role: z.enum(['owner', 'editor', 'reviewer', 'viewer']),
-    status: z.enum(['offline', 'connecting', 'connected', 'error']),
+    role: z.enum(["owner", "editor", "reviewer", "viewer"]),
+    status: z.enum(["offline", "connecting", "connected", "error"]),
     serverOrigin: z.string().url(),
     updatedAt: TimestampSchema,
   })

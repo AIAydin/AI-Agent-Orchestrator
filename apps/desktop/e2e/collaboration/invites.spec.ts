@@ -37,7 +37,9 @@ test('owners manage token-free invite rows and a second profile redeems through 
       subject: 'owner-e2e',
     });
     await ownerSettings.getByLabel('Collaboration room').fill('invite-e2e-room');
-    await ownerSettings.getByLabel('Session access token').fill(server.ownerAccessToken);
+    await ownerSettings
+      .locator('input[name="collaboration-access-token"]')
+      .fill(server.ownerAccessToken);
 
     await test.step('the owner direct-joins through an exact cancel-default disclosure', async () => {
       const dialogIndex = await queueCollaborationDialog(owner.app, 1);
@@ -65,7 +67,9 @@ test('owners manage token-free invite rows and a second profile redeems through 
       await expect(collaborationStatus(ownerSettings)).toContainText('Your role is owner', {
         timeout: 20_000,
       });
-      await expect(ownerSettings.getByLabel('Session access token')).toHaveValue('');
+      await expect(ownerSettings.locator('input[name="collaboration-access-token"]')).toHaveCount(
+        0,
+      );
       await expectSecretsAbsent(owner.page, [server!.ownerAccessToken]);
     });
 
@@ -149,7 +153,9 @@ test('owners manage token-free invite rows and a second profile redeems through 
       });
       await expect(collaborationStatus(ownerSettings)).toContainText('Invite link copied');
       inviteLink = await owner.app.evaluate(({ clipboard }) => clipboard.readText());
-      expect(inviteLink).toMatch(/^forgeboard:\/\/collaboration\/invite#token=\S+$/u);
+      expect(inviteLink).toMatch(/^forgeboard:\/\/collaboration\/invite\?\S+#token=\S+$/u);
+      expect(new URL(inviteLink).searchParams.get('server')).toBe(server!.webSocketUrl);
+      expect(new URL(inviteLink).searchParams.get('management')).toBe(`${server!.httpUrl}/`);
       const inviteToken = new URLSearchParams(new URL(inviteLink).hash.slice(1)).get('token');
       expect(inviteToken).not.toBeNull();
       await expectSecretsAbsent(owner.page, [inviteLink, inviteToken ?? '']);
@@ -166,7 +172,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
         secrets: [inviteLink, inviteToken ?? ''],
       });
       revokedInviteLink = await owner.app.evaluate(({ clipboard }) => clipboard.readText());
-      expect(revokedInviteLink).toMatch(/^forgeboard:\/\/collaboration\/invite#token=\S+$/u);
+      expect(revokedInviteLink).toMatch(/^forgeboard:\/\/collaboration\/invite\?\S+#token=\S+$/u);
       const revokedToken =
         new URLSearchParams(new URL(revokedInviteLink).hash.slice(1)).get('token') ?? '';
       await expectSecretsAbsent(owner.page, [revokedInviteLink, revokedToken]);
@@ -208,7 +214,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
       const inviteField = viewerSettings.locator('input[name="collaboration-invite-link"]');
       await inviteField.fill(revokedInviteLink);
       let dialogIndex = await queueCollaborationDialog(viewer.app, 1);
-      await viewerSettings.getByRole('button', { name: 'Join with invite' }).click();
+      await viewerSettings.getByRole('button', { name: 'Join room' }).click();
       let dialog = await waitForCollaborationDialog(viewer.app, dialogIndex);
       expectCancelDefaultDialog(dialog, {
         title: 'Redeem invite and join collaboration?',
@@ -226,7 +232,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
 
       await inviteField.fill(inviteLink);
       dialogIndex = await queueCollaborationDialog(viewer.app, 0);
-      await viewerSettings.getByRole('button', { name: 'Join with invite' }).click();
+      await viewerSettings.getByRole('button', { name: 'Join room' }).click();
       dialog = await waitForCollaborationDialog(viewer.app, dialogIndex);
       expectCancelDefaultDialog(dialog, {
         title: 'Redeem invite and join collaboration?',
@@ -239,7 +245,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
 
       await inviteField.fill(inviteLink);
       dialogIndex = await queueCollaborationDialog(viewer.app, 1);
-      await viewerSettings.getByRole('button', { name: 'Join with invite' }).click();
+      await viewerSettings.getByRole('button', { name: 'Join room' }).click();
       dialog = await waitForCollaborationDialog(viewer.app, dialogIndex);
       expectCancelDefaultDialog(dialog, {
         title: 'Redeem invite and join collaboration?',
@@ -253,7 +259,7 @@ test('owners manage token-free invite rows and a second profile redeems through 
         },
       );
       await expect(collaborationStatus(viewerSettings)).toContainText('Your role is viewer');
-      await expect(inviteField).toHaveValue('');
+      await expect(inviteField).toHaveCount(0);
       await expect(viewerSettings.getByRole('button', { name: 'Create invite' })).toHaveCount(0);
       const inviteToken = new URLSearchParams(new URL(inviteLink).hash.slice(1)).get('token') ?? '';
       await expectSecretsAbsent(viewer.page, [inviteLink, inviteToken]);
@@ -293,7 +299,7 @@ async function openConnectivitySettings(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Settings' }).click();
   const settings = page.locator('.settings-modal');
   await settings.getByRole('button', { name: 'Connectivity', exact: true }).click();
-  await expect(settings.getByRole('heading', { name: 'Self-hosted collaboration' })).toBeVisible();
+  await expect(settings.getByRole('heading', { name: 'Collaboration' })).toBeVisible();
   return settings;
 }
 
@@ -302,6 +308,7 @@ async function configureIdentity(
   server: CollaborationServerFixture,
   identity: { displayName: string; subject: string },
 ): Promise<void> {
+  await settings.getByText('Server and advanced options').click();
   await settings.getByRole('checkbox', { name: /Enable collaboration/u }).check();
   await settings.getByLabel('Collaboration server URL').fill(server.webSocketUrl);
   await settings

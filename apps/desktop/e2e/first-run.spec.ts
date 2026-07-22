@@ -34,7 +34,9 @@ test('a first-time user can configure and persist a local visual workshop', asyn
     await test.step('the production window starts with a hardened renderer and welcome UI', async () => {
       await expect(page).toHaveTitle('Forgeboard');
       await expect(
-        page.getByRole('heading', { name: /Build software in a visual workshop/i }),
+        page.getByRole('heading', {
+          name: /Build software in a visual workshop/i,
+        }),
       ).toBeVisible();
       await expect(page.getByText('Your code stays on this device')).toBeVisible();
       await expect(page.getByRole('button', { name: /Open a project folder/i })).toBeVisible();
@@ -117,9 +119,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await settings.getByLabel('Branch prefix').fill('team/agents/');
       await settings.getByLabel('Preview port start').fill('42000');
       await settings.getByLabel('Preview port end').fill('42099');
-      await expect(
-        settings.getByRole('heading', { name: /Self-hosted collaboration/ }),
-      ).toHaveCount(0);
+      await expect(settings.getByRole('heading', { name: /^Collaboration$/u })).toHaveCount(0);
 
       await settings.getByRole('button', { name: /Data & privacy/ }).click();
       await settings.getByLabel('Backup folder').fill(join(userDataDirectory, 'backups'));
@@ -162,11 +162,15 @@ test('a first-time user can configure and persist a local visual workshop', asyn
         .fill('A local-only release plan configured entirely from the Forgeboard UI.');
       await inspector.getByRole('button', { name: 'Lock' }).click();
 
-      const releasePlan = page.getByRole('article', { name: 'Product brief: Release plan' });
+      const releasePlan = page.getByRole('article', {
+        name: 'Product brief: Release plan',
+      });
       await expect(releasePlan.locator('[aria-label="Locked"]')).toBeVisible();
 
       await inspector.getByRole('button', { name: 'Duplicate' }).click();
-      const duplicate = page.getByRole('article', { name: 'Product brief: Release plan copy' });
+      const duplicate = page.getByRole('article', {
+        name: 'Product brief: Release plan copy',
+      });
       await expect(duplicate).toBeVisible();
       await expect(inspector.getByLabel('Title')).toHaveValue('Release plan copy');
       await inspector.getByRole('button', { name: 'Delete' }).click();
@@ -186,7 +190,9 @@ test('a first-time user can configure and persist a local visual workshop', asyn
     });
 
     await test.step('nodes can be connected with the visual handles', async () => {
-      const releasePlan = page.getByRole('article', { name: 'Product brief: Release plan' });
+      const releasePlan = page.getByRole('article', {
+        name: 'Product brief: Release plan',
+      });
       await releasePlan.click();
       const inspector = page.locator('.inspector');
       await expect(
@@ -247,7 +253,9 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 
       await expect(page.locator('.setup-shell')).toHaveCount(0);
       await expect(
-        page.getByRole('heading', { name: /Build software in a visual workshop/i }),
+        page.getByRole('heading', {
+          name: /Build software in a visual workshop/i,
+        }),
       ).toBeVisible();
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
       await expect(page.locator('html')).toHaveAttribute('data-density', 'compact');
@@ -395,7 +403,9 @@ function readRecentProjects(page: Page): Promise<BrowserIpcResult<BrowserProject
     const api = (
       globalThis as unknown as {
         forgeboard: {
-          projects: { recent: () => Promise<BrowserIpcResult<BrowserProject[]>> };
+          projects: {
+            recent: () => Promise<BrowserIpcResult<BrowserProject[]>>;
+          };
         };
       }
     ).forgeboard;
@@ -498,7 +508,9 @@ async function readPersistedCanvas(
     const api = (
       globalThis as unknown as {
         forgeboard: {
-          canvas: { load: (projectId: string) => Promise<Result<CanvasResult>> };
+          canvas: {
+            load: (projectId: string) => Promise<Result<CanvasResult>>;
+          };
           projects: { recent: () => Promise<Result<ProjectResult[]>> };
         };
       }

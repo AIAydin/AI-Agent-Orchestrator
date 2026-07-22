@@ -86,13 +86,8 @@ describe('ConnectivitySettings collaboration controls', () => {
       name: /Collaboration management API URL/u,
     });
     expect(managementUrl.value).toBe('https://management.example.test/control/');
-    expect(screen.getByText(/Used for explicit room and invite management/u)).toBeTruthy();
-    expect(
-      screen.getByText(/Plain HTTP is accepted only for a server on this device/u),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/does not guess this API address from the WebSocket URL/u),
-    ).toBeTruthy();
+    expect(screen.getByText(/Used to create rooms and redeem invites/u)).toBeTruthy();
+    expect(screen.getByText(/HTTP is accepted only on this device/u)).toBeTruthy();
 
     fireEvent.change(managementUrl, {
       target: { value: 'http://127.0.0.1:1234' },
@@ -118,9 +113,7 @@ describe('ConnectivitySettings collaboration controls', () => {
       accessToken: 'SESSION_TOKEN_DO_NOT_PERSIST',
       reconnect: true,
     });
-    await waitFor(() =>
-      expect(screen.getByLabelText<HTMLInputElement>('Session access token').value).toBe(''),
-    );
+    await waitFor(() => expect(screen.queryByLabelText('Session access token')).toBeNull());
     expect(document.body.textContent).not.toContain('SESSION_TOKEN_DO_NOT_PERSIST');
 
     eventListener?.({
@@ -151,7 +144,7 @@ describe('ConnectivitySettings collaboration controls', () => {
     expect(await screen.findByText(/Left the collaboration room/u)).toBeTruthy();
   });
 
-  it('leaves the active network session before disabling collaboration', async () => {
+  it('leaves the active network session from the connected status view', async () => {
     render(<Harness />);
     fireEvent.change(screen.getByLabelText('Session access token'), {
       target: { value: 'SESSION_TOKEN' },
@@ -159,14 +152,11 @@ describe('ConnectivitySettings collaboration controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect with access token' }));
     await waitFor(() => expect(join).toHaveBeenCalledOnce());
 
-    const enabled = screen.getByRole<HTMLInputElement>('checkbox', {
-      name: /Enable collaboration/u,
-    });
-    fireEvent.click(enabled);
+    fireEvent.click(screen.getByRole('button', { name: 'Leave room' }));
 
     await waitFor(() => expect(leave).toHaveBeenCalledOnce());
-    await waitFor(() => expect(enabled.checked).toBe(false));
-    expect(screen.getByRole('button', { name: 'Leave room' })).toHaveProperty('disabled', true);
+    await waitFor(() => expect(screen.getByText(/Left the collaboration room/u)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Leave room' })).toBeNull();
   });
 });
 

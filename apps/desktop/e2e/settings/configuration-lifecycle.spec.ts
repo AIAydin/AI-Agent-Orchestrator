@@ -62,6 +62,7 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
       await expect(settings.getByRole('heading', { name: 'Local extensions' })).toBeVisible();
 
       await settings.getByRole('button', { name: 'Connectivity' }).click();
+      await settings.getByText('Server and advanced options').click();
       await settings.getByLabel('Collaboration server URL').fill('ws://127.0.0.1:1234');
       await settings.getByLabel('Collaboration management API URL').fill('http://127.0.0.1:1234');
       await settings.getByLabel('Collaboration display name').fill('UI Proof User');
@@ -139,7 +140,9 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
       settings = await openDataSettings(session.page);
       await settings.getByRole('button', { name: 'Import settings' }).click();
       await expect(settings.getByText(/Settings loaded as a draft/u)).toBeVisible();
-      const blockedSave = settings.getByRole('button', { name: 'Save settings' });
+      const blockedSave = settings.getByRole('button', {
+        name: 'Save settings',
+      });
       await expect(blockedSave).toBeDisabled();
       await expect(blockedSave).toHaveAccessibleDescription(
         /does not exist|not a directory|not an ordinary folder/u,
@@ -168,7 +171,9 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
 
 async function useSafeDefaults(page: Page): Promise<void> {
   await page
-    .getByRole('dialog', { name: 'Ready to build without wiring config files?' })
+    .getByRole('dialog', {
+      name: 'Ready to build without wiring config files?',
+    })
     .getByRole('button', { name: 'Use safe defaults' })
     .click();
 }
@@ -201,7 +206,10 @@ async function approveNextRetentionReduction(
       __forgeboardSettingsRetentionDialog?: RetentionDialogState;
     };
     const originalDescriptor = Object.getOwnPropertyDescriptor(dialog, 'showMessageBox');
-    const record: RetentionDialogState = { originalDescriptor, status: 'armed' };
+    const record: RetentionDialogState = {
+      originalDescriptor,
+      status: 'armed',
+    };
 
     function restore(): void {
       if (Object.getOwnPropertyDescriptor(dialog, 'showMessageBox')?.value !== interceptor) return;
@@ -258,7 +266,10 @@ async function approveNextRetentionReduction(
     }
 
     state.__forgeboardSettingsRetentionDialog = record;
-    Object.defineProperty(dialog, 'showMessageBox', { configurable: true, value: interceptor });
+    Object.defineProperty(dialog, 'showMessageBox', {
+      configurable: true,
+      value: interceptor,
+    });
   });
 
   try {
@@ -276,7 +287,10 @@ async function approveNextRetentionReduction(
       .not.toBe('armed');
     const result = await app.evaluate(() => {
       const state = globalThis as typeof globalThis & {
-        __forgeboardSettingsRetentionDialog?: { error?: string; status: string };
+        __forgeboardSettingsRetentionDialog?: {
+          error?: string;
+          status: string;
+        };
       };
       return state.__forgeboardSettingsRetentionDialog;
     });

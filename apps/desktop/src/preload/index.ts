@@ -1,17 +1,17 @@
-import { contextBridge, ipcRenderer } from 'electron';
-import { z } from 'zod';
+import { contextBridge, ipcRenderer } from "electron";
+import { z } from "zod";
 
-import type { ForgeboardApi } from '../shared/api.js';
-import { AgentReadinessResultSchema } from '../shared/readiness/contracts.js';
-import { CommandReadinessResultSchema } from '../shared/command-readiness/contracts.js';
-import { ApprovalViewSchema } from '../shared/approvals/contracts.js';
+import type { ForgeboardApi } from "../shared/api.js";
+import { AgentReadinessResultSchema } from "../shared/readiness/contracts.js";
+import { CommandReadinessResultSchema } from "../shared/command-readiness/contracts.js";
+import { ApprovalViewSchema } from "../shared/approvals/contracts.js";
 import {
   CheckEventEnvelopeSchema,
   CheckExecutionViewSchema,
   CheckPlanViewSchema,
-} from '../shared/checks/contracts.js';
-import type { IpcResult } from '../shared/application/contracts.js';
-import { CanvasWorkspaceStateSchema } from '../shared/canvas/history/contracts.js';
+} from "../shared/checks/contracts.js";
+import type { IpcResult } from "../shared/application/contracts.js";
+import { CanvasWorkspaceStateSchema } from "../shared/canvas/history/contracts.js";
 import {
   AppCloseRequestSchema,
   AppCloseResponseSchema,
@@ -26,33 +26,45 @@ import {
   ProjectSchema,
   RunEventEnvelopeSchema,
   ipcResultSchema,
-} from '../shared/application/contracts.js';
+} from "../shared/application/contracts.js";
 import {
   SettingsRepairEvidenceSchema,
   SettingsRepairSummarySchema,
-} from '../shared/settings/repair/contracts.js';
-import { DockerPullResultSchema, DockerReadinessSchema } from '../shared/docker/contracts.js';
+} from "../shared/settings/repair/contracts.js";
+import {
+  DockerPullResultSchema,
+  DockerReadinessSchema,
+} from "../shared/docker/contracts.js";
 import {
   GitCommitPlanViewSchema,
   GitCommitResultViewSchema,
   GitDiscardPlanViewSchema,
   GitReviewViewSchema,
-} from '../shared/git/contracts.js';
+} from "../shared/git/contracts.js";
 import {
   GitShippingPlanViewSchema,
   GitShippingResultViewSchema,
   GitConflictRecoveryPlanViewSchema,
   GitConflictRecoveryResultViewSchema,
   GitConflictRecoveryStateViewSchema,
-} from '../shared/git/shipping-contracts.js';
+} from "../shared/git/shipping-contracts.js";
 import {
   GIT_CONFLICT_RESOLUTION_IPC_CHANNELS,
   GitConflictInspectionViewSchema,
   GitConflictResolutionPlanViewSchema,
   GitConflictResolutionResultViewSchema,
-} from '../shared/git/conflict-resolution/contracts.js';
-import { IntegrityCheckResultSchema } from '../shared/integrity/contracts.js';
-import { PREVIEW_TARGET_IPC_CHANNELS, PreviewTargetListSchema } from '../shared/preview/targets.js';
+} from "../shared/git/conflict-resolution/contracts.js";
+import { IntegrityCheckResultSchema } from "../shared/integrity/contracts.js";
+import {
+  PREVIEW_TARGET_IPC_CHANNELS,
+  PreviewTargetListSchema,
+} from "../shared/preview/targets.js";
+import {
+  BROWSER_COMPANION_IPC_CHANNELS,
+  BrowserCompanionFrameSchema,
+  BrowserCompanionSnapshotSchema,
+  BrowserCompanionStatusSchema,
+} from "../shared/browser-companion/contracts.js";
 import {
   RECOVERY_IPC_CHANNELS,
   RecoveryImportCountsSchema,
@@ -60,7 +72,7 @@ import {
   RecoveryRestoredCanvasSchema,
   RecoverySnapshotRestorePlanSchema,
   RecoverySnapshotSummarySchema,
-} from '../shared/recovery/contracts.js';
+} from "../shared/recovery/contracts.js";
 import {
   WORKFLOW_IPC_CHANNELS,
   WorkflowApproveHumanDecisionInputSchema,
@@ -78,30 +90,30 @@ import {
   WorkflowResolveRevisionEscapeInputSchema,
   WorkflowReviewDecisionInputSchema,
   WorkflowStartInputSchema,
-} from '../shared/workflow/contracts.js';
-import { createFileApi } from './files.js';
-import { createCollaborationApi } from './collaboration/index.js';
-import { createGitConnectionsApi } from './git/connections/index.js';
-import { createGitLifecycleApi } from './git/lifecycle/cleanup.js';
-import { createGitAgentComparisonApi } from './git/comparison/bridge.js';
-import { createGitDeliveryReadinessApi } from './git/readiness/bridge.js';
-import { createGitIdentityApi } from './git/identity/bridge.js';
-import { createGitRemoteDeliveryApi } from './git/remote/index.js';
-import { createGitReviewNotesApi } from './git-review-notes.js';
-import { createRunHistoryApi } from './runs/history.js';
-import { createRunContinuationApi } from './runs/continuation.js';
-import { checkSettingsFolderReadiness } from './settings-folder-readiness.js';
-import { createAgentPeersApi } from './agent-peers/bridge.js';
-import { createTerminalApi } from './terminal/index.js';
-import { createProviderConnectionsApi } from './provider-connections/index.js';
-import { createUpdatesApi } from './updates/bridge.js';
-import { createDiagramApi } from './diagram/bridge.js';
-import { createWhiteboardApi } from './whiteboard/bridge.js';
+} from "../shared/workflow/contracts.js";
+import { createFileApi } from "./files.js";
+import { createCollaborationApi } from "./collaboration/index.js";
+import { createGitConnectionsApi } from "./git/connections/index.js";
+import { createGitLifecycleApi } from "./git/lifecycle/cleanup.js";
+import { createGitAgentComparisonApi } from "./git/comparison/bridge.js";
+import { createGitDeliveryReadinessApi } from "./git/readiness/bridge.js";
+import { createGitIdentityApi } from "./git/identity/bridge.js";
+import { createGitRemoteDeliveryApi } from "./git/remote/index.js";
+import { createGitReviewNotesApi } from "./git-review-notes.js";
+import { createRunHistoryApi } from "./runs/history.js";
+import { createRunContinuationApi } from "./runs/continuation.js";
+import { checkSettingsFolderReadiness } from "./settings-folder-readiness.js";
+import { createAgentPeersApi } from "./agent-peers/bridge.js";
+import { createTerminalApi } from "./terminal/index.js";
+import { createProviderConnectionsApi } from "./provider-connections/index.js";
+import { createUpdatesApi } from "./updates/bridge.js";
+import { createDiagramApi } from "./diagram/bridge.js";
+import { createWhiteboardApi } from "./whiteboard/bridge.js";
 import {
   VOICE_IPC_CHANNELS,
   VoiceModelStatusSchema,
   VoiceTranscriptionSchema,
-} from '../shared/voice/contracts.js';
+} from "../shared/voice/contracts.js";
 
 async function invokeValidated<Schema extends z.ZodTypeAny>(
   channel: string,
@@ -113,12 +125,19 @@ async function invokeValidated<Schema extends z.ZodTypeAny>(
 }
 
 const api: ForgeboardApi = {
-  diagram: createDiagramApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
-  whiteboard: createWhiteboardApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
+  diagram: createDiagramApi((channel, ...args) =>
+    ipcRenderer.invoke(channel, ...args),
+  ),
+  whiteboard: createWhiteboardApi((channel, ...args) =>
+    ipcRenderer.invoke(channel, ...args),
+  ),
   app: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appInfo),
     onCloseRequested: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: unknown,
+      ): void => {
         const request = AppCloseRequestSchema.safeParse(payload);
         if (!request.success) return;
         void (async () => {
@@ -136,29 +155,51 @@ const api: ForgeboardApi = {
         })();
       };
       ipcRenderer.on(IPC_CHANNELS.appCloseRequested, handler);
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.appCloseRequested, handler);
+      return () =>
+        ipcRenderer.removeListener(IPC_CHANNELS.appCloseRequested, handler);
     },
   },
-  updates: createUpdatesApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
+  updates: createUpdatesApi((channel, ...args) =>
+    ipcRenderer.invoke(channel, ...args),
+  ),
   voice: {
-    status: () => invokeValidated(VOICE_IPC_CHANNELS.status, VoiceModelStatusSchema),
-    install: () => invokeValidated(VOICE_IPC_CHANNELS.install, VoiceModelStatusSchema),
-    remove: () => invokeValidated(VOICE_IPC_CHANNELS.remove, VoiceModelStatusSchema),
+    status: () =>
+      invokeValidated(VOICE_IPC_CHANNELS.status, VoiceModelStatusSchema),
+    install: () =>
+      invokeValidated(VOICE_IPC_CHANNELS.install, VoiceModelStatusSchema),
+    remove: () =>
+      invokeValidated(VOICE_IPC_CHANNELS.remove, VoiceModelStatusSchema),
     transcribe: (input) =>
-      invokeValidated(VOICE_IPC_CHANNELS.transcribe, VoiceTranscriptionSchema, input),
+      invokeValidated(
+        VOICE_IPC_CHANNELS.transcribe,
+        VoiceTranscriptionSchema,
+        input,
+      ),
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
-    update: (settings) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, settings),
+    update: (settings) =>
+      ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, settings),
     reset: () => ipcRenderer.invoke(IPC_CHANNELS.settingsReset),
     export: () => ipcRenderer.invoke(IPC_CHANNELS.settingsExport),
     import: () => ipcRenderer.invoke(IPC_CHANNELS.settingsImport),
     listRepairs: () =>
-      invokeValidated(IPC_CHANNELS.settingsRepairList, SettingsRepairSummarySchema.array()),
+      invokeValidated(
+        IPC_CHANNELS.settingsRepairList,
+        SettingsRepairSummarySchema.array(),
+      ),
     getRepair: (repairId) =>
-      invokeValidated(IPC_CHANNELS.settingsRepairGet, SettingsRepairEvidenceSchema, repairId),
+      invokeValidated(
+        IPC_CHANNELS.settingsRepairGet,
+        SettingsRepairEvidenceSchema,
+        repairId,
+      ),
     exportRepair: (repairId) =>
-      invokeValidated(IPC_CHANNELS.settingsRepairExport, z.string().nullable(), repairId),
+      invokeValidated(
+        IPC_CHANNELS.settingsRepairExport,
+        z.string().nullable(),
+        repairId,
+      ),
     checkFolderReadiness: (input) =>
       checkSettingsFolderReadiness(async (channel, ...args) => {
         const result: unknown = await ipcRenderer.invoke(channel, ...args);
@@ -179,24 +220,42 @@ const api: ForgeboardApi = {
   },
   commands: {
     checkReadiness: (input) =>
-      invokeValidated(IPC_CHANNELS.commandsCheckReadiness, CommandReadinessResultSchema, input),
+      invokeValidated(
+        IPC_CHANNELS.commandsCheckReadiness,
+        CommandReadinessResultSchema,
+        input,
+      ),
   },
   approvals: {
-    list: (input) => invokeValidated(IPC_CHANNELS.approvalsList, ApprovalViewSchema.array(), input),
-    revoke: (input) => invokeValidated(IPC_CHANNELS.approvalsRevoke, ApprovalViewSchema, input),
+    list: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.approvalsList,
+        ApprovalViewSchema.array(),
+        input,
+      ),
+    revoke: (input) =>
+      invokeValidated(IPC_CHANNELS.approvalsRevoke, ApprovalViewSchema, input),
   },
   docker: {
     check: (input) =>
-      invokeValidated(IPC_CHANNELS.dockerCheck, DockerReadinessSchema.nullable(), input),
-    pull: (input) => invokeValidated(IPC_CHANNELS.dockerPull, DockerPullResultSchema, input),
+      invokeValidated(
+        IPC_CHANNELS.dockerCheck,
+        DockerReadinessSchema.nullable(),
+        input,
+      ),
+    pull: (input) =>
+      invokeValidated(IPC_CHANNELS.dockerPull, DockerPullResultSchema, input),
   },
   projects: {
     recent: () => ipcRenderer.invoke(IPC_CHANNELS.projectsRecent),
-    refresh: (projectId) => invokeValidated(IPC_CHANNELS.projectsRefresh, ProjectSchema, projectId),
+    refresh: (projectId) =>
+      invokeValidated(IPC_CHANNELS.projectsRefresh, ProjectSchema, projectId),
     pick: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPick),
     pickParent: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickParent),
-    pickExecutable: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickExecutable),
-    pickExternalApplication: () => ipcRenderer.invoke(IPC_CHANNELS.projectsPickExternalApplication),
+    pickExecutable: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.projectsPickExecutable),
+    pickExternalApplication: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.projectsPickExternalApplication),
     pickReferences: (input) =>
       invokeValidated(
         IPC_CHANNELS.projectsPickReferences,
@@ -216,14 +275,23 @@ const api: ForgeboardApi = {
     clone: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsClone, input),
     demo: () => ipcRenderer.invoke(IPC_CHANNELS.projectsDemo),
     initializeGit: (projectId) =>
-      invokeValidated(IPC_CHANNELS.projectsInitializeGit, ProjectSchema.nullable(), projectId),
+      invokeValidated(
+        IPC_CHANNELS.projectsInitializeGit,
+        ProjectSchema.nullable(),
+        projectId,
+      ),
   },
   canvas: {
     load: (projectId) => ipcRenderer.invoke(IPC_CHANNELS.canvasLoad, projectId),
     loadWithHistory: (projectId) =>
-      invokeValidated(IPC_CHANNELS.canvasLoadWithHistory, CanvasWorkspaceStateSchema, projectId),
+      invokeValidated(
+        IPC_CHANNELS.canvasLoadWithHistory,
+        CanvasWorkspaceStateSchema,
+        projectId,
+      ),
     save: (document) => ipcRenderer.invoke(IPC_CHANNELS.canvasSave, document),
-    saveWithHistory: (input) => ipcRenderer.invoke(IPC_CHANNELS.canvasSaveWithHistory, input),
+    saveWithHistory: (input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.canvasSaveWithHistory, input),
   },
   files: createFileApi(async (channel, ...args) => {
     const result: unknown = await ipcRenderer.invoke(channel, ...args);
@@ -235,16 +303,24 @@ const api: ForgeboardApi = {
     (channel, listener) => ipcRenderer.removeListener(channel, listener),
   ),
   runs: {
-    ...createRunHistoryApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
-    ...createRunContinuationApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
+    ...createRunHistoryApi((channel, ...args) =>
+      ipcRenderer.invoke(channel, ...args),
+    ),
+    ...createRunContinuationApi((channel, ...args) =>
+      ipcRenderer.invoke(channel, ...args),
+    ),
     approve: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsApprove, runId),
-    sendInput: (runId, data) => ipcRenderer.invoke(IPC_CHANNELS.runsInput, runId, data),
+    sendInput: (runId, data) =>
+      ipcRenderer.invoke(IPC_CHANNELS.runsInput, runId, data),
     pause: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsPause, runId),
     continue: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsContinue, runId),
     interrupt: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsInterrupt, runId),
     terminate: (runId) => ipcRenderer.invoke(IPC_CHANNELS.runsTerminate, runId),
     onEvent: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: unknown,
+      ): void => {
         listener(RunEventEnvelopeSchema.parse(payload));
       };
       ipcRenderer.on(IPC_CHANNELS.runsEvent, handler);
@@ -254,7 +330,10 @@ const api: ForgeboardApi = {
   terminal: createTerminalApi(
     (channel, ...args) => ipcRenderer.invoke(channel, ...args),
     (channel, listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: unknown,
+      ): void => {
         listener(payload);
       };
       ipcRenderer.on(channel, handler);
@@ -264,7 +343,10 @@ const api: ForgeboardApi = {
   agentPeers: createAgentPeersApi(
     (channel, ...args) => ipcRenderer.invoke(channel, ...args),
     (channel, listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: unknown,
+      ): void => {
         listener(payload);
       };
       ipcRenderer.on(channel, handler);
@@ -273,34 +355,112 @@ const api: ForgeboardApi = {
   ),
   previews: {
     listTargets: (input) =>
-      invokeValidated(PREVIEW_TARGET_IPC_CHANNELS.list, PreviewTargetListSchema, input),
+      invokeValidated(
+        PREVIEW_TARGET_IPC_CHANNELS.list,
+        PreviewTargetListSchema,
+        input,
+      ),
     start: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsStart, input),
     restart: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsRestart, input),
     stop: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsStop, input),
     get: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsGet, input),
-    navigate: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsNavigate, input),
-    setAllowedOrigin: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsSetAllowedOrigin, input),
+    navigate: (input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.previewsNavigate, input),
+    setAllowedOrigin: (input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.previewsSetAllowedOrigin, input),
     onEvent: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: unknown,
+      ): void => {
         listener(PreviewEventEnvelopeSchema.parse(payload));
       };
       ipcRenderer.on(IPC_CHANNELS.previewsEvent, handler);
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.previewsEvent, handler);
+      return () =>
+        ipcRenderer.removeListener(IPC_CHANNELS.previewsEvent, handler);
     },
   },
+  browserCompanion: {
+    open: (input) =>
+      invokeValidated(
+        BROWSER_COMPANION_IPC_CHANNELS.open,
+        BrowserCompanionStatusSchema,
+        input,
+      ),
+    status: (input) =>
+      invokeValidated(
+        BROWSER_COMPANION_IPC_CHANNELS.status,
+        BrowserCompanionStatusSchema,
+        input,
+      ),
+    focus: (input) =>
+      invokeValidated(
+        BROWSER_COMPANION_IPC_CHANNELS.focus,
+        BrowserCompanionStatusSchema,
+        input,
+      ),
+    close: (input) =>
+      invokeValidated(
+        BROWSER_COMPANION_IPC_CHANNELS.close,
+        BrowserCompanionStatusSchema,
+        input,
+      ),
+    clear: (input) =>
+      invokeValidated(
+        BROWSER_COMPANION_IPC_CHANNELS.clear,
+        BrowserCompanionStatusSchema,
+        input,
+      ),
+    snapshot: (input) =>
+      invokeValidated(
+        BROWSER_COMPANION_IPC_CHANNELS.snapshot,
+        BrowserCompanionSnapshotSchema.nullable(),
+        input,
+      ),
+    frame: (input) =>
+      invokeValidated(
+        BROWSER_COMPANION_IPC_CHANNELS.frame,
+        BrowserCompanionFrameSchema.nullable(),
+        input,
+      ),
+    setViewport: (input) =>
+      invokeValidated(BROWSER_COMPANION_IPC_CHANNELS.viewport, z.null(), input),
+    dispatchInput: (input) =>
+      invokeValidated(BROWSER_COMPANION_IPC_CHANNELS.input, z.null(), input),
+    navigate: (input) =>
+      invokeValidated(BROWSER_COMPANION_IPC_CHANNELS.navigate, z.null(), input),
+  },
   checks: {
-    prepare: (input) => invokeValidated(IPC_CHANNELS.checksPrepare, CheckPlanViewSchema, input),
+    prepare: (input) =>
+      invokeValidated(IPC_CHANNELS.checksPrepare, CheckPlanViewSchema, input),
     confirm: (input) =>
-      invokeValidated(IPC_CHANNELS.checksConfirm, CheckExecutionViewSchema.nullable(), input),
+      invokeValidated(
+        IPC_CHANNELS.checksConfirm,
+        CheckExecutionViewSchema.nullable(),
+        input,
+      ),
     list: (input) =>
-      invokeValidated(IPC_CHANNELS.checksList, CheckExecutionViewSchema.array(), input),
-    cancel: (input) => invokeValidated(IPC_CHANNELS.checksCancel, CheckExecutionViewSchema, input),
+      invokeValidated(
+        IPC_CHANNELS.checksList,
+        CheckExecutionViewSchema.array(),
+        input,
+      ),
+    cancel: (input) =>
+      invokeValidated(
+        IPC_CHANNELS.checksCancel,
+        CheckExecutionViewSchema,
+        input,
+      ),
     onEvent: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: unknown,
+      ): void => {
         listener(CheckEventEnvelopeSchema.parse(payload));
       };
       ipcRenderer.on(IPC_CHANNELS.checksEvent, handler);
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.checksEvent, handler);
+      return () =>
+        ipcRenderer.removeListener(IPC_CHANNELS.checksEvent, handler);
     },
   },
   workflows: {
@@ -383,26 +543,42 @@ const api: ForgeboardApi = {
         WorkflowNodeInterruptSchema.parse(input),
       ),
     onEvent: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: unknown,
+      ): void => {
         listener(WorkflowEventEnvelopeSchema.parse(payload));
       };
       ipcRenderer.on(WORKFLOW_IPC_CHANNELS.event, handler);
-      return () => ipcRenderer.removeListener(WORKFLOW_IPC_CHANNELS.event, handler);
+      return () =>
+        ipcRenderer.removeListener(WORKFLOW_IPC_CHANNELS.event, handler);
     },
     onInteractionEvent: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
-        const parsed = WorkflowInteractionEventEnvelopeSchema.safeParse(payload);
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: unknown,
+      ): void => {
+        const parsed =
+          WorkflowInteractionEventEnvelopeSchema.safeParse(payload);
         if (parsed.success) listener(parsed.data);
       };
       ipcRenderer.on(WORKFLOW_IPC_CHANNELS.interactionEvent, handler);
-      return () => ipcRenderer.removeListener(WORKFLOW_IPC_CHANNELS.interactionEvent, handler);
+      return () =>
+        ipcRenderer.removeListener(
+          WORKFLOW_IPC_CHANNELS.interactionEvent,
+          handler,
+        );
     },
   },
   audit: {
     list: (input) => ipcRenderer.invoke(IPC_CHANNELS.auditList, input),
   },
   extensions: {
-    list: () => invokeValidated(IPC_CHANNELS.extensionsList, ExtensionDiscoveryViewSchema),
+    list: () =>
+      invokeValidated(
+        IPC_CHANNELS.extensionsList,
+        ExtensionDiscoveryViewSchema,
+      ),
     choose: (kind) =>
       invokeValidated(
         IPC_CHANNELS.extensionsChoose,
@@ -410,29 +586,62 @@ const api: ForgeboardApi = {
         kind,
       ),
     approve: (input) =>
-      invokeValidated(IPC_CHANNELS.extensionsApprove, ExtensionDiscoveryViewSchema, input),
+      invokeValidated(
+        IPC_CHANNELS.extensionsApprove,
+        ExtensionDiscoveryViewSchema,
+        input,
+      ),
     remove: (input) =>
-      invokeValidated(IPC_CHANNELS.extensionsRemove, ExtensionDiscoveryViewSchema, input),
+      invokeValidated(
+        IPC_CHANNELS.extensionsRemove,
+        ExtensionDiscoveryViewSchema,
+        input,
+      ),
   },
   git: {
-    identity: createGitIdentityApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
-    review: (input) => invokeValidated(IPC_CHANNELS.gitReview, GitReviewViewSchema, input),
-    stagePaths: (input) => invokeValidated(IPC_CHANNELS.gitStagePaths, GitReviewViewSchema, input),
-    stageHunks: (input) => invokeValidated(IPC_CHANNELS.gitStageHunks, GitReviewViewSchema, input),
+    identity: createGitIdentityApi((channel, ...args) =>
+      ipcRenderer.invoke(channel, ...args),
+    ),
+    review: (input) =>
+      invokeValidated(IPC_CHANNELS.gitReview, GitReviewViewSchema, input),
+    stagePaths: (input) =>
+      invokeValidated(IPC_CHANNELS.gitStagePaths, GitReviewViewSchema, input),
+    stageHunks: (input) =>
+      invokeValidated(IPC_CHANNELS.gitStageHunks, GitReviewViewSchema, input),
     unstagePaths: (input) =>
       invokeValidated(IPC_CHANNELS.gitUnstagePaths, GitReviewViewSchema, input),
     unstageHunks: (input) =>
       invokeValidated(IPC_CHANNELS.gitUnstageHunks, GitReviewViewSchema, input),
     prepareDiscard: (input) =>
-      invokeValidated(IPC_CHANNELS.gitPrepareDiscard, GitDiscardPlanViewSchema, input),
+      invokeValidated(
+        IPC_CHANNELS.gitPrepareDiscard,
+        GitDiscardPlanViewSchema,
+        input,
+      ),
     confirmDiscard: (input) =>
-      invokeValidated(IPC_CHANNELS.gitConfirmDiscard, GitReviewViewSchema.nullable(), input),
+      invokeValidated(
+        IPC_CHANNELS.gitConfirmDiscard,
+        GitReviewViewSchema.nullable(),
+        input,
+      ),
     prepareCommit: (input) =>
-      invokeValidated(IPC_CHANNELS.gitPrepareCommit, GitCommitPlanViewSchema, input),
+      invokeValidated(
+        IPC_CHANNELS.gitPrepareCommit,
+        GitCommitPlanViewSchema,
+        input,
+      ),
     confirmCommit: (input) =>
-      invokeValidated(IPC_CHANNELS.gitConfirmCommit, GitCommitResultViewSchema.nullable(), input),
+      invokeValidated(
+        IPC_CHANNELS.gitConfirmCommit,
+        GitCommitResultViewSchema.nullable(),
+        input,
+      ),
     prepareShipping: (input) =>
-      invokeValidated(IPC_CHANNELS.gitPrepareShipping, GitShippingPlanViewSchema, input),
+      invokeValidated(
+        IPC_CHANNELS.gitPrepareShipping,
+        GitShippingPlanViewSchema,
+        input,
+      ),
     confirmShipping: (input) =>
       invokeValidated(
         IPC_CHANNELS.gitConfirmShipping,
@@ -484,8 +693,12 @@ const api: ForgeboardApi = {
     connections: createGitConnectionsApi((channel, ...args) =>
       ipcRenderer.invoke(channel, ...args),
     ),
-    remote: createGitRemoteDeliveryApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
-    lifecycle: createGitLifecycleApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
+    remote: createGitRemoteDeliveryApi((channel, ...args) =>
+      ipcRenderer.invoke(channel, ...args),
+    ),
+    lifecycle: createGitLifecycleApi((channel, ...args) =>
+      ipcRenderer.invoke(channel, ...args),
+    ),
     reviewNotes: createGitReviewNotesApi(async (channel, ...args) => {
       const result: unknown = await ipcRenderer.invoke(channel, ...args);
       return result;
@@ -493,13 +706,20 @@ const api: ForgeboardApi = {
   },
   privacy: {
     export: () => ipcRenderer.invoke(IPC_CHANNELS.privacyExport),
-    deleteAll: (confirmation) => ipcRenderer.invoke(IPC_CHANNELS.privacyDelete, confirmation),
+    deleteAll: (confirmation) =>
+      ipcRenderer.invoke(IPC_CHANNELS.privacyDelete, confirmation),
   },
   storage: {
-    createBackup: () => invokeValidated(IPC_CHANNELS.storageCreateBackup, BackupResultSchema),
-    getBackupHealth: () => invokeValidated(IPC_CHANNELS.storageBackupHealth, BackupHealthSchema),
+    createBackup: () =>
+      invokeValidated(IPC_CHANNELS.storageCreateBackup, BackupResultSchema),
+    getBackupHealth: () =>
+      invokeValidated(IPC_CHANNELS.storageBackupHealth, BackupHealthSchema),
     checkIntegrity: (input) =>
-      invokeValidated(IPC_CHANNELS.storageCheckIntegrity, IntegrityCheckResultSchema, input),
+      invokeValidated(
+        IPC_CHANNELS.storageCheckIntegrity,
+        IntegrityCheckResultSchema,
+        input,
+      ),
   },
   recovery: {
     listSnapshots: (input) =>
@@ -509,7 +729,11 @@ const api: ForgeboardApi = {
         input,
       ),
     createSnapshot: (input) =>
-      invokeValidated(RECOVERY_IPC_CHANNELS.snapshotsCreate, RecoverySnapshotSummarySchema, input),
+      invokeValidated(
+        RECOVERY_IPC_CHANNELS.snapshotsCreate,
+        RecoverySnapshotSummarySchema,
+        input,
+      ),
     prepareSnapshotRestore: (input) =>
       invokeValidated(
         RECOVERY_IPC_CHANNELS.snapshotsPrepareRestore,
@@ -537,4 +761,4 @@ const api: ForgeboardApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('forgeboard', Object.freeze(api));
+contextBridge.exposeInMainWorld("forgeboard", Object.freeze(api));

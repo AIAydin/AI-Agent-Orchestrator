@@ -9,7 +9,11 @@ import type {
 } from '../../../../../shared/collaboration/index.js';
 import { SettingsSection } from '../shared.js';
 import { CollaborationStatus } from './CollaborationStatus.js';
-import { ConnectionFields } from './ConnectionFields.js';
+import {
+  CollaborationProfileFields,
+  CollaborationRoomField,
+  ConnectionFields,
+} from './ConnectionFields.js';
 import { DirectJoinControls } from './DirectJoinControls.js';
 import { InviteJoinControls } from './InviteJoinControls.js';
 import { InviteManagementControls } from './InviteManagementControls.js';
@@ -33,6 +37,9 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
   const [operationBusy, setOperationBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [inviteClearSignal, setInviteClearSignal] = useState(0);
+  const [advancedOpen, setAdvancedOpen] = useState(
+    settings.collaborationUrl.trim() === '' || settings.collaborationManagementUrl.trim() === '',
+  );
   const operationLock = useRef(false);
   const connectionIdRef = useRef(connection?.connectionId ?? null);
   connectionIdRef.current = connection?.connectionId ?? null;
@@ -41,7 +48,10 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
     endOperation,
     setConnection,
     setMessage,
-    onConnected: () => setInviteClearSignal((current) => current + 1),
+    onConnected: () => {
+      enableCollaboration();
+      setInviteClearSignal((current) => current + 1);
+    },
   });
 
   useEffect(() => {
@@ -106,7 +116,6 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
   const controlsBusy = busy || operationBusy;
   const inputDisabled = controlsBusy || connectionActive;
   const canConnect =
-    settings.collaborationEnabled &&
     settings.collaborationUrl.trim() !== '' &&
     settings.collaborationRoom.trim() !== '' &&
     settings.collaborationDisplayName.trim() !== '' &&
@@ -131,7 +140,10 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
         reconnect: settings.collaborationReconnect,
       });
       applyJoinResult(result, setConnection, setMessage);
-      if (result.ok) setInviteClearSignal((current) => current + 1);
+      if (result.ok) {
+        enableCollaboration();
+        setInviteClearSignal((current) => current + 1);
+      }
     } catch {
       setMessage(validationFailure());
     } finally {
@@ -156,6 +168,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
         reconnect: settings.collaborationReconnect,
       });
       applyJoinResult(result, setConnection, setMessage);
+      if (result.ok) enableCollaboration();
     } catch {
       setMessage(validationFailure());
     } finally {
@@ -194,6 +207,12 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
   async function setCollaborationEnabled(enabled: boolean): Promise<void> {
     if (!enabled && connectionActive && !(await leave())) return;
     setSettings((current) => ({ ...current, collaborationEnabled: enabled }));
+  }
+
+  function enableCollaboration(): void {
+    setSettings((current) =>
+      current.collaborationEnabled ? current : { ...current, collaborationEnabled: true },
+    );
   }
 
   async function createInvite(input: CollaborationInviteCreateInput): Promise<void> {
@@ -306,60 +325,106 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
 
   return (
     <SettingsSection
-      title="Self-hosted collaboration"
-      description="Work with others in real time through a server your team runs. Access tokens and invite links are never saved."
+      title="Collaboration"
+      description="Work together on the same canvas through a server your team controls."
     >
-      <label className="switch-row">
-        <span>
-          <strong>Enable collaboration</strong>
-          <small>A connection starts only when you choose a join action and approve it.</small>
-        </span>
-        <input
-          type="checkbox"
-          name="collaboration-enabled"
-          checked={settings.collaborationEnabled}
-          disabled={controlsBusy}
-          onChange={(event) => void setCollaborationEnabled(event.target.checked)}
-        />
-      </label>
-      <ConnectionFields settings={settings} setSettings={setSettings} disabled={inputDisabled} />
-      <InviteJoinControls
-        settings={settings}
-        disabled={inputDisabled}
-        clearSignal={inviteClearSignal}
-        onJoin={joinInvite}
-      />
-      <DirectJoinControls
-        accessToken={accessToken}
-        setAccessToken={setAccessToken}
-        disabled={inputDisabled}
-        canConnect={canConnect}
-        connecting={operationBusy && !connectionActive}
-        onJoin={join}
-      />
-      {!connectionActive && (
-        <RoomAccessControls
-          settings={settings}
-          busy={controlsBusy}
-          onBootstrap={ownerAccess.bootstrapRoom}
-          onRecover={ownerAccess.recoverOwner}
-        />
-      )}
-      <div className="button-row">
-        <button
-          className="button"
-          type="button"
-          disabled={controlsBusy || !connectionActive}
-          onClick={() => void leave()}
-        >
-          Leave room
-        </button>
-      </div>
       <CollaborationStatus
         connection={connection}
         message={message}
         collaborators={collaborators}
       />
+      {!connectionActive && (
+        <>
+          <CollaborationProfileFields
+            settings={settings}
+            setSettings={setSettings}
+            disabled={inputDisabled}
+          />
+          <div className="collaboration-setup-grid">
+            <section className="collaboration-setup-card primary" aria-labelledby="join-room-title">
+              <span className="collaboration-card-kicker">Recommended</span>
+              <h4 id="join-room-title">Join with an invite</h4>
+              <p>
+                Paste the link you received. New Forgeboard invites configure the server for you.
+              </p>
+              <InviteJoinControls
+                settings={settings}
+                setSettings={setSettings}
+                disabled={inputDisabled}
+                clearSignal={inviteClearSignal}
+                onJoin={joinInvite}
+              />
+            </section>
+            <section className="collaboration-setup-card" aria-labelledby="host-room-title">
+              <h4 id="host-room-title">Create or recover a room</h4>
+              <p>For room owners using a server their team already runs.</p>
+              <CollaborationRoomField
+                settings={settings}
+                setSettings={setSettings}
+                disabled={inputDisabled}
+              />
+              <RoomAccessControls
+                settings={settings}
+                busy={controlsBusy}
+                onBootstrap={ownerAccess.bootstrapRoom}
+                onRecover={ownerAccess.recoverOwner}
+              />
+            </section>
+          </div>
+          <details
+            className="collaboration-advanced"
+            open={advancedOpen}
+            onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+          >
+            <summary>
+              <span>
+                <strong>Server and advanced options</strong>
+                <small>Only needed for older invites, custom servers, or direct tokens.</small>
+              </span>
+            </summary>
+            <div className="collaboration-advanced-fields">
+              <label className="switch-row">
+                <span>
+                  <strong>Enable collaboration</strong>
+                  <small>Joining a room turns this on automatically.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  name="collaboration-enabled"
+                  checked={settings.collaborationEnabled}
+                  disabled={controlsBusy}
+                  onChange={(event) => void setCollaborationEnabled(event.target.checked)}
+                />
+              </label>
+              <ConnectionFields
+                settings={settings}
+                setSettings={setSettings}
+                disabled={inputDisabled}
+              />
+              <DirectJoinControls
+                accessToken={accessToken}
+                setAccessToken={setAccessToken}
+                disabled={inputDisabled}
+                canConnect={canConnect}
+                connecting={operationBusy && !connectionActive}
+                onJoin={join}
+              />
+            </div>
+          </details>
+        </>
+      )}
+      {connectionActive && (
+        <div className="button-row">
+          <button
+            className="button danger"
+            type="button"
+            disabled={controlsBusy}
+            onClick={() => void leave()}
+          >
+            Leave room
+          </button>
+        </div>
+      )}
       {connection?.status === 'connected' &&
         connection.role === 'owner' &&
         connection.managementBaseUrl !== undefined && (

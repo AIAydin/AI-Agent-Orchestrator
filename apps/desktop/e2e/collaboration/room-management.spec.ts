@@ -38,6 +38,7 @@ test('room creation, member administration, audit, and renewal work entirely thr
     await ownerSettings.getByLabel('Collaboration room').fill('management-e2e-room');
 
     await test.step('cancelled bootstrap makes no room before approved UI creation', async () => {
+      await ownerSettings.getByText('My server requires an admin token').click();
       const adminToken = ownerSettings.getByLabel(/^Server administrator token/u);
       await adminToken.fill(server!.adminToken);
       let dialogIndex = await queueCollaborationDialog(owner.app, 0);
@@ -100,7 +101,7 @@ test('room creation, member administration, audit, and renewal work entirely thr
         confirmLabel: 'Copy invite',
       });
       inviteLink = await owner.app.evaluate(({ clipboard }) => clipboard.readText());
-      expect(inviteLink).toMatch(/^forgeboard:\/\/collaboration\/invite#token=\S+$/u);
+      expect(inviteLink).toMatch(/^forgeboard:\/\/collaboration\/invite\?\S+#token=\S+$/u);
       await expectSecretsAbsent(owner.page, [inviteLink, inviteToken(inviteLink)]);
       const member = await launchDesktop(join(root, 'member-user-data'));
       applications.push(member.app);
@@ -112,7 +113,7 @@ test('room creation, member administration, audit, and renewal work entirely thr
       const inviteField = memberSettings.locator('input[name="collaboration-invite-link"]');
       await inviteField.fill(inviteLink);
       dialogIndex = await queueCollaborationDialog(member.app, 1);
-      await memberSettings.getByRole('button', { name: 'Join with invite' }).click();
+      await memberSettings.getByRole('button', { name: 'Join room' }).click();
       dialog = await waitForCollaborationDialog(member.app, dialogIndex);
       expectCancelDefaultDialog(dialog, {
         title: 'Redeem invite and join collaboration?',
@@ -122,7 +123,7 @@ test('room creation, member administration, audit, and renewal work entirely thr
       await expect(collaborationStatus(memberSettings)).toContainText('Your role is editor', {
         timeout: 20_000,
       });
-      await expect(inviteField).toHaveValue('');
+      await expect(inviteField).toHaveCount(0);
       await expect(
         memberSettings.getByRole('heading', { name: 'Room administration' }),
       ).toHaveCount(0);
@@ -217,6 +218,7 @@ test('room creation, member administration, audit, and renewal work entirely thr
       const roomAccessAction = ownerSettings.getByLabel('Room access action');
       await expect(roomAccessAction).toBeEnabled();
       await roomAccessAction.selectOption('recover');
+      await ownerSettings.getByText('Owner recovery').click();
       await ownerSettings.getByLabel(/^Server administrator token/u).fill(server!.adminToken);
       dialogIndex = await queueCollaborationDialog(owner.app, 1);
       await ownerSettings.getByRole('button', { name: 'Rotate owner access and connect' }).click();
@@ -258,7 +260,9 @@ test('room creation, member administration, audit, and renewal work entirely thr
         .getByRole('button', { name: /Product brief/u })
         .click();
       await expect(
-        owner.page.getByRole('article', { name: 'Product brief: Product brief' }),
+        owner.page.getByRole('article', {
+          name: 'Product brief: Product brief',
+        }),
       ).toBeVisible();
       await expect(owner.page.getByText('Saved locally')).toBeVisible();
     });
@@ -301,6 +305,7 @@ async function configureIdentity(
   displayName: string,
   subject: string,
 ): Promise<void> {
+  await settings.getByText('Server and advanced options').click();
   await settings.getByRole('checkbox', { name: /Enable collaboration/u }).check();
   await settings.getByLabel('Collaboration server URL').fill(server.webSocketUrl);
   await settings

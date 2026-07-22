@@ -620,6 +620,8 @@ export type PreviewNavigateInput = z.infer<typeof PreviewNavigateInputSchema>;
  */
 export const PreviewSetAllowedOriginInputSchema = PreviewNodeKeySchema.extend({
   origin: z.string().min(1).max(2_048).nullable(),
+  active: z.boolean(),
+  authenticationEnabled: z.boolean(),
 }).strict();
 export type PreviewSetAllowedOriginInput = z.infer<typeof PreviewSetAllowedOriginInputSchema>;
 

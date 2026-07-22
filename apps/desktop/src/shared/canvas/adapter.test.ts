@@ -646,6 +646,8 @@ describe('canonical desktop canvas adapter', () => {
             previewSecondaryPreset: 'tablet',
             previewOrientation: 'landscape',
             previewSideBySide: true,
+            browserAuthenticationEnabled: true,
+            agentBrowserAccess: true,
             previewComparison: {
               leftTarget: previewTarget,
               rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
@@ -687,6 +689,8 @@ describe('canonical desktop canvas adapter', () => {
         secondaryPreset: 'tablet',
         orientation: 'landscape',
         sideBySide: true,
+        browserAuthenticationEnabled: true,
+        agentBrowserAccess: true,
         comparison: {
           leftTarget: previewTarget,
           rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
@@ -711,6 +715,8 @@ describe('canonical desktop canvas adapter', () => {
       previewSecondaryPreset: 'tablet',
       previewOrientation: 'landscape',
       previewSideBySide: true,
+      browserAuthenticationEnabled: true,
+      agentBrowserAccess: true,
       previewComparison: {
         leftTarget: previewTarget,
         rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },

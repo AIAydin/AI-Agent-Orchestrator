@@ -26,7 +26,6 @@ export function RoomAccessControls({
   const submissionLock = useRef(false);
   const disabled = busy || submitting;
   const configured =
-    settings.collaborationEnabled &&
     settings.collaborationUrl.trim() !== '' &&
     settings.collaborationManagementUrl.trim() !== '' &&
     settings.collaborationRoom.trim() !== '' &&
@@ -59,65 +58,64 @@ export function RoomAccessControls({
   }
 
   return (
-    <section aria-labelledby="collaboration-room-access-heading">
-      <h4 id="collaboration-room-access-heading">Room access</h4>
-      <p id="collaboration-room-access-help">
-        Create a room or recover its owner access — no config files. Recovery rotates the owner
-        credential, so the old one stops working right away.
-      </p>
+    <section aria-label="Room access">
       <label>
-        Room access action
+        Action
         <select
           name="collaboration-room-access-action"
+          aria-label="Room access action"
           value={mode}
           disabled={disabled}
-          aria-describedby="collaboration-room-access-help"
           onChange={(event) => setMode(event.target.value as 'create' | 'recover')}
         >
           <option value="create">Create new room</option>
           <option value="recover">Recover existing owner access</option>
         </select>
       </label>
-      <div className="settings-form-field">
-        <label htmlFor="collaboration-admin-token">Server administrator token</label>
-        <span className="path-picker">
-          <input
-            id="collaboration-admin-token"
-            name="collaboration-admin-token"
-            type={revealed ? 'text' : 'password'}
-            value={adminToken}
-            disabled={disabled}
-            autoComplete="off"
-            spellCheck={false}
-            aria-describedby="collaboration-admin-token-help"
-            onChange={(event) => setAdminToken(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return;
-              event.preventDefault();
-              if (!disabled && configured) void submit();
-            }}
-          />
-          <button
-            className="icon-button"
-            type="button"
-            aria-label={
-              revealed ? 'Hide server administrator token' : 'Show server administrator token'
-            }
-            disabled={disabled}
-            onClick={() => setRevealed((current) => !current)}
-          >
-            {revealed ? (
-              <EyeOff size={15} aria-hidden="true" />
-            ) : (
-              <Eye size={15} aria-hidden="true" />
-            )}
-          </button>
-        </span>
-        <small id="collaboration-admin-token-help">
-          Optional only when the server permits local loopback bootstrap. Cleared immediately and
-          never saved.
-        </small>
-      </div>
+      <details className="collaboration-admin-token">
+        <summary>
+          {mode === 'create' ? 'My server requires an admin token' : 'Owner recovery'}
+        </summary>
+        <div className="settings-form-field">
+          <label htmlFor="collaboration-admin-token">Server administrator token</label>
+          <span className="path-picker">
+            <input
+              id="collaboration-admin-token"
+              name="collaboration-admin-token"
+              type={revealed ? 'text' : 'password'}
+              value={adminToken}
+              disabled={disabled}
+              autoComplete="off"
+              spellCheck={false}
+              aria-describedby="collaboration-admin-token-help"
+              onChange={(event) => setAdminToken(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                if (!disabled && configured) void submit();
+              }}
+            />
+            <button
+              className="icon-button"
+              type="button"
+              aria-label={
+                revealed ? 'Hide server administrator token' : 'Show server administrator token'
+              }
+              disabled={disabled}
+              onClick={() => setRevealed((current) => !current)}
+            >
+              {revealed ? (
+                <EyeOff size={15} aria-hidden="true" />
+              ) : (
+                <Eye size={15} aria-hidden="true" />
+              )}
+            </button>
+          </span>
+          <small id="collaboration-admin-token-help">
+            Cleared immediately and never saved. Recovery rotates the old owner credential.
+          </small>
+        </div>
+      </details>
       <button
         className={mode === 'recover' ? 'button danger' : 'button'}
         type="button"

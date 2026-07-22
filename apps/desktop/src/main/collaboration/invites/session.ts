@@ -2,6 +2,7 @@ import {
   CollaborationInviteHistoryPageSchema,
   CollaborationInviteIdSchema,
   CollaborationInviteSchema,
+  collaborationInviteLinkWithConnection,
   CollaborationInviteRedeemResponseSchema,
   CollaborationInviteSessionBindingSchema,
   CollaborationManagementUrlSchema,
@@ -249,13 +250,16 @@ export class CollaborationInviteSessionAuthority {
 
   /** Main-process-only clipboard handoff. Never return this value through renderer IPC. */
   public inviteLinkForCopy(lease: CollaborationInviteSessionLease, rawInviteId: string): string {
-    this.assertCurrent(lease);
+    const binding = this.assertCurrent(lease);
     const inviteId = CollaborationInviteIdSchema.parse(rawInviteId);
     const invite = this.#createdInvites.get(inviteId);
     if (invite === undefined) {
       throw new Error('This invite was not created by the current Forgeboard room session.');
     }
-    return invite.url;
+    return collaborationInviteLinkWithConnection(invite.url, {
+      serverUrl: binding.serverUrl,
+      managementBaseUrl: binding.managementBaseUrl,
+    });
   }
 
   public assertCurrent(lease: CollaborationInviteSessionLease): CollaborationInviteSessionBinding {
