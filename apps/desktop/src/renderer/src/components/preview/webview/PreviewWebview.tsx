@@ -69,12 +69,13 @@ export const PreviewWebview = forwardRef<PreviewWebviewHandle, PreviewWebviewPro
         current = {
           ...current,
           ...patch,
-          canGoBack: element.canGoBack?.() ?? false,
-          canGoForward: element.canGoForward?.() ?? false,
+          canGoBack: readHistoryAvailability(element, 'canGoBack'),
+          canGoForward: readHistoryAvailability(element, 'canGoForward'),
         };
         onStatusRef.current?.(current);
       };
       const listeners: ReadonlyArray<readonly [string, EventListener]> = [
+        ['dom-ready', () => publish({})],
         ['did-start-loading', () => publish({ status: 'loading', failure: null })],
         [
           'did-stop-loading',
@@ -175,4 +176,16 @@ function consoleLevel(level: unknown): PreviewConsoleLevel {
     if (level === 0) return 'debug';
   }
   return 'info';
+}
+
+function readHistoryAvailability(
+  element: PreviewWebviewElement,
+  method: 'canGoBack' | 'canGoForward',
+): boolean {
+  try {
+    return element[method]?.() ?? false;
+  } catch {
+    // Electron throws until the webview is attached and has emitted dom-ready.
+    return false;
+  }
 }

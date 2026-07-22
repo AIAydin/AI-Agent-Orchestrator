@@ -76,6 +76,35 @@ describe('PreviewWebview', () => {
     );
   });
 
+  it('stays mounted while Electron history methods are unavailable before dom-ready', () => {
+    const prototype = HTMLElement.prototype as PreviewWebviewElement;
+    Object.defineProperties(prototype, {
+      canGoBack: {
+        configurable: true,
+        value: vi.fn(() => {
+          throw new Error('The WebView must emit dom-ready first.');
+        }),
+      },
+      canGoForward: {
+        configurable: true,
+        value: vi.fn(() => {
+          throw new Error('The WebView must emit dom-ready first.');
+        }),
+      },
+    });
+
+    try {
+      const { element, onStatus } = renderWebview();
+      expect(element).not.toBeNull();
+      expect(onStatus).toHaveBeenLastCalledWith(
+        expect.objectContaining({ canGoBack: false, canGoForward: false }),
+      );
+    } finally {
+      delete prototype.canGoBack;
+      delete prototype.canGoForward;
+    }
+  });
+
   it('forwards mapped console messages', () => {
     const { element, onConsole } = renderWebview();
     fireEvent(

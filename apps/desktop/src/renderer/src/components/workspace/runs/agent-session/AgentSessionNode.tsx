@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { useEffect, useRef, useState, type JSX } from 'react';
+import { GripHorizontal } from 'lucide-react';
 
 import type { PermissionProfile } from '../../../../../../shared/application/contracts.js';
 import type { AgentPeersProvisionView } from '../../../../../../shared/agent-peers/index.js';
@@ -269,7 +270,11 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
 
   return (
     <>
-      <div className="agent-window-titlebar agent-drag-handle">
+      <div
+        className="agent-window-titlebar agent-drag-handle"
+        role="group"
+        aria-label={`Move ${data.title} agent node`}
+      >
         <button
           type="button"
           className="traffic close nodrag"
@@ -290,6 +295,7 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
           aria-label="Focus terminal"
           onClick={() => surfaceRef.current?.focus()}
         />
+        <GripHorizontal className="agent-drag-grip" size={15} aria-hidden="true" />
         {editingTitle ? (
           <input
             className="agent-title-input nodrag"

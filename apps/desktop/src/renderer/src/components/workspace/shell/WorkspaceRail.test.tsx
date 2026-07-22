@@ -76,6 +76,7 @@ describe('WorkspaceRail accessibility', () => {
         name: 'Project has changes not yet recorded in Git',
       }),
     ).toBeTruthy();
+    expect(screen.queryByText('Private file protection on')).toBeNull();
 
     rerender(<WorkspaceRail {...props} tab="nodes" />);
     expect(screen.getByRole('button', { name: 'Nodes' }).getAttribute('aria-pressed')).toBe('true');

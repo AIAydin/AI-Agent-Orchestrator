@@ -464,6 +464,16 @@ unchecked when only a subset of their required behavior has proof.
   Eight new focused geometry, keyboard, renderer-interaction, lock, and undo tests passed alongside
   targeted lint/format checks and the structure gate. The broad canvas checklist item remains
   unchecked because comments and complete grouping/containment behavior are not yet proven.
+- 2026-07-22: expanded Agent nodes expose their full title bar as an explicit React Flow drag
+  handle, with a visible grip, grab/grabbing feedback, and touch-safe movement while the embedded
+  terminal remains interactive. Collapsed Agent nodes retain their whole-node drag handle, and the
+  existing canvas change/autosave path persists completed positions. Twenty-nine focused Agent and
+  canvas-node tests passed with targeted lint, desktop typecheck, and diff validation.
+- 2026-07-22: Mobile Preview canvas faces now preserve the selected device's real CSS viewport width
+  while fitting their height to the available node body. The page therefore fills the preview node
+  at a readable mobile breakpoint instead of shrinking the entire phone into unused black space;
+  narrower resized nodes still scale proportionally. Focused layout and face coverage verifies both
+  full-size and constrained-node behavior.
 - 2026-07-15: a real main-process workflow recovery integration scenario now runs bundled
   deterministic child processes in five production-managed Git worktrees. It proves live SIGINT
   interruption, workflow cancellation with process termination, deliberate exit-code-7 failure,
@@ -1816,3 +1826,15 @@ unchecked when only a subset of their required behavior has proof.
   contract, matcher, and audio tests passed.
   `Workspace.tsx` was split below 2,000 lines. The structure gate still reports only three inherited
   direct-file-count failures in `apps/desktop/e2e`, `workspace/shell`, and `workspace/workflows`.
+- 2026-07-21: native terminal approval gained an explicit UI-managed 30-day trust option for the
+  exact project, canonical executable identity, arguments, working-folder identity, and disclosed
+  environment-variable names. Unchanged launches reuse the durable main-process approval without a
+  second native prompt; any scope change misses the cryptographic fingerprint and requires review
+  again. Settings lists the human-readable grant and revokes it immediately. Twenty-three focused
+  fingerprint, native-confirmation, IPC-security, and Settings tests passed, as did all 29 terminal
+  service tests, desktop strict typecheck, focused zero-warning lint, formatting, production build,
+  and diff whitespace validation. The complete 2,901-test unit suite had one unrelated concurrent
+  preview-port expectation race; that nine-test preview file passed immediately in isolation. The
+  repository-wide structure and production-control gates remain red on pre-existing workspace
+  shell/folder limits and an unrelated inert project-tree button, so no false green gate claim is
+  recorded here.

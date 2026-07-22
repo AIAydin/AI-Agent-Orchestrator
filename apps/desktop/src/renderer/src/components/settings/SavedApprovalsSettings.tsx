@@ -77,9 +77,9 @@ export function SavedApprovalsSettings({
         </button>
       </header>
       <p>
-        Only exact check commands you chose to remember appear here. Everything else — starting
-        agents, expanding context, pulling Docker images, sending data out, destructive Git actions
-        — still requires per-use approval.
+        Exact project checks and local agent or terminal launches you chose to trust appear here.
+        Expanding context, pulling Docker images, sending data out, and destructive Git actions
+        still require per-use approval.
       </p>
       <label className="switch-row compact">
         <span>
@@ -111,6 +111,7 @@ export function SavedApprovalsSettings({
                   Project {approval.record.scope.projectId.slice(0, 8)} · item{' '}
                   <code>{approval.record.scope.resourceFingerprint.slice(0, 16)}</code>
                 </small>
+                <small>{approval.record.reason}</small>
                 <small>
                   Created {new Date(approval.record.createdAt).toLocaleString()} · expires{' '}
                   {new Date(approval.record.expiresAt).toLocaleString()}
@@ -140,6 +141,7 @@ export function SavedApprovalsSettings({
 }
 
 function approvalLabel(approval: ApprovalView): string {
+  if (approval.record.scope.action === 'agent-launch') return 'Trusted agent or terminal launch';
   const action = approval.record.scope.action.replaceAll('-', ' ');
   return action.replace(/^./u, (letter) => letter.toUpperCase());
 }

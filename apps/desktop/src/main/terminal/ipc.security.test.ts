@@ -9,6 +9,8 @@ import type {
 } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ApprovalRecord } from '@forgeboard/core';
+
 const electronMock = vi.hoisted(() => {
   type Handler = (event: unknown, ...arguments_: unknown[]) => Promise<unknown>;
   return {
@@ -99,6 +101,47 @@ describe('TerminalIpcService collaboration authority routing', () => {
       await fixture.ipc.dispose();
     },
   );
+
+  it('saves a 30-day exact trusted launch only when the native checkbox is selected', async () => {
+    const fixture = createFixture('owner', {
+      confirmation: Promise.resolve({ response: 1, checkboxChecked: true }),
+    });
+    const event = liveEvent();
+
+    await expect(
+      handler(TERMINAL_IPC_CHANNELS.confirmLaunch)(event, { planId: PLAN_ID }),
+    ).resolves.toEqual({ ok: true, value: session });
+
+    expect(fixture.approvals.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: {
+          projectId: PROJECT_ID,
+          action: 'agent-launch',
+          resourceFingerprint: nativeReview.approvalFingerprint,
+        },
+        decision: 'approved',
+        decidedBy: 'local-user',
+        singleUse: false,
+      }),
+    );
+    await fixture.ipc.dispose();
+  });
+
+  it('reuses a live exact trusted launch without another native prompt', async () => {
+    const fixture = createFixture('owner', { savedApproval: trustedApproval });
+    const event = liveEvent();
+
+    await expect(
+      handler(TERMINAL_IPC_CHANNELS.confirmLaunch)(event, { planId: PLAN_ID }),
+    ).resolves.toEqual({ ok: true, value: session });
+
+    expect(fixture.showMessageBox).not.toHaveBeenCalled();
+    expect(fixture.approvals.authorize).toHaveBeenCalledWith({
+      approvalId: trustedApproval.id,
+      scope: trustedApproval.scope,
+    });
+    await fixture.ipc.dispose();
+  });
 
   it.each(['owner', 'editor'] satisfies CollaborationRole[])(
     'admits picker, prepare, confirm, input, and resize mutations for an authorized %s',
@@ -252,7 +295,11 @@ describe('TerminalIpcService collaboration authority routing', () => {
 
 function createFixture(
   initialRole: CollaborationRole,
-  options: { confirmation?: Promise<MessageBoxReturnValue>; beforeSpawn?: Promise<void> } = {},
+  options: {
+    confirmation?: Promise<MessageBoxReturnValue>;
+    beforeSpawn?: Promise<void>;
+    savedApproval?: ApprovalRecord;
+  } = {},
 ) {
   let role = initialRole;
   const parent = liveParent();
@@ -270,12 +317,18 @@ function createFixture(
         await (options.confirmation ?? Promise.resolve({ response: 1, checkboxChecked: false })),
     );
   const operations = createOperations(options.beforeSpawn);
+  const approvals = {
+    findActive: vi.fn(() => options.savedApproval),
+    authorize: vi.fn(() => options.savedApproval ?? trustedApproval),
+    create: vi.fn(),
+  };
   const ipc = new TerminalIpcService(
     { showOpenDialog, showMessageBox } as unknown as Pick<
       Dialog,
       'showOpenDialog' | 'showMessageBox'
     >,
     operations as unknown as TerminalService,
+    approvals,
     () => parent,
     authorizeMutation,
   );
@@ -287,6 +340,7 @@ function createFixture(
     authorizeMutation,
     showOpenDialog,
     showMessageBox,
+    approvals,
     setRole(nextRole: CollaborationRole) {
       role = nextRole;
     },
@@ -387,12 +441,29 @@ const replay: TerminalReplayView = {
 
 const nativeReview: TerminalLaunchNativeReview = {
   view: launchPlan,
+  approvalFingerprint: 'a'.repeat(64),
   exact: {
     executable: process.execPath,
     arguments: ['--version'],
     cwd: process.cwd(),
     environmentVariableNames: ['PATH'],
   },
+};
+
+const trustedApproval: ApprovalRecord = {
+  schemaVersion: 1,
+  id: '40000000-0000-4000-8000-000000000001',
+  scope: {
+    projectId: PROJECT_ID,
+    action: 'agent-launch',
+    resourceFingerprint: nativeReview.approvalFingerprint,
+  },
+  decision: 'approved',
+  decidedBy: 'local-user',
+  reason: 'Trusted exact terminal launch.',
+  createdAt: '2026-07-17T14:00:00.000Z',
+  expiresAt: '2026-08-16T14:00:00.000Z',
+  singleUse: false,
 };
 
 function liveEvent(id = 7): IpcMainInvokeEvent {

@@ -3,6 +3,8 @@ import { constants } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 
+import type { ApprovalRecord } from '@forgeboard/core';
+
 import {
   BrowserWindow,
   ipcMain,
@@ -33,11 +35,14 @@ import {
   type TerminalEvent,
 } from '../../shared/terminal/index.js';
 import { assertLiveMainFrame } from '../security/ipc-authority.js';
+import type { ApprovalService } from '../approvals/approval-service.js';
 import { confirmTerminalLaunch } from './native-confirmation.js';
-import type { TerminalService } from './service.js';
+import type { TerminalLaunchNativeReview, TerminalService } from './service.js';
 
 type WindowResolver = (event: IpcMainInvokeEvent) => BrowserWindow | null;
 type TerminalMutationAuthorizer = (event: IpcMainInvokeEvent) => void;
+const TRUSTED_LAUNCH_DURATION_MS = 30 * 24 * 60 * 60 * 1_000;
+const LOCAL_ACTOR = 'local-user';
 
 /** Narrow IPC owner boundary for terminal picker, approval, control, replay, and events. */
 export class TerminalIpcService {
@@ -52,6 +57,7 @@ export class TerminalIpcService {
   public constructor(
     private readonly dialog: Pick<Dialog, 'showOpenDialog' | 'showMessageBox'>,
     private readonly service: TerminalService,
+    private readonly approvals: Pick<ApprovalService, 'authorize' | 'create' | 'findActive'>,
     private readonly resolveWindow: WindowResolver = (event) =>
       BrowserWindow.fromWebContents(event.sender),
     private readonly assertMutationAuthorized: TerminalMutationAuthorizer = () => undefined,
@@ -127,7 +133,7 @@ export class TerminalIpcService {
         return await this.service.confirmLaunch(
           ownerId,
           input.planId,
-          async (review) => await confirmTerminalLaunch(this.dialog, parent, review, assertCurrent),
+          async (review) => await this.#authorizeLaunch(parent, review, assertCurrent),
           assertCurrent,
         );
       },
@@ -180,6 +186,34 @@ export class TerminalIpcService {
       TerminalSessionViewSchema,
       async (event, input) => await this.service.terminate(this.#ownerId(event.sender), input),
     );
+  }
+
+  async #authorizeLaunch(
+    parent: BrowserWindow,
+    review: TerminalLaunchNativeReview,
+    assertCurrent: () => void,
+  ): Promise<'approved' | 'denied'> {
+    const scope = trustedLaunchScope(review);
+    const savedApproval = this.approvals.findActive(scope);
+    if (savedApproval !== undefined) {
+      assertCurrent();
+      this.approvals.authorize({ approvalId: savedApproval.id, scope });
+      assertCurrent();
+      return 'approved';
+    }
+
+    const confirmation = await confirmTerminalLaunch(this.dialog, parent, review, assertCurrent);
+    if (confirmation.decision === 'approved' && confirmation.remember) {
+      this.approvals.create({
+        scope,
+        decision: 'approved',
+        decidedBy: LOCAL_ACTOR,
+        reason: `Trusted exact ${basename(review.exact.executable)} launch in ${review.exact.cwd}.`,
+        expiresAt: new Date(Date.now() + TRUSTED_LAUNCH_DURATION_MS).toISOString(),
+        singleUse: false,
+      });
+    }
+    return confirmation.decision;
   }
 
   public async pauseForDataMutation(): Promise<void> {
@@ -332,4 +366,12 @@ export class TerminalIpcService {
   #assertNotDisposed(): void {
     if (this.#disposed) throw new Error('The terminal IPC service has been disposed.');
   }
+}
+
+function trustedLaunchScope(review: TerminalLaunchNativeReview): ApprovalRecord['scope'] {
+  return {
+    projectId: review.view.projectId,
+    action: 'agent-launch',
+    resourceFingerprint: review.approvalFingerprint,
+  };
 }
