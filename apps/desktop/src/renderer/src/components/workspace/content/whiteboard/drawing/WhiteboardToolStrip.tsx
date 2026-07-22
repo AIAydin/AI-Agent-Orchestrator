@@ -3,7 +3,11 @@ import { ArrowRight, Circle, Diamond, MousePointer2, Pencil, Square, Type } from
 
 import type { WhiteboardTool } from './useWhiteboardDrawing.js';
 
-const TOOLS: readonly { readonly tool: WhiteboardTool; readonly label: string; readonly icon: ReactNode }[] = [
+const TOOLS: readonly {
+  readonly tool: WhiteboardTool;
+  readonly label: string;
+  readonly icon: ReactNode;
+}[] = [
   { tool: 'select', label: 'Select', icon: <MousePointer2 size={13} aria-hidden="true" /> },
   { tool: 'rectangle', label: 'Draw rectangle', icon: <Square size={13} aria-hidden="true" /> },
   { tool: 'ellipse', label: 'Draw ellipse', icon: <Circle size={13} aria-hidden="true" /> },

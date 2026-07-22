@@ -35,7 +35,9 @@ describe('whiteboardSvg arrows', () => {
   });
 
   it('draws a legacy arrow along the box diagonal', () => {
-    const svg = whiteboardSvg(documentOf({ id: 'a1', type: 'arrow', x: 5, y: 5, width: 100, height: 50 }));
+    const svg = whiteboardSvg(
+      documentOf({ id: 'a1', type: 'arrow', x: 5, y: 5, width: 100, height: 50 }),
+    );
     expect(svg).toContain('x1="5" y1="5" x2="105" y2="55"');
   });
 });
@@ -49,7 +51,9 @@ describe('whiteboardSvg escaping', () => {
 
   it('stays policy-safe with hostile text', () => {
     expect(() => {
-      assertSafeDiagramSvg(whiteboardSvg(documentOf({ id: 't2', type: 'text', text: '</svg><img>' })));
+      assertSafeDiagramSvg(
+        whiteboardSvg(documentOf({ id: 't2', type: 'text', text: '</svg><img>' })),
+      );
     }).not.toThrow();
   });
 });

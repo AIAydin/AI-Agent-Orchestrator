@@ -151,7 +151,10 @@ export function createWhiteboardElement(
  * Arrows carry their direction in `points`, so a drag up-left produces an arrow that
  * points up-left. `x`/`y`/`width`/`height` are the normalized bounding box.
  */
-export function createArrowElement(start: WhiteboardPoint, end: WhiteboardPoint): WhiteboardElement {
+export function createArrowElement(
+  start: WhiteboardPoint,
+  end: WhiteboardPoint,
+): WhiteboardElement {
   const bounds = boundsOfPoints([start, end]);
   return {
     ...elementBase('arrow', bounds),
@@ -227,7 +230,9 @@ export function updateWhiteboardElement(
         height,
         ...(element.points === undefined
           ? {}
-          : { points: scalePoints(element.points, width / element.width, height / element.height) }),
+          : {
+              points: scalePoints(element.points, width / element.width, height / element.height),
+            }),
         version: element.version + 1,
         versionNonce: randomInteger(),
         updated: Date.now(),

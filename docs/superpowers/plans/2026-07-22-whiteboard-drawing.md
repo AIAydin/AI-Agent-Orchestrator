@@ -25,32 +25,32 @@ Spec: `docs/superpowers/specs/2026-07-22-whiteboard-drawing-design.md`
 
 `apps/desktop/src/renderer/src/components/workspace/content/whiteboard/` (6 files today → 7):
 
-| File | Responsibility |
-|---|---|
-| `model.ts` | **Modify.** Element types, parsing, bounds, factories, and the pure element→path helpers shared by renderer and exporter. |
-| `model.test.ts` | **Create.** Parsing bounds and factory behaviour. |
-| `svg.ts` | **Modify.** Export-string builder; gains `freedraw`, switches arrows to points. |
-| `svg.test.ts` | **Create.** Export output + allowlist regression. |
-| `WhiteboardNodeFace.tsx` | **Modify.** Composition only — strip, canvas, popover, text editor. |
-| `WhiteboardNodeFace.test.tsx` | **Modify.** Face-level behaviour. |
-| `whiteboard.css` | **Modify.** Tool strip + canvas styles. |
-| `WhiteboardPreview.tsx` | **Delete.** Superseded by `WhiteboardCanvas`; no other consumer since the inspector was removed in `694b0c3`. |
+| File                          | Responsibility                                                                                                            |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `model.ts`                    | **Modify.** Element types, parsing, bounds, factories, and the pure element→path helpers shared by renderer and exporter. |
+| `model.test.ts`               | **Create.** Parsing bounds and factory behaviour.                                                                         |
+| `svg.ts`                      | **Modify.** Export-string builder; gains `freedraw`, switches arrows to points.                                           |
+| `svg.test.ts`                 | **Create.** Export output + allowlist regression.                                                                         |
+| `WhiteboardNodeFace.tsx`      | **Modify.** Composition only — strip, canvas, popover, text editor.                                                       |
+| `WhiteboardNodeFace.test.tsx` | **Modify.** Face-level behaviour.                                                                                         |
+| `whiteboard.css`              | **Modify.** Tool strip + canvas styles.                                                                                   |
+| `WhiteboardPreview.tsx`       | **Delete.** Superseded by `WhiteboardCanvas`; no other consumer since the inspector was removed in `694b0c3`.             |
 
 `…/content/whiteboard/drawing/` (new, 11 files):
 
-| File | Responsibility |
-|---|---|
-| `geometry.ts` | Pure interaction maths: pointer→viewBox, drag normalisation, hit-test, resize, stroke sampling. |
-| `geometry.test.ts` | Unit tests for the above. |
-| `useWhiteboardDrawing.ts` | Pointer state machine; local draft state, single commit per gesture. |
-| `useWhiteboardDrawing.test.ts` | `renderHook` tests for the state machine. |
-| `WhiteboardShape.tsx` | The single element→SVG renderer. |
-| `WhiteboardCanvas.tsx` | Interactive `<svg>`: elements, draft, selection outline, resize handles. |
-| `WhiteboardCanvas.test.tsx` | Pointer-driven creation/move/resize tests. |
-| `WhiteboardToolStrip.tsx` | Header tool selector. |
-| `WhiteboardToolStrip.test.tsx` | Tool selection + read-only tests. |
-| `WhiteboardTextEditor.tsx` | Inline text input overlay. |
-| `drawing.css` | Canvas, handle, strip, and text-editor styles. |
+| File                           | Responsibility                                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `geometry.ts`                  | Pure interaction maths: pointer→viewBox, drag normalisation, hit-test, resize, stroke sampling. |
+| `geometry.test.ts`             | Unit tests for the above.                                                                       |
+| `useWhiteboardDrawing.ts`      | Pointer state machine; local draft state, single commit per gesture.                            |
+| `useWhiteboardDrawing.test.ts` | `renderHook` tests for the state machine.                                                       |
+| `WhiteboardShape.tsx`          | The single element→SVG renderer.                                                                |
+| `WhiteboardCanvas.tsx`         | Interactive `<svg>`: elements, draft, selection outline, resize handles.                        |
+| `WhiteboardCanvas.test.tsx`    | Pointer-driven creation/move/resize tests.                                                      |
+| `WhiteboardToolStrip.tsx`      | Header tool selector.                                                                           |
+| `WhiteboardToolStrip.test.tsx` | Tool selection + read-only tests.                                                               |
+| `WhiteboardTextEditor.tsx`     | Inline text input overlay.                                                                      |
+| `drawing.css`                  | Canvas, handle, strip, and text-editor styles.                                                  |
 
 Unchanged but touched: `apps/desktop/src/main/workflow/context/whiteboard-source.ts` (+ its existing test).
 
@@ -65,12 +65,15 @@ Fix: arrows render from their `points` array (`points[0]` → `points[1]`, relat
 ### Task 1: Freedraw and directional arrows in the data model
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/workspace/content/whiteboard/model.ts`
 - Test: `apps/desktop/src/renderer/src/components/workspace/content/whiteboard/model.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: nothing (leaf module).
 - Produces:
+
   ```ts
   export const VIEW_BOX_WIDTH = 960;
   export const VIEW_BOX_HEIGHT = 640;
@@ -78,11 +81,18 @@ Fix: arrows render from their `points` array (`points[0]` → `points[1]`, relat
   export const MAX_POINTS_PER_STROKE = 512;
 
   export type WhiteboardElementType =
-    | 'rectangle' | 'ellipse' | 'diamond' | 'arrow' | 'text' | 'freedraw';
+    | 'rectangle'
+    | 'ellipse'
+    | 'diamond'
+    | 'arrow'
+    | 'text'
+    | 'freedraw';
   export type WhiteboardPoint = readonly [number, number];
   export interface WhiteboardBounds {
-    readonly x: number; readonly y: number;
-    readonly width: number; readonly height: number;
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
   }
 
   // WhiteboardElement.points widens to `readonly WhiteboardPoint[] | undefined`.
@@ -93,10 +103,16 @@ Fix: arrows render from their `points` array (`points[0]` → `points[1]`, relat
     bounds: WhiteboardBounds,
     text?: string,
   ): WhiteboardElement;
-  export function createArrowElement(start: WhiteboardPoint, end: WhiteboardPoint): WhiteboardElement;
-  export function createFreedrawElement(points: readonly WhiteboardPoint[]): WhiteboardElement | null;
+  export function createArrowElement(
+    start: WhiteboardPoint,
+    end: WhiteboardPoint,
+  ): WhiteboardElement;
+  export function createFreedrawElement(
+    points: readonly WhiteboardPoint[],
+  ): WhiteboardElement | null;
   export function arrowEndpoints(element: WhiteboardElement): {
-    readonly start: WhiteboardPoint; readonly end: WhiteboardPoint;
+    readonly start: WhiteboardPoint;
+    readonly end: WhiteboardPoint;
   };
   export function strokePath(element: WhiteboardElement): string;
   // updateWhiteboardElement keeps its signature; it now scales `points` proportionally.
@@ -109,9 +125,16 @@ Create `model.test.ts` covering:
 ```ts
 import { describe, expect, it } from 'vitest';
 import {
-  arrowEndpoints, boundsOfPoints, createArrowElement, createFreedrawElement,
-  createWhiteboardElement, parseWhiteboardDocument, strokePath,
-  updateWhiteboardElement, MAX_POINTS_PER_STROKE, type WhiteboardPoint,
+  arrowEndpoints,
+  boundsOfPoints,
+  createArrowElement,
+  createFreedrawElement,
+  createWhiteboardElement,
+  parseWhiteboardDocument,
+  strokePath,
+  updateWhiteboardElement,
+  MAX_POINTS_PER_STROKE,
+  type WhiteboardPoint,
 } from './model.js';
 
 function documentWith(element: unknown) {
@@ -120,7 +143,12 @@ function documentWith(element: unknown) {
 
 describe('boundsOfPoints', () => {
   it('spans the extremes and enforces the minimum size', () => {
-    expect(boundsOfPoints([[10, 20], [40, 20]])).toEqual({ x: 10, y: 20, width: 30, height: 4 });
+    expect(
+      boundsOfPoints([
+        [10, 20],
+        [40, 20],
+      ]),
+    ).toEqual({ x: 10, y: 20, width: 30, height: 4 });
   });
 });
 
@@ -134,9 +162,15 @@ describe('createArrowElement', () => {
 
 describe('createFreedrawElement', () => {
   it('stores points relative to the bounding box origin', () => {
-    const stroke = createFreedrawElement([[100, 100], [140, 180]]);
+    const stroke = createFreedrawElement([
+      [100, 100],
+      [140, 180],
+    ]);
     expect(stroke).toMatchObject({ type: 'freedraw', x: 100, y: 100, width: 40, height: 80 });
-    expect(stroke?.points).toEqual([[0, 0], [40, 80]]);
+    expect(stroke?.points).toEqual([
+      [0, 0],
+      [40, 80],
+    ]);
   });
 
   it('rejects a stroke with fewer than two points', () => {
@@ -146,22 +180,40 @@ describe('createFreedrawElement', () => {
 
 describe('strokePath', () => {
   it('emits absolute move/line commands', () => {
-    const stroke = createFreedrawElement([[10, 10], [20, 30]]);
+    const stroke = createFreedrawElement([
+      [10, 10],
+      [20, 30],
+    ]);
     expect(strokePath(stroke!)).toBe('M10 10 L20 30');
   });
 });
 
 describe('parseWhiteboardDocument freedraw', () => {
   it('drops non-finite points and caps the count', () => {
-    const points: unknown[] = [[0, 0], [1, Number.NaN], ['x', 2]];
+    const points: unknown[] = [
+      [0, 0],
+      [1, Number.NaN],
+      ['x', 2],
+    ];
     for (let index = 0; index < 600; index += 1) points.push([index, index]);
     const parsed = documentWith({ id: 'f1', type: 'freedraw', points });
     expect(parsed.elements[0]?.points?.length).toBe(MAX_POINTS_PER_STROKE);
-    expect(parsed.elements[0]?.points?.every((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))).toBe(true);
+    expect(
+      parsed.elements[0]?.points?.every((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])),
+    ).toBe(true);
   });
 
   it('rejects a freedraw element left with fewer than two valid points', () => {
-    expect(documentWith({ id: 'f2', type: 'freedraw', points: [[0, 0], [1, Number.NaN]] }).elements).toEqual([]);
+    expect(
+      documentWith({
+        id: 'f2',
+        type: 'freedraw',
+        points: [
+          [0, 0],
+          [1, Number.NaN],
+        ],
+      }).elements,
+    ).toEqual([]);
   });
 
   it('keeps a legacy arrow rendering identically when it has no stored points', () => {
@@ -172,20 +224,27 @@ describe('parseWhiteboardDocument freedraw', () => {
 
 describe('updateWhiteboardElement', () => {
   it('scales stroke points with the box', () => {
-    const stroke = createFreedrawElement([[0, 0], [50, 50]])!;
+    const stroke = createFreedrawElement([
+      [0, 0],
+      [50, 50],
+    ])!;
     const next = updateWhiteboardElement(
       { ...parseWhiteboardDocument({}), elements: [stroke] },
       stroke.id,
       { width: 100, height: 25 },
     );
-    expect(next.elements[0]?.points).toEqual([[0, 0], [100, 25]]);
+    expect(next.elements[0]?.points).toEqual([
+      [0, 0],
+      [100, 25],
+    ]);
   });
 });
 
 describe('createWhiteboardElement', () => {
   it('creates a shape at the supplied bounds', () => {
-    expect(createWhiteboardElement('rectangle', { x: 12, y: 34, width: 56, height: 78 }))
-      .toMatchObject({ type: 'rectangle', x: 12, y: 34, width: 56, height: 78 });
+    expect(
+      createWhiteboardElement('rectangle', { x: 12, y: 34, width: 56, height: 78 }),
+    ).toMatchObject({ type: 'rectangle', x: 12, y: 34, width: 56, height: 78 });
   });
 });
 ```
@@ -227,28 +286,46 @@ git commit -m "feat(whiteboard): freedraw element type and directional arrows in
 ### Task 2: Pure interaction geometry
 
 **Files:**
+
 - Create: `…/content/whiteboard/drawing/geometry.ts`
 - Test: `…/content/whiteboard/drawing/geometry.test.ts`
 
 **Interfaces:**
+
 - Consumes: `WhiteboardPoint`, `WhiteboardBounds`, `WhiteboardElement`, `MIN_ELEMENT_SIZE`, `MAX_POINTS_PER_STROKE`, `VIEW_BOX_WIDTH`, `VIEW_BOX_HEIGHT` from `../model.js`.
 - Produces:
+
   ```ts
   export type WhiteboardHandle = 'nw' | 'ne' | 'sw' | 'se';
   export interface WhiteboardRect {
-    readonly left: number; readonly top: number;
-    readonly width: number; readonly height: number;
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
   }
-  export function viewBoxPoint(rect: WhiteboardRect, clientX: number, clientY: number): WhiteboardPoint;
+  export function viewBoxPoint(
+    rect: WhiteboardRect,
+    clientX: number,
+    clientY: number,
+  ): WhiteboardPoint;
   export function dragBounds(start: WhiteboardPoint, current: WhiteboardPoint): WhiteboardBounds;
-  export function hitTest(elements: readonly WhiteboardElement[], point: WhiteboardPoint): string | null;
+  export function hitTest(
+    elements: readonly WhiteboardElement[],
+    point: WhiteboardPoint,
+  ): string | null;
   export function resizeBounds(
-    element: WhiteboardElement, handle: WhiteboardHandle, point: WhiteboardPoint,
+    element: WhiteboardElement,
+    handle: WhiteboardHandle,
+    point: WhiteboardPoint,
   ): WhiteboardBounds;
   export function appendStrokePoint(
-    points: readonly WhiteboardPoint[], point: WhiteboardPoint,
+    points: readonly WhiteboardPoint[],
+    point: WhiteboardPoint,
   ): readonly WhiteboardPoint[];
-  export function handlePosition(bounds: WhiteboardBounds, handle: WhiteboardHandle): WhiteboardPoint;
+  export function handlePosition(
+    bounds: WhiteboardBounds,
+    handle: WhiteboardHandle,
+  ): WhiteboardPoint;
   ```
 
 - [ ] **Step 1: Write the failing tests**
@@ -314,11 +391,21 @@ describe('resizeBounds', () => {
   const element = createWhiteboardElement('rectangle', { x: 100, y: 100, width: 100, height: 100 });
 
   it('anchors the opposite corner when dragging the north-west handle', () => {
-    expect(resizeBounds(element, 'nw', [150, 150])).toEqual({ x: 150, y: 150, width: 50, height: 50 });
+    expect(resizeBounds(element, 'nw', [150, 150])).toEqual({
+      x: 150,
+      y: 150,
+      width: 50,
+      height: 50,
+    });
   });
 
   it('anchors the top-left when dragging the south-east handle', () => {
-    expect(resizeBounds(element, 'se', [400, 300])).toEqual({ x: 100, y: 100, width: 300, height: 200 });
+    expect(resizeBounds(element, 'se', [400, 300])).toEqual({
+      x: 100,
+      y: 100,
+      width: 300,
+      height: 200,
+    });
   });
 });
 
@@ -328,7 +415,10 @@ describe('appendStrokePoint', () => {
   });
 
   it('appends a point beyond the sampling distance', () => {
-    expect(appendStrokePoint([[0, 0]], [10, 0])).toEqual([[0, 0], [10, 0]]);
+    expect(appendStrokePoint([[0, 0]], [10, 0])).toEqual([
+      [0, 0],
+      [10, 0],
+    ]);
   });
 
   it('stops appending at the cap', () => {
@@ -347,20 +437,31 @@ Expected: FAIL — cannot resolve `./geometry.js`.
 
 ```ts
 import {
-  MAX_POINTS_PER_STROKE, MIN_ELEMENT_SIZE, VIEW_BOX_HEIGHT, VIEW_BOX_WIDTH,
-  type WhiteboardBounds, type WhiteboardElement, type WhiteboardPoint,
+  MAX_POINTS_PER_STROKE,
+  MIN_ELEMENT_SIZE,
+  VIEW_BOX_HEIGHT,
+  VIEW_BOX_WIDTH,
+  type WhiteboardBounds,
+  type WhiteboardElement,
+  type WhiteboardPoint,
 } from '../model.js';
 
 export type WhiteboardHandle = 'nw' | 'ne' | 'sw' | 'se';
 export interface WhiteboardRect {
-  readonly left: number; readonly top: number;
-  readonly width: number; readonly height: number;
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 const SAMPLE_DISTANCE = 2;
 const HIT_TOLERANCE = 4;
 
-export function viewBoxPoint(rect: WhiteboardRect, clientX: number, clientY: number): WhiteboardPoint {
+export function viewBoxPoint(
+  rect: WhiteboardRect,
+  clientX: number,
+  clientY: number,
+): WhiteboardPoint {
   const scale = Math.min(rect.width / VIEW_BOX_WIDTH, rect.height / VIEW_BOX_HEIGHT);
   if (!Number.isFinite(scale) || scale <= 0) return [0, 0];
   const offsetX = (rect.width - VIEW_BOX_WIDTH * scale) / 2;
@@ -391,13 +492,16 @@ git commit -m "feat(whiteboard): pure interaction geometry for the drawing surfa
 ### Task 3: Shared shape renderer and SVG export
 
 **Files:**
+
 - Create: `…/content/whiteboard/drawing/WhiteboardShape.tsx`
 - Modify: `…/content/whiteboard/svg.ts`
 - Test: `…/content/whiteboard/svg.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `arrowEndpoints`, `strokePath`, `VIEW_BOX_WIDTH`, `VIEW_BOX_HEIGHT` from `../model.js` / `./model.js`.
 - Produces:
+
   ```ts
   export function WhiteboardShape(props: {
     readonly element: WhiteboardElement;
@@ -405,6 +509,7 @@ git commit -m "feat(whiteboard): pure interaction geometry for the drawing surfa
     readonly onSelect?: (() => void) | undefined;
   }): JSX.Element;
   ```
+
   `whiteboardSvg` keeps its existing signature.
 
 - [ ] **Step 1: Write the failing test**
@@ -423,7 +528,14 @@ function documentOf(...elements: unknown[]) {
 
 describe('whiteboardSvg', () => {
   it('emits a path for a freehand stroke', () => {
-    const svg = whiteboardSvg(documentOf(createFreedrawElement([[10, 10], [40, 50]])));
+    const svg = whiteboardSvg(
+      documentOf(
+        createFreedrawElement([
+          [10, 10],
+          [40, 50],
+        ]),
+      ),
+    );
     expect(svg).toContain('<path d="M10 10 L40 50"');
     expect(svg).toContain('fill="none"');
   });
@@ -434,7 +546,14 @@ describe('whiteboardSvg', () => {
   });
 
   it('produces export-policy-safe SVG for a freehand stroke', () => {
-    const svg = whiteboardSvg(documentOf(createFreedrawElement([[10, 10], [40, 50]])));
+    const svg = whiteboardSvg(
+      documentOf(
+        createFreedrawElement([
+          [10, 10],
+          [40, 50],
+        ]),
+      ),
+    );
     expect(() => assertSafeDiagramSvg(svg)).not.toThrow();
   });
 
@@ -478,10 +597,12 @@ git commit -m "feat(whiteboard): render and export freehand strokes and directio
 ### Task 4: Freehand in the agent-context snapshot
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/workflow/context/whiteboard-source.ts`
 - Test: the existing test file for that module (find it with `ls apps/desktop/src/main/workflow/context/`)
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks — this module deliberately re-implements its own bounded parsing.
 - Produces: `SafeWhiteboardElement.points` widens to `[number, number][]`; `SafeWhiteboardDocument` gains `truncatedPointCount: number`.
 
@@ -492,9 +613,28 @@ Add to the existing test file:
 ```ts
 it('normalizes a freehand stroke', () => {
   const safe = safeWhiteboardDocument({
-    elements: [{ id: 'f1', type: 'freedraw', x: 0, y: 0, width: 40, height: 50, points: [[0, 0], [40, 50]] }],
+    elements: [
+      {
+        id: 'f1',
+        type: 'freedraw',
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 50,
+        points: [
+          [0, 0],
+          [40, 50],
+        ],
+      },
+    ],
   });
-  expect(safe.elements[0]).toMatchObject({ type: 'freedraw', points: [[0, 0], [40, 50]] });
+  expect(safe.elements[0]).toMatchObject({
+    type: 'freedraw',
+    points: [
+      [0, 0],
+      [40, 50],
+    ],
+  });
 });
 
 it('truncates an oversized stroke and reports the count', () => {
@@ -505,7 +645,9 @@ it('truncates an oversized stroke and reports the count', () => {
 });
 
 it('drops a freehand stroke left with fewer than two valid points', () => {
-  const safe = safeWhiteboardDocument({ elements: [{ id: 'f3', type: 'freedraw', points: [[0, 0]] }] });
+  const safe = safeWhiteboardDocument({
+    elements: [{ id: 'f3', type: 'freedraw', points: [[0, 0]] }],
+  });
   expect(safe.elements).toEqual([]);
   expect(safe.discardedElementCount).toBe(1);
 });
@@ -536,25 +678,49 @@ git commit -m "feat(whiteboard): include bounded freehand strokes in agent conte
 ### Task 5: Gesture state machine
 
 **Files:**
+
 - Create: `…/content/whiteboard/drawing/useWhiteboardDrawing.ts`
 - Test: `…/content/whiteboard/drawing/useWhiteboardDrawing.test.ts`
 
 **Interfaces:**
+
 - Consumes: everything from Tasks 1 and 2.
 - Produces:
+
   ```ts
   export type WhiteboardTool =
-    | 'select' | 'rectangle' | 'ellipse' | 'diamond' | 'arrow' | 'text' | 'freedraw';
+    | 'select'
+    | 'rectangle'
+    | 'ellipse'
+    | 'diamond'
+    | 'arrow'
+    | 'text'
+    | 'freedraw';
 
   export type WhiteboardDraft =
-    | { readonly kind: 'shape'; readonly tool: 'rectangle' | 'ellipse' | 'diamond'; readonly start: WhiteboardPoint; readonly current: WhiteboardPoint }
+    | {
+        readonly kind: 'shape';
+        readonly tool: 'rectangle' | 'ellipse' | 'diamond';
+        readonly start: WhiteboardPoint;
+        readonly current: WhiteboardPoint;
+      }
     | { readonly kind: 'arrow'; readonly start: WhiteboardPoint; readonly current: WhiteboardPoint }
     | { readonly kind: 'stroke'; readonly points: readonly WhiteboardPoint[] }
-    | { readonly kind: 'move'; readonly id: string; readonly start: WhiteboardPoint; readonly current: WhiteboardPoint }
-    | { readonly kind: 'resize'; readonly id: string; readonly handle: WhiteboardHandle; readonly current: WhiteboardPoint };
+    | {
+        readonly kind: 'move';
+        readonly id: string;
+        readonly start: WhiteboardPoint;
+        readonly current: WhiteboardPoint;
+      }
+    | {
+        readonly kind: 'resize';
+        readonly id: string;
+        readonly handle: WhiteboardHandle;
+        readonly current: WhiteboardPoint;
+      };
 
   export interface WhiteboardTextDraft {
-    readonly id: string | null;      // null = creating, non-null = editing an existing element
+    readonly id: string | null; // null = creating, non-null = editing an existing element
     readonly point: WhiteboardPoint; // top-left anchor in viewBox coords
     readonly value: string;
   }
@@ -590,6 +756,7 @@ git commit -m "feat(whiteboard): include bounded freehand strokes in agent conte
   ```
 
 **Behaviour contract:**
+
 - `beginGesture` with `handle` present and a selection → `resize` draft. With the `select` tool and a hit → `move` draft; with the `select` tool and no hit → clears the selection, no draft. With a shape tool → `shape`/`arrow` draft. With `freedraw` → `stroke` draft seeded with the point. With `text` → opens a `textDraft` (no pointer draft).
 - Every branch that will mutate calls `onRecordHistory()` exactly once, at `beginGesture`.
 - `extendGesture` only updates local state.
@@ -640,10 +807,12 @@ git commit -m "feat(whiteboard): pointer gesture state machine with single-commi
 ### Task 6: Interactive canvas
 
 **Files:**
+
 - Create: `…/content/whiteboard/drawing/WhiteboardCanvas.tsx`, `…/drawing/drawing.css`
 - Test: `…/content/whiteboard/drawing/WhiteboardCanvas.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `WhiteboardDrawing` (Task 5), `WhiteboardShape` (Task 3), `viewBoxPoint`/`handlePosition` (Task 2).
 - Produces:
   ```ts
@@ -656,6 +825,7 @@ git commit -m "feat(whiteboard): pointer gesture state machine with single-commi
   ```
 
 **Behaviour contract:**
+
 - Renders `<svg viewBox="0 0 960 640" aria-label="Whiteboard canvas" role="application">` with the background as an in-viewBox `<rect>`, **not** a CSS background, so the white area equals the drawable area.
 - `onPointerDown` calls `setPointerCapture`, maps the event through `viewBoxPoint(target.getBoundingClientRect(), …)`, and calls `drawing.beginGesture`. `onPointerMove` → `extendGesture` (only while a draft exists). `onPointerUp` → `endGesture`. `onPointerCancel` / `onLostPointerCapture` → `cancelGesture`.
 - Renders the live draft as an extra `WhiteboardShape` above the committed ones.
@@ -671,7 +841,14 @@ Create `WhiteboardCanvas.test.tsx`. Stub the rect so coordinate maths is exercis
 ```ts
 function stubRect(element: Element): void {
   vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
-    left: 0, top: 0, width: 960, height: 640, right: 960, bottom: 640, x: 0, y: 0,
+    left: 0,
+    top: 0,
+    width: 960,
+    height: 640,
+    right: 960,
+    bottom: 640,
+    x: 0,
+    y: 0,
     toJSON: () => ({}),
   } as DOMRect);
 }
@@ -707,10 +884,12 @@ git commit -m "feat(whiteboard): interactive drawing canvas with selection handl
 ### Task 7: Tool strip
 
 **Files:**
+
 - Create: `…/content/whiteboard/drawing/WhiteboardToolStrip.tsx`
 - Test: `…/content/whiteboard/drawing/WhiteboardToolStrip.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `WhiteboardTool` (Task 5).
 - Produces:
   ```ts
@@ -752,9 +931,11 @@ git commit -m "feat(whiteboard): persistent tool strip in the node header"
 ### Task 8: Inline text editor
 
 **Files:**
+
 - Create: `…/content/whiteboard/drawing/WhiteboardTextEditor.tsx`
 
 **Interfaces:**
+
 - Consumes: `WhiteboardTextDraft` (Task 5), `VIEW_BOX_WIDTH`/`VIEW_BOX_HEIGHT` (Task 1).
 - Produces:
   ```ts
@@ -791,14 +972,17 @@ git commit -m "feat(whiteboard): inline text editor overlay"
 ### Task 9: Wire the face together
 
 **Files:**
+
 - Modify: `…/content/whiteboard/WhiteboardNodeFace.tsx`, `…/content/whiteboard/WhiteboardNodeFace.test.tsx`, `…/content/whiteboard/whiteboard.css`
 - Delete: `…/content/whiteboard/WhiteboardPreview.tsx`
 
 **Interfaces:**
+
 - Consumes: everything from Tasks 1–8.
 - Produces: no new exports.
 
 **Behaviour contract:**
+
 - The header strip renders the element count, then `WhiteboardToolStrip`, then the existing Tools button.
 - The body renders `WhiteboardCanvas`, the `WhiteboardTextEditor` when `drawing.textDraft` is non-null, and the existing Tools popover.
 - The Tools popover **keeps** the per-element numeric editor, the stroke/fill colour pickers, the delete button, the agent-context picker, and SVG export. It **loses** the four create-shape buttons and the annotation text field.
@@ -856,6 +1040,7 @@ corepack pnpm --dir apps/desktop typecheck
 corepack pnpm lint
 corepack pnpm format:check
 ```
+
 Expected: all clean, zero warnings.
 
 - [ ] **Step 3: Structure gate — from the MAIN checkout, not this worktree**
@@ -863,6 +1048,7 @@ Expected: all clean, zero warnings.
 ```bash
 cd "/Users/aydin/AI Agent Orchestrator" && node scripts/structure/check.mjs
 ```
+
 Expected: clean. If it reports `content/whiteboard/drawing` over 12 files, fold a test file into a sibling rather than adding a directory.
 
 - [ ] **Step 4: Update the implementation checklist**

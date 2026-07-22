@@ -27,8 +27,12 @@ describe('WhiteboardToolStrip', () => {
 
   it('marks only the active tool as pressed', () => {
     render(<WhiteboardToolStrip tool="freedraw" readOnly={false} onSelectTool={() => undefined} />);
-    expect(screen.getByRole('button', { name: 'Draw freehand' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Draw freehand' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
   });
 
   it('reports the chosen tool', () => {

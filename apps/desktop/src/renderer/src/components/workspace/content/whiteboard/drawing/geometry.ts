@@ -93,7 +93,10 @@ export function resizeBounds(
 }
 
 /** The viewBox coordinate of one corner of a box. */
-export function handlePosition(bounds: WhiteboardBounds, handle: WhiteboardHandle): WhiteboardPoint {
+export function handlePosition(
+  bounds: WhiteboardBounds,
+  handle: WhiteboardHandle,
+): WhiteboardPoint {
   return [
     handle === 'ne' || handle === 'se' ? bounds.x + bounds.width : bounds.x,
     handle === 'sw' || handle === 'se' ? bounds.y + bounds.height : bounds.y,

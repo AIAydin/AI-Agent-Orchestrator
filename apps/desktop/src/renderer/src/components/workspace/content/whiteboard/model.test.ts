@@ -25,31 +25,40 @@ function requireElement(element: WhiteboardElement | null | undefined): Whiteboa
 
 describe('boundsOfPoints', () => {
   it('spans the extremes of the supplied points', () => {
-    expect(boundsOfPoints([
-      [10, 20],
-      [50, 90],
-    ])).toEqual({ x: 10, y: 20, width: 40, height: 70 });
+    expect(
+      boundsOfPoints([
+        [10, 20],
+        [50, 90],
+      ]),
+    ).toEqual({ x: 10, y: 20, width: 40, height: 70 });
   });
 
   it('enforces the minimum size on a degenerate axis', () => {
-    expect(boundsOfPoints([
-      [10, 20],
-      [40, 20],
-    ])).toEqual({ x: 10, y: 20, width: 30, height: 4 });
+    expect(
+      boundsOfPoints([
+        [10, 20],
+        [40, 20],
+      ]),
+    ).toEqual({ x: 10, y: 20, width: 30, height: 4 });
   });
 });
 
 describe('createWhiteboardElement', () => {
   it('creates a shape at the supplied bounds', () => {
-    expect(createWhiteboardElement('rectangle', { x: 12, y: 34, width: 56, height: 78 })).toMatchObject(
-      { type: 'rectangle', x: 12, y: 34, width: 56, height: 78 },
-    );
+    expect(
+      createWhiteboardElement('rectangle', { x: 12, y: 34, width: 56, height: 78 }),
+    ).toMatchObject({ type: 'rectangle', x: 12, y: 34, width: 56, height: 78 });
   });
 
   it('creates transparent text carrying its own copy', () => {
-    expect(createWhiteboardElement('text', { x: 0, y: 0, width: 180, height: 42 }, 'Login')).toMatchObject(
-      { type: 'text', text: 'Login', originalText: 'Login', backgroundColor: 'transparent' },
-    );
+    expect(
+      createWhiteboardElement('text', { x: 0, y: 0, width: 180, height: 42 }, 'Login'),
+    ).toMatchObject({
+      type: 'text',
+      text: 'Login',
+      originalText: 'Login',
+      backgroundColor: 'transparent',
+    });
   });
 });
 
@@ -69,10 +78,12 @@ describe('createArrowElement', () => {
 
 describe('createFreedrawElement', () => {
   it('stores points relative to the bounding box origin', () => {
-    const stroke = requireElement(createFreedrawElement([
-      [100, 100],
-      [140, 180],
-    ]));
+    const stroke = requireElement(
+      createFreedrawElement([
+        [100, 100],
+        [140, 180],
+      ]),
+    );
     expect(stroke).toMatchObject({ type: 'freedraw', x: 100, y: 100, width: 40, height: 80 });
     expect(stroke.points).toEqual([
       [0, 0],
@@ -88,10 +99,12 @@ describe('createFreedrawElement', () => {
 
 describe('strokePath', () => {
   it('emits absolute move and line commands', () => {
-    const stroke = requireElement(createFreedrawElement([
-      [10, 10],
-      [20, 30],
-    ]));
+    const stroke = requireElement(
+      createFreedrawElement([
+        [10, 10],
+        [20, 30],
+      ]),
+    );
     expect(strokePath(stroke)).toBe('M10 10 L20 30');
   });
 });
@@ -105,13 +118,7 @@ describe('parseWhiteboardDocument freehand strokes', () => {
   });
 
   it('drops points that are not pairs of finite numbers', () => {
-    const points: unknown[] = [
-      [0, 0],
-      [1, Number.NaN],
-      ['x', 2],
-      [5],
-      [2, 2],
-    ];
+    const points: unknown[] = [[0, 0], [1, Number.NaN], ['x', 2], [5], [2, 2]];
     expect(parsedElement({ id: 'f2', type: 'freedraw', points })?.points).toEqual([
       [0, 0],
       [2, 2],
@@ -134,15 +141,17 @@ describe('parseWhiteboardDocument freehand strokes', () => {
       [0, 0],
       [1, Number.NaN],
     ];
-    expect(parseWhiteboardDocument({ elements: [{ id: 'f4', type: 'freedraw', points }] }).elements).toEqual(
-      [],
-    );
+    expect(
+      parseWhiteboardDocument({ elements: [{ id: 'f4', type: 'freedraw', points }] }).elements,
+    ).toEqual([]);
   });
 });
 
 describe('parseWhiteboardDocument arrows', () => {
   it('keeps a legacy arrow rendering identically when it stores no points', () => {
-    const arrow = requireElement(parsedElement({ id: 'a1', type: 'arrow', x: 5, y: 5, width: 100, height: 50 }));
+    const arrow = requireElement(
+      parsedElement({ id: 'a1', type: 'arrow', x: 5, y: 5, width: 100, height: 50 }),
+    );
     expect(arrowEndpoints(arrow)).toEqual({ start: [5, 5], end: [105, 55] });
   });
 
@@ -167,10 +176,12 @@ describe('parseWhiteboardDocument arrows', () => {
 
 describe('updateWhiteboardElement', () => {
   it('scales stroke points with the box', () => {
-    const stroke = requireElement(createFreedrawElement([
-      [0, 0],
-      [50, 50],
-    ]));
+    const stroke = requireElement(
+      createFreedrawElement([
+        [0, 0],
+        [50, 50],
+      ]),
+    );
     const next = updateWhiteboardElement(
       { ...parseWhiteboardDocument({}), elements: [stroke] },
       stroke.id,
@@ -196,10 +207,12 @@ describe('updateWhiteboardElement', () => {
   });
 
   it('moves an element without touching its point count', () => {
-    const stroke = requireElement(createFreedrawElement([
-      [0, 0],
-      [50, 50],
-    ]));
+    const stroke = requireElement(
+      createFreedrawElement([
+        [0, 0],
+        [50, 50],
+      ]),
+    );
     const next = updateWhiteboardElement(
       { ...parseWhiteboardDocument({}), elements: [stroke] },
       stroke.id,

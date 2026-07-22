@@ -30,11 +30,26 @@ type ShapeTool = 'rectangle' | 'ellipse' | 'diamond';
 
 /** An in-flight gesture. Drafts live in local state and never touch the graph until commit. */
 export type WhiteboardDraft =
-  | { readonly kind: 'shape'; readonly tool: ShapeTool; readonly start: WhiteboardPoint; readonly current: WhiteboardPoint }
+  | {
+      readonly kind: 'shape';
+      readonly tool: ShapeTool;
+      readonly start: WhiteboardPoint;
+      readonly current: WhiteboardPoint;
+    }
   | { readonly kind: 'arrow'; readonly start: WhiteboardPoint; readonly current: WhiteboardPoint }
   | { readonly kind: 'stroke'; readonly points: readonly WhiteboardPoint[] }
-  | { readonly kind: 'move'; readonly id: string; readonly start: WhiteboardPoint; readonly current: WhiteboardPoint }
-  | { readonly kind: 'resize'; readonly id: string; readonly handle: WhiteboardHandle; readonly current: WhiteboardPoint };
+  | {
+      readonly kind: 'move';
+      readonly id: string;
+      readonly start: WhiteboardPoint;
+      readonly current: WhiteboardPoint;
+    }
+  | {
+      readonly kind: 'resize';
+      readonly id: string;
+      readonly handle: WhiteboardHandle;
+      readonly current: WhiteboardPoint;
+    };
 
 export interface WhiteboardTextDraft {
   /** `null` while creating; the element id while editing an existing one. */
@@ -265,7 +280,11 @@ export function useWhiteboardDrawing({
     if (draft.kind === 'resize') {
       const element = elements.find((candidate) => candidate.id === draft.id);
       if (element === undefined) return document;
-      return updateWhiteboardElement(document, draft.id, resizeBounds(element, draft.handle, draft.current));
+      return updateWhiteboardElement(
+        document,
+        draft.id,
+        resizeBounds(element, draft.handle, draft.current),
+      );
     }
     return document;
   }, [document, draft, elements]);

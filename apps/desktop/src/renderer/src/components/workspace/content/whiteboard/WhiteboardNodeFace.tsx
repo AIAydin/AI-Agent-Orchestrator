@@ -44,7 +44,8 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
     (next: WhiteboardDocument, nextAnnotationIds: readonly string[] | undefined): void => {
       session.updateNodeData(id, {
         excalidraw: next,
-        annotationIds: nextAnnotationIds === undefined ? [...annotationIds] : [...nextAnnotationIds],
+        annotationIds:
+          nextAnnotationIds === undefined ? [...annotationIds] : [...nextAnnotationIds],
       });
     },
     [annotationIds, id, session],
@@ -94,7 +95,11 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
         <span className="node-face-strip-label">
           {activeElements.length} element{activeElements.length === 1 ? '' : 's'}
         </span>
-        <WhiteboardToolStrip tool={drawing.tool} readOnly={readOnly} onSelectTool={drawing.setTool} />
+        <WhiteboardToolStrip
+          tool={drawing.tool}
+          readOnly={readOnly}
+          onSelectTool={drawing.setTool}
+        />
         <button
           type="button"
           aria-label="Whiteboard tools"
@@ -108,10 +113,15 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
         </button>
       </div>
       <div className="node-face-body nowheel nodrag" ref={body}>
-        <WhiteboardCanvas drawing={drawing} readOnly={readOnly} className="whiteboard-face-canvas" />
+        <WhiteboardCanvas
+          drawing={drawing}
+          readOnly={readOnly}
+          className="whiteboard-face-canvas"
+        />
         {drawing.textDraft === null ? null : (
           <WhiteboardTextEditor
             draft={drawing.textDraft}
+            name={`node-${id}-whiteboard-text`}
             surface={body.current}
             onChange={drawing.changeText}
             onCommit={drawing.commitText}
@@ -206,7 +216,10 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               </section>
             )}
 
-            <section className="whiteboard-face-context" aria-label="Share whiteboard with an agent">
+            <section
+              className="whiteboard-face-context"
+              aria-label="Share whiteboard with an agent"
+            >
               <strong>
                 <Link2 size={12} aria-hidden="true" /> Agent context
               </strong>

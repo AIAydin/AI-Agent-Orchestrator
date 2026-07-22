@@ -18,7 +18,10 @@ function documentOf(...elements: WhiteboardElement[]): WhiteboardDocument {
   return { ...parseWhiteboardDocument({}), elements };
 }
 
-function setup(document: WhiteboardDocument = documentOf(), options: { readOnly?: boolean; annotationIds?: string[] } = {}) {
+function setup(
+  document: WhiteboardDocument = documentOf(),
+  options: { readOnly?: boolean; annotationIds?: string[] } = {},
+) {
   const onPersist = vi.fn();
   const onRecordHistory = vi.fn();
   const view = renderHook(() =>
@@ -103,7 +106,13 @@ describe('creating shapes by dragging', () => {
       result.current.extendGesture([60, 80]);
     });
 
-    expect(result.current.draftElement).toMatchObject({ type: 'ellipse', x: 10, y: 10, width: 50, height: 70 });
+    expect(result.current.draftElement).toMatchObject({
+      type: 'ellipse',
+      x: 10,
+      y: 10,
+      width: 50,
+      height: 70,
+    });
     expect(onPersist).not.toHaveBeenCalled();
   });
 });
@@ -346,7 +355,10 @@ describe('inline text', () => {
       result.current.commitText();
     });
 
-    expect(persistedDocument(onPersist).elements[0]).toMatchObject({ text: 'New', originalText: 'New' });
+    expect(persistedDocument(onPersist).elements[0]).toMatchObject({
+      text: 'New',
+      originalText: 'New',
+    });
     expect(onPersist.mock.calls[0]?.[1]).toBeUndefined();
   });
 });

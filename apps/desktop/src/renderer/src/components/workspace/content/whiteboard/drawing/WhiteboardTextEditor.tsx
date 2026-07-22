@@ -11,12 +11,14 @@ import type { WhiteboardTextDraft } from './useWhiteboardDrawing.js';
  */
 export function WhiteboardTextEditor({
   draft,
+  name,
   surface,
   onChange,
   onCommit,
   onCancel,
 }: {
   readonly draft: WhiteboardTextDraft;
+  readonly name: string;
   readonly surface: HTMLElement | null;
   readonly onChange: (value: string) => void;
   readonly onCommit: () => void;
@@ -35,6 +37,7 @@ export function WhiteboardTextEditor({
     <input
       ref={input}
       className="whiteboard-text-editor nodrag"
+      name={name}
       aria-label="Whiteboard text"
       value={draft.value}
       maxLength={20_000}

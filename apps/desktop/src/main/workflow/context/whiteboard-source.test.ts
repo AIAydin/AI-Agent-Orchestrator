@@ -89,13 +89,21 @@ describe('safeWhiteboardDocument disclosure guarantees', () => {
   });
 
   it('omits opaque fields rather than copying them into agent context', () => {
-    const safe = documentOf({ id: 'r2', type: 'rectangle', link: 'https://example.com', customData: { a: 1 } });
+    const safe = documentOf({
+      id: 'r2',
+      type: 'rectangle',
+      link: 'https://example.com',
+      customData: { a: 1 },
+    });
     expect(safe.elements[0]).not.toHaveProperty('link');
     expect(safe.elements[0]).not.toHaveProperty('customData');
   });
 
   it('truncates text and counts elements beyond the cap', () => {
-    const many = Array.from({ length: 1_010 }, (_, index) => ({ id: `n${String(index)}`, type: 'rectangle' }));
+    const many = Array.from({ length: 1_010 }, (_, index) => ({
+      id: `n${String(index)}`,
+      type: 'rectangle',
+    }));
     const safe = safeWhiteboardDocument({ elements: many });
     expect(safe.elements).toHaveLength(1_000);
     expect(safe.truncatedElementCount).toBe(10);

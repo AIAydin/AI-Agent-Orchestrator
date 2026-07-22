@@ -196,7 +196,10 @@ describe('WhiteboardNodeFace inline text', () => {
 describe('WhiteboardNodeFace locking', () => {
   it('disables every tool and the popover for locked nodes', () => {
     renderFace({ locked: true });
-    expect(screen.getByRole('button', { name: 'Whiteboard tools' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Whiteboard tools' })).toHaveProperty(
+      'disabled',
+      true,
+    );
     expect(screen.getByRole('button', { name: 'Draw rectangle' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Draw freehand' })).toHaveProperty('disabled', true);
   });
@@ -230,7 +233,9 @@ describe('WhiteboardNodeFace popover', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Whiteboard tools' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete selected element' }));
 
-    expect(lastPatch().excalidraw.elements.every((element) => element.isDeleted === true)).toBe(true);
+    expect(lastPatch().excalidraw.elements.every((element) => element.isDeleted === true)).toBe(
+      true,
+    );
   });
 
   it('exports the whiteboard as an SVG through the native bridge', async () => {

@@ -11,10 +11,10 @@ The Whiteboard node becomes an actual drawing surface: pick a tool, drag on the 
 
 The whiteboard face renders an **inert** SVG with no pointer handling at all:
 
-- `WhiteboardPreview.tsx` puts no handler on the `<svg>` itself. The only interaction is `onClick` on an *already existing* element, to select it. Clicking or dragging empty canvas is a no-op by construction.
+- `WhiteboardPreview.tsx` puts no handler on the `<svg>` itself. The only interaction is `onClick` on an _already existing_ element, to select it. Clicking or dragging empty canvas is a no-op by construction.
 - `grep -rn "onPointer|onMouseDown|onDrag|draggable"` across the whiteboard directory returns **zero matches**.
 - Shapes can only be created from the "Tools" popover, and land at a fixed staircase position — `x = 24 + (index % 8) * 22`, `y = 24 + (index % 6) * 22` (`model.ts:88`).
-- They are then repositioned and resized by *typing numbers* into x/y/width/height fields in the face's Tools popover (`WhiteboardNodeFace.tsx`, the `whiteboard-face-number-grid` block).
+- They are then repositioned and resized by _typing numbers_ into x/y/width/height fields in the face's Tools popover (`WhiteboardNodeFace.tsx`, the `whiteboard-face-number-grid` block).
 
 This matches the original intent — `IMPLEMENTATION_CHECKLIST.md:1489` describes "UI-only rectangle, ellipse, diamond, arrow, and text-annotation editing… rendered solely with Forgeboard-owned inert React SVG primitives" — so this is an unimplemented capability, not a regression.
 
@@ -97,7 +97,7 @@ Keeping the graph untouched mid-drag is what prevents a 500-point stroke from tr
 
 ### 5. Drawable-area fix
 
-Today the white area is a CSS `background` on the `<svg>` element, so it also paints the letterbox margins — the white region is *larger* than the drawable 3:2 region, which would make edge clicks feel dead once clicks matter. The background becomes a `<rect>` inside the viewBox, so the white area is exactly the drawable area. This matches what `svg.ts` already emits for export.
+Today the white area is a CSS `background` on the `<svg>` element, so it also paints the letterbox margins — the white region is _larger_ than the drawable 3:2 region, which would make edge clicks feel dead once clicks matter. The background becomes a `<rect>` inside the viewBox, so the white area is exactly the drawable area. This matches what `svg.ts` already emits for export.
 
 ### 6. Export and agent context
 
@@ -113,7 +113,7 @@ Pointer event → `viewBoxPoint` → gesture hook draft (local state, no graph w
 - Pointer coordinates outside the drawable region clamp into the viewBox rather than creating off-canvas elements.
 - A degenerate gesture (drag under the 4-unit minimum, stroke under 2 points) commits nothing and leaves no history entry beyond the one already recorded.
 - A pointer lost mid-gesture (`pointercancel`, capture loss) discards the draft.
-- The new per-stroke point cap is enforced on write (during sampling) *and* re-enforced on parse, so hand-edited or corrupt persisted JSON cannot exceed it. The existing `MAX_ELEMENTS = 2_000` document cap keeps being enforced on parse.
+- The new per-stroke point cap is enforced on write (during sampling) _and_ re-enforced on parse, so hand-edited or corrupt persisted JSON cannot exceed it. The existing `MAX_ELEMENTS = 2_000` document cap keeps being enforced on parse.
 - Read-only nodes accept selection but reject every mutation.
 
 ## Testing
