@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import type { WorkshopNodeData } from '../canvas/CanvasNode.js';
 import { CanvasNodeInteractionProvider } from '../canvas/interactions/CanvasNodeInteractionContext.js';
@@ -19,7 +19,10 @@ const reportError = vi.fn();
 const previewsGet = vi.fn(() => Promise.resolve({ ok: true, value: null }));
 const previewsStart = vi.fn(() => Promise.resolve({ ok: true, value: null }));
 const previewsStop = vi.fn(() => Promise.resolve({ ok: true, value: null }));
-const previewsOnEvent = vi.fn(() => () => undefined);
+const previewsOnEvent = vi.fn<(listener: (event: unknown) => void) => () => void>(
+  () => () => undefined,
+);
+const previewsSetAllowedOrigin = vi.fn(() => Promise.resolve({ ok: true, value: null }));
 
 afterEach(() => {
   cleanup();
@@ -34,12 +37,15 @@ beforeEach(() => {
   previewsStart.mockClear();
   previewsStop.mockClear();
   previewsOnEvent.mockClear();
+  previewsSetAllowedOrigin.mockClear();
+  previewsSetAllowedOrigin.mockImplementation(() => Promise.resolve({ ok: true, value: null }));
   (window as unknown as { forgeboard: unknown }).forgeboard = {
     previews: {
       get: previewsGet,
       start: previewsStart,
       stop: previewsStop,
       onEvent: previewsOnEvent,
+      setAllowedOrigin: previewsSetAllowedOrigin,
     },
   };
 });
@@ -84,9 +90,9 @@ function renderFace(
 }
 
 describe('PreviewNodeFace', () => {
-  it('shows only a port input and hint while no port is set', () => {
+  it('shows only an address input and hint while no address is set', () => {
     const { container } = renderFace('web-preview');
-    expect(screen.getByLabelText('Preview port')).toHaveProperty('value', '');
+    expect(screen.getByLabelText('Preview address')).toHaveProperty('value', '');
     expect(screen.getByText(/enter the port/i)).toBeTruthy();
     expect(container.querySelector('webview')).toBeNull();
     expect(screen.getByRole('button', { name: 'Reload preview' })).toHaveProperty('disabled', true);
@@ -94,20 +100,20 @@ describe('PreviewNodeFace', () => {
 
   it('persists the typed port on Enter', () => {
     renderFace('web-preview');
-    const input = screen.getByLabelText('Preview port');
+    const input = screen.getByLabelText('Preview address');
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: '5173' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(recordHistory).toHaveBeenCalled();
-    expect(updateNodeData).toHaveBeenCalledWith('n1', { previewPort: 5173 });
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { previewPort: 5173, url: undefined });
   });
 
   it('clears the port when the input is emptied', () => {
     renderFace('web-preview', { previewPort: 5173 });
-    const input = screen.getByLabelText('Preview port');
+    const input = screen.getByLabelText('Preview address');
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.blur(input);
-    expect(updateNodeData).toHaveBeenCalledWith('n1', { previewPort: undefined });
+    expect(updateNodeData).toHaveBeenCalledWith('n1', { previewPort: undefined, url: undefined });
   });
 
   it('renders a partitioned localhost webview once a port is set', () => {
@@ -128,12 +134,12 @@ describe('PreviewNodeFace', () => {
     expect(container.querySelector('webview')).not.toBeNull();
   });
 
-  it('disables the port input for locked nodes and read-only collaborators', () => {
+  it('disables the address input for locked nodes and read-only collaborators', () => {
     renderFace('web-preview', { locked: true });
-    expect(screen.getByLabelText('Preview port')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Preview address')).toHaveProperty('disabled', true);
     cleanup();
     renderFace('web-preview', {}, true);
-    expect(screen.getByLabelText('Preview port')).toHaveProperty('disabled', true);
+    expect(screen.getByLabelText('Preview address')).toHaveProperty('disabled', true);
   });
 
   it('starts the dev server through the previews IPC when a script is available', () => {
@@ -170,5 +176,129 @@ describe('PreviewNodeFace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Configure preview' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open project settings' }));
     expect(openSettings).toHaveBeenCalled();
+  });
+
+  describe('address classification', () => {
+    it('classifies a full https URL as an address, clearing previewPort', () => {
+      renderFace('web-preview', { previewPort: 5173 });
+      const input = screen.getByLabelText('Preview address');
+      fireEvent.change(input, { target: { value: 'https://app.staging.com/dashboard' } });
+      fireEvent.blur(input);
+      expect(updateNodeData).toHaveBeenCalledWith('n1', {
+        previewPort: undefined,
+        url: 'https://app.staging.com/dashboard',
+      });
+    });
+
+    it('shows an inline error for junk input and does not update node data', () => {
+      renderFace('web-preview');
+      const input = screen.getByLabelText('Preview address');
+      fireEvent.change(input, { target: { value: 'not a url or port' } });
+      fireEvent.blur(input);
+      expect(updateNodeData).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert').textContent).toMatch(/port|url/i);
+    });
+
+    it('rejects a port number out of the 1-65535 range as junk', () => {
+      renderFace('web-preview');
+      const input = screen.getByLabelText('Preview address');
+      fireEvent.change(input, { target: { value: '70000' } });
+      fireEvent.blur(input);
+      expect(updateNodeData).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toBeTruthy();
+    });
+
+    it('clears both port and url when the address is emptied', () => {
+      renderFace('web-preview', { url: 'https://app.staging.com/' });
+      const input = screen.getByLabelText('Preview address');
+      fireEvent.change(input, { target: { value: '' } });
+      fireEvent.blur(input);
+      expect(updateNodeData).toHaveBeenCalledWith('n1', { previewPort: undefined, url: undefined });
+    });
+
+    it('displays the stored url in the address field', () => {
+      renderFace('web-preview', { url: 'https://app.staging.com/dashboard' });
+      expect(screen.getByLabelText('Preview address')).toHaveProperty(
+        'value',
+        'https://app.staging.com/dashboard',
+      );
+    });
+  });
+
+  describe('URL mode', () => {
+    it('registers the allowed origin before mounting the external webview, then mounts it', async () => {
+      const resolvers: Array<() => void> = [];
+      previewsSetAllowedOrigin.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolvers.push(() => resolve({ ok: true, value: null }));
+          }),
+      );
+      const { container } = renderFace('web-preview', { url: 'https://app.staging.com/dashboard' });
+      // Registration is in flight — the guest must not be mounted yet.
+      expect(container.querySelector('webview')).toBeNull();
+      expect(previewsSetAllowedOrigin).toHaveBeenCalledWith({
+        projectId: 'p1',
+        nodeId: 'n1',
+        origin: 'https://app.staging.com',
+      });
+      resolvers.forEach((resolve) => resolve());
+      await waitFor(() => expect(container.querySelector('webview')).not.toBeNull());
+      const webview = container.querySelector('webview');
+      expect(webview?.getAttribute('src')).toBe('https://app.staging.com/dashboard');
+      expect(webview?.getAttribute('partition')).toBe('preview:p1:n1');
+    });
+
+    it('clears the registered origin on unmount', async () => {
+      const { unmount } = renderFace('web-preview', { url: 'https://app.staging.com/dashboard' });
+      await waitFor(() =>
+        expect(previewsSetAllowedOrigin).toHaveBeenCalledWith({
+          projectId: 'p1',
+          nodeId: 'n1',
+          origin: 'https://app.staging.com',
+        }),
+      );
+      previewsSetAllowedOrigin.mockClear();
+      unmount();
+      expect(previewsSetAllowedOrigin).toHaveBeenCalledWith({
+        projectId: 'p1',
+        nodeId: 'n1',
+        origin: null,
+      });
+    });
+
+    it('hides the dev-server Start/Stop control in URL mode', async () => {
+      renderFace('web-preview', { url: 'https://app.staging.com/' });
+      await waitFor(() =>
+        expect(previewsSetAllowedOrigin).toHaveBeenCalledWith(
+          expect.objectContaining({ origin: 'https://app.staging.com' }),
+        ),
+      );
+      expect(screen.queryByRole('button', { name: 'Start dev server' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Stop dev server' })).toBeNull();
+      // Reload stays available.
+      expect(screen.getByRole('button', { name: 'Reload preview' })).toBeTruthy();
+    });
+
+    it('suppresses the dev-server auto-port bridge while in URL mode', () => {
+      const listeners: Array<(event: unknown) => void> = [];
+      previewsOnEvent.mockImplementation((listener) => {
+        listeners.push(listener);
+        return () => undefined;
+      });
+      renderFace('web-preview', { url: 'https://app.staging.com/' });
+      for (const listener of listeners) {
+        listener({
+          kind: 'state',
+          projectId: 'p1',
+          nodeId: 'n1',
+          session: {
+            status: 'ready',
+            processes: [{ port: 5173, previewUrl: 'http://localhost:5173/' }],
+          },
+        });
+      }
+      expect(updateNodeData).not.toHaveBeenCalledWith('n1', { previewPort: 5173 });
+    });
   });
 });

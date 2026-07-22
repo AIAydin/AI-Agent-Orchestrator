@@ -65,6 +65,7 @@ function createHarness(overrides: Partial<PreviewWebviewSecurityOptions> = {}) {
     confirmOpenExternal: vi.fn(() => Promise.resolve(true)),
     openExternal: vi.fn(() => Promise.resolve(undefined)),
     audit: vi.fn(),
+    allowedOriginForGuestSession: () => null,
     ...overrides,
   };
   installPreviewWebviewSecurity(app as never, options);
@@ -212,6 +213,53 @@ describe('installPreviewWebviewSecurity', () => {
     attach(session);
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it('URL mode: permits navigation to the configured external origin before and after pinning, and still blocks other origins', () => {
+    const targetSession = new FakeSession();
+    const { attach } = createHarness({
+      allowedOriginForGuestSession: (session) =>
+        (session as unknown) === (targetSession as unknown) ? 'https://app.staging.com' : null,
+    });
+    const contents = attach(targetSession);
+    const prePin = { preventDefault: vi.fn() };
+    contents.emit('will-navigate', prePin, 'https://app.staging.com/dashboard');
+    expect(prePin.preventDefault).not.toHaveBeenCalled();
+    contents.emit('did-navigate', {}, 'https://app.staging.com/dashboard');
+    const samePage = { preventDefault: vi.fn() };
+    contents.emit('will-navigate', samePage, 'https://app.staging.com/other-page');
+    expect(samePage.preventDefault).not.toHaveBeenCalled();
+    const otherOrigin = { preventDefault: vi.fn() };
+    contents.emit('will-navigate', otherOrigin, 'https://evil.example.com/');
+    expect(otherOrigin.preventDefault).toHaveBeenCalled();
+  });
+
+  it('URL mode: the guest session request filter allows a cross-origin subresource that loopback mode would cancel', () => {
+    const externalSession = new FakeSession();
+    const { attach } = createHarness({
+      allowedOriginForGuestSession: (session) =>
+        (session as unknown) === (externalSession as unknown) ? 'https://app.staging.com' : null,
+    });
+    const { session: loopbackSession } = attach(new FakeSession());
+    attach(externalSession);
+    expect(loopbackSession.webRequest.allows('https://cdn.example.com/font.woff2')).toBe(false);
+    expect(externalSession.webRequest.allows('https://cdn.example.com/font.woff2')).toBe(true);
+    // Credentialed URLs are still rejected in URL mode.
+    expect(externalSession.webRequest.allows('https://user:pass@cdn.example.com/x')).toBe(false);
+  });
+
+  it('guest hardening (no preload, contextIsolation, sandbox) is unaffected by the configured origin', () => {
+    const { attach } = createHarness({
+      allowedOriginForGuestSession: () => 'https://app.staging.com',
+    });
+    const { session } = attach();
+    expect(session.permissionCheck?.()).toBe(false);
+    const download = { preventDefault: vi.fn() };
+    session.emit('will-download', download);
+    expect(download.preventDefault).toHaveBeenCalled();
+    const preferences: Record<string, unknown> = { contextIsolation: false, sandbox: false };
+    hardenAttachingWebviewPreferences(preferences);
+    expect(preferences).toMatchObject({ contextIsolation: true, sandbox: true, webSecurity: true });
+  });
 });
 
 describe('shouldAttachPreviewWebview', () => {
@@ -237,6 +285,30 @@ describe('shouldAttachPreviewWebview', () => {
         preloadURL: '',
       }),
     ).toBe(true);
+  });
+
+  it('accepts the configured origin for the guest partition (URL mode), and still rejects other origins', () => {
+    const allowedOriginForPartition = (partition: string): string | null =>
+      partition === 'preview:p1:n1' ? 'https://app.staging.com' : null;
+    expect(
+      shouldAttachPreviewWebview(
+        { partition: 'preview:p1:n1', src: 'https://app.staging.com/dashboard' },
+        allowedOriginForPartition,
+      ),
+    ).toBe(true);
+    expect(
+      shouldAttachPreviewWebview(
+        { partition: 'preview:p1:n1', src: 'https://evil.example.com/' },
+        allowedOriginForPartition,
+      ),
+    ).toBe(false);
+    // A different, unregistered partition stays loopback-only.
+    expect(
+      shouldAttachPreviewWebview(
+        { partition: 'preview:p1:n2', src: 'https://app.staging.com/dashboard' },
+        allowedOriginForPartition,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -274,9 +346,35 @@ describe('url helpers', () => {
     expect(allowedGuestNavigation('http://localhost:9999/', pinned)).toBe(false);
   });
 
+  it('allowedGuestNavigation permits the configured external origin before pinning and still blocks a different origin', () => {
+    expect(
+      allowedGuestNavigation('https://app.staging.com/', null, 'https://app.staging.com'),
+    ).toBe(true);
+    expect(
+      allowedGuestNavigation('https://evil.example.com/', null, 'https://app.staging.com'),
+    ).toBe(false);
+    // Loopback stays allowed regardless of a configured external origin.
+    expect(allowedGuestNavigation(ALLOWED, null, 'https://app.staging.com')).toBe(true);
+  });
+
   it('isAllowedGuestRequest rejects credentials and non-loopback hosts', () => {
     expect(isAllowedGuestRequest('http://user:pass@127.0.0.1:5173/')).toBe(false);
     expect(isAllowedGuestRequest('http://10.0.0.5:5173/')).toBe(false);
     expect(isAllowedGuestRequest('wss://127.0.0.1:5173/socket')).toBe(true);
+  });
+
+  it('isAllowedGuestRequest: URL mode allows any http(s)/ws(s) subresource (no credentials) that loopback mode rejects', () => {
+    expect(
+      isAllowedGuestRequest('https://cdn.example.com/font.woff2', 'https://app.staging.com'),
+    ).toBe(true);
+    expect(isAllowedGuestRequest('wss://api.example.com/socket', 'https://app.staging.com')).toBe(
+      true,
+    );
+    expect(
+      isAllowedGuestRequest('https://user:pass@cdn.example.com/x', 'https://app.staging.com'),
+    ).toBe(false);
+    expect(isAllowedGuestRequest('file:///etc/passwd', 'https://app.staging.com')).toBe(false);
+    // Loopback mode (no configured origin) is unaffected — byte-for-byte unchanged.
+    expect(isAllowedGuestRequest('https://cdn.example.com/font.woff2')).toBe(false);
   });
 });

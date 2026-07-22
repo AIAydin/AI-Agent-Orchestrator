@@ -50,7 +50,10 @@ export function PreviewNodeFace({
   const readOnly = graphReadOnly || data.locked || interactions.readOnly;
 
   const port = normalizedPort(data.previewPort);
-  const [draft, setDraft] = useState(port === null ? '' : String(port));
+  const url = typeof data.url === 'string' ? data.url : undefined;
+  const isExternalUrl = url !== undefined;
+  const [draft, setDraft] = useState(url ?? (port === null ? '' : String(port)));
+  const [addressError, setAddressError] = useState<string | null>(null);
   const [status, setStatus] = useState<PreviewWebviewStatus | null>(null);
   const [scale, setScale] = useState(1);
   const [configuring, setConfiguring] = useState(false);
@@ -58,8 +61,8 @@ export function PreviewNodeFace({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setDraft(port === null ? '' : String(port));
-  }, [port]);
+    setDraft(url ?? (port === null ? '' : String(port)));
+  }, [url, port]);
 
   const orientation: PreviewOrientation =
     data.previewOrientation === 'landscape' ? 'landscape' : 'portrait';
@@ -72,8 +75,22 @@ export function PreviewNodeFace({
   const primaryViewport = orientedViewport(primaryPreset, orientation);
   const secondaryViewport = orientedViewport(secondaryPreset, orientation);
 
-  const src = port === null ? null : `http://localhost:${String(port)}/`;
-  const showsDeviceStage = src !== null && (kind === 'mobile-preview' || sideBySide);
+  const src = url ?? (port === null ? null : `http://localhost:${String(port)}/`);
+  const externalOrigin = useMemo(() => {
+    if (!isExternalUrl || url === undefined) return null;
+    try {
+      return new URL(url).origin;
+    } catch {
+      return null;
+    }
+  }, [isExternalUrl, url]);
+  // In URL mode the guest's origin must be registered with the main process
+  // BEFORE the webview mounts with the external `src` — otherwise the very
+  // first top-level request could race the security pin. Loopback mode has
+  // nothing to register and is ready immediately.
+  const [originReady, setOriginReady] = useState(!isExternalUrl);
+  const mountedSrc = originReady ? src : null;
+  const showsDeviceStage = mountedSrc !== null && (kind === 'mobile-preview' || sideBySide);
 
   useEffect(() => {
     if (!showsDeviceStage || typeof ResizeObserver === 'undefined') return;
@@ -121,6 +138,8 @@ export function PreviewNodeFace({
   portRef.current = port;
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
+  const isExternalUrlRef = useRef(isExternalUrl);
+  isExternalUrlRef.current = isExternalUrl;
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.forgeboard) return;
@@ -130,17 +149,67 @@ export function PreviewNodeFace({
       setPreview(event.session);
       // Bridge the started dev server to the port-driven webview: once it is
       // ready on a concrete port, surface that port so the app shows up.
+      // Never in URL mode — an external URL has no dev server to bridge from.
       const ready = event.session.processes.find((candidate) => candidate.previewUrl) ?? null;
       if (
         event.session.status === 'ready' &&
         ready?.port != null &&
         ready.port !== portRef.current &&
-        !readOnlyRef.current
+        !readOnlyRef.current &&
+        !isExternalUrlRef.current
       ) {
         session.updateNodeData(id, { previewPort: ready.port });
       }
     });
   }, [id, project.id, session]);
+
+  // URL mode is origin-pinned by the main process, keyed by this node's
+  // webview partition(s). The origin must be registered BEFORE the webview
+  // mounts with the external `src` (see `originReady` above) so the guest's
+  // very first top-level request is already covered by the pin — not racing
+  // it. Registration is cleared (origin: null) whenever this effect's
+  // dependencies change away from the current external origin/partitions,
+  // including on unmount (the node's guest going away).
+  useEffect(() => {
+    if (!isExternalUrl) {
+      setOriginReady(true);
+      return;
+    }
+    if (externalOrigin === null) {
+      setOriginReady(false);
+      return;
+    }
+    if (typeof window === 'undefined' || !window.forgeboard) {
+      setOriginReady(true);
+      return;
+    }
+    const bridge = window.forgeboard;
+    const keys: Array<{ projectId: string; nodeId: string; slot?: 'comparison-right' }> = sideBySide
+      ? [
+          { projectId: project.id, nodeId: id },
+          { projectId: project.id, nodeId: id, slot: 'comparison-right' },
+        ]
+      : [{ projectId: project.id, nodeId: id }];
+    let active = true;
+    setOriginReady(false);
+    void Promise.all(
+      keys.map((key) =>
+        bridge.previews.setAllowedOrigin({ ...key, origin: externalOrigin }).then(unwrap),
+      ),
+    )
+      .then(() => {
+        if (active) setOriginReady(true);
+      })
+      .catch(() => {
+        if (active) setOriginReady(false);
+      });
+    return () => {
+      active = false;
+      for (const key of keys) {
+        void bridge.previews.setAllowedOrigin({ ...key, origin: null }).catch(() => undefined);
+      }
+    };
+  }, [isExternalUrl, externalOrigin, sideBySide, project.id, id]);
 
   const detectedScripts = useMemo(
     () => (project.health ? detectedPreviewScripts(project.health) : []),
@@ -173,9 +242,16 @@ export function PreviewNodeFace({
   const running = preview ? ['starting', 'ready', 'stopping'].includes(preview.status) : false;
 
   const commit = (): void => {
-    const next = draft.trim() === '' ? null : normalizedPort(Number(draft));
-    if (next === port) return;
-    session.updateNodeData(id, { previewPort: next ?? undefined });
+    const classification = classifiedAddress(draft);
+    if (classification === 'invalid') {
+      setAddressError('Enter a port from 1–65535, or a full http(s) URL.');
+      return;
+    }
+    setAddressError(null);
+    const nextPort = classification === 'empty' ? undefined : classification.port;
+    const nextUrl = classification === 'empty' ? undefined : classification.url;
+    if (nextPort === port && nextUrl === url) return;
+    session.updateNodeData(id, { previewPort: nextPort, url: nextUrl });
   };
 
   const updateConfig = (patch: Partial<WorkshopNodeData>): void => {
@@ -224,21 +300,22 @@ export function PreviewNodeFace({
     >
       <div className="preview-face-strip nodrag">
         <label className="preview-face-port">
-          Port
+          Address
           <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={65535}
-            placeholder="5173"
-            aria-label="Preview port"
+            type="text"
+            placeholder="5173 or https://…"
+            aria-label="Preview address"
+            aria-invalid={addressError !== null}
             name={`node-${id}-preview-port`}
             value={draft}
             disabled={readOnly}
             onFocus={() => {
               session.recordHistory();
             }}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setAddressError(null);
+            }}
             onBlur={commit}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
@@ -252,12 +329,12 @@ export function PreviewNodeFace({
           type="button"
           className="preview-face-reload"
           aria-label="Reload preview"
-          disabled={src === null}
+          disabled={mountedSrc === null}
           onClick={() => webviewRef.current?.reload()}
         >
           <RotateCw size={12} aria-hidden="true" />
         </button>
-        {running ? (
+        {isExternalUrl ? null : running ? (
           <button
             type="button"
             className="preview-face-devserver"
@@ -288,12 +365,19 @@ export function PreviewNodeFace({
           <Settings2 size={12} aria-hidden="true" />
         </button>
         <span className={`preview-face-status ${status?.status ?? 'idle'}`} role="status">
-          {src === null ? 'no port' : (status?.status ?? 'loading')}
+          {mountedSrc === null ? 'no address' : (status?.status ?? 'loading')}
         </span>
       </div>
+      {addressError !== null ? (
+        <p className="preview-face-address-error" role="alert">
+          {addressError}
+        </p>
+      ) : null}
       <div className="preview-face-body nowheel nodrag" ref={bodyRef}>
-        {src === null ? (
-          <p className="preview-face-hint">Enter the port your local dev server is running on.</p>
+        {mountedSrc === null ? (
+          <p className="preview-face-hint">
+            Enter the port your local dev server is running on, or paste a web URL.
+          </p>
         ) : showsDeviceStage ? (
           sideBySide ? (
             <div className="preview-face-stage side-by-side">
@@ -301,7 +385,7 @@ export function PreviewNodeFace({
                 <PreviewWebview
                   ref={webviewRef}
                   partition={partition}
-                  src={src}
+                  src={mountedSrc}
                   ariaLabel={primaryAria}
                   className="preview-face-webview"
                   onStatus={setStatus}
@@ -310,7 +394,7 @@ export function PreviewNodeFace({
               <DeviceFrame viewport={secondaryViewport} scale={scale}>
                 <PreviewWebview
                   partition={secondaryPartition}
-                  src={src}
+                  src={mountedSrc}
                   ariaLabel="Comparison preview page"
                   className="preview-face-webview"
                 />
@@ -321,7 +405,7 @@ export function PreviewNodeFace({
               <PreviewWebview
                 ref={webviewRef}
                 partition={partition}
-                src={src}
+                src={mountedSrc}
                 ariaLabel={primaryAria}
                 className="preview-face-webview"
                 onStatus={setStatus}
@@ -332,13 +416,13 @@ export function PreviewNodeFace({
           <PreviewWebview
             ref={webviewRef}
             partition={partition}
-            src={src}
+            src={mountedSrc}
             ariaLabel="Web preview page"
             className="preview-face-webview"
             onStatus={setStatus}
           />
         )}
-        {status?.status === 'failed' && status.failure !== null && src !== null ? (
+        {status?.status === 'failed' && status.failure !== null && mountedSrc !== null ? (
           <p className="preview-face-failure" role="alert">
             {status.failure}
           </p>
@@ -486,4 +570,28 @@ function normalizedPort(candidate: unknown): number | null {
     candidate <= 65_535
     ? candidate
     : null;
+}
+
+/**
+ * Classifies the preview address field's raw text on commit: a bare port
+ * (1–65535, dev-server mode), a full http/https URL (external mode), empty
+ * (clears both), or invalid (neither — the caller should show an inline
+ * error and leave the node's data untouched).
+ */
+function classifiedAddress(
+  raw: string,
+): 'invalid' | 'empty' | { port: number | undefined; url: string | undefined } {
+  const trimmed = raw.trim();
+  if (trimmed === '') return 'empty';
+  if (/^\d{1,5}$/.test(trimmed)) {
+    const port = normalizedPort(Number(trimmed));
+    return port === null ? 'invalid' : { port, url: undefined };
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return 'invalid';
+    return { port: undefined, url: parsed.href };
+  } catch {
+    return 'invalid';
+  }
 }

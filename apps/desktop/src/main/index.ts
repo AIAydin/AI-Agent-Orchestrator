@@ -14,6 +14,8 @@ import {
   installPreviewWebviewSecurity,
   shouldAttachPreviewWebview,
 } from './previews/webview/webview-security.js';
+import { registerPreviewOriginIpc } from './previews/webview/preview-origin-ipc.js';
+import { createPreviewOriginRegistry } from './previews/webview/preview-origin-registry.js';
 import { openLocalStoreWithStartupDatabaseRecovery } from './recovery/database/startup-adapter/open-store.js';
 import { configurePackagedSmokeProfile, runPackagedApplicationSmoke } from './smoke/packaged.js';
 import { createNonInteractiveSmokeStartupDialog } from './smoke/startup-recovery-dialog.js';
@@ -72,6 +74,10 @@ void app
       return;
     }
     services = registerIpcHandlers(store);
+    const previewOriginRegistry = createPreviewOriginRegistry((partition) =>
+      session.fromPartition(partition),
+    );
+    registerPreviewOriginIpc(ipcMain, previewOriginRegistry);
     installPreviewWebviewSecurity(app, {
       confirmOpenExternal: async (url) => {
         const parent = mainWindow;
@@ -91,6 +97,8 @@ void app
       openExternal: async (url) => {
         await shell.openExternal(url, { activate: true });
       },
+      allowedOriginForGuestSession: (guestSession) =>
+        previewOriginRegistry.allowedOriginForGuestSession(guestSession),
       audit: (action, outcome, metadata) => {
         try {
           store?.appendAudit('preview-webview', action, outcome, metadata);
@@ -100,7 +108,12 @@ void app
       },
     });
     closeCoordinator = new CloseCoordinator(dialog, ipcMain);
-    mainWindow = createWindow(services, closeCoordinator, packagedSmokeProfile === null);
+    mainWindow = createWindow(
+      services,
+      closeCoordinator,
+      (partition) => previewOriginRegistry.allowedOriginForPartition(partition),
+      packagedSmokeProfile === null,
+    );
 
     if (packagedSmokeProfile !== null) {
       const report = await runPackagedApplicationSmoke({
@@ -122,7 +135,9 @@ void app
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0 && services && closeCoordinator) {
-        mainWindow = createWindow(services, closeCoordinator);
+        mainWindow = createWindow(services, closeCoordinator, (partition) =>
+          previewOriginRegistry.allowedOriginForPartition(partition),
+        );
       }
     });
   })
@@ -219,6 +234,7 @@ async function disposeApplication(): Promise<void> {
 function createWindow(
   applicationServices: ApplicationServices,
   coordinator: CloseCoordinator,
+  allowedOriginForPartition: (partition: string) => string | null = () => null,
   showWhenReady = true,
 ): BrowserWindow {
   const window = new BrowserWindow({
@@ -275,7 +291,12 @@ function createWindow(
   });
   // Webviews are allowed only for sandboxed, partition-scoped local previews.
   window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
-    if (!shouldAttachPreviewWebview(params as unknown as Record<string, unknown>)) {
+    if (
+      !shouldAttachPreviewWebview(
+        params as unknown as Record<string, unknown>,
+        allowedOriginForPartition,
+      )
+    ) {
       event.preventDefault();
       return;
     }

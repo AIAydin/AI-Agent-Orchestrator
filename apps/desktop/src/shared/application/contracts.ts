@@ -611,6 +611,18 @@ export const PreviewNavigateInputSchema = PreviewNodeKeySchema.extend({
 }).strict();
 export type PreviewNavigateInput = z.infer<typeof PreviewNavigateInputSchema>;
 
+/**
+ * Registers (or clears, with `origin: null`) the external origin a preview
+ * node's address field is configured to — the security-critical signal that
+ * lets the main process pin/relax a `<webview>` guest's navigation and
+ * subresource policy for that exact partition. See
+ * `main/previews/webview/preview-origin-registry.ts`.
+ */
+export const PreviewSetAllowedOriginInputSchema = PreviewNodeKeySchema.extend({
+  origin: z.string().min(1).max(2_048).nullable(),
+}).strict();
+export type PreviewSetAllowedOriginInput = z.infer<typeof PreviewSetAllowedOriginInputSchema>;
+
 export const PreviewLogSchema = z
   .object({
     sequence: z.number().int().positive(),
@@ -1124,6 +1136,7 @@ export const IPC_CHANNELS = Object.freeze({
   previewsStop: 'previews:stop',
   previewsGet: 'previews:get',
   previewsNavigate: 'previews:navigate',
+  previewsSetAllowedOrigin: 'previews:set-allowed-origin',
   previewsEvent: 'previews:event',
   auditList: 'audit:list',
   extensionsList: 'extensions:list',

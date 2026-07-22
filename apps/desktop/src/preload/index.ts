@@ -279,6 +279,7 @@ const api: ForgeboardApi = {
     stop: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsStop, input),
     get: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsGet, input),
     navigate: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsNavigate, input),
+    setAllowedOrigin: (input) => ipcRenderer.invoke(IPC_CHANNELS.previewsSetAllowedOrigin, input),
     onEvent: (listener) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
         listener(PreviewEventEnvelopeSchema.parse(payload));

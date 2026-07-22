@@ -9,6 +9,13 @@ export interface PreviewWebviewSecurityOptions {
   confirmOpenExternal(url: string): Promise<boolean>;
   openExternal(url: string): Promise<void>;
   audit(action: string, outcome: 'allowed' | 'denied', metadata: Record<string, unknown>): void;
+  /**
+   * The externally configured origin for a guest's session (URL mode), or
+   * `null` when the guest is in loopback/dev-server mode. Looked up fresh on
+   * every navigation/request decision — the mode can change over the life of
+   * a partition as the node's address field is edited.
+   */
+  allowedOriginForGuestSession(guestSession: Session): string | null;
 }
 
 interface WebContentsCreatedApp {
@@ -18,8 +25,11 @@ interface WebContentsCreatedApp {
   ): unknown;
 }
 
-/** Embedder-side attach guard: preview partitions only, no preload, loopback (or blank) src. */
-export function shouldAttachPreviewWebview(params: Record<string, unknown>): boolean {
+/** Embedder-side attach guard: preview partitions only, no preload, loopback (or configured origin) src. */
+export function shouldAttachPreviewWebview(
+  params: Record<string, unknown>,
+  allowedOriginForPartition: (partition: string) => string | null = () => null,
+): boolean {
   if (!isPreviewWebviewPartition(params['partition'])) return false;
   // Electron always includes preload/preloadURL in attach params, defaulting to
   // an empty string when the renderer sets none. Only a NON-empty value means an
@@ -34,7 +44,8 @@ export function shouldAttachPreviewWebview(params: Record<string, unknown>): boo
     return false;
   }
   const src = typeof params['src'] === 'string' ? params['src'] : 'about:blank';
-  return allowedGuestNavigation(src, null);
+  const configuredOrigin = allowedOriginForPartition(params['partition']);
+  return allowedGuestNavigation(src, null, configuredOrigin);
 }
 
 /** Force-harden the guest's webPreferences regardless of what the renderer requested. */
@@ -55,24 +66,45 @@ export function hardenAttachingWebviewPreferences(webPreferences: Record<string,
 }
 
 /**
- * Content-initiated navigation policy. Before a loopback origin is pinned any
- * validated loopback URL (plus about:blank/data:) is allowed; once pinned,
- * navigation must stay on that exact origin ("that node's port").
+ * Content-initiated navigation policy. Before an origin is pinned, any
+ * validated loopback URL (plus about:blank/data:) is allowed, and — when the
+ * node has a configured external origin (URL mode) — that origin too. Once
+ * pinned, navigation must stay on that exact origin ("that node's port" or
+ * "that node's configured site").
  */
-export function allowedGuestNavigation(candidate: string, allowed: URL | null): boolean {
+export function allowedGuestNavigation(
+  candidate: string,
+  allowed: URL | null,
+  configuredOrigin: string | null = null,
+): boolean {
   if (allowed !== null) return isAllowedSurfaceRequest(candidate, allowed);
   if (candidate === 'about:blank' || candidate.startsWith('data:')) return true;
   try {
-    validatedSurfaceUrl(candidate);
+    validatedSurfaceUrl(candidate, { allowedOrigin: configuredOrigin ?? undefined });
     return true;
   } catch {
     return false;
   }
 }
 
-/** Session-level request filter: loopback-only, with ws/wss mapped onto http/https validation. */
-export function isAllowedGuestRequest(candidate: string): boolean {
-  if (candidate === 'about:blank' || candidate.startsWith('data:') || candidate.startsWith('blob:')) {
+/**
+ * Session-level request filter. In loopback mode (`configuredOrigin === null`,
+ * the default) this is byte-for-byte the original strict loopback-only
+ * cancel, with ws/wss mapped onto http/https validation. In URL mode (an
+ * external origin is configured for this guest's partition) subresource
+ * requests are far less restrictive — real sites load CDN/font/API resources
+ * from many third-party origins — but still require http(s)/ws(s) and forbid
+ * embedded credentials.
+ */
+export function isAllowedGuestRequest(
+  candidate: string,
+  configuredOrigin: string | null = null,
+): boolean {
+  if (
+    candidate === 'about:blank' ||
+    candidate.startsWith('data:') ||
+    candidate.startsWith('blob:')
+  ) {
     return true;
   }
   const normalized = candidate.startsWith('wss:')
@@ -80,12 +112,25 @@ export function isAllowedGuestRequest(candidate: string): boolean {
     : candidate.startsWith('ws:')
       ? `http:${candidate.slice(3)}`
       : candidate;
+  if (configuredOrigin === null) {
+    try {
+      validatedSurfaceUrl(normalized);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  let parsed: URL;
   try {
-    validatedSurfaceUrl(normalized);
-    return true;
+    parsed = new URL(normalized);
   } catch {
     return false;
   }
+  return (
+    (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+    parsed.username === '' &&
+    parsed.password === ''
+  );
 }
 
 export function installPreviewWebviewSecurity(
@@ -99,35 +144,41 @@ export function installPreviewWebviewSecurity(
     // every commit. Embedder-initiated loads (src/loadURL) do not fire
     // will-navigate, so they re-pin; content-initiated navigation must match.
     let allowed: URL | null = null;
+    const configuredOrigin = (): string | null =>
+      options.allowedOriginForGuestSession(contents.session);
     contents.setWindowOpenHandler(({ url }) => {
       void handoffWindowOpen(url, options);
       return { action: 'deny' };
     });
     contents.on('will-navigate', (event, url) => {
-      if (!allowedGuestNavigation(url, allowed)) {
+      if (!allowedGuestNavigation(url, allowed, configuredOrigin())) {
         event.preventDefault();
         options.audit('webview-navigate', 'denied', { urlSha256: sha256(url) });
       }
     });
     contents.on('will-frame-navigate', (event) => {
-      if (!allowedGuestNavigation(event.url, allowed)) event.preventDefault();
+      if (!allowedGuestNavigation(event.url, allowed, configuredOrigin())) event.preventDefault();
     });
     contents.on('will-redirect', (event, url) => {
-      if (!allowedGuestNavigation(url, allowed)) event.preventDefault();
+      if (!allowedGuestNavigation(url, allowed, configuredOrigin())) event.preventDefault();
     });
     contents.on('did-navigate', (_event, url) => {
       try {
-        allowed = validatedSurfaceUrl(url);
+        allowed = validatedSurfaceUrl(url, { allowedOrigin: configuredOrigin() ?? undefined });
       } catch {
         allowed = null;
       }
     });
     contents.on('will-attach-webview', (event) => event.preventDefault());
-    hardenGuestSession(contents.session, hardenedSessions);
+    hardenGuestSession(contents.session, hardenedSessions, configuredOrigin);
   });
 }
 
-function hardenGuestSession(guestSession: Session, hardened: WeakSet<Session>): void {
+function hardenGuestSession(
+  guestSession: Session,
+  hardened: WeakSet<Session>,
+  configuredOrigin: () => string | null,
+): void {
   if (hardened.has(guestSession)) return;
   hardened.add(guestSession);
   guestSession.setPermissionCheckHandler(() => false);
@@ -135,7 +186,8 @@ function hardenGuestSession(guestSession: Session, hardened: WeakSet<Session>): 
   guestSession.on('will-download', (event) => event.preventDefault());
   guestSession.webRequest.onBeforeRequest(
     { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] },
-    (details, callback) => callback({ cancel: !isAllowedGuestRequest(details.url) }),
+    (details, callback) =>
+      callback({ cancel: !isAllowedGuestRequest(details.url, configuredOrigin()) }),
   );
 }
 

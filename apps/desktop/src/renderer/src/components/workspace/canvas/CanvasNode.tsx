@@ -152,6 +152,8 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   previewReadinessPath?: string;
   previewUrlPath?: string;
   previewPort?: number | undefined;
+  /** A configured external web URL (origin-pinned); mutually exclusive with `previewPort`. */
+  url?: string | undefined;
   previewPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewSecondaryPreset?: 'desktop' | 'laptop' | 'iphone' | 'pixel' | 'tablet';
   previewOrientation?: 'portrait' | 'landscape';

@@ -22,6 +22,7 @@ import type {
   PreviewNavigateInput,
   PreviewNodeKey,
   PreviewSessionSnapshot,
+  PreviewSetAllowedOriginInput,
   PreviewStartInput,
   Project,
   ProjectRecoveryAssessment,
@@ -469,6 +470,7 @@ export interface ForgeboardApi {
     stop(input: PreviewNodeKey): Promise<IpcResult<PreviewSessionSnapshot | null>>;
     get(input: PreviewNodeKey): Promise<IpcResult<PreviewSessionSnapshot | null>>;
     navigate(input: PreviewNavigateInput): Promise<IpcResult<string>>;
+    setAllowedOrigin(input: PreviewSetAllowedOriginInput): Promise<IpcResult<null>>;
     onEvent(listener: (event: PreviewEventEnvelope) => void): () => void;
   };
   checks: {

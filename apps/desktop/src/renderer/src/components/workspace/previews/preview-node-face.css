@@ -197,3 +197,9 @@ webview.preview-face-webview {
   color: var(--text);
   font-size: var(--text-2xs);
 }
+.preview-face-address-error {
+  margin: 0;
+  padding: 2px 10px;
+  color: #d06870;
+  font-size: var(--text-2xs);
+}
