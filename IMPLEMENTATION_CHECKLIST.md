@@ -1816,3 +1816,25 @@ unchecked when only a subset of their required behavior has proof.
   contract, matcher, and audio tests passed.
   `Workspace.tsx` was split below 2,000 lines. The structure gate still reports only three inherited
   direct-file-count failures in `apps/desktop/e2e`, `workspace/shell`, and `workspace/workflows`.
+- 2026-07-22: the Whiteboard/Mockup node is now an actual drawing surface. Previously its SVG was
+  inert — nothing on the canvas handled pointer events, so shapes could only be added from the Tools
+  popover at a fixed staircase position and were repositioned by typing numbers. A persistent tool
+  strip in the node header now selects a mode (select, rectangle, ellipse, diamond, arrow, text,
+  freehand); dragging on the canvas creates a shape at the dragged bounds, dragging an element moves
+  it, and four corner handles resize it. A new bounded `freedraw` element type stores freehand
+  strokes as points relative to their bounding box, capped at 512 points per stroke with non-finite
+  coordinates dropped on write and again on parse. Arrows now carry direction in their `points`
+  array instead of the box diagonal, so they can point in all four directions; documents persisted
+  before this render unchanged via a `[[0,0],[width,height]]` fallback. Text is typed in place at the
+  clicked point and re-edited by double-clicking, still registering in `annotationIds`. Gestures keep
+  their geometry in local state and write to the graph exactly once on pointer-up, so a long stroke
+  costs one re-render and one undo entry rather than hundreds; history is recorded immediately before
+  a commit, so cancelled gestures leave no undo entry. The whiteboard background moved from a CSS
+  background to an in-viewBox `<rect>`, making the white area exactly the drawable area. Freehand
+  export emits `<path>` with attributes already covered by the main-process SVG allowlist, verified
+  by a test that runs renderer output through `assertSafeDiagramSvg`; the agent-context normalizer
+  gained `freedraw` with its own point cap and a disclosed `truncatedPointCount`. The dead
+  `WhiteboardPreview.tsx` and `whiteboard.css` left behind by the sidebar deletion were removed. The
+  full unit suite passed at 2,987 tests (92 added), with desktop strict typecheck and zero-warning
+  lint clean. The structure gate still reports only the inherited direct-file-count failures present
+  on `main`; `content/whiteboard` holds 7 files and `content/whiteboard/drawing` 12.
