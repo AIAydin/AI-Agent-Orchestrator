@@ -41,7 +41,10 @@ describe('BuiltInContentInspector', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'Goal' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Requirements Markdown source' })).toHaveProperty(
+      'value',
+      '# Goal',
+    );
     fireEvent.change(screen.getByRole('textbox', { name: 'Requirements Markdown source' }), {
       target: { value: '# Updated goal' },
     });
@@ -87,7 +90,10 @@ describe('BuiltInContentInspector', () => {
       />,
     );
 
-    expect(screen.getByText('local')).toHaveProperty('tagName', 'STRONG');
+    expect(screen.getByRole('textbox', { name: 'Note Markdown source' })).toHaveProperty(
+      'value',
+      'A **local** note',
+    );
     fireEvent.click(screen.getByLabelText('Include image Wireframe'));
     expect(onUpdate.mock.calls.at(-1)?.[0].images).toEqual([image.data.file]);
 
