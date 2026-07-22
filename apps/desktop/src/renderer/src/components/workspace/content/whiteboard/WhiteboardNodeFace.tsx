@@ -15,13 +15,28 @@ import type { NodeFaceProps } from '../../canvas/faces/node-face-registry.js';
 import { useCanvasNodeInteractions } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
 import { useAgentSession } from '../../runs/agent-session/AgentSessionContext.js';
 import {
+  createArrowElement,
   createWhiteboardElement,
   parseWhiteboardDocument,
   updateWhiteboardElement,
   type WhiteboardDocument,
   type WhiteboardElement,
-  type WhiteboardElementType,
 } from './model.js';
+
+/** Kinds the popover can still stage; the canvas owns freehand strokes. */
+type StagedElementType = 'rectangle' | 'ellipse' | 'diamond' | 'arrow' | 'text';
+
+/** Places a popover-created element on the legacy staircase, pending the drawing canvas. */
+function stagedElement(type: StagedElementType, index: number, text: string): WhiteboardElement {
+  const x = 24 + (index % 8) * 22;
+  const y = 24 + (index % 6) * 22;
+  if (type === 'arrow') return createArrowElement([x, y], [x + 150, y + 72]);
+  return createWhiteboardElement(
+    type,
+    { x, y, width: type === 'text' ? 180 : 140, height: type === 'text' ? 42 : 90 },
+    text,
+  );
+}
 import { whiteboardSvg } from './svg.js';
 import { WhiteboardPreview } from './WhiteboardPreview.js';
 
@@ -61,10 +76,10 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
     });
   };
 
-  const addElement = (type: WhiteboardElementType, text = ''): void => {
+  const addElement = (type: StagedElementType, text = ''): void => {
     if (readOnly) return;
     session.recordHistory();
-    const element = createWhiteboardElement(type, activeElements.length, text);
+    const element = stagedElement(type, activeElements.length, text);
     persist(
       { ...document, elements: [...document.elements, element] },
       type === 'text' ? [...(data.annotationIds ?? []), element.id] : undefined,
