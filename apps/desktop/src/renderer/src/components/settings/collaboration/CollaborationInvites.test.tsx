@@ -114,6 +114,39 @@ describe('collaboration invite settings', () => {
     expect(api.listInvites).not.toHaveBeenCalled();
   });
 
+  it('creates and copies a one-use ten-minute editor invite in one owner action', async () => {
+    const api = installApi({ current: connected('owner') });
+    api.createInvite.mockResolvedValue({
+      ok: true,
+      value: {
+        id: INVITE_ID,
+        roomId: 'launch-room',
+        role: 'editor',
+        expiresAt: '2026-07-17T12:10:00.000Z',
+        maxUses: 1,
+      },
+    });
+    api.copyInviteLink.mockResolvedValue({ ok: true, value: true });
+    render(<Harness />);
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Create & copy 10-minute invite',
+      }),
+    );
+
+    await waitFor(() =>
+      expect(api.createInvite).toHaveBeenCalledWith({
+        role: 'editor',
+        expiresInSeconds: 600,
+        maxUses: 1,
+      }),
+    );
+    expect(api.copyInviteLink).toHaveBeenCalledWith({ inviteId: INVITE_ID });
+    expect(await screen.findByText(/10-minute editor invite copied.*used once/u)).toBeTruthy();
+    expect(document.body.textContent).not.toContain('token=');
+  });
+
   it('creates, pages durable invite history, copies only current-session links, and revokes exact rows', async () => {
     const invite = {
       id: INVITE_ID,

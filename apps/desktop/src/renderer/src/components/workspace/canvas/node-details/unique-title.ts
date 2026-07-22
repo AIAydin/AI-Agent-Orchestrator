@@ -23,9 +23,7 @@ export function uniqueNodeTitle(
 ): string {
   const trimmed = desired.trim();
   if (trimmed === '') return '';
-  const taken = new Set(
-    roster.filter((entry) => entry.id !== nodeId).map((entry) => entry.title),
-  );
+  const taken = new Set(roster.filter((entry) => entry.id !== nodeId).map((entry) => entry.title));
   if (!taken.has(trimmed)) return trimmed;
   for (let suffix = 2; ; suffix += 1) {
     const candidate = `${trimmed} (${String(suffix)})`;

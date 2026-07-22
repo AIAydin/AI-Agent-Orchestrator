@@ -27,9 +27,7 @@ beforeEach(() => {
   requestDecision.mockClear();
 });
 
-function sessionValue(
-  roster: readonly unknown[] = [],
-): AgentSessionContextValue {
+function sessionValue(roster: readonly unknown[] = []): AgentSessionContextValue {
   return {
     project: { id: 'p1' },
     settings: { defaultAgent: 'claude' },
@@ -46,9 +44,7 @@ function sessionValue(
 }
 
 /** A complete review-gate view so the authoritative evidence panel can render. */
-function reviewGateView(
-  overrides: Partial<WorkflowReviewGateView> = {},
-): WorkflowReviewGateView {
+function reviewGateView(overrides: Partial<WorkflowReviewGateView> = {}): WorkflowReviewGateView {
   return {
     nodeId: 'g1',
     attempt: 1,
@@ -67,7 +63,9 @@ function reviewGateView(
   } as WorkflowReviewGateView;
 }
 
-function runtimeValue(overrides: Partial<WorkflowRuntimeContextValue> = {}): WorkflowRuntimeContextValue {
+function runtimeValue(
+  overrides: Partial<WorkflowRuntimeContextValue> = {},
+): WorkflowRuntimeContextValue {
   return {
     executions: [],
     interactionEvents: [],

@@ -21,31 +21,31 @@ import {
   Workflow,
   Video,
   type LucideIcon,
-} from "lucide-react";
+} from 'lucide-react';
 
-import type { ExtensionCanvasNodeTypeView } from "../../../../../shared/application/contracts.js";
+import type { ExtensionCanvasNodeTypeView } from '../../../../../shared/application/contracts.js';
 
 export const NODE_KINDS = [
-  "agent",
-  "brief",
-  "task",
-  "file",
-  "video",
-  "diff",
-  "terminal",
-  "web-preview",
-  "mobile-preview",
-  "test",
-  "review-gate",
-  "git-pr",
-  "diagram",
-  "whiteboard",
-  "note-image",
-  "group-frame",
+  'agent',
+  'brief',
+  'task',
+  'file',
+  'video',
+  'diff',
+  'terminal',
+  'web-preview',
+  'mobile-preview',
+  'test',
+  'review-gate',
+  'git-pr',
+  'diagram',
+  'whiteboard',
+  'note-image',
+  'group-frame',
 ] as const;
 
 export type BuiltInNodeKind = (typeof NODE_KINDS)[number];
-export type NodeKind = BuiltInNodeKind | "extension";
+export type NodeKind = BuiltInNodeKind | 'extension';
 
 export interface SharedNodeBehaviors {
   readonly resizable: true;
@@ -65,9 +65,9 @@ export interface NodeTypeDefinition {
   readonly description: string;
   readonly color: string;
   readonly icon: LucideIcon;
-  readonly source: "built-in" | "installed-extension" | "persisted-extension";
+  readonly source: 'built-in' | 'installed-extension' | 'persisted-extension';
   readonly behaviors: SharedNodeBehaviors;
-  readonly ports?: ExtensionCanvasNodeTypeView["ports"];
+  readonly ports?: ExtensionCanvasNodeTypeView['ports'];
 }
 
 export interface ExtensionNodeRegistration {
@@ -95,132 +95,55 @@ const SHARED_BEHAVIORS: SharedNodeBehaviors = Object.freeze({
   runHistory: true,
 });
 
-const BUILT_INS: readonly Omit<
-  NodeTypeDefinition,
-  "behaviors" | "source" | "key"
->[] = [
+const BUILT_INS: readonly Omit<NodeTypeDefinition, 'behaviors' | 'source' | 'key'>[] = [
+  builtin('agent', 'Agent', 'Run an AI coding agent on this computer', '#d4a85b', Bot),
+  builtin('brief', 'Product brief', 'What to build and how to check it', '#8d7de8', NotebookPen),
+  builtin('task', 'Task', 'A piece of work to assign and run', '#58a6a6', ListChecks),
+  builtin('file', 'File', 'A live link to a file on this computer', '#6d9ed0', FileCode2),
+  builtin('video', 'Video', 'Watch a project video and share it with an agent', '#d0748b', Video),
+  builtin('diff', 'Diff / review', 'Review changes and choose what to keep', '#e27b68', FileDiff),
+  builtin('terminal', 'Terminal', 'Run commands on this computer', '#8dbd6f', TerminalSquare),
   builtin(
-    "agent",
-    "Agent",
-    "Run an AI coding agent on this computer",
-    "#d4a85b",
-    Bot,
-  ),
-  builtin(
-    "brief",
-    "Product brief",
-    "What to build and how to check it",
-    "#8d7de8",
-    NotebookPen,
-  ),
-  builtin(
-    "task",
-    "Task",
-    "A piece of work to assign and run",
-    "#58a6a6",
-    ListChecks,
-  ),
-  builtin(
-    "file",
-    "File",
-    "A live link to a file on this computer",
-    "#6d9ed0",
-    FileCode2,
-  ),
-  builtin(
-    "video",
-    "Video",
-    "Watch a project video and share it with an agent",
-    "#d0748b",
-    Video,
-  ),
-  builtin(
-    "diff",
-    "Diff / review",
-    "Review changes and choose what to keep",
-    "#e27b68",
-    FileDiff,
-  ),
-  builtin(
-    "terminal",
-    "Terminal",
-    "Run commands on this computer",
-    "#8dbd6f",
-    TerminalSquare,
-  ),
-  builtin(
-    "web-preview",
-    "Web preview",
-    "See your web app in its own window",
-    "#6099c5",
+    'web-preview',
+    'Web preview',
+    'See your web app in its own window',
+    '#6099c5',
     MonitorPlay,
   ),
   builtin(
-    "mobile-preview",
-    "Mobile preview",
-    "See your app at phone and tablet sizes",
-    "#a27bd3",
+    'mobile-preview',
+    'Mobile preview',
+    'See your app at phone and tablet sizes',
+    '#a27bd3',
     Smartphone,
   ),
+  builtin('test', 'Test', 'Run the same checks every time', '#64a774', TestTube2),
   builtin(
-    "test",
-    "Test",
-    "Run the same checks every time",
-    "#64a774",
-    TestTube2,
-  ),
-  builtin(
-    "review-gate",
-    "Review gate",
-    "Pause the workflow until work is approved",
-    "#d39b55",
+    'review-gate',
+    'Review gate',
+    'Pause the workflow until work is approved',
+    '#d39b55',
     CheckCircle2,
   ),
   builtin(
-    "git-pr",
-    "Git / PR",
-    "Track branches, commits, and approvals",
-    "#d06870",
+    'git-pr',
+    'Git / PR',
+    'Track branches, commits, and approvals',
+    '#d06870',
     GitPullRequest,
   ),
-  builtin(
-    "diagram",
-    "Diagram",
-    "Turn Mermaid text into a diagram",
-    "#7888d8",
-    Network,
-  ),
-  builtin(
-    "whiteboard",
-    "Whiteboard",
-    "Sketch and add notes freely",
-    "#c482aa",
-    PanelTop,
-  ),
-  builtin(
-    "note-image",
-    "Note / image",
-    "A quick note or picture",
-    "#c5a75f",
-    Image,
-  ),
-  builtin(
-    "group-frame",
-    "Group",
-    "Collect related nodes in one area",
-    "#82909b",
-    Frame,
-  ),
+  builtin('diagram', 'Diagram', 'Turn Mermaid text into a diagram', '#7888d8', Network),
+  builtin('whiteboard', 'Whiteboard', 'Sketch and add notes freely', '#c482aa', PanelTop),
+  builtin('note-image', 'Note / image', 'A quick note or picture', '#c5a75f', Image),
+  builtin('group-frame', 'Group', 'Collect related nodes in one area', '#82909b', Frame),
 ];
 
-const EXTENSION_ICONS: Readonly<
-  Record<ExtensionCanvasNodeTypeView["icon"], LucideIcon>
-> = {
+const EXTENSION_ICONS: Readonly<Record<ExtensionCanvasNodeTypeView['icon'], LucideIcon>> = {
   bot: Bot,
   box: Box,
-  "check-circle": CheckCircle2,
+  'check-circle': CheckCircle2,
   file: FileCode2,
-  "git-branch": GitBranch,
+  'git-branch': GitBranch,
   image: Image,
   layout: LayoutGrid,
   note: NotebookPen,
@@ -237,18 +160,18 @@ export class NodeTypeRegistry {
       this.#register({
         ...definition,
         key: definition.kind,
-        source: "built-in",
+        source: 'built-in',
         behaviors: SHARED_BEHAVIORS,
       });
     }
     this.#register({
-      key: "extension:unavailable",
-      kind: "extension",
-      label: "Extension node",
-      description: "Fields from an explicitly installed local extension",
-      color: "#7f8c98",
+      key: 'extension:unavailable',
+      kind: 'extension',
+      label: 'Extension node',
+      description: 'Fields from an explicitly installed local extension',
+      color: '#7f8c98',
       icon: Box,
-      source: "persisted-extension",
+      source: 'persisted-extension',
       behaviors: SHARED_BEHAVIORS,
       ports: [],
     });
@@ -263,36 +186,36 @@ export class NodeTypeRegistry {
         registration.extensionVersion,
         definition.id,
       ),
-      kind: "extension",
+      kind: 'extension',
       label: definition.displayName,
       description: definition.description,
       color: definition.color,
       icon: EXTENSION_ICONS[definition.icon],
-      source: "installed-extension",
+      source: 'installed-extension',
       behaviors: SHARED_BEHAVIORS,
       ports: definition.ports,
     });
   }
 
   public resolve(input: NodeDefinitionInput): NodeTypeDefinition {
-    if (input.kind !== "extension") return this.#definitions.get(input.kind)!;
+    if (input.kind !== 'extension') return this.#definitions.get(input.kind)!;
     const key = extensionInputKey(input);
     const installed = key === null ? undefined : this.#definitions.get(key);
     if (installed !== undefined) return installed;
     if (input.extensionDefinition !== undefined) {
       return {
-        key: key ?? "extension:unavailable",
-        kind: "extension",
+        key: key ?? 'extension:unavailable',
+        kind: 'extension',
         label: input.extensionDefinition.displayName,
         description: input.extensionDefinition.description,
         color: input.extensionDefinition.color,
         icon: EXTENSION_ICONS[input.extensionDefinition.icon],
-        source: "persisted-extension",
+        source: 'persisted-extension',
         behaviors: SHARED_BEHAVIORS,
         ports: input.extensionDefinition.ports,
       };
     }
-    return this.#definitions.get("extension:unavailable")!;
+    return this.#definitions.get('extension:unavailable')!;
   }
 
   public builtIns(): readonly NodeTypeDefinition[] {
@@ -301,9 +224,7 @@ export class NodeTypeRegistry {
 
   #register(definition: NodeTypeDefinition): void {
     if (this.#definitions.has(definition.key)) {
-      throw new Error(
-        `Node type registration already exists: ${definition.key}`,
-      );
+      throw new Error(`Node type registration already exists: ${definition.key}`);
     }
     this.#definitions.set(definition.key, Object.freeze(definition));
   }
@@ -315,7 +236,7 @@ export const NODE_DEFINITIONS = Object.freeze(
   Object.fromEntries(
     [
       ...BUILT_IN_NODE_REGISTRY.builtIns(),
-      BUILT_IN_NODE_REGISTRY.resolve({ kind: "extension" }),
+      BUILT_IN_NODE_REGISTRY.resolve({ kind: 'extension' }),
     ].map((definition) => [definition.kind, definition]),
   ) as Record<NodeKind, NodeTypeDefinition>,
 );
@@ -333,11 +254,7 @@ function extensionInputKey(input: NodeDefinitionInput): string | null {
     input.extensionVersion === undefined ||
     input.extensionNodeTypeId === undefined
     ? null
-    : extensionNodeTypeKey(
-        input.extensionId,
-        input.extensionVersion,
-        input.extensionNodeTypeId,
-      );
+    : extensionNodeTypeKey(input.extensionId, input.extensionVersion, input.extensionNodeTypeId);
 }
 
 function builtin(
@@ -346,6 +263,6 @@ function builtin(
   description: string,
   color: string,
   icon: LucideIcon,
-): Omit<NodeTypeDefinition, "behaviors" | "source" | "key"> {
+): Omit<NodeTypeDefinition, 'behaviors' | 'source' | 'key'> {
   return { kind, label, description, color, icon };
 }

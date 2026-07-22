@@ -1,21 +1,14 @@
-import { createHash } from "node:crypto";
+import { createHash } from 'node:crypto';
 
-import type { Session, WebContents } from "electron";
+import type { Session, WebContents } from 'electron';
 
-import { isPreviewWebviewPartition } from "../../../shared/preview/webview-partition.js";
-import {
-  isAllowedSurfaceRequest,
-  validatedSurfaceUrl,
-} from "../surface/url-policy.js";
+import { isPreviewWebviewPartition } from '../../../shared/preview/webview-partition.js';
+import { isAllowedSurfaceRequest, validatedSurfaceUrl } from '../surface/url-policy.js';
 
 export interface PreviewWebviewSecurityOptions {
   confirmOpenExternal(url: string): Promise<boolean>;
   openExternal(url: string): Promise<void>;
-  audit(
-    action: string,
-    outcome: "allowed" | "denied",
-    metadata: Record<string, unknown>,
-  ): void;
+  audit(action: string, outcome: 'allowed' | 'denied', metadata: Record<string, unknown>): void;
   /**
    * The externally configured origin for a guest's session (URL mode), or
    * `null` when the guest is in loopback/dev-server mode. Looked up fresh on
@@ -30,30 +23,28 @@ export interface PreviewWebviewSecurityOptions {
 
 interface WebContentsCreatedApp {
   on(
-    event: "web-contents-created",
+    event: 'web-contents-created',
     listener: (event: unknown, contents: WebContents) => void,
   ): unknown;
 }
 
 /** Embedder-side attach guard: preview partitions only, no preload, loopback src. */
-export function shouldAttachPreviewWebview(
-  params: Record<string, unknown>,
-): boolean {
-  if (!isPreviewWebviewPartition(params["partition"])) return false;
+export function shouldAttachPreviewWebview(params: Record<string, unknown>): boolean {
+  if (!isPreviewWebviewPartition(params['partition'])) return false;
   // Electron always includes preload/preloadURL in attach params, defaulting to
   // an empty string when the renderer sets none. Only a NON-empty value means an
   // actual preload was requested — reject those; the empty-string default is fine
   // (and is force-cleared by hardenAttachingWebviewPreferences anyway).
-  const preload = params["preload"];
-  const preloadURL = params["preloadURL"];
+  const preload = params['preload'];
+  const preloadURL = params['preloadURL'];
   if (
-    (typeof preload === "string" && preload !== "") ||
-    (typeof preloadURL === "string" && preloadURL !== "")
+    (typeof preload === 'string' && preload !== '') ||
+    (typeof preloadURL === 'string' && preloadURL !== '')
   ) {
     return false;
   }
-  const src = typeof params["src"] === "string" ? params["src"] : "about:blank";
-  if (src === "about:blank") return true;
+  const src = typeof params['src'] === 'string' ? params['src'] : 'about:blank';
+  if (src === 'about:blank') return true;
   try {
     validatedSurfaceUrl(src);
     return true;
@@ -63,22 +54,20 @@ export function shouldAttachPreviewWebview(
 }
 
 /** Force-harden the guest's webPreferences regardless of what the renderer requested. */
-export function hardenAttachingWebviewPreferences(
-  webPreferences: Record<string, unknown>,
-): void {
-  delete webPreferences["preload"];
-  delete webPreferences["preloadURL"];
-  webPreferences["nodeIntegration"] = false;
-  webPreferences["nodeIntegrationInSubFrames"] = false;
-  webPreferences["nodeIntegrationInWorker"] = false;
-  webPreferences["contextIsolation"] = true;
-  webPreferences["sandbox"] = true;
-  webPreferences["webSecurity"] = true;
-  webPreferences["allowRunningInsecureContent"] = false;
-  webPreferences["experimentalFeatures"] = false;
-  webPreferences["enableBlinkFeatures"] = "";
-  webPreferences["webviewTag"] = false;
-  webPreferences["spellcheck"] = false;
+export function hardenAttachingWebviewPreferences(webPreferences: Record<string, unknown>): void {
+  delete webPreferences['preload'];
+  delete webPreferences['preloadURL'];
+  webPreferences['nodeIntegration'] = false;
+  webPreferences['nodeIntegrationInSubFrames'] = false;
+  webPreferences['nodeIntegrationInWorker'] = false;
+  webPreferences['contextIsolation'] = true;
+  webPreferences['sandbox'] = true;
+  webPreferences['webSecurity'] = true;
+  webPreferences['allowRunningInsecureContent'] = false;
+  webPreferences['experimentalFeatures'] = false;
+  webPreferences['enableBlinkFeatures'] = '';
+  webPreferences['webviewTag'] = false;
+  webPreferences['spellcheck'] = false;
 }
 
 /**
@@ -95,7 +84,7 @@ export function allowedGuestNavigation(
 ): boolean {
   if (configuredOrigin !== null) return isAllowedBrowserNavigation(candidate);
   if (allowed !== null) return isAllowedSurfaceRequest(candidate, allowed);
-  if (candidate === "about:blank" || candidate.startsWith("data:")) return true;
+  if (candidate === 'about:blank' || candidate.startsWith('data:')) return true;
   try {
     validatedSurfaceUrl(candidate, {
       allowedOrigin: configuredOrigin ?? undefined,
@@ -120,15 +109,15 @@ export function isAllowedGuestRequest(
   configuredOrigin: string | null = null,
 ): boolean {
   if (
-    candidate === "about:blank" ||
-    candidate.startsWith("data:") ||
-    candidate.startsWith("blob:")
+    candidate === 'about:blank' ||
+    candidate.startsWith('data:') ||
+    candidate.startsWith('blob:')
   ) {
     return true;
   }
-  const normalized = candidate.startsWith("wss:")
+  const normalized = candidate.startsWith('wss:')
     ? `https:${candidate.slice(4)}`
-    : candidate.startsWith("ws:")
+    : candidate.startsWith('ws:')
       ? `http:${candidate.slice(3)}`
       : candidate;
   if (configuredOrigin === null) {
@@ -146,9 +135,9 @@ export function isAllowedGuestRequest(
     return false;
   }
   return (
-    (parsed.protocol === "http:" || parsed.protocol === "https:") &&
-    parsed.username === "" &&
-    parsed.password === ""
+    (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+    parsed.username === '' &&
+    parsed.password === ''
   );
 }
 
@@ -157,8 +146,8 @@ export function installPreviewWebviewSecurity(
   options: PreviewWebviewSecurityOptions,
 ): void {
   const hardenedSessions = new WeakSet<Session>();
-  app.on("web-contents-created", (_event, contents) => {
-    if (contents.getType() !== "webview") return;
+  app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() !== 'webview') return;
     // Electron throws "Object has been destroyed" when the `session` getter is
     // touched after its WebContents dies. Session-level request callbacks can
     // outlive the guest briefly, so capture the stable Session object while
@@ -175,17 +164,17 @@ export function installPreviewWebviewSecurity(
     contents.setWindowOpenHandler(({ url }) => {
       if (configuredOrigin() !== null && authenticationEnabled()) {
         if (!isAllowedHttpNavigation(url)) {
-          options.audit("webview-window-open", "denied", {
-            reason: "unsupported-scheme",
+          options.audit('webview-window-open', 'denied', {
+            reason: 'unsupported-scheme',
           });
-          return { action: "deny" };
+          return { action: 'deny' };
         }
-        options.audit("webview-window-open", "allowed", {
-          disposition: "sandboxed-authentication-window",
+        options.audit('webview-window-open', 'allowed', {
+          disposition: 'sandboxed-authentication-window',
           urlSha256: sha256(url),
         });
         return {
-          action: "allow",
+          action: 'allow',
           overrideBrowserWindowOptions: {
             width: 560,
             height: 720,
@@ -206,23 +195,21 @@ export function installPreviewWebviewSecurity(
       } else {
         void handoffWindowOpen(url, options);
       }
-      return { action: "deny" };
+      return { action: 'deny' };
     });
-    contents.on("will-navigate", (event, url) => {
+    contents.on('will-navigate', (event, url) => {
       if (!allowedGuestNavigation(url, allowed, configuredOrigin())) {
         event.preventDefault();
-        options.audit("webview-navigate", "denied", { urlSha256: sha256(url) });
+        options.audit('webview-navigate', 'denied', { urlSha256: sha256(url) });
       }
     });
-    contents.on("will-frame-navigate", (event) => {
-      if (!allowedGuestNavigation(event.url, allowed, configuredOrigin()))
-        event.preventDefault();
+    contents.on('will-frame-navigate', (event) => {
+      if (!allowedGuestNavigation(event.url, allowed, configuredOrigin())) event.preventDefault();
     });
-    contents.on("will-redirect", (event, url) => {
-      if (!allowedGuestNavigation(url, allowed, configuredOrigin()))
-        event.preventDefault();
+    contents.on('will-redirect', (event, url) => {
+      if (!allowedGuestNavigation(url, allowed, configuredOrigin())) event.preventDefault();
     });
-    contents.on("did-navigate", (_event, url) => {
+    contents.on('did-navigate', (_event, url) => {
       try {
         allowed = validatedSurfaceUrl(url, {
           allowedOrigin: configuredOrigin() ?? undefined,
@@ -231,11 +218,9 @@ export function installPreviewWebviewSecurity(
         allowed = null;
       }
     });
-    contents.on("will-attach-webview", (event) => event.preventDefault());
+    contents.on('will-attach-webview', (event) => event.preventDefault());
     if (authenticationEnabled()) {
-      guestSession.setUserAgent(
-        browserCompatibleUserAgent(guestSession.getUserAgent()),
-      );
+      guestSession.setUserAgent(browserCompatibleUserAgent(guestSession.getUserAgent()));
     }
     hardenGuestSession(guestSession, hardenedSessions, configuredOrigin);
     const partition = options.partitionForGuestSession(guestSession);
@@ -245,16 +230,16 @@ export function installPreviewWebviewSecurity(
 
 /** Safe schemes for top-level navigation in the hardened single-tab browser. */
 function isAllowedBrowserNavigation(candidate: string): boolean {
-  if (candidate === "about:blank") return true;
-  if (candidate.startsWith("blob:")) {
-    return isAllowedBrowserNavigation(candidate.slice("blob:".length));
+  if (candidate === 'about:blank') return true;
+  if (candidate.startsWith('blob:')) {
+    return isAllowedBrowserNavigation(candidate.slice('blob:'.length));
   }
   try {
     const parsed = new URL(candidate);
     return (
-      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
-      parsed.username === "" &&
-      parsed.password === ""
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      parsed.username === '' &&
+      parsed.password === ''
     );
   } catch {
     return false;
@@ -263,14 +248,14 @@ function isAllowedBrowserNavigation(candidate: string): boolean {
 
 function isAllowedHttpNavigation(candidate: string): boolean {
   if (!isAllowedBrowserNavigation(candidate)) return false;
-  return candidate.startsWith("http:") || candidate.startsWith("https:");
+  return candidate.startsWith('http:') || candidate.startsWith('https:');
 }
 
 function browserCompatibleUserAgent(userAgent: string): string {
   return userAgent
-    .replace(/\sElectron\/[^\s]+/gu, "")
-    .replace(/\sForgeboard\/[^\s]+/gu, "")
-    .replace(/\s{2,}/gu, " ")
+    .replace(/\sElectron\/[^\s]+/gu, '')
+    .replace(/\sForgeboard\/[^\s]+/gu, '')
+    .replace(/\s{2,}/gu, ' ')
     .trim();
 }
 
@@ -279,24 +264,21 @@ async function navigateWindowOpenInGuest(
   url: string,
   options: PreviewWebviewSecurityOptions,
 ): Promise<void> {
-  if (
-    !isAllowedBrowserNavigation(url) ||
-    (!url.startsWith("http:") && !url.startsWith("https:"))
-  ) {
-    options.audit("webview-window-open", "denied", {
-      reason: "unsupported-scheme",
+  if (!isAllowedBrowserNavigation(url) || (!url.startsWith('http:') && !url.startsWith('https:'))) {
+    options.audit('webview-window-open', 'denied', {
+      reason: 'unsupported-scheme',
     });
     return;
   }
   try {
-    options.audit("webview-window-open", "allowed", {
-      disposition: "same-preview-tab",
+    options.audit('webview-window-open', 'allowed', {
+      disposition: 'same-preview-tab',
       urlSha256: sha256(url),
     });
     await contents.loadURL(url);
   } catch {
-    options.audit("webview-window-open", "denied", {
-      reason: "guest-navigation-failed",
+    options.audit('webview-window-open', 'denied', {
+      reason: 'guest-navigation-failed',
     });
   }
 }
@@ -309,12 +291,10 @@ function hardenGuestSession(
   if (hardened.has(guestSession)) return;
   hardened.add(guestSession);
   guestSession.setPermissionCheckHandler(() => false);
-  guestSession.setPermissionRequestHandler((_contents, _permission, callback) =>
-    callback(false),
-  );
-  guestSession.on("will-download", (event) => event.preventDefault());
+  guestSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  guestSession.on('will-download', (event) => event.preventDefault());
   guestSession.webRequest.onBeforeRequest(
-    { urls: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"] },
+    { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] },
     (details, callback) =>
       callback({
         cancel: !isAllowedGuestRequest(details.url, configuredOrigin()),
@@ -326,29 +306,29 @@ async function handoffWindowOpen(
   url: string,
   options: PreviewWebviewSecurityOptions,
 ): Promise<void> {
-  if (!url.startsWith("http:") && !url.startsWith("https:")) {
-    options.audit("webview-window-open", "denied", {
-      reason: "unsupported-scheme",
+  if (!url.startsWith('http:') && !url.startsWith('https:')) {
+    options.audit('webview-window-open', 'denied', {
+      reason: 'unsupported-scheme',
     });
     return;
   }
   try {
     const approved = await options.confirmOpenExternal(url);
     if (!approved) {
-      options.audit("webview-window-open", "denied", {
-        reason: "confirmation-cancelled",
+      options.audit('webview-window-open', 'denied', {
+        reason: 'confirmation-cancelled',
       });
       return;
     }
-    options.audit("webview-window-open", "allowed", { urlSha256: sha256(url) });
+    options.audit('webview-window-open', 'allowed', { urlSha256: sha256(url) });
     await options.openExternal(url);
   } catch {
-    options.audit("webview-window-open", "denied", {
-      reason: "handoff-failed",
+    options.audit('webview-window-open', 'denied', {
+      reason: 'handoff-failed',
     });
   }
 }
 
 function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash('sha256').update(value).digest('hex');
 }

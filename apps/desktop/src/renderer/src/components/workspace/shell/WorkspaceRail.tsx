@@ -1,11 +1,4 @@
-import {
-  ChevronRight,
-  Files,
-  GitBranch,
-  Layers3,
-  Search,
-  Workflow,
-} from 'lucide-react';
+import { ChevronRight, Files, GitBranch, Layers3, Search, Workflow } from 'lucide-react';
 
 import type {
   AgentDetection,

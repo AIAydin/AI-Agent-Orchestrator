@@ -22,8 +22,7 @@ export function BriefNodeFace({ id, data }: NodeFaceProps): JSX.Element {
   const attachmentIds = new Set(data.attachmentIds ?? []);
   const attachmentCandidates = session.nodeRoster.filter(
     (candidate) =>
-      candidate.id !== id &&
-      ['file', 'task', 'diagram', 'note-image'].includes(candidate.kind),
+      candidate.id !== id && ['file', 'task', 'diagram', 'note-image'].includes(candidate.kind),
   );
   const variables = Object.entries(data.variables ?? {});
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -190,9 +189,7 @@ export function BriefNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               onClick={() => {
                 session.recordHistory();
                 update({
-                  acceptanceCriteria: criteria.filter(
-                    (candidate) => candidate.id !== criterion.id,
-                  ),
+                  acceptanceCriteria: criteria.filter((candidate) => candidate.id !== criterion.id),
                 });
               }}
             >

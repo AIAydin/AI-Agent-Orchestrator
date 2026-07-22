@@ -188,7 +188,7 @@ export const createTerminalPty: TerminalPtyFactory = async (launch, beforeSpawn)
   };
 };
 
-async function ensureNodePtySpawnHelper(): Promise<void> {
+export async function ensureNodePtySpawnHelper(): Promise<void> {
   if (process.platform === 'win32') return;
   const entryPath = require.resolve('node-pty');
   const packageRoot = path.resolve(path.dirname(entryPath), '..');

@@ -1,5 +1,5 @@
-import type { ChildProcess } from "node:child_process";
-import type { Readable, Writable } from "node:stream";
+import type { ChildProcess } from 'node:child_process';
+import type { Readable, Writable } from 'node:stream';
 
 const COMMAND_TIMEOUT_MS = 10_000;
 
@@ -31,7 +31,7 @@ export class CdpPipeClient {
   readonly #pending = new Map<number, PendingCommand>();
   readonly #eventListeners = new Set<(event: CdpEvent) => void>();
   #nextId = 0;
-  #buffer = "";
+  #buffer = '';
   #closed = false;
 
   constructor(child: ChildProcess) {
@@ -42,25 +42,21 @@ export class CdpPipeClient {
       output === undefined ||
       input === null ||
       output === null ||
-      !("write" in input) ||
-      !("on" in output)
+      !('write' in input) ||
+      !('on' in output)
     ) {
-      throw new Error("Chrome did not expose its private debugging pipe.");
+      throw new Error('Chrome did not expose its private debugging pipe.');
     }
     this.#input = input;
     this.#output = output as Readable;
-    this.#output.setEncoding("utf8");
-    this.#output.on("data", (chunk: string) => this.#receive(chunk));
-    this.#output.once("error", (error) => this.close(error));
-    child.once("exit", () => this.close(new Error("Chrome closed.")));
+    this.#output.setEncoding('utf8');
+    this.#output.on('data', (chunk: string) => this.#receive(chunk));
+    this.#output.once('error', (error) => this.close(error));
+    child.once('exit', () => this.close(new Error('Chrome closed.')));
   }
 
-  async send<Result>(
-    method: string,
-    params: unknown = {},
-    sessionId?: string,
-  ): Promise<Result> {
-    if (this.#closed) throw new Error("Chrome connection is closed.");
+  async send<Result>(method: string, params: unknown = {}, sessionId?: string): Promise<Result> {
+    if (this.#closed) throw new Error('Chrome connection is closed.');
     const id = ++this.#nextId;
     const message = JSON.stringify({
       id,
@@ -94,7 +90,7 @@ export class CdpPipeClient {
     return () => this.#eventListeners.delete(listener);
   }
 
-  close(error = new Error("Chrome connection closed.")): void {
+  close(error = new Error('Chrome connection closed.')): void {
     if (this.#closed) return;
     this.#closed = true;
     for (const pending of this.#pending.values()) {
@@ -107,10 +103,10 @@ export class CdpPipeClient {
 
   #receive(chunk: string): void {
     this.#buffer += chunk;
-    const messages = this.#buffer.split("\0");
-    this.#buffer = messages.pop() ?? "";
+    const messages = this.#buffer.split('\0');
+    this.#buffer = messages.pop() ?? '';
     for (const raw of messages) {
-      if (raw === "") continue;
+      if (raw === '') continue;
       let message: CdpResponse;
       try {
         message = JSON.parse(raw) as CdpResponse;
@@ -123,9 +119,7 @@ export class CdpPipeClient {
         clearTimeout(pending.timeout);
         this.#pending.delete(message.id);
         if (message.error !== undefined) {
-          pending.reject(
-            new Error(message.error.message ?? "Chrome command failed."),
-          );
+          pending.reject(new Error(message.error.message ?? 'Chrome command failed.'));
         } else {
           pending.resolve(message.result);
         }

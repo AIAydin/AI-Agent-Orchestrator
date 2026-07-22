@@ -19,7 +19,7 @@ const diffReviewMocks = vi.hoisted(() => ({
   refreshSummary: vi.fn(),
 }));
 
-vi.mock('../canvas/useCanvasPersistence.js', () => ({
+vi.mock('../canvas/history/useCanvasPersistence.js', () => ({
   useCanvasPersistence: () => ({
     saveState: 'saved',
     persistedUpdatedAt: '2026-07-17T12:00:00.000Z',

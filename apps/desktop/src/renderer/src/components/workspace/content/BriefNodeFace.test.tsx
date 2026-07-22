@@ -90,7 +90,12 @@ describe('BriefNodeFace', () => {
     renderFace({
       markdown: '# v2',
       versions: [
-        { id: 'v1', createdAt: '2026-07-19T10:00:00.000Z', markdown: '# v1', authorId: 'local-user' },
+        {
+          id: 'v1',
+          createdAt: '2026-07-19T10:00:00.000Z',
+          markdown: '# v1',
+          authorId: 'local-user',
+        },
       ],
     });
     fireEvent.click(screen.getByRole('button', { name: 'Version history' }));

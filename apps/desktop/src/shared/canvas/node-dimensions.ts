@@ -65,10 +65,7 @@ interface NodeDimensions {
 
 /** Face dimensions for the document & status node kinds (sub-plan 2b). */
 export const DOCUMENT_NODE_DIMENSIONS: Readonly<
-  Record<
-    string,
-    { readonly default: NodeDimensions; readonly minimum: NodeDimensions }
-  >
+  Record<string, { readonly default: NodeDimensions; readonly minimum: NodeDimensions }>
 > = {
   diagram: {
     default: { width: 480, height: 360 },
@@ -82,7 +79,7 @@ export const DOCUMENT_NODE_DIMENSIONS: Readonly<
     default: { width: 440, height: 440 },
     minimum: { width: 320, height: 280 },
   },
-  "note-image": {
+  'note-image': {
     default: { width: 400, height: 360 },
     minimum: { width: 300, height: 240 },
   },
@@ -90,11 +87,11 @@ export const DOCUMENT_NODE_DIMENSIONS: Readonly<
     default: { width: 340, height: 280 },
     minimum: { width: 260, height: 200 },
   },
-  "review-gate": {
+  'review-gate': {
     default: { width: 360, height: 300 },
     minimum: { width: 280, height: 220 },
   },
-  "git-pr": {
+  'git-pr': {
     default: { width: 420, height: 380 },
     minimum: { width: 320, height: 260 },
   },
@@ -106,10 +103,7 @@ export const DOCUMENT_NODE_DIMENSIONS: Readonly<
 
 /** Face dimensions for the heavier content node kinds (sub-plan 2c). */
 export const CONTENT_NODE_DIMENSIONS: Readonly<
-  Record<
-    string,
-    { readonly default: NodeDimensions; readonly minimum: NodeDimensions }
-  >
+  Record<string, { readonly default: NodeDimensions; readonly minimum: NodeDimensions }>
 > = {
   terminal: {
     default: { width: 560, height: 480 },
@@ -134,9 +128,9 @@ export function defaultNodeDimensionsForKind(kind: string): {
   readonly width: number;
   readonly height: number;
 } {
-  if (kind === "agent") return AGENT_NODE_DEFAULT_DIMENSIONS;
-  if (kind === "web-preview") return WEB_PREVIEW_NODE_DEFAULT_DIMENSIONS;
-  if (kind === "mobile-preview") return MOBILE_PREVIEW_NODE_DEFAULT_DIMENSIONS;
+  if (kind === 'agent') return AGENT_NODE_DEFAULT_DIMENSIONS;
+  if (kind === 'web-preview') return WEB_PREVIEW_NODE_DEFAULT_DIMENSIONS;
+  if (kind === 'mobile-preview') return MOBILE_PREVIEW_NODE_DEFAULT_DIMENSIONS;
   const contentDimensions = CONTENT_NODE_DIMENSIONS[kind];
   if (contentDimensions !== undefined) return contentDimensions.default;
   const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];
@@ -149,9 +143,9 @@ export function minimumNodeDimensionsForKind(kind: string): {
   readonly width: number;
   readonly height: number;
 } {
-  if (kind === "agent") return AGENT_NODE_MINIMUM_DIMENSIONS;
-  if (kind === "web-preview") return WEB_PREVIEW_NODE_MINIMUM_DIMENSIONS;
-  if (kind === "mobile-preview") return MOBILE_PREVIEW_NODE_MINIMUM_DIMENSIONS;
+  if (kind === 'agent') return AGENT_NODE_MINIMUM_DIMENSIONS;
+  if (kind === 'web-preview') return WEB_PREVIEW_NODE_MINIMUM_DIMENSIONS;
+  if (kind === 'mobile-preview') return MOBILE_PREVIEW_NODE_MINIMUM_DIMENSIONS;
   const contentDimensions = CONTENT_NODE_DIMENSIONS[kind];
   if (contentDimensions !== undefined) return contentDimensions.minimum;
   const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];

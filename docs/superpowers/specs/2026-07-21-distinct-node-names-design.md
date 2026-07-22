@@ -18,7 +18,7 @@ Every node on the ForgeBoard canvas carries a **distinct, friendly name** shown 
 - **Naming scheme:** friendly names from a curated pool (mythology / constellations — Hermes, Atlas, Orion, Vega, Juno…), not kind-numbered or short codes.
 - **Uniqueness:** names are always distinct. Auto-assign the first unused pool name at creation; auto-suffix a colliding rename (`Alice` → `Alice 2`).
 - **Scope:** every node kind gets a name badge at the top.
-- **Reuse `title`** as the name (not a separate `name`/`handle` field) — the shown name *is* the peer identifier; no second field to keep in sync.
+- **Reuse `title`** as the name (not a separate `name`/`handle` field) — the shown name _is_ the peer identifier; no second field to keep in sync.
 - **Migration:** on canvas load, only nodes whose title is still a bare generic kind label (or empty) are given a distinct friendly name; **user-customized titles are never touched**.
 - **Kind still conveyed by the header icon** — the friendly name is the prominent header text; the kind icon sits beside it (the kind label text is replaced by the name).
 
@@ -49,6 +49,7 @@ export function ensureUniqueNodeName(desired: string, inUse: ReadonlySet<string>
 ### 3. Rename
 
 Both edit paths run the input through `ensureUniqueNodeName(input, titlesInUseExcludingThisNode)` before writing:
+
 - Agent inline edit — `AgentSessionNode.tsx` `commitTitleEdit`.
 - Inspector Title field — `WorkspaceInspector.tsx` `onUpdateSelected({ title })`.
 
@@ -57,6 +58,7 @@ An empty rename falls back to `assignNodeName` (never persists an empty title).
 ### 4. Name badge at the top of every kind
 
 A shared presentation so the node's name is the prominent top identifier on every kind:
+
 - **Agent nodes:** already render `title` in the window title bar — no change beyond it now being the friendly name.
 - **All other kinds:** the `CanvasNode` header renders `data.title` (the name) as its primary text, with the existing kind icon beside it, replacing the current kind-label-only header text. Collapsed and Face-based kinds included.
 

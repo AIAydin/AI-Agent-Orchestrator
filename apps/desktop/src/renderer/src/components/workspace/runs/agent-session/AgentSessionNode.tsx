@@ -46,7 +46,13 @@ const PEER_TOOLS_UNAVAILABLE_HINT = 'Peer tools unavailable.';
  * title bar, the embedded terminal (or a start/exit card), and a bottom
  * strip for choosing the agent, model, permission profile, and context.
  */
-export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeData }): JSX.Element {
+export function AgentSessionNode({
+  id,
+  data,
+}: {
+  id: string;
+  data: WorkshopNodeData;
+}): JSX.Element {
   const {
     project,
     settings,
@@ -75,7 +81,9 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
   const [peerMaterial, setPeerMaterial] = useState<AgentSessionPeerLaunchMaterial | null>(null);
   const [peerHint, setPeerHint] = useState<string | null>(null);
 
-  const fallbackAdapter = isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'test-agent';
+  const fallbackAdapter = isRunAdapterId(settings.defaultAgent)
+    ? settings.defaultAgent
+    : 'test-agent';
   const adapter = data.adapterId ?? fallbackAdapter;
   const agent = runnableAgents.find((candidate) => candidate.id === adapter);
 
@@ -460,7 +468,9 @@ export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeD
             <option
               key={option.value}
               value={option.value}
-              disabled={permissionProfileUnavailableReason(option.value, settings, adapter) !== null}
+              disabled={
+                permissionProfileUnavailableReason(option.value, settings, adapter) !== null
+              }
             >
               {option.label}
             </option>

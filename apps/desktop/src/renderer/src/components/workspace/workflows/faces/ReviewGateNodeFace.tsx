@@ -198,7 +198,8 @@ export function ReviewGateNodeFace({ id, data }: NodeFaceProps): JSX.Element {
             {unsupportedAgents.length > 0 ? (
               <p className="test-face-warning">
                 Reviewer mode currently supports Test agent, Codex, and Claude Code. Reconfigure or
-                add a supported Agent for {unsupportedAgents.map((entry) => entry.title).join(', ')}.
+                add a supported Agent for {unsupportedAgents.map((entry) => entry.title).join(', ')}
+                .
               </p>
             ) : null}
             {typeof data.reviewerAgentId === 'string' &&
@@ -269,10 +270,7 @@ function ReviewGateEvidence({ gate }: { readonly gate: WorkflowReviewGateView })
   const findings = gate.reviewerAssessment?.findings ?? [];
   const blocking = new Set(gate.blockingFindingIds);
   return (
-    <section
-      className="review-gate-face-evidence"
-      aria-label="Authoritative review gate evidence"
-    >
+    <section className="review-gate-face-evidence" aria-label="Authoritative review gate evidence">
       <p>
         Attempt {gate.attempt} · deterministic {gate.deterministicStatus.replaceAll('-', ' ')} ·
         reviewer {gate.reviewerStatus.replaceAll('-', ' ')} · human{' '}

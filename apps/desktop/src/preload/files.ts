@@ -1,6 +1,6 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-import type { ForgeboardApi } from "../shared/api.js";
+import type { ForgeboardApi } from '../shared/api.js';
 import {
   FILE_IPC_CHANNELS,
   FileDocumentSchema,
@@ -16,29 +16,26 @@ import {
   fileIpcResultSchema,
   type FileDomainErrorCode,
   type FileIpcResult,
-} from "../shared/files/contracts.js";
+} from '../shared/files/contracts.js';
 import {
   PROJECT_IMAGE_IPC_CHANNELS,
   ProjectImageChooseInputSchema,
   ProjectImageLoadInputSchema,
   ProjectImageLoadResultSchema,
   ProjectImageReferenceSchema,
-} from "../shared/files/images/contracts.js";
+} from '../shared/files/images/contracts.js';
 import {
   PROJECT_VIDEO_IPC_CHANNELS,
   ProjectVideoChooseInputSchema,
   ProjectVideoInputSchema,
   ProjectVideoLoadResultSchema,
   ProjectVideoReferenceSchema,
-} from "../shared/files/videos/contracts.js";
+} from '../shared/files/videos/contracts.js';
 
-export type FileIpcInvoker = (
-  channel: string,
-  ...args: unknown[]
-) => Promise<unknown>;
+export type FileIpcInvoker = (channel: string, ...args: unknown[]) => Promise<unknown>;
 
 /** Creates the narrow validated bridge consumed by the renderer file editor. */
-export function createFileApi(invoke: FileIpcInvoker): ForgeboardApi["files"] {
+export function createFileApi(invoke: FileIpcInvoker): ForgeboardApi['files'] {
   return {
     tree: async (input) =>
       await invokeFile(
@@ -81,13 +78,7 @@ export function createFileApi(invoke: FileIpcInvoker): ForgeboardApi["files"] {
         input,
       ),
     reveal: async (input) => {
-      await invokeFile(
-        invoke,
-        FILE_IPC_CHANNELS.reveal,
-        FileRevealInputSchema,
-        z.null(),
-        input,
-      );
+      await invokeFile(invoke, FILE_IPC_CHANNELS.reveal, FileRevealInputSchema, z.null(), input);
     },
     openExternal: async (input) => {
       await invokeFile(
@@ -114,13 +105,10 @@ export function createFileApi(invoke: FileIpcInvoker): ForgeboardApi["files"] {
         ProjectImageLoadResultSchema,
         input,
       );
-      if (
-        result.projectId !== input.projectId ||
-        result.relativePath !== input.relativePath
-      ) {
+      if (result.projectId !== input.projectId || result.relativePath !== input.relativePath) {
         throw new FileBridgeError(
-          "INVALID_REQUEST",
-          "The project image response did not match the requested reference.",
+          'INVALID_REQUEST',
+          'The project image response did not match the requested reference.',
         );
       }
       return result;
@@ -141,13 +129,10 @@ export function createFileApi(invoke: FileIpcInvoker): ForgeboardApi["files"] {
         ProjectVideoLoadResultSchema,
         input,
       );
-      if (
-        result.projectId !== input.projectId ||
-        result.relativePath !== input.relativePath
-      ) {
+      if (result.projectId !== input.projectId || result.relativePath !== input.relativePath) {
         throw new FileBridgeError(
-          "INVALID_REQUEST",
-          "The project video response did not match the requested reference.",
+          'INVALID_REQUEST',
+          'The project video response did not match the requested reference.',
         );
       }
       return result;
@@ -164,10 +149,8 @@ async function invokeFile<Input, Output>(
 ): Promise<Output> {
   const parsedInput = inputSchema.parse(input);
   const rawResult: unknown = await invoke(channel, parsedInput);
-  const result: FileIpcResult<Output> =
-    fileIpcResultSchema(outputSchema).parse(rawResult);
-  if (!result.ok)
-    throw new FileBridgeError(result.error.code, result.error.message);
+  const result: FileIpcResult<Output> = fileIpcResultSchema(outputSchema).parse(rawResult);
+  if (!result.ok) throw new FileBridgeError(result.error.code, result.error.message);
   return result.value;
 }
 
@@ -177,6 +160,6 @@ class FileBridgeError extends Error {
     message: string,
   ) {
     super(message);
-    this.name = "FileBridgeError";
+    this.name = 'FileBridgeError';
   }
 }

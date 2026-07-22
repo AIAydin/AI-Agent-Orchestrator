@@ -41,6 +41,7 @@
 ### Task 1: Node face registry in CanvasNode
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/canvas/faces/node-face-registry.tsx`
 - Create: `src/renderer/src/components/workspace/canvas/faces/node-face-registry.test.tsx`
 - Create: `src/renderer/src/components/workspace/canvas/faces/node-face.css`
@@ -268,6 +269,7 @@ export function nodeFaceForKind(kind: string): NodeFaceComponent | null {
 ```
 
 `CanvasNode.tsx` edits:
+
 - Replace the imports at `:17-18` (`AgentSessionNode`, `PreviewNodeFace`) with:
 
 ```ts
@@ -277,8 +279,8 @@ import { nodeFaceForKind } from './faces/node-face-registry.js';
 - Replace lines 194-197:
 
 ```ts
-  const isAgent = data.kind === 'agent';
-  const Face = data.collapsed ? null : nodeFaceForKind(data.kind);
+const isAgent = data.kind === 'agent';
+const Face = data.collapsed ? null : nodeFaceForKind(data.kind);
 ```
 
 - Replace the render block at `:293-297`:
@@ -288,7 +290,7 @@ import { nodeFaceForKind } from './faces/node-face-registry.js';
       {Face === null && definition.behaviors.collapsible && !data.collapsed && (
 ```
 
-  (The `agent-drag-handle`/`agent-window` class logic and everything else stays.)
+(The `agent-drag-handle`/`agent-window` class logic and everything else stays.)
 
 - [ ] **Step 4: Run tests + typecheck.** New registry test → PASS. Run `apps/desktop/src/renderer/src/components/workspace/canvas/CanvasNode.test.tsx`, `apps/desktop/src/renderer/src/components/workspace/canvas/WorkspaceCanvas.test.tsx`, and `apps/desktop/src/renderer/src/components/workspace/previews/PreviewNodeFace.test.tsx` → PASS unchanged (pure refactor). Typecheck → clean.
 
@@ -306,22 +308,23 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 2: Per-kind dimensions for the eight document & status kinds
 
 **Files:**
+
 - Modify: `src/shared/canvas/node-dimensions.ts` (append table; extend both lookup functions)
 - Modify: `src/renderer/src/styles/workspace/canvas.css` (after the mobile-preview rule at `:153-156`)
 - Test: `src/renderer/src/components/workspace/model/node-persistence.test.ts` (append)
 
 **Interfaces (exact values; CSS and later face tests depend on them):**
 
-| kind | default | minimum |
-| --- | --- | --- |
-| `diagram` | 480×360 | 320×240 |
-| `whiteboard` | 560×420 | 360×280 |
-| `brief` | 440×440 | 320×280 |
-| `note-image` | 400×360 | 300×240 |
-| `task` | 340×280 | 260×200 |
+| kind          | default | minimum |
+| ------------- | ------- | ------- |
+| `diagram`     | 480×360 | 320×240 |
+| `whiteboard`  | 560×420 | 360×280 |
+| `brief`       | 440×440 | 320×280 |
+| `note-image`  | 400×360 | 300×240 |
+| `task`        | 340×280 | 260×200 |
 | `review-gate` | 360×300 | 280×220 |
-| `git-pr` | 420×380 | 320×260 |
-| `test` | 400×340 | 300×240 |
+| `git-pr`      | 420×380 | 320×260 |
+| `test`        | 400×340 | 300×240 |
 
 - [ ] **Step 1: Write the failing tests** — append to `node-persistence.test.ts` (same style as the 2a preview cases):
 
@@ -385,15 +388,15 @@ export const DOCUMENT_NODE_DIMENSIONS: Readonly<
 In `defaultNodeDimensionsForKind`, insert before the final `return DEFAULT_CANVAS_NODE_DIMENSIONS;`:
 
 ```ts
-  const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];
-  if (documentDimensions !== undefined) return documentDimensions.default;
+const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];
+if (documentDimensions !== undefined) return documentDimensions.default;
 ```
 
 In `minimumNodeDimensionsForKind`, insert before the final `return CANVAS_NODE_MINIMUM_DIMENSIONS;`:
 
 ```ts
-  const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];
-  if (documentDimensions !== undefined) return documentDimensions.minimum;
+const documentDimensions = DOCUMENT_NODE_DIMENSIONS[kind];
+if (documentDimensions !== undefined) return documentDimensions.minimum;
 ```
 
 `canvas.css` — append after the `mobile-preview` rule at `:153-156`:
@@ -449,6 +452,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 3: Context extensions — rosters on AgentSessionContext, new WorkflowRuntimeContext
 
 **Files:**
+
 - Create: `src/renderer/src/lib/use-keyed-stable.ts`
 - Create: `src/renderer/src/lib/use-keyed-stable.test.tsx`
 - Create: `src/renderer/src/components/workspace/workflows/WorkflowRuntimeContext.tsx`
@@ -609,7 +613,10 @@ describe('useWorkflowRuntime', () => {
     expect(() => renderHook(() => useWorkflowRuntime())).toThrow(
       'useWorkflowRuntime requires a WorkflowRuntimeProvider.',
     );
-    const value = { busyAction: null, startNode: vi.fn() } as unknown as WorkflowRuntimeContextValue;
+    const value = {
+      busyAction: null,
+      startNode: vi.fn(),
+    } as unknown as WorkflowRuntimeContextValue;
     const { result } = renderHook(() => useWorkflowRuntime(), {
       wrapper: ({ children }) => (
         <WorkflowRuntimeProvider value={value}>{children}</WorkflowRuntimeProvider>
@@ -735,86 +742,88 @@ and inside `AgentSessionContextValue` (after `requestDeleteNode`):
 ```
 
 `Workspace.tsx` wiring:
+
 - Imports to add: `useKeyedStable` from `'../../../lib/use-keyed-stable.js'`; `checkProducerId` from `'../workflows/workflow-node-config.js'` (if not already imported); `WorkflowRuntimeProvider, workflowPendingDecision, type WorkflowRuntimeContextValue` from `'../workflows/WorkflowRuntimeContext.js'`; `type CanvasNodeRosterEntry, type CheckProducerEntry` from the agent-session context module.
 - Insert immediately before the `agentSessionValue` memo (`:1519`):
 
 ```ts
-  const nodeRosterSource = useMemo<readonly CanvasNodeRosterEntry[]>(
-    () =>
-      nodes.map((node) => ({
-        id: node.id,
+const nodeRosterSource = useMemo<readonly CanvasNodeRosterEntry[]>(
+  () =>
+    nodes.map((node) => ({
+      id: node.id,
+      title: node.data.title,
+      kind: node.data.kind,
+      locked: node.data.locked,
+    })),
+  [nodes],
+);
+const nodeRoster = useKeyedStable(
+  nodeRosterSource,
+  nodeRosterSource
+    .map(
+      (entry) => `${entry.id}\u0000${entry.title}\u0000${entry.kind}\u0000${String(entry.locked)}`,
+    )
+    .join('\n'),
+);
+const checkProducersSource = useMemo<readonly CheckProducerEntry[]>(
+  () =>
+    nodes
+      .filter((node) => node.data.kind === 'test')
+      .map((node) => ({
+        nodeId: node.id,
+        producerId: checkProducerId(node),
         title: node.data.title,
-        kind: node.data.kind,
-        locked: node.data.locked,
+        checkKind: node.data.checkKind ?? 'test',
       })),
-    [nodes],
-  );
-  const nodeRoster = useKeyedStable(
-    nodeRosterSource,
-    nodeRosterSource
-      .map(
-        (entry) => `${entry.id}\u0000${entry.title}\u0000${entry.kind}\u0000${String(entry.locked)}`,
-      )
-      .join('\n'),
-  );
-  const checkProducersSource = useMemo<readonly CheckProducerEntry[]>(
-    () =>
-      nodes
-        .filter((node) => node.data.kind === 'test')
-        .map((node) => ({
-          nodeId: node.id,
-          producerId: checkProducerId(node),
-          title: node.data.title,
-          checkKind: node.data.checkKind ?? 'test',
-        })),
-    [nodes],
-  );
-  const checkProducers = useKeyedStable(
-    checkProducersSource,
-    checkProducersSource
-      .map(
-        (entry) =>
-          `${entry.nodeId}\u0000${entry.producerId}\u0000${entry.title}\u0000${entry.checkKind}`,
-      )
-      .join('\n'),
-  );
-  const openGitPrReadiness = useCallback(
-    (runId: string) => {
-      gitReview.openTarget({ kind: 'agent-worktree', projectId: project.id, runId });
-    },
-    [gitReview, project.id],
-  );
+  [nodes],
+);
+const checkProducers = useKeyedStable(
+  checkProducersSource,
+  checkProducersSource
+    .map(
+      (entry) =>
+        `${entry.nodeId}\u0000${entry.producerId}\u0000${entry.title}\u0000${entry.checkKind}`,
+    )
+    .join('\n'),
+);
+const openGitPrReadiness = useCallback(
+  (runId: string) => {
+    gitReview.openTarget({ kind: 'agent-worktree', projectId: project.id, runId });
+  },
+  [gitReview, project.id],
+);
 ```
 
 - Add `nodeRoster,`, `checkProducers,`, `openGitPrReadiness,` to the `agentSessionValue` object and its dependency array.
 - Insert after `agentSessionValue`:
 
 ```ts
-  const workflowRuntimeValue = useMemo<WorkflowRuntimeContextValue>(
-    () => ({
-      executions: workflows.executions,
-      interactionEvents: workflows.interactionEvents,
-      busyAction: workflows.busyAction,
-      mutationsAuthorized: workflows.mutationsAuthorized,
-      reviewGateFor: (nodeId: string) => workflowReviewGates.get(nodeId) ?? null,
-      pendingDecisionFor: (nodeId: string) =>
-        workflowPendingDecision(workflows.currentExecution, nodeId),
-      requestDecision: setWorkflowDecision,
-      startNode: (nodeId: string) =>
-        void workflows.start({ kind: 'node', nodeId, includeUpstream: false }),
-      cancelNode: (input) => void workflows.cancelNode(input),
-      revealArtifact: async (input) => {
-        unwrap(await window.forgeboard.workflows.revealArtifact(input));
-      },
-      openArtifact: async (input) => {
-        unwrap(await window.forgeboard.workflows.openArtifact(input));
-      },
-    }),
-    [workflowReviewGates, workflows],
-  );
+const workflowRuntimeValue = useMemo<WorkflowRuntimeContextValue>(
+  () => ({
+    executions: workflows.executions,
+    interactionEvents: workflows.interactionEvents,
+    busyAction: workflows.busyAction,
+    mutationsAuthorized: workflows.mutationsAuthorized,
+    reviewGateFor: (nodeId: string) => workflowReviewGates.get(nodeId) ?? null,
+    pendingDecisionFor: (nodeId: string) =>
+      workflowPendingDecision(workflows.currentExecution, nodeId),
+    requestDecision: setWorkflowDecision,
+    startNode: (nodeId: string) =>
+      void workflows.start({ kind: 'node', nodeId, includeUpstream: false }),
+    cancelNode: (input) => void workflows.cancelNode(input),
+    revealArtifact: async (input) => {
+      unwrap(await window.forgeboard.workflows.revealArtifact(input));
+    },
+    openArtifact: async (input) => {
+      unwrap(await window.forgeboard.workflows.openArtifact(input));
+    },
+  }),
+  [workflowReviewGates, workflows],
+);
 ```
 
-  (If `workflows` — the `useWorkflowRuns` return — is not referentially stable per render, narrow the deps to `[workflowReviewGates, workflows.executions, workflows.interactionEvents, workflows.busyAction, workflows.mutationsAuthorized, workflows.currentExecution, workflows.start, workflows.cancelNode]` and reference those fields via locals; do not silence the exhaustive-deps rule.)
+(If `workflows` — the `useWorkflowRuns` return — is not referentially stable per render, narrow the deps to `[workflowReviewGates, workflows.executions, workflows.interactionEvents, workflows.busyAction, workflows.mutationsAuthorized, workflows.currentExecution, workflows.start, workflows.cancelNode]` and reference those fields via locals; do not silence the exhaustive-deps rule.)
+
 - Nest the provider inside the existing `AgentSessionProvider` (`:1643`/`:1760`):
 
 ```tsx
@@ -845,6 +854,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 4: Diagram face (mermaid render extracted into a shared hook)
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/content/diagram/use-mermaid-diagram.ts`
 - Create: `src/renderer/src/components/workspace/content/diagram/DiagramNodeFace.tsx`
 - Create: `src/renderer/src/components/workspace/content/diagram/DiagramNodeFace.test.tsx`
@@ -857,7 +867,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```ts
 // use-mermaid-diagram.ts
 export interface MermaidDiagramState {
-  readonly svg: string | null;   // latest successful render (kept while re-rendering)
+  readonly svg: string | null; // latest successful render (kept while re-rendering)
   readonly error: string | null; // error for the *current* source only
   readonly rendering: boolean;
 }
@@ -949,10 +959,7 @@ describe('DiagramNodeFace', () => {
   it('reports render failures on the face', async () => {
     renderDiagram.mockRejectedValue(new Error('Parse error on line 2'));
     renderFace({ mermaidSource: 'not mermaid' });
-    expect(await screen.findByRole('alert')).toHaveProperty(
-      'textContent',
-      'Parse error on line 2',
-    );
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Parse error on line 2');
   });
 
   it('locks the editor for read-only nodes but keeps the source viewable', () => {
@@ -1066,7 +1073,11 @@ export function DiagramNodeFace({ id, data }: NodeFaceProps): JSX.Element {
           aria-pressed={editing}
           onClick={() => setEditing((open) => !open)}
         >
-          {editing ? <Eye size={12} aria-hidden="true" /> : <FilePenLine size={12} aria-hidden="true" />}
+          {editing ? (
+            <Eye size={12} aria-hidden="true" />
+          ) : (
+            <FilePenLine size={12} aria-hidden="true" />
+          )}
           {editing ? 'Preview' : 'Edit'}
         </button>
         <span
@@ -1121,11 +1132,12 @@ export function DiagramNodeFace({ id, data }: NodeFaceProps): JSX.Element {
 ```
 
 `MermaidDiagramInspector.tsx` refactor (behavior-preserving):
+
 - Delete the local `DiagramRenderState` type (`:10-12`), the `renderState`/`renderSequence` state (`:29`, `:32`), the derived `currentRender`/`renderedSvg`/`renderError` (`:33-35`), and the effect (`:37-62`).
 - Add `import { useMermaidDiagram } from './use-mermaid-diagram.js';` and, in the component body:
 
 ```ts
-  const { svg: renderedSvg, error: renderError, rendering } = useMermaidDiagram(source);
+const { svg: renderedSvg, error: renderError, rendering } = useMermaidDiagram(source);
 ```
 
 - Replace the `aria-busy` expression (`:132`) with `aria-busy={rendering}`.
@@ -1178,6 +1190,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 5: Whiteboard face (interactive SVG preview extracted, toolbar popover)
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/content/whiteboard/WhiteboardPreview.tsx`
 - Create: `src/renderer/src/components/workspace/content/whiteboard/WhiteboardNodeFace.tsx`
 - Create: `src/renderer/src/components/workspace/content/whiteboard/WhiteboardNodeFace.test.tsx`
@@ -1185,7 +1198,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Modify: `src/renderer/src/components/workspace/canvas/faces/node-face-registry.tsx` (register `whiteboard`)
 - Modify: `src/renderer/src/components/workspace/canvas/faces/node-face.css` (append)
 
-**Extraction (a move, byte-identical bodies):** move `WhiteboardPreview` (`WhiteboardMockupInspector.tsx:237-266`), `PreviewElement` (`:268-329`), `ArrowElement` (`:331-360`), and `diamondPoints` (`:473-477`) into `WhiteboardPreview.tsx`. Only `WhiteboardPreview` is exported; it gains one optional prop `className?: string | undefined` applied as `` className={`whiteboard-preview${className === undefined ? '' : ` ${className}`}`} ``. Target module header:
+**Extraction (a move, byte-identical bodies):** move `WhiteboardPreview` (`WhiteboardMockupInspector.tsx:237-266`), `PreviewElement` (`:268-329`), `ArrowElement` (`:331-360`), and `diamondPoints` (`:473-477`) into `WhiteboardPreview.tsx`. Only `WhiteboardPreview` is exported; it gains one optional prop `className?: string | undefined` applied as ``className={`whiteboard-preview${className === undefined ? '' : ` ${className}`}`}``. Target module header:
 
 ```tsx
 import type { WhiteboardDocument, WhiteboardElement } from './model.js';
@@ -1200,7 +1213,9 @@ export function WhiteboardPreview({
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
   readonly className?: string | undefined;
-}) { /* moved body, className applied as above */ }
+}) {
+  /* moved body, className applied as above */
+}
 ```
 
 The inspector adds `import { WhiteboardPreview } from './WhiteboardPreview.js';` and drops the moved symbols plus their now-unused imports.
@@ -1408,7 +1423,11 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
         {toolsOpen && !readOnly ? (
           <div className="node-face-popover" role="dialog" aria-label="Whiteboard tools">
             <div className="whiteboard-face-tools">
-              <button type="button" aria-label="Add rectangle" onClick={() => addElement('rectangle')}>
+              <button
+                type="button"
+                aria-label="Add rectangle"
+                onClick={() => addElement('rectangle')}
+              >
                 <Square size={13} aria-hidden="true" />
               </button>
               <button type="button" aria-label="Add ellipse" onClick={() => addElement('ellipse')}>
@@ -1505,6 +1524,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 6: Brief and note-image faces
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/content/BriefNodeFace.tsx`
 - Create: `src/renderer/src/components/workspace/content/BriefNodeFace.test.tsx`
 - Create: `src/renderer/src/components/workspace/content/note-image/use-note-image-previews.ts`
@@ -1623,11 +1643,11 @@ export function useNoteImagePreviews(
 `NoteImageInspector.tsx` then deletes its `previews` state, `signature` memo, `PreviewState` type, and the effect, replacing them with:
 
 ```ts
-  const previews = useNoteImagePreviews(
-    projectId,
-    images,
-    readOnly ? undefined : (reconciled) => onUpdate({ images: reconciled }),
-  );
+const previews = useNoteImagePreviews(
+  projectId,
+  images,
+  readOnly ? undefined : (reconciled) => onUpdate({ images: reconciled }),
+);
 ```
 
 - [ ] **Step 1: Write the failing tests.**
@@ -1721,7 +1741,12 @@ describe('BriefNodeFace', () => {
     renderFace({
       markdown: '# v2',
       versions: [
-        { id: 'v1', createdAt: '2026-07-19T10:00:00.000Z', markdown: '# v1', authorId: 'local-user' },
+        {
+          id: 'v1',
+          createdAt: '2026-07-19T10:00:00.000Z',
+          markdown: '# v1',
+          authorId: 'local-user',
+        },
       ],
     });
     fireEvent.click(screen.getByRole('button', { name: 'Version history' }));
@@ -2049,9 +2074,7 @@ export function BriefNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               onClick={() => {
                 session.recordHistory();
                 update({
-                  acceptanceCriteria: criteria.filter(
-                    (candidate) => candidate.id !== criterion.id,
-                  ),
+                  acceptanceCriteria: criteria.filter((candidate) => candidate.id !== criterion.id),
                 });
               }}
             >
@@ -2156,7 +2179,9 @@ export function NoteImageNodeFace({ id, data }: NodeFaceProps): JSX.Element {
         relativePath: reference.relativePath,
         kind: 'image',
         missing: reference.missing,
-        ...(reference.lastKnownHash === undefined ? {} : { lastKnownHash: reference.lastKnownHash }),
+        ...(reference.lastKnownHash === undefined
+          ? {}
+          : { lastKnownHash: reference.lastKnownHash }),
       };
       session.recordHistory();
       session.updateNodeData(id, { images: addOrReplaceImageReference(images, normalized) });
@@ -2313,6 +2338,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 7: Task and review-gate faces
 
 **Files:**
+
 - Modify: `src/renderer/src/components/workspace/workflows/workflow-node-config.ts` (receive moved helpers)
 - Modify: `src/renderer/src/components/workspace/workflows/WorkflowNodeInspector.tsx` (delete moved helpers, import them)
 - Create: `src/renderer/src/components/workspace/workflows/faces/TaskNodeFace.tsx`
@@ -2470,7 +2496,9 @@ function sessionValue(): AgentSessionContextValue {
   } as unknown as AgentSessionContextValue;
 }
 
-function runtimeValue(overrides: Partial<WorkflowRuntimeContextValue> = {}): WorkflowRuntimeContextValue {
+function runtimeValue(
+  overrides: Partial<WorkflowRuntimeContextValue> = {},
+): WorkflowRuntimeContextValue {
   return {
     executions: [],
     interactionEvents: [],
@@ -2706,9 +2734,7 @@ export function TaskNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               onClick={() => {
                 session.recordHistory();
                 update({
-                  acceptanceCriteria: criteria.filter(
-                    (candidate) => candidate.id !== criterion.id,
-                  ),
+                  acceptanceCriteria: criteria.filter((candidate) => candidate.id !== criterion.id),
                 });
               }}
             >
@@ -2873,6 +2899,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 8: Git-pr operational strip face
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/git-pr/configuration.ts` (receives moved helpers)
 - Modify: `src/renderer/src/components/workspace/shell/WorkspaceInspector.tsx` (delete `gitPrConfiguration`/`gitPrNodeDataPatch` at `:504-533`, import from the new module, call with `selectedNode.data`)
 - Create: `src/renderer/src/components/workspace/git-pr/GitPrNodeFace.tsx`
@@ -2891,11 +2918,15 @@ import type { GitPrNodeConfiguration } from './types.js';
 export function gitPrConfiguration(
   data: WorkshopNodeData,
   defaultRemote: string,
-): GitPrNodeConfiguration { /* moved body */ }
+): GitPrNodeConfiguration {
+  /* moved body */
+}
 
 export function gitPrNodeDataPatch(
   patch: Partial<GitPrNodeConfiguration>,
-): Partial<WorkshopNodeData> { /* moved body */ }
+): Partial<WorkshopNodeData> {
+  /* moved body */
+}
 ```
 
 - [ ] **Step 1: Write the failing test** (`GitPrNodeFace.test.tsx`):
@@ -3138,11 +3169,7 @@ export function GitPrNodeFace({ id, data }: NodeFaceProps): JSX.Element {
           className={`node-face-status ${controller.inspectionError === null ? '' : 'failed'}`}
           role="status"
         >
-          {busy
-            ? 'Working…'
-            : inspection?.ready === true
-              ? 'Ready to publish'
-              : 'Check needed'}
+          {busy ? 'Working…' : inspection?.ready === true ? 'Ready to publish' : 'Check needed'}
         </span>
       </div>
       <div className="node-face-body nowheel nodrag">
@@ -3363,6 +3390,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 9: Test-runner face
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/workflows/test-node/TestNodeFace.tsx`
 - Create: `src/renderer/src/components/workspace/workflows/test-node/TestNodeFace.test.tsx`
 - Modify: `src/renderer/src/components/workspace/canvas/faces/node-face-registry.tsx` (register `test`)

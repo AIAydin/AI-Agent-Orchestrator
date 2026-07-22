@@ -3,7 +3,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CanvasDocument } from '../../../../../shared/application/contracts.js';
+import type { CanvasDocument } from '../../../../../../shared/application/contracts.js';
 import { useCanvasPersistence } from './useCanvasPersistence.js';
 
 const PROJECT_A = '50000000-0000-4000-8000-000000000001';

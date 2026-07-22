@@ -1,16 +1,12 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 const BrowserCompanionNodeKeyShape = {
   projectId: z.string().trim().min(1).max(512),
   nodeId: z.string().trim().min(1).max(512),
 } as const;
 
-export const BrowserCompanionNodeKeySchema = z
-  .object(BrowserCompanionNodeKeyShape)
-  .strict();
-export type BrowserCompanionNodeKey = z.infer<
-  typeof BrowserCompanionNodeKeySchema
->;
+export const BrowserCompanionNodeKeySchema = z.object(BrowserCompanionNodeKeyShape).strict();
+export type BrowserCompanionNodeKey = z.infer<typeof BrowserCompanionNodeKeySchema>;
 
 export const BrowserCompanionOpenInputSchema = z
   .object({
@@ -21,17 +17,11 @@ export const BrowserCompanionOpenInputSchema = z
       .max(32_768)
       .refine((value) => {
         const parsed = new URL(value);
-        return (
-          parsed.protocol === "https:" &&
-          parsed.username === "" &&
-          parsed.password === ""
-        );
-      }, "Chrome websites must use HTTPS and cannot contain credentials."),
+        return parsed.protocol === 'https:' && parsed.username === '' && parsed.password === '';
+      }, 'Chrome websites must use HTTPS and cannot contain credentials.'),
   })
   .strict();
-export type BrowserCompanionOpenInput = z.infer<
-  typeof BrowserCompanionOpenInputSchema
->;
+export type BrowserCompanionOpenInput = z.infer<typeof BrowserCompanionOpenInputSchema>;
 
 export const BrowserCompanionViewportInputSchema = z
   .object({
@@ -40,17 +30,15 @@ export const BrowserCompanionViewportInputSchema = z
     height: z.number().int().min(200).max(1_600),
   })
   .strict();
-export type BrowserCompanionViewportInput = z.infer<
-  typeof BrowserCompanionViewportInputSchema
->;
+export type BrowserCompanionViewportInput = z.infer<typeof BrowserCompanionViewportInputSchema>;
 
 const BrowserCompanionPointerEventSchema = z
   .object({
-    kind: z.literal("pointer"),
-    type: z.enum(["mousePressed", "mouseReleased", "mouseMoved"]),
+    kind: z.literal('pointer'),
+    type: z.enum(['mousePressed', 'mouseReleased', 'mouseMoved']),
     x: z.number().finite().min(0).max(2_560),
     y: z.number().finite().min(0).max(1_600),
-    button: z.enum(["none", "left", "middle", "right"]),
+    button: z.enum(['none', 'left', 'middle', 'right']),
     buttons: z.number().int().min(0).max(7),
     clickCount: z.number().int().min(0).max(3),
   })
@@ -58,7 +46,7 @@ const BrowserCompanionPointerEventSchema = z
 
 const BrowserCompanionWheelEventSchema = z
   .object({
-    kind: z.literal("wheel"),
+    kind: z.literal('wheel'),
     x: z.number().finite().min(0).max(2_560),
     y: z.number().finite().min(0).max(1_600),
     deltaX: z.number().finite().min(-4_096).max(4_096),
@@ -69,8 +57,8 @@ const BrowserCompanionWheelEventSchema = z
 
 const BrowserCompanionKeyEventSchema = z
   .object({
-    kind: z.literal("key"),
-    type: z.enum(["keyDown", "keyUp"]),
+    kind: z.literal('key'),
+    type: z.enum(['keyDown', 'keyUp']),
     key: z.string().max(64),
     code: z.string().max(64),
     text: z.string().max(16),
@@ -81,7 +69,7 @@ const BrowserCompanionKeyEventSchema = z
 
 const BrowserCompanionTextEventSchema = z
   .object({
-    kind: z.literal("text"),
+    kind: z.literal('text'),
     text: z.string().min(1).max(16_384),
   })
   .strict();
@@ -89,7 +77,7 @@ const BrowserCompanionTextEventSchema = z
 export const BrowserCompanionInputSchema = z
   .object({
     ...BrowserCompanionNodeKeyShape,
-    event: z.discriminatedUnion("kind", [
+    event: z.discriminatedUnion('kind', [
       BrowserCompanionPointerEventSchema,
       BrowserCompanionWheelEventSchema,
       BrowserCompanionKeyEventSchema,
@@ -102,22 +90,14 @@ export type BrowserCompanionInput = z.infer<typeof BrowserCompanionInputSchema>;
 export const BrowserCompanionNavigationInputSchema = z
   .object({
     ...BrowserCompanionNodeKeyShape,
-    action: z.enum(["back", "forward", "reload"]),
+    action: z.enum(['back', 'forward', 'reload']),
   })
   .strict();
-export type BrowserCompanionNavigationInput = z.infer<
-  typeof BrowserCompanionNavigationInputSchema
->;
+export type BrowserCompanionNavigationInput = z.infer<typeof BrowserCompanionNavigationInputSchema>;
 
 export const BrowserCompanionStatusSchema = z
   .object({
-    state: z.enum([
-      "closed",
-      "launching",
-      "connected",
-      "failed",
-      "unavailable",
-    ]),
+    state: z.enum(['closed', 'launching', 'connected', 'failed', 'unavailable']),
     url: z.string().url().nullable(),
     title: z.string().max(1_024),
     chromeVersion: z.string().max(128).nullable(),
@@ -125,19 +105,15 @@ export const BrowserCompanionStatusSchema = z
     error: z.string().max(2_048).nullable(),
   })
   .strict();
-export type BrowserCompanionStatus = z.infer<
-  typeof BrowserCompanionStatusSchema
->;
+export type BrowserCompanionStatus = z.infer<typeof BrowserCompanionStatusSchema>;
 
 export const BrowserCompanionSnapshotSchema = z
   .object({
-    mimeType: z.literal("image/png"),
+    mimeType: z.literal('image/png'),
     data: z.string().max(12 * 1_024 * 1_024),
   })
   .strict();
-export type BrowserCompanionSnapshot = z.infer<
-  typeof BrowserCompanionSnapshotSchema
->;
+export type BrowserCompanionSnapshot = z.infer<typeof BrowserCompanionSnapshotSchema>;
 
 export const BrowserCompanionFrameRequestSchema = z
   .object({
@@ -145,28 +121,26 @@ export const BrowserCompanionFrameRequestSchema = z
     afterSequence: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   })
   .strict();
-export type BrowserCompanionFrameRequest = z.infer<
-  typeof BrowserCompanionFrameRequestSchema
->;
+export type BrowserCompanionFrameRequest = z.infer<typeof BrowserCompanionFrameRequestSchema>;
 
 export const BrowserCompanionFrameSchema = z
   .object({
     sequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
-    mimeType: z.literal("image/jpeg"),
+    mimeType: z.literal('image/jpeg'),
     data: z.string().max(6 * 1_024 * 1_024),
   })
   .strict();
 export type BrowserCompanionFrame = z.infer<typeof BrowserCompanionFrameSchema>;
 
 export const BROWSER_COMPANION_IPC_CHANNELS = Object.freeze({
-  open: "browser-companion:open",
-  status: "browser-companion:status",
-  focus: "browser-companion:focus",
-  close: "browser-companion:close",
-  clear: "browser-companion:clear",
-  snapshot: "browser-companion:snapshot",
-  frame: "browser-companion:frame",
-  viewport: "browser-companion:viewport",
-  input: "browser-companion:input",
-  navigate: "browser-companion:navigate",
+  open: 'browser-companion:open',
+  status: 'browser-companion:status',
+  focus: 'browser-companion:focus',
+  close: 'browser-companion:close',
+  clear: 'browser-companion:clear',
+  snapshot: 'browser-companion:snapshot',
+  frame: 'browser-companion:frame',
+  viewport: 'browser-companion:viewport',
+  input: 'browser-companion:input',
+  navigate: 'browser-companion:navigate',
 });

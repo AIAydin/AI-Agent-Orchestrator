@@ -15,10 +15,7 @@ import {
   WorkflowRuntimeProvider,
   type WorkflowRuntimeContextValue,
 } from '../../workflows/WorkflowRuntimeContext.js';
-import {
-  NodeCommentsProvider,
-  type NodeCommentsContextValue,
-} from './NodeCommentsContext.js';
+import { NodeCommentsProvider, type NodeCommentsContextValue } from './NodeCommentsContext.js';
 import { uniqueNodeTitle } from './unique-title.js';
 
 // Faces need the full in-canvas provider stack these tests don't build; stub the registry so
@@ -147,10 +144,7 @@ function renderNode(data: WorkshopNodeData, overrides: Overrides = {}) {
 
 function rendered(data: WorkshopNodeData, overrides: Overrides = {}) {
   return (
-    <CanvasNodeInteractionProvider
-      readOnly={overrides.readOnly ?? false}
-      setCollapsed={vi.fn()}
-    >
+    <CanvasNodeInteractionProvider readOnly={overrides.readOnly ?? false} setCollapsed={vi.fn()}>
       <AgentSessionProvider value={agentSessionValue(overrides)}>
         <WorkflowRuntimeProvider value={workflowRuntimeValue()}>
           <NodeCommentsProvider value={nodeCommentsValue(overrides)}>

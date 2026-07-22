@@ -115,15 +115,11 @@ export function normalizedCommand(node: WorkshopNode): WorkshopCommandConfigurat
 }
 
 /** Data-based variant of {@link normalizedCommand} for callers holding only `data` (faces). */
-export function normalizedCommandFor(
-  data: WorkshopNode['data'],
-): WorkshopCommandConfiguration {
+export function normalizedCommandFor(data: WorkshopNode['data']): WorkshopCommandConfiguration {
   return {
     executable: data.command?.executable ?? '',
     arguments: [...(data.command?.arguments ?? [])],
-    ...(data.command?.cwdRelative === undefined
-      ? {}
-      : { cwdRelative: data.command.cwdRelative }),
+    ...(data.command?.cwdRelative === undefined ? {} : { cwdRelative: data.command.cwdRelative }),
     environmentNames: [...(data.command?.environmentNames ?? [])],
   };
 }

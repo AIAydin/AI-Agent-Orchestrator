@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import type { WorkshopNode } from '../../canvas/CanvasNode.js';
 import { applyNodeDataPatch } from './node-data-patch.js';
 
 describe('applyNodeDataPatch', () => {

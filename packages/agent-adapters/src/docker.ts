@@ -180,7 +180,7 @@ export class DockerLaunchValidationError extends Error {
   }
 }
 
-function hostPathApi(style: DockerHostPathStyle): path.PlatformPath {
+function hostPathApi(style: DockerHostPathStyle): typeof path.posix {
   return style === 'win32' ? path.win32 : path.posix;
 }
 

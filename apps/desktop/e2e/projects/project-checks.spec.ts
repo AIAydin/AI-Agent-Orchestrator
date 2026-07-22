@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './support/electron.js';
+import { launchDesktop, watchExternalRequests } from '../support/electron.js';
 
 test('project checks configure, approve, execute, cancel, and persist entirely through the UI', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-checks-e2e-'));

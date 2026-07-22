@@ -160,6 +160,7 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   previewSideBySide?: boolean;
   browserAuthenticationEnabled?: boolean;
   agentBrowserAccess?: boolean;
+  agentBrowserInteraction?: boolean;
   previewComparison?: {
     leftTarget?: { kind: 'agent-run'; runId: string };
     rightTarget?: { kind: 'agent-run'; runId: string };

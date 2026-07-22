@@ -45,7 +45,9 @@ export function NoteImageNodeFace({ id, data }: NodeFaceProps): JSX.Element {
         relativePath: reference.relativePath,
         kind: 'image',
         missing: reference.missing,
-        ...(reference.lastKnownHash === undefined ? {} : { lastKnownHash: reference.lastKnownHash }),
+        ...(reference.lastKnownHash === undefined
+          ? {}
+          : { lastKnownHash: reference.lastKnownHash }),
       };
       session.recordHistory();
       session.updateNodeData(id, {
@@ -61,10 +63,7 @@ export function NoteImageNodeFace({ id, data }: NodeFaceProps): JSX.Element {
     }
   };
 
-  const includeCanvasImage = (
-    entry: (typeof canvasImages)[number],
-    checked: boolean,
-  ): void => {
+  const includeCanvasImage = (entry: (typeof canvasImages)[number], checked: boolean): void => {
     if (readOnly) return;
     session.recordHistory();
     if (checked) {
@@ -205,8 +204,7 @@ export function NoteImageNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                           disabled={readOnly || choosing}
                           onClick={() => void choose(image.relativePath)}
                         >
-                          <Link2 size={12} aria-hidden="true" />{' '}
-                          {missing ? 'Find image' : 'Relink'}
+                          <Link2 size={12} aria-hidden="true" /> {missing ? 'Find image' : 'Relink'}
                           {missing ? <RotateCcw size={11} aria-hidden="true" /> : null}
                         </button>
                         <button

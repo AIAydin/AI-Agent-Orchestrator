@@ -25,6 +25,7 @@
 ### Task 1: Per-kind node dimensions
 
 **Files:**
+
 - Modify: `src/shared/canvas/node-dimensions.ts`
 - Modify: `src/renderer/src/components/workspace/model/node-persistence.ts:10-31`
 - Modify: `src/renderer/src/components/workspace/canvas/CanvasNode.tsx:187` (minimum selection) and `:9` (imports)
@@ -32,6 +33,7 @@
 - Test: `src/renderer/src/components/workspace/model/node-persistence.test.ts`
 
 **Interfaces:**
+
 - Consumes: existing `DEFAULT_CANVAS_NODE_DIMENSIONS`, `CANVAS_NODE_MINIMUM_DIMENSIONS`.
 - Produces: `AGENT_NODE_DEFAULT_DIMENSIONS = { width: 560, height: 480 }` and `AGENT_NODE_MINIMUM_DIMENSIONS = { width: 400, height: 320 }` exported from `src/shared/canvas/node-dimensions.ts`; `initialWorkshopNodeDimensions('agent')` returns the agent default; `persistedWorkshopNodeDimensions` floors agent nodes at the agent minimum. Later tasks rely on these exact names.
 
@@ -135,18 +137,20 @@ git commit -m "feat: larger per-kind dimensions for agent session nodes"
 ### Task 2: Provider theme map
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/node-registry/provider-themes.ts`
 - Test: `src/renderer/src/components/workspace/node-registry/provider-themes.test.ts`
 
 **Interfaces:**
+
 - Produces (used by Tasks 5 and 6):
 
 ```ts
 export interface ProviderTheme {
   readonly id: string;
-  readonly label: string;      // window title-bar provider label, e.g. "Claude Code"
-  readonly monogram: string;   // 1–2 chars for the start card / palette badge
-  readonly accent: string;     // hex accent
+  readonly label: string; // window title-bar provider label, e.g. "Claude Code"
+  readonly monogram: string; // 1–2 chars for the start card / palette badge
+  readonly accent: string; // hex accent
   readonly titleBarTint: string; // translucent tint for the window title bar
 }
 export function providerTheme(adapterId: string | undefined): ProviderTheme | null;
@@ -224,10 +228,12 @@ git commit -m "feat: provider theme map for agent session windows"
 ### Task 3: Agent session launch configuration
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/runs/agent-session/launch-config.ts`
 - Test: `src/renderer/src/components/workspace/runs/agent-session/launch-config.test.ts`
 
 **Interfaces:**
+
 - Consumes: `AgentDetection`, `PermissionProfile` from `src/shared/application/contracts.ts`; `TerminalNodeConfiguration` from `../../terminal/types.js`.
 - Produces (used by Task 5):
 
@@ -260,12 +266,19 @@ const claude: AgentDetection = {
   version: '2.1.0',
   providerDisclosure: 'runs claude',
 };
-const codex: AgentDetection = { ...claude, id: 'codex', label: 'Codex', executable: '/usr/local/bin/codex' };
+const codex: AgentDetection = {
+  ...claude,
+  id: 'codex',
+  label: 'Codex',
+  executable: '/usr/local/bin/codex',
+};
 
 describe('agentSessionUnavailableReason', () => {
   it('requires a detected executable', () => {
     expect(agentSessionUnavailableReason(undefined)).toMatch(/pick an installed agent/i);
-    expect(agentSessionUnavailableReason({ ...claude, executable: null })).toMatch(/isn't installed/i);
+    expect(agentSessionUnavailableReason({ ...claude, executable: null })).toMatch(
+      /isn't installed/i,
+    );
     expect(agentSessionUnavailableReason(claude)).toBeNull();
   });
 });
@@ -372,11 +385,13 @@ git commit -m "feat: provider launch configuration for interactive agent session
 ### Task 4: AgentSessionContext (canvas ↔ workspace bridge)
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/runs/agent-session/AgentSessionContext.tsx`
 - Modify: `src/renderer/src/components/workspace/shell/Workspace.tsx` — wrap the `<WorkspaceCanvas …>` element (find it with `grep -n "<WorkspaceCanvas" Workspace.tsx`) in the provider.
 - Test: `src/renderer/src/components/workspace/runs/agent-session/AgentSessionContext.test.tsx`
 
 **Interfaces:**
+
 - Produces (consumed by Task 5's `AgentSessionNode`):
 
 ```tsx
@@ -395,7 +410,10 @@ export interface AgentSessionContextValue {
   removeAgentContext(agentNodeId: string, attachmentNodeId: string): void;
   requestDeleteNode(nodeId: string): void;
 }
-export const AgentSessionProvider: React.FC<{ value: AgentSessionContextValue; children: React.ReactNode }>;
+export const AgentSessionProvider: React.FC<{
+  value: AgentSessionContextValue;
+  children: React.ReactNode;
+}>;
 export function useAgentSession(): AgentSessionContextValue; // throws outside provider
 ```
 
@@ -404,7 +422,11 @@ export function useAgentSession(): AgentSessionContextValue; // throws outside p
 ```tsx
 import { describe, expect, it } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { AgentSessionProvider, useAgentSession, type AgentSessionContextValue } from './AgentSessionContext.js';
+import {
+  AgentSessionProvider,
+  useAgentSession,
+  type AgentSessionContextValue,
+} from './AgentSessionContext.js';
 
 describe('useAgentSession', () => {
   it('throws without a provider', () => {
@@ -414,7 +436,9 @@ describe('useAgentSession', () => {
   it('returns the provided value', () => {
     const value = { graphReadOnly: true } as unknown as AgentSessionContextValue;
     const { result } = renderHook(() => useAgentSession(), {
-      wrapper: ({ children }) => <AgentSessionProvider value={value}>{children}</AgentSessionProvider>,
+      wrapper: ({ children }) => (
+        <AgentSessionProvider value={value}>{children}</AgentSessionProvider>
+      ),
     });
     expect(result.current.graphReadOnly).toBe(true);
   });
@@ -448,6 +472,7 @@ git commit -m "feat: agent session context bridging canvas nodes to workspace se
 ### Task 5: AgentSessionNode — the window with the CLI inside
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/runs/agent-session/AgentSessionNode.tsx`
 - Create: `src/renderer/src/components/workspace/runs/agent-session/agent-session.css`
 - Modify: `src/renderer/src/components/workspace/canvas/CanvasNode.tsx` (agent branch, `data-provider`, drag-handle class)
@@ -455,10 +480,12 @@ git commit -m "feat: agent session context bridging canvas nodes to workspace se
 - Test: `src/renderer/src/components/workspace/runs/agent-session/AgentSessionNode.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `useAgentSession()` (Task 4), `agentSessionLaunch`/`agentSessionUnavailableReason` (Task 3), `providerTheme` (Task 2), `useTerminalNodeController` + `TerminalSurface` + `TerminalLaunchReviewDialog` + `terminalOperationsFromWindow` from `../../terminal/`, `useCanvasNodeInteractions`, `PERMISSION_PROFILE_OPTIONS` + `permissionProfileUnavailableReason` from `../../../permissions/permission-profile-ui.js`, `effectiveNodeModel` from `../agent-node/model-selection.js`.
 - Produces: `export function AgentSessionNode({ id, data }: { id: string; data: WorkshopNodeData }): JSX.Element` and `export const AGENT_NODE_DRAG_HANDLE = '.agent-drag-handle';`
 
 **Component behavior (implement exactly):**
+
 1. Resolve `adapter` = `data.adapterId ?? settings.defaultAgent if runnable else 'test-agent'` (same fallback rule as `Workspace.tsx:927-930`), `agent` = `runnableAgents.find(a => a.id === adapter)`.
 2. `launch = agent ? agentSessionLaunch(agent, effectiveNodeModel(agent, data.model, settings.agentDefaultModels[adapter]), data.permissionProfile ?? 'worktree-write') : null`.
 3. `controller = useTerminalNodeController({ projectId: project.id, nodeId: id, configuration: launch?.configuration ?? { executable: '', arguments: [], cwdRelative: '', environmentVariableNames: [] }, onError: reportError, operations: terminalOperationsFromWindow() })`.
@@ -488,22 +515,121 @@ git commit -m "feat: agent session context bridging canvas nodes to workspace se
 **CSS (`agent-session.css`, imported by `AgentSessionNode.tsx`; key rules, adjust values only if tokens differ):**
 
 ```css
-.canvas-node.agent-window { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; }
-.canvas-node.agent-window::before { display: none; }
-.agent-window-titlebar { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 10px; background: linear-gradient(var(--provider-tint), transparent), var(--surface-raised); border-bottom: 1px solid var(--line); cursor: grab; }
-.traffic { width: 12px; height: 12px; border-radius: 50%; border: none; padding: 0; cursor: pointer; }
-.traffic.close { background: #ff5f57; } .traffic.collapse { background: #febc2e; } .traffic.zoom { background: #28c840; }
-.agent-title-input { flex: 1; min-width: 0; border: none; background: transparent; color: var(--text); font-weight: 600; font-size: var(--text-sm, 13px); }
-.agent-provider-label { color: var(--text-faint); font-size: var(--text-xs); white-space: nowrap; }
-.agent-terminal { flex: 1; min-height: 0; background: #0d0f12; }
-.agent-terminal > div { height: 100%; }
-.agent-start-card { flex: 1; display: grid; place-items: center; align-content: center; gap: 10px; background: #0d0f12; color: var(--text-soft); padding: 18px; text-align: center; }
-.agent-monogram { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; font-size: 20px; color: #0d0f12; background: var(--node-accent); }
-.agent-window-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 5px 8px; border-top: 1px solid var(--line); background: var(--surface-raised); font-size: var(--text-xs); }
-.agent-window-strip select, .agent-window-strip input { font-size: var(--text-xs); max-width: 130px; }
-.agent-review-overlay { position: absolute; inset: 34px 0 0 0; z-index: 5; overflow: auto; background: color-mix(in srgb, var(--surface) 88%, transparent); }
-.agent-exit-strip { display: flex; gap: 8px; align-items: center; padding: 4px 8px; border-top: 1px solid var(--line); color: var(--text-soft); }
-.agent-last-run pre { max-height: 140px; overflow: auto; white-space: pre-wrap; }
+.canvas-node.agent-window {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.canvas-node.agent-window::before {
+  display: none;
+}
+.agent-window-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 10px;
+  background: linear-gradient(var(--provider-tint), transparent), var(--surface-raised);
+  border-bottom: 1px solid var(--line);
+  cursor: grab;
+}
+.traffic {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.traffic.close {
+  background: #ff5f57;
+}
+.traffic.collapse {
+  background: #febc2e;
+}
+.traffic.zoom {
+  background: #28c840;
+}
+.agent-title-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: var(--text-sm, 13px);
+}
+.agent-provider-label {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.agent-terminal {
+  flex: 1;
+  min-height: 0;
+  background: #0d0f12;
+}
+.agent-terminal > div {
+  height: 100%;
+}
+.agent-start-card {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  background: #0d0f12;
+  color: var(--text-soft);
+  padding: 18px;
+  text-align: center;
+}
+.agent-monogram {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 20px;
+  color: #0d0f12;
+  background: var(--node-accent);
+}
+.agent-window-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-raised);
+  font-size: var(--text-xs);
+}
+.agent-window-strip select,
+.agent-window-strip input {
+  font-size: var(--text-xs);
+  max-width: 130px;
+}
+.agent-review-overlay {
+  position: absolute;
+  inset: 34px 0 0 0;
+  z-index: 5;
+  overflow: auto;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+.agent-exit-strip {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px;
+  border-top: 1px solid var(--line);
+  color: var(--text-soft);
+}
+.agent-last-run pre {
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
 ```
 
 - [ ] **Step 1: Write failing tests** (`AgentSessionNode.test.tsx`). Mock the terminal module and context:
@@ -513,11 +639,25 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 const controller = {
-  session: null, sessions: [], output: [], pendingPlan: null, busy: null, error: null,
-  notice: null, active: false, replayWindowLimited: false,
-  chooseExecutable: vi.fn(), prepareLaunch: vi.fn(async () => {}), confirmLaunch: vi.fn(async () => {}),
-  cancelLaunch: vi.fn(async () => {}), refresh: vi.fn(async () => {}), selectSession: vi.fn(async () => {}),
-  sendInput: vi.fn(), resize: vi.fn(), interrupt: vi.fn(async () => {}), terminate: vi.fn(async () => {}),
+  session: null,
+  sessions: [],
+  output: [],
+  pendingPlan: null,
+  busy: null,
+  error: null,
+  notice: null,
+  active: false,
+  replayWindowLimited: false,
+  chooseExecutable: vi.fn(),
+  prepareLaunch: vi.fn(async () => {}),
+  confirmLaunch: vi.fn(async () => {}),
+  cancelLaunch: vi.fn(async () => {}),
+  refresh: vi.fn(async () => {}),
+  selectSession: vi.fn(async () => {}),
+  sendInput: vi.fn(),
+  resize: vi.fn(),
+  interrupt: vi.fn(async () => {}),
+  terminate: vi.fn(async () => {}),
 };
 vi.mock('../../terminal/index.js', async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -530,6 +670,7 @@ vi.mock('../../terminal/index.js', async (importOriginal) => ({
 (If `../../terminal/index.js` does not re-export `useTerminalNodeController`, mock the individual module paths instead — check `terminal/index.ts` first.)
 
 Tests (context value stubbed with a claude runnable agent, connected gate, spies):
+
 1. renders Start session on the start card and calls `prepareLaunch` on click;
 2. gate warning (`gateFor` → `{ state: 'unknown', warning: 'needs a refresh', actionLabel: 'Refresh status', … }`) hides Start, renders the warning and recheck button;
 3. `controller.session = { id: 's1', status: 'running' } as never; controller.active = true` → renders `terminal-surface`;
@@ -561,11 +702,13 @@ git commit -m "feat: agent nodes are live CLI session windows on the canvas"
 ### Task 6: Provider entries in the node palette
 
 **Files:**
+
 - Modify: `src/renderer/src/components/workspace/shell/WorkspaceRail.tsx` (new "Agents" section above "Node templates", new props)
 - Modify: `src/renderer/src/components/workspace/shell/Workspace.tsx` (`addNode` overrides param, `addAgentNode`, pass new rail props)
 - Test: `src/renderer/src/components/workspace/shell/WorkspaceRail.test.tsx` (extend)
 
 **Interfaces:**
+
 - `addNode(kind: NodeKind, position?: {x,y}, dataOverrides?: Partial<WorkshopNodeData>)` — overrides spread LAST into `data`.
 - Rail props added: `runnableAgents: readonly (AgentDetection & { id: RunAdapterId })[]`, `onAddAgentNode: (adapterId: RunAdapterId) => void`.
 
@@ -636,6 +779,7 @@ git commit -m "feat: per-provider agent entries in the node palette"
 ### Task 7: Retire the agent inspector panel
 
 **Files:**
+
 - Modify: `src/renderer/src/components/workspace/shell/WorkspaceInspector.tsx` (agent branch at `:390-429`; early-return for agent kind before the shared fieldset at `:206`)
 - Modify: `src/renderer/src/components/workspace/shell/Workspace.tsx` (drop now-unused inspector props/wiring)
 - Delete (only if unreferenced after the edits — verify each with `grep -rn "<name>" apps/desktop/src | grep -v test`): `AgentNodePanel.tsx` + its test, `AgentAttemptHistory.tsx` + hooks used only by it.

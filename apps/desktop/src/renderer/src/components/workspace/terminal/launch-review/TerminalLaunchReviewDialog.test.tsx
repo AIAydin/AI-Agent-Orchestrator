@@ -3,7 +3,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { TerminalLaunchPlanView } from '../../../../../shared/terminal/index.js';
+import type { TerminalLaunchPlanView } from '../../../../../../shared/terminal/index.js';
 import { TerminalLaunchReviewDialog } from './TerminalLaunchReviewDialog.js';
 
 afterEach(cleanup);

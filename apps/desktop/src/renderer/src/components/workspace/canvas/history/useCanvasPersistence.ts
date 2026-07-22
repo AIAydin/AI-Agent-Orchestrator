@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import type { CanvasDocument } from '../../../../../shared/application/contracts.js';
+import type { CanvasDocument } from '../../../../../../shared/application/contracts.js';
 import {
   fitCanvasHistory,
   type CanvasHistoryState,
-} from '../../../../../shared/canvas/history/contracts.js';
-import { unwrap } from '../../../lib/ipc.js';
+} from '../../../../../../shared/canvas/history/contracts.js';
+import { unwrap } from '../../../../lib/ipc.js';
 
 export type CanvasSaveState = 'saved' | 'saving' | 'error';
 

@@ -1,10 +1,5 @@
-import {
-  BrowserWindow,
-  ipcMain,
-  type Dialog,
-  type IpcMainInvokeEvent,
-} from "electron";
-import { z } from "zod";
+import { BrowserWindow, ipcMain, type Dialog, type IpcMainInvokeEvent } from 'electron';
+import { z } from 'zod';
 
 import {
   BROWSER_COMPANION_IPC_CHANNELS,
@@ -18,16 +13,16 @@ import {
   type BrowserCompanionFrame,
   type BrowserCompanionSnapshot,
   type BrowserCompanionStatus,
-} from "../../shared/browser-companion/contracts.js";
-import type { IpcResult } from "../../shared/application/contracts.js";
-import type { BrowserCompanionService } from "./service.js";
+} from '../../shared/browser-companion/contracts.js';
+import type { IpcResult } from '../../shared/application/contracts.js';
+import type { BrowserCompanionService } from './service.js';
 
 export class BrowserCompanionIpcService {
   readonly #channels: string[] = [];
 
   constructor(
     private readonly service: BrowserCompanionService,
-    private readonly dialog: Pick<Dialog, "showMessageBox">,
+    private readonly dialog: Pick<Dialog, 'showMessageBox'>,
   ) {}
 
   registerIpcHandlers(): void {
@@ -37,11 +32,7 @@ export class BrowserCompanionIpcService {
       async (input, event) => {
         const status = await this.service.open(input);
         const parent = BrowserWindow.fromWebContents(event.sender);
-        if (
-          status.state === "connected" &&
-          parent !== null &&
-          !parent.isDestroyed()
-        ) {
+        if (status.state === 'connected' && parent !== null && !parent.isDestroyed()) {
           parent.show();
           parent.focus();
         }
@@ -65,44 +56,32 @@ export class BrowserCompanionIpcService {
     );
     ipcMain.handle(
       BROWSER_COMPANION_IPC_CHANNELS.clear,
-      async (
-        event: IpcMainInvokeEvent,
-        rawInput,
-      ): Promise<IpcResult<BrowserCompanionStatus>> => {
+      async (event: IpcMainInvokeEvent, rawInput): Promise<IpcResult<BrowserCompanionStatus>> => {
         try {
           requireMainFrame(event);
           const input = BrowserCompanionNodeKeySchema.parse(rawInput);
           const parent = BrowserWindow.fromWebContents(event.sender);
-          if (parent === null || parent.isDestroyed())
-            throw new Error("Forgeboard window closed.");
+          if (parent === null || parent.isDestroyed()) throw new Error('Forgeboard window closed.');
           const decision = await this.dialog.showMessageBox(parent, {
-            type: "warning",
-            title: "Clear saved Chrome sign-in data?",
-            message:
-              "This will close the connected Chrome window and erase its dedicated profile.",
+            type: 'warning',
+            title: 'Clear saved Chrome sign-in data?',
+            message: 'This will close the connected Chrome window and erase its dedicated profile.',
             detail:
-              "Saved cookies, website storage, and sign-ins for this preview cannot be recovered.",
-            buttons: ["Cancel", "Clear browser data"],
+              'Saved cookies, website storage, and sign-ins for this preview cannot be recovered.',
+            buttons: ['Cancel', 'Clear browser data'],
             defaultId: 0,
             cancelId: 0,
             noLink: true,
           });
-          if (decision.response !== 1)
-            return { ok: true, value: await this.service.status(input) };
+          if (decision.response !== 1) return { ok: true, value: await this.service.status(input) };
           requireMainFrame(event);
           return { ok: true, value: await this.service.clear(input) };
         } catch (error) {
           return {
             ok: false,
             error: {
-              code:
-                error instanceof z.ZodError
-                  ? "INVALID_REQUEST"
-                  : "OPERATION_FAILED",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Could not clear Chrome data.",
+              code: error instanceof z.ZodError ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
+              message: error instanceof Error ? error.message : 'Could not clear Chrome data.',
             },
           };
         }
@@ -114,10 +93,7 @@ export class BrowserCompanionIpcService {
       BrowserCompanionNodeKeySchema,
       async (input) => await this.service.snapshot(input),
     );
-    this.#handle<
-      z.infer<typeof BrowserCompanionFrameRequestSchema>,
-      BrowserCompanionFrame | null
-    >(
+    this.#handle<z.infer<typeof BrowserCompanionFrameRequestSchema>, BrowserCompanionFrame | null>(
       BROWSER_COMPANION_IPC_CHANNELS.frame,
       BrowserCompanionFrameRequestSchema,
       (input) => this.service.frame(input),
@@ -165,17 +141,11 @@ export class BrowserCompanionIpcService {
   #handle<Input, Output = BrowserCompanionStatus>(
     channel: string,
     schema: z.ZodType<Input>,
-    operation: (
-      input: Input,
-      event: IpcMainInvokeEvent,
-    ) => Output | Promise<Output>,
+    operation: (input: Input, event: IpcMainInvokeEvent) => Output | Promise<Output>,
   ): void {
     ipcMain.handle(
       channel,
-      async (
-        event: IpcMainInvokeEvent,
-        rawInput,
-      ): Promise<IpcResult<Output>> => {
+      async (event: IpcMainInvokeEvent, rawInput): Promise<IpcResult<Output>> => {
         try {
           requireMainFrame(event);
           const input = schema.parse(rawInput);
@@ -184,14 +154,9 @@ export class BrowserCompanionIpcService {
           return {
             ok: false,
             error: {
-              code:
-                error instanceof z.ZodError
-                  ? "INVALID_REQUEST"
-                  : "OPERATION_FAILED",
+              code: error instanceof z.ZodError ? 'INVALID_REQUEST' : 'OPERATION_FAILED',
               message:
-                error instanceof Error
-                  ? error.message
-                  : "Chrome companion operation failed.",
+                error instanceof Error ? error.message : 'Chrome companion operation failed.',
             },
           };
         }
@@ -203,8 +168,6 @@ export class BrowserCompanionIpcService {
 
 function requireMainFrame(event: IpcMainInvokeEvent): void {
   if (event.senderFrame !== event.sender.mainFrame) {
-    throw new Error(
-      "Chrome companion requests require the active Forgeboard main frame.",
-    );
+    throw new Error('Chrome companion requests require the active Forgeboard main frame.');
   }
 }

@@ -80,10 +80,7 @@ describe('DiagramNodeFace', () => {
   it('reports render failures on the face', async () => {
     renderDiagram.mockRejectedValue(new Error('Parse error on line 2'));
     renderFace({ mermaidSource: 'not mermaid' });
-    expect(await screen.findByRole('alert')).toHaveProperty(
-      'textContent',
-      'Parse error on line 2',
-    );
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Parse error on line 2');
   });
 
   it('locks the editor for read-only nodes but keeps the source viewable', () => {

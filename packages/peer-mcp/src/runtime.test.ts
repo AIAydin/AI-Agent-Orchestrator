@@ -7,7 +7,24 @@ const previewMethods = {
   previews: vi.fn(() => Promise.resolve({ previews: [] })),
   readPreview: vi.fn(() => Promise.resolve({ url: '', title: '', text: '', dom: '', console: [] })),
   screenshotPreview: vi.fn(() => Promise.resolve({ mimeType: 'image/png', data: '' })),
-} satisfies Pick<HubClient, 'previews' | 'readPreview' | 'screenshotPreview'>;
+  elementsPreview: vi.fn(() =>
+    Promise.resolve({ pageVersion: '', url: '', title: '', elements: [] }),
+  ),
+  scrollPreview: vi.fn(() => Promise.resolve({ pageVersion: '', url: '' })),
+  actionPreview: vi.fn(() =>
+    Promise.resolve({ performed: true as const, pageVersion: '', url: '' }),
+  ),
+  videos: vi.fn(() => Promise.resolve({ videos: [] })),
+} satisfies Pick<
+  HubClient,
+  | 'previews'
+  | 'readPreview'
+  | 'screenshotPreview'
+  | 'elementsPreview'
+  | 'scrollPreview'
+  | 'actionPreview'
+  | 'videos'
+>;
 
 describe('createStdioLoop', () => {
   it('drains an in-flight tools/call reply before signaling done, even when input ends immediately', async () => {
@@ -18,7 +35,12 @@ describe('createStdioLoop', () => {
       ...previewMethods,
       peers: vi.fn<
         () => Promise<{
-          agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
+          agents: {
+            name: string;
+            provider: string | null;
+            live: boolean;
+            muted: boolean;
+          }[];
         }>
       >(
         () =>
@@ -71,7 +93,12 @@ describe('createStdioLoop', () => {
       ...previewMethods,
       peers: vi.fn<
         () => Promise<{
-          agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
+          agents: {
+            name: string;
+            provider: string | null;
+            live: boolean;
+            muted: boolean;
+          }[];
         }>
       >(() => Promise.reject(new Error('boom'))),
       message: vi.fn<(to: string, message: string) => Promise<{ result: string }>>(() =>
@@ -121,7 +148,12 @@ describe('createStdioLoop', () => {
       ...previewMethods,
       peers: vi.fn<
         () => Promise<{
-          agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
+          agents: {
+            name: string;
+            provider: string | null;
+            live: boolean;
+            muted: boolean;
+          }[];
         }>
       >(() => Promise.resolve({ agents: [] })),
       message: vi.fn<(to: string, message: string) => Promise<{ result: string }>>(() =>
@@ -162,7 +194,12 @@ describe('createStdioLoop', () => {
       ...previewMethods,
       peers: vi.fn<
         () => Promise<{
-          agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
+          agents: {
+            name: string;
+            provider: string | null;
+            live: boolean;
+            muted: boolean;
+          }[];
         }>
       >(() => Promise.resolve({ agents: [] })),
       message: vi.fn<(to: string, message: string) => Promise<{ result: string }>>(() =>

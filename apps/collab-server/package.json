@@ -14,13 +14,13 @@
   },
   "dependencies": {
     "@forgeboard/core": "workspace:*",
-    "@hocuspocus/server": "4.4.0",
+    "@hocuspocus/server": "3.4.4",
     "y-protocols": "1.0.7",
     "yjs": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@hocuspocus/provider": "4.4.0",
+    "@hocuspocus/provider": "3.4.4",
     "tsup": "catalog:",
     "vitest": "catalog:"
   }

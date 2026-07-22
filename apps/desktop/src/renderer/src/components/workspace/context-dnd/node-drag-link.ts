@@ -1,6 +1,6 @@
-import type { WorkshopNode } from "../canvas/CanvasNode.js";
-import { CANVAS_NODE_MINIMUM_DIMENSIONS } from "../../../../../shared/canvas/node-dimensions.js";
-import type { WorkspaceContextDragPayload } from "./contracts.js";
+import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import { CANVAS_NODE_MINIMUM_DIMENSIONS } from '../../../../../shared/canvas/node-dimensions.js';
+import type { WorkspaceContextDragPayload } from './contracts.js';
 
 export type FileNodeContextDropResolution =
   | {
@@ -18,33 +18,30 @@ export function resolveFileNodeContextDrop(input: {
   readonly draggedNodes: readonly WorkshopNode[];
   readonly nodes: readonly WorkshopNode[];
 }): FileNodeContextDropResolution {
-  if (input.source.data.kind !== "file" && input.source.data.kind !== "video")
-    return null;
+  if (input.source.data.kind !== 'file' && input.source.data.kind !== 'video') return null;
 
   const draggedIds = new Set(
-    (input.draggedNodes.length > 0 ? input.draggedNodes : [input.source]).map(
-      (node) => node.id,
-    ),
+    (input.draggedNodes.length > 0 ? input.draggedNodes : [input.source]).map((node) => node.id),
   );
   const sourceCenter = nodeCenter(input.source);
   const target = input.nodes.find(
     (node) =>
       !draggedIds.has(node.id) &&
       node.hidden !== true &&
-      node.data.kind === "agent" &&
+      node.data.kind === 'agent' &&
       containsPoint(node, sourceCenter),
   );
   if (target === undefined) return null;
   if (input.source.data.locked) {
     return {
       ok: false,
-      message: "Unlock the context node before sharing it with an agent.",
+      message: 'Unlock the context node before sharing it with an agent.',
     };
   }
   if (target.data.locked) {
     return {
       ok: false,
-      message: "Unlock the agent before changing its files.",
+      message: 'Unlock the agent before changing its files.',
     };
   }
 
@@ -52,22 +49,22 @@ export function resolveFileNodeContextDrop(input: {
   if (reference === undefined) {
     return {
       ok: false,
-      message: "Set up the file or video before sharing it with an agent.",
+      message: 'Set up the file or video before sharing it with an agent.',
     };
   }
   if (reference.projectId !== input.projectId) {
-    return { ok: false, message: "This file belongs to another project." };
+    return { ok: false, message: 'This file belongs to another project.' };
   }
   if (reference.missing) {
     return {
       ok: false,
-      message: "This file is missing. Choose a replacement first.",
+      message: 'This file is missing. Choose a replacement first.',
     };
   }
-  if (reference.kind !== "file") {
+  if (reference.kind !== 'file') {
     return {
       ok: false,
-      message: "Only regular files can be shared with an agent.",
+      message: 'Only regular files can be shared with an agent.',
     };
   }
 
@@ -76,7 +73,7 @@ export function resolveFileNodeContextDrop(input: {
     targetNodeId: target.id,
     payload: {
       schemaVersion: 1,
-      kind: "project-file",
+      kind: 'project-file',
       projectId: reference.projectId,
       relativePath: reference.relativePath,
       sourceNodeId: input.source.id,
@@ -84,10 +81,7 @@ export function resolveFileNodeContextDrop(input: {
   };
 }
 
-function containsPoint(
-  node: WorkshopNode,
-  point: { readonly x: number; readonly y: number },
-) {
+function containsPoint(node: WorkshopNode, point: { readonly x: number; readonly y: number }) {
   const width = resolvedDimension(
     node.measured?.width ?? node.width,
     CANVAS_NODE_MINIMUM_DIMENSIONS.width,
@@ -119,11 +113,8 @@ function nodeCenter(node: WorkshopNode): {
   return { x: node.position.x + width / 2, y: node.position.y + height / 2 };
 }
 
-function resolvedDimension(
-  value: number | null | undefined,
-  minimum: number,
-): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
+function resolvedDimension(value: number | null | undefined, minimum: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? Math.max(minimum, value)
     : minimum;
 }

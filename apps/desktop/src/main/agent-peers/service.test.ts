@@ -3,25 +3,26 @@ import {
   CanvasNodeSchema,
   type CanvasEdge,
   type CanvasNode,
-} from "@forgeboard/core/domain";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+} from '@forgeboard/core/domain';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AgentPeersService,
   type AgentPeersPreviewBridge,
   type AgentPeersStore,
   type AgentPeersTerminalBridge,
-} from "./service.js";
+} from './service.js';
+import type { PreviewActionAuthorizer } from './preview-control/contracts.js';
 
-const NOW = "2026-07-20T12:00:00.000Z";
-const PROJECT_ID = "project-1";
+const NOW = '2026-07-20T12:00:00.000Z';
+const PROJECT_ID = 'project-1';
 
 class FakeStore implements AgentPeersStore {
   canvas: { nodes: CanvasNode[]; edges: CanvasEdge[] } | null = null;
   readonly auditEvents: {
     category: string;
     action: string;
-    outcome: "allowed" | "denied" | "failed";
+    outcome: 'allowed' | 'denied' | 'failed';
     metadata: Record<string, unknown>;
   }[] = [];
 
@@ -32,7 +33,7 @@ class FakeStore implements AgentPeersStore {
   appendAudit(
     category: string,
     action: string,
-    outcome: "allowed" | "denied" | "failed",
+    outcome: 'allowed' | 'denied' | 'failed',
     metadata: Record<string, unknown>,
   ): void {
     this.auditEvents.push({ category, action, outcome, metadata });
@@ -41,32 +42,87 @@ class FakeStore implements AgentPeersStore {
 
 function createFakeBridge() {
   return {
-    findActiveSessionByNode: vi.fn<
-      AgentPeersTerminalBridge["findActiveSessionByNode"]
-    >(() => null),
-    deliverPeerInput: vi.fn<AgentPeersTerminalBridge["deliverPeerInput"]>(() =>
-      Promise.resolve("delivered"),
+    findActiveSessionByNode: vi.fn<AgentPeersTerminalBridge['findActiveSessionByNode']>(() => null),
+    deliverPeerInput: vi.fn<AgentPeersTerminalBridge['deliverPeerInput']>(() =>
+      Promise.resolve('delivered'),
     ),
-    readTranscriptTail: vi.fn<AgentPeersTerminalBridge["readTranscriptTail"]>(
-      () => Promise.resolve(null),
+    readTranscriptTail: vi.fn<AgentPeersTerminalBridge['readTranscriptTail']>(() =>
+      Promise.resolve(null),
     ),
   };
 }
 
 function createFakePreviewBridge() {
   return {
-    isLive: vi.fn<AgentPeersPreviewBridge["isLive"]>(() => true),
-    inspect: vi.fn<AgentPeersPreviewBridge["inspect"]>(() =>
+    isLive: vi.fn<AgentPeersPreviewBridge['isLive']>(() => true),
+    inspect: vi.fn<AgentPeersPreviewBridge['inspect']>(() =>
       Promise.resolve({
-        url: "https://miro.com/app/board",
-        title: "Planning board",
-        text: "Visible board text",
-        dom: "<html><body>Visible board text</body></html>",
+        url: 'https://miro.com/app/board',
+        title: 'Planning board',
+        text: 'Visible board text',
+        dom: '<html><body>Visible board text</body></html>',
         console: [],
       }),
     ),
-    screenshot: vi.fn<AgentPeersPreviewBridge["screenshot"]>(() =>
-      Promise.resolve({ mimeType: "image/png", data: "cG5n" }),
+    screenshot: vi.fn<AgentPeersPreviewBridge['screenshot']>(() =>
+      Promise.resolve({ mimeType: 'image/png', data: 'cG5n' }),
+    ),
+    elements: vi.fn<AgentPeersPreviewBridge['elements']>(() =>
+      Promise.resolve({
+        pageVersion: 'page-version-1',
+        url: 'https://miro.com/app/board',
+        title: 'Planning board',
+        elements: [
+          {
+            handle: '11111111-1111-4111-8111-111111111111',
+            kind: 'button',
+            name: 'Add card',
+            disabled: false,
+            editable: false,
+            sensitive: false,
+            consequential: false,
+            userOnly: false,
+            destination: null,
+          },
+        ],
+      }),
+    ),
+    scroll: vi.fn<AgentPeersPreviewBridge['scroll']>(() =>
+      Promise.resolve({
+        pageVersion: 'page-version-1',
+        url: 'https://miro.com/app/board',
+      }),
+    ),
+    describeAction: vi.fn<AgentPeersPreviewBridge['describeAction']>(
+      (_projectId, _nodeId, action) =>
+        Promise.resolve({
+          pageVersion: 'page-version-1',
+          url: 'https://miro.com/app/board',
+          origin: 'https://miro.com',
+          action: action.kind,
+          element: {
+            handle: action.elementHandle,
+            kind: 'button',
+            name: 'Add card',
+            disabled: false,
+            editable: false,
+            sensitive: false,
+            consequential: false,
+            userOnly: false,
+            destination: null,
+          },
+          textPreview: action.kind === 'type' ? action.text : null,
+          textLength: action.kind === 'type' ? action.text.length : null,
+          consequential: action.kind === 'type',
+        }),
+    ),
+    performAction: vi.fn<AgentPeersPreviewBridge['performAction']>(
+      (_projectId, _nodeId, _action, expectedPageVersion) =>
+        Promise.resolve({
+          performed: true,
+          pageVersion: expectedPageVersion,
+          url: 'https://miro.com/app/board',
+        }),
     ),
   };
 }
@@ -75,8 +131,8 @@ function nodeBase(id: string, title: string) {
   return {
     id,
     title,
-    color: "#445566",
-    icon: "node",
+    color: '#445566',
+    icon: 'node',
     position: { x: 0, y: 0 },
     size: { width: 300, height: 200 },
     createdAt: NOW,
@@ -87,7 +143,7 @@ function nodeBase(id: string, title: string) {
 function agentNode(id: string, title: string, adapterId?: string): CanvasNode {
   return CanvasNodeSchema.parse({
     ...nodeBase(id, title),
-    type: "agent",
+    type: 'agent',
     data: adapterId === undefined ? {} : { adapterId },
   });
 }
@@ -96,25 +152,25 @@ function previewNode(
   id: string,
   title: string,
   agentBrowserAccess: boolean,
+  agentBrowserInteraction = false,
 ): CanvasNode {
   return CanvasNodeSchema.parse({
     ...nodeBase(id, title),
-    type: "web-preview",
-    data: { url: "https://miro.com/", agentBrowserAccess },
+    type: 'web-preview',
+    data: {
+      url: 'https://miro.com/',
+      agentBrowserAccess,
+      agentBrowserInteraction,
+    },
   });
 }
 
-function videoNode(
-  id: string,
-  title: string,
-  relativePath: string,
-  missing = false,
-): CanvasNode {
+function videoNode(id: string, title: string, relativePath: string, missing = false): CanvasNode {
   return CanvasNodeSchema.parse({
     ...nodeBase(id, title),
-    type: "video",
+    type: 'video',
     data: {
-      file: { projectId: PROJECT_ID, relativePath, kind: "file", missing },
+      file: { projectId: PROJECT_ID, relativePath, kind: 'file', missing },
     },
   });
 }
@@ -129,7 +185,7 @@ function contextEdge(
     id,
     sourceNodeId,
     targetNodeId,
-    type: "context",
+    type: 'context',
     config,
     createdAt: NOW,
   });
@@ -143,16 +199,17 @@ async function fetchJson(
   const headers: Record<string, string> = {
     ...(init.headers as Record<string, string>),
   };
-  if (token !== null) headers["Authorization"] = `Bearer ${token}`;
+  if (token !== null) headers['Authorization'] = `Bearer ${token}`;
   const response = await fetch(url, { ...init, headers });
   const body = (await response.json()) as Record<string, unknown>;
   return { status: response.status, body };
 }
 
-describe("AgentPeersService", () => {
+describe('AgentPeersService', () => {
   let store: FakeStore;
   let bridge: ReturnType<typeof createFakeBridge>;
   let previewBridge: ReturnType<typeof createFakePreviewBridge>;
+  let authorizePreviewAction: ReturnType<typeof vi.fn<PreviewActionAuthorizer>>;
   let clock: number;
   let service: AgentPeersService;
 
@@ -160,8 +217,15 @@ describe("AgentPeersService", () => {
     store = new FakeStore();
     bridge = createFakeBridge();
     previewBridge = createFakePreviewBridge();
+    authorizePreviewAction = vi.fn<PreviewActionAuthorizer>(() => Promise.resolve(false));
     clock = 1_700_000_000_000;
-    service = new AgentPeersService(store, bridge, () => clock, previewBridge);
+    service = new AgentPeersService(
+      store,
+      bridge,
+      () => clock,
+      previewBridge,
+      authorizePreviewAction,
+    );
   });
 
   afterEach(async () => {
@@ -172,89 +236,80 @@ describe("AgentPeersService", () => {
     store.canvas = { nodes, edges };
   }
 
-  it("provisions a URL and only answers requests bearing a valid token", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('provisions a URL and only answers requests bearing a valid token', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
 
     const provision = await service.provision(PROJECT_ID, a.id);
     expect(provision.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
     const env = service.environmentForProvision(provision.provisionId);
     expect(env).not.toBeNull();
-    const token = env?.["FORGEBOARD_PEER_TOKEN"] ?? "";
-    expect(env?.["FORGEBOARD_PEER_URL"]).toBe(provision.url);
+    const token = env?.['FORGEBOARD_PEER_TOKEN'] ?? '';
+    expect(env?.['FORGEBOARD_PEER_URL']).toBe(provision.url);
 
     const missing = await fetchJson(`${provision.url}/v1/peers`, null);
     expect(missing.status).toBe(401);
-    expect(missing.body["error"]).toBeTypeOf("string");
+    expect(missing.body['error']).toBeTypeOf('string');
 
-    const wrong = await fetchJson(`${provision.url}/v1/peers`, "not-the-token");
+    const wrong = await fetchJson(`${provision.url}/v1/peers`, 'not-the-token');
     expect(wrong.status).toBe(401);
 
     const valid = await fetchJson(`${provision.url}/v1/peers`, token);
     expect(valid.status).toBe(200);
   });
 
-  it("GET /v1/peers reflects live from findActiveSessionByNode", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B", "codex");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('GET /v1/peers reflects live from findActiveSessionByNode', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B', 'codex');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
     bridge.findActiveSessionByNode.mockImplementation((_projectId, nodeId) =>
-      nodeId === b.id ? { sessionId: "session-b" } : null,
+      nodeId === b.id ? { sessionId: 'session-b' } : null,
     );
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
-    const { status, body } = await fetchJson(
-      `${provision.url}/v1/peers`,
-      token,
-    );
+    const { status, body } = await fetchJson(`${provision.url}/v1/peers`, token);
     expect(status).toBe(200);
-    expect(body["agents"]).toEqual([
-      { name: "Agent B", provider: "codex", live: true, muted: false },
+    expect(body['agents']).toEqual([
+      { name: 'Agent B', provider: 'codex', live: true, muted: false },
     ]);
   });
 
-  it("lists directly connected previews and reads only those explicitly shared with agents", async () => {
-    const agent = agentNode("agent-a", "Agent A");
-    const shared = previewNode("preview-shared", "Shared board", true);
-    const privatePreview = previewNode(
-      "preview-private",
-      "Private board",
-      false,
-    );
+  it('lists directly connected previews and reads only those explicitly shared with agents', async () => {
+    const agent = agentNode('agent-a', 'Agent A');
+    const shared = previewNode('preview-shared', 'Shared board', true);
+    const privatePreview = previewNode('preview-private', 'Private board', false);
     setCanvas(
       [agent, shared, privatePreview],
       [
-        contextEdge("edge-shared", agent.id, shared.id),
-        contextEdge("edge-private", agent.id, privatePreview.id),
+        contextEdge('edge-shared', agent.id, shared.id),
+        contextEdge('edge-private', agent.id, privatePreview.id),
       ],
     );
     const provision = await service.provision(PROJECT_ID, agent.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
     const listed = await fetchJson(`${provision.url}/v1/previews`, token);
     expect(listed.status).toBe(200);
-    expect(listed.body["previews"]).toEqual([
+    expect(listed.body['previews']).toEqual([
       {
         id: shared.id,
         name: shared.title,
-        kind: "web-preview",
+        kind: 'web-preview',
         readable: true,
+        interactive: false,
         live: true,
       },
       {
         id: privatePreview.id,
         name: privatePreview.title,
-        kind: "web-preview",
+        kind: 'web-preview',
         readable: false,
+        interactive: false,
         live: true,
       },
     ]);
@@ -265,8 +320,8 @@ describe("AgentPeersService", () => {
     );
     expect(read.status).toBe(200);
     expect(read.body).toMatchObject({
-      title: "Planning board",
-      text: "Visible board text",
+      title: 'Planning board',
+      text: 'Visible board text',
     });
     expect(previewBridge.inspect).toHaveBeenCalledWith(PROJECT_ID, shared.id);
 
@@ -278,77 +333,179 @@ describe("AgentPeersService", () => {
     expect(previewBridge.inspect).toHaveBeenCalledTimes(1);
   });
 
-  it("exposes only Video nodes explicitly attached or context-connected to the caller", async () => {
-    const attached = videoNode(
-      "video-attached",
-      "Demo",
-      "forgeboard-videos/demo.mp4",
+  it('requires interaction opt-in and native approval before a browser action', async () => {
+    const agent = agentNode('agent-a', 'Agent A');
+    const readOnly = previewNode('preview-read-only', 'Read-only board', true);
+    const interactive = previewNode('preview-interactive', 'Interactive board', true, true);
+    setCanvas(
+      [agent, readOnly, interactive],
+      [
+        contextEdge('edge-read-only', agent.id, readOnly.id),
+        contextEdge('edge-interactive', agent.id, interactive.id),
+      ],
     );
-    const connected = videoNode(
-      "video-connected",
-      "Moved clip",
-      "clips/moved.webm",
-      true,
+    authorizePreviewAction.mockResolvedValue(true);
+    const provision = await service.provision(PROJECT_ID, agent.id);
+    const token =
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
+
+    const deniedElements = await fetchJson(
+      `${provision.url}/v1/preview/elements?previewId=${encodeURIComponent(readOnly.id)}`,
+      token,
     );
-    const privateVideo = videoNode("video-private", "Private", "private.mp4");
+    expect(deniedElements.status).toBe(403);
+    expect(previewBridge.elements).not.toHaveBeenCalled();
+
+    const elements = await fetchJson(
+      `${provision.url}/v1/preview/elements?previewId=${encodeURIComponent(interactive.id)}`,
+      token,
+    );
+    expect(elements.status).toBe(200);
+    expect(elements.body['pageVersion']).toBe('page-version-1');
+
+    const action = {
+      kind: 'click' as const,
+      elementHandle: '11111111-1111-4111-8111-111111111111',
+    };
+    const performed = await fetchJson(`${provision.url}/v1/preview/action`, token, {
+      method: 'POST',
+      body: JSON.stringify({ previewId: interactive.id, action }),
+    });
+    expect(performed.status).toBe(200);
+    expect(authorizePreviewAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: PROJECT_ID,
+        agentNodeId: agent.id,
+        previewNodeId: interactive.id,
+        edgeId: 'edge-interactive',
+      }),
+    );
+    expect(previewBridge.performAction).toHaveBeenCalledWith(
+      PROJECT_ID,
+      interactive.id,
+      action,
+      'page-version-1',
+    );
+  });
+
+  it('does not execute declined actions or retain typed text in the audit log', async () => {
+    const agent = agentNode('agent-a', 'Agent A');
+    const interactive = previewNode('preview-interactive', 'Interactive board', true, true);
+    setCanvas([agent, interactive], [contextEdge('edge-interactive', agent.id, interactive.id)]);
+    authorizePreviewAction.mockResolvedValue(false);
+    const provision = await service.provision(PROJECT_ID, agent.id);
+    const token =
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
+    const secretMarker = 'private page text that must not be audited';
+    const response = await fetchJson(`${provision.url}/v1/preview/action`, token, {
+      method: 'POST',
+      body: JSON.stringify({
+        previewId: interactive.id,
+        action: {
+          kind: 'type',
+          elementHandle: '11111111-1111-4111-8111-111111111111',
+          text: secretMarker,
+          replace: true,
+        },
+      }),
+    });
+
+    expect(response).toMatchObject({
+      status: 403,
+      body: { error: 'preview-action-declined' },
+    });
+    expect(previewBridge.performAction).not.toHaveBeenCalled();
+    expect(JSON.stringify(store.auditEvents)).not.toContain(secretMarker);
+  });
+
+  it('rechecks the live edge and interaction permission after approval', async () => {
+    const agent = agentNode('agent-a', 'Agent A');
+    const interactive = previewNode('preview-interactive', 'Interactive board', true, true);
+    const edge = contextEdge('edge-interactive', agent.id, interactive.id);
+    setCanvas([agent, interactive], [edge]);
+    authorizePreviewAction.mockImplementation(() => {
+      setCanvas([agent, previewNode(interactive.id, interactive.title, true, false)], [edge]);
+      return Promise.resolve(true);
+    });
+    const provision = await service.provision(PROJECT_ID, agent.id);
+    const token =
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
+    const response = await fetchJson(`${provision.url}/v1/preview/action`, token, {
+      method: 'POST',
+      body: JSON.stringify({
+        previewId: interactive.id,
+        action: {
+          kind: 'click',
+          elementHandle: '11111111-1111-4111-8111-111111111111',
+        },
+      }),
+    });
+
+    expect(response).toMatchObject({
+      status: 403,
+      body: { error: 'preview-interaction-denied' },
+    });
+    expect(previewBridge.performAction).not.toHaveBeenCalled();
+  });
+
+  it('exposes only Video nodes explicitly attached or context-connected to the caller', async () => {
+    const attached = videoNode('video-attached', 'Demo', 'forgeboard-videos/demo.mp4');
+    const connected = videoNode('video-connected', 'Moved clip', 'clips/moved.webm', true);
+    const privateVideo = videoNode('video-private', 'Private', 'private.mp4');
     const caller = CanvasNodeSchema.parse({
-      ...nodeBase("agent-a", "Claude"),
-      type: "agent",
-      data: { adapterId: "claude", contextAttachmentIds: [attached.id] },
+      ...nodeBase('agent-a', 'Claude'),
+      type: 'agent',
+      data: { adapterId: 'claude', contextAttachmentIds: [attached.id] },
     });
     setCanvas(
       [caller, attached, connected, privateVideo],
-      [contextEdge("edge-video", caller.id, connected.id)],
+      [contextEdge('edge-video', caller.id, connected.id)],
     );
     const provision = await service.provision(PROJECT_ID, caller.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
     const listed = await fetchJson(`${provision.url}/v1/videos`, token);
     expect(listed.status).toBe(200);
-    expect(listed.body["videos"]).toEqual([
+    expect(listed.body['videos']).toEqual([
       {
         id: attached.id,
         name: attached.title,
-        relativePath: "forgeboard-videos/demo.mp4",
+        relativePath: 'forgeboard-videos/demo.mp4',
         available: true,
       },
       {
         id: connected.id,
         name: connected.title,
-        relativePath: "clips/moved.webm",
+        relativePath: 'clips/moved.webm',
         available: false,
       },
     ]);
-    expect(JSON.stringify(listed.body)).not.toContain("private.mp4");
+    expect(JSON.stringify(listed.body)).not.toContain('private.mp4');
     expect(store.auditEvents).toContainEqual(
-      expect.objectContaining({ action: "list-videos", outcome: "allowed" }),
+      expect.objectContaining({ action: 'list-videos', outcome: 'allowed' }),
     );
   });
 
-  it("does not expose previews through muted or indirect context connections", async () => {
-    const caller = agentNode("agent-a", "Agent A");
-    const peer = agentNode("agent-b", "Agent B");
-    const muted = previewNode("preview-muted", "Muted board", true);
-    const indirect = previewNode("preview-indirect", "Indirect board", true);
+  it('does not expose previews through muted or indirect context connections', async () => {
+    const caller = agentNode('agent-a', 'Agent A');
+    const peer = agentNode('agent-b', 'Agent B');
+    const muted = previewNode('preview-muted', 'Muted board', true);
+    const indirect = previewNode('preview-indirect', 'Indirect board', true);
     setCanvas(
       [caller, peer, muted, indirect],
       [
-        contextEdge("edge-muted", caller.id, muted.id, { muted: true }),
-        contextEdge("edge-peer", caller.id, peer.id),
-        contextEdge("edge-indirect", peer.id, indirect.id),
+        contextEdge('edge-muted', caller.id, muted.id, { muted: true }),
+        contextEdge('edge-peer', caller.id, peer.id),
+        contextEdge('edge-indirect', peer.id, indirect.id),
       ],
     );
     const provision = await service.provision(PROJECT_ID, caller.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
     const listed = await fetchJson(`${provision.url}/v1/previews`, token);
-    expect(listed.body["previews"]).toEqual([]);
+    expect(listed.body['previews']).toEqual([]);
     for (const preview of [muted, indirect]) {
       const denied = await fetchJson(
         `${provision.url}/v1/preview?previewId=${encodeURIComponent(preview.id)}`,
@@ -359,301 +516,256 @@ describe("AgentPeersService", () => {
     expect(previewBridge.inspect).not.toHaveBeenCalled();
   });
 
-  it("POST /v1/message happy path delivers, fires onMessageDelivered, and audits allowed", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    const edge = contextEdge("edge-1", a.id, b.id);
+  it('POST /v1/message happy path delivers, fires onMessageDelivered, and audits allowed', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    const edge = contextEdge('edge-1', a.id, b.id);
     setCanvas([a, b], [edge]);
     bridge.findActiveSessionByNode.mockImplementation((_projectId, nodeId) =>
-      nodeId === b.id ? { sessionId: "session-b" } : null,
+      nodeId === b.id ? { sessionId: 'session-b' } : null,
     );
-    bridge.deliverPeerInput.mockResolvedValue("delivered");
+    bridge.deliverPeerInput.mockResolvedValue('delivered');
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
     const delivered = vi.fn();
     service.onMessageDelivered(delivered);
 
-    const { status, body } = await fetchJson(
-      `${provision.url}/v1/message`,
-      token,
-      {
-        method: "POST",
-        body: JSON.stringify({ to: "Agent B", message: "hello there" }),
-      },
-    );
+    const { status, body } = await fetchJson(`${provision.url}/v1/message`, token, {
+      method: 'POST',
+      body: JSON.stringify({ to: 'Agent B', message: 'hello there' }),
+    });
 
     expect(status).toBe(200);
-    expect(body).toEqual({ result: "delivered" });
-    expect(bridge.deliverPeerInput).toHaveBeenCalledWith(
-      "session-b",
-      "Agent A",
-      "hello there",
-    );
+    expect(body).toEqual({ result: 'delivered' });
+    expect(bridge.deliverPeerInput).toHaveBeenCalledWith('session-b', 'Agent A', 'hello there');
     expect(delivered).toHaveBeenCalledWith({
       projectId: PROJECT_ID,
       edgeId: edge.id,
     });
     expect(store.auditEvents).toEqual([
       expect.objectContaining({
-        category: "agent-peers",
-        action: "message",
-        outcome: "allowed",
+        category: 'agent-peers',
+        action: 'message',
+        outcome: 'allowed',
       }),
     ]);
   });
 
-  it("a muted edge blocks delivery without calling the bridge and audits denied", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id, { muted: true })]);
+  it('a muted edge blocks delivery without calling the bridge and audits denied', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id, { muted: true })]);
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
-    const { status, body } = await fetchJson(
-      `${provision.url}/v1/message`,
-      token,
-      {
-        method: "POST",
-        body: JSON.stringify({ to: "Agent B", message: "hello" }),
-      },
-    );
+    const { status, body } = await fetchJson(`${provision.url}/v1/message`, token, {
+      method: 'POST',
+      body: JSON.stringify({ to: 'Agent B', message: 'hello' }),
+    });
 
     expect(status).toBe(200);
-    expect(body).toEqual({ result: "muted" });
+    expect(body).toEqual({ result: 'muted' });
     expect(bridge.deliverPeerInput).not.toHaveBeenCalled();
     expect(store.auditEvents).toEqual([
       expect.objectContaining({
-        outcome: "denied",
-        metadata: expect.objectContaining({ reason: "muted" }) as unknown,
+        outcome: 'denied',
+        metadata: expect.objectContaining({ reason: 'muted' }) as unknown,
       }),
     ]);
   });
 
-  it("rate-limits the 7th message within 60s on the same edge", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('rate-limits the 7th message within 60s on the same edge', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
     bridge.findActiveSessionByNode.mockImplementation((_projectId, nodeId) =>
-      nodeId === b.id ? { sessionId: "session-b" } : null,
+      nodeId === b.id ? { sessionId: 'session-b' } : null,
     );
-    bridge.deliverPeerInput.mockResolvedValue("delivered");
+    bridge.deliverPeerInput.mockResolvedValue('delivered');
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
     const send = () =>
       fetchJson(`${provision.url}/v1/message`, token, {
-        method: "POST",
-        body: JSON.stringify({ to: "Agent B", message: "hi" }),
+        method: 'POST',
+        body: JSON.stringify({ to: 'Agent B', message: 'hi' }),
       });
 
     for (let i = 0; i < 6; i += 1) {
       const { body } = await send();
-      expect(body["result"]).toBe("delivered");
+      expect(body['result']).toBe('delivered');
     }
     const seventh = await send();
-    expect(seventh.body).toEqual({ result: "rate-limited" });
+    expect(seventh.body).toEqual({ result: 'rate-limited' });
     expect(bridge.deliverPeerInput).toHaveBeenCalledTimes(6);
   });
 
-  it("the rate-limit window slides: still blocked at 59_999ms, allowed again once past 60_000ms", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('the rate-limit window slides: still blocked at 59_999ms, allowed again once past 60_000ms', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
     bridge.findActiveSessionByNode.mockImplementation((_projectId, nodeId) =>
-      nodeId === b.id ? { sessionId: "session-b" } : null,
+      nodeId === b.id ? { sessionId: 'session-b' } : null,
     );
-    bridge.deliverPeerInput.mockResolvedValue("delivered");
+    bridge.deliverPeerInput.mockResolvedValue('delivered');
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
     const send = () =>
       fetchJson(`${provision.url}/v1/message`, token, {
-        method: "POST",
-        body: JSON.stringify({ to: "Agent B", message: "hi" }),
+        method: 'POST',
+        body: JSON.stringify({ to: 'Agent B', message: 'hi' }),
       });
 
     const start = clock;
     for (let i = 0; i < 6; i += 1) {
       const { body } = await send();
-      expect(body["result"]).toBe("delivered");
+      expect(body['result']).toBe('delivered');
     }
     const seventh = await send();
-    expect(seventh.body).toEqual({ result: "rate-limited" });
+    expect(seventh.body).toEqual({ result: 'rate-limited' });
 
     clock = start + 59_999;
     const stillLimited = await send();
-    expect(stillLimited.body).toEqual({ result: "rate-limited" });
+    expect(stillLimited.body).toEqual({ result: 'rate-limited' });
 
     clock = start + 60_001;
     const slid = await send();
-    expect(slid.body).toEqual({ result: "delivered" });
+    expect(slid.body).toEqual({ result: 'delivered' });
   });
 
-  it("a peer without a live session returns no-live-session", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('a peer without a live session returns no-live-session', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
     bridge.findActiveSessionByNode.mockReturnValue(null);
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
-    const { status, body } = await fetchJson(
-      `${provision.url}/v1/message`,
-      token,
-      {
-        method: "POST",
-        body: JSON.stringify({ to: "Agent B", message: "hi" }),
-      },
-    );
+    const { status, body } = await fetchJson(`${provision.url}/v1/message`, token, {
+      method: 'POST',
+      body: JSON.stringify({ to: 'Agent B', message: 'hi' }),
+    });
 
     expect(status).toBe(200);
-    expect(body).toEqual({ result: "no-live-session" });
+    expect(body).toEqual({ result: 'no-live-session' });
     expect(bridge.deliverPeerInput).not.toHaveBeenCalled();
   });
 
-  it("an unknown peer name returns unknown-peer", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('an unknown peer name returns unknown-peer', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
-    const { status, body } = await fetchJson(
-      `${provision.url}/v1/message`,
-      token,
-      {
-        method: "POST",
-        body: JSON.stringify({ to: "Nobody", message: "hi" }),
-      },
-    );
+    const { status, body } = await fetchJson(`${provision.url}/v1/message`, token, {
+      method: 'POST',
+      body: JSON.stringify({ to: 'Nobody', message: 'hi' }),
+    });
 
     expect(status).toBe(200);
-    expect(body).toEqual({ result: "unknown-peer" });
+    expect(body).toEqual({ result: 'unknown-peer' });
   });
 
-  it("GET /v1/screen returns the transcript tail, and 404s for an unknown peer", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('GET /v1/screen returns the transcript tail, and 404s for an unknown peer', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
     bridge.findActiveSessionByNode.mockImplementation((_projectId, nodeId) =>
-      nodeId === b.id ? { sessionId: "session-b" } : null,
+      nodeId === b.id ? { sessionId: 'session-b' } : null,
     );
-    bridge.readTranscriptTail.mockResolvedValue("hello world");
+    bridge.readTranscriptTail.mockResolvedValue('hello world');
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
     const found = await fetchJson(
-      `${provision.url}/v1/screen?agent=${encodeURIComponent("Agent B")}`,
+      `${provision.url}/v1/screen?agent=${encodeURIComponent('Agent B')}`,
       token,
     );
     expect(found.status).toBe(200);
-    expect(found.body).toEqual({ text: "hello world" });
-    expect(bridge.readTranscriptTail).toHaveBeenCalledWith(
-      "session-b",
-      64 * 1024,
-    );
+    expect(found.body).toEqual({ text: 'hello world' });
+    expect(bridge.readTranscriptTail).toHaveBeenCalledWith('session-b', 64 * 1024);
 
     const notFound = await fetchJson(
-      `${provision.url}/v1/screen?agent=${encodeURIComponent("Nobody")}`,
+      `${provision.url}/v1/screen?agent=${encodeURIComponent('Nobody')}`,
       token,
     );
     expect(notFound.status).toBe(404);
-    expect(notFound.body["error"]).toBeTypeOf("string");
+    expect(notFound.body['error']).toBeTypeOf('string');
   });
 
-  it("rejects a message body over the byte cap with 413", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('rejects a message body over the byte cap with 413', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
     const oversized = JSON.stringify({
-      to: "Agent B",
-      message: "x".repeat(70_000),
+      to: 'Agent B',
+      message: 'x'.repeat(70_000),
     });
-    const { status, body } = await fetchJson(
-      `${provision.url}/v1/message`,
-      token,
-      {
-        method: "POST",
-        body: oversized,
-      },
-    );
+    const { status, body } = await fetchJson(`${provision.url}/v1/message`, token, {
+      method: 'POST',
+      body: oversized,
+    });
 
     expect(status).toBe(413);
-    expect(body["error"]).toBeTypeOf("string");
+    expect(body['error']).toBeTypeOf('string');
     expect(bridge.deliverPeerInput).not.toHaveBeenCalled();
   });
 
-  it("releaseSession invalidates the token so subsequent calls are 401", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('releaseSession invalidates the token so subsequent calls are 401', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
-    service.bindSession(provision.provisionId, "session-a");
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
+    service.bindSession(provision.provisionId, 'session-a');
 
     const before = await fetchJson(`${provision.url}/v1/peers`, token);
     expect(before.status).toBe(200);
 
-    service.releaseSession("session-a");
+    service.releaseSession('session-a');
 
     const after = await fetchJson(`${provision.url}/v1/peers`, token);
     expect(after.status).toBe(401);
   });
 
-  it("runs registered cleanup when a session is released", async () => {
-    const a = agentNode("agent-a", "Agent A");
+  it('runs registered cleanup when a session is released', async () => {
+    const a = agentNode('agent-a', 'Agent A');
     setCanvas([a], []);
     const provision = await service.provision(PROJECT_ID, a.id);
-    service.bindSession(provision.provisionId, "session-a");
+    service.bindSession(provision.provisionId, 'session-a');
     const cleanup = vi.fn(() => Promise.resolve());
     service.registerCleanup(provision.provisionId, cleanup);
 
-    service.releaseSession("session-a");
+    service.releaseSession('session-a');
 
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("resetForPrivacy runs registered cleanups before wiping provision state", async () => {
-    const a = agentNode("agent-a", "Agent A");
+  it('resetForPrivacy runs registered cleanups before wiping provision state', async () => {
+    const a = agentNode('agent-a', 'Agent A');
     setCanvas([a], []);
     const provision = await service.provision(PROJECT_ID, a.id);
     const cleanup = vi.fn(() => Promise.resolve());
@@ -664,8 +776,8 @@ describe("AgentPeersService", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("dispose runs registered cleanups", async () => {
-    const a = agentNode("agent-a", "Agent A");
+  it('dispose runs registered cleanups', async () => {
+    const a = agentNode('agent-a', 'Agent A');
     setCanvas([a], []);
     const provision = await service.provision(PROJECT_ID, a.id);
     const cleanup = vi.fn(() => Promise.resolve());
@@ -676,26 +788,24 @@ describe("AgentPeersService", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("a rejecting cleanup does not throw out of resetForPrivacy", async () => {
-    const a = agentNode("agent-a", "Agent A");
+  it('a rejecting cleanup does not throw out of resetForPrivacy', async () => {
+    const a = agentNode('agent-a', 'Agent A');
     setCanvas([a], []);
     const provision = await service.provision(PROJECT_ID, a.id);
-    service.registerCleanup(provision.provisionId, () =>
-      Promise.reject(new Error("boom")),
-    );
+    service.registerCleanup(provision.provisionId, () => Promise.reject(new Error('boom')));
 
     await expect(service.resetForPrivacy()).resolves.toBeUndefined();
   });
 
-  it("releaseSession followed by dispose does not double-run that provision cleanup", async () => {
-    const a = agentNode("agent-a", "Agent A");
+  it('releaseSession followed by dispose does not double-run that provision cleanup', async () => {
+    const a = agentNode('agent-a', 'Agent A');
     setCanvas([a], []);
     const provision = await service.provision(PROJECT_ID, a.id);
-    service.bindSession(provision.provisionId, "session-a");
+    service.bindSession(provision.provisionId, 'session-a');
     const cleanup = vi.fn(() => Promise.resolve());
     service.registerCleanup(provision.provisionId, cleanup);
 
-    service.releaseSession("session-a");
+    service.releaseSession('session-a');
     expect(cleanup).toHaveBeenCalledTimes(1);
 
     await service.dispose();
@@ -703,64 +813,51 @@ describe("AgentPeersService", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("malformed JSON bodies return 400 without crashing the hub", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('malformed JSON bodies return 400 without crashing the hub', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
-    const { status, body } = await fetchJson(
-      `${provision.url}/v1/message`,
-      token,
-      {
-        method: "POST",
-        body: "{not json",
-      },
-    );
+    const { status, body } = await fetchJson(`${provision.url}/v1/message`, token, {
+      method: 'POST',
+      body: '{not json',
+    });
 
     expect(status).toBe(400);
-    expect(body["error"]).toBeTypeOf("string");
+    expect(body['error']).toBeTypeOf('string');
 
     const stillWorks = await fetchJson(`${provision.url}/v1/peers`, token);
     expect(stillWorks.status).toBe(200);
   });
 
-  it("handles a caller node removed from the canvas gracefully (404, no crash)", async () => {
-    const a = agentNode("agent-a", "Agent A");
-    const b = agentNode("agent-b", "Agent B");
-    setCanvas([a, b], [contextEdge("edge-1", a.id, b.id)]);
+  it('handles a caller node removed from the canvas gracefully (404, no crash)', async () => {
+    const a = agentNode('agent-a', 'Agent A');
+    const b = agentNode('agent-b', 'Agent B');
+    setCanvas([a, b], [contextEdge('edge-1', a.id, b.id)]);
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
     // Simulate the caller's own node having been deleted from the canvas since provisioning.
     setCanvas([b], []);
 
-    const { status, body } = await fetchJson(
-      `${provision.url}/v1/peers`,
-      token,
-    );
+    const { status, body } = await fetchJson(`${provision.url}/v1/peers`, token);
     expect(status).toBe(404);
-    expect(body["error"]).toBeTypeOf("string");
+    expect(body['error']).toBeTypeOf('string');
   });
 
-  it("expires an unbound provision after 5 minutes", async () => {
-    const a = agentNode("agent-a", "Agent A");
+  it('expires an unbound provision after 5 minutes', async () => {
+    const a = agentNode('agent-a', 'Agent A');
     setCanvas([a], []);
 
     const provision = await service.provision(PROJECT_ID, a.id);
     const token =
-      service.environmentForProvision(provision.provisionId)?.[
-        "FORGEBOARD_PEER_TOKEN"
-      ] ?? "";
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
 
     clock += 5 * 60_000 + 1;
 

@@ -37,17 +37,18 @@
 ### Task 1: Per-kind dimensions for terminal, file, and diff
 
 **Files:**
+
 - Modify: `src/shared/canvas/node-dimensions.ts` (add `CONTENT_NODE_DIMENSIONS`; consult it in both lookups)
 - Modify: `src/renderer/src/styles/workspace/canvas.css` (append `:has(...)` min-size rules after the 2b `test` rule)
 - Test: `src/renderer/src/components/workspace/model/node-persistence.test.ts` (append)
 
 **Interfaces (exact values; CSS and later face tests depend on them):**
 
-| kind | default | minimum |
-| --- | --- | --- |
+| kind       | default | minimum |
+| ---------- | ------- | ------- |
 | `terminal` | 560×480 | 400×320 |
-| `file` | 640×520 | 420×360 |
-| `diff` | 640×560 | 440×360 |
+| `file`     | 640×520 | 420×360 |
+| `diff`     | 640×560 | 440×360 |
 
 - [ ] **Step 1: Write the failing tests** — append to `node-persistence.test.ts` (same style as the 2a/2b cases):
 
@@ -91,15 +92,15 @@ export const CONTENT_NODE_DIMENSIONS: Readonly<
 In `defaultNodeDimensionsForKind`, before the `DOCUMENT_NODE_DIMENSIONS` lookup:
 
 ```ts
-  const contentDimensions = CONTENT_NODE_DIMENSIONS[kind];
-  if (contentDimensions !== undefined) return contentDimensions.default;
+const contentDimensions = CONTENT_NODE_DIMENSIONS[kind];
+if (contentDimensions !== undefined) return contentDimensions.default;
 ```
 
 In `minimumNodeDimensionsForKind`, before the `DOCUMENT_NODE_DIMENSIONS` lookup:
 
 ```ts
-  const contentDimensions = CONTENT_NODE_DIMENSIONS[kind];
-  if (contentDimensions !== undefined) return contentDimensions.minimum;
+const contentDimensions = CONTENT_NODE_DIMENSIONS[kind];
+if (contentDimensions !== undefined) return contentDimensions.minimum;
 ```
 
 `canvas.css` — append after the 2b `test` rule:
@@ -135,6 +136,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 2: Scaffolding — openDiffReview context callback + size-gate hook + shared face CSS
 
 **Files:**
+
 - Create: `src/renderer/src/lib/use-above-min-size.ts`
 - Create: `src/renderer/src/lib/use-above-min-size.test.tsx`
 - Modify: `src/renderer/src/components/workspace/runs/agent-session/AgentSessionContext.tsx` (add `openDiffReview`)
@@ -331,6 +333,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 3: Terminal face (embedded xterm + compact config strip + in-node launch review)
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/terminal/node-configuration.ts`
 - Create: `src/renderer/src/components/workspace/terminal/TerminalNodeFace.tsx`
 - Create: `src/renderer/src/components/workspace/terminal/TerminalNodeFace.test.tsx`
@@ -666,7 +669,9 @@ export function TerminalNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                 readOnly={readOnly}
                 onFocus={session.recordHistory}
                 onChange={
-                  readOnly ? undefined : (event) => updateConfiguration({ executable: event.target.value })
+                  readOnly
+                    ? undefined
+                    : (event) => updateConfiguration({ executable: event.target.value })
                 }
               />
             </label>
@@ -694,8 +699,7 @@ export function TerminalNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               onChange={
                 readOnly
                   ? () => undefined
-                  : (environmentVariableNames) =>
-                      updateConfiguration({ environmentVariableNames })
+                  : (environmentVariableNames) => updateConfiguration({ environmentVariableNames })
               }
             />
           </div>
@@ -728,7 +732,7 @@ import { TerminalNodeFace } from '../../terminal/TerminalNodeFace.js';
 `node-face-registry.test.tsx` — move `terminal` from the null-case to the function-case:
 
 ```tsx
-    expect(nodeFaceForKind('terminal')).toBeTypeOf('function');
+expect(nodeFaceForKind('terminal')).toBeTypeOf('function');
 ```
 
 and delete the `expect(nodeFaceForKind('file')).toBeNull();` line's `terminal` sibling if present (only `terminal` moves in this task; `file`/`diff` move in Tasks 4/5).
@@ -769,6 +773,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 4: File face (lazy Monaco editor + ProjectFileBrowser assignment popover)
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/content/file/FileNodeFace.tsx`
 - Create: `src/renderer/src/components/workspace/content/file/FileNodeFace.test.tsx`
 - Modify: `src/renderer/src/components/workspace/canvas/faces/node-face-registry.tsx` (register `file`)
@@ -1029,7 +1034,7 @@ import { FileNodeFace } from '../../content/file/FileNodeFace.js';
 `node-face-registry.test.tsx` — remove `expect(nodeFaceForKind('file')).toBeNull();` and add to the function case:
 
 ```tsx
-    expect(nodeFaceForKind('file')).toBeTypeOf('function');
+expect(nodeFaceForKind('file')).toBeTypeOf('function');
 ```
 
 `node-face.css` — append:
@@ -1060,6 +1065,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 5: Diff face (inline read-only GitDiffViewer + compact file list + maximize)
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/content/diff/DiffNodeFace.tsx`
 - Create: `src/renderer/src/components/workspace/content/diff/DiffNodeFace.test.tsx`
 - Modify: `src/renderer/src/components/workspace/canvas/faces/node-face-registry.tsx` (register `diff`)
@@ -1384,7 +1390,7 @@ import { DiffNodeFace } from '../../content/diff/DiffNodeFace.js';
 `node-face-registry.test.tsx` — remove `expect(nodeFaceForKind('diff')).toBeNull();` and add:
 
 ```tsx
-    expect(nodeFaceForKind('diff')).toBeTypeOf('function');
+expect(nodeFaceForKind('diff')).toBeTypeOf('function');
 ```
 
 (the registry test's null-case should now only assert kinds that remain generic, e.g. `group-frame`, `extension`, `unknown-kind`.)

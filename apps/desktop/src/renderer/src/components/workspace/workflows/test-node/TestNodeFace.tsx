@@ -288,8 +288,9 @@ export function TestNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                 value={data.checkKind ?? 'test'}
                 onFocus={() => session.recordHistory()}
                 onChange={(event) => {
-                  const checkKind = event.target
-                    .value as NonNullable<WorkshopNode['data']['checkKind']>;
+                  const checkKind = event.target.value as NonNullable<
+                    WorkshopNode['data']['checkKind']
+                  >;
                   session.updateNodeData(id, {
                     checkKind,
                     runIds: [producerIdForCheckKind(checkKind, data.runIds?.[0])],

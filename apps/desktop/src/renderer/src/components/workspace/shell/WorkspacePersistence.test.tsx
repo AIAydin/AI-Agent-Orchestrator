@@ -35,7 +35,7 @@ const mocks = vi.hoisted(() => ({
       ) => boolean),
 }));
 
-vi.mock('../canvas/useCanvasPersistence.js', () => ({
+vi.mock('../canvas/history/useCanvasPersistence.js', () => ({
   useCanvasPersistence: () => ({
     saveState: 'saving',
     persistedUpdatedAt: '2026-07-17T12:00:00.000Z',
@@ -126,94 +126,94 @@ vi.mock('../canvas/WorkspaceCanvas.js', async () => {
       const session = useAgentSession();
       return (
         <div>
-      <output data-testid="canvas-node-positions">
-        {JSON.stringify(nodes.map(({ id, position }) => ({ id, position })))}
-      </output>
-      <output data-testid="canvas-nodes">{JSON.stringify(nodes)}</output>
-      <output data-testid="collaboration-graph-read-only">
-        {String(collaborationGraphReadOnly)}
-      </output>
-      <button
-        type="button"
-        onClick={() =>
-          onNodesChange(
-            nodes.map((node) => ({
-              type: 'select',
-              id: node.id,
-              selected: true,
-            })),
-          )
-        }
-      >
-        Select canvas nodes
-      </button>
-      <button type="button" onClick={() => onKeyboardMove({ x: 1, y: 0 }, true)}>
-        Move selected right
-      </button>
-      <button
-        type="button"
-        onClick={() => onSelectionChange({ nodes: nodes.slice(0, 1), edges: [] })}
-      >
-        Inspect first node
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          const first = nodes[0];
-          if (first !== undefined) onNodesChange([{ type: 'remove', id: first.id }]);
-        }}
-      >
-        Remove first node
-      </button>
-      <button type="button" onClick={() => nodes[0] && onDuplicateNode(nodes[0].id)}>
-        Context duplicate first node
-      </button>
-      <button type="button" onClick={() => nodes[0] && onDeleteNode(nodes[0].id)}>
-        Context delete first node
-      </button>
-      <button type="button" onClick={() => nodes.at(-1) && onDeleteNode(nodes.at(-1)!.id)}>
-        Context delete last node
-      </button>
-      <button
-        type="button"
-        onClick={() =>
-          nodes[0] &&
-          onRunWorkflowScope({ kind: 'node', nodeId: nodes[0].id, includeUpstream: true })
-        }
-      >
-        Context run first node
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          const last = nodes.at(-1);
-          if (last !== undefined) onSelectionChange({ nodes: [last], edges: [] });
-        }}
-      >
-        Inspect last node
-      </button>
-      <button
-        type="button"
-        onClick={() =>
-          void onAttachAgentContext('agent-node', {
-            schemaVersion: 1,
-            kind: 'project-file',
-            projectId: '70000000-0000-4000-8000-000000000001',
-            relativePath: 'src/context.ts',
-          })
-        }
-      >
-        Attach project file
-      </button>
-      <button type="button" onClick={() => nodes[0] && session.fitGroupFrame(nodes[0].id)}>
-        Fit inspected group
-      </button>
-      <button
-        type="button"
-        onClick={() => nodes[0] && session.arrangeGroupFrame(nodes[0].id, 'vertical')}
-      >
-        Arrange inspected group
-      </button>
+          <output data-testid="canvas-node-positions">
+            {JSON.stringify(nodes.map(({ id, position }) => ({ id, position })))}
+          </output>
+          <output data-testid="canvas-nodes">{JSON.stringify(nodes)}</output>
+          <output data-testid="collaboration-graph-read-only">
+            {String(collaborationGraphReadOnly)}
+          </output>
+          <button
+            type="button"
+            onClick={() =>
+              onNodesChange(
+                nodes.map((node) => ({
+                  type: 'select',
+                  id: node.id,
+                  selected: true,
+                })),
+              )
+            }
+          >
+            Select canvas nodes
+          </button>
+          <button type="button" onClick={() => onKeyboardMove({ x: 1, y: 0 }, true)}>
+            Move selected right
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectionChange({ nodes: nodes.slice(0, 1), edges: [] })}
+          >
+            Inspect first node
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const first = nodes[0];
+              if (first !== undefined) onNodesChange([{ type: 'remove', id: first.id }]);
+            }}
+          >
+            Remove first node
+          </button>
+          <button type="button" onClick={() => nodes[0] && onDuplicateNode(nodes[0].id)}>
+            Context duplicate first node
+          </button>
+          <button type="button" onClick={() => nodes[0] && onDeleteNode(nodes[0].id)}>
+            Context delete first node
+          </button>
+          <button type="button" onClick={() => nodes.at(-1) && onDeleteNode(nodes.at(-1)!.id)}>
+            Context delete last node
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              nodes[0] &&
+              onRunWorkflowScope({ kind: 'node', nodeId: nodes[0].id, includeUpstream: true })
+            }
+          >
+            Context run first node
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const last = nodes.at(-1);
+              if (last !== undefined) onSelectionChange({ nodes: [last], edges: [] });
+            }}
+          >
+            Inspect last node
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void onAttachAgentContext('agent-node', {
+                schemaVersion: 1,
+                kind: 'project-file',
+                projectId: '70000000-0000-4000-8000-000000000001',
+                relativePath: 'src/context.ts',
+              })
+            }
+          >
+            Attach project file
+          </button>
+          <button type="button" onClick={() => nodes[0] && session.fitGroupFrame(nodes[0].id)}>
+            Fit inspected group
+          </button>
+          <button
+            type="button"
+            onClick={() => nodes[0] && session.arrangeGroupFrame(nodes[0].id, 'vertical')}
+          >
+            Arrange inspected group
+          </button>
         </div>
       );
     },
