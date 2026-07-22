@@ -45,6 +45,19 @@ export function viewBoxPoint(
   ];
 }
 
+/**
+ * The inverse of {@link viewBoxPoint}: where a viewBox coordinate sits in pixels,
+ * relative to the surface's top-left corner. Used to park the inline text editor.
+ */
+export function surfacePoint(rect: WhiteboardRect, point: WhiteboardPoint): WhiteboardPoint {
+  const scale = Math.min(rect.width / VIEW_BOX_WIDTH, rect.height / VIEW_BOX_HEIGHT);
+  if (!Number.isFinite(scale) || scale <= 0) return [0, 0];
+  return [
+    point[0] * scale + (rect.width - VIEW_BOX_WIDTH * scale) / 2,
+    point[1] * scale + (rect.height - VIEW_BOX_HEIGHT * scale) / 2,
+  ];
+}
+
 /** Normalises two drag corners into a box, so dragging in any direction works. */
 export function dragBounds(start: WhiteboardPoint, current: WhiteboardPoint): WhiteboardBounds {
   return {

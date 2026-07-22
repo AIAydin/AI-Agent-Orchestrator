@@ -7,6 +7,7 @@ import {
   handlePosition,
   hitTest,
   resizeBounds,
+  surfacePoint,
   viewBoxPoint,
 } from './geometry.js';
 
@@ -38,6 +39,20 @@ describe('viewBoxPoint', () => {
 
   it('survives a zero-sized rect', () => {
     expect(viewBoxPoint({ left: 0, top: 0, width: 0, height: 0 }, 10, 10)).toEqual([0, 0]);
+  });
+});
+
+describe('surfacePoint', () => {
+  it('round-trips with viewBoxPoint through a uniform scale', () => {
+    expect(surfacePoint(EXACT, [480, 320])).toEqual([240, 160]);
+  });
+
+  it('adds the letterbox offset back', () => {
+    expect(surfacePoint(TALL, [480, 320])).toEqual([240, 240]);
+  });
+
+  it('survives a zero-sized rect', () => {
+    expect(surfacePoint({ left: 0, top: 0, width: 0, height: 0 }, [10, 10])).toEqual([0, 0]);
   });
 });
 
