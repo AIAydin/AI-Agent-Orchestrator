@@ -1,49 +1,38 @@
-import { useEffect, useMemo, useState, type JSX } from 'react';
-import {
-  ArrowRight,
-  Circle,
-  Diamond,
-  Download,
-  Link2,
-  Shapes,
-  Square,
-  Trash2,
-  Type,
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { Download, Link2, Shapes, Trash2 } from 'lucide-react';
 
 import type { NodeFaceProps } from '../../canvas/faces/node-face-registry.js';
 import { useCanvasNodeInteractions } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
 import { useAgentSession } from '../../runs/agent-session/AgentSessionContext.js';
+import { WhiteboardCanvas } from './drawing/WhiteboardCanvas.js';
+import { WhiteboardTextEditor } from './drawing/WhiteboardTextEditor.js';
+import { WhiteboardToolStrip } from './drawing/WhiteboardToolStrip.js';
+import { useWhiteboardDrawing } from './drawing/useWhiteboardDrawing.js';
 import {
-  createWhiteboardElement,
   parseWhiteboardDocument,
   updateWhiteboardElement,
   type WhiteboardDocument,
   type WhiteboardElement,
-  type WhiteboardElementType,
 } from './model.js';
 import { whiteboardSvg } from './svg.js';
-import { WhiteboardPreview } from './WhiteboardPreview.js';
 
 /**
- * Whiteboard face: the interactive inert-SVG preview fills the node body; the
- * shape toolbar, per-element editor, SVG export, and agent-context sharing live
- * in a node-anchored popover.
+ * Whiteboard face: the drawing canvas fills the node body and the header strip selects the
+ * active tool. The Tools popover holds everything that is not a drawing gesture — the
+ * per-element editor, colours, agent-context sharing, and SVG export.
  */
 export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
   const session = useAgentSession();
   const interactions = useCanvasNodeInteractions();
   const readOnly = session.graphReadOnly || data.locked || interactions.readOnly;
   const document = useMemo(() => parseWhiteboardDocument(data.excalidraw), [data.excalidraw]);
-  const activeElements = document.elements.filter((element) => !element.isDeleted);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [annotation, setAnnotation] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const selected = activeElements.find((element) => element.id === selectedId) ?? null;
+  const body = useRef<HTMLDivElement | null>(null);
   const agents = session.nodeRoster.filter((entry) => entry.kind === 'agent' && !entry.locked);
   const [targetAgentId, setTargetAgentId] = useState(agents[0]?.id ?? '');
+  const annotationIds = useMemo(() => data.annotationIds ?? [], [data.annotationIds]);
 
   useEffect(() => {
     if (!agents.some((agent) => agent.id === targetAgentId)) {
@@ -51,44 +40,31 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
     }
   }, [agents, targetAgentId]);
 
-  const persist = (
-    next: WhiteboardDocument,
-    annotationIds: readonly string[] | undefined,
-  ): void => {
-    session.updateNodeData(id, {
-      excalidraw: next,
-      annotationIds: annotationIds === undefined ? (data.annotationIds ?? []) : [...annotationIds],
-    });
-  };
+  const persist = useCallback(
+    (next: WhiteboardDocument, nextAnnotationIds: readonly string[] | undefined): void => {
+      session.updateNodeData(id, {
+        excalidraw: next,
+        annotationIds:
+          nextAnnotationIds === undefined ? [...annotationIds] : [...nextAnnotationIds],
+      });
+    },
+    [annotationIds, id, session],
+  );
 
-  const addElement = (type: WhiteboardElementType, text = ''): void => {
-    if (readOnly) return;
+  const recordHistory = useCallback((): void => {
     session.recordHistory();
-    const element = createWhiteboardElement(type, activeElements.length, text);
-    persist(
-      { ...document, elements: [...document.elements, element] },
-      type === 'text' ? [...(data.annotationIds ?? []), element.id] : undefined,
-    );
-    setSelectedId(element.id);
-    setAnnotation('');
-  };
+  }, [session]);
 
-  const deleteSelected = (): void => {
-    if (readOnly || selected === null) return;
-    session.recordHistory();
-    persist(
-      {
-        ...document,
-        elements: document.elements.map((element) =>
-          element.id === selected.id
-            ? { ...element, isDeleted: true, version: element.version + 1, updated: Date.now() }
-            : element,
-        ),
-      },
-      (data.annotationIds ?? []).filter((annotationId) => annotationId !== selected.id),
-    );
-    setSelectedId(null);
-  };
+  const drawing = useWhiteboardDrawing({
+    document,
+    annotationIds,
+    readOnly,
+    onRecordHistory: recordHistory,
+    onPersist: persist,
+  });
+
+  const activeElements = document.elements.filter((element) => !element.isDeleted);
+  const selected = activeElements.find((element) => element.id === drawing.selectedId) ?? null;
 
   const changeSelected = (patch: Partial<WhiteboardElement>): void => {
     if (readOnly || selected === null) return;
@@ -119,68 +95,55 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
         <span className="node-face-strip-label">
           {activeElements.length} element{activeElements.length === 1 ? '' : 's'}
         </span>
+        <WhiteboardToolStrip
+          tool={drawing.tool}
+          readOnly={readOnly}
+          onSelectTool={drawing.setTool}
+        />
         <button
           type="button"
           aria-label="Whiteboard tools"
           aria-expanded={toolsOpen}
           disabled={readOnly}
-          onClick={() => setToolsOpen((open) => !open)}
+          onClick={() => {
+            setToolsOpen((open) => !open);
+          }}
         >
           <Shapes size={12} aria-hidden="true" /> Tools
         </button>
       </div>
-      <div className="node-face-body nowheel nodrag">
-        <WhiteboardPreview
-          document={document}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          className="whiteboard-face-preview"
+      <div className="node-face-body nowheel nodrag" ref={body}>
+        <WhiteboardCanvas
+          drawing={drawing}
+          readOnly={readOnly}
+          className="whiteboard-face-canvas"
         />
+        {drawing.textDraft === null ? null : (
+          <WhiteboardTextEditor
+            draft={drawing.textDraft}
+            name={`node-${id}-whiteboard-text`}
+            surface={body.current}
+            onChange={drawing.changeText}
+            onCommit={drawing.commitText}
+            onCancel={drawing.cancelText}
+          />
+        )}
         {toolsOpen && !readOnly ? (
           <div className="node-face-popover" role="dialog" aria-label="Whiteboard tools">
-            <div className="whiteboard-face-tools">
-              <button type="button" aria-label="Add rectangle" onClick={() => addElement('rectangle')}>
-                <Square size={13} aria-hidden="true" />
-              </button>
-              <button type="button" aria-label="Add ellipse" onClick={() => addElement('ellipse')}>
-                <Circle size={13} aria-hidden="true" />
-              </button>
-              <button type="button" aria-label="Add diamond" onClick={() => addElement('diamond')}>
-                <Diamond size={13} aria-hidden="true" />
-              </button>
-              <button type="button" aria-label="Add arrow" onClick={() => addElement('arrow')}>
-                <ArrowRight size={13} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                aria-label="Delete selected element"
-                disabled={selected === null}
-                onClick={deleteSelected}
-              >
-                <Trash2 size={13} aria-hidden="true" />
-              </button>
-            </div>
-            <label>
-              Annotation
-              <input
-                name={`node-${id}-whiteboard-face-annotation`}
-                value={annotation}
-                maxLength={20_000}
-                placeholder="Describe a screen or interaction"
-                onChange={(event) => setAnnotation(event.target.value)}
-              />
-            </label>
-            <button
-              type="button"
-              disabled={annotation.trim() === ''}
-              onClick={() => addElement('text', annotation.trim())}
-            >
-              <Type size={13} aria-hidden="true" /> Add annotation
-            </button>
-
-            {selected !== null ? (
+            {selected === null ? (
+              <small>Select an element on the canvas to edit it precisely.</small>
+            ) : (
               <section className="whiteboard-face-element" aria-label="Selected whiteboard element">
-                <strong>{selected.type}</strong>
+                <strong>
+                  {selected.type}
+                  <button
+                    type="button"
+                    aria-label="Delete selected element"
+                    onClick={drawing.deleteSelected}
+                  >
+                    <Trash2 size={13} aria-hidden="true" />
+                  </button>
+                </strong>
                 <div className="whiteboard-face-number-grid">
                   {(['x', 'y', 'width', 'height'] as const).map((field) => (
                     <label key={field}>
@@ -192,8 +155,10 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                         readOnly={readOnly}
                         min={field === 'width' || field === 'height' ? 1 : -4000}
                         max={4000}
-                        onFocus={() => session.recordHistory()}
-                        onChange={(event) => changeSelected({ [field]: Number(event.target.value) })}
+                        onFocus={recordHistory}
+                        onChange={(event) => {
+                          changeSelected({ [field]: Number(event.target.value) });
+                        }}
                       />
                     </label>
                   ))}
@@ -206,13 +171,13 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                       rows={2}
                       value={selected.text ?? ''}
                       readOnly={readOnly}
-                      onFocus={() => session.recordHistory()}
-                      onChange={(event) =>
+                      onFocus={recordHistory}
+                      onChange={(event) => {
                         changeSelected({
                           text: event.target.value.slice(0, 20_000),
                           originalText: event.target.value.slice(0, 20_000),
-                        })
-                      }
+                        });
+                      }}
                     />
                   </label>
                 ) : null}
@@ -224,11 +189,15 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                       name="whiteboard-face-stroke"
                       value={selected.strokeColor}
                       disabled={readOnly}
-                      onFocus={() => session.recordHistory()}
-                      onChange={(event) => changeSelected({ strokeColor: event.target.value })}
+                      onFocus={recordHistory}
+                      onChange={(event) => {
+                        changeSelected({ strokeColor: event.target.value });
+                      }}
                     />
                   </label>
-                  {selected.type !== 'arrow' && selected.type !== 'text' ? (
+                  {selected.type === 'rectangle' ||
+                  selected.type === 'ellipse' ||
+                  selected.type === 'diamond' ? (
                     <label>
                       Fill
                       <input
@@ -236,16 +205,21 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                         name="whiteboard-face-fill"
                         value={selected.backgroundColor}
                         disabled={readOnly}
-                        onFocus={() => session.recordHistory()}
-                        onChange={(event) => changeSelected({ backgroundColor: event.target.value })}
+                        onFocus={recordHistory}
+                        onChange={(event) => {
+                          changeSelected({ backgroundColor: event.target.value });
+                        }}
                       />
                     </label>
                   ) : null}
                 </div>
               </section>
-            ) : null}
+            )}
 
-            <section className="whiteboard-face-context" aria-label="Share whiteboard with an agent">
+            <section
+              className="whiteboard-face-context"
+              aria-label="Share whiteboard with an agent"
+            >
               <strong>
                 <Link2 size={12} aria-hidden="true" /> Agent context
               </strong>
@@ -258,7 +232,9 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                     <select
                       name={`node-${id}-whiteboard-face-agent`}
                       value={targetAgentId}
-                      onChange={(event) => setTargetAgentId(event.target.value)}
+                      onChange={(event) => {
+                        setTargetAgentId(event.target.value);
+                      }}
                     >
                       {agents.map((agent) => (
                         <option key={agent.id} value={agent.id}>
@@ -270,7 +246,9 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                   <button
                     type="button"
                     disabled={targetAgentId === ''}
-                    onClick={() => setNotice(session.attachWhiteboardContext(id, targetAgentId))}
+                    onClick={() => {
+                      setNotice(session.attachWhiteboardContext(id, targetAgentId));
+                    }}
                   >
                     Attach specification
                   </button>
@@ -283,7 +261,8 @@ export function WhiteboardNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               disabled={activeElements.length === 0 || exporting}
               onClick={() => void exportImage()}
             >
-              <Download size={13} aria-hidden="true" /> {exporting ? 'Exporting…' : 'Export SVG image'}
+              <Download size={13} aria-hidden="true" />{' '}
+              {exporting ? 'Exporting…' : 'Export SVG image'}
             </button>
             {notice !== null ? <small role="status">{notice}</small> : null}
           </div>

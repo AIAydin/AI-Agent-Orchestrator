@@ -11,10 +11,10 @@ The Whiteboard node becomes an actual drawing surface: pick a tool, drag on the 
 
 The whiteboard face renders an **inert** SVG with no pointer handling at all:
 
-- `WhiteboardPreview.tsx` puts no handler on the `<svg>` itself. The only interaction is `onClick` on an *already existing* element, to select it. Clicking or dragging empty canvas is a no-op by construction.
+- `WhiteboardPreview.tsx` puts no handler on the `<svg>` itself. The only interaction is `onClick` on an _already existing_ element, to select it. Clicking or dragging empty canvas is a no-op by construction.
 - `grep -rn "onPointer|onMouseDown|onDrag|draggable"` across the whiteboard directory returns **zero matches**.
 - Shapes can only be created from the "Tools" popover, and land at a fixed staircase position — `x = 24 + (index % 8) * 22`, `y = 24 + (index % 6) * 22` (`model.ts:88`).
-- They are then repositioned and resized by *typing numbers* into x/y/width/height fields in the inspector (`WhiteboardMockupInspector.tsx:263-279`).
+- They are then repositioned and resized by _typing numbers_ into x/y/width/height fields in the face's Tools popover (`WhiteboardNodeFace.tsx`, the `whiteboard-face-number-grid` block).
 
 This matches the original intent — `IMPLEMENTATION_CHECKLIST.md:1489` describes "UI-only rectangle, ellipse, diamond, arrow, and text-annotation editing… rendered solely with Forgeboard-owned inert React SVG primitives" — so this is an unimplemented capability, not a regression.
 
@@ -28,7 +28,13 @@ This matches the original intent — `IMPLEMENTATION_CHECKLIST.md:1489` describe
 
 ## Constraint: structure gate
 
-`scripts/structure/check.mjs` enforces `MAX_FILES_PER_DIRECTORY = 12` (counting every hand-written file, not just code) and `MAX_LINES = 2_000`. The whiteboard directory already holds 8 files, so the new interactive layer goes in a `whiteboard/drawing/` subdirectory rather than alongside the existing modules.
+`scripts/structure/check.mjs` enforces `MAX_FILES_PER_DIRECTORY = 12` (counting every hand-written file, not just code) and `MAX_LINES = 2_000`. The whiteboard directory holds 6 files today and gains 2 test files, so the new interactive layer goes in a `whiteboard/drawing/` subdirectory (11 files) rather than alongside the existing modules.
+
+## Baseline: what `main` actually has
+
+The right sidebar was deleted on `main` in `694b0c3`, taking `WhiteboardMockupInspector.tsx` with it. Everything it owned now lives in the face's Tools popover: the shape buttons, the annotation field, the per-element numeric editor, stroke/fill colours, the agent-context picker, and SVG export. The face reads `session.nodeRoster` and calls `session.attachWhiteboardContext`.
+
+The popover therefore **survives as the properties-and-actions popover**. It loses only the two things the new interaction model replaces: the four create-shape buttons (the header tool strip creates now) and the annotation text field (inline text creates now). The numeric editor, colours, agent context, and export stay exactly as they are — they remain the precise way to nudge an element.
 
 ## Architecture
 
@@ -82,15 +88,16 @@ Keeping the graph untouched mid-drag is what prevents a 500-point stroke from tr
 
 ### 4. Surfaces (`drawing/`)
 
-- **`WhiteboardCanvas.tsx`** — the interactive `<svg>`: committed elements, the live draft, the selection outline, and four corner handles. Keeps the existing `nodrag`/`nowheel` classes and adds `touch-action: none`, so React Flow cannot pan, zoom, or drag the node out from under a stroke.
-- **`WhiteboardToolStrip.tsx`** — replaces the Tools popover in the header row: element count, then select / rectangle / ellipse / diamond / arrow / text / pen, with `aria-pressed` marking the active tool and every control disabled when read-only.
+- **`WhiteboardShape.tsx`** — the single element→SVG renderer, gaining a `freedraw` branch. One renderer, so nothing can drift.
+- **`WhiteboardCanvas.tsx`** — the interactive `<svg>`: committed elements, the live draft, the selection outline, and four corner handles. Keeps the existing `nodrag`/`nowheel` classes and adds `touch-action: none`, so React Flow cannot pan, zoom, or drag the node out from under a stroke. Read-only nodes render through the same component with interaction disabled.
+- **`WhiteboardToolStrip.tsx`** — added to the header row: element count, then select / rectangle / ellipse / diamond / arrow / text / pen, with `aria-pressed` marking the active tool and every control disabled when read-only. The existing Tools button stays beside it, now opening the properties-and-actions popover.
 - **`WhiteboardTextEditor.tsx`** — inline text as an HTML `<input>` absolutely positioned over the SVG, placed by inverting `viewBoxPoint`. Not `<foreignObject>`, which is absent from the export allowlist. Enter or blur commits and registers the id in `annotationIds`; Escape or an empty value discards without creating an element. Double-clicking an existing text re-opens it for editing and does not re-register its id.
 
-`WhiteboardPreview.tsx` stays as the inspector's read-only renderer, gaining only a `freedraw` branch.
+`WhiteboardPreview.tsx` is **deleted** — `WhiteboardCanvas` supersedes it and it has no other consumer now that the inspector is gone.
 
 ### 5. Drawable-area fix
 
-Today the white area is a CSS `background` on the `<svg>` element, so it also paints the letterbox margins — the white region is *larger* than the drawable 3:2 region, which would make edge clicks feel dead once clicks matter. The background becomes a `<rect>` inside the viewBox, so the white area is exactly the drawable area. This matches what `svg.ts` already emits for export.
+Today the white area is a CSS `background` on the `<svg>` element, so it also paints the letterbox margins — the white region is _larger_ than the drawable 3:2 region, which would make edge clicks feel dead once clicks matter. The background becomes a `<rect>` inside the viewBox, so the white area is exactly the drawable area. This matches what `svg.ts` already emits for export.
 
 ### 6. Export and agent context
 
@@ -99,14 +106,14 @@ Today the white area is a CSS `background` on the `<svg>` element, so it also pa
 
 ## Data flow
 
-Pointer event → `viewBoxPoint` → gesture hook draft (local state, no graph write) → pointerup → `createWhiteboardElement` / `updateWhiteboardElement` → `session.updateNodeData({ excalidraw, annotationIds })` → persisted node data → `parseWhiteboardDocument` on read → `WhiteboardCanvas` / `WhiteboardPreview` render, `whiteboardSvg` exports, `safeWhiteboardDocument` normalizes for agent context.
+Pointer event → `viewBoxPoint` → gesture hook draft (local state, no graph write) → pointerup → `createWhiteboardElement` / `updateWhiteboardElement` → `session.updateNodeData({ excalidraw, annotationIds })` → persisted node data → `parseWhiteboardDocument` on read → `WhiteboardCanvas` renders, `whiteboardSvg` exports, `safeWhiteboardDocument` normalizes for agent context.
 
 ## Error handling
 
 - Pointer coordinates outside the drawable region clamp into the viewBox rather than creating off-canvas elements.
 - A degenerate gesture (drag under the 4-unit minimum, stroke under 2 points) commits nothing and leaves no history entry beyond the one already recorded.
 - A pointer lost mid-gesture (`pointercancel`, capture loss) discards the draft.
-- The new per-stroke point cap is enforced on write (during sampling) *and* re-enforced on parse, so hand-edited or corrupt persisted JSON cannot exceed it. The existing `MAX_ELEMENTS = 2_000` document cap keeps being enforced on parse.
+- The new per-stroke point cap is enforced on write (during sampling) _and_ re-enforced on parse, so hand-edited or corrupt persisted JSON cannot exceed it. The existing `MAX_ELEMENTS = 2_000` document cap keeps being enforced on parse.
 - Read-only nodes accept selection but reject every mutation.
 
 ## Testing
@@ -122,4 +129,4 @@ Pointer event → `viewBoxPoint` → gesture hook draft (local state, no graph w
 - Pan and zoom inside the node.
 - Rotation, multi-select, grouping, z-order controls.
 - Images or embedded files on the whiteboard.
-- Changes to the inspector's numeric x/y/width/height editor — it stays as the precise way to nudge an element.
+- Changes to the popover's numeric x/y/width/height editor, colour pickers, agent-context picker, or SVG export — they stay as they are.

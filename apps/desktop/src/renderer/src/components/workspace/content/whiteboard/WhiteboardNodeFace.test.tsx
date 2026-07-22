@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { useState } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
@@ -10,6 +10,7 @@ import {
   AgentSessionProvider,
   type AgentSessionContextValue,
 } from '../../runs/agent-session/AgentSessionContext.js';
+import { installPointerSupport, stubBoundingRect } from './drawing/pointer-testing.js';
 import { WhiteboardNodeFace } from './WhiteboardNodeFace.js';
 
 const updateNodeData = vi.fn();
@@ -17,6 +18,7 @@ const recordHistory = vi.fn();
 const attachWhiteboardContext = vi.fn();
 const exportSvg = vi.fn();
 
+beforeAll(installPointerSupport);
 afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, 'forgeboard');
@@ -32,6 +34,15 @@ beforeEach(() => {
     value: { whiteboard: { exportSvg } },
   });
 });
+
+interface PersistedPatch {
+  excalidraw: { elements: { id: string; type: string; width: number; isDeleted?: boolean }[] };
+  annotationIds: string[];
+}
+
+function lastPatch(): PersistedPatch {
+  return updateNodeData.mock.calls.at(-1)?.[1] as PersistedPatch;
+}
 
 function sessionValue(
   roster: AgentSessionContextValue['nodeRoster'] = [],
@@ -72,8 +83,8 @@ function renderFace(
   );
 }
 
-/** Controlled host that feeds updateNodeData patches back into `data`, so state
- * that depends on persisted excalidraw content (selection, export) is testable. */
+/** Controlled host that feeds updateNodeData patches back into `data`, so state that
+ * depends on persisted excalidraw content (selection, export) is testable. */
 function ControlledFace() {
   const [data, setData] = useState<WorkshopNodeData>(() => nodeData());
   const value = {
@@ -96,68 +107,149 @@ function ControlledFace() {
   );
 }
 
-describe('WhiteboardNodeFace', () => {
-  it('renders the inert SVG preview as the face body', () => {
+function canvas(): SVGSVGElement {
+  const surface = screen.getByRole('application', {
+    name: 'Whiteboard canvas',
+  }) as unknown as SVGSVGElement;
+  stubBoundingRect(surface);
+  return surface;
+}
+
+/** Picks a tool, then drags across the canvas. */
+function drag(tool: string, from: [number, number], to: [number, number]): void {
+  fireEvent.click(screen.getByRole('button', { name: tool }));
+  const surface = canvas();
+  fireEvent.pointerDown(surface, { clientX: from[0], clientY: from[1], pointerId: 1 });
+  fireEvent.pointerMove(surface, { clientX: to[0], clientY: to[1], pointerId: 1 });
+  fireEvent.pointerUp(surface, { clientX: to[0], clientY: to[1], pointerId: 1 });
+}
+
+describe('WhiteboardNodeFace drawing', () => {
+  it('renders the drawing canvas as the face body', () => {
     renderFace();
-    expect(screen.getByRole('img', { name: 'Inert whiteboard preview' })).toBeTruthy();
+    expect(screen.getByRole('application', { name: 'Whiteboard canvas' })).toBeTruthy();
   });
 
-  it('adds shapes from the toolbar popover and records history', () => {
+  it('creates a shape spanning the drag and records history once', () => {
     renderFace();
-    fireEvent.click(screen.getByRole('button', { name: 'Whiteboard tools' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add rectangle' }));
-    expect(recordHistory).toHaveBeenCalled();
-    const call = updateNodeData.mock.calls.at(-1);
-    expect(call?.[0]).toBe('n1');
-    const patch = call?.[1] as {
-      excalidraw: { elements: Array<{ type: string }> };
-    };
-    expect(patch.excalidraw.elements).toMatchObject([{ type: 'rectangle' }]);
+    drag('Draw rectangle', [100, 100], [300, 250]);
+
+    expect(recordHistory).toHaveBeenCalledTimes(1);
+    expect(updateNodeData.mock.calls.at(-1)?.[0]).toBe('n1');
+    expect(lastPatch().excalidraw.elements).toMatchObject([
+      { type: 'rectangle', x: 100, y: 100, width: 200, height: 150 },
+    ]);
   });
 
-  it('adds annotations and tracks their ids', () => {
+  it('records a freehand stroke', () => {
     renderFace();
-    fireEvent.click(screen.getByRole('button', { name: 'Whiteboard tools' }));
-    fireEvent.change(screen.getByLabelText('Annotation'), { target: { value: 'Header here' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add annotation' }));
-    const patch = updateNodeData.mock.calls.at(-1)?.[1] as {
-      excalidraw: { elements: Array<{ id: string; type: string }> };
-      annotationIds: string[];
-    };
-    expect(patch.excalidraw.elements[0]?.type).toBe('text');
+    fireEvent.click(screen.getByRole('button', { name: 'Draw freehand' }));
+    const surface = canvas();
+    fireEvent.pointerDown(surface, { clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(surface, { clientX: 60, clientY: 30, pointerId: 1 });
+    fireEvent.pointerMove(surface, { clientX: 90, clientY: 80, pointerId: 1 });
+    fireEvent.pointerUp(surface, { clientX: 90, clientY: 80, pointerId: 1 });
+
+    expect(lastPatch().excalidraw.elements).toMatchObject([{ type: 'freedraw' }]);
+  });
+
+  it('persists nothing while a drag is still in flight', () => {
+    renderFace();
+    fireEvent.click(screen.getByRole('button', { name: 'Draw ellipse' }));
+    const surface = canvas();
+    fireEvent.pointerDown(surface, { clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(surface, { clientX: 200, clientY: 200, pointerId: 1 });
+
+    expect(updateNodeData).not.toHaveBeenCalled();
+  });
+});
+
+describe('WhiteboardNodeFace inline text', () => {
+  it('commits typed text at the clicked point and tracks the annotation', () => {
+    renderFace();
+    fireEvent.click(screen.getByRole('button', { name: 'Add text' }));
+    fireEvent.pointerDown(canvas(), { clientX: 40, clientY: 60, pointerId: 1 });
+
+    const input = screen.getByRole('textbox', { name: 'Whiteboard text' });
+    fireEvent.change(input, { target: { value: 'Login screen' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    const patch = lastPatch();
+    expect(patch.excalidraw.elements).toMatchObject([{ type: 'text', x: 40, y: 60 }]);
     expect(patch.annotationIds).toEqual([patch.excalidraw.elements[0]?.id]);
   });
 
-  it('keeps the toolbar closed for locked nodes', () => {
+  it('discards the draft on Escape', () => {
+    renderFace();
+    fireEvent.click(screen.getByRole('button', { name: 'Add text' }));
+    fireEvent.pointerDown(canvas(), { clientX: 40, clientY: 60, pointerId: 1 });
+
+    const input = screen.getByRole('textbox', { name: 'Whiteboard text' });
+    fireEvent.change(input, { target: { value: 'Discard me' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(updateNodeData).not.toHaveBeenCalled();
+    expect(screen.queryByRole('textbox', { name: 'Whiteboard text' })).toBeNull();
+  });
+});
+
+describe('WhiteboardNodeFace locking', () => {
+  it('disables every tool and the popover for locked nodes', () => {
     renderFace({ locked: true });
     expect(screen.getByRole('button', { name: 'Whiteboard tools' })).toHaveProperty(
       'disabled',
       true,
     );
+    expect(screen.getByRole('button', { name: 'Draw rectangle' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Draw freehand' })).toHaveProperty('disabled', true);
   });
 
-  it('edits the selected element geometry from the popover', () => {
+  it('ignores drags on a locked node', () => {
+    renderFace({ locked: true });
+    const surface = canvas();
+    fireEvent.pointerDown(surface, { clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(surface, { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.pointerUp(surface, { clientX: 200, clientY: 200, pointerId: 1 });
+
+    expect(updateNodeData).not.toHaveBeenCalled();
+  });
+});
+
+describe('WhiteboardNodeFace popover', () => {
+  it('still edits the selected element geometry precisely', () => {
     render(<ControlledFace />);
+    drag('Draw rectangle', [100, 100], [300, 250]);
     fireEvent.click(screen.getByRole('button', { name: 'Whiteboard tools' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add rectangle' }));
     fireEvent.change(screen.getByRole('spinbutton', { name: 'width' }), {
       target: { value: '321' },
     });
-    const patch = updateNodeData.mock.calls.at(-1)?.[1] as {
-      excalidraw: { elements: Array<{ width: number; isDeleted?: boolean }> };
-    };
-    expect(patch.excalidraw.elements.some((element) => element.width === 321)).toBe(true);
+
+    expect(lastPatch().excalidraw.elements.some((element) => element.width === 321)).toBe(true);
+  });
+
+  it('deletes the selected element', () => {
+    render(<ControlledFace />);
+    drag('Draw rectangle', [100, 100], [300, 250]);
+    fireEvent.click(screen.getByRole('button', { name: 'Whiteboard tools' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected element' }));
+
+    expect(lastPatch().excalidraw.elements.every((element) => element.isDeleted === true)).toBe(
+      true,
+    );
   });
 
   it('exports the whiteboard as an SVG through the native bridge', async () => {
     render(<ControlledFace />);
+    drag('Draw rectangle', [100, 100], [300, 250]);
     fireEvent.click(screen.getByRole('button', { name: 'Whiteboard tools' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add rectangle' }));
     fireEvent.click(screen.getByRole('button', { name: 'Export SVG image' }));
-    await waitFor(() => expect(exportSvg).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => {
+      expect(exportSvg).toHaveBeenCalledTimes(1);
+    });
     const input = exportSvg.mock.calls[0]?.[0] as { fileName: string; svg: string };
     expect(input.fileName).toBe('Mockup.svg');
-    expect(input.svg).toContain('<rect');
+    expect(input.svg).toContain('rx="6"');
     expect(await screen.findByText('Exported Mockup.svg.')).toBeTruthy();
   });
 
@@ -166,6 +258,7 @@ describe('WhiteboardNodeFace', () => {
     renderFace({}, [{ id: 'agent-1', title: 'Builder', kind: 'agent', locked: false }]);
     fireEvent.click(screen.getByRole('button', { name: 'Whiteboard tools' }));
     fireEvent.click(screen.getByRole('button', { name: 'Attach specification' }));
+
     expect(attachWhiteboardContext).toHaveBeenCalledWith('n1', 'agent-1');
     expect(screen.getByText('Attached to Builder.')).toBeTruthy();
   });

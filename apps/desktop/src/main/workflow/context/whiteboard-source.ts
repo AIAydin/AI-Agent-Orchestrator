@@ -1,7 +1,8 @@
 const MAX_ELEMENTS = 1_000;
 const MAX_TEXT_CHARACTERS = 2_048;
 const MAX_ID_CHARACTERS = 128;
-const ELEMENT_TYPES = new Set(['rectangle', 'ellipse', 'diamond', 'arrow', 'text']);
+const MAX_POINTS = 512;
+const ELEMENT_TYPES = new Set(['rectangle', 'ellipse', 'diamond', 'arrow', 'text', 'freedraw']);
 const COLOR = /^(?:#[0-9a-f]{3,8}|transparent)$/iu;
 
 interface SafeWhiteboardElement {
@@ -17,7 +18,12 @@ interface SafeWhiteboardElement {
   opacity: number;
   text?: string;
   fontSize?: number;
-  points?: [[number, number], [number, number]];
+  points?: [number, number][];
+}
+
+interface SafeElementResult {
+  element: SafeWhiteboardElement;
+  truncatedPoints: number;
 }
 
 export interface SafeWhiteboardDocument {
@@ -29,6 +35,7 @@ export interface SafeWhiteboardDocument {
   embeddedFilesIncluded: false;
   discardedElementCount: number;
   truncatedElementCount: number;
+  truncatedPointCount: number;
 }
 
 /**
@@ -40,28 +47,29 @@ export function safeWhiteboardDocument(value: unknown): SafeWhiteboardDocument {
   const input = objectValue(value);
   const candidates = Array.isArray(input?.['elements']) ? input['elements'] : [];
   const considered = candidates.slice(0, MAX_ELEMENTS);
-  const elements = considered.flatMap((candidate) => {
-    const element = safeElement(candidate);
-    return element === null ? [] : [element];
+  const results = considered.flatMap((candidate) => {
+    const result = safeElement(candidate);
+    return result === null ? [] : [result];
   });
   const appState = objectValue(input?.['appState']);
   return {
     type: 'excalidraw',
     version: 2,
     source: 'https://forgeboard.local',
-    elements,
+    elements: results.map((result) => result.element),
     appState: {
       viewBackgroundColor: colorValue(appState?.['viewBackgroundColor'], '#ffffff'),
       gridSize:
         appState?.['gridSize'] === null ? null : finiteNumber(appState?.['gridSize'], 20, 1, 200),
     },
     embeddedFilesIncluded: false,
-    discardedElementCount: considered.length - elements.length,
+    discardedElementCount: considered.length - results.length,
     truncatedElementCount: Math.max(0, candidates.length - considered.length),
+    truncatedPointCount: results.reduce((total, result) => total + result.truncatedPoints, 0),
   };
 }
 
-function safeElement(value: unknown): SafeWhiteboardElement | null {
+function safeElement(value: unknown): SafeElementResult | null {
   const input = objectValue(value);
   const type = input?.['type'];
   const id = input?.['id'];
@@ -95,20 +103,55 @@ function safeElement(value: unknown): SafeWhiteboardElement | null {
   };
   if (type === 'text') {
     return {
-      ...base,
-      text: typeof input['text'] === 'string' ? input['text'].slice(0, MAX_TEXT_CHARACTERS) : '',
-      fontSize: finiteNumber(input['fontSize'], 20, 8, 96),
+      element: {
+        ...base,
+        text: typeof input['text'] === 'string' ? input['text'].slice(0, MAX_TEXT_CHARACTERS) : '',
+        fontSize: finiteNumber(input['fontSize'], 20, 8, 96),
+      },
+      truncatedPoints: 0,
     };
   }
-  if (type === 'arrow')
+  if (type === 'freedraw') {
+    const raw = Array.isArray(input['points']) ? input['points'] : [];
+    const points = safePoints(raw);
+    if (points.length < 2) return null;
+    return { element: { ...base, points }, truncatedPoints: raw.length - points.length };
+  }
+  if (type === 'arrow') {
+    const raw = Array.isArray(input['points']) ? input['points'] : [];
+    const points = safePoints(raw);
+    const start = points[0];
+    const end = points[1];
     return {
-      ...base,
-      points: [
-        [0, 0],
-        [width, height],
-      ],
+      element: {
+        ...base,
+        points:
+          start === undefined || end === undefined
+            ? [
+                [0, 0],
+                [width, height],
+              ]
+            : [start, end],
+      },
+      truncatedPoints: 0,
     };
-  return base;
+  }
+  return { element: base, truncatedPoints: 0 };
+}
+
+/** Bounded point normalization: never more than {@link MAX_POINTS}, never a non-finite coordinate. */
+function safePoints(value: readonly unknown[]): [number, number][] {
+  return value.slice(0, MAX_POINTS).flatMap((candidate) => {
+    if (!Array.isArray(candidate)) return [];
+    const [x, y] = candidate as unknown[];
+    if (typeof x !== 'number' || !Number.isFinite(x)) return [];
+    if (typeof y !== 'number' || !Number.isFinite(y)) return [];
+    return [[clampCoordinate(x), clampCoordinate(y)] as [number, number]];
+  });
+}
+
+function clampCoordinate(value: number): number {
+  return Math.min(4_000, Math.max(-4_000, value));
 }
 
 function objectValue(value: unknown): Record<string, unknown> | null {

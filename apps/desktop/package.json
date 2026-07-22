@@ -34,7 +34,7 @@
     "@forgeboard/ui": "workspace:*",
     "@forgeboard/windows-durable-fs": "workspace:*",
     "@hocuspocus/provider": "catalog:",
-    "@huggingface/transformers": "3.8.1",
+    "@huggingface/transformers": "4.2.0",
     "@tanstack/react-query": "catalog:",
     "@xmldom/xmldom": "^0.9.10",
     "@xterm/addon-fit": "catalog:",
