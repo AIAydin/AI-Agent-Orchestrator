@@ -889,6 +889,16 @@ export class AgentPeersService {
         });
         return;
       }
+      this.#store.appendAudit('agent-peers', 'browser-action-approved', 'allowed', {
+        projectId: provision.projectId,
+        nodeId: provision.nodeId,
+        previewId: preview.node.id,
+        action: input.action.kind,
+        edgeId: preview.edgeId,
+        origin: intent.origin,
+        elementKind: intent.element.kind,
+        consequential: intent.consequential,
+      });
       const result = await this.#previews.performAction(
         provision.projectId,
         preview.node.id,

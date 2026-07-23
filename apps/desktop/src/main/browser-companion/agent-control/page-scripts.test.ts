@@ -44,7 +44,14 @@ describe('browser companion agent page contracts', () => {
         width: 100,
         height: 30,
       }),
-    ).toEqual({ connected: true, hitMatches: true, x: 1, y: 2, width: 100, height: 30 });
+    ).toEqual({
+      connected: true,
+      hitMatches: true,
+      x: 1,
+      y: 2,
+      width: 100,
+      height: 30,
+    });
     expect(
       parsePageElementBounds({
         connected: true,

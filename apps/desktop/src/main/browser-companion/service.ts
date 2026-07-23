@@ -319,7 +319,7 @@ export class BrowserCompanionService {
         '--no-first-run',
         '--no-default-browser-check',
         '--new-window',
-        url,
+        'about:blank',
       ],
       {
         // fd 3/4 are the private CDP transport. Chrome diagnostics are not
@@ -332,7 +332,11 @@ export class BrowserCompanionService {
       await onceSpawned(child);
       const client = new CdpPipeClient(child);
       const version = await client.send<{ product?: unknown }>('Browser.getVersion');
-      const target = await waitForPageTarget(client, url);
+      // Establish the restrictive browser policy before the untrusted site is
+      // allowed to load, closing the launch-time download race.
+      await client.send('Browser.setDownloadBehavior', { behavior: 'deny' });
+      await client.send('Target.setDiscoverTargets', { discover: true });
+      const target = await waitForPageTarget(client, 'about:blank');
       const attached = await client.send<{ sessionId?: unknown }>('Target.attachToTarget', {
         targetId: target.targetId,
         flatten: true,
@@ -371,6 +375,10 @@ export class BrowserCompanionService {
         closing: false,
       };
       client.onEvent((event) => this.#handleCdpEvent(connection, event));
+      this.#connections.set(key, connection);
+      child.once('exit', () => this.#forgetConnection(connection));
+      await client.send('Page.navigate', { url }, connection.sessionId);
+      await this.#waitForInitialNavigation(connection);
       await this.#startScreencast(connection);
       connection.unregisterAgentSource = this.#previewBrowser.registerSource(
         input.projectId,
@@ -391,10 +399,6 @@ export class BrowserCompanionService {
             await this.#performAgentAction(connection, action, expectedPageVersion),
         },
       );
-      this.#connections.set(key, connection);
-      await client.send('Browser.setDownloadBehavior', { behavior: 'deny' });
-      await client.send('Target.setDiscoverTargets', { discover: true });
-      child.once('exit', () => this.#forgetConnection(connection));
       this.#audit('launch', 'allowed', auditMetadata(input, url));
       return await this.status(input);
     } catch (error) {
@@ -594,8 +598,8 @@ export class BrowserCompanionService {
         bounds.y >= connection.viewport.height
       )
         throw new Error('preview-element-not-visible');
-      const x = Math.max(0, Math.min(connection.viewport.width, bounds.x + bounds.width / 2));
-      const y = Math.max(0, Math.min(connection.viewport.height, bounds.y + bounds.height / 2));
+      const x = Math.max(0, Math.min(connection.viewport.width - 1, bounds.x + bounds.width / 2));
+      const y = Math.max(0, Math.min(connection.viewport.height - 1, bounds.y + bounds.height / 2));
       connection.blockNewTargetsUntil = Date.now() + 2_000;
       await this.#sendToPage(connection, 'Input.dispatchMouseEvent', {
         type: 'mousePressed',
@@ -708,6 +712,16 @@ export class BrowserCompanionService {
     const value = result.result?.value;
     if (!isPageMetadata(value)) throw new Error('Chrome page is not ready.');
     return value;
+  }
+
+  async #waitForInitialNavigation(connection: ChromeConnection): Promise<void> {
+    const deadline = Date.now() + TARGET_WAIT_MS;
+    while (Date.now() < deadline) {
+      const page = await this.#pageMetadata(connection);
+      if (page.url !== '' && page.url !== 'about:blank') return;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+    }
+    throw new Error('Chrome did not navigate to the requested page.');
   }
 
   async #assertSharedOrigin(connection: ChromeConnection): Promise<void> {

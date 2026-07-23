@@ -15,7 +15,7 @@ class FakeChrome extends EventEmitter {
   exitCode: number | null = null;
   signalCode: NodeJS.Signals | null = null;
   killed = false;
-  pageUrl = 'https://miro.com/';
+  pageUrl = 'about:blank';
   invalidSessionOnce = false;
   attachmentCount = 0;
   elementDescriptor = {
@@ -246,13 +246,21 @@ describe('BrowserCompanionService', () => {
       expect.arrayContaining([
         '--remote-debugging-pipe',
         expect.stringMatching(/^--user-data-dir=/u),
-        'https://miro.com/',
+        'about:blank',
       ]),
       expect.objectContaining({
         stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'],
       }),
     );
     expect(previewBrowser.isLive('project-1', 'preview-1')).toBe(true);
+    const downloadPolicyIndex = chrome.commands.findIndex(
+      (command) => command.method === 'Browser.setDownloadBehavior',
+    );
+    const initialNavigationIndex = chrome.commands.findIndex(
+      (command) => command.method === 'Page.navigate',
+    );
+    expect(downloadPolicyIndex).toBeGreaterThanOrEqual(0);
+    expect(initialNavigationIndex).toBeGreaterThan(downloadPolicyIndex);
     await expect(previewBrowser.inspect('project-1', 'preview-1')).resolves.toMatchObject({
       title: 'Miro board',
       text: 'Visible board',

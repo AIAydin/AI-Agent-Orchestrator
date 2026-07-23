@@ -19,6 +19,7 @@ const PROJECT_ID = 'project-1';
 
 class FakeStore implements AgentPeersStore {
   canvas: { nodes: CanvasNode[]; edges: CanvasEdge[] } | null = null;
+  failBrowserActionApprovalAudit = false;
   readonly auditEvents: {
     category: string;
     action: string;
@@ -36,6 +37,9 @@ class FakeStore implements AgentPeersStore {
     outcome: 'allowed' | 'denied' | 'failed',
     metadata: Record<string, unknown>,
   ): void {
+    if (this.failBrowserActionApprovalAudit && action === 'browser-action-approved') {
+      throw new Error('audit unavailable');
+    }
     this.auditEvents.push({ category, action, outcome, metadata });
   }
 }
@@ -444,6 +448,34 @@ describe('AgentPeersService', () => {
     expect(response).toMatchObject({
       status: 403,
       body: { error: 'preview-interaction-denied' },
+    });
+    expect(previewBridge.performAction).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before execution when the required action approval audit cannot be stored', async () => {
+    const agent = agentNode('agent-a', 'Agent A');
+    const interactive = previewNode('preview-interactive', 'Interactive board', true, true);
+    setCanvas([agent, interactive], [contextEdge('edge-interactive', agent.id, interactive.id)]);
+    authorizePreviewAction.mockResolvedValue(true);
+    store.failBrowserActionApprovalAudit = true;
+    const provision = await service.provision(PROJECT_ID, agent.id);
+    const token =
+      service.environmentForProvision(provision.provisionId)?.['FORGEBOARD_PEER_TOKEN'] ?? '';
+
+    const response = await fetchJson(`${provision.url}/v1/preview/action`, token, {
+      method: 'POST',
+      body: JSON.stringify({
+        previewId: interactive.id,
+        action: {
+          kind: 'click',
+          elementHandle: '11111111-1111-4111-8111-111111111111',
+        },
+      }),
+    });
+
+    expect(response).toMatchObject({
+      status: 409,
+      body: { error: 'preview-action-unavailable' },
     });
     expect(previewBridge.performAction).not.toHaveBeenCalled();
   });

@@ -31,7 +31,10 @@ export const INTERACTIVE_ELEMENTS_EXPRESSION = String.raw`(() => {
   return [...document.querySelectorAll(selector)].filter((element) => {
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
-    return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 &&
+      rect.top < window.innerHeight && rect.left < window.innerWidth &&
+      style.visibility !== 'hidden' && style.display !== 'none' &&
+      style.opacity !== '0' && style.pointerEvents !== 'none';
   }).slice(0, 100);
 })()`;
 
@@ -183,7 +186,7 @@ function descriptorFunction(collection: boolean): string {
       /(password|passcode|one.?time|otp|verification|credit|card number|cvv|cvc|routing|social security|ssn|api.?key|access.?token|private.?key|seed phrase|recovery code)/i.test(searchable);
     const identifyingField = editable && /(email|e-mail|username|user name|account id)/i.test(searchable);
     const userOnly = sensitive || identifyingField || authenticationPage || paymentPage ||
-      /(sign[ -]?in|log[ -]?in|oauth|authoriz|two.?factor|2fa|checkout|purchase|\bbuy\b|\bpay\b|upload|download|camera|microphone|location permission)/i.test(label);
+      /(sign[ -]?in|log[ -]?in|oauth|authoriz|two.?factor|2fa|checkout|purchase|\bbuy\b|\bpay\b|upload|download|choose file|select file|attach(?:ment| file)|camera|microphone|location permission|notification|clipboard|screen (?:share|capture)|bluetooth|usb|serial)/i.test(label);
     const consequential = userOnly || inputType === 'submit' ||
       /(delete|remove|send|submit|confirm|publish|share|invite|approve|transfer|place order)/i.test(label);
     let destination = null;

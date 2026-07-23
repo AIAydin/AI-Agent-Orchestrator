@@ -59,9 +59,11 @@ navigation commands.
 Scrolling is bounded and may run without a prompt after interaction is enabled. Every click or text
 entry requires a cancel-default native **Allow once** dialog naming the agent, preview, origin, and
 control. Password, authentication, payment, file-picker, permission, and popup controls are always
-user-only. Downloads are disabled for companion sessions, agent-created popup targets are closed,
-typed values are never written to audit events, and stale element handles fail closed. Tool results
-label website material as untrusted content so it cannot silently become application authority.
+user-only. Chrome starts on a blank tab and disables downloads before the requested site loads;
+agent-created popup targets are closed; typed values are never written to audit events; the
+approval audit must persist before execution; and stale or covered element handles fail closed.
+Tool results label website material as untrusted content so it cannot silently become application
+authority.
 
 ## Main-process composition
 

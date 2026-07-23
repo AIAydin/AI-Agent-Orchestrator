@@ -514,6 +514,12 @@ export function PreviewNodeFace({
               />
               Let connected agents observe this page
             </label>
+            {agentBrowserAccess ? (
+              <p className="preview-face-security-note">
+                Shares visible text and screenshots. Hidden fields, URL secrets, cookies, and
+                console logs stay private.
+              </p>
+            ) : null}
             <label className="preview-face-check">
               <input
                 type="checkbox"

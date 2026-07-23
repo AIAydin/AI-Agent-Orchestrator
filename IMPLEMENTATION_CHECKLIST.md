@@ -501,8 +501,10 @@ unchecked when only a subset of their required behavior has proof.
   coordinates, raw JavaScript, navigation, or DevTools access. Every click and typed entry requires
   a cancel-default native one-time approval; secret, authentication, payment, file, permission, and
   popup controls remain user-only; downloads and agent-created popup targets are denied; action
-  audits omit entered text; and permission, edge, origin, page-version, and handle checks fail
-  closed before execution. Changing the address revokes both permissions. One hundred eleven
+  audits omit entered text and must persist before execution; and permission, edge, origin,
+  page-version, hit-target, and handle checks fail closed before execution. Chrome applies its
+  restrictive download policy before navigating the initial blank tab to the site. Changing the
+  address revokes both permissions. One hundred thirteen
   focused tests across 12 files pass alongside desktop, core, and peer-MCP strict typechecks,
   zero-warning focused lint, and the 1,475-file structure gate.
 - 2026-07-15: a real main-process workflow recovery integration scenario now runs bundled
