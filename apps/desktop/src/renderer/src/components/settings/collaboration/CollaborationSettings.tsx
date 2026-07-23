@@ -27,6 +27,12 @@ interface CollaborationSettingsProps {
   readonly busy: boolean;
 }
 
+const TEN_MINUTE_INVITE: CollaborationInviteCreateInput = {
+  role: 'editor',
+  expiresInSeconds: 600,
+  maxUses: 1,
+};
+
 export function CollaborationSettings({ settings, setSettings, busy }: CollaborationSettingsProps) {
   const [accessToken, setAccessToken] = useState('');
   const [connection, setConnection] = useState<CollaborationConnection | null>(null);
@@ -224,6 +230,32 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
     });
   }
 
+  async function createAndCopyTenMinuteInvite(): Promise<void> {
+    await manageInvite(async (collaboration) => {
+      const created = await collaboration.createInvite(TEN_MINUTE_INVITE);
+      if (!created.ok) return setMessage(created.error.message);
+      if (created.value === null) return setMessage('Invite creation was cancelled.');
+
+      const copied = await collaboration.copyInviteLink({
+        inviteId: created.value.id,
+      });
+      setMessage(
+        copied.ok && copied.value
+          ? '10-minute editor invite copied. It can be used once.'
+          : copied.ok
+            ? 'Invite created, but copying was cancelled. Use invite history to copy it.'
+            : `Invite created, but could not be copied: ${copied.error.message}`,
+      );
+    });
+  }
+
+  async function bootstrapRoomAndCreateInvite(
+    input: Parameters<typeof ownerAccess.bootstrapRoom>[0],
+  ): Promise<void> {
+    const ownerSession = await ownerAccess.bootstrapRoom(input);
+    if (ownerSession !== null) await createAndCopyTenMinuteInvite();
+  }
+
   async function copyInvite(inviteId: string): Promise<void> {
     await manageInvite(async (collaboration) => {
       const result = await collaboration.copyInviteLink({ inviteId });
@@ -367,6 +399,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
                 settings={settings}
                 busy={controlsBusy}
                 onBootstrap={ownerAccess.bootstrapRoom}
+                onBootstrapAndInvite={bootstrapRoomAndCreateInvite}
                 onRecover={ownerAccess.recoverOwner}
               />
             </section>
@@ -432,6 +465,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
             <InviteManagementControls
               page={invitePage}
               busy={controlsBusy}
+              onCreateQuick={createAndCopyTenMinuteInvite}
               onCreate={createInvite}
               onCopy={copyInvite}
               onRevoke={revokeInvite}

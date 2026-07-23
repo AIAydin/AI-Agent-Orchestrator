@@ -14,8 +14,18 @@ const claude: AgentDetection = {
   version: '2.1.0',
   providerDisclosure: 'runs claude',
 };
-const codex: AgentDetection = { ...claude, id: 'codex', label: 'Codex', executable: '/usr/local/bin/codex' };
-const gemini: AgentDetection = { ...claude, id: 'gemini', label: 'Gemini', executable: '/usr/local/bin/gemini' };
+const codex: AgentDetection = {
+  ...claude,
+  id: 'codex',
+  label: 'Codex',
+  executable: '/usr/local/bin/codex',
+};
+const gemini: AgentDetection = {
+  ...claude,
+  id: 'gemini',
+  label: 'Gemini',
+  executable: '/usr/local/bin/gemini',
+};
 const opencode: AgentDetection = {
   ...claude,
   id: 'opencode',
@@ -26,7 +36,9 @@ const opencode: AgentDetection = {
 describe('agentSessionUnavailableReason', () => {
   it('requires a detected executable', () => {
     expect(agentSessionUnavailableReason(undefined)).toMatch(/pick an installed agent/i);
-    expect(agentSessionUnavailableReason({ ...claude, executable: null })).toMatch(/isn't installed/i);
+    expect(agentSessionUnavailableReason({ ...claude, executable: null })).toMatch(
+      /isn't installed/i,
+    );
     expect(agentSessionUnavailableReason(claude)).toBeNull();
   });
 });

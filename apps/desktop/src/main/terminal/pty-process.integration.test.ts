@@ -4,11 +4,15 @@ import { promisify } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
 
+import { ensureNodePtySpawnHelper } from './pty-process.js';
+
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
+const NODE_PTY_ENTRY = require.resolve('node-pty');
 
 describe.runIf(process.platform !== 'win32')('real node-pty integration', () => {
   it('supports literal input, resize, interrupt, and termination under the Electron ABI', async () => {
+    await ensureNodePtySpawnHelper();
     const electron = require('electron') as string;
     const { stdout, stderr } = await execFileAsync(electron, ['-e', REAL_PTY_PROBE], {
       cwd: process.cwd(),
@@ -39,7 +43,7 @@ describe.runIf(process.platform !== 'win32')('real node-pty integration', () => 
 });
 
 const REAL_PTY_PROBE = String.raw`
-const pty = require('node-pty');
+const pty = require(${JSON.stringify(NODE_PTY_ENTRY)});
 
 function spawnProcess(executable, arguments = []) {
   return pty.spawn(executable, arguments, {

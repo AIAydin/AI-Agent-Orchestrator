@@ -9,6 +9,7 @@ import type {
 interface InviteManagementControlsProps {
   readonly page: CollaborationInviteHistoryPage | null;
   readonly busy: boolean;
+  readonly onCreateQuick: () => Promise<void>;
   readonly onCreate: (input: CollaborationInviteCreateInput) => Promise<void>;
   readonly onCopy: (inviteId: string) => Promise<void>;
   readonly onRevoke: (inviteId: string) => Promise<void>;
@@ -28,6 +29,7 @@ const EXPIRATIONS = [
 export function InviteManagementControls({
   page,
   busy,
+  onCreateQuick,
   onCreate,
   onCopy,
   onRevoke,
@@ -42,6 +44,17 @@ export function InviteManagementControls({
 
   return (
     <div aria-label="Manage room invites">
+      <strong>Quick invite</strong>
+      <p>One editor, one use, valid for 10 minutes.</p>
+      <button
+        className="button primary"
+        type="button"
+        disabled={busy}
+        onClick={() => void onCreateQuick()}
+      >
+        Create &amp; copy 10-minute invite
+      </button>
+      <hr />
       <strong>Create invite</strong>
       <div className="two-column">
         <label>

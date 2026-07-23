@@ -133,8 +133,8 @@ export function GitPrPlanDialog({
           </section>
         ) : null}
         <p className="git-pr-face-plan-no-force">
-          <ShieldCheck size={14} aria-hidden="true" /> Force push is never offered. The latest commit
-          and approval expiry are re-checked right before sending.
+          <ShieldCheck size={14} aria-hidden="true" /> Force push is never offered. The latest
+          commit and approval expiry are re-checked right before sending.
           {pullRequest
             ? ' A pull request follows its branch — commits pushed later change what it contains.'
             : ''}

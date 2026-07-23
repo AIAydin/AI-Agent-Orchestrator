@@ -6,7 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
-} from "react";
+} from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -15,10 +15,11 @@ import {
   RotateCw,
   ShieldCheck,
   Unplug,
-} from "lucide-react";
+} from 'lucide-react';
 
-import { useBrowserCompanion } from "./useBrowserCompanion.js";
-import "./chrome-companion-surface.css";
+import { useBrowserCompanion } from './useBrowserCompanion.js';
+import { chromeViewportForNode } from './viewport.js';
+import './chrome-companion-surface.css';
 
 export function ChromeCompanionSurface({
   projectId,
@@ -36,20 +37,17 @@ export function ChromeCompanionSurface({
   onStatus?: (state: string) => void;
 }): JSX.Element {
   const companion = useBrowserCompanion(projectId, nodeId, true);
-  const connected = companion.status.state === "connected";
+  const connected = companion.status.state === 'connected';
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const lastMoveAt = useRef(0);
   const setViewportRef = useRef(companion.setViewport);
   setViewportRef.current = companion.setViewport;
 
-  useEffect(
-    () => onStatus?.(companion.status.state),
-    [companion.status.state, onStatus],
-  );
+  useEffect(() => onStatus?.(companion.status.state), [companion.status.state, onStatus]);
 
   useEffect(() => {
-    if (!connected || typeof ResizeObserver === "undefined") return;
+    if (!connected || typeof ResizeObserver === 'undefined') return;
     const stage = stageRef.current;
     if (stage === null) return;
     let timer: number | null = null;
@@ -57,8 +55,7 @@ export function ChromeCompanionSurface({
       if (timer !== null) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         const bounds = stage.getBoundingClientRect();
-        const width = clamp(Math.round(bounds.width), 320, 2_560);
-        const height = clamp(Math.round(bounds.height), 200, 1_600);
+        const { width, height } = chromeViewportForNode(bounds.width, bounds.height);
         void setViewportRef.current(width, height);
       }, 100);
     };
@@ -73,18 +70,18 @@ export function ChromeCompanionSurface({
 
   const sendPointer = (
     event: ReactPointerEvent<HTMLDivElement>,
-    type: "mousePressed" | "mouseReleased" | "mouseMoved",
+    type: 'mousePressed' | 'mouseReleased' | 'mouseMoved',
   ): void => {
     if (readOnly) return;
     const point = imagePoint(event.clientX, event.clientY, imageRef.current);
     if (point === null) return;
     void companion.dispatchInput({
-      kind: "pointer",
+      kind: 'pointer',
       type,
       ...point,
       button: pointerButton(event.button),
       buttons: event.buttons,
-      clickCount: type === "mouseMoved" ? 0 : clamp(event.detail || 1, 1, 3),
+      clickCount: type === 'mouseMoved' ? 0 : clamp(event.detail || 1, 1, 3),
     });
   };
 
@@ -94,7 +91,7 @@ export function ChromeCompanionSurface({
     if (point === null) return;
     event.preventDefault();
     void companion.dispatchInput({
-      kind: "wheel",
+      kind: 'wheel',
       ...point,
       deltaX: clamp(event.deltaX, -4_096, 4_096),
       deltaY: clamp(event.deltaY, -4_096, 4_096),
@@ -102,23 +99,20 @@ export function ChromeCompanionSurface({
     });
   };
 
-  const sendKey = (
-    event: ReactKeyboardEvent<HTMLDivElement>,
-    type: "keyDown" | "keyUp",
-  ): void => {
+  const sendKey = (event: ReactKeyboardEvent<HTMLDivElement>, type: 'keyDown' | 'keyUp'): void => {
     if (readOnly) return;
     event.preventDefault();
     const modifiers = eventModifiers(event);
     const text =
-      type === "keyDown" &&
+      type === 'keyDown' &&
       event.key.length === 1 &&
       !event.altKey &&
       !event.ctrlKey &&
       !event.metaKey
         ? event.key
-        : "";
+        : '';
     void companion.dispatchInput({
-      kind: "key",
+      kind: 'key',
       type,
       key: event.key,
       code: event.code,
@@ -130,17 +124,14 @@ export function ChromeCompanionSurface({
 
   const sendPaste = (event: ReactClipboardEvent<HTMLDivElement>): void => {
     if (readOnly) return;
-    const text = event.clipboardData.getData("text/plain").slice(0, 16_384);
-    if (text === "") return;
+    const text = event.clipboardData.getData('text/plain').slice(0, 16_384);
+    if (text === '') return;
     event.preventDefault();
-    void companion.dispatchInput({ kind: "text", text });
+    void companion.dispatchInput({ kind: 'text', text });
   };
 
   return (
-    <div
-      className="chrome-companion-surface"
-      aria-label="Google Chrome preview connection"
-    >
+    <div className="chrome-companion-surface" aria-label="Google Chrome preview connection">
       {connected ? (
         <div className="chrome-companion-browser">
           <div className="chrome-companion-toolbar">
@@ -148,7 +139,7 @@ export function ChromeCompanionSurface({
               type="button"
               aria-label="Chrome back"
               disabled={readOnly}
-              onClick={() => void companion.navigate("back")}
+              onClick={() => void companion.navigate('back')}
             >
               <ChevronLeft size={14} aria-hidden="true" />
             </button>
@@ -156,7 +147,7 @@ export function ChromeCompanionSurface({
               type="button"
               aria-label="Chrome forward"
               disabled={readOnly}
-              onClick={() => void companion.navigate("forward")}
+              onClick={() => void companion.navigate('forward')}
             >
               <ChevronRight size={14} aria-hidden="true" />
             </button>
@@ -164,18 +155,13 @@ export function ChromeCompanionSurface({
               type="button"
               aria-label="Reload Chrome page"
               disabled={readOnly}
-              onClick={() => void companion.navigate("reload")}
+              onClick={() => void companion.navigate('reload')}
             >
               <RotateCw size={13} aria-hidden="true" />
             </button>
             <span className="chrome-companion-live-dot" aria-hidden="true" />
-            <span
-              className="chrome-companion-title"
-              title={companion.status.url ?? ""}
-            >
-              {companion.status.title ||
-                companion.status.url ||
-                "Google Chrome"}
+            <span className="chrome-companion-title" title={companion.status.url ?? ''}>
+              {companion.status.title || companion.status.url || 'Google Chrome'}
             </span>
             <button
               type="button"
@@ -204,24 +190,24 @@ export function ChromeCompanionSurface({
             onPointerDown={(event) => {
               event.currentTarget.focus();
               event.currentTarget.setPointerCapture(event.pointerId);
-              sendPointer(event, "mousePressed");
+              sendPointer(event, 'mousePressed');
             }}
             onPointerMove={(event) => {
               const now = performance.now();
               if (now - lastMoveAt.current < 32) return;
               lastMoveAt.current = now;
-              sendPointer(event, "mouseMoved");
+              sendPointer(event, 'mouseMoved');
             }}
             onPointerUp={(event) => {
               if (event.currentTarget.hasPointerCapture(event.pointerId)) {
                 event.currentTarget.releasePointerCapture(event.pointerId);
               }
-              sendPointer(event, "mouseReleased");
+              sendPointer(event, 'mouseReleased');
             }}
-            onPointerCancel={(event) => sendPointer(event, "mouseReleased")}
+            onPointerCancel={(event) => sendPointer(event, 'mouseReleased')}
             onWheel={sendWheel}
-            onKeyDown={(event) => sendKey(event, "keyDown")}
-            onKeyUp={(event) => sendKey(event, "keyUp")}
+            onKeyDown={(event) => sendKey(event, 'keyDown')}
+            onKeyUp={(event) => sendKey(event, 'keyUp')}
             onPaste={sendPaste}
           >
             {companion.snapshot !== null ? (
@@ -229,21 +215,15 @@ export function ChromeCompanionSurface({
                 ref={imageRef}
                 className="chrome-companion-snapshot"
                 src={`data:${companion.snapshot.mimeType};base64,${companion.snapshot.data}`}
-                alt={companion.status.title || "Interactive Google Chrome tab"}
+                alt={companion.status.title || 'Interactive Google Chrome tab'}
                 draggable={false}
               />
             ) : (
-              <p className="chrome-companion-loading">
-                Connecting to the Chrome tab…
-              </p>
+              <p className="chrome-companion-loading">Connecting to the Chrome tab…</p>
             )}
-            {readOnly ? (
-              <span className="chrome-companion-readonly">Read only</span>
-            ) : null}
+            {readOnly ? <span className="chrome-companion-readonly">Read only</span> : null}
             {agentAccess ? (
-              <span className="chrome-companion-agent-badge">
-                Agent page reading is enabled
-              </span>
+              <span className="chrome-companion-agent-badge">Agent page reading is enabled</span>
             ) : null}
           </div>
         </div>
@@ -252,10 +232,7 @@ export function ChromeCompanionSurface({
           <ShieldCheck size={24} aria-hidden="true" />
           <div>
             <strong>Open safely in Chrome</strong>
-            <p>
-              Uses a dedicated Google Chrome profile—never your personal browser
-              profile.
-            </p>
+            <p>Uses a dedicated Google Chrome profile—never your personal browser profile.</p>
             {companion.status.error !== null ? (
               <p className="chrome-companion-error" role="alert">
                 {companion.status.error}
@@ -268,14 +245,9 @@ export function ChromeCompanionSurface({
               disabled={readOnly || companion.busy}
               onClick={() => void companion.open(url)}
             >
-              <ExternalLink size={13} aria-hidden="true" /> Open in Google
-              Chrome
+              <ExternalLink size={13} aria-hidden="true" /> Open in Google Chrome
             </button>
-            <button
-              type="button"
-              disabled={companion.busy}
-              onClick={() => void companion.clear()}
-            >
+            <button type="button" disabled={companion.busy} onClick={() => void companion.clear()}>
               Clear saved Chrome data
             </button>
           </div>
@@ -290,8 +262,7 @@ function imagePoint(
   clientY: number,
   image: HTMLImageElement | null,
 ): { x: number; y: number } | null {
-  if (image === null || image.naturalWidth < 1 || image.naturalHeight < 1)
-    return null;
+  if (image === null || image.naturalWidth < 1 || image.naturalHeight < 1) return null;
   const bounds = image.getBoundingClientRect();
   if (
     bounds.width < 1 ||
@@ -303,11 +274,7 @@ function imagePoint(
   )
     return null;
   return {
-    x: clamp(
-      ((clientX - bounds.left) / bounds.width) * image.naturalWidth,
-      0,
-      image.naturalWidth,
-    ),
+    x: clamp(((clientX - bounds.left) / bounds.width) * image.naturalWidth, 0, image.naturalWidth),
     y: clamp(
       ((clientY - bounds.top) / bounds.height) * image.naturalHeight,
       0,
@@ -316,11 +283,11 @@ function imagePoint(
   };
 }
 
-function pointerButton(button: number): "none" | "left" | "middle" | "right" {
-  if (button === 0) return "left";
-  if (button === 1) return "middle";
-  if (button === 2) return "right";
-  return "none";
+function pointerButton(button: number): 'none' | 'left' | 'middle' | 'right' {
+  if (button === 0) return 'left';
+  if (button === 1) return 'middle';
+  if (button === 2) return 'right';
+  return 'none';
 }
 
 function eventModifiers(event: {

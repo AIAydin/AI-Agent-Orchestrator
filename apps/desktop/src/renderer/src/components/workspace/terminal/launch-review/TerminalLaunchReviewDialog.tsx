@@ -1,9 +1,9 @@
 import { Play, ShieldAlert, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import type { TerminalLaunchPlanView } from '../../../../../shared/terminal/index.js';
-import { trapModalFocus } from '../../../lib/modal-focus.js';
-import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
+import type { TerminalLaunchPlanView } from '../../../../../../shared/terminal/index.js';
+import { trapModalFocus } from '../../../../lib/modal-focus.js';
+import { WorkspaceTooltip } from '../../shell/tooltips/WorkspaceTooltip.js';
 
 interface TerminalLaunchReviewDialogProps {
   readonly plan: TerminalLaunchPlanView;

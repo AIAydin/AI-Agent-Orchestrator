@@ -129,6 +129,7 @@ test('aggregate verification rejects local manifests without a source commit', a
         version: VERSION,
         platform,
         architecture,
+        environment: {},
       });
       await writeFile(join(root, plan.infoName), `${JSON.stringify(info)}\n`);
     }

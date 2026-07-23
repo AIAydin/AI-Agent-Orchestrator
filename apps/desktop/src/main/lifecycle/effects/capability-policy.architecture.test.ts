@@ -177,6 +177,7 @@ describe('main-process local effect capability architecture', () => {
 
   it('keeps the ordinary-save and pre-database recovery exceptions exact and documented', () => {
     expect(policyFiles('ordinary-project-save')).toEqual(['file-domain/writer.ts']);
+    expect(policyFiles('user-selected-project-import')).toEqual(['file-domain/videos/service.ts']);
     expect(policyFiles('journaled-startup-recovery')).toEqual([
       'recovery/database/atomic-restore.ts',
       'recovery/database/interrupted-restore.ts',
@@ -188,6 +189,9 @@ describe('main-process local effect capability architecture', () => {
     ]);
     expect(LOCAL_EFFECT_POLICY_REQUIREMENTS['ordinary-project-save']).toContain(
       'expected-content-hash',
+    );
+    expect(LOCAL_EFFECT_POLICY_REQUIREMENTS['user-selected-project-import']).toContain(
+      'native picker',
     );
     expect(LOCAL_EFFECT_POLICY_REQUIREMENTS['journaled-startup-recovery']).toContain('journal');
   });

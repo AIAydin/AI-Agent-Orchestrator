@@ -58,6 +58,43 @@ describe('collaboration room management settings', () => {
     expect(document.body.innerHTML).not.toContain(ADMIN_TOKEN);
   });
 
+  it('creates a room and copies a one-use ten-minute invite from one setup action', async () => {
+    const api = installApi();
+    api.bootstrapRoomAndJoin.mockResolvedValue({
+      ok: true,
+      value: ownerSession(),
+    });
+    api.createInvite.mockResolvedValue({
+      ok: true,
+      value: {
+        id: '95c8589e-b738-4506-9ea9-7578f062f294',
+        roomId: 'launch-room',
+        role: 'editor',
+        expiresAt: '2026-07-18T12:10:00.000Z',
+        maxUses: 1,
+      },
+    });
+    api.copyInviteLink.mockResolvedValue({ ok: true, value: true });
+    render(<Harness />);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Create room + copy 10-minute invite',
+      }),
+    );
+
+    await waitFor(() => expect(api.bootstrapRoomAndJoin).toHaveBeenCalledOnce());
+    expect(api.createInvite).toHaveBeenCalledWith({
+      role: 'editor',
+      expiresInSeconds: 600,
+      maxUses: 1,
+    });
+    expect(api.copyInviteLink).toHaveBeenCalledWith({
+      inviteId: '95c8589e-b738-4506-9ea9-7578f062f294',
+    });
+    expect(await screen.findByText(/10-minute editor invite copied.*used once/u)).toBeTruthy();
+  });
+
   it('clears the administrator token when owner recovery is rejected', async () => {
     const api = installApi();
     api.recoverOwnerAndJoin.mockResolvedValue({

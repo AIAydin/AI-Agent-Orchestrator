@@ -6,7 +6,8 @@ export type LocalEffectPolicy =
   | 'reviewed-domain-operation'
   | 'reviewed-package-capability'
   | 'reviewed-runtime'
-  | 'test-and-packaging';
+  | 'test-and-packaging'
+  | 'user-selected-project-import';
 
 export interface LocalEffectCapabilityEntry {
   readonly capabilities: readonly string[];
@@ -31,7 +32,10 @@ export const LOCAL_EFFECT_PRODUCTION_ROOTS: readonly LocalEffectProductionRoot[]
     relativeRoot: 'packages/agent-adapters/src',
     inventoryPrefix: 'packages/agent-adapters/src/',
   },
-  { relativeRoot: 'packages/git-engine/src', inventoryPrefix: 'packages/git-engine/src/' },
+  {
+    relativeRoot: 'packages/git-engine/src',
+    inventoryPrefix: 'packages/git-engine/src/',
+  },
 ]);
 
 /** Normative review meaning for every policy value accepted by the architecture gate. */
@@ -52,6 +56,8 @@ export const LOCAL_EFFECT_POLICY_REQUIREMENTS: Readonly<Record<LocalEffectPolicy
     'The capability belongs to a supervised runtime whose exact launch or control authority and required audit are enforced by its main-owned caller before process effects.',
   'test-and-packaging':
     'The capability is unreachable from the installed production application and exists only for packaged smoke or build tooling.',
+  'user-selected-project-import':
+    'The operation copies only a file chosen in a native picker into the active project after canonical-path, symlink, ignore-policy, file-type, and exclusive-destination checks.',
 };
 
 /**
@@ -107,6 +113,11 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     'node:fs/promises#unlink',
     'node:fs/promises#writeFile',
   ]),
+  'browser-companion/service.ts': entry('reviewed-runtime', [
+    'node:child_process#spawn',
+    'node:fs/promises#mkdir',
+    'node:fs/promises#rm',
+  ]),
   'checks/check-process.ts': entry('reviewed-runtime', [
     'node:child_process#spawn',
     'node:fs/promises#open',
@@ -120,6 +131,12 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
   ]),
   'file-domain/images/reader.ts': entry('durable-internal-state', ['node:fs/promises#open']),
   'file-domain/reader.ts': entry('durable-internal-state', ['node:fs/promises#open']),
+  'file-domain/videos/service.ts': entry('user-selected-project-import', [
+    'node:fs/promises#copyFile',
+    'node:fs/promises#mkdir',
+    'node:fs/promises#open',
+    'node:fs/promises#unlink',
+  ]),
   'file-domain/writer.ts': entry('ordinary-project-save', [
     'node:fs/promises#open',
     'node:fs/promises#rename',

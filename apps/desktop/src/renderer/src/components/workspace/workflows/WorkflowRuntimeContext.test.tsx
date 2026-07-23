@@ -63,7 +63,10 @@ describe('useWorkflowRuntime', () => {
     expect(() => renderHook(() => useWorkflowRuntime())).toThrow(
       'useWorkflowRuntime requires a WorkflowRuntimeProvider.',
     );
-    const value = { busyAction: null, startNode: vi.fn() } as unknown as WorkflowRuntimeContextValue;
+    const value = {
+      busyAction: null,
+      startNode: vi.fn(),
+    } as unknown as WorkflowRuntimeContextValue;
     const { result } = renderHook(() => useWorkflowRuntime(), {
       wrapper: ({ children }) => (
         <WorkflowRuntimeProvider value={value}>{children}</WorkflowRuntimeProvider>

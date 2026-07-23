@@ -2,14 +2,18 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import type { AppSettings } from '../../../../../../shared/application/contracts.js';
-import type { CollaborationRoomBootstrapJoinInput } from '../../../../../../shared/collaboration/index.js';
+import type {
+  CollaborationOwnerSessionView,
+  CollaborationRoomBootstrapJoinInput,
+} from '../../../../../../shared/collaboration/index.js';
 
 type RoomAccessInput = CollaborationRoomBootstrapJoinInput;
 
 interface RoomAccessControlsProps {
   readonly settings: AppSettings;
   readonly busy: boolean;
-  readonly onBootstrap: (input: RoomAccessInput) => Promise<void>;
+  readonly onBootstrap: (input: RoomAccessInput) => Promise<CollaborationOwnerSessionView | null>;
+  readonly onBootstrapAndInvite: (input: RoomAccessInput) => Promise<void>;
   readonly onRecover: (input: RoomAccessInput) => Promise<void>;
 }
 
@@ -17,6 +21,7 @@ export function RoomAccessControls({
   settings,
   busy,
   onBootstrap,
+  onBootstrapAndInvite,
   onRecover,
 }: RoomAccessControlsProps) {
   const [mode, setMode] = useState<'create' | 'recover'>('create');
@@ -32,7 +37,7 @@ export function RoomAccessControls({
     settings.collaborationSubject.trim() !== '' &&
     settings.collaborationDisplayName.trim() !== '';
 
-  async function submit(): Promise<void> {
+  async function submit(createInvite = false): Promise<void> {
     if (submissionLock.current || disabled || !configured) return;
     submissionLock.current = true;
     setSubmitting(true);
@@ -50,7 +55,11 @@ export function RoomAccessControls({
       reconnect: settings.collaborationReconnect,
     };
     try {
-      await (mode === 'create' ? onBootstrap(input) : onRecover(input));
+      await (mode === 'create'
+        ? createInvite
+          ? onBootstrapAndInvite(input)
+          : onBootstrap(input)
+        : onRecover(input));
     } finally {
       submissionLock.current = false;
       setSubmitting(false);
@@ -124,6 +133,19 @@ export function RoomAccessControls({
       >
         {mode === 'create' ? 'Create room and connect' : 'Rotate owner access and connect'}
       </button>
+      {mode === 'create' && (
+        <>
+          <button
+            className="button primary"
+            type="button"
+            disabled={disabled || !configured}
+            onClick={() => void submit(true)}
+          >
+            Create room + copy 10-minute invite
+          </button>
+          <small>Creates a one-use editor invite and copies it without showing its secret.</small>
+        </>
+      )}
     </section>
   );
 }

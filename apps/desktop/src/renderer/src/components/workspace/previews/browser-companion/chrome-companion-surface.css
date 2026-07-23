@@ -79,7 +79,7 @@
   touch-action: none;
 }
 
-.chrome-companion-stage[aria-disabled="true"] {
+.chrome-companion-stage[aria-disabled='true'] {
   cursor: not-allowed;
 }
 

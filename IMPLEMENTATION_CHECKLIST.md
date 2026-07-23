@@ -490,12 +490,23 @@ unchecked when only a subset of their required behavior has proof.
   sign-in dialogs. Chrome pushes compressed frames only as page pixels change; Forgeboard
   acknowledges them immediately, transfers each frame sequence once, and maps the resulting image
   edge-to-edge onto the exact node viewport instead of repeatedly polling full PNG screenshots.
-- 2026-07-22: connected-agent browser reads remain a separate default-off permission that is
-  reauthorized against a direct, unmuted Context edge on each request. Authorized reads expose only
-  bounded visible text, sanitized DOM, and PNG screenshots; form state, scripts, styles, and console
-  logs are excluded, changing the address revokes consent, and cross-origin tab navigation cannot
-  inherit prior consent. Sixty-five focused Chrome transport,
-  lifecycle, webview-boundary, agent bridge, and renderer tests pass alongside workspace typecheck.
+  Compact nodes retain that exact aspect ratio but receive at least a 1280-by-720 desktop-class CSS
+  viewport before scaling, preventing responsive sites from rendering oversized mobile layouts.
+- 2026-07-22: connected-agent browser observation and interaction are separate default-off
+  permissions, each reauthorized against a direct, unmuted Context edge on every request. Reads
+  expose bounded visible text, an escaped visible-text-only legacy DOM projection, and PNG
+  screenshots while excluding hidden DOM, attributes, form state, URL queries/fragments, scripts,
+  styles, console output, cookies, and storage. Agents can inspect short-lived opaque element
+  handles and request bounded scrolling, clicks, or text entry without receiving selectors,
+  coordinates, raw JavaScript, navigation, or DevTools access. Every click and typed entry requires
+  a cancel-default native one-time approval; secret, authentication, payment, file, permission, and
+  popup controls remain user-only; downloads and agent-created popup targets are denied; action
+  audits omit entered text and must persist before execution; and permission, edge, origin,
+  page-version, hit-target, and handle checks fail closed before execution. Chrome applies its
+  restrictive download policy before navigating the initial blank tab to the site. Changing the
+  address revokes both permissions. One hundred thirteen
+  focused tests across 12 files pass alongside desktop, core, and peer-MCP strict typechecks,
+  zero-warning focused lint, and the 1,475-file structure gate.
 - 2026-07-15: a real main-process workflow recovery integration scenario now runs bundled
   deterministic child processes in five production-managed Git worktrees. It proves live SIGINT
   interruption, workflow cancellation with process termination, deliberate exit-code-7 failure,
@@ -1862,6 +1873,11 @@ unchecked when only a subset of their required behavior has proof.
   and Video context wiring. Duplicate names, missing nodes, read-only canvases, locks, and duplicate
   connections fail closed. Seven focused registry and matcher tests passed; the desktop typecheck
   reached only an unrelated concurrent Preview test fixture error in the existing dirty tree.
+  Follow-up provider aliases now accept natural `start a Claude Code agent` and
+  `start Claude Code agent` phrasing as the safe create-Agent-node action without weakening process
+  launch review. The exact transcribed screenshot phrase is covered; four focused matcher/registry
+  tests, desktop typecheck, formatting, zero-warning focused lint, whitespace validation, and the
+  1,476-file structure gate passed.
 - 2026-07-21: native terminal approval gained an explicit UI-managed 30-day trust option for the
   exact project, canonical executable identity, arguments, working-folder identity, and disclosed
   environment-variable names. Unchanged launches reuse the durable main-process approval without a
@@ -1903,9 +1919,8 @@ unchecked when only a subset of their required behavior has proof.
   collaboration-server typecheck passed, and the production desktop build plus real two-profile
   invite Electron journey passed. The broader room-management journey completed its collaboration
   operations and then hit an unrelated current-tree canvas assertion for a missing Product brief
-  node. Workspace typecheck is currently blocked by the concurrently edited PreviewNodeFace test
-  fixture, and the structure gate reports the existing oversized Workspace file plus five unrelated
-  direct-file-count violations; none is presented as connectivity completion evidence.
+  node. The later merge-gate pass resolved the concurrent preview fixture, Workspace size, and folder
+  count issues; workspace typecheck and the complete structure gate now pass.
 - 2026-07-22: the Whiteboard/Mockup node is now an actual drawing surface. Previously its SVG was
   inert — nothing on the canvas handled pointer events, so shapes could only be added from the Tools
   popover at a fixed staircase position and were repositioned by typing numbers. A persistent tool
@@ -1926,5 +1941,61 @@ unchecked when only a subset of their required behavior has proof.
   gained `freedraw` with its own point cap and a disclosed `truncatedPointCount`. The dead
   `WhiteboardPreview.tsx` and `whiteboard.css` left behind by the sidebar deletion were removed. The
   full unit suite passed at 2,987 tests (92 added), with desktop strict typecheck and zero-warning
-  lint clean. The structure gate still reports only the inherited direct-file-count failures present
-  on `main`; `content/whiteboard` holds 7 files and `content/whiteboard/drawing` 12.
+  lint clean. The final structure remediation keeps `content/whiteboard` at 7 files and
+  `content/whiteboard/drawing` at 12 while bringing the whole repository within the enforced limits.
+- 2026-07-22: final merge-gate remediation split the oversized Workspace runtime and overfull feature
+  folders, recorded the Chrome-companion and user-selected video-import capability policies, and
+  pinned TypeScript 5.8.3 for every pnpm peer resolution so package declarations cannot silently use
+  a different compiler major. The structure gate passed across 1,475 maintained files, the
+  production-control audit covered 854 files, formatting, zero-warning lint, workspace typecheck,
+  documentation checks, and quality checks passed, and the production build passed including the
+  collaboration-server startup smoke and desktop renderer bundle. All 3,092 unit tests passed; the
+  complete integration run passed 334 of 335 tests, and its sole fresh-install Electron PTY harness
+  failure passed on focused rerun after resolving the desktop-local `node-pty` entry and exercising
+  the same spawn-helper permission repair used by production.
+- 2026-07-22: collaboration room owners gained a one-action 10-minute invite flow. From the
+  disconnected setup card, **Create room + copy 10-minute invite** creates and joins the real room,
+  then creates and securely copies an editor invite; connected owners get the matching **Create &
+  copy 10-minute invite** action. Both paths enforce exactly 600 seconds and one use through the
+  server-backed invite API. The secret remains in main-process protected memory and is written
+  directly to the clipboard without entering renderer state or page text. Eleven focused invite
+  and room-management tests passed, along with focused formatting, zero-warning lint, whitespace
+  validation, and the repository structure gate. The browser-companion implementation was then
+  completed and passed the desktop-wide typecheck as recorded below.
+- 2026-07-22: the browser-companion and peer preview controls now separate read access from agent
+  interaction, bind every inspected element handle to the current page version, and require a
+  native allow-once approval before an agent can click or type. Approval text escapes untrusted
+  website and agent control characters, website console content never enters agent-visible output,
+  and peer tools expose bounded inspect, scroll, click, and type operations. All 84 focused browser,
+  peer-service, renderer, and MCP tests passed, followed by zero-warning lint, workspace typecheck,
+  documentation and quality checks, and the full production build.
+- 2026-07-23: CI now takes its single pnpm version from the repository `packageManager` declaration,
+  preventing action-setup drift across verification, packaging, and release jobs. The collaboration
+  image copies the local core package manifest and source before bundling the server, so its Docker
+  build no longer depends on source that exists only outside the image context. The exact CI Docker
+  build passed locally, including the supply-chain lock policy, collaboration-server declaration
+  build, startup smoke, production dependency deploy, and final non-root runtime image. Two
+  regression checks guard both configuration contracts; all five quality tests, zero-warning lint,
+  formatting, the 1,476-file structure gate, and the 854-file production-control audit passed. The
+  release artifact test now supplies an explicitly empty environment for its local-manifest case;
+  all 34 release and startup tests pass with a simulated CI `GITHUB_SHA`.
+- 2026-07-23: release maintainers gained `corepack pnpm version:bump <new-semver>`. The command
+  validates strict SemVer precedence, refuses to repair root/desktop version drift, updates both
+  manifests with rollback on a partial write, creates matching prepared release notes without
+  overwriting maintainer-written notes, and never tags or publishes automatically. Seven focused
+  success, preservation, refusal, precedence, rollback, and package-wiring tests passed, along with
+  focused zero-warning lint, formatting, diff whitespace validation, the 1,478-file structure gate,
+  and the 854-file production-control audit. The exact package-script route, CLI help, and
+  invalid-input refusal also ran without changing the repository version. Pnpm's default
+  dependency-state repair still stops before scripts in this checkout because its existing
+  `node_modules` is out of sync; package routing was therefore verified with that automatic repair
+  disabled rather than presenting the local dependency installation as healthy.
+- 2026-07-23: clean-run verification no longer assumes a prebuilt peer-MCP artifact, an interactive
+  `TERM`, the host's login shell, or a specific numeric user id. Windows account identity now comes
+  from the literal system `whoami.exe` path with strict bounded CSV/SID parsing before the existing
+  fail-closed PowerShell ACL authority runs. Database swap detection also binds size and change and
+  modification times alongside device and inode identity. The isolated full unit suite passed all
+  3,110 tests across 455 files; all 335 integration tests, 41 release/startup tests, 3 docs tests,
+  and 5 quality tests passed. Typecheck, zero-warning lint, formatting, the 1,478-file structure
+  gate, the 854-file production-control audit, the collaboration artifact startup smoke, and the
+  complete production build also passed.

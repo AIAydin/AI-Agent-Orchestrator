@@ -15,7 +15,10 @@ export function canvasNodeRoster(nodes: readonly WorkshopNode[]): CanvasNodeRost
 export function canvasNodeRosterKey(entries: readonly CanvasNodeRosterEntry[]): string {
   return entries
     .map((entry) =>
-      [entry.id, entry.title, entry.kind, String(entry.locked), entry.adapterId ?? ''].join('\u0000'))
+      [entry.id, entry.title, entry.kind, String(entry.locked), entry.adapterId ?? ''].join(
+        '\u0000',
+      ),
+    )
     .join('\n');
 }
 

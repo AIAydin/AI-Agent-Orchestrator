@@ -1,27 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type {
   BrowserCompanionInput,
   BrowserCompanionNavigationInput,
   BrowserCompanionFrame,
   BrowserCompanionStatus,
-} from "../../../../../../shared/browser-companion/contracts.js";
-import { unwrap } from "../../../../lib/ipc.js";
+} from '../../../../../../shared/browser-companion/contracts.js';
+import { unwrap } from '../../../../lib/ipc.js';
 
 const CLOSED_STATUS: BrowserCompanionStatus = {
-  state: "closed",
+  state: 'closed',
   url: null,
-  title: "",
+  title: '',
   chromeVersion: null,
   profilePersisted: true,
   error: null,
 };
 
-export function useBrowserCompanion(
-  projectId: string,
-  nodeId: string,
-  active: boolean,
-) {
+export function useBrowserCompanion(projectId: string, nodeId: string, active: boolean) {
   const key = { projectId, nodeId };
   const [status, setStatus] = useState<BrowserCompanionStatus>(CLOSED_STATUS);
   const [snapshot, setSnapshot] = useState<BrowserCompanionFrame | null>(null);
@@ -31,23 +27,20 @@ export function useBrowserCompanion(
   const connected = useRef(false);
 
   const refreshStatus = useCallback(async (): Promise<void> => {
-    if (!active || typeof window === "undefined" || !window.forgeboard) return;
+    if (!active || typeof window === 'undefined' || !window.forgeboard) return;
     try {
       const next = unwrap(await window.forgeboard.browserCompanion.status(key));
-      connected.current = next.state === "connected";
+      connected.current = next.state === 'connected';
       setStatus(next);
-      if (next.state !== "connected") {
+      if (next.state !== 'connected') {
         frameSequence.current = 0;
         setSnapshot(null);
       }
     } catch (error) {
       setStatus({
         ...CLOSED_STATUS,
-        state: "failed",
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not connect to Google Chrome.",
+        state: 'failed',
+        error: error instanceof Error ? error.message : 'Could not connect to Google Chrome.',
       });
       connected.current = false;
     }
@@ -58,7 +51,7 @@ export function useBrowserCompanion(
       !active ||
       !connected.current ||
       framePending.current ||
-      typeof window === "undefined" ||
+      typeof window === 'undefined' ||
       !window.forgeboard
     )
       return;
@@ -110,11 +103,8 @@ export function useBrowserCompanion(
       } catch (error) {
         setStatus({
           ...CLOSED_STATUS,
-          state: "failed",
-          error:
-            error instanceof Error
-              ? error.message
-              : "Google Chrome operation failed.",
+          state: 'failed',
+          error: error instanceof Error ? error.message : 'Google Chrome operation failed.',
         });
       } finally {
         setBusy(false);
@@ -143,17 +133,11 @@ export function useBrowserCompanion(
         unwrap(await window.forgeboard.browserCompanion.open({ ...key, url })),
       ),
     focus: async () =>
-      await perform(async () =>
-        unwrap(await window.forgeboard.browserCompanion.focus(key)),
-      ),
+      await perform(async () => unwrap(await window.forgeboard.browserCompanion.focus(key))),
     close: async () =>
-      await perform(async () =>
-        unwrap(await window.forgeboard.browserCompanion.close(key)),
-      ),
+      await perform(async () => unwrap(await window.forgeboard.browserCompanion.close(key))),
     clear: async () =>
-      await perform(async () =>
-        unwrap(await window.forgeboard.browserCompanion.clear(key)),
-      ),
+      await perform(async () => unwrap(await window.forgeboard.browserCompanion.clear(key))),
     setViewport: async (width: number, height: number) =>
       await send(async () =>
         unwrap(
@@ -164,7 +148,7 @@ export function useBrowserCompanion(
           }),
         ),
       ),
-    dispatchInput: async (event: BrowserCompanionInput["event"]) =>
+    dispatchInput: async (event: BrowserCompanionInput['event']) =>
       await send(async () =>
         unwrap(
           await window.forgeboard.browserCompanion.dispatchInput({
@@ -173,11 +157,9 @@ export function useBrowserCompanion(
           }),
         ),
       ),
-    navigate: async (action: BrowserCompanionNavigationInput["action"]) =>
+    navigate: async (action: BrowserCompanionNavigationInput['action']) =>
       await send(async () =>
-        unwrap(
-          await window.forgeboard.browserCompanion.navigate({ ...key, action }),
-        ),
+        unwrap(await window.forgeboard.browserCompanion.navigate({ ...key, action })),
       ),
   };
 }

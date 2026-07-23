@@ -111,7 +111,7 @@
   cursor: grab;
 }
 
-.workspace-project-tree-row:hover:not(:disabled),
+.workspace-project-tree-row:hover:not(:disabled):not([aria-disabled='true']),
 .workspace-project-tree-row[aria-selected='true'],
 .workspace-project-tree-row:focus-visible {
   background: var(--surface-subtle);

@@ -468,6 +468,9 @@ export const MIGRATIONS = [
 export interface ExpectedDatabaseIdentity {
   readonly dev: number;
   readonly ino: number;
+  readonly ctimeMs: number;
+  readonly mtimeMs: number;
+  readonly size: number;
 }
 
 export function openDatabase(
@@ -483,7 +486,10 @@ export function openDatabase(
         !openedPath.isFile() ||
         openedPath.isSymbolicLink() ||
         openedPath.dev !== expectedIdentity.dev ||
-        openedPath.ino !== expectedIdentity.ino
+        openedPath.ino !== expectedIdentity.ino ||
+        openedPath.ctimeMs !== expectedIdentity.ctimeMs ||
+        openedPath.mtimeMs !== expectedIdentity.mtimeMs ||
+        openedPath.size !== expectedIdentity.size
       ) {
         throw new Error('The local database path changed before its writable handle was bound.');
       }

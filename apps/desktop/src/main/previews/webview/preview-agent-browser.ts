@@ -1,11 +1,9 @@
-import type { WebContents } from "electron";
+import type { WebContents } from 'electron';
 
-import { parsePreviewWebviewPartition } from "../../../shared/preview/webview-partition.js";
+import { parsePreviewWebviewPartition } from '../../../shared/preview/webview-partition.js';
 
 const MAX_TEXT_CHARACTERS = 64 * 1_024;
 const MAX_DOM_CHARACTERS = 128 * 1_024;
-const MAX_CONSOLE_ENTRIES = 100;
-const MAX_CONSOLE_MESSAGE_CHARACTERS = 4 * 1_024;
 const MAX_SCREENSHOT_BYTES = 8 * 1_024 * 1_024;
 
 export interface AgentPreviewInspection {
@@ -17,14 +15,68 @@ export interface AgentPreviewInspection {
 }
 
 export interface AgentPreviewScreenshot {
-  readonly mimeType: "image/png";
+  readonly mimeType: 'image/png';
   readonly data: string;
+}
+
+export type AgentPreviewElementKind = 'button' | 'link' | 'text-input' | 'toggle' | 'control';
+
+export interface AgentPreviewElement {
+  readonly handle: string;
+  readonly kind: AgentPreviewElementKind;
+  readonly name: string;
+  readonly disabled: boolean;
+  readonly editable: boolean;
+  readonly sensitive: boolean;
+  readonly consequential: boolean;
+  readonly userOnly: boolean;
+  readonly destination: string | null;
+}
+
+export interface AgentPreviewElements {
+  readonly pageVersion: string;
+  readonly url: string;
+  readonly title: string;
+  readonly elements: readonly AgentPreviewElement[];
+}
+
+export type AgentPreviewAction =
+  | { readonly kind: 'click'; readonly elementHandle: string }
+  | {
+      readonly kind: 'type';
+      readonly elementHandle: string;
+      readonly text: string;
+      readonly replace: boolean;
+    };
+
+export interface AgentPreviewActionIntent {
+  readonly pageVersion: string;
+  readonly url: string;
+  readonly origin: string;
+  readonly action: AgentPreviewAction['kind'];
+  readonly element: AgentPreviewElement;
+  readonly textPreview: string | null;
+  readonly textLength: number | null;
+  readonly consequential: boolean;
+}
+
+export interface AgentPreviewActionResult {
+  readonly performed: true;
+  readonly pageVersion: string;
+  readonly url: string;
 }
 
 export interface AgentPreviewSource {
   isLive(): boolean;
   inspect(): Promise<AgentPreviewInspection>;
   screenshot(): Promise<AgentPreviewScreenshot>;
+  elements?(): Promise<AgentPreviewElements>;
+  scroll?(deltaY: number): Promise<{ pageVersion: string; url: string }>;
+  describeAction?(action: AgentPreviewAction): Promise<AgentPreviewActionIntent>;
+  performAction?(
+    action: AgentPreviewAction,
+    expectedPageVersion: string,
+  ): Promise<AgentPreviewActionResult>;
 }
 
 /**
@@ -43,44 +95,30 @@ export class PreviewAgentBrowser {
     const existing = this.#sources.get(key);
     // Prefer the primary guest over a comparison slot for deterministic reads.
     if (existing !== undefined && identity.slot !== null) return;
-    const console: string[] = [];
     const source: AgentPreviewSource = {
       isLive: () => !contents.isDestroyed(),
       inspect: async () => {
-        const result = (await contents.executeJavaScript(
-          DOM_INSPECTION_EXPRESSION,
-          true,
-        )) as {
+        const result = (await contents.executeJavaScript(DOM_INSPECTION_EXPRESSION, true)) as {
           url?: unknown;
           title?: unknown;
           text?: unknown;
           dom?: unknown;
         };
-        return boundedInspection(result, console);
+        return boundedInspection(result);
       },
       screenshot: async () => {
         const data = (await contents.capturePage()).toPNG();
-        if (data.byteLength > MAX_SCREENSHOT_BYTES)
-          throw new Error("preview-screenshot-too-large");
-        return { mimeType: "image/png", data: data.toString("base64") };
+        if (data.byteLength > MAX_SCREENSHOT_BYTES) throw new Error('preview-screenshot-too-large');
+        return { mimeType: 'image/png', data: data.toString('base64') };
       },
     };
     this.#sources.set(key, source);
-    contents.on("console-message", (_event, _level, message) => {
-      if (typeof message !== "string" || message === "") return;
-      console.push(message.slice(0, MAX_CONSOLE_MESSAGE_CHARACTERS));
-      if (console.length > MAX_CONSOLE_ENTRIES) console.shift();
-    });
-    contents.once("destroyed", () => {
+    contents.once('destroyed', () => {
       if (this.#sources.get(key) === source) this.#sources.delete(key);
     });
   }
 
-  registerSource(
-    projectId: string,
-    nodeId: string,
-    source: AgentPreviewSource,
-  ): () => void {
+  registerSource(projectId: string, nodeId: string, source: AgentPreviewSource): () => void {
     const key = previewKey(projectId, nodeId);
     this.#sources.set(key, source);
     return () => {
@@ -92,22 +130,57 @@ export class PreviewAgentBrowser {
     return this.#liveSource(projectId, nodeId) !== null;
   }
 
-  async inspect(
-    projectId: string,
-    nodeId: string,
-  ): Promise<AgentPreviewInspection> {
+  async inspect(projectId: string, nodeId: string): Promise<AgentPreviewInspection> {
     const source = this.#liveSource(projectId, nodeId);
-    if (source === null) throw new Error("preview-not-live");
+    if (source === null) throw new Error('preview-not-live');
     return await source.inspect();
   }
 
-  async screenshot(
+  async screenshot(projectId: string, nodeId: string): Promise<AgentPreviewScreenshot> {
+    const source = this.#liveSource(projectId, nodeId);
+    if (source === null) throw new Error('preview-not-live');
+    return await source.screenshot();
+  }
+
+  async elements(projectId: string, nodeId: string): Promise<AgentPreviewElements> {
+    const source = this.#liveSource(projectId, nodeId);
+    if (source === null) throw new Error('preview-not-live');
+    if (source.elements === undefined) throw new Error('preview-interaction-unavailable');
+    return await source.elements();
+  }
+
+  async scroll(
     projectId: string,
     nodeId: string,
-  ): Promise<AgentPreviewScreenshot> {
+    deltaY: number,
+  ): Promise<{ pageVersion: string; url: string }> {
     const source = this.#liveSource(projectId, nodeId);
-    if (source === null) throw new Error("preview-not-live");
-    return await source.screenshot();
+    if (source === null) throw new Error('preview-not-live');
+    if (source.scroll === undefined) throw new Error('preview-interaction-unavailable');
+    return await source.scroll(deltaY);
+  }
+
+  async describeAction(
+    projectId: string,
+    nodeId: string,
+    action: AgentPreviewAction,
+  ): Promise<AgentPreviewActionIntent> {
+    const source = this.#liveSource(projectId, nodeId);
+    if (source === null) throw new Error('preview-not-live');
+    if (source.describeAction === undefined) throw new Error('preview-interaction-unavailable');
+    return await source.describeAction(action);
+  }
+
+  async performAction(
+    projectId: string,
+    nodeId: string,
+    action: AgentPreviewAction,
+    expectedPageVersion: string,
+  ): Promise<AgentPreviewActionResult> {
+    const source = this.#liveSource(projectId, nodeId);
+    if (source === null) throw new Error('preview-not-live');
+    if (source.performAction === undefined) throw new Error('preview-interaction-unavailable');
+    return await source.performAction(action, expectedPageVersion);
   }
 
   #liveSource(projectId: string, nodeId: string): AgentPreviewSource | null {
@@ -117,23 +190,41 @@ export class PreviewAgentBrowser {
   }
 }
 
-function boundedInspection(
-  result: { url?: unknown; title?: unknown; text?: unknown; dom?: unknown },
-  console: readonly string[],
-): AgentPreviewInspection {
+function boundedInspection(result: {
+  url?: unknown;
+  title?: unknown;
+  text?: unknown;
+  dom?: unknown;
+}): AgentPreviewInspection {
+  const text = typeof result.text === 'string' ? result.text.slice(0, MAX_TEXT_CHARACTERS) : '';
   return {
-    url: typeof result.url === "string" ? result.url.slice(0, 2_048) : "",
-    title: typeof result.title === "string" ? result.title.slice(0, 1_024) : "",
-    text:
-      typeof result.text === "string"
-        ? result.text.slice(0, MAX_TEXT_CHARACTERS)
-        : "",
-    dom:
-      typeof result.dom === "string"
-        ? result.dom.slice(0, MAX_DOM_CHARACTERS)
-        : "",
-    console: [...console],
+    url: sanitizedPageUrl(result.url),
+    title: typeof result.title === 'string' ? result.title.slice(0, 1_024) : '',
+    text,
+    // Preserve the legacy response shape without exposing hidden elements,
+    // attributes, form values, or embedded application state. Agents only
+    // receive an escaped representation of the same visible text field.
+    dom: visibleTextDom(text),
+    // Browser console messages commonly contain access tokens, request
+    // payloads, and application internals. They never cross the agent bridge.
+    console: [],
   };
+}
+
+function sanitizedPageUrl(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    return `${parsed.origin}${parsed.pathname}`.slice(0, 2_048);
+  } catch {
+    return '';
+  }
+}
+
+function visibleTextDom(text: string): string {
+  const escaped = text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return `<body>${escaped}</body>`.slice(0, MAX_DOM_CHARACTERS);
 }
 
 function previewKey(projectId: string, nodeId: string): string {
@@ -141,17 +232,11 @@ function previewKey(projectId: string, nodeId: string): string {
 }
 
 const DOM_INSPECTION_EXPRESSION = String.raw`(() => {
-  const clone = document.documentElement.cloneNode(true);
-  for (const element of clone.querySelectorAll('script, style, noscript')) element.remove();
-  for (const element of clone.querySelectorAll('input, textarea, select')) {
-    element.removeAttribute('value');
-    element.removeAttribute('checked');
-    element.removeAttribute('selected');
-  }
+  const text = (document.body?.innerText ?? '').slice(0, ${String(MAX_TEXT_CHARACTERS)});
   return {
-    url: location.href,
+    url: (location.origin + location.pathname).slice(0, 2048),
     title: document.title,
-    text: (document.body?.innerText ?? '').slice(0, ${String(MAX_TEXT_CHARACTERS)}),
-    dom: clone.outerHTML.slice(0, ${String(MAX_DOM_CHARACTERS)})
+    text,
+    dom: ''
   };
 })()`;

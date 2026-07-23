@@ -8,7 +8,7 @@ import { EnvironmentAllowlistEditor } from '../../configuration/EnvironmentAllow
 import type { NodeFaceProps } from '../canvas/faces/node-face-registry.js';
 import { useCanvasNodeInteractions } from '../canvas/interactions/CanvasNodeInteractionContext.js';
 import { useAgentSession } from '../runs/agent-session/AgentSessionContext.js';
-import { TerminalLaunchReviewDialog } from './TerminalLaunchReviewDialog.js';
+import { TerminalLaunchReviewDialog } from './launch-review/TerminalLaunchReviewDialog.js';
 import { TerminalSurface, type TerminalSurfaceHandle } from './TerminalSurface.js';
 import { terminalCommandConfiguration, terminalNodeConfiguration } from './node-configuration.js';
 import { terminalOperationsFromWindow, type TerminalNodeConfiguration } from './types.js';
@@ -132,7 +132,9 @@ export function TerminalNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                 readOnly={readOnly}
                 onFocus={session.recordHistory}
                 onChange={
-                  readOnly ? undefined : (event) => updateConfiguration({ executable: event.target.value })
+                  readOnly
+                    ? undefined
+                    : (event) => updateConfiguration({ executable: event.target.value })
                 }
               />
             </label>
@@ -160,8 +162,7 @@ export function TerminalNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               onChange={
                 readOnly
                   ? () => undefined
-                  : (environmentVariableNames) =>
-                      updateConfiguration({ environmentVariableNames })
+                  : (environmentVariableNames) => updateConfiguration({ environmentVariableNames })
               }
             />
           </div>

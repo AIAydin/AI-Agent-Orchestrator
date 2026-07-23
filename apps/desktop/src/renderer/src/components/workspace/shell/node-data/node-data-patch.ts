@@ -1,4 +1,4 @@
-import type { WorkshopNode } from '../canvas/CanvasNode.js';
+import type { WorkshopNode } from '../../canvas/CanvasNode.js';
 
 type NodeData = WorkshopNode['data'];
 

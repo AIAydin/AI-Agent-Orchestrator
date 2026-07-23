@@ -23,7 +23,9 @@ describe('ProviderConnectionService', () => {
       expect(review.commandArguments).toEqual(['login']);
       expect(review.executable).toBe('/fixtures/codex');
       expect(review.followUpArguments).toEqual(['login', 'status']);
-      expect(review.environmentVariableNames).toEqual(['HOME', 'LANG', 'PATH', 'TERM']);
+      expect(review.environmentVariableNames).toEqual(
+        ['HOME', 'LANG', 'PATH', 'TERM'].filter((name) => process.env[name] !== undefined),
+      );
       expect(review.providerDisclosure).toContain('Forgeboard never receives or stores');
       return Promise.resolve('approved');
     });

@@ -154,9 +154,7 @@ export function TaskNodeFace({ id, data }: NodeFaceProps): JSX.Element {
               onClick={() => {
                 session.recordHistory();
                 update({
-                  acceptanceCriteria: criteria.filter(
-                    (candidate) => candidate.id !== criterion.id,
-                  ),
+                  acceptanceCriteria: criteria.filter((candidate) => candidate.id !== criterion.id),
                 });
               }}
             >
@@ -185,8 +183,7 @@ export function TaskNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                     onFocus={() => session.recordHistory()}
                     onChange={(event) => {
                       const next = relatedFiles.filter(
-                        (candidate) =>
-                          `${candidate.projectId}:${candidate.relativePath}` !== key,
+                        (candidate) => `${candidate.projectId}:${candidate.relativePath}` !== key,
                       );
                       update({
                         relatedFiles: event.target.checked ? [...next, target.file] : next,

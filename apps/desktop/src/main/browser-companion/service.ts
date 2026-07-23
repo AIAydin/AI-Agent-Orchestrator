@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
 
 import type {
   BrowserCompanionFrame,
@@ -13,13 +13,29 @@ import type {
   BrowserCompanionSnapshot,
   BrowserCompanionStatus,
   BrowserCompanionViewportInput,
-} from "../../shared/browser-companion/contracts.js";
+} from '../../shared/browser-companion/contracts.js';
 import type {
+  AgentPreviewAction,
+  AgentPreviewActionIntent,
+  AgentPreviewActionResult,
+  AgentPreviewElement,
   AgentPreviewInspection,
   PreviewAgentBrowser,
-} from "../previews/webview/preview-agent-browser.js";
-import { CdpPipeClient, type CdpEvent } from "./cdp-pipe.js";
-import { findGoogleChromeExecutable } from "./chrome-executable.js";
+} from '../previews/webview/preview-agent-browser.js';
+import { CdpPipeClient, type CdpEvent } from './cdp-pipe.js';
+import { findGoogleChromeExecutable } from './chrome-executable.js';
+import {
+  DESCRIBE_ELEMENT_FUNCTION,
+  DESCRIBE_ELEMENTS_FUNCTION,
+  ELEMENT_BOUNDS_FUNCTION,
+  FOCUS_ELEMENT_FUNCTION,
+  INTERACTIVE_ELEMENTS_EXPRESSION,
+  parsePageElementBounds,
+  parsePageElementDescriptor,
+  parsePageElementDescriptors,
+  sameElementDescriptor,
+  type PageElementDescriptor,
+} from './agent-control/page-scripts.js';
 
 const MAX_SCREENSHOT_CHARACTERS = 12 * 1_024 * 1_024;
 const MAX_FRAME_CHARACTERS = 6 * 1_024 * 1_024;
@@ -43,6 +59,13 @@ interface ChromeConnection {
   frameSequence: number;
   lastFrameAt: number;
   viewport: { width: number; height: number };
+  agentPageVersion: string;
+  agentPageIdentity: string | null;
+  agentElements: Map<
+    string,
+    { readonly objectId: string; readonly descriptor: PageElementDescriptor }
+  >;
+  blockNewTargetsUntil: number;
   unregisterAgentSource: () => void;
   closing: boolean;
 }
@@ -60,7 +83,7 @@ export interface BrowserCompanionServiceOptions {
   readonly spawnChrome?: typeof spawn;
   readonly audit?: (
     action: string,
-    outcome: "allowed" | "denied" | "failed",
+    outcome: 'allowed' | 'denied' | 'failed',
     metadata: Record<string, unknown>,
   ) => void;
 }
@@ -74,140 +97,99 @@ export class BrowserCompanionService {
   readonly #previewBrowser: PreviewAgentBrowser;
   readonly #findExecutable: () => string | null;
   readonly #spawnChrome: typeof spawn;
-  readonly #audit: NonNullable<BrowserCompanionServiceOptions["audit"]>;
+  readonly #audit: NonNullable<BrowserCompanionServiceOptions['audit']>;
   readonly #connections = new Map<string, ChromeConnection>();
   readonly #launches = new Map<string, Promise<BrowserCompanionStatus>>();
 
   constructor(options: BrowserCompanionServiceOptions) {
-    this.#profileRoot = join(
-      options.userDataPath,
-      "browser-companion",
-      "profiles",
-    );
+    this.#profileRoot = join(options.userDataPath, 'browser-companion', 'profiles');
     this.#previewBrowser = options.previewBrowser;
     this.#findExecutable = options.findExecutable ?? findGoogleChromeExecutable;
     this.#spawnChrome = options.spawnChrome ?? spawn;
     this.#audit = options.audit ?? (() => undefined);
   }
 
-  async open(
-    input: BrowserCompanionOpenInput,
-  ): Promise<BrowserCompanionStatus> {
+  async open(input: BrowserCompanionOpenInput): Promise<BrowserCompanionStatus> {
     const url = validatedHttpsUrl(input.url);
     const key = connectionKey(input.projectId, input.nodeId);
     const existing = this.#connections.get(key);
     if (existing !== undefined && isChildLive(existing.child)) {
       existing.requestedUrl = url;
       existing.sharedOrigin = new URL(url).origin;
-      await this.#sendToPage(existing, "Page.navigate", { url });
-      await existing.client.send("Target.activateTarget", {
+      await this.#sendToPage(existing, 'Page.navigate', { url });
+      await existing.client.send('Target.activateTarget', {
         targetId: existing.targetId,
       });
-      this.#audit("open", "allowed", auditMetadata(input, url));
+      this.#audit('open', 'allowed', auditMetadata(input, url));
       return await this.status(input);
     }
     const pending = this.#launches.get(key);
     if (pending !== undefined) return await pending;
-    const launch = this.#launch(input, url).finally(() =>
-      this.#launches.delete(key),
-    );
+    const launch = this.#launch(input, url).finally(() => this.#launches.delete(key));
     this.#launches.set(key, launch);
     return await launch;
   }
 
-  async status(
-    input: BrowserCompanionNodeKey,
-  ): Promise<BrowserCompanionStatus> {
-    const connection = this.#connections.get(
-      connectionKey(input.projectId, input.nodeId),
-    );
+  async status(input: BrowserCompanionNodeKey): Promise<BrowserCompanionStatus> {
+    const connection = this.#connections.get(connectionKey(input.projectId, input.nodeId));
     if (connection === undefined || !isChildLive(connection.child)) {
       return this.#findExecutable() === null
-        ? statusView(
-            "unavailable",
-            null,
-            "",
-            null,
-            "Google Chrome is not installed.",
-          )
-        : statusView("closed");
+        ? statusView('unavailable', null, '', null, 'Google Chrome is not installed.')
+        : statusView('closed');
     }
     try {
       const page = await this.#pageMetadata(connection);
-      return statusView(
-        "connected",
-        page.url,
-        page.title,
-        connection.chromeVersion,
-        null,
-      );
+      return statusView('connected', page.url, page.title, connection.chromeVersion, null);
     } catch (error) {
-      return statusView(
-        "failed",
-        null,
-        "",
-        connection.chromeVersion,
-        errorMessage(error),
-      );
+      return statusView('failed', null, '', connection.chromeVersion, errorMessage(error));
     }
   }
 
   async focus(input: BrowserCompanionNodeKey): Promise<BrowserCompanionStatus> {
     const connection = this.#requireConnection(input);
     try {
-      await connection.client.send("Target.activateTarget", {
+      await connection.client.send('Target.activateTarget', {
         targetId: connection.targetId,
       });
     } catch (error) {
       if (!isRecoverableSessionError(error)) throw error;
       await this.#reattach(connection);
-      await connection.client.send("Target.activateTarget", {
+      await connection.client.send('Target.activateTarget', {
         targetId: connection.targetId,
       });
     }
     return await this.status(input);
   }
 
-  async snapshot(
-    input: BrowserCompanionNodeKey,
-  ): Promise<BrowserCompanionSnapshot | null> {
-    const connection = this.#connections.get(
-      connectionKey(input.projectId, input.nodeId),
-    );
+  async snapshot(input: BrowserCompanionNodeKey): Promise<BrowserCompanionSnapshot | null> {
+    const connection = this.#connections.get(connectionKey(input.projectId, input.nodeId));
     if (connection === undefined || !isChildLive(connection.child)) return null;
     const result = await this.#sendToPage<{ data?: unknown }>(
       connection,
-      "Page.captureScreenshot",
+      'Page.captureScreenshot',
       {
-        format: "png",
+        format: 'png',
         fromSurface: true,
         captureBeyondViewport: false,
         optimizeForSpeed: true,
       },
     );
-    if (
-      typeof result.data !== "string" ||
-      result.data.length > MAX_SCREENSHOT_CHARACTERS
-    ) {
-      throw new Error("Chrome returned an invalid or oversized screenshot.");
+    if (typeof result.data !== 'string' || result.data.length > MAX_SCREENSHOT_CHARACTERS) {
+      throw new Error('Chrome returned an invalid or oversized screenshot.');
     }
-    return { mimeType: "image/png", data: result.data };
+    return { mimeType: 'image/png', data: result.data };
   }
 
   frame(input: BrowserCompanionFrameRequest): BrowserCompanionFrame | null {
-    const connection = this.#connections.get(
-      connectionKey(input.projectId, input.nodeId),
-    );
+    const connection = this.#connections.get(connectionKey(input.projectId, input.nodeId));
     if (connection === undefined || !isChildLive(connection.child)) return null;
     const frame = connection.latestFrame;
-    return frame !== null && frame.sequence > input.afterSequence
-      ? frame
-      : null;
+    return frame !== null && frame.sequence > input.afterSequence ? frame : null;
   }
 
   async setViewport(input: BrowserCompanionViewportInput): Promise<void> {
     const connection = this.#requireConnection(input);
-    await this.#sendToPage(connection, "Emulation.setDeviceMetricsOverride", {
+    await this.#sendToPage(connection, 'Emulation.setDeviceMetricsOverride', {
       width: input.width,
       height: input.height,
       deviceScaleFactor: 1,
@@ -222,42 +204,42 @@ export class BrowserCompanionService {
   async dispatchInput(input: BrowserCompanionInput): Promise<void> {
     const connection = this.#requireConnection(input);
     const event = input.event;
-    if (event.kind === "pointer") {
-      await this.#sendToPage(connection, "Input.dispatchMouseEvent", {
+    if (event.kind === 'pointer') {
+      await this.#sendToPage(connection, 'Input.dispatchMouseEvent', {
         type: event.type,
         x: event.x,
         y: event.y,
         button: event.button,
         buttons: event.buttons,
         clickCount: event.clickCount,
-        pointerType: "mouse",
+        pointerType: 'mouse',
       });
       return;
     }
-    if (event.kind === "wheel") {
-      await this.#sendToPage(connection, "Input.dispatchMouseEvent", {
-        type: "mouseWheel",
+    if (event.kind === 'wheel') {
+      await this.#sendToPage(connection, 'Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
         x: event.x,
         y: event.y,
         deltaX: event.deltaX,
         deltaY: event.deltaY,
         modifiers: event.modifiers,
-        pointerType: "mouse",
+        pointerType: 'mouse',
       });
       return;
     }
-    if (event.kind === "text") {
-      await this.#sendToPage(connection, "Input.insertText", {
+    if (event.kind === 'text') {
+      await this.#sendToPage(connection, 'Input.insertText', {
         text: event.text,
       });
       return;
     }
-    await this.#sendToPage(connection, "Input.dispatchKeyEvent", {
+    await this.#sendToPage(connection, 'Input.dispatchKeyEvent', {
       type: event.type,
       key: event.key,
       code: event.code,
-      text: event.type === "keyDown" ? event.text : "",
-      unmodifiedText: event.type === "keyDown" ? event.text : "",
+      text: event.type === 'keyDown' ? event.text : '',
+      unmodifiedText: event.type === 'keyDown' ? event.text : '',
       modifiers: event.modifiers,
       autoRepeat: event.autoRepeat,
     });
@@ -265,31 +247,31 @@ export class BrowserCompanionService {
 
   async navigate(input: BrowserCompanionNavigationInput): Promise<void> {
     const connection = this.#requireConnection(input);
-    if (input.action === "reload") {
-      await this.#sendToPage(connection, "Page.reload", { ignoreCache: false });
+    if (input.action === 'reload') {
+      await this.#sendToPage(connection, 'Page.reload', { ignoreCache: false });
       return;
     }
     const history = await this.#sendToPage<{
       currentIndex?: unknown;
       entries?: unknown;
-    }>(connection, "Page.getNavigationHistory");
+    }>(connection, 'Page.getNavigationHistory');
     if (
-      typeof history.currentIndex !== "number" ||
+      typeof history.currentIndex !== 'number' ||
       !Number.isInteger(history.currentIndex) ||
       !isUnknownArray(history.entries)
     )
       return;
-    const offset = input.action === "back" ? -1 : 1;
+    const offset = input.action === 'back' ? -1 : 1;
     const entry = history.entries[history.currentIndex + offset];
     if (!isHistoryEntry(entry)) return;
-    await this.#sendToPage(connection, "Page.navigateToHistoryEntry", {
+    await this.#sendToPage(connection, 'Page.navigateToHistoryEntry', {
       entryId: entry.id,
     });
   }
 
   async close(input: BrowserCompanionNodeKey): Promise<BrowserCompanionStatus> {
     await this.#stopConnection(connectionKey(input.projectId, input.nodeId));
-    return statusView("closed");
+    return statusView('closed');
   }
 
   async clear(input: BrowserCompanionNodeKey): Promise<BrowserCompanionStatus> {
@@ -298,11 +280,11 @@ export class BrowserCompanionService {
     const profilePath = this.#profilePath(input.projectId, input.nodeId);
     assertOwnedProfilePath(this.#profileRoot, profilePath);
     await rm(profilePath, { recursive: true, force: true });
-    this.#audit("clear-profile", "allowed", {
+    this.#audit('clear-profile', 'allowed', {
       projectId: input.projectId,
       nodeId: input.nodeId,
     });
-    return statusView("closed");
+    return statusView('closed');
   }
 
   async resetForPrivacy(): Promise<void> {
@@ -318,62 +300,52 @@ export class BrowserCompanionService {
     await this.#stopAll();
   }
 
-  async #launch(
-    input: BrowserCompanionOpenInput,
-    url: string,
-  ): Promise<BrowserCompanionStatus> {
+  async #launch(input: BrowserCompanionOpenInput, url: string): Promise<BrowserCompanionStatus> {
     const executable = this.#findExecutable();
     if (executable === null) {
-      this.#audit("launch", "denied", {
+      this.#audit('launch', 'denied', {
         ...auditMetadata(input, url),
-        reason: "chrome-not-found",
+        reason: 'chrome-not-found',
       });
-      return statusView(
-        "unavailable",
-        null,
-        "",
-        null,
-        "Google Chrome is not installed.",
-      );
+      return statusView('unavailable', null, '', null, 'Google Chrome is not installed.');
     }
     const profilePath = this.#profilePath(input.projectId, input.nodeId);
     await mkdir(profilePath, { recursive: true, mode: 0o700 });
     const child = this.#spawnChrome(
       executable,
       [
-        "--remote-debugging-pipe",
+        '--remote-debugging-pipe',
         `--user-data-dir=${profilePath}`,
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--new-window",
-        url,
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--new-window',
+        'about:blank',
       ],
       {
         // fd 3/4 are the private CDP transport. Chrome diagnostics are not
         // collected, avoiding sensitive log retention and pipe backpressure.
-        stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"],
+        stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'],
         windowsHide: false,
       },
     );
     try {
       await onceSpawned(child);
       const client = new CdpPipeClient(child);
-      const version = await client.send<{ product?: unknown }>(
-        "Browser.getVersion",
-      );
-      const target = await waitForPageTarget(client, url);
-      const attached = await client.send<{ sessionId?: unknown }>(
-        "Target.attachToTarget",
-        {
-          targetId: target.targetId,
-          flatten: true,
-        },
-      );
-      if (typeof attached.sessionId !== "string") {
-        throw new Error("Chrome did not create a page inspection session.");
+      const version = await client.send<{ product?: unknown }>('Browser.getVersion');
+      // Establish the restrictive browser policy before the untrusted site is
+      // allowed to load, closing the launch-time download race.
+      await client.send('Browser.setDownloadBehavior', { behavior: 'deny' });
+      await client.send('Target.setDiscoverTargets', { discover: true });
+      const target = await waitForPageTarget(client, 'about:blank');
+      const attached = await client.send<{ sessionId?: unknown }>('Target.attachToTarget', {
+        targetId: target.targetId,
+        flatten: true,
+      });
+      if (typeof attached.sessionId !== 'string') {
+        throw new Error('Chrome did not create a page inspection session.');
       }
-      await client.send("Runtime.enable", {}, attached.sessionId);
-      await client.send("Page.enable", {}, attached.sessionId);
+      await client.send('Runtime.enable', {}, attached.sessionId);
+      await client.send('Page.enable', {}, attached.sessionId);
       const key = connectionKey(input.projectId, input.nodeId);
       const connection: ChromeConnection = {
         key,
@@ -385,9 +357,9 @@ export class BrowserCompanionService {
         targetId: target.targetId,
         sessionId: attached.sessionId,
         chromeVersion:
-          typeof version.product === "string"
-            ? version.product.replace(/^Chrome\//u, "")
-            : "Chrome",
+          typeof version.product === 'string'
+            ? version.product.replace(/^Chrome\//u, '')
+            : 'Chrome',
         requestedUrl: url,
         sharedOrigin: new URL(url).origin,
         reattaching: null,
@@ -395,77 +367,361 @@ export class BrowserCompanionService {
         frameSequence: 0,
         lastFrameAt: 0,
         viewport: { width: 1_280, height: 800 },
+        agentPageVersion: randomUUID(),
+        agentPageIdentity: null,
+        agentElements: new Map(),
+        blockNewTargetsUntil: 0,
         unregisterAgentSource: () => undefined,
         closing: false,
       };
-      client.onEvent((event) =>
-        this.#captureScreencastFrame(connection, event),
-      );
+      client.onEvent((event) => this.#handleCdpEvent(connection, event));
+      this.#connections.set(key, connection);
+      child.once('exit', () => this.#forgetConnection(connection));
+      await client.send('Page.navigate', { url }, connection.sessionId);
+      await this.#waitForInitialNavigation(connection);
       await this.#startScreencast(connection);
       connection.unregisterAgentSource = this.#previewBrowser.registerSource(
         input.projectId,
         input.nodeId,
         {
-          isLive: () =>
-            this.#connections.get(key) === connection && isChildLive(child),
+          isLive: () => this.#connections.get(key) === connection && isChildLive(child),
           inspect: async () => await this.#inspect(connection),
           screenshot: async () => {
             await this.#assertSharedOrigin(connection);
             const screenshot = await this.snapshot(input);
-            if (screenshot === null) throw new Error("preview-not-live");
+            if (screenshot === null) throw new Error('preview-not-live');
             return screenshot;
           },
+          elements: async () => await this.#inspectElements(connection),
+          scroll: async (deltaY) => await this.#scrollForAgent(connection, deltaY),
+          describeAction: async (action) => await this.#describeAgentAction(connection, action),
+          performAction: async (action, expectedPageVersion) =>
+            await this.#performAgentAction(connection, action, expectedPageVersion),
         },
       );
-      this.#connections.set(key, connection);
-      child.once("exit", () => this.#forgetConnection(connection));
-      this.#audit("launch", "allowed", auditMetadata(input, url));
+      this.#audit('launch', 'allowed', auditMetadata(input, url));
       return await this.status(input);
     } catch (error) {
-      if (isChildLive(child)) child.kill("SIGTERM");
-      this.#audit("launch", "failed", {
+      if (isChildLive(child)) child.kill('SIGTERM');
+      this.#audit('launch', 'failed', {
         ...auditMetadata(input, url),
         reason: errorMessage(error),
       });
-      return statusView("failed", null, "", null, errorMessage(error));
+      return statusView('failed', null, '', null, errorMessage(error));
     }
   }
 
-  async #inspect(
-    connection: ChromeConnection,
-  ): Promise<AgentPreviewInspection> {
+  async #inspect(connection: ChromeConnection): Promise<AgentPreviewInspection> {
+    const page = await this.#agentPageContext(connection);
     const result = await this.#sendToPage<{
       result?: { value?: unknown };
       exceptionDetails?: unknown;
-    }>(connection, "Runtime.evaluate", {
+    }>(connection, 'Runtime.evaluate', {
       expression: DOM_INSPECTION_EXPRESSION,
+      contextId: page.contextId,
       returnByValue: true,
       awaitPromise: true,
     });
-    if (
-      result.exceptionDetails !== undefined ||
-      !isInspection(result.result?.value)
-    ) {
-      throw new Error("Chrome page inspection failed.");
+    if (result.exceptionDetails !== undefined || !isInspection(result.result?.value)) {
+      throw new Error('Chrome page inspection failed.');
     }
-    assertSameOrigin(result.result.value.url, connection.sharedOrigin);
+    const inspection = result.result.value;
+    assertSameOrigin(inspection.url, connection.sharedOrigin);
+    const text = inspection.text.slice(0, 65_536);
     // Page console output frequently contains tokens, request payloads, and
     // application internals. Agents get the visible document snapshot only.
-    return { ...result.result.value, console: [] };
+    return {
+      url: sanitizedPageUrl(inspection.url),
+      title: inspection.title.slice(0, 1_024),
+      text,
+      dom: visibleTextDom(text),
+      console: [],
+    };
   }
 
-  async #pageMetadata(
+  async #inspectElements(connection: ChromeConnection) {
+    await this.#releaseAgentObjects(connection);
+    const page = await this.#agentPageContext(connection);
+    const evaluated = await this.#sendToPage<{
+      result?: { objectId?: unknown };
+    }>(connection, 'Runtime.evaluate', {
+      expression: INTERACTIVE_ELEMENTS_EXPRESSION,
+      contextId: page.contextId,
+      objectGroup: 'forgeboard-agent-elements',
+      returnByValue: false,
+      awaitPromise: false,
+    });
+    const arrayObjectId = evaluated.result?.objectId;
+    if (typeof arrayObjectId !== 'string') throw new Error('preview-elements-unavailable');
+    const described = await this.#sendToPage<{
+      result?: { value?: unknown };
+    }>(connection, 'Runtime.callFunctionOn', {
+      objectId: arrayObjectId,
+      functionDeclaration: DESCRIBE_ELEMENTS_FUNCTION,
+      objectGroup: 'forgeboard-agent-elements',
+      returnByValue: true,
+    });
+    const descriptors = parsePageElementDescriptors(described.result?.value);
+    const properties = await this.#sendToPage<{
+      result?: Array<{ name?: unknown; value?: { objectId?: unknown } }>;
+    }>(connection, 'Runtime.getProperties', {
+      objectId: arrayObjectId,
+      ownProperties: true,
+      accessorPropertiesOnly: false,
+      generatePreview: false,
+    });
+    const objectIds = new Map<number, string>();
+    for (const property of properties.result ?? []) {
+      if (typeof property.name !== 'string' || !/^\d+$/u.test(property.name)) continue;
+      const objectId = property.value?.objectId;
+      if (typeof objectId === 'string') objectIds.set(Number(property.name), objectId);
+    }
+    connection.agentPageVersion = randomUUID();
+    connection.agentPageIdentity = page.identity;
+    const elements: AgentPreviewElement[] = [];
+    for (const [index, descriptor] of descriptors.entries()) {
+      const objectId = objectIds.get(index);
+      if (descriptor === null || objectId === undefined || !descriptor.connected) continue;
+      const handle = randomUUID();
+      connection.agentElements.set(handle, { objectId, descriptor });
+      elements.push(publicElement(handle, descriptor));
+    }
+    return {
+      pageVersion: connection.agentPageVersion,
+      url: sanitizedPageUrl(page.url),
+      title: page.title,
+      elements,
+    };
+  }
+
+  async #scrollForAgent(
     connection: ChromeConnection,
-  ): Promise<{ url: string; title: string }> {
+    deltaY: number,
+  ): Promise<{ pageVersion: string; url: string }> {
+    const page = await this.#agentPageContext(connection);
+    const boundedDelta = Math.max(-1_200, Math.min(1_200, Math.round(deltaY)));
+    if (boundedDelta === 0) throw new Error('preview-scroll-delta-required');
+    await this.#sendToPage(connection, 'Runtime.evaluate', {
+      expression: `window.scrollBy({ top: ${String(boundedDelta)}, left: 0, behavior: 'auto' })`,
+      contextId: page.contextId,
+      returnByValue: true,
+    });
+    return {
+      pageVersion: connection.agentPageVersion,
+      url: sanitizedPageUrl(page.url),
+    };
+  }
+
+  async #describeAgentAction(
+    connection: ChromeConnection,
+    action: AgentPreviewAction,
+  ): Promise<AgentPreviewActionIntent> {
+    const entry = connection.agentElements.get(action.elementHandle);
+    if (entry === undefined) throw new Error('preview-element-handle-invalid');
+    const page = await this.#agentPageContext(connection);
+    if (connection.agentPageIdentity !== page.identity) {
+      await this.#releaseAgentObjects(connection);
+      throw new Error('preview-page-changed');
+    }
+    const current = await this.#describeRemoteElement(connection, entry.objectId);
+    if (!current.connected || !sameElementDescriptor(entry.descriptor, current)) {
+      connection.agentElements.delete(action.elementHandle);
+      throw new Error('preview-element-changed');
+    }
+    if (current.disabled) throw new Error('preview-element-disabled');
+    if (current.userOnly) throw new Error('preview-action-requires-user');
+    if (current.opensNewWindow) throw new Error('preview-popup-actions-are-user-only');
+    if (action.kind === 'type') {
+      if (!current.editable || current.sensitive)
+        throw new Error('preview-sensitive-entry-blocked');
+      if (action.text.length < 1 || action.text.length > 4_000) {
+        throw new Error('preview-text-length-invalid');
+      }
+    }
+    const origin = new URL(page.url).origin;
+    const crossOriginDestination =
+      current.destination !== null && new URL(current.destination).origin !== origin;
+    return {
+      pageVersion: connection.agentPageVersion,
+      url: sanitizedPageUrl(page.url),
+      origin,
+      action: action.kind,
+      element: publicElement(action.elementHandle, current),
+      textPreview: action.kind === 'type' ? action.text : null,
+      textLength: action.kind === 'type' ? action.text.length : null,
+      consequential: action.kind === 'type' || current.consequential || crossOriginDestination,
+    };
+  }
+
+  async #performAgentAction(
+    connection: ChromeConnection,
+    action: AgentPreviewAction,
+    expectedPageVersion: string,
+  ): Promise<AgentPreviewActionResult> {
+    if (connection.agentPageVersion !== expectedPageVersion)
+      throw new Error('preview-page-changed');
+    const intent = await this.#describeAgentAction(connection, action);
+    if (intent.pageVersion !== expectedPageVersion) throw new Error('preview-page-changed');
+    const entry = connection.agentElements.get(action.elementHandle);
+    if (entry === undefined) throw new Error('preview-element-handle-invalid');
+    if (action.kind === 'type') {
+      const focused = await this.#sendToPage<{
+        result?: { value?: unknown };
+      }>(connection, 'Runtime.callFunctionOn', {
+        objectId: entry.objectId,
+        functionDeclaration: FOCUS_ELEMENT_FUNCTION,
+        arguments: [{ value: action.replace }],
+        returnByValue: true,
+      });
+      if (focused.result?.value !== true) throw new Error('preview-element-not-editable');
+      await this.#sendToPage(connection, 'Input.insertText', {
+        text: action.text,
+      });
+    } else {
+      const boundsResult = await this.#sendToPage<{
+        result?: { value?: unknown };
+      }>(connection, 'Runtime.callFunctionOn', {
+        objectId: entry.objectId,
+        functionDeclaration: ELEMENT_BOUNDS_FUNCTION,
+        returnByValue: true,
+      });
+      const bounds = parsePageElementBounds(boundsResult.result?.value);
+      if (
+        bounds === null ||
+        !bounds.connected ||
+        !bounds.hitMatches ||
+        bounds.width <= 0 ||
+        bounds.height <= 0 ||
+        bounds.x + bounds.width <= 0 ||
+        bounds.y + bounds.height <= 0 ||
+        bounds.x >= connection.viewport.width ||
+        bounds.y >= connection.viewport.height
+      )
+        throw new Error('preview-element-not-visible');
+      const x = Math.max(0, Math.min(connection.viewport.width - 1, bounds.x + bounds.width / 2));
+      const y = Math.max(0, Math.min(connection.viewport.height - 1, bounds.y + bounds.height / 2));
+      connection.blockNewTargetsUntil = Date.now() + 2_000;
+      await this.#sendToPage(connection, 'Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        x,
+        y,
+        button: 'left',
+        buttons: 1,
+        clickCount: 1,
+        pointerType: 'mouse',
+      });
+      await this.#sendToPage(connection, 'Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x,
+        y,
+        button: 'left',
+        buttons: 0,
+        clickCount: 1,
+        pointerType: 'mouse',
+      });
+    }
+    return {
+      performed: true,
+      pageVersion: expectedPageVersion,
+      url: intent.url,
+    };
+  }
+
+  async #describeRemoteElement(
+    connection: ChromeConnection,
+    objectId: string,
+  ): Promise<PageElementDescriptor> {
+    const described = await this.#sendToPage<{
+      result?: { value?: unknown };
+    }>(connection, 'Runtime.callFunctionOn', {
+      objectId,
+      functionDeclaration: DESCRIBE_ELEMENT_FUNCTION,
+      returnByValue: true,
+    });
+    const descriptor = parsePageElementDescriptor(described.result?.value);
+    if (descriptor === null) throw new Error('preview-element-description-invalid');
+    return descriptor;
+  }
+
+  async #agentPageContext(connection: ChromeConnection): Promise<{
+    contextId: number;
+    identity: string;
+    url: string;
+    title: string;
+  }> {
+    await this.#assertSharedOrigin(connection);
+    const tree = await this.#sendToPage<{
+      frameTree?: {
+        frame?: { id?: unknown; loaderId?: unknown; url?: unknown };
+      };
+    }>(connection, 'Page.getFrameTree');
+    const frame = tree.frameTree?.frame;
+    if (
+      typeof frame?.id !== 'string' ||
+      typeof frame.loaderId !== 'string' ||
+      typeof frame.url !== 'string'
+    )
+      throw new Error('preview-page-context-unavailable');
+    assertSameOrigin(frame.url, connection.sharedOrigin);
+    const isolated = await this.#sendToPage<{ executionContextId?: unknown }>(
+      connection,
+      'Page.createIsolatedWorld',
+      {
+        frameId: frame.id,
+        worldName: 'forgeboard-agent-control',
+      },
+    );
+    if (typeof isolated.executionContextId !== 'number') {
+      throw new Error('preview-isolated-world-unavailable');
+    }
+    const titleResult = await this.#sendToPage<{
+      result?: { value?: unknown };
+    }>(connection, 'Runtime.evaluate', {
+      expression: 'document.title.slice(0, 1024)',
+      contextId: isolated.executionContextId,
+      returnByValue: true,
+    });
+    return {
+      contextId: isolated.executionContextId,
+      identity: `${frame.id}\u0000${frame.loaderId}\u0000${frame.url}`,
+      url: frame.url,
+      title: typeof titleResult.result?.value === 'string' ? titleResult.result.value : '',
+    };
+  }
+
+  async #releaseAgentObjects(connection: ChromeConnection): Promise<void> {
+    connection.agentElements.clear();
+    connection.agentPageIdentity = null;
+    connection.agentPageVersion = randomUUID();
+    try {
+      await this.#sendToPage(connection, 'Runtime.releaseObjectGroup', {
+        objectGroup: 'forgeboard-agent-elements',
+      });
+    } catch {
+      // Navigation already releases the old isolated-world objects.
+    }
+  }
+
+  async #pageMetadata(connection: ChromeConnection): Promise<{ url: string; title: string }> {
     const result = await this.#sendToPage<{
       result?: { value?: unknown };
-    }>(connection, "Runtime.evaluate", {
-      expression: "({ url: location.href, title: document.title })",
+    }>(connection, 'Runtime.evaluate', {
+      expression: '({ url: location.href, title: document.title })',
       returnByValue: true,
     });
     const value = result.result?.value;
-    if (!isPageMetadata(value)) throw new Error("Chrome page is not ready.");
+    if (!isPageMetadata(value)) throw new Error('Chrome page is not ready.');
     return value;
+  }
+
+  async #waitForInitialNavigation(connection: ChromeConnection): Promise<void> {
+    const deadline = Date.now() + TARGET_WAIT_MS;
+    while (Date.now() < deadline) {
+      const page = await this.#pageMetadata(connection);
+      if (page.url !== '' && page.url !== 'about:blank') return;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+    }
+    throw new Error('Chrome did not navigate to the requested page.');
   }
 
   async #assertSharedOrigin(connection: ChromeConnection): Promise<void> {
@@ -479,41 +735,33 @@ export class BrowserCompanionService {
     params: unknown = {},
   ): Promise<Result> {
     try {
-      return await connection.client.send<Result>(
-        method,
-        params,
-        connection.sessionId,
-      );
+      return await connection.client.send<Result>(method, params, connection.sessionId);
     } catch (error) {
       if (!isRecoverableSessionError(error)) throw error;
       await this.#reattach(connection);
-      return await connection.client.send<Result>(
-        method,
-        params,
-        connection.sessionId,
-      );
+      return await connection.client.send<Result>(method, params, connection.sessionId);
     }
   }
 
   async #reattach(connection: ChromeConnection): Promise<void> {
     if (connection.reattaching !== null) return await connection.reattaching;
     const reattaching = (async (): Promise<void> => {
-      const target = await waitForPageTarget(
-        connection.client,
-        connection.requestedUrl,
-      );
+      const target = await waitForPageTarget(connection.client, connection.requestedUrl);
       const attached = await connection.client.send<{ sessionId?: unknown }>(
-        "Target.attachToTarget",
+        'Target.attachToTarget',
         { targetId: target.targetId, flatten: true },
       );
-      if (typeof attached.sessionId !== "string") {
-        throw new Error("Chrome did not restore its page session.");
+      if (typeof attached.sessionId !== 'string') {
+        throw new Error('Chrome did not restore its page session.');
       }
       connection.targetId = target.targetId;
       connection.sessionId = attached.sessionId;
-      await connection.client.send("Runtime.enable", {}, connection.sessionId);
-      await connection.client.send("Page.enable", {}, connection.sessionId);
+      await connection.client.send('Runtime.enable', {}, connection.sessionId);
+      await connection.client.send('Page.enable', {}, connection.sessionId);
       connection.latestFrame = null;
+      connection.agentElements.clear();
+      connection.agentPageIdentity = null;
+      connection.agentPageVersion = randomUUID();
       await this.#startScreencast(connection);
     })().finally(() => {
       connection.reattaching = null;
@@ -524,7 +772,7 @@ export class BrowserCompanionService {
 
   async #restartScreencast(connection: ChromeConnection): Promise<void> {
     try {
-      await this.#sendToPage(connection, "Page.stopScreencast");
+      await this.#sendToPage(connection, 'Page.stopScreencast');
     } catch {
       // A session with no active stream can be started directly.
     }
@@ -533,8 +781,8 @@ export class BrowserCompanionService {
   }
 
   async #startScreencast(connection: ChromeConnection): Promise<void> {
-    await this.#sendToPage(connection, "Page.startScreencast", {
-      format: "jpeg",
+    await this.#sendToPage(connection, 'Page.startScreencast', {
+      format: 'jpeg',
       quality: 65,
       maxWidth: connection.viewport.width,
       maxHeight: connection.viewport.height,
@@ -542,52 +790,62 @@ export class BrowserCompanionService {
     });
   }
 
-  #captureScreencastFrame(connection: ChromeConnection, event: CdpEvent): void {
+  #handleCdpEvent(connection: ChromeConnection, event: CdpEvent): void {
+    this.#captureScreencastFrame(connection, event);
+    if (event.method === 'Page.frameNavigated' || event.method === 'Page.navigatedWithinDocument') {
+      const params = unknownRecord(event.params);
+      const frame = unknownRecord(params?.['frame']);
+      const isMainFrame =
+        event.method === 'Page.navigatedWithinDocument' || frame?.['parentId'] === undefined;
+      if (isMainFrame) void this.#releaseAgentObjects(connection);
+    }
+    if (event.method !== 'Target.targetCreated' || Date.now() > connection.blockNewTargetsUntil)
+      return;
+    const targetInfo = unknownRecord(unknownRecord(event.params)?.['targetInfo']);
+    const targetId = targetInfo?.['targetId'];
     if (
-      event.method !== "Page.screencastFrame" ||
-      event.sessionId !== connection.sessionId
+      typeof targetId !== 'string' ||
+      targetId === connection.targetId ||
+      targetInfo?.['type'] !== 'page'
     )
       return;
-    if (typeof event.params !== "object" || event.params === null) return;
+    void connection.client.send('Target.closeTarget', { targetId }).catch(() => undefined);
+  }
+
+  #captureScreencastFrame(connection: ChromeConnection, event: CdpEvent): void {
+    if (event.method !== 'Page.screencastFrame' || event.sessionId !== connection.sessionId) return;
+    if (typeof event.params !== 'object' || event.params === null) return;
     const params = event.params as Record<string, unknown>;
-    const screencastSessionId = params["sessionId"];
-    if (typeof screencastSessionId === "number") {
+    const screencastSessionId = params['sessionId'];
+    if (typeof screencastSessionId === 'number') {
       void connection.client
-        .send(
-          "Page.screencastFrameAck",
-          { sessionId: screencastSessionId },
-          connection.sessionId,
-        )
+        .send('Page.screencastFrameAck', { sessionId: screencastSessionId }, connection.sessionId)
         .catch(() => undefined);
     }
-    const data = params["data"];
-    if (typeof data !== "string" || data.length > MAX_FRAME_CHARACTERS) return;
+    const data = params['data'];
+    if (typeof data !== 'string' || data.length > MAX_FRAME_CHARACTERS) return;
     const now = Date.now();
     if (now - connection.lastFrameAt < MIN_FRAME_INTERVAL_MS) return;
     connection.lastFrameAt = now;
     connection.frameSequence += 1;
     connection.latestFrame = {
       sequence: connection.frameSequence,
-      mimeType: "image/jpeg",
+      mimeType: 'image/jpeg',
       data,
     };
   }
 
   #requireConnection(input: BrowserCompanionNodeKey): ChromeConnection {
-    const connection = this.#connections.get(
-      connectionKey(input.projectId, input.nodeId),
-    );
+    const connection = this.#connections.get(connectionKey(input.projectId, input.nodeId));
     if (connection === undefined || !isChildLive(connection.child)) {
-      throw new Error("Chrome is not connected for this preview.");
+      throw new Error('Chrome is not connected for this preview.');
     }
     return connection;
   }
 
   async #stopAll(): Promise<void> {
     await Promise.all(
-      [...this.#connections.keys()].map(
-        async (key) => await this.#stopConnection(key),
-      ),
+      [...this.#connections.keys()].map(async (key) => await this.#stopConnection(key)),
     );
   }
 
@@ -598,9 +856,9 @@ export class BrowserCompanionService {
     connection.unregisterAgentSource();
     this.#connections.delete(key);
     try {
-      await connection.client.send("Browser.close");
+      await connection.client.send('Browser.close');
     } catch {
-      if (isChildLive(connection.child)) connection.child.kill("SIGTERM");
+      if (isChildLive(connection.child)) connection.child.kill('SIGTERM');
     }
     await waitForExit(connection.child, 3_000);
     connection.client.close();
@@ -612,7 +870,7 @@ export class BrowserCompanionService {
     this.#connections.delete(connection.key);
     connection.client.close();
     if (!connection.closing) {
-      this.#audit("closed", "allowed", {
+      this.#audit('closed', 'allowed', {
         projectId: connection.projectId,
         nodeId: connection.nodeId,
       });
@@ -620,23 +878,15 @@ export class BrowserCompanionService {
   }
 
   #profilePath(projectId: string, nodeId: string): string {
-    const digest = createHash("sha256")
-      .update(`${projectId}\0${nodeId}`)
-      .digest("hex");
+    const digest = createHash('sha256').update(`${projectId}\0${nodeId}`).digest('hex');
     return join(this.#profileRoot, digest);
   }
 }
 
 function validatedHttpsUrl(candidate: string): string {
   const parsed = new URL(candidate);
-  if (
-    parsed.protocol !== "https:" ||
-    parsed.username !== "" ||
-    parsed.password !== ""
-  ) {
-    throw new Error(
-      "External Chrome previews require a credential-free HTTPS URL.",
-    );
+  if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '') {
+    throw new Error('External Chrome previews require a credential-free HTTPS URL.');
   }
   return parsed.href;
 }
@@ -645,10 +895,7 @@ function connectionKey(projectId: string, nodeId: string): string {
   return `${projectId}\0${nodeId}`;
 }
 
-function auditMetadata(
-  input: BrowserCompanionNodeKey,
-  url: string,
-): Record<string, unknown> {
+function auditMetadata(input: BrowserCompanionNodeKey, url: string): Record<string, unknown> {
   return {
     projectId: input.projectId,
     nodeId: input.nodeId,
@@ -657,9 +904,9 @@ function auditMetadata(
 }
 
 function statusView(
-  state: BrowserCompanionStatus["state"],
+  state: BrowserCompanionStatus['state'],
   url: string | null = null,
-  title = "",
+  title = '',
   chromeVersion: string | null = null,
   error: string | null = null,
 ): BrowserCompanionStatus {
@@ -673,59 +920,48 @@ function isChildLive(child: ChildProcess): boolean {
 async function onceSpawned(child: ChildProcess): Promise<void> {
   if (child.pid !== undefined) return;
   await new Promise<void>((resolvePromise, reject) => {
-    child.once("spawn", resolvePromise);
-    child.once("error", reject);
+    child.once('spawn', resolvePromise);
+    child.once('error', reject);
   });
 }
 
-async function waitForPageTarget(
-  client: CdpPipeClient,
-  expectedUrl: string,
-): Promise<TargetInfo> {
+async function waitForPageTarget(client: CdpPipeClient, expectedUrl: string): Promise<TargetInfo> {
   const deadline = Date.now() + TARGET_WAIT_MS;
   while (Date.now() < deadline) {
-    const result = await client.send<{ targetInfos?: unknown }>(
-      "Target.getTargets",
-    );
+    const result = await client.send<{ targetInfos?: unknown }>('Target.getTargets');
     const targets = Array.isArray(result.targetInfos)
       ? result.targetInfos.filter(isTargetInfo)
       : [];
-    const exact = targets.find(
-      (target) => target.type === "page" && target.url === expectedUrl,
-    );
+    const exact = targets.find((target) => target.type === 'page' && target.url === expectedUrl);
     const webPage = targets.find(
-      (target) => target.type === "page" && /^https:\/\//u.test(target.url),
+      (target) => target.type === 'page' && /^https:\/\//u.test(target.url),
     );
     if (exact !== undefined) return exact;
     if (webPage !== undefined) return webPage;
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
   }
-  throw new Error("Chrome did not open the requested page.");
+  throw new Error('Chrome did not open the requested page.');
 }
 
 function isTargetInfo(value: unknown): value is TargetInfo {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    typeof record["targetId"] === "string" &&
-    typeof record["type"] === "string" &&
-    typeof record["url"] === "string"
+    typeof record['targetId'] === 'string' &&
+    typeof record['type'] === 'string' &&
+    typeof record['url'] === 'string'
   );
 }
 
-function isPageMetadata(
-  value: unknown,
-): value is { url: string; title: string } {
-  if (typeof value !== "object" || value === null) return false;
+function isPageMetadata(value: unknown): value is { url: string; title: string } {
+  if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
-  return (
-    typeof record["url"] === "string" && typeof record["title"] === "string"
-  );
+  return typeof record['url'] === 'string' && typeof record['title'] === 'string';
 }
 
 function isHistoryEntry(value: unknown): value is { id: number } {
-  if (typeof value !== "object" || value === null) return false;
-  return typeof (value as Record<string, unknown>)["id"] === "number";
+  if (typeof value !== 'object' || value === null) return false;
+  return typeof (value as Record<string, unknown>)['id'] === 'number';
 }
 
 function isUnknownArray(value: unknown): value is readonly unknown[] {
@@ -738,7 +974,7 @@ function assertSameOrigin(candidate: string, expectedOrigin: string): void {
   } catch {
     // Fall through to the same non-disclosing authorization failure.
   }
-  throw new Error("preview-origin-changed");
+  throw new Error('preview-origin-changed');
 }
 
 function isRecoverableSessionError(error: unknown): boolean {
@@ -748,27 +984,20 @@ function isRecoverableSessionError(error: unknown): boolean {
   );
 }
 
-function isInspection(
-  value: unknown,
-): value is Omit<AgentPreviewInspection, "console"> {
-  if (typeof value !== "object" || value === null) return false;
+function isInspection(value: unknown): value is Omit<AgentPreviewInspection, 'console'> {
+  if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
-  return ["url", "title", "text", "dom"].every(
-    (key) => typeof record[key] === "string",
-  );
+  return ['url', 'title', 'text', 'dom'].every((key) => typeof record[key] === 'string');
 }
 
-async function waitForExit(
-  child: ChildProcess,
-  timeoutMs: number,
-): Promise<void> {
+async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void> {
   if (!isChildLive(child)) return;
   await new Promise<void>((resolvePromise) => {
     const timeout = setTimeout(() => {
-      if (isChildLive(child)) child.kill("SIGTERM");
+      if (isChildLive(child)) child.kill('SIGTERM');
       resolvePromise();
     }, timeoutMs);
-    child.once("exit", () => {
+    child.once('exit', () => {
       clearTimeout(timeout);
       resolvePromise();
     });
@@ -778,30 +1007,48 @@ async function waitForExit(
 function assertOwnedProfilePath(root: string, candidate: string): void {
   const resolvedRoot = `${resolve(root)}/`;
   if (!resolve(candidate).startsWith(resolvedRoot)) {
-    throw new Error(
-      "Refusing to clear a Chrome profile outside Forgeboard storage.",
-    );
+    throw new Error('Refusing to clear a Chrome profile outside Forgeboard storage.');
   }
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message.slice(0, 2_048)
-    : "Chrome companion failed.";
+  return error instanceof Error ? error.message.slice(0, 2_048) : 'Chrome companion failed.';
+}
+
+function publicElement(handle: string, descriptor: PageElementDescriptor): AgentPreviewElement {
+  return {
+    handle,
+    kind: descriptor.kind,
+    name: descriptor.name,
+    disabled: descriptor.disabled,
+    editable: descriptor.editable,
+    sensitive: descriptor.sensitive,
+    consequential: descriptor.consequential,
+    userOnly: descriptor.userOnly,
+    destination: descriptor.destination,
+  };
+}
+
+function sanitizedPageUrl(candidate: string): string {
+  const parsed = new URL(candidate);
+  return `${parsed.origin}${parsed.pathname}`.slice(0, 2_048);
+}
+
+function visibleTextDom(text: string): string {
+  const escaped = text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return `<body>${escaped}</body>`.slice(0, 131_072);
+}
+
+function unknownRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 }
 
 const DOM_INSPECTION_EXPRESSION = String.raw`(() => {
-  const clone = document.documentElement.cloneNode(true);
-  for (const element of clone.querySelectorAll('script, style, noscript')) element.remove();
-  for (const element of clone.querySelectorAll('input, textarea, select')) {
-    element.removeAttribute('value');
-    element.removeAttribute('checked');
-    element.removeAttribute('selected');
-  }
+  const text = (document.body?.innerText ?? '').slice(0, 65536);
   return {
-    url: location.href.slice(0, 2048),
+    url: (location.origin + location.pathname).slice(0, 2048),
     title: document.title.slice(0, 1024),
-    text: (document.body?.innerText ?? '').slice(0, 65536),
-    dom: clone.outerHTML.slice(0, 131072)
+    text,
+    dom: ''
   };
 })()`;

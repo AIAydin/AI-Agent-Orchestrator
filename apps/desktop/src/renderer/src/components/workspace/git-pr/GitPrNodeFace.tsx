@@ -95,11 +95,7 @@ export function GitPrNodeFace({ id, data }: NodeFaceProps): JSX.Element {
           className={`node-face-status ${controller.inspectionError === null ? '' : 'failed'}`}
           role="status"
         >
-          {busy
-            ? 'Working…'
-            : inspection?.ready === true
-              ? 'Ready to publish'
-              : 'Check needed'}
+          {busy ? 'Working…' : inspection?.ready === true ? 'Ready to publish' : 'Check needed'}
         </span>
       </div>
       <div className="node-face-body nowheel nodrag">

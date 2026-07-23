@@ -160,7 +160,10 @@ function nodeData(overrides: Partial<WorkshopNodeData> = {}): WorkshopNodeData {
   };
 }
 
-function nodeTree(data: WorkshopNodeData, contextOverrides: Partial<AgentSessionContextValue> = {}) {
+function nodeTree(
+  data: WorkshopNodeData,
+  contextOverrides: Partial<AgentSessionContextValue> = {},
+) {
   return (
     <AgentSessionProvider value={contextValue(contextOverrides)}>
       <CanvasNodeInteractionProvider readOnly={false} setCollapsed={vi.fn()}>
@@ -440,7 +443,7 @@ describe('AgentSessionNode', () => {
     expect(controller.cancelLaunch).not.toHaveBeenCalled();
   });
 
-  it('re-provisions peer tools fresh when a config-drift restart relaunches the session, instead of reusing the terminated session\'s stale provision', async () => {
+  it("re-provisions peer tools fresh when a config-drift restart relaunches the session, instead of reusing the terminated session's stale provision", async () => {
     provisionMock.mockResolvedValueOnce({
       ok: true,
       value: {

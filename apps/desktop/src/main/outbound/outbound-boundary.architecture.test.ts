@@ -65,8 +65,13 @@ describe('Forgeboard-owned outbound architecture', () => {
 
   it('has no unenumerated direct external network API in desktop main', async () => {
     const sources = await mainSources();
+    expect(callSites(sources, /\bnet\.fetch\s*\(/gu)).toEqual(['index.ts']);
+    const applicationEntry = requiredSource(sources, 'index.ts');
+    expect(applicationEntry).toContain('videoFileUrlForRequest(request.url)');
+    expect(applicationEntry).toContain('net.fetch(fileUrl');
+
     const patterns: ReadonlyArray<readonly [string, RegExp]> = [
-      ['global fetch', /\bfetch\s*\(/gu],
+      ['global fetch', /(?<!\.)\bfetch\s*\(/gu],
       ['Node HTTP request', /\bhttps?\.request\s*\(/gu],
       ['Electron net request', /\bnet\.request\s*\(/gu],
       ['WebSocket construction', /\bnew\s+WebSocket\s*\(/gu],

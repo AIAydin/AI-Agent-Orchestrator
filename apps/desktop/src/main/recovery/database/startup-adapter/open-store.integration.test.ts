@@ -251,7 +251,13 @@ describe('startup database recovery composition', () => {
       () =>
         new LocalStore(databasePath, {
           legacySettingsDefaults: defaultSettings(root),
-          expectedDatabaseIdentity: { dev: expected.dev, ino: expected.ino },
+          expectedDatabaseIdentity: {
+            dev: expected.dev,
+            ino: expected.ino,
+            ctimeMs: expected.ctimeMs,
+            mtimeMs: expected.mtimeMs,
+            size: expected.size,
+          },
         }),
     ).toThrow('changed before its writable handle was bound');
     await expect(readFile(databasePath)).resolves.toEqual(replacementBefore);

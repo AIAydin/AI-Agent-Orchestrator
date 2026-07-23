@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const packageJsonPath = path.join(repositoryRoot, 'package.json');
+const pnpmBuiltins = new Set(['exec', 'install']);
 const canonicalUserCommands = [
   'start',
   'verify',
@@ -44,7 +45,7 @@ test('documented pnpm commands name current root scripts', async () => {
   for (const file of await markdownFiles()) {
     const source = await readFile(file, 'utf8');
     for (const command of documentedPnpmCommands(source)) {
-      if (command === 'install' || scripts.has(command)) continue;
+      if (pnpmBuiltins.has(command) || scripts.has(command)) continue;
       invalid.push(`${path.relative(repositoryRoot, file)} -> pnpm ${command}`);
     }
   }

@@ -5,6 +5,7 @@ import { baseTerminalEnvironment, interactiveShellInvocation } from './pty-proce
 const TOUCHED = [
   'HOME',
   'PATH',
+  'SHELL',
   'DYLD_INSERT_LIBRARIES',
   'LD_PRELOAD',
   'NODE_OPTIONS',
@@ -84,6 +85,7 @@ describe('interactiveShellInvocation', () => {
   });
 
   it('falls back to /bin/zsh when SHELL is unset or not an absolute path', () => {
+    delete process.env.SHELL;
     expect(interactiveShellInvocation('codex', [], 'darwin', undefined).file).toBe('/bin/zsh');
     expect(interactiveShellInvocation('codex', [], 'darwin', 'zsh').file).toBe('/bin/zsh');
   });

@@ -93,8 +93,8 @@ Implemented on branch `feature/agent-peer-channels` (tasks 1–12). Where the bu
 
 3. **Provider config was verified against the installed CLIs and diverged from the plan's guessed flags:**
    - **claude** — `--mcp-config <0600 file>` in a per-provision scratch dir under `userData` (never the repo, never argv).
-   - **gemini / opencode** — their MCP-server child *inherits* the parent/PTY env (verified by spawning a real probe server), so the peer token is **omitted** from the project-root config files (`.gemini/settings.json`, `opencode.json`); only `ELECTRON_RUN_AS_NODE` is written. The token reaches the shim via the PTY env (deviation 4).
-   - **codex** — env inheritance was *disproved*, so it uses a `0600` TOML profile under `$CODEX_HOME` selected via `--profile <name>` (only the profile name touches argv).
+   - **gemini / opencode** — their MCP-server child _inherits_ the parent/PTY env (verified by spawning a real probe server), so the peer token is **omitted** from the project-root config files (`.gemini/settings.json`, `opencode.json`); only `ELECTRON_RUN_AS_NODE` is written. The token reaches the shim via the PTY env (deviation 4).
+   - **codex** — env inheritance was _disproved_, so it uses a `0600` TOML profile under `$CODEX_HOME` selected via `--profile <name>` (only the profile name touches argv).
 
 4. **The peer token is minted and injected entirely main-side.** The renderer passes only an opaque `peerProvisionId` (uuid) over IPC; `FORGEBOARD_PEER_URL`/`FORGEBOARD_PEER_TOKEN` values are resolved from the injected provider and spread into the PTY env at spawn — never over IPC, never logged, never in the renderer schema/event payload.
 

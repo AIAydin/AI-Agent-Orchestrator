@@ -27,6 +27,7 @@ describe('FolderReadinessService', () => {
       verifyWritable,
       now,
       platform: 'linux',
+      currentUid: 501,
     }).check({
       purpose: 'managed-worktrees',
       path: '/tmp/forgeboard/worktrees',
@@ -54,6 +55,7 @@ describe('FolderReadinessService', () => {
       verifyWritable,
       now,
       platform: 'linux',
+      currentUid: 501,
     }).check({
       purpose: 'backup-destination',
       path: '/tmp/forgeboard/backups/daily',
@@ -77,6 +79,7 @@ describe('FolderReadinessService', () => {
       verifyWritable,
       now,
       platform: 'linux',
+      currentUid: 501,
     });
 
     await expect(

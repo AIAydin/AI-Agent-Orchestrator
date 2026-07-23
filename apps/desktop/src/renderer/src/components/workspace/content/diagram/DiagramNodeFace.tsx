@@ -27,7 +27,11 @@ export function DiagramNodeFace({ id, data }: NodeFaceProps): JSX.Element {
           aria-pressed={editing}
           onClick={() => setEditing((open) => !open)}
         >
-          {editing ? <Eye size={12} aria-hidden="true" /> : <FilePenLine size={12} aria-hidden="true" />}
+          {editing ? (
+            <Eye size={12} aria-hidden="true" />
+          ) : (
+            <FilePenLine size={12} aria-hidden="true" />
+          )}
           {editing ? 'Preview' : 'Edit'}
         </button>
         <span

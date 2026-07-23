@@ -16,7 +16,7 @@
 - Rate limit: **6 messages per 60 s per edge**. Message prefix: `[from <sender>] `. Delivery = ESC`[200~` + prefixed body + ESC`[201~` + `\r` (bracketed paste, then submit).
 - `read_screen`: last **64 KiB** of transcript, ANSI-stripped, last **200 lines**.
 - Copy is terse (project UX preference). All user-visible strings ≤ 1 short sentence.
-- Tests: run a single file with `pnpm vitest --config config/tooling/vitest.config.ts run --project unit <path>` from the repo root. jsdom component tests start with `// @vitest-environment jsdom`.
+- Tests: run a single file with `corepack pnpm exec vitest --config config/tooling/vitest.config.ts run --project unit <path>` from the repo root. jsdom component tests start with `// @vitest-environment jsdom`.
 - **Spec deviations of record** (rationale documented here, spec `docs/superpowers/specs/2026-07-20-agent-peer-channels-design.md` stays as approved): (1) `read_screen` reads main-side transcript files, not renderer xterm serialization — no serialize addon exists and xterm unmounts on node collapse; transcripts work always. (2) The mute toggle lives in the existing sidebar `TypedEdgeInspector` — the phase-2 edge popover does not exist yet. (3) All four providers receive the peer env via PTY environment injected in main; file-based provider configs additionally carry the values so MCP-server spawn env quirks can't break claude/gemini/opencode; codex relies on PTY inheritance (verified in Task 8).
 
 ---
@@ -24,11 +24,13 @@
 ### Task 1: `muted` flag on context edge config
 
 **Files:**
+
 - Modify: `packages/core/src/model/domain.ts:679-688` (`ContextEdgeSchema`)
 - Modify: `apps/desktop/src/renderer/src/components/workspace/model/edge-config.ts:39-47` (context case of `createEdgeData`)
 - Test: `apps/desktop/src/renderer/src/components/workspace/model/edge-config.test.ts` (exists — append)
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `ContextEdgeSchema` config gains `muted: z.boolean().default(false)`; renderer `WorkshopEdgeData` for `'context'` gains `muted: boolean`. Task 4 reads `edge.config.muted`; Task 2 toggles it.
 
@@ -50,7 +52,7 @@ describe('context edge muted flag', () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm vitest --config config/tooling/vitest.config.ts run --project unit apps/desktop/src/renderer/src/components/workspace/model/edge-config.test.ts`
+Run: `corepack pnpm exec vitest --config config/tooling/vitest.config.ts run --project unit apps/desktop/src/renderer/src/components/workspace/model/edge-config.test.ts`
 Expected: FAIL — `muted` missing from config.
 
 - [ ] **Step 3: Implement.** In `domain.ts`, inside the `ContextEdgeSchema` config object (after `attachmentIds`):
@@ -76,7 +78,7 @@ In `edge-config.ts`, the `'context'` case becomes:
 
 The zod default makes old persisted canvases parse cleanly (`.strict()` objects still apply defaults for absent keys).
 
-- [ ] **Step 4: Run the same test file — PASS. Also run the core package tests:** `pnpm vitest --config config/tooling/vitest.config.ts run --project unit packages/core` — expected PASS (schema default is additive).
+- [ ] **Step 4: Run the same test file — PASS. Also run the core package tests:** `corepack pnpm exec vitest --config config/tooling/vitest.config.ts run --project unit packages/core` — expected PASS (schema default is additive).
 
 - [ ] **Step 5: Commit** (both files may carry user WIP — follow the Global Constraints staging protocol):
 
@@ -91,10 +93,12 @@ git commit -m "feat: add muted flag to context edge config"
 ### Task 2: Mute toggle in the context edge inspector
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/workspace/canvas/TypedEdgeInspector.tsx` (context form inside `EdgeConfiguration`)
 - Test: `apps/desktop/src/renderer/src/components/workspace/canvas/TypedEdgeInspector.test.tsx` (exists — append)
 
 **Interfaces:**
+
 - Consumes: Task 1's `muted` field on context config.
 - Produces: UI checkbox labeled `Muted` calling `onChange({ edgeType: 'context', config: { ...config, muted } })`. No other tasks depend on it.
 
@@ -144,10 +148,12 @@ it('toggles muted on a context edge', () => {
 ### Task 3: `packages/peer-mcp` — the stdio MCP shim
 
 **Files:**
+
 - Create: `packages/peer-mcp/package.json`, `packages/peer-mcp/tsconfig.json`, `packages/peer-mcp/src/protocol.ts`, `packages/peer-mcp/src/main.ts`
 - Test: `packages/peer-mcp/src/protocol.test.ts`
 
 **Interfaces:**
+
 - Consumes: env vars `FORGEBOARD_PEER_URL`, `FORGEBOARD_PEER_TOKEN` (set by Task 7); hub HTTP wire protocol (implemented in Task 6): `GET /v1/peers` → `{ agents: [{ name, provider, live, muted }] }`; `POST /v1/message` body `{ to, message }` → `{ result: 'delivered' | 'muted' | 'rate-limited' | 'no-live-session' | 'unknown-peer' }`; `GET /v1/screen?agent=<name>` → `{ text }`. All with `Authorization: Bearer <token>`; non-2xx → `{ error: string }`.
 - Produces: `dist/main.js` — a standalone script; `handleMessage(message, hub)` pure handler for tests.
 
@@ -160,7 +166,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { handleMessage, type HubClient } from './protocol.js';
 
 const hub: HubClient = {
-  peers: vi.fn(async () => ({ agents: [{ name: 'Hermes', provider: 'claude', live: true, muted: false }] })),
+  peers: vi.fn(async () => ({
+    agents: [{ name: 'Hermes', provider: 'claude', live: true, muted: false }],
+  })),
   message: vi.fn(async () => ({ result: 'delivered' as const })),
   screen: vi.fn(async () => ({ text: 'hello world' })),
 };
@@ -168,39 +176,80 @@ const hub: HubClient = {
 describe('peer-mcp protocol', () => {
   it('answers initialize echoing the client protocol version', async () => {
     const reply = await handleMessage(
-      { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'x', version: '0' } } },
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'x', version: '0' },
+        },
+      },
       hub,
     );
-    expect(reply).toMatchObject({ id: 1, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'forgeboard-peer-mcp' } } });
+    expect(reply).toMatchObject({
+      id: 1,
+      result: {
+        protocolVersion: '2025-06-18',
+        capabilities: { tools: {} },
+        serverInfo: { name: 'forgeboard-peer-mcp' },
+      },
+    });
   });
 
   it('lists the three tools', async () => {
     const reply = await handleMessage({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, hub);
-    const names = (reply as { result: { tools: { name: string }[] } }).result.tools.map((tool) => tool.name);
+    const names = (reply as { result: { tools: { name: string }[] } }).result.tools.map(
+      (tool) => tool.name,
+    );
     expect(names).toEqual(['list_agents', 'send_message', 'read_screen']);
   });
 
   it('routes tools/call send_message to the hub and returns text content', async () => {
     const reply = await handleMessage(
-      { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'send_message', arguments: { to: 'Hermes', message: 'hi' } } },
+      {
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: { name: 'send_message', arguments: { to: 'Hermes', message: 'hi' } },
+      },
       hub,
     );
     expect(hub.message).toHaveBeenCalledWith('Hermes', 'hi');
-    expect(reply).toMatchObject({ id: 3, result: { content: [{ type: 'text', text: expect.stringContaining('delivered') }] } });
+    expect(reply).toMatchObject({
+      id: 3,
+      result: { content: [{ type: 'text', text: expect.stringContaining('delivered') }] },
+    });
   });
 
   it('returns isError content when the hub rejects', async () => {
-    const failing: HubClient = { ...hub, screen: vi.fn(async () => { throw new Error('unknown peer'); }) };
+    const failing: HubClient = {
+      ...hub,
+      screen: vi.fn(async () => {
+        throw new Error('unknown peer');
+      }),
+    };
     const reply = await handleMessage(
-      { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'read_screen', arguments: { agent: 'Nobody' } } },
+      {
+        jsonrpc: '2.0',
+        id: 4,
+        method: 'tools/call',
+        params: { name: 'read_screen', arguments: { agent: 'Nobody' } },
+      },
       failing,
     );
     expect(reply).toMatchObject({ id: 4, result: { isError: true } });
   });
 
   it('ignores notifications (no id) and answers ping', async () => {
-    expect(await handleMessage({ jsonrpc: '2.0', method: 'notifications/initialized' }, hub)).toBeNull();
-    expect(await handleMessage({ jsonrpc: '2.0', id: 5, method: 'ping' }, hub)).toMatchObject({ id: 5, result: {} });
+    expect(
+      await handleMessage({ jsonrpc: '2.0', method: 'notifications/initialized' }, hub),
+    ).toBeNull();
+    expect(await handleMessage({ jsonrpc: '2.0', id: 5, method: 'ping' }, hub)).toMatchObject({
+      id: 5,
+      result: {},
+    });
   });
 });
 ```
@@ -218,7 +267,9 @@ type JsonRpcMessage = {
 };
 
 export interface HubClient {
-  peers(): Promise<{ agents: { name: string; provider: string | null; live: boolean; muted: boolean }[] }>;
+  peers(): Promise<{
+    agents: { name: string; provider: string | null; live: boolean; muted: boolean }[];
+  }>;
   message(to: string, message: string): Promise<{ result: string }>;
   screen(agent: string): Promise<{ text: string }>;
 }
@@ -254,7 +305,11 @@ const TOOLS = [
 ] as const;
 
 function text(id: number | string, body: string, isError = false) {
-  return { jsonrpc: '2.0' as const, id, result: { content: [{ type: 'text', text: body }], ...(isError ? { isError: true } : {}) } };
+  return {
+    jsonrpc: '2.0' as const,
+    id,
+    result: { content: [{ type: 'text', text: body }], ...(isError ? { isError: true } : {}) },
+  };
 }
 
 export async function handleMessage(message: JsonRpcMessage, hub: HubClient) {
@@ -284,7 +339,10 @@ export async function handleMessage(message: JsonRpcMessage, hub: HubClient) {
           return text(id, JSON.stringify(agents, null, 2));
         }
         if (name === 'send_message') {
-          const outcome = await hub.message(String(args['to'] ?? ''), String(args['message'] ?? ''));
+          const outcome = await hub.message(
+            String(args['to'] ?? ''),
+            String(args['message'] ?? ''),
+          );
           return text(id, outcome.result);
         }
         if (name === 'read_screen') {
@@ -297,7 +355,11 @@ export async function handleMessage(message: JsonRpcMessage, hub: HubClient) {
       }
     }
     default:
-      return { jsonrpc: '2.0' as const, id, error: { code: -32601, message: `Method not found: ${String(method)}` } };
+      return {
+        jsonrpc: '2.0' as const,
+        id,
+        error: { code: -32601, message: `Method not found: ${String(method)}` },
+      };
   }
 }
 ```
@@ -318,16 +380,24 @@ if (!url || !token) {
 async function call(path: string, init?: RequestInit): Promise<never | Record<string, unknown>> {
   const response = await fetch(`${url}${path}`, {
     ...init,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
   });
   const body = (await response.json()) as Record<string, unknown>;
-  if (!response.ok) throw new Error(typeof body['error'] === 'string' ? body['error'] : `hub error ${response.status}`);
+  if (!response.ok)
+    throw new Error(
+      typeof body['error'] === 'string' ? body['error'] : `hub error ${response.status}`,
+    );
   return body;
 }
 
 const hub: HubClient = {
   peers: () => call('/v1/peers') as never,
-  message: (to, message) => call('/v1/message', { method: 'POST', body: JSON.stringify({ to, message }) }) as never,
+  message: (to, message) =>
+    call('/v1/message', { method: 'POST', body: JSON.stringify({ to, message }) }) as never,
   screen: (agent) => call(`/v1/screen?agent=${encodeURIComponent(agent)}`) as never,
 };
 
@@ -360,17 +430,19 @@ lines.on('close', () => process.exit(0));
 ### Task 4: Peer graph resolution (main, pure module)
 
 **Files:**
+
 - Create: `apps/desktop/src/main/agent-peers/peer-graph.ts`
 - Test: `apps/desktop/src/main/agent-peers/peer-graph.test.ts`
 
 **Interfaces:**
+
 - Consumes: `CanvasNode`, `CanvasEdge` from `@forgeboard/core/domain` (agent nodes: `type === 'agent'`, fields `id`, `title`, `adapterId`; context edges: `type === 'context'`, `config.muted` from Task 1).
 - Produces:
 
 ```ts
 export interface PeerDescriptor {
   readonly nodeId: string;
-  readonly name: string;        // display title, deduped with " (2)" suffixes
+  readonly name: string; // display title, deduped with " (2)" suffixes
   readonly provider: string | null;
   readonly edgeId: string;
   readonly muted: boolean;
@@ -380,7 +452,10 @@ export function resolvePeers(
   edges: readonly CanvasEdge[],
   nodeId: string,
 ): PeerDescriptor[];
-export function findPeerByName(peers: readonly PeerDescriptor[], name: string): PeerDescriptor | undefined; // case-insensitive
+export function findPeerByName(
+  peers: readonly PeerDescriptor[],
+  name: string,
+): PeerDescriptor | undefined; // case-insensitive
 ```
 
 - [ ] **Step 1: Write the failing tests.** Build minimal node/edge literals (parse through `CanvasNodeSchema`/`CanvasEdgeSchema` to stay honest with required fields — copy fixture style from `apps/desktop/src/main/terminal/service.test.ts` for ids/timestamps). Cases: (a) agent↔agent context edge in either direction resolves as a peer; (b) context edge to a non-agent node is NOT a peer; (c) non-context edge between agents is NOT a peer; (d) no multi-hop (A—B—C: A's peers exclude C); (e) two peers with the same title come back as `Claude Code` and `Claude Code (2)`; (f) `muted` is carried from edge config; (g) `findPeerByName` matches case-insensitively.
@@ -405,14 +480,20 @@ export function resolvePeers(
   edges: readonly CanvasEdge[],
   nodeId: string,
 ): PeerDescriptor[] {
-  const agents = new Map(nodes.filter((node) => node.type === 'agent').map((node) => [node.id, node]));
+  const agents = new Map(
+    nodes.filter((node) => node.type === 'agent').map((node) => [node.id, node]),
+  );
   if (!agents.has(nodeId)) return [];
   const seen = new Map<string, number>();
   const peers: PeerDescriptor[] = [];
   for (const edge of edges) {
     if (edge.type !== 'context') continue;
     const otherId =
-      edge.sourceNodeId === nodeId ? edge.targetNodeId : edge.targetNodeId === nodeId ? edge.sourceNodeId : null;
+      edge.sourceNodeId === nodeId
+        ? edge.targetNodeId
+        : edge.targetNodeId === nodeId
+          ? edge.sourceNodeId
+          : null;
     if (otherId === null) continue;
     const other = agents.get(otherId);
     if (other === undefined || peers.some((peer) => peer.nodeId === otherId)) continue;
@@ -422,7 +503,8 @@ export function resolvePeers(
     peers.push({
       nodeId: otherId,
       name: count === 1 ? base : `${base} (${count})`,
-      provider: 'adapterId' in other && typeof other.adapterId === 'string' ? other.adapterId : null,
+      provider:
+        'adapterId' in other && typeof other.adapterId === 'string' ? other.adapterId : null,
       edgeId: edge.id,
       muted: edge.config.muted,
     });
@@ -450,11 +532,13 @@ export function findPeerByName(
 ### Task 5: TerminalService peer hooks (find, deliver, transcript tail)
 
 **Files:**
+
 - Create: `apps/desktop/src/main/agent-peers/text.ts` (+ `text.test.ts`) — ANSI strip + delivery formatting
 - Modify: `apps/desktop/src/main/terminal/service.ts`
 - Test: `apps/desktop/src/main/terminal/service.test.ts` (exists — append; reuse its `fixture()` with fake ptyFactory)
 
 **Interfaces:**
+
 - Consumes: `ActiveTerminal` internals (`#active`, `view.projectId/nodeId/status`, `handle.write`), transcript replay (`this.#transcripts.replay`), `#safeAudit`.
 - Produces (used by Task 6):
 
@@ -489,7 +573,10 @@ export function formatPeerDelivery(sender: string, message: string): string {
 
 export function transcriptTailText(raw: string, maxLines = 200): string {
   const lines = stripAnsi(raw).split('\n');
-  return lines.slice(Math.max(0, lines.length - maxLines)).join('\n').trimEnd();
+  return lines
+    .slice(Math.max(0, lines.length - maxLines))
+    .join('\n')
+    .trimEnd();
 }
 ```
 
@@ -550,38 +637,51 @@ For `readTranscriptTail`, follow `replay()`'s exact call shape into `this.#trans
 ### Task 6: AgentPeersService — provisions, hub server, tool endpoints
 
 **Files:**
+
 - Create: `apps/desktop/src/main/agent-peers/service.ts`
 - Test: `apps/desktop/src/main/agent-peers/service.test.ts`
 
 **Interfaces:**
+
 - Consumes: `resolvePeers`/`findPeerByName` (Task 4), the three TerminalService hooks (Task 5) via a narrow bridge interface, `store.loadCanvas(projectId)` + `store.appendAudit` (`apps/desktop/src/main/storage.ts:548,704`).
 - Produces (used by Tasks 7, 9, 10):
 
 ```ts
 export interface AgentPeersTerminalBridge {
   findActiveSessionByNode(projectId: string, nodeId: string): { sessionId: string } | null;
-  deliverPeerInput(sessionId: string, sender: string, message: string): Promise<'delivered' | 'no-live-session'>;
+  deliverPeerInput(
+    sessionId: string,
+    sender: string,
+    message: string,
+  ): Promise<'delivered' | 'no-live-session'>;
   readTranscriptTail(sessionId: string, maxBytes: number): Promise<string | null>;
 }
 export interface AgentPeersStore {
   loadCanvas(projectId: string): { nodes: CanvasNode[]; edges: CanvasEdge[] } | null;
-  appendAudit(category: string, action: string, outcome: 'allowed' | 'denied' | 'failed', metadata: Record<string, unknown>): void;
+  appendAudit(
+    category: string,
+    action: string,
+    outcome: 'allowed' | 'denied' | 'failed',
+    metadata: Record<string, unknown>,
+  ): void;
 }
 export interface PeerProvision {
-  readonly provisionId: string;   // uuid
-  readonly url: string;           // http://127.0.0.1:<port>
+  readonly provisionId: string; // uuid
+  readonly url: string; // http://127.0.0.1:<port>
 }
 export class AgentPeersService {
   constructor(store: AgentPeersStore, bridge: AgentPeersTerminalBridge);
-  async provision(projectId: string, nodeId: string): Promise<PeerProvision>;      // starts hub lazily, mints token
-  environmentForProvision(provisionId: string): Record<string, string> | null;     // { FORGEBOARD_PEER_URL, FORGEBOARD_PEER_TOKEN } — single consumer: TerminalService at spawn
+  async provision(projectId: string, nodeId: string): Promise<PeerProvision>; // starts hub lazily, mints token
+  environmentForProvision(provisionId: string): Record<string, string> | null; // { FORGEBOARD_PEER_URL, FORGEBOARD_PEER_TOKEN } — single consumer: TerminalService at spawn
   bindSession(provisionId: string, sessionId: string): void;
-  releaseSession(sessionId: string): void;                                         // also runs any registered cleanup
-  registerCleanup(provisionId: string, cleanup: () => Promise<void>): void;        // Task 9 registers provider-config cleanup here
+  releaseSession(sessionId: string): void; // also runs any registered cleanup
+  registerCleanup(provisionId: string, cleanup: () => Promise<void>): void; // Task 9 registers provider-config cleanup here
   onMessageDelivered(listener: (event: { projectId: string; edgeId: string }) => void): () => void;
   // lifecycle contract (ipc.ts wiring):
-  pauseForShutdown(): Promise<void>; pauseForDataMutation(): Promise<void>;
-  resetForPrivacy(): Promise<void>; resumeAfterPrivacyReset(): void;
+  pauseForShutdown(): Promise<void>;
+  pauseForDataMutation(): Promise<void>;
+  resetForPrivacy(): Promise<void>;
+  resumeAfterPrivacyReset(): void;
   async dispose(): Promise<void>;
 }
 ```
@@ -640,6 +740,7 @@ interface ProvisionRecord {
 ### Task 7: Peer env injection at terminal launch
 
 **Files:**
+
 - Modify: `apps/desktop/src/shared/terminal/launch.ts:47` (`TerminalPrepareLaunchInputSchema` + plan view type if it mirrors fields)
 - Modify: `apps/desktop/src/main/terminal/service.ts` (plan storage, `#launch`, exit finalization)
 - Modify: `apps/desktop/src/main/terminal/pty-process.ts:93` (env spread)
@@ -647,6 +748,7 @@ interface ProvisionRecord {
 - Test: `apps/desktop/src/main/terminal/service.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: `AgentPeersService.environmentForProvision` / `bindSession` / `releaseSession` (Task 6).
 - Produces:
   - `TerminalPrepareLaunchInputSchema` gains `peerProvisionId: z.string().uuid().optional()`.
@@ -660,7 +762,7 @@ export interface PeerEnvironmentProvider {
 }
 ```
 
-  - `ResolvedTerminalLaunch` gains `peerEnvironment?: Record<string, string>`; pty env becomes `{ ...baseTerminalEnvironment(), ...launch.environment, ...launch.peerEnvironment }`.
+- `ResolvedTerminalLaunch` gains `peerEnvironment?: Record<string, string>`; pty env becomes `{ ...baseTerminalEnvironment(), ...launch.environment, ...launch.peerEnvironment }`.
 
 - [ ] **Step 1: Write failing service tests:** (a) prepare with `peerProvisionId` + a fake provider → the fake ptyFactory receives env containing `FORGEBOARD_PEER_URL`/`FORGEBOARD_PEER_TOKEN`, and `bindSession` was called with the launched sessionId; (b) session exit → `releaseSession(sessionId)`; (c) unknown provisionId → prepare fails with a clear error (`Peer session expired. Start again.`); (d) no `peerProvisionId` → env unchanged, provider untouched; (e) the native-review env name list (`TerminalLaunchNativeReview.exact.environmentVariableNames`) includes the two peer names when a provision is attached (transparency in the launch review).
 
@@ -679,26 +781,28 @@ export interface PeerEnvironmentProvider {
 ### Task 8: Provider config artifacts + shim packaging
 
 **Files:**
+
 - Create: `apps/desktop/src/main/agent-peers/provider-config.ts` (+ `provider-config.test.ts`)
 - Modify: `apps/desktop/package.json` (`build.extraResources`, lines ~97-106 — copy the `test-agent` entry shape)
 - Test: `provider-config.test.ts`
 
 **Interfaces:**
+
 - Consumes: provision env values (main-side), `process.resourcesPath`/dev dist path resolution (pattern: `apps/desktop/src/main/ipc.ts:290-292`), `process.execPath` + `ELECTRON_RUN_AS_NODE` spawn pattern (`apps/desktop/src/main/agent-execution/adapter-planner.ts:112-118`).
 - Produces (used by Task 9's provision IPC):
 
 ```ts
 export interface ProviderPeerMaterial {
   readonly available: boolean;
-  readonly hint: string | null;            // terse, e.g. "Peer tools unavailable for this agent."
+  readonly hint: string | null; // terse, e.g. "Peer tools unavailable for this agent."
   readonly extraArguments: readonly string[]; // appended to the CLI argv by the renderer
-  readonly cleanup: () => Promise<void>;      // undo any file writes
+  readonly cleanup: () => Promise<void>; // undo any file writes
 }
 export function shimEntryPath(): string; // packaged: join(process.resourcesPath,'peer-mcp','main.js'); dev: packages/peer-mcp/dist/main.js
 export async function writeProviderPeerMaterial(input: {
   adapterId: string;
-  provisionDir: string;          // per-provision scratch dir under app.getPath('userData')/agent-peers/<provisionId>
-  projectRoot: string;           // for gemini/opencode project-scoped config
+  provisionDir: string; // per-provision scratch dir under app.getPath('userData')/agent-peers/<provisionId>
+  projectRoot: string; // for gemini/opencode project-scoped config
   environment: Record<string, string>; // FORGEBOARD_PEER_URL/TOKEN — written ONLY into 0600 files, never argv
 }): Promise<ProviderPeerMaterial>;
 ```
@@ -744,12 +848,14 @@ If a flag differs from the plan (e.g. claude's `--mcp-config` syntax changed), a
 ### Task 9: IPC channels, preload bridge, main wiring, delivery events
 
 **Files:**
+
 - Create: `apps/desktop/src/shared/agent-peers/index.ts` (channels + zod schemas)
 - Create: `apps/desktop/src/main/agent-peers/ipc.ts` (`AgentPeersIpcService`) (+ `ipc.test.ts` following `terminal/ipc.security.test.ts` patterns where practical)
 - Modify: `apps/desktop/src/main/ipc.ts` (construct, register, lifecycle lists, `ApplicationServices`)
 - Modify: `apps/desktop/src/preload/index.ts` (expose `agentPeers` API)
 
 **Interfaces:**
+
 - Consumes: `AgentPeersService` (Task 6), `writeProviderPeerMaterial` (Task 8), TerminalService bridge methods (Task 5), the IPC helper patterns in `main/ipc.ts:1143-1201` and preload `invokeValidated` (`preload/index.ts:101`), the main→renderer event pattern (`terminal/ipc.ts:292`).
 - Produces:
 
@@ -759,21 +865,27 @@ export const AGENT_PEERS_IPC_CHANNELS = Object.freeze({
   provision: 'agent-peers:provision',
   event: 'agent-peers:event',
 });
-export const AgentPeersProvisionInputSchema = z.object({
-  projectId: z.string().uuid(),
-  nodeId: EntityIdSchema,
-  adapterId: z.string().min(1).max(100),
-}).strict();
-export const AgentPeersProvisionViewSchema = z.object({
-  provisionId: z.string().uuid(),
-  available: z.boolean(),
-  hint: z.string().nullable(),
-  extraArguments: z.array(z.string()).max(64),
-}).strict();
-export const AgentPeersEventSchema = z.object({
-  projectId: z.string().uuid(),
-  edgeId: EntityIdSchema,
-}).strict();
+export const AgentPeersProvisionInputSchema = z
+  .object({
+    projectId: z.string().uuid(),
+    nodeId: EntityIdSchema,
+    adapterId: z.string().min(1).max(100),
+  })
+  .strict();
+export const AgentPeersProvisionViewSchema = z
+  .object({
+    provisionId: z.string().uuid(),
+    available: z.boolean(),
+    hint: z.string().nullable(),
+    extraArguments: z.array(z.string()).max(64),
+  })
+  .strict();
+export const AgentPeersEventSchema = z
+  .object({
+    projectId: z.string().uuid(),
+    edgeId: EntityIdSchema,
+  })
+  .strict();
 ```
 
 - Renderer API: `window.forgeboard.agentPeers.provision(input): Promise<AgentPeersProvisionView>` and `window.forgeboard.agentPeers.onEvent(cb): () => void`.
@@ -798,6 +910,7 @@ export const AgentPeersEventSchema = z.object({
 ### Task 10: Renderer — provision in the agent session launch flow
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/workspace/runs/agent-session/launch-config.ts`
 - Modify: `apps/desktop/src/renderer/src/components/workspace/terminal/useTerminalNodeController.ts` (options + prepare input)
 - Modify: `apps/desktop/src/renderer/src/components/workspace/terminal/types.ts` (`TerminalNodeConfiguration`)
@@ -805,6 +918,7 @@ export const AgentPeersEventSchema = z.object({
 - Test: `apps/desktop/src/renderer/src/components/workspace/runs/agent-session/launch-config.test.ts`, `AgentSessionNode.test.tsx` (both exist — append)
 
 **Interfaces:**
+
 - Consumes: `window.forgeboard.agentPeers.provision` (Task 9), `peerProvisionId` in `TerminalPrepareLaunchInputSchema` (Task 7).
 - Produces: `TerminalNodeConfiguration` gains `readonly peerProvisionId?: string`; `agentSessionLaunch` gains a 4th parameter `peers: { provisionId: string; extraArguments: readonly string[] } | null` and appends `extraArguments` to argv; `AgentSessionNode` calls provision before `prepareLaunch()` and shows the hint chip when `available === false`.
 
@@ -825,16 +939,21 @@ export const AgentPeersEventSchema = z.object({
 ### Task 11: Edge pulse on message transit
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/workspace/shell/Workspace.tsx` (subscribe + transient class)
 - Modify: the stylesheet defining `.workflow-edge-runtime` styles (locate: `grep -rn "workflow-edge-runtime" apps/desktop/src/renderer --include=*.css`)
 - Test: `apps/desktop/src/renderer/src/components/workspace/shell/Workspace.test.tsx` if it exists (check; otherwise a focused hook test — create `apps/desktop/src/renderer/src/components/workspace/canvas/usePeerTransitPulse.ts` + `.test.ts` and keep Workspace's diff minimal)
 
 **Interfaces:**
+
 - Consumes: `window.forgeboard.agentPeers.onEvent` (Task 9); edge `className` passthrough (`Workspace.tsx:1193`).
 - Produces: hook
 
 ```ts
-export function usePeerTransitPulse(subscribe: (cb: (event: { edgeId: string }) => void) => () => void, durationMs?: number): ReadonlySet<string>; // edge ids currently pulsing
+export function usePeerTransitPulse(
+  subscribe: (cb: (event: { edgeId: string }) => void) => () => void,
+  durationMs?: number,
+): ReadonlySet<string>; // edge ids currently pulsing
 ```
 
 - [ ] **Step 1: Write the failing hook test** (`// @vitest-environment jsdom`, `renderHook` from `@testing-library/react`): emitting an event adds the edge id to the set; after `durationMs` (fake timers) it is removed; unsubscribes on unmount.
@@ -850,7 +969,10 @@ export function usePeerTransitPulse(subscribe: (cb: (event: { edgeId: string }) 
   animation: peer-transit-pulse 0.8s ease-in-out 2;
 }
 @keyframes peer-transit-pulse {
-  50% { stroke-width: 3.5; opacity: 1; }
+  50% {
+    stroke-width: 3.5;
+    opacity: 1;
+  }
 }
 ```
 
@@ -863,11 +985,12 @@ export function usePeerTransitPulse(subscribe: (cb: (event: { edgeId: string }) 
 ### Task 12: End-to-end smoke + wrap-up
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/2026-07-20-agent-peer-channels-design.md` (append a short "Implementation deviations of record" block mirroring Global Constraints deviations 1-3)
 
 - [ ] **Step 1: Full test + typecheck sweep:** `pnpm test:unit` and the repo typecheck script — all green.
 
-- [ ] **Step 2: Manual smoke (dev app):** launch the app (`pnpm dev` per repo scripts), create two claude agent nodes connected by a context edge, Start both sessions, and in one type: *"Use list_agents, then send_message asking the other agent to reply with the word pong."* Verify: (a) tools appear (`/mcp` in the claude session shows `forgeboard`); (b) the message lands typed into the peer terminal with the `[from …]` prefix; (c) the edge pulses; (d) the peer's reply arrives back; (e) muting the edge in the inspector makes the next send return `muted`; (f) 7 rapid messages → `rate-limited`.
+- [ ] **Step 2: Manual smoke (dev app):** launch the app (`pnpm dev` per repo scripts), create two claude agent nodes connected by a context edge, Start both sessions, and in one type: _"Use list_agents, then send_message asking the other agent to reply with the word pong."_ Verify: (a) tools appear (`/mcp` in the claude session shows `forgeboard`); (b) the message lands typed into the peer terminal with the `[from …]` prefix; (c) the edge pulses; (d) the peer's reply arrives back; (e) muting the edge in the inspector makes the next send return `muted`; (f) 7 rapid messages → `rate-limited`.
 
 - [ ] **Step 3: Append the deviations block to the spec**, commit spec + any smoke fixes (staging protocol): `docs: record agent peer channels implementation deviations`.
 

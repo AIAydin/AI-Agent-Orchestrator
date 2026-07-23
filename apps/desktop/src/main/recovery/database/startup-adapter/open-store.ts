@@ -400,7 +400,13 @@ function stableDatabaseIdentity(databasePath: string): ExpectedDatabaseIdentity 
   if (!stats.isFile() || stats.isSymbolicLink() || realpathSync(databasePath) !== databasePath) {
     throw new Error('The local database path is not a stable ordinary file.');
   }
-  return { dev: stats.dev, ino: stats.ino };
+  return {
+    dev: stats.dev,
+    ino: stats.ino,
+    ctimeMs: stats.ctimeMs,
+    mtimeMs: stats.mtimeMs,
+    size: stats.size,
+  };
 }
 
 async function reconcileBeforeOpen(

@@ -2,6 +2,9 @@ packages:
   - apps/*
   - packages/*
 
+overrides:
+  typescript: 5.8.3
+
 allowBuilds:
   '@tailwindcss/oxide': true
   better-sqlite3: false
@@ -16,16 +19,16 @@ allowBuilds:
   '@forgeboard/windows-durable-fs': true
 
 catalog:
-  '@hocuspocus/provider': 4.4.0
-  '@hocuspocus/server': 4.4.0
-  '@playwright/test': 1.61.1
-  '@tailwindcss/vite': 4.3.3
-  '@tanstack/react-query': 5.101.4
-  '@testing-library/jest-dom': 7.0.0
-  '@testing-library/react': 16.3.2
+  '@hocuspocus/provider': 3.4.4
+  '@hocuspocus/server': 3.4.4
+  '@playwright/test': 1.53.2
+  '@tailwindcss/vite': 4.1.11
+  '@tanstack/react-query': 5.81.5
+  '@testing-library/jest-dom': 6.6.3
+  '@testing-library/react': 16.3.0
   '@types/react': 19.1.8
   '@types/react-dom': 19.1.6
-  '@vitejs/plugin-react': 6.0.4
+  '@vitejs/plugin-react': 4.6.0
   '@xterm/addon-fit': 0.10.0
   '@xterm/xterm': 5.5.0
   '@xyflow/react': 12.8.2
@@ -42,10 +45,10 @@ catalog:
   tailwindcss: 4.1.11
   tsup: 8.5.0
   vite: 6.3.5
-  vitest: 4.1.10
+  vitest: 3.2.4
   yjs: 13.6.27
   zod: 3.25.67
   zustand: 5.0.6
 
 minimumReleaseAgeExclude:
-  - pnpm@11.13.0
+  - pnpm@11.15.1

@@ -21,6 +21,6 @@
   },
   "devDependencies": {
     "tsup": "catalog:",
-    "vitest": "4.1.10"
+    "vitest": "3.2.4"
   }
 }

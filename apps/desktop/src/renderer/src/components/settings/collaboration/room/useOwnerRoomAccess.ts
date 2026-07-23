@@ -21,8 +21,10 @@ type OwnerAccessOperation = Promise<IpcResult<CollaborationOwnerSessionView | nu
 export function useOwnerRoomAccess(options: OwnerRoomAccessOptions) {
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
 
-  async function bootstrapRoom(input: CollaborationRoomBootstrapJoinInput): Promise<void> {
-    await run(() => window.forgeboard.collaboration?.bootstrapRoomAndJoin(input), {
+  async function bootstrapRoom(
+    input: CollaborationRoomBootstrapJoinInput,
+  ): Promise<CollaborationOwnerSessionView | null> {
+    return run(() => window.forgeboard.collaboration?.bootstrapRoomAndJoin(input), {
       cancelled: 'Room creation was cancelled.',
       success: 'Created and connected to the collaboration room.',
     });
@@ -45,24 +47,32 @@ export function useOwnerRoomAccess(options: OwnerRoomAccessOptions) {
   async function run(
     action: () => OwnerAccessOperation | undefined,
     labels: { cancelled: string; success: string },
-  ): Promise<void> {
-    if (!options.beginOperation()) return;
+  ): Promise<CollaborationOwnerSessionView | null> {
+    if (!options.beginOperation()) return null;
     options.setMessage(null);
     try {
       const operation = action();
       if (operation === undefined) {
         options.setMessage('Collaboration is unavailable in this desktop build.');
-        return;
+        return null;
       }
       const result = await operation;
-      if (!result.ok) return options.setMessage(result.error.message);
-      if (result.value === null) return options.setMessage(labels.cancelled);
+      if (!result.ok) {
+        options.setMessage(result.error.message);
+        return null;
+      }
+      if (result.value === null) {
+        options.setMessage(labels.cancelled);
+        return null;
+      }
       options.setConnection(result.value.connection);
       setExpiresAt(result.value.expiresAt);
       options.onConnected();
       options.setMessage(labels.success);
+      return result.value;
     } catch {
       options.setMessage('Forgeboard could not validate the collaboration response.');
+      return null;
     } finally {
       options.endOperation();
     }

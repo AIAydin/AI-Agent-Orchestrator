@@ -23,8 +23,8 @@ export function ExtensionNodeFace({ id, data }: NodeFaceProps): JSX.Element {
     return (
       <section className="node-face extension-node-face" aria-label="Extension node">
         <p className="node-face-hint">
-          This extension node is missing its definition. Reinstall or update the extension to edit it
-          here.
+          This extension node is missing its definition. Reinstall or update the extension to edit
+          it here.
         </p>
       </section>
     );

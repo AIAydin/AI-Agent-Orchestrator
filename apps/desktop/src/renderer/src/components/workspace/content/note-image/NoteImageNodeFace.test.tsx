@@ -145,7 +145,11 @@ describe('NoteImageNodeFace', () => {
 
   it('relinks an image through the chooser', async () => {
     loadImage.mockResolvedValue({ status: 'unavailable' });
-    chooseImage.mockResolvedValue({ projectId: 'p1', relativePath: 'docs/moved.png', missing: false });
+    chooseImage.mockResolvedValue({
+      projectId: 'p1',
+      relativePath: 'docs/moved.png',
+      missing: false,
+    });
     renderFace({
       images: [{ projectId: 'p1', relativePath: 'docs/hero.png', kind: 'image', missing: false }],
       altText: { 'docs/hero.png': 'Hero' },
@@ -164,7 +168,13 @@ describe('NoteImageNodeFace', () => {
 
   it('reuses an image already on the canvas', () => {
     renderFace({}, [
-      { id: 'file-1', title: 'Canvas hero', projectId: 'p1', relativePath: 'docs/hero.png', missing: false },
+      {
+        id: 'file-1',
+        title: 'Canvas hero',
+        projectId: 'p1',
+        relativePath: 'docs/hero.png',
+        missing: false,
+      },
     ]);
     fireEvent.click(screen.getByRole('button', { name: 'Image settings' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Include image Canvas hero' }));

@@ -88,13 +88,22 @@ describe('canonical desktop canvas adapter', () => {
 
     expect(synchronized.ok).toBe(true);
     if (!synchronized.ok) return;
-    expect(synchronized.document.nodes[0]).toMatchObject({ width: 320, height: 180 });
-    expect(synchronized.document.canonical.nodes[0]?.size).toEqual({ width: 320, height: 180 });
+    expect(synchronized.document.nodes[0]).toMatchObject({
+      width: 320,
+      height: 180,
+    });
+    expect(synchronized.document.canonical.nodes[0]?.size).toEqual({
+      width: 320,
+      height: 180,
+    });
 
     const reloaded = synchronizeCanvasDocument(synchronized.document);
     expect(reloaded.ok).toBe(true);
     if (!reloaded.ok) return;
-    expect(reloaded.document.nodes[0]).toMatchObject({ width: 320, height: 180 });
+    expect(reloaded.document.nodes[0]).toMatchObject({
+      width: 320,
+      height: 180,
+    });
   });
 
   it('normalizes legacy group bounds to the shared default and rendering floor', () => {
@@ -177,7 +186,11 @@ describe('canonical desktop canvas adapter', () => {
                   createdAt: T1,
                 },
               ],
-              resources: { cpuUnits: 2, memoryMb: 1024, exclusiveKeys: ['worktree:agent-1'] },
+              resources: {
+                cpuUnits: 2,
+                memoryMb: 1024,
+                exclusiveKeys: ['worktree:agent-1'],
+              },
               data: {
                 ...candidate.data,
                 tokenUsage: { inputTokens: 12, outputTokens: 8 },
@@ -196,7 +209,11 @@ describe('canonical desktop canvas adapter', () => {
           locked: false,
         },
       ],
-      workflowLimits: { maximumConcurrency: 2, maximumCpuUnits: 8, maximumMemoryMb: 8192 },
+      workflowLimits: {
+        maximumConcurrency: 2,
+        maximumCpuUnits: 8,
+        maximumMemoryMb: 8192,
+      },
       updatedAt: T1,
     };
     const surface = legacySurfaceFromCanonical(canonical);
@@ -206,7 +223,10 @@ describe('canonical desktop canvas adapter', () => {
       updatedAt: T2,
       nodes: surface.nodes.map((candidate) =>
         candidate.id === 'agent-1'
-          ? { ...candidate, data: { ...candidate.data, title: 'Edited agent title' } }
+          ? {
+              ...candidate,
+              data: { ...candidate.data, title: 'Edited agent title' },
+            }
           : candidate,
       ),
     };
@@ -219,7 +239,11 @@ describe('canonical desktop canvas adapter', () => {
       title: 'Edited agent title',
       status: 'ready',
       comments: [{ body: 'Keep this durable review note.' }],
-      resources: { cpuUnits: 2, memoryMb: 1024, exclusiveKeys: ['worktree:agent-1'] },
+      resources: {
+        cpuUnits: 2,
+        memoryMb: 1024,
+        exclusiveKeys: ['worktree:agent-1'],
+      },
       data: { tokenUsage: { inputTokens: 12, outputTokens: 8 } },
     });
     expect(migrated.canvas.groups).toEqual(canonical.groups);
@@ -612,13 +636,20 @@ describe('canonical desktop canvas adapter', () => {
   it('fails closed on path-bearing or non-UUID Diff review targets', () => {
     const invalidTargets = [
       { kind: 'primary', root: '/private/repository' },
-      { kind: 'agent-run', runId: AGENT_RUN_ID, worktreePath: '/private/worktree' },
+      {
+        kind: 'agent-run',
+        runId: AGENT_RUN_ID,
+        worktreePath: '/private/worktree',
+      },
       { kind: 'agent-run', runId: 'renderer-selected-folder' },
     ];
 
     for (const reviewTarget of invalidTargets) {
       const migrated = canonicalCanvasFromLegacy(
-        legacy({ nodes: [node('diff-1', 'diff', { reviewTarget })], edges: [] }),
+        legacy({
+          nodes: [node('diff-1', 'diff', { reviewTarget })],
+          edges: [],
+        }),
       );
       expect(migrated).toMatchObject({
         ok: false,
@@ -648,6 +679,7 @@ describe('canonical desktop canvas adapter', () => {
             previewSideBySide: true,
             browserAuthenticationEnabled: true,
             agentBrowserAccess: true,
+            agentBrowserInteraction: true,
             previewComparison: {
               leftTarget: previewTarget,
               rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
@@ -691,6 +723,7 @@ describe('canonical desktop canvas adapter', () => {
         sideBySide: true,
         browserAuthenticationEnabled: true,
         agentBrowserAccess: true,
+        agentBrowserInteraction: true,
         comparison: {
           leftTarget: previewTarget,
           rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
@@ -717,6 +750,7 @@ describe('canonical desktop canvas adapter', () => {
       previewSideBySide: true,
       browserAuthenticationEnabled: true,
       agentBrowserAccess: true,
+      agentBrowserInteraction: true,
       previewComparison: {
         leftTarget: previewTarget,
         rightTarget: { kind: 'agent-run', runId: COMPETING_RUN_ID },
@@ -814,7 +848,11 @@ describe('canonical desktop canvas adapter', () => {
           priority: 'high',
           assigneeId: 'agent-1',
           acceptanceCriteria: [
-            { id: 'criterion-1', description: 'Focused tests pass.', satisfied: false },
+            {
+              id: 'criterion-1',
+              description: 'Focused tests pass.',
+              satisfied: false,
+            },
           ],
           relatedFiles: [
             {
@@ -1113,7 +1151,10 @@ describe('canonical desktop canvas adapter', () => {
 
   it('fails closed instead of discarding non-JSON renderer metadata', () => {
     const migrated = canonicalCanvasFromLegacy(
-      legacy({ nodes: [node('agent-1', 'agent', { unsafe: undefined })], edges: [] }),
+      legacy({
+        nodes: [node('agent-1', 'agent', { unsafe: undefined })],
+        edges: [],
+      }),
     );
     expect(migrated).toEqual({
       ok: false,

@@ -273,20 +273,19 @@ function ProjectTreeEntry({
     if (!safe) {
       return (
         <WorkspaceTooltip content={entry.policy.reason ?? policyLabel(entry)}>
-          <button
-            type="button"
+          <div
             role="treeitem"
             className="workspace-project-tree-row"
             style={indent}
-            disabled
             aria-level={depth + 1}
+            aria-disabled="true"
             aria-label={`Folder ${entry.relativePath} (${policyLabel(entry)})`}
           >
             <span className="workspace-project-tree-gutter" aria-hidden="true" />
             <Folder size={13} aria-hidden="true" />
             <span>{label}</span>
             <ShieldAlert size={12} aria-hidden="true" />
-          </button>
+          </div>
         </WorkspaceTooltip>
       );
     }

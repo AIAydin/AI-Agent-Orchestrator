@@ -1,6 +1,11 @@
 import { createContext, useContext, type ReactNode } from 'react';
 
-import type { AgentDetection, AppSettings, Project, RunAdapterId } from '../../../../../../shared/application/contracts.js';
+import type {
+  AgentDetection,
+  AppSettings,
+  Project,
+  RunAdapterId,
+} from '../../../../../../shared/application/contracts.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import type { DiffReviewOpenRequest } from '../../diff-review/DiffReviewNodeInspector.js';
 import type { AgentProviderGate } from '../useAgentProviderGate.js';

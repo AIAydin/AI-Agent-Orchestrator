@@ -35,6 +35,7 @@
 ### Task 1: Main-process webview security hardening
 
 **Files:**
+
 - Create: `src/shared/preview/webview-partition.ts`
 - Create: `src/shared/preview/webview-partition.test.ts`
 - Create: `src/main/previews/webview/webview-security.ts`
@@ -42,6 +43,7 @@
 - Modify: `src/main/index.ts` (`:4` electron import adds `shell`; `:201-209` webPreferences; `:242` attach guard; after `:68` install app-level policy)
 
 **Interfaces:**
+
 - Consumes: `validatedSurfaceUrl`, `isAllowedSurfaceRequest` from `src/main/previews/surface/url-policy.ts` (kept permanently).
 - Produces (used by Tasks 3-5 renderer code and this task's wiring; names must match exactly):
 
@@ -65,21 +67,26 @@ export function hardenAttachingWebviewPreferences(webPreferences: Record<string,
 export function allowedGuestNavigation(candidate: string, allowed: URL | null): boolean;
 export function isAllowedGuestRequest(candidate: string): boolean;
 export function installPreviewWebviewSecurity(
-  app: { on(event: 'web-contents-created', listener: (event: unknown, contents: Electron.WebContents) => void): unknown },
+  app: {
+    on(
+      event: 'web-contents-created',
+      listener: (event: unknown, contents: Electron.WebContents) => void,
+    ): unknown;
+  },
   options: PreviewWebviewSecurityOptions,
 ): void;
 ```
 
 **Security-policy parity audit** (`security-policy.ts` → new home; all covered by tests below):
 
-| `installPreviewSurfaceSecurity` (WebContentsView) | `webview-security.ts` |
-| --- | --- |
-| `setWindowOpenHandler` → deny | deny + confirmed `openExternal` handoff (http/https only) |
-| `will-navigate` / `will-frame-navigate` origin filter | `allowedGuestNavigation` with per-guest origin pin |
-| `will-attach-webview` → prevent (no nesting) | same, on every guest |
-| permission check/request → false | `hardenGuestSession` |
-| `will-download` → prevent | `hardenGuestSession` |
-| `webRequest.onBeforeRequest` loopback/ws filter | `isAllowedGuestRequest` |
+| `installPreviewSurfaceSecurity` (WebContentsView)     | `webview-security.ts`                                     |
+| ----------------------------------------------------- | --------------------------------------------------------- |
+| `setWindowOpenHandler` → deny                         | deny + confirmed `openExternal` handoff (http/https only) |
+| `will-navigate` / `will-frame-navigate` origin filter | `allowedGuestNavigation` with per-guest origin pin        |
+| `will-attach-webview` → prevent (no nesting)          | same, on every guest                                      |
+| permission check/request → false                      | `hardenGuestSession`                                      |
+| `will-download` → prevent                             | `hardenGuestSession`                                      |
+| `webRequest.onBeforeRequest` loopback/ws filter       | `isAllowedGuestRequest`                                   |
 
 - [ ] **Step 1: Write the failing tests.**
 
@@ -153,8 +160,9 @@ class FakeWebRequest {
 class FakeSession extends EventEmitter {
   webRequest = new FakeWebRequest();
   permissionCheck: (() => boolean) | null = null;
-  permissionRequest: ((contents: unknown, permission: string, callback: (granted: boolean) => void) => void) | null =
-    null;
+  permissionRequest:
+    | ((contents: unknown, permission: string, callback: (granted: boolean) => void) => void)
+    | null = null;
   setPermissionCheckHandler(handler: FakeSession['permissionCheck']): void {
     this.permissionCheck = handler;
   }
@@ -324,14 +332,20 @@ describe('shouldAttachPreviewWebview', () => {
   it('requires a preview partition, no preload, and a loopback (or blank) src', () => {
     expect(shouldAttachPreviewWebview({ partition: 'preview:p1:n1', src: ALLOWED })).toBe(true);
     expect(shouldAttachPreviewWebview({ partition: 'preview:p1:n1' })).toBe(true);
-    expect(shouldAttachPreviewWebview({ partition: 'persist:preview:p1:n1', src: ALLOWED })).toBe(false);
+    expect(shouldAttachPreviewWebview({ partition: 'persist:preview:p1:n1', src: ALLOWED })).toBe(
+      false,
+    );
     expect(shouldAttachPreviewWebview({ partition: 'other', src: ALLOWED })).toBe(false);
     expect(shouldAttachPreviewWebview({ src: ALLOWED })).toBe(false);
     expect(
       shouldAttachPreviewWebview({ partition: 'preview:p1:n1', src: 'https://example.com/' }),
     ).toBe(false);
     expect(
-      shouldAttachPreviewWebview({ partition: 'preview:p1:n1', src: ALLOWED, preload: '/tmp/x.js' }),
+      shouldAttachPreviewWebview({
+        partition: 'preview:p1:n1',
+        src: ALLOWED,
+        preload: '/tmp/x.js',
+      }),
     ).toBe(false);
   });
 });
@@ -477,7 +491,11 @@ export function allowedGuestNavigation(candidate: string, allowed: URL | null): 
 
 /** Session-level request filter: loopback-only, with ws/wss mapped onto http/https validation. */
 export function isAllowedGuestRequest(candidate: string): boolean {
-  if (candidate === 'about:blank' || candidate.startsWith('data:') || candidate.startsWith('blob:')) {
+  if (
+    candidate === 'about:blank' ||
+    candidate.startsWith('data:') ||
+    candidate.startsWith('blob:')
+  ) {
     return true;
   }
   const normalized = candidate.startsWith('wss:')
@@ -582,50 +600,50 @@ import {
 } from './previews/webview/webview-security.js';
 ```
 
-  - In `createWindow` webPreferences (`:201-209`) add `webviewTag: true,` after `sandbox: true,`.
-  - Replace line 242 (`window.webContents.on('will-attach-webview', (event) => event.preventDefault());`) with:
+- In `createWindow` webPreferences (`:201-209`) add `webviewTag: true,` after `sandbox: true,`.
+- Replace line 242 (`window.webContents.on('will-attach-webview', (event) => event.preventDefault());`) with:
 
 ```ts
-  // Webviews are allowed only for sandboxed, partition-scoped local previews.
-  window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
-    if (!shouldAttachPreviewWebview(params as unknown as Record<string, unknown>)) {
-      event.preventDefault();
-      return;
-    }
-    hardenAttachingWebviewPreferences(webPreferences as unknown as Record<string, unknown>);
-  });
+// Webviews are allowed only for sandboxed, partition-scoped local previews.
+window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+  if (!shouldAttachPreviewWebview(params as unknown as Record<string, unknown>)) {
+    event.preventDefault();
+    return;
+  }
+  hardenAttachingWebviewPreferences(webPreferences as unknown as Record<string, unknown>);
+});
 ```
 
-  - In `whenReady` immediately after `services = registerIpcHandlers(store);` (`:68`):
+- In `whenReady` immediately after `services = registerIpcHandlers(store);` (`:68`):
 
 ```ts
-    installPreviewWebviewSecurity(app, {
-      confirmOpenExternal: async (url) => {
-        const parent = mainWindow;
-        if (!parent || parent.isDestroyed()) return false;
-        const decision = await dialog.showMessageBox(parent, {
-          type: 'warning',
-          title: 'Open link in your browser?',
-          message: 'The preview wants to open a page outside Forgeboard.',
-          detail: url,
-          buttons: ['Cancel', 'Open in browser'],
-          defaultId: 0,
-          cancelId: 0,
-          noLink: true,
-        });
-        return decision.response === 1;
-      },
-      openExternal: async (url) => {
-        await shell.openExternal(url, { activate: true });
-      },
-      audit: (action, outcome, metadata) => {
-        try {
-          store?.appendAudit('preview-webview', action, outcome, metadata);
-        } catch {
-          // Audit storage failure must not change an enforcement decision.
-        }
-      },
+installPreviewWebviewSecurity(app, {
+  confirmOpenExternal: async (url) => {
+    const parent = mainWindow;
+    if (!parent || parent.isDestroyed()) return false;
+    const decision = await dialog.showMessageBox(parent, {
+      type: 'warning',
+      title: 'Open link in your browser?',
+      message: 'The preview wants to open a page outside Forgeboard.',
+      detail: url,
+      buttons: ['Cancel', 'Open in browser'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
     });
+    return decision.response === 1;
+  },
+  openExternal: async (url) => {
+    await shell.openExternal(url, { activate: true });
+  },
+  audit: (action, outcome, metadata) => {
+    try {
+      store?.appendAudit('preview-webview', action, outcome, metadata);
+    } catch {
+      // Audit storage failure must not change an enforcement decision.
+    }
+  },
+});
 ```
 
 - [ ] **Step 5: Run tests + typecheck.**
@@ -646,6 +664,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 2: Per-kind dimensions for preview nodes
 
 **Files:**
+
 - Modify: `src/shared/canvas/node-dimensions.ts` (append)
 - Modify: `src/renderer/src/components/workspace/model/node-persistence.ts` (`:12-35`)
 - Modify: `src/renderer/src/components/workspace/canvas/CanvasNode.tsx` (`:9-12` imports, `:192-196` minimum)
@@ -653,6 +672,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Test: `src/renderer/src/components/workspace/model/node-persistence.test.ts` (append)
 
 **Interfaces:**
+
 - Produces (Task 4's CSS/size expectations depend on these): `WEB_PREVIEW_NODE_DEFAULT_DIMENSIONS = { width: 640, height: 480 }`, `WEB_PREVIEW_NODE_MINIMUM_DIMENSIONS = { width: 400, height: 300 }`, `MOBILE_PREVIEW_NODE_DEFAULT_DIMENSIONS = { width: 420, height: 640 }`, `MOBILE_PREVIEW_NODE_MINIMUM_DIMENSIONS = { width: 320, height: 480 }`, and `defaultNodeDimensionsForKind(kind: string)` / `minimumNodeDimensionsForKind(kind: string)`, all exported from `src/shared/canvas/node-dimensions.ts`.
 
 - [ ] **Step 1: Write the failing tests** — append to `node-persistence.test.ts` (matching its existing style):
@@ -751,16 +771,16 @@ export function initialWorkshopNodeDimensions(kind: NodeKind): {
 ```
 
 ```ts
-  const minimum =
-    node.data.kind === 'group-frame'
-      ? GROUP_FRAME_MINIMUM_DIMENSIONS
-      : minimumNodeDimensionsForKind(node.data.kind);
+const minimum =
+  node.data.kind === 'group-frame'
+    ? GROUP_FRAME_MINIMUM_DIMENSIONS
+    : minimumNodeDimensionsForKind(node.data.kind);
 ```
 
 `CanvasNode.tsx` — replace the import of `AGENT_NODE_MINIMUM_DIMENSIONS, CANVAS_NODE_MINIMUM_DIMENSIONS` (`:9-12`) with `minimumNodeDimensionsForKind`, and lines 192-196 with:
 
 ```ts
-  const minimum = groupFrame ? GROUP_FRAME_MINIMUM : minimumNodeDimensionsForKind(data.kind);
+const minimum = groupFrame ? GROUP_FRAME_MINIMUM : minimumNodeDimensionsForKind(data.kind);
 ```
 
 `canvas.css` — after the agent `:has()` rule at `:145-148`:
@@ -792,12 +812,14 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 3: Shared PreviewWebview element wrapper
 
 **Files:**
+
 - Create: `src/shared/preview/console.ts`
 - Create: `src/renderer/src/components/preview/webview/webview.d.ts`
 - Create: `src/renderer/src/components/preview/webview/PreviewWebview.tsx`
 - Test: `src/renderer/src/components/preview/webview/PreviewWebview.test.tsx`
 
 **Interfaces:**
+
 - Produces (used by Tasks 4-6; names must match exactly):
 
 ```ts
@@ -1110,7 +1132,9 @@ export const PreviewWebview = forwardRef<PreviewWebviewHandle, PreviewWebviewPro
         ],
         [
           'did-fail-load',
-          ((event: Event & { errorCode?: number; errorDescription?: string; isMainFrame?: boolean }) => {
+          ((
+            event: Event & { errorCode?: number; errorDescription?: string; isMainFrame?: boolean },
+          ) => {
             if (event.isMainFrame === false || event.errorCode === -3) return;
             publish({
               status: 'failed',
@@ -1130,7 +1154,14 @@ export const PreviewWebview = forwardRef<PreviewWebviewHandle, PreviewWebviewPro
         ],
         [
           'console-message',
-          ((event: Event & { level?: unknown; message?: unknown; line?: unknown; sourceId?: unknown }) => {
+          ((
+            event: Event & {
+              level?: unknown;
+              message?: unknown;
+              line?: unknown;
+              sourceId?: unknown;
+            },
+          ) => {
             onConsoleRef.current?.({
               level: consoleLevel(event.level),
               message:
@@ -1196,7 +1227,8 @@ export const PreviewWebview = forwardRef<PreviewWebviewHandle, PreviewWebviewPro
 );
 
 function consoleLevel(level: unknown): PreviewConsoleLevel {
-  if (level === 'debug' || level === 'info' || level === 'warning' || level === 'error') return level;
+  if (level === 'debug' || level === 'info' || level === 'warning' || level === 'error')
+    return level;
   if (typeof level === 'number') {
     if (level >= 3) return 'error';
     if (level === 2) return 'warning';
@@ -1222,12 +1254,14 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 4: Port-only preview node faces
 
 **Files:**
+
 - Create: `src/renderer/src/components/workspace/previews/PreviewNodeFace.tsx`
 - Create: `src/renderer/src/components/workspace/previews/preview-node-face.css`
 - Modify: `src/renderer/src/components/workspace/canvas/CanvasNode.tsx` (`WorkshopNodeData` around `:151`; render branch at `:303-335`)
 - Test: `src/renderer/src/components/workspace/previews/PreviewNodeFace.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `useAgentSession()` (existing `AgentSessionContextValue`: `project`, `graphReadOnly`, `updateNodeData`, `recordHistory`), `useCanvasNodeInteractions()`, `previewWebviewPartition` (Task 1), `PreviewWebview`/`PreviewWebviewHandle`/`PreviewWebviewStatus` (Task 3), `previewPreset`/`orientedViewport` from `../../preview/devices/presets.js`.
 - Produces: `export function PreviewNodeFace({ id, kind, data }: { id: string; kind: 'web-preview' | 'mobile-preview'; data: WorkshopNodeData }): JSX.Element` and the `previewPort?: number | undefined;` field on `WorkshopNodeData`.
 
@@ -1651,11 +1685,11 @@ webview.preview-face-webview {
   - After `const agentWindow = isAgent && !data.collapsed;` (`:200`) add:
 
 ```ts
-  const previewFace =
-    (data.kind === 'web-preview' || data.kind === 'mobile-preview') && !data.collapsed;
+const previewFace =
+  (data.kind === 'web-preview' || data.kind === 'mobile-preview') && !data.collapsed;
 ```
 
-  - Replace the body block at `:303-304`:
+- Replace the body block at `:303-304`:
 
 ```tsx
       {agentWindow && <AgentSessionNode id={id} data={data} />}
@@ -1665,7 +1699,7 @@ webview.preview-face-webview {
       {!agentWindow && !previewFace && definition.behaviors.collapsible && !data.collapsed && (
 ```
 
-  (The generic `<header>` with the collapse pill, lock icon, and status dot stays for preview kinds — collapse/lock/resize behaviors are unchanged.)
+(The generic `<header>` with the collapse pill, lock icon, and status dot stays for preview kinds — collapse/lock/resize behaviors are unchanged.)
 
 - [ ] **Step 5: Run tests + typecheck.**
 
@@ -1689,6 +1723,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 5: Migrate the PreviewSurface modal and comparison view to the webview
 
 **Files:**
+
 - Create: `src/renderer/src/components/preview/webview/usePreviewConsoleBuffer.ts`
 - Rewrite: `src/renderer/src/components/preview/surface/DeviceFrameHost.tsx`
 - Modify: `src/renderer/src/components/preview/surface/PreviewSurface.tsx` (drop `operations`, screenshot, open-external; console from webview)
@@ -1700,6 +1735,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Modify: `e2e/preview.spec.ts` (remove the screenshot step at `:129-130` and any `Touchscreen mode on` / open-in-browser assertions — verify with `grep -n "screenshot\|Touchscreen\|Open in browser" apps/desktop/e2e/preview.spec.ts`)
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
@@ -1840,7 +1876,10 @@ export function usePreviewConsoleBuffer(): {
       const entries = [...current.entries, entry];
       let retainedBytes = current.retainedBytes + utf8Length(entry.message);
       let truncated = current.truncated;
-      while (entries.length > MAX_PREVIEW_CONSOLE_ENTRIES || retainedBytes > MAX_PREVIEW_CONSOLE_BYTES) {
+      while (
+        entries.length > MAX_PREVIEW_CONSOLE_ENTRIES ||
+        retainedBytes > MAX_PREVIEW_CONSOLE_BYTES
+      ) {
         const removed = entries.shift();
         if (!removed) break;
         retainedBytes -= utf8Length(removed.message);
@@ -1998,6 +2037,7 @@ webview.preview-device-webview {
 ```
 
 `PreviewSurface.tsx` edits (concrete):
+
 - Remove the `Camera` import, the `operations` prop (and its type import), the screenshot button (`:166-179`), the open-external button (`:180-194`), and the `actionStatus` state + status paragraph (`:55`, `:200-204`).
 - Change `primaryView` state type to `PreviewWebviewStatus | null` (import from `../webview/PreviewWebview.js`); `DeviceFrameHost` props at `:207-230` lose `operations` and gain nothing else.
 - Add `const consoleBuffer = usePreviewConsoleBuffer();`, pass `onConsole={consoleBuffer.append}` to the primary `DeviceFrameHost`, replace `browserConsole={browserConsole}` state with `browserConsole={consoleBuffer.view}` and delete the old `browserConsole` state/`onConsole` wiring.
@@ -2029,6 +2069,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 6: Retire the WebContentsView surface runtime
 
 **Files:**
+
 - Delete: `src/main/previews/surface/runtime.ts`, `src/main/previews/surface/runtime.test.ts`, `src/main/previews/surface/security-policy.ts`
 - Keep: `src/main/previews/surface/url-policy.ts` + `url-policy.test.ts` (now consumed by `webview-security.ts`)
 - Modify: `src/main/previews/preview-ipc.ts` — remove the `PreviewSurfaceRuntime` field and construction (`:87`, `:103-110`), the surface schema imports (`:34-43`), all `PREVIEW_SURFACE_IPC_CHANNELS.*` handler registrations (`:153-215`), the `closeNode` finally-block in `previewsStop` (`:140-143`), `#surfaces.reset()` (`:226`), `#surfaces.dispose()` (`:257`), `#surfaces.closeOwner(ownerId)` (`:342`), and the now-unused `#sendSurface` (`:322-329`)

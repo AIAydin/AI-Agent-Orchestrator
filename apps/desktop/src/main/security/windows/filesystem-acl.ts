@@ -23,17 +23,6 @@ const DANGEROUS_PARENT_RIGHTS =
   0x40000 | // Change permissions.
   0x80000; // Take ownership.
 
-const CURRENT_IDENTITY_SCRIPT = String.raw`
-$ErrorActionPreference = 'Stop'
-$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-if ($null -eq $identity.User) { throw 'The Windows token has no user SID.' }
-$result = [ordered]@{
-  schemaVersion = 2
-  sid = $identity.User.Value
-}
-[Console]::Out.Write(($result | ConvertTo-Json -Compress))
-`;
-
 const INSPECT_DIRECTORY_ACL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
 $target = $env:FORGEBOARD_WINDOWS_ACL_PATH
@@ -209,12 +198,19 @@ type RunPowerShell = (
   environment: Readonly<Record<string, string>>,
 ) => Promise<PowerShellResult>;
 
+type ResolveWindowsUserSid = () => Promise<string>;
+
 export class PowerShellWindowsFilesystemSecurity implements WindowsFilesystemSecurity {
   readonly #run: RunPowerShell;
+  readonly #resolveWindowsUserSid: ResolveWindowsUserSid;
   #currentSid: Promise<string> | undefined;
 
-  public constructor(run: RunPowerShell = runSystemPowerShell) {
+  public constructor(
+    run: RunPowerShell = runSystemPowerShell,
+    resolveWindowsUserSid: ResolveWindowsUserSid = resolveSystemWindowsUserSid,
+  ) {
     this.#run = run;
+    this.#resolveWindowsUserSid = resolveWindowsUserSid;
   }
 
   public async currentUserSid(): Promise<string> {
@@ -323,21 +319,11 @@ export class PowerShellWindowsFilesystemSecurity implements WindowsFilesystemSec
 
   async #resolveCurrentUserSid(): Promise<string> {
     try {
-      const { stdout } = await this.#run(CURRENT_IDENTITY_SCRIPT, {});
-      const parsed = JSON.parse(stdout) as unknown;
-      if (
-        !isRecord(parsed) ||
-        !hasExactKeys(parsed, ['schemaVersion', 'sid']) ||
-        parsed.schemaVersion !== ACL_SCHEMA_VERSION ||
-        typeof parsed.sid !== 'string'
-      ) {
-        throw new Error('Invalid Windows identity response.');
-      }
-      return assertWindowsSid(parsed.sid);
+      return assertWindowsSid(await this.#resolveWindowsUserSid());
     } catch {
       throw new WindowsAclBoundaryError(
         'identity-unavailable',
-        'Forgeboard could not verify the current Windows account SID. Reopen Forgeboard or repair Windows PowerShell before running an agent with context.',
+        'Forgeboard could not verify the current Windows account SID. Reopen Forgeboard or repair Windows identity services before running an agent with context.',
       );
     }
   }
@@ -637,7 +623,7 @@ async function runSystemPowerShell(
       ],
       {
         encoding: 'utf8',
-        env: powershellEnvironment(environment),
+        env: windowsAuthorityEnvironment(environment),
         killSignal: 'SIGKILL',
         maxBuffer: POWERSHELL_MAX_BUFFER_BYTES,
         shell: false,
@@ -656,8 +642,54 @@ async function runSystemPowerShell(
   });
 }
 
+async function resolveSystemWindowsUserSid(): Promise<string> {
+  const executable = systemWindowsPath('System32', 'whoami.exe');
+  return await new Promise((resolveSid, rejectSid) => {
+    const child = execFile(
+      executable,
+      ['/user', '/fo', 'csv', '/nh'],
+      {
+        encoding: 'utf8',
+        env: windowsAuthorityEnvironment({}),
+        killSignal: 'SIGKILL',
+        maxBuffer: POWERSHELL_MAX_BUFFER_BYTES,
+        shell: false,
+        timeout: POWERSHELL_TIMEOUT_MS,
+        windowsHide: true,
+      },
+      (error, stdout) => {
+        if (error !== null) {
+          rejectSid(new Error('The bounded Windows identity authority failed.'));
+          return;
+        }
+        try {
+          resolveSid(parseWindowsUserSid(stdout));
+        } catch (parseError) {
+          rejectSid(
+            parseError instanceof Error
+              ? parseError
+              : new Error('The Windows identity response could not be parsed.'),
+          );
+        }
+      },
+    );
+    child.stdin?.end();
+  });
+}
+
+export function parseWindowsUserSid(output: string): string {
+  const match = /,\s*"(S-\d+(?:-\d+){2,})"\s*$/u.exec(output.trim());
+  if (match?.[1] === undefined) throw new Error('Invalid Windows identity response.');
+  return assertWindowsSid(match[1]);
+}
+
 function systemPowerShellPath(): string {
-  const systemRoot = process.env['SystemRoot'] ?? process.env['WINDIR'];
+  return systemWindowsPath('System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+}
+
+function systemWindowsPath(...segments: readonly string[]): string {
+  const systemRoot =
+    process.env['SystemRoot'] ?? process.env['SYSTEMROOT'] ?? process.env['WINDIR'];
   if (
     systemRoot === undefined ||
     !path.win32.isAbsolute(systemRoot) ||
@@ -669,16 +701,10 @@ function systemPowerShellPath(): string {
       'Forgeboard could not resolve the system Windows permission authority. No agent context was launched.',
     );
   }
-  return path.win32.join(
-    path.win32.normalize(systemRoot),
-    'System32',
-    'WindowsPowerShell',
-    'v1.0',
-    'powershell.exe',
-  );
+  return path.win32.join(path.win32.normalize(systemRoot), ...segments);
 }
 
-function powershellEnvironment(
+function windowsAuthorityEnvironment(
   authorityValues: Readonly<Record<string, string>>,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { ...authorityValues };
