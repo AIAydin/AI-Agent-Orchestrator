@@ -1964,3 +1964,11 @@ unchecked when only a subset of their required behavior has proof.
   and peer tools expose bounded inspect, scroll, click, and type operations. All 84 focused browser,
   peer-service, renderer, and MCP tests passed, followed by zero-warning lint, workspace typecheck,
   documentation and quality checks, and the full production build.
+- 2026-07-23: CI now takes its single pnpm version from the repository `packageManager` declaration,
+  preventing action-setup drift across verification, packaging, and release jobs. The collaboration
+  image copies the local core package manifest and source before bundling the server, so its Docker
+  build no longer depends on source that exists only outside the image context. The exact CI Docker
+  build passed locally, including the supply-chain lock policy, collaboration-server declaration
+  build, startup smoke, production dependency deploy, and final non-root runtime image. Two
+  regression checks guard both configuration contracts; all five quality tests, zero-warning lint,
+  formatting, the 1,476-file structure gate, and the 854-file production-control audit passed.

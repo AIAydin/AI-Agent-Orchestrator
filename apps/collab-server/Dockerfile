@@ -6,11 +6,13 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY config/tooling ./config/tooling
 COPY apps/collab-server/package.json apps/collab-server/tsconfig.json ./apps/collab-server/
+COPY packages/core/package.json packages/core/tsconfig.json ./packages/core/
 RUN --mount=type=cache,id=forgeboard-pnpm-store,target=/pnpm/store \
   pnpm config set store-dir /pnpm/store \
   && pnpm install --frozen-lockfile --filter @forgeboard/collab-server...
 
 COPY apps/collab-server ./apps/collab-server
+COPY packages/core/src ./packages/core/src
 RUN pnpm --filter @forgeboard/collab-server build
 RUN pnpm deploy --legacy --filter @forgeboard/collab-server --prod /opt/forgeboard-collab
 
