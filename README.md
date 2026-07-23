@@ -1,5 +1,18 @@
 # Forgeboard
 
+Run Claude Code, Codex, Gemini CLI, and OpenCode side by side on a spatial canvas. Each agent works
+in its own isolated Git worktree, and nothing reaches the primary checkout without explicit human
+review and approval. Everything is local: no accounts, no API keys, and no telemetry.
+
+```bash
+git clone https://github.com/AIAydin/AI-Agent-Orchestrator.git
+cd AI-Agent-Orchestrator
+corepack pnpm start
+```
+
+Running from source requires Node.js 22.12 or later with Corepack. Packaged installers are not
+published yet, so this source bootstrap is currently the only way to try Forgeboard.
+
 Forgeboard is an MIT-licensed, local-first visual workshop for building software with locally
 installed coding-agent CLIs. The current desktop application combines a spatial canvas, isolated
 Git worktrees, streamed agent sessions, loopback web/mobile previews, and explicit launch and
@@ -93,8 +106,8 @@ subfolder before that limit is exceeded.
 
 ## Current availability
 
-This repository is currently private, has no published tags or GitHub Releases, and therefore has no
-public installer download. Earlier exact-commit checkpoints recorded passing production builds and
+This repository is public but has no published tags or GitHub Releases yet, and therefore has no
+installer download. Earlier exact-commit checkpoints recorded passing production builds and
 unpacked-application smoke tests on macOS arm64, macOS Intel, Windows, and Linux, plus unsigned native
 macOS arm64 and Intel DMG generation, installation, launch, smoke, and checksum evidence. The current
 tree still needs fresh Windows, Linux, and macOS Intel hosted proof, signing/notarization, and GitHub
