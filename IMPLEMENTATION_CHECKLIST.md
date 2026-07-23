@@ -1971,4 +1971,6 @@ unchecked when only a subset of their required behavior has proof.
   build passed locally, including the supply-chain lock policy, collaboration-server declaration
   build, startup smoke, production dependency deploy, and final non-root runtime image. Two
   regression checks guard both configuration contracts; all five quality tests, zero-warning lint,
-  formatting, the 1,476-file structure gate, and the 854-file production-control audit passed.
+  formatting, the 1,476-file structure gate, and the 854-file production-control audit passed. The
+  release artifact test now supplies an explicitly empty environment for its local-manifest case;
+  all 34 release and startup tests pass with a simulated CI `GITHUB_SHA`.
