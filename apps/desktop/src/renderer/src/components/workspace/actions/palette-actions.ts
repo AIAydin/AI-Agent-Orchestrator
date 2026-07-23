@@ -3,12 +3,10 @@ import type { WorkflowStartInput } from '../../../../../shared/workflow/contract
 import type { PaletteAction } from '../../shell/CommandPalette.js';
 import type { NodeKind } from '../canvas/CanvasNode.js';
 import type { ExtensionTemplate } from '../model/types.js';
-import type { WorkflowTemplate } from '../workflows/templates/catalog.js';
 
 interface WorkspacePaletteActionInput {
   readonly runnableAgents: readonly (AgentDetection & { id: RunAdapterId })[];
   readonly extensionTemplates: readonly ExtensionTemplate[];
-  readonly workflowTemplates: readonly WorkflowTemplate[];
   readonly selectedNodeTitle: string | null;
   readonly selectedWorkflowScope: WorkflowStartInput['scope'] | undefined;
   readonly canRunWorkflow: boolean;
@@ -17,7 +15,6 @@ interface WorkspacePaletteActionInput {
   readonly addNode: (kind: NodeKind) => void;
   readonly addAgentNode: (adapterId: RunAdapterId) => void;
   readonly addExtensionNode: (template: ExtensionTemplate) => void;
-  readonly addWorkflowTemplate: (template: WorkflowTemplate) => void;
   readonly fitCanvas: () => void;
   readonly startWorkflow: (scope: WorkflowStartInput['scope']) => void;
   readonly openGitReview: () => void;
@@ -59,14 +56,6 @@ export function createWorkspacePaletteActions(input: WorkspacePaletteActionInput
         `Add ${template.definition.displayName}`,
         `Extension · ${template.extension.manifest.name}`,
         () => input.addExtensionNode(template),
-      ),
-    ),
-    ...input.workflowTemplates.map((template) =>
-      safeAction(
-        `add-workflow-template-${template.id}`,
-        `Add ${template.name} workflow`,
-        'Workflow templates',
-        () => input.addWorkflowTemplate(template),
       ),
     ),
     {

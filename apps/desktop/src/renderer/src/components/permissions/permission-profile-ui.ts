@@ -44,15 +44,11 @@ export function permissionProfileLabel(profile: PermissionProfile): string {
 export function permissionProfileUnavailableReason(
   profile: PermissionProfile,
   settings: AppSettings,
-  adapterId: string,
 ): string | null {
   const dockerRuntime =
     profile === 'docker-isolated' ||
     (profile === 'custom' && settings.customPermissionProfile.runtime === 'docker');
   if (!dockerRuntime) return null;
-  if (adapterId === 'test-agent') {
-    return "The built-in test agent runs directly on this computer, so it can't run in Docker.";
-  }
   if (!settings.dockerEnabled) {
     return 'Turn on and set up Docker in Settings to use this profile.';
   }
@@ -71,17 +67,7 @@ export function permissionProfileNeedsDocker(
 
 export function customPermissionConfigurationIssues(settings: AppSettings): readonly string[] {
   const parsed = CustomPermissionProfileSettingsSchema.safeParse(settings.customPermissionProfile);
-  const issues = parsed.success ? [] : parsed.error.issues.map((issue) => issue.message);
-  if (
-    settings.defaultPermissionProfile === 'custom' &&
-    settings.customPermissionProfile.runtime === 'docker' &&
-    settings.defaultAgent === 'test-agent'
-  ) {
-    issues.push(
-      'Pick a default agent that can run in Docker before making Custom with Docker the default profile.',
-    );
-  }
-  return [...new Set(issues)];
+  return parsed.success ? [] : [...new Set(parsed.error.issues.map((issue) => issue.message))];
 }
 
 export function configuredFilesystemLabel(

@@ -63,9 +63,8 @@ function unavailableMaterial(hint: string): ProviderPeerMaterial {
  * (`build.extraResources` in apps/desktop/package.json) lands at
  * `process.resourcesPath/peer-mcp/main.js`. Dev: resolved relative to `process.cwd()`, which is
  * `apps/desktop` for every way this app is actually launched in dev (`pnpm dev`, `pnpm build` --
- * see their `predev`/`prebuild` scripts), mirroring the identical pattern already used for
- * test-agent's cli.js (apps/desktop/src/main/ipc.ts:290-292). A bundled build collapses the
- * main-process source tree, so this intentionally does NOT use `import.meta.url`-relative
+ * see their `predev`/`prebuild` scripts). A bundled build collapses the main-process source tree,
+ * so this intentionally does NOT use `import.meta.url`-relative
  * resolution -- `process.cwd()` is the stable anchor here, not the module's own location.
  */
 export function shimEntryPath(): string {

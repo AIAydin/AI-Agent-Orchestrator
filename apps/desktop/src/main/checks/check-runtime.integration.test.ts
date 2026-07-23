@@ -569,7 +569,7 @@ function baseSettings(projectRoot: string): Partial<AppSettings> {
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     worktreeRoot: join(projectRoot, '.forgeboard-worktrees'),
     branchPrefix: 'forgeboard/',

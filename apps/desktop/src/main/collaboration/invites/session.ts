@@ -7,6 +7,7 @@ import {
   CollaborationInviteSessionBindingSchema,
   CollaborationManagementUrlSchema,
   CollaborationServerUrlSchema,
+  collaborationPublicInviteConnectionIssue,
   type CollaborationInvite,
   type CollaborationInviteHistoryPage,
   type CollaborationInviteRedeemResponse,
@@ -192,7 +193,12 @@ export class CollaborationInviteSessionAuthority {
   }
 
   public assertCanCreateInvite(lease: CollaborationInviteSessionLease): void {
-    this.assertCurrent(lease);
+    const binding = this.assertCurrent(lease);
+    const connectionIssue = collaborationPublicInviteConnectionIssue(
+      binding.serverUrl,
+      binding.managementBaseUrl,
+    );
+    if (connectionIssue !== null) throw new Error(connectionIssue);
     if (this.#createdInvites.size >= 100) {
       throw new Error('This session has reached the collaboration invite management limit.');
     }

@@ -56,11 +56,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
     settings,
     onUpdateSelected,
   } = props;
-  const permissionUnavailable = permissionProfileUnavailableReason(
-    selectedPermission,
-    settings,
-    selectedAdapter,
-  );
+  const permissionUnavailable = permissionProfileUnavailableReason(selectedPermission, settings);
   const permissionIssueId = `node-${selectedNode.id}-permission-unavailable`;
   const modelHelpId = `node-${selectedNode.id}-model-help`;
   const selectedAgent = runnableAgents.find((agent) => agent.id === selectedAdapter);
@@ -211,7 +207,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             />
             <small id={modelHelpId}>
               {modelSelectionSupported
-                ? "Overrides the Settings default for this node. You'll see the exact model in launch review."
+                ? 'Overrides the Settings default for this node. Forgeboard binds the exact model into the next launch.'
                 : `${selectedAgent?.label ?? 'This adapter'} doesn't support model selection. It uses its own default.`}
             </small>
           </label>
@@ -232,21 +228,14 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
                 <option
                   key={option.value}
                   value={option.value}
-                  disabled={
-                    permissionProfileUnavailableReason(option.value, settings, selectedAdapter) !==
-                    null
-                  }
+                  disabled={permissionProfileUnavailableReason(option.value, settings) !== null}
                 >
                   {option.label} · {option.description}
                 </option>
               ))}
             </select>
           </label>
-          <ConfiguredPermissionSummary
-            profile={selectedPermission}
-            settings={settings}
-            adapterId={selectedAdapter}
-          />
+          <ConfiguredPermissionSummary profile={selectedPermission} settings={settings} />
           {selectedAdapter === 'custom' &&
           !permissionProfileNeedsDocker(selectedPermission, settings) ? (
             <small>
@@ -322,7 +311,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
             </strong>
           ) : null}
           {selectedNode.data.branch ||
-          selectedNode.data.worktreeId ||
+          selectedNode.data.worktreeRecordedActive ||
           selectedNode.data.tokenUsage ||
           selectedNode.data.cost ? (
             <dl>
@@ -332,7 +321,7 @@ export function AgentNodePanel(props: AgentNodePanelProps) {
                   <dd>{selectedNode.data.branch}</dd>
                 </div>
               ) : null}
-              {selectedNode.data.worktreeId ? (
+              {selectedNode.data.worktreeRecordedActive ? (
                 <div>
                   <dt>Worktree</dt>
                   <dd>Assigned to this run</dd>

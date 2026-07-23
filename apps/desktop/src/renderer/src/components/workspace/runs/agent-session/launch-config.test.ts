@@ -128,7 +128,6 @@ describe('modelFlagSupported', () => {
     for (const id of ['claude', 'codex', 'gemini', 'opencode']) {
       expect(modelFlagSupported(id)).toBe(true);
     }
-    expect(modelFlagSupported('test-agent')).toBe(false);
     expect(modelFlagSupported('custom')).toBe(false);
     expect(modelFlagSupported('acme.custom-agent')).toBe(false);
   });

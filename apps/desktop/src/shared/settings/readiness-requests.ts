@@ -40,7 +40,6 @@ export function agentReadinessRequestCandidate(
 ): unknown {
   const executableOverride = settings.agentExecutableOverrides[agentId]?.trim();
   if (agentId === 'custom') return { agentId, configuration: settings.customAgent };
-  if (agentId === 'test-agent') return { agentId };
   return { agentId, ...(executableOverride ? { executableOverride } : {}) };
 }
 
@@ -77,7 +76,6 @@ export function readinessRequestFingerprint(request: AgentReadinessRequest): str
 export function expectedReadinessSource(
   request: AgentReadinessRequest,
 ): AgentReadinessResult['source'] {
-  if (request.agentId === 'test-agent') return 'bundled';
   if (request.agentId === 'custom') return 'custom';
   return request.executableOverride === undefined ? 'automatic' : 'override';
 }

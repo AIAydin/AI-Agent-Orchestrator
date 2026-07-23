@@ -37,7 +37,7 @@ const run: StoredRunRecord = {
   id: RUN_ID,
   projectId: PROJECT_ID,
   nodeId: 'agent-node',
-  adapterId: 'test-agent',
+  adapterId: 'codex',
   status: 'succeeded',
   cwd: '/managed/private/worktree',
   branch: 'forgeboard/agent-node',
@@ -124,7 +124,7 @@ describe('PreviewTargetResolver', () => {
       },
       {
         target: { kind: 'agent-run', runId: RUN_ID },
-        label: 'test-agent · agent-node',
+        label: 'codex · agent-node',
         badge: 'Agent worktree',
         available: false,
         unavailableReason: 'The owned worktree is missing.',

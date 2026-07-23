@@ -226,7 +226,7 @@ function runRecord(id: string, ownership: WorktreeOwnership): StoredRunRecord {
     id,
     projectId: PROJECT_ID,
     nodeId: ownership.taskId ?? 'agent-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     status: 'succeeded',
     cwd: ownership.worktreePath,
     branch: ownership.branch,

@@ -210,7 +210,28 @@ export class CollaborationService {
   async start(): Promise<StartedCollaborationService> {
     if (this.closed) throw new Error('The collaboration service has already been closed.');
     if (!this.started) {
-      await this.server.listen();
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error): void => reject(error);
+        this.server.httpServer.once('error', onError);
+        this.server.httpServer.listen({ host: this.config.host, port: this.config.port }, () => {
+          this.server.httpServer.off('error', onError);
+          resolve();
+        });
+      });
+      const listeningAddress = this.server.httpServer.address() as AddressInfo | null;
+      if (!listeningAddress) {
+        throw new Error('The collaboration server did not expose a listening address.');
+      }
+      try {
+        await this.server.hocuspocus.hooks('onListen', {
+          instance: this.server.hocuspocus,
+          configuration: this.server.configuration,
+          port: listeningAddress.port,
+        });
+      } catch (error) {
+        await new Promise<void>((resolve) => this.server.httpServer.close(() => resolve()));
+        throw error;
+      }
       this.started = true;
     }
     const address = this.server.httpServer.address() as AddressInfo | null;

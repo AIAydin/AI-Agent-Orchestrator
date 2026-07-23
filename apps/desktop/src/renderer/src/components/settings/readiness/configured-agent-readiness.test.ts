@@ -16,7 +16,7 @@ const settings = AppSettingsSchema.parse({
   theme: 'system',
   reducedMotion: false,
   density: 'comfortable',
-  defaultAgent: 'test-agent',
+  defaultAgent: 'claude',
   defaultPermissionProfile: 'worktree-write',
   worktreeRoot: '/tmp/forgeboard-worktrees',
   terminalShell: '/bin/sh',
@@ -29,7 +29,6 @@ const settings = AppSettingsSchema.parse({
 });
 
 const agents: AgentDetection[] = [
-  detection('test-agent', 'Deterministic test agent', '/bundled/test-agent', '0.1.0'),
   detection('codex', 'OpenAI Codex CLI', '/usr/local/bin/codex', '2.4.0'),
   detection('claude', 'Claude Code', '/usr/local/bin/claude', '1.2.0'),
 ];
@@ -45,13 +44,13 @@ describe('configured agent readiness', () => {
         executable: '/chosen/custom',
       },
     });
-    expect(configuredReadinessAgentIds(draft)).toEqual(['test-agent', 'codex', 'claude', 'custom']);
+    expect(configuredReadinessAgentIds(draft)).toEqual(['claude', 'codex', 'custom']);
   });
 
   it('accepts launch detection for an unchanged default but not a configured non-default', () => {
     const draft = update(settings, { agentDefaultModels: { codex: 'gpt-5' } });
     const entries = evaluate(draft);
-    expect(entries.find((entry) => entry.agentId === 'test-agent')).toMatchObject({
+    expect(entries.find((entry) => entry.agentId === 'claude')).toMatchObject({
       phase: 'ready',
       evidence: 'launch-detection',
     });
@@ -128,28 +127,25 @@ describe('configured agent readiness', () => {
     });
     const missing = evaluate(draft);
     expect(missing.map((entry) => entry.agentId)).toEqual([
-      'test-agent',
-      'codex',
       'claude',
+      'codex',
       'gemini',
       'opencode',
       'custom',
     ]);
     expect(
       missing.filter((entry) => entry.phase !== 'ready').map((entry) => entry.agentId),
-    ).toEqual(['codex', 'claude', 'gemini', 'opencode', 'custom']);
+    ).toEqual(['claude', 'codex', 'gemini', 'opencode', 'custom']);
 
     const results = Object.fromEntries(
       configuredReadinessAgentIds(draft).map((agentId) => {
         const readiness = readinessDraftForAgent(draft, agentId);
         const source =
-          agentId === 'test-agent'
-            ? 'bundled'
-            : agentId === 'custom'
-              ? 'custom'
-              : draft.agentExecutableOverrides[agentId]
-                ? 'override'
-                : 'automatic';
+          agentId === 'custom'
+            ? 'custom'
+            : draft.agentExecutableOverrides[agentId]
+              ? 'override'
+              : 'automatic';
         return [readiness.fingerprint, readyResult(agentId, source)];
       }),
     );

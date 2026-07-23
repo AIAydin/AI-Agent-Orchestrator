@@ -47,7 +47,7 @@ describe('GitIpcService agent-worktree target', () => {
       await new WorktreeService(repositories).provision({
         repositoryPath: repository,
         managedRoot,
-        agentId: 'test-agent',
+        agentId: 'codex',
         taskId: 'agent-node',
       })
     ).ownership;
@@ -119,7 +119,7 @@ describe('GitIpcService agent-worktree target', () => {
         ...target,
         nodeId: 'agent-node',
         worktreeId: ownership.id,
-        agentId: 'test-agent',
+        agentId: 'codex',
         baseRef: ownership.baseRef,
         baseCommit: ownership.baseCommit,
       },
@@ -216,7 +216,7 @@ describe('GitIpcService agent-worktree target', () => {
       await worktrees.provision({
         repositoryPath: repository,
         managedRoot,
-        agentId: 'test-agent',
+        agentId: 'codex',
         taskId: 'agent-node',
       })
     ).ownership;
@@ -445,7 +445,7 @@ function runRecord(
     id: RUN_ID,
     projectId: PROJECT_ID,
     nodeId: 'agent-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     status: 'succeeded',
     cwd: ownership.worktreePath,
     branch: ownership.branch,

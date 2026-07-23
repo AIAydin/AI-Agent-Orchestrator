@@ -93,6 +93,23 @@ describe('collaboration invite contracts', () => {
     expect(collaborationInviteConnectionFromLink(LINK)).toBeNull();
   });
 
+  it('refuses to put localhost or private-network endpoints into a shared invite', () => {
+    for (const connection of [
+      {
+        serverUrl: 'ws://127.0.0.1:1234',
+        managementBaseUrl: 'http://127.0.0.1:1234',
+      },
+      {
+        serverUrl: 'wss://192.168.1.8/socket',
+        managementBaseUrl: 'https://192.168.1.8/control',
+      },
+    ]) {
+      expect(() => collaborationInviteLinkWithConnection(LINK, connection)).toThrow(
+        /public wss:\/\/.*https:\/\//u,
+      );
+    }
+  });
+
   it('rejects ambiguous, exposed, credentialed, and unsupported invite links', () => {
     const invalid = [
       'ftp://collab.example/invite#token=value',

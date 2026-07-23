@@ -777,7 +777,7 @@ describe('durable workflow host', () => {
           preparationId: 'preparation-after-delegate-approval',
           approvalFingerprint: 'fingerprint-after-delegate-approval',
           expiresAt: '2026-07-15T19:30:00.000Z',
-          disclosure: { executable: 'forgeboard-test-agent', arguments: ['--stdio'] },
+          disclosure: { executable: 'forgeboard-codex', arguments: ['--stdio'] },
         });
       const recoveredHost = new WorkflowHost(store, [recoveredExecutor.executor], { now: clock() });
 
@@ -833,7 +833,7 @@ describe('durable workflow host', () => {
           preparationId: `preparation-${context.node.id}`,
           approvalFingerprint: `fingerprint-${context.node.id}`,
           expiresAt: '2026-07-15T19:30:00.000Z',
-          disclosure: { executable: 'forgeboard-test-agent', arguments: ['--stdio'] },
+          disclosure: { executable: 'forgeboard-codex', arguments: ['--stdio'] },
         });
       });
       const host = new WorkflowHost(store, [fake.executor], { now: clock() });
@@ -1418,7 +1418,7 @@ function fakeExecutor(externalId = 'fake-agent-1'): {
       approvalFingerprint: 'fingerprint-agent-1',
       expiresAt: '2026-07-15T19:00:00.000Z',
       disclosure: {
-        executable: 'forgeboard-test-agent',
+        executable: 'forgeboard-codex',
         arguments: ['--stdio'],
         cwd: '/tmp/worktree',
       },
@@ -1559,7 +1559,7 @@ function agentNode(id = 'agent-1'): CanvasNode {
     ...nodeBase(id, 'Agent'),
     type: 'agent',
     data: {
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       permissionProfileId: 'worktree-write',
       promptDraft: 'Make the requested change.',
     },

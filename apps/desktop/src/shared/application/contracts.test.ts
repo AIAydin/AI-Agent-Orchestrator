@@ -47,7 +47,7 @@ describe('agent-run target contracts', () => {
     const input = {
       projectId: 'c95b77bb-53d0-46f9-b9fc-5df23c0d5843',
       nodeId: 'agent-1',
-      adapterId: 'test-agent' as const,
+      adapterId: 'codex' as const,
       prompt: 'Inspect the project.',
       permissionProfile: 'plan-read-only' as const,
     };

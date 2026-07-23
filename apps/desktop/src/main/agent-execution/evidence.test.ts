@@ -1,5 +1,8 @@
-import { createCustomCliAdapter, type PermissionProfile } from '@forgeboard/agent-adapters';
-import { TEST_AGENT_MANIFEST } from '@forgeboard/test-agent';
+import {
+  CODEX_MANIFEST,
+  createCustomCliAdapter,
+  type PermissionProfile,
+} from '@forgeboard/agent-adapters';
 import { describe, expect, it } from 'vitest';
 
 import { RunDisclosureSchema, type RunDisclosure } from '../../shared/application/contracts.js';
@@ -33,7 +36,7 @@ const PERMISSION_PROFILE: PermissionProfile = {
 
 describe('agent disclosure evidence', () => {
   it('binds the fingerprint to the exact enriched disclosure returned for review', () => {
-    const adapter = createCustomCliAdapter({ ...TEST_AGENT_MANIFEST, id: 'test-agent' });
+    const adapter = createCustomCliAdapter({ ...CODEX_MANIFEST, id: 'codex' });
     const plan = adapter.prepareLaunch({
       prompt: 'Inspect this repository.',
       cwd: '/repo',
@@ -46,7 +49,7 @@ describe('agent disclosure evidence', () => {
     const reviewedDisclosure: RunDisclosure = {
       runId: RUN_ID,
       nodeId: 'agent-node',
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       provider: plan.disclosure.provider,
       executable: plan.disclosure.executable,
       arguments: [...plan.disclosure.arguments],

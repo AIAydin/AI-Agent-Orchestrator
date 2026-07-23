@@ -297,7 +297,7 @@ function attempt(status: RunHistorySummary['status']): RunHistorySummary {
     id: '00000000-0000-4000-8000-000000000001',
     projectId: '00000000-0000-4000-8000-000000000002',
     nodeId: 'agent-1',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     model: null,
     permissionProfile: 'plan-read-only',
     providerSessionAvailable: false,

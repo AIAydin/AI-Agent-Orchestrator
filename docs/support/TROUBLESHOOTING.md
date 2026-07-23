@@ -19,7 +19,8 @@ disabled Continue/Save/Review button.
 3. For Codex or Claude Code, use **Connect with OpenAI** or **Connect with Anthropic** and complete the
    provider CLI's browser sign-in. **Needs refresh** is not connected.
 4. Review literal arguments. An argument without an executable is rejected rather than guessed.
-5. Use **Deterministic test agent** to continue locally without an account or external CLI.
+5. If the tool is not one of the built-ins, configure it under **Custom tool** with its executable,
+   version arguments, privacy disclosure, runtime, and output format.
 
 A readiness check inspects the selected command; it does not silently save the draft or approve a
 later launch.

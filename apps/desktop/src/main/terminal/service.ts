@@ -113,6 +113,13 @@ export type TerminalLaunchAuthorizer = (
 export interface PeerEnvironmentProvider {
   /** `null` means the provision is unknown, expired, or the hub is not currently listening. */
   environmentForProvision(provisionId: string): Record<string, string> | null;
+  /** Exact main-created provider CLI arguments and their project/node/adapter binding. */
+  launchMaterialForProvision(provisionId: string): {
+    readonly projectId: string;
+    readonly nodeId: string;
+    readonly adapterId: string;
+    readonly arguments: readonly string[];
+  } | null;
   /** Binds a provision to its spawned session so the hub can invalidate it on session exit. */
   bindSession(provisionId: string, sessionId: string): void;
   /** Best-effort, idempotent: a session that was never bound to a provision is a safe no-op. */
@@ -146,6 +153,7 @@ interface PendingLaunch {
   readonly resolved: ResolvedTerminalLaunch;
   readonly input: TerminalPrepareLaunchInput;
   readonly workspace?: PreparedTerminalWorkspace;
+  readonly authorization: 'native-or-saved-approval' | 'managed-agent-automatic';
   /** Opaque hub provision id from the renderer; never a resolved URL/token (see IPC schema). */
   readonly peerProvisionId?: string;
 }
@@ -181,7 +189,7 @@ interface ExactSession {
 
 export type TerminalEventListener = (ownerId: string, event: TerminalEvent) => void;
 
-/** Main-process authority for literal, native-confirmed, owner-bound local PTY sessions. */
+/** Main-process authority for exact, owner-bound, reviewed or reconstructed local PTY sessions. */
 export class TerminalService {
   readonly #plans = new Map<string, PendingLaunch>();
   readonly #prepareOwners = new Map<string, string>();
@@ -291,6 +299,7 @@ export class TerminalService {
         plan,
         resolved,
         input: parsed,
+        authorization: 'native-or-saved-approval',
         ...(parsed.peerProvisionId === undefined
           ? {}
           : { peerProvisionId: parsed.peerProvisionId }),
@@ -328,26 +337,10 @@ export class TerminalService {
       this.#assertConcurrency(ownerId);
       pending = await this.#prepareManagedWorkspace(pending);
       await this.#assertPendingLaunchCurrent(pending);
-      const environmentVariableNames =
-        pending.peerProvisionId === undefined
-          ? [...pending.resolved.environmentVariableNames]
-          : [...pending.resolved.environmentVariableNames, ...PEER_ENVIRONMENT_VARIABLE_NAMES];
-      const decision = await authorize({
-        view: structuredClone(pending.plan),
-        approvalFingerprint: trustedTerminalLaunchFingerprint({
-          executable: pending.resolved.executableIdentity,
-          arguments: pending.resolved.arguments,
-          cwd: pending.resolved.cwdIdentity,
-          environmentVariableNames,
-        }),
-        exact: {
-          executable: pending.resolved.executable,
-          arguments: [...pending.resolved.arguments],
-          cwd: pending.resolved.cwd,
-          // Transparency: disclose peer env NAMES, never values, when a provision is attached.
-          environmentVariableNames,
-        },
-      });
+      const decision =
+        pending.authorization === 'managed-agent-automatic'
+          ? 'approved'
+          : await authorize(this.#nativeReview(pending));
       assertAuthority();
       await this.#assertPendingLaunchCurrent(pending);
       if (decision !== 'approved') {
@@ -541,7 +534,11 @@ export class TerminalService {
       return 'no-live-session';
     }
     active.handle.write(formatPeerDelivery(sender, message));
-    this.#safeAudit('input', 'allowed', { sessionId, source: 'agent-peer', sender });
+    this.#safeAudit('input', 'allowed', {
+      sessionId,
+      source: 'agent-peer',
+      sender,
+    });
     return 'delivered';
   }
 
@@ -807,6 +804,7 @@ export class TerminalService {
           argumentCount: resolved.arguments.length,
           cwdRelative: resolved.cwdRelative,
           environmentVariableNames: resolved.environmentVariableNames,
+          authorization: pending.authorization,
           phase: 'authorized-before-spawn',
         });
       });
@@ -876,6 +874,29 @@ export class TerminalService {
       throw new Error('Peer session expired. Start again.');
     }
     return environment;
+  }
+
+  #nativeReview(pending: PendingLaunch): TerminalLaunchNativeReview {
+    const environmentVariableNames =
+      pending.peerProvisionId === undefined
+        ? [...pending.resolved.environmentVariableNames]
+        : [...pending.resolved.environmentVariableNames, ...PEER_ENVIRONMENT_VARIABLE_NAMES];
+    return {
+      view: structuredClone(pending.plan),
+      approvalFingerprint: trustedTerminalLaunchFingerprint({
+        executable: pending.resolved.executableIdentity,
+        arguments: pending.resolved.arguments,
+        cwd: pending.resolved.cwdIdentity,
+        environmentVariableNames,
+      }),
+      exact: {
+        executable: pending.resolved.executable,
+        arguments: [...pending.resolved.arguments],
+        cwd: pending.resolved.cwd,
+        // Transparency: disclose peer env NAMES, never values, when a provision is attached.
+        environmentVariableNames,
+      },
+    };
   }
 
   #onOutput(active: ActiveTerminal, untrustedData: string): void {
@@ -1252,13 +1273,45 @@ export class TerminalService {
       adapterId: pending.input.workspace.adapterId,
     });
     try {
+      const automatic = await manager.resolveAutomaticAgentLaunch(workspace);
+      if (automatic === null) {
+        const resolved = await resolveTerminalLaunch(
+          project,
+          pending.input,
+          this.getSettings(),
+          workspace.rootPath,
+        );
+        return { ...pending, resolved, workspace };
+      }
+      const peerArguments = this.#automaticPeerArguments(pending, workspace);
+      const input = TerminalPrepareLaunchInputSchema.parse({
+        ...pending.input,
+        executable: automatic.executable,
+        arguments: [...automatic.arguments, ...peerArguments],
+        cwdRelative: automatic.cwdRelative,
+        environmentVariableNames: [...automatic.environmentVariableNames],
+      });
       const resolved = await resolveTerminalLaunch(
         project,
-        pending.input,
+        input,
         this.getSettings(),
         workspace.rootPath,
       );
-      return { ...pending, resolved, workspace };
+      const plan = TerminalLaunchPlanViewSchema.parse({
+        ...pending.plan,
+        executable: resolved.configuredExecutable,
+        arguments: [...resolved.arguments],
+        cwdRelative: resolved.cwdRelative,
+        environmentVariableNames: [...resolved.environmentVariableNames],
+      });
+      return {
+        ...pending,
+        authorization: 'managed-agent-automatic',
+        input,
+        plan,
+        resolved,
+        workspace,
+      };
     } catch (error) {
       try {
         await manager.discard(workspace);
@@ -1270,6 +1323,30 @@ export class TerminalService {
       }
       throw error;
     }
+  }
+
+  #automaticPeerArguments(
+    pending: PendingLaunch,
+    workspace: PreparedTerminalWorkspace,
+  ): readonly string[] {
+    if (pending.peerProvisionId === undefined) return [];
+    const material = this.#peerProvider?.launchMaterialForProvision(pending.peerProvisionId);
+    if (material === null || material === undefined) {
+      throw new Error('Peer session expired. Start again.');
+    }
+    if (
+      material.projectId !== pending.plan.projectId ||
+      material.nodeId !== pending.plan.nodeId ||
+      material.adapterId !== workspace.ownership.agentId
+    ) {
+      this.#safeAudit('launch', 'failed', {
+        projectId: pending.plan.projectId,
+        nodeId: pending.plan.nodeId,
+        reason: 'peer-launch-binding-mismatch',
+      });
+      throw new Error('The Agent peer configuration changed. Start the session again.');
+    }
+    return [...material.arguments];
   }
 
   async #assertPendingLaunchCurrent(pending: PendingLaunch): Promise<void> {

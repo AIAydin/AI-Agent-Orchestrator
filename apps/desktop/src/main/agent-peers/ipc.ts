@@ -71,7 +71,17 @@ export class AgentPeersIpcService {
           projectRoot,
           environment,
         });
-        this.service.registerCleanup(provisionId, material.cleanup);
+        try {
+          this.service.registerLaunchMaterial(
+            provisionId,
+            input.adapterId,
+            material.extraArguments,
+          );
+          this.service.registerCleanup(provisionId, material.cleanup);
+        } catch (error) {
+          await material.cleanup().catch(() => undefined);
+          throw error;
+        }
         return {
           provisionId,
           available: material.available,

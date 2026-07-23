@@ -238,7 +238,9 @@ beforeEach(() => {
     },
   });
   (
-    window as unknown as { forgeboard: { agentPeers: { provision: typeof provisionMock } } }
+    window as unknown as {
+      forgeboard: { agentPeers: { provision: typeof provisionMock } };
+    }
   ).forgeboard = {
     agentPeers: { provision: provisionMock },
   };
@@ -374,7 +376,12 @@ describe('AgentSessionNode', () => {
         extraArguments: [],
       },
     });
-    controller.session = { id: 's1', status: 'failed', exitCode: 1, exitSignal: null };
+    controller.session = {
+      id: 's1',
+      status: 'failed',
+      exitCode: 1,
+      exitSignal: null,
+    };
     controller.active = false;
     renderNode();
 
@@ -411,7 +418,12 @@ describe('AgentSessionNode', () => {
   });
 
   it('keeps the terminal surface visible after the session ends and shows the exit code', () => {
-    controller.session = { id: 's1', status: 'failed', exitCode: 127, exitSignal: null };
+    controller.session = {
+      id: 's1',
+      status: 'failed',
+      exitCode: 127,
+      exitSignal: null,
+    };
     controller.active = false;
     renderNode();
     // The final output stays readable instead of collapsing to an exit-only card.
@@ -445,7 +457,9 @@ describe('AgentSessionNode', () => {
     // The draft commits on Enter, not on every keystroke.
     expect(spies.updateNodeData).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Hermes' });
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, {
+      title: 'Hermes',
+    });
   });
 
   it('auto-suffixes a rename that collides with another node on the canvas', () => {
@@ -459,7 +473,9 @@ describe('AgentSessionNode', () => {
     const input = screen.getByLabelText('Node title');
     fireEvent.change(input, { target: { value: 'Atlas' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Atlas 2' });
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, {
+      title: 'Atlas 2',
+    });
   });
 
   it('falls back to an assigned friendly name when the rename is emptied out', () => {
@@ -470,7 +486,9 @@ describe('AgentSessionNode', () => {
     const input = screen.getByLabelText('Node title');
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Hermes' });
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, {
+      title: 'Hermes',
+    });
   });
 
   it('cancels a title edit on Escape without committing', () => {
@@ -601,17 +619,11 @@ describe('AgentSessionNode', () => {
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
   });
 
-  it('renders the Model input only when the agent supports model selection', () => {
+  it('keeps provider and model configuration out of the compact terminal footer', () => {
     renderNode();
-    expect(screen.getByLabelText('Model')).toBeTruthy();
-    cleanup();
-
-    const claudeNoModelSelection: AgentDetection & { id: RunAdapterId } = {
-      ...claude,
-      capabilities: { ...claude.capabilities!, modelSelection: false },
-    };
-    render(nodeTree(nodeData(), { runnableAgents: [claudeNoModelSelection] }));
+    expect(screen.queryByLabelText('Agent')).toBeNull();
     expect(screen.queryByLabelText('Model')).toBeNull();
+    expect(screen.getByLabelText('Permission profile')).toBeTruthy();
   });
 
   it('disables permission profile options that require Docker when Docker is off', () => {

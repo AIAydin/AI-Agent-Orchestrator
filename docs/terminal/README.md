@@ -4,6 +4,11 @@ The Terminal canvas node runs a real local PTY without requiring source, environ
 manifest editing. Add the node from the node library, select it, and configure the process in the
 inspector.
 
+This page describes ordinary Terminal canvas nodes. The embedded session on a built-in Agent node
+can start automatically after one explicit **Start** when **Write in a worktree** is selected,
+because Electron main reconstructs the command from saved Agent state. Custom Agent sessions and
+ordinary Terminal nodes retain the native confirmation described below.
+
 ## Configure and launch
 
 The form exposes the executable, literal argument array, project-relative working directory, and

@@ -83,7 +83,6 @@ jobs:
           node-version: 22.17.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @forgeboard/test-agent build
       - run: pnpm --filter @forgeboard/desktop package:dir
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'

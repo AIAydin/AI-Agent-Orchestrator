@@ -192,70 +192,66 @@ export function AgentsSettings({
                           ? 'Check needed'
                           : 'Not found'}
                   </span>
-                  {isCodingAgent(agent.id) &&
-                    agent.id !== 'custom' &&
-                    agent.id !== 'test-agent' && (
-                      <div className="agent-overrides">
-                        <div className="agent-override-field">
-                          <label htmlFor={`agent-${agent.id}-executable`}>
-                            Executable override
-                          </label>
-                          <span className="path-picker">
-                            <input
-                              id={`agent-${agent.id}-executable`}
-                              name={`agent-${agent.id}-executable`}
-                              value={draft.agentExecutableOverrides[agent.id] ?? ''}
-                              placeholder={agent.executable ?? `Find ${agent.id} automatically`}
-                              onChange={(event) =>
-                                setDraft({
-                                  ...draft,
-                                  agentExecutableOverrides: {
-                                    ...draft.agentExecutableOverrides,
-                                    [agent.id]: event.target.value,
-                                  },
-                                })
-                              }
-                            />
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() =>
-                                void perform(async () => {
-                                  const selected = unwrap(
-                                    await window.forgeboard.projects.pickExecutable(),
-                                  );
-                                  if (selected) {
-                                    setDraft((current) => ({
-                                      ...current,
-                                      agentExecutableOverrides: {
-                                        ...current.agentExecutableOverrides,
-                                        [agent.id]: selected,
-                                      },
-                                    }));
-                                  }
-                                })
-                              }
-                            >
-                              Browse
-                            </button>
-                          </span>
-                        </div>
-                        <AgentDefaultModelField
-                          agentId={agent.id}
-                          name={`agent-${agent.id}-default-model`}
-                          value={draft.agentDefaultModels[agent.id] ?? ''}
-                          onChange={(model) =>
-                            setDraft({
-                              ...draft,
-                              agentDefaultModels: {
-                                ...draft.agentDefaultModels,
-                                [agent.id]: model,
-                              },
-                            })
-                          }
-                        />
+                  {isCodingAgent(agent.id) && agent.id !== 'custom' && (
+                    <div className="agent-overrides">
+                      <div className="agent-override-field">
+                        <label htmlFor={`agent-${agent.id}-executable`}>Executable override</label>
+                        <span className="path-picker">
+                          <input
+                            id={`agent-${agent.id}-executable`}
+                            name={`agent-${agent.id}-executable`}
+                            value={draft.agentExecutableOverrides[agent.id] ?? ''}
+                            placeholder={agent.executable ?? `Find ${agent.id} automatically`}
+                            onChange={(event) =>
+                              setDraft({
+                                ...draft,
+                                agentExecutableOverrides: {
+                                  ...draft.agentExecutableOverrides,
+                                  [agent.id]: event.target.value,
+                                },
+                              })
+                            }
+                          />
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void perform(async () => {
+                                const selected = unwrap(
+                                  await window.forgeboard.projects.pickExecutable(),
+                                );
+                                if (selected) {
+                                  setDraft((current) => ({
+                                    ...current,
+                                    agentExecutableOverrides: {
+                                      ...current.agentExecutableOverrides,
+                                      [agent.id]: selected,
+                                    },
+                                  }));
+                                }
+                              })
+                            }
+                          >
+                            Browse
+                          </button>
+                        </span>
                       </div>
-                    )}
+                      <AgentDefaultModelField
+                        agentId={agent.id}
+                        name={`agent-${agent.id}-default-model`}
+                        value={draft.agentDefaultModels[agent.id] ?? ''}
+                        onChange={(model) =>
+                          setDraft({
+                            ...draft,
+                            agentDefaultModels: {
+                              ...draft.agentDefaultModels,
+                              [agent.id]: model,
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -273,20 +269,9 @@ export function AgentsSettings({
             value={draft.defaultAgent}
             onChange={(event) => {
               const defaultAgent = event.target.value as AppSettings['defaultAgent'];
-              const dockerProfile = permissionProfileNeedsDocker(
-                draft.defaultPermissionProfile,
-                draft,
-              );
-              setDraft({
-                ...draft,
-                defaultAgent,
-                ...(defaultAgent === 'test-agent' && dockerProfile
-                  ? { defaultPermissionProfile: 'worktree-write' as const }
-                  : {}),
-              });
+              setDraft({ ...draft, defaultAgent });
             }}
           >
-            <option value="test-agent">Deterministic test agent</option>
             <option value="codex">Codex CLI</option>
             <option value="claude">Claude Code</option>
             <option value="gemini">Gemini CLI</option>
@@ -299,7 +284,7 @@ export function AgentsSettings({
             providerStatuses[draft.defaultAgent]?.state !== 'connected' && (
               <small role="status">
                 Connect {draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} above before
-                saving it as the default, or choose the local test agent.
+                saving it as the default.
               </small>
             )}
         </label>
@@ -349,15 +334,7 @@ export function AgentsSettings({
             <option value="plan-read-only">Plan / read-only</option>
             <option value="worktree-write">Worktree write</option>
             <option value="docker-isolated">Docker isolated</option>
-            <option
-              value="custom"
-              disabled={
-                draft.defaultAgent === 'test-agent' &&
-                draft.customPermissionProfile.runtime === 'docker'
-              }
-            >
-              Custom
-            </option>
+            <option value="custom">Custom</option>
           </select>
           <small>Set up the Custom profile in the Permissions centre.</small>
         </label>
@@ -422,5 +399,5 @@ export function AgentsSettings({
 }
 
 function isCodingAgent(id: AgentDetection['id']): boolean {
-  return ['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom'].includes(id);
+  return ['codex', 'claude', 'gemini', 'opencode', 'custom'].includes(id);
 }

@@ -75,6 +75,7 @@ export function planLegacySettingsRepair(
     repaired.add(field);
   };
 
+  repairRemovedTestAgent(candidate, defaults, mark);
   repairAgentOverrides(candidate, mark);
   repairCustomAgent(candidate, defaults, mark);
   repairPermissionProfile(candidate, defaults, mark);
@@ -126,6 +127,32 @@ export function planLegacySettingsRepair(
     repairedSettingsJson,
   });
   return { settings: parsed.data, evidence };
+}
+
+function repairRemovedTestAgent(
+  candidate: Record<string, unknown>,
+  defaults: AppSettings,
+  mark: (field: SettingsRepairFieldPath) => void,
+): void {
+  if (candidate.defaultAgent === 'test-agent') {
+    candidate.defaultAgent = defaults.defaultAgent;
+    mark('defaultAgent');
+  }
+  for (const field of ['agentExecutableOverrides', 'agentDefaultModels'] as const) {
+    const value = candidate[field];
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      !Object.hasOwn(value, 'test-agent')
+    ) {
+      continue;
+    }
+    candidate[field] = Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).filter(([key]) => key !== 'test-agent'),
+    );
+    mark(field);
+  }
 }
 
 function repairAgentOverrides(

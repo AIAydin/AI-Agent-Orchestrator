@@ -64,7 +64,7 @@ const PROJECT_ID = '123fae6e-e213-4a10-a0db-0f85b791f7e9';
 const PREPARE_INPUT: PrepareRunInput = {
   projectId: PROJECT_ID,
   nodeId: 'agent-node',
-  adapterId: 'test-agent',
+  adapterId: 'codex',
   prompt: 'Inspect this repository.',
   permissionProfile: 'plan-read-only',
 };
@@ -125,7 +125,7 @@ class FakeAgentExecutionRuntime implements AgentExecutionOperations {
         nodeId: input.nodeId,
         adapterId: input.adapterId,
         provider: 'Local test provider',
-        executable: '/test-agent',
+        executable: '/codex',
         arguments: [],
         cwd: '/repo',
         runtime: 'pipes',
@@ -320,7 +320,7 @@ describe('RunService Electron compatibility', () => {
           id: available.id,
           projectId: PROJECT_ID,
           nodeId: 'agent-node',
-          adapterId: 'test-agent',
+          adapterId: 'codex',
           model: 'provider-model-1',
           permissionProfile: null,
           providerSessionAvailable: true,
@@ -779,7 +779,7 @@ describe('RunService Electron compatibility', () => {
         cancelId: 0,
       }),
     );
-    expect(shownMessage(showMessageBox).detail).toContain('Program: /test-agent');
+    expect(shownMessage(showMessageBox).detail).toContain('Program: /codex');
     await service.dispose();
   });
 
@@ -1130,7 +1130,7 @@ function storedRun(id: string, overrides: Partial<StoredRunRecord> = {}): Stored
     id,
     projectId: PROJECT_ID,
     nodeId: 'agent-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     status: 'succeeded',
     cwd: '/repo/.forgeboard/worktrees/agent-node',
     branch: 'forgeboard/agent-node',
@@ -1166,7 +1166,7 @@ function agentCanvas(runId: string): CanvasDocument {
           locked: false,
           collapsed: false,
           color: '#445566',
-          adapterId: 'test-agent',
+          adapterId: 'codex',
           permissionProfile: 'plan-read-only',
           prompt: PREPARE_INPUT.prompt,
           contextAttachmentIds: [],

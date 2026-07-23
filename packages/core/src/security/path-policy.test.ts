@@ -208,8 +208,8 @@ describe('attachment manifests', () => {
       manifestId: 'manifest-1',
       projectId: 'project-1',
       projectRoot: root,
-      receivingAdapterId: 'test-agent',
-      receivingProvider: 'Local deterministic test agent',
+      receivingAdapterId: 'codex',
+      receivingProvider: 'Local deterministic Codex',
       relativePaths: ['.env.example'],
       createdAt: NOW,
       overrides: [
@@ -238,7 +238,7 @@ describe('attachment manifests', () => {
       buildAttachmentManifest({
         projectId: 'project-1',
         projectRoot: root,
-        receivingAdapterId: 'test-agent',
+        receivingAdapterId: 'codex',
         receivingProvider: 'Local',
         relativePaths: ['README.md', './README.md'],
       }),
@@ -254,7 +254,7 @@ describe('attachment manifests', () => {
       buildAttachmentManifest({
         projectId: 'project-1',
         projectRoot: root,
-        receivingAdapterId: 'test-agent',
+        receivingAdapterId: 'codex',
         receivingProvider: 'Local',
         relativePaths: ['alias.ts'],
       }),

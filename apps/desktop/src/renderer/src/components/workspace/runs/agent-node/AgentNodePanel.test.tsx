@@ -58,10 +58,11 @@ const codex: AgentDetection & { id: 'codex' } = {
   capabilitySource: 'manifest',
 };
 
-const testAgent: AgentDetection & { id: 'test-agent' } = {
+const opencode: AgentDetection & { id: 'opencode' } = {
   ...codex,
-  id: 'test-agent',
-  label: 'Test agent',
+  id: 'opencode',
+  label: 'OpenCode',
+  executable: '/usr/local/bin/opencode',
   capabilities: { ...codex.capabilities!, modelSelection: false },
 };
 
@@ -73,7 +74,7 @@ describe('AgentNodePanel configuration and usage', () => {
 
     const adapter = screen.getByRole('combobox', { name: 'Agent to run' });
     fireEvent.focus(adapter);
-    fireEvent.change(adapter, { target: { value: 'test-agent' } });
+    fireEvent.change(adapter, { target: { value: 'opencode' } });
 
     const model = screen.getByRole('textbox', { name: 'Model (optional)' });
     fireEvent.focus(model);
@@ -91,7 +92,7 @@ describe('AgentNodePanel configuration and usage', () => {
 
     expect(onRecord).toHaveBeenCalledTimes(4);
     expect(onUpdateSelected).toHaveBeenCalledWith({
-      adapterId: 'test-agent',
+      adapterId: 'opencode',
       model: undefined,
     });
     expect(onUpdateSelected).toHaveBeenCalledWith({ model: 'gpt-5.2' });
@@ -279,7 +280,7 @@ describe('AgentNodePanel provider connection run gate', () => {
 
   it('never gates agents without a provider connection', () => {
     const onPrepareRun = vi.fn();
-    renderPanel(agentNode({ adapterId: 'test-agent' }), { onPrepareRun });
+    renderPanel(agentNode({ adapterId: 'opencode' }), { onPrepareRun });
 
     const runButton = screen.getByRole<HTMLButtonElement>('button', {
       name: 'Review and run Agent',
@@ -313,7 +314,7 @@ function panelProps(selectedNode: WorkshopNode, overrides: PanelOverrides = {}) 
     selectedNode,
     selectedAdapter: 'codex' as const,
     selectedPermission: 'worktree-write' as const,
-    runnableAgents: [codex, testAgent],
+    runnableAgents: [codex, opencode],
     settings,
     runInput: '',
     running: overrides.running ?? false,

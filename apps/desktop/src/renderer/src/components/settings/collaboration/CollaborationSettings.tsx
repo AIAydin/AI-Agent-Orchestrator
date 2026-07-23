@@ -7,11 +7,13 @@ import type {
   CollaborationInviteCreateInput,
   CollaborationInviteHistoryPage,
 } from '../../../../../shared/collaboration/index.js';
+import { collaborationPublicInviteConnectionIssue } from '../../../../../shared/collaboration/index.js';
 import { SettingsSection } from '../shared.js';
 import { CollaborationStatus } from './CollaborationStatus.js';
 import {
   CollaborationProfileFields,
   CollaborationRoomField,
+  CollaborationServerFields,
   ConnectionFields,
 } from './ConnectionFields.js';
 import { DirectJoinControls } from './DirectJoinControls.js';
@@ -32,6 +34,8 @@ const TEN_MINUTE_INVITE: CollaborationInviteCreateInput = {
   expiresInSeconds: 600,
   maxUses: 1,
 };
+const LEGACY_LOCAL_SERVER_URL = 'ws://127.0.0.1:1234';
+const LEGACY_LOCAL_MANAGEMENT_URL = 'http://127.0.0.1:1234/';
 
 export function CollaborationSettings({ settings, setSettings, busy }: CollaborationSettingsProps) {
   const [accessToken, setAccessToken] = useState('');
@@ -43,9 +47,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
   const [operationBusy, setOperationBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [inviteClearSignal, setInviteClearSignal] = useState(0);
-  const [advancedOpen, setAdvancedOpen] = useState(
-    settings.collaborationUrl.trim() === '' || settings.collaborationManagementUrl.trim() === '',
-  );
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const operationLock = useRef(false);
   const connectionIdRef = useRef(connection?.connectionId ?? null);
   connectionIdRef.current = connection?.connectionId ?? null;
@@ -59,6 +61,28 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
       setInviteClearSignal((current) => current + 1);
     },
   });
+
+  useEffect(() => {
+    if (
+      settings.collaborationEnabled ||
+      settings.collaborationUrl !== LEGACY_LOCAL_SERVER_URL ||
+      !['', LEGACY_LOCAL_MANAGEMENT_URL].includes(settings.collaborationManagementUrl)
+    ) {
+      return;
+    }
+    setSettings((current) =>
+      !current.collaborationEnabled &&
+      current.collaborationUrl === LEGACY_LOCAL_SERVER_URL &&
+      ['', LEGACY_LOCAL_MANAGEMENT_URL].includes(current.collaborationManagementUrl)
+        ? { ...current, collaborationUrl: '', collaborationManagementUrl: '' }
+        : current,
+    );
+  }, [
+    settings.collaborationEnabled,
+    settings.collaborationManagementUrl,
+    settings.collaborationUrl,
+    setSettings,
+  ]);
 
   useEffect(() => {
     const collaboration = window.forgeboard.collaboration;
@@ -389,7 +413,12 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
             </section>
             <section className="collaboration-setup-card" aria-labelledby="host-room-title">
               <h4 id="host-room-title">Create or recover a room</h4>
-              <p>For room owners using a server their team already runs.</p>
+              <p>Use a hosted server that every invited computer can reach.</p>
+              <CollaborationServerFields
+                settings={settings}
+                setSettings={setSettings}
+                disabled={inputDisabled}
+              />
               <CollaborationRoomField
                 settings={settings}
                 setSettings={setSettings}
@@ -412,7 +441,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
             <summary>
               <span>
                 <strong>Server and advanced options</strong>
-                <small>Only needed for older invites, custom servers, or direct tokens.</small>
+                <small>Local development, collaborator ID, reconnect, and direct tokens.</small>
               </span>
             </summary>
             <div className="collaboration-advanced-fields">
@@ -433,6 +462,7 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
                 settings={settings}
                 setSettings={setSettings}
                 disabled={inputDisabled}
+                includeServerFields={false}
               />
               <DirectJoinControls
                 accessToken={accessToken}
@@ -465,6 +495,10 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
             <InviteManagementControls
               page={invitePage}
               busy={controlsBusy}
+              inviteConnectionIssue={collaborationPublicInviteConnectionIssue(
+                connection.serverUrl,
+                connection.managementBaseUrl,
+              )}
               onCreateQuick={createAndCopyTenMinuteInvite}
               onCreate={createInvite}
               onCopy={copyInvite}

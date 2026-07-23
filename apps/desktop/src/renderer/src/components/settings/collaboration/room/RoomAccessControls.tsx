@@ -6,6 +6,7 @@ import type {
   CollaborationOwnerSessionView,
   CollaborationRoomBootstrapJoinInput,
 } from '../../../../../../shared/collaboration/index.js';
+import { collaborationPublicInviteConnectionIssue } from '../../../../../../shared/collaboration/index.js';
 
 type RoomAccessInput = CollaborationRoomBootstrapJoinInput;
 
@@ -36,6 +37,14 @@ export function RoomAccessControls({
     settings.collaborationRoom.trim() !== '' &&
     settings.collaborationSubject.trim() !== '' &&
     settings.collaborationDisplayName.trim() !== '';
+  const missingConnectionLinks =
+    settings.collaborationUrl.trim() === '' || settings.collaborationManagementUrl.trim() === '';
+  const inviteConnectionIssue = missingConnectionLinks
+    ? null
+    : collaborationPublicInviteConnectionIssue(
+        settings.collaborationUrl,
+        settings.collaborationManagementUrl,
+      );
 
   async function submit(createInvite = false): Promise<void> {
     if (submissionLock.current || disabled || !configured) return;
@@ -138,13 +147,23 @@ export function RoomAccessControls({
           <button
             className="button primary"
             type="button"
-            disabled={disabled || !configured}
+            disabled={disabled || !configured || inviteConnectionIssue !== null}
             onClick={() => void submit(true)}
           >
             Create room + copy 10-minute invite
           </button>
           <small>Creates a one-use editor invite and copies it without showing its secret.</small>
         </>
+      )}
+      {missingConnectionLinks && (
+        <small className="collaboration-missing-links" role="status">
+          Add the public WebSocket and management links above.
+        </small>
+      )}
+      {inviteConnectionIssue !== null && (
+        <small className="collaboration-missing-links" role="status">
+          {inviteConnectionIssue}
+        </small>
       )}
     </section>
   );

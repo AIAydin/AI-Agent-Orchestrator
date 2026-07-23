@@ -11,7 +11,6 @@ const THEMES: Readonly<Record<string, ProviderTheme>> = Object.freeze({
   codex: theme('codex', 'Codex', 'X', '#10a37f'),
   gemini: theme('gemini', 'Gemini CLI', 'G', '#4e86f6'),
   opencode: theme('opencode', 'opencode', 'O', '#8a63d2'),
-  'test-agent': theme('test-agent', 'Test agent', 'T', '#82909b'),
 });
 
 export function providerTheme(adapterId: string | undefined): ProviderTheme | null {

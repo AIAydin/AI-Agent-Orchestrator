@@ -56,7 +56,7 @@ export function Welcome(props: WelcomeProps) {
   const recoveryBusyRef = useRef(false);
   recoveryBusyRef.current = recoveryBusy !== null;
   const hasRecovery = recovery !== null;
-  const detected = props.agents.filter((agent) => agent.installed && agent.id !== 'test-agent');
+  const detected = props.agents.filter((agent) => agent.installed);
 
   useEffect(() => {
     if (!props.busy) setBusyAction(null);

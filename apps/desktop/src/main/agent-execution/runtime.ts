@@ -95,7 +95,6 @@ const InputSchema = z
 
 interface ActiveRunState extends PreparedRunState {
   readonly session: AgentSession;
-  pendingTestInputId: string | null;
   outputPreview: string;
   outputObservedUnits: number;
   outputPersistedUnits: number;
@@ -105,7 +104,6 @@ export interface AgentExecutionRuntimeOptions {
   readonly store: AgentExecutionStore;
   readonly getSettings: () => AppSettings;
   readonly emit: AgentExecutionEventSink;
-  readonly resolveTestAgentCliPath: () => Promise<string>;
   readonly getTrustedAdapter?: TrustedAdapterLookup;
   readonly launchTrustedAdapter?: TrustedAdapterLauncher;
   readonly repositories?: RepositoryService;
@@ -172,7 +170,6 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       options.planAdapter ??
       createDefaultAgentAdapterPlanner({
         getTrustedAdapter: this.#getTrustedAdapter,
-        resolveTestAgentCliPath: options.resolveTestAgentCliPath,
       });
     this.#launchSession = options.launchSession;
     this.#now = options.now ?? (() => new Date());
@@ -309,14 +306,7 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
       throw new Error('Continue the paused Agent run before sending input.');
     }
     const parsed = InputSchema.parse(data);
-    if (active.adapterId === 'test-agent') {
-      const requestId = active.pendingTestInputId;
-      if (requestId === null) throw new Error('The test agent is not waiting for input.');
-      active.session.writeInput(`${JSON.stringify({ type: 'input', requestId, data: parsed })}\n`);
-      active.pendingTestInputId = null;
-    } else {
-      active.session.writeInput(parsed.endsWith('\n') ? parsed : `${parsed}\n`);
-    }
+    active.session.writeInput(parsed.endsWith('\n') ? parsed : `${parsed}\n`);
     return true;
   }
 
@@ -896,7 +886,6 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
         ...prepared,
         context: discardGeneratedContextContent(prepared.context),
         session,
-        pendingTestInputId: null,
         outputPreview: prepared.record.outputPreview ?? '',
         outputObservedUnits: 0,
         outputPersistedUnits: 0,
@@ -1108,7 +1097,6 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
     const events = (async (): Promise<void> => {
       for await (const event of active.session.events) {
         if (this.#active.get(active.record.id) !== active) return;
-        this.#observeTestInput(active, event);
         this.#observeOutputPreview(active, event);
         this.#emit(active.ownerId, {
           runId: active.record.id,
@@ -1446,15 +1434,6 @@ export class AgentExecutionRuntime implements AgentExecutionOperations {
           reason: errorMessage(error),
         });
       }
-    }
-  }
-
-  #observeTestInput(active: ActiveRunState, event: AgentEvent): void {
-    if (active.adapterId !== 'test-agent' || event.type !== 'message') return;
-    if (typeof event.payload !== 'object' || event.payload === null) return;
-    const payload = event.payload as Record<string, unknown>;
-    if (payload['type'] === 'input-requested' && typeof payload['requestId'] === 'string') {
-      active.pendingTestInputId = payload['requestId'];
     }
   }
 

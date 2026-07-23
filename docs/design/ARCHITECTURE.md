@@ -31,8 +31,6 @@ default.
 - `@forgeboard/git-engine` executes native Git with argument arrays, provisions per-run branches
   and worktrees, and provides diff/review/change integration primitives.
 - `@forgeboard/ui` provides the visual language and accessible primitives shared by renderers.
-- `@forgeboard/test-agent` is a deterministic executable that exercises the full workflow without
-  a paid provider.
 - `@forgeboard/collab-server` is optional. It accepts only collaboration-safe graph metadata.
 
 ## Data flow
@@ -47,6 +45,15 @@ executable, arguments, working directory, environment variable names, permission
 and exact context file list. The trusted runtime records redacted allowed, denied, and failed audit
 outcomes around the supervised launch; a project-check saved grant is never accepted as agent-run
 approval.
+
+Interactive built-in Agent sessions using the worktree-write profile take a separate automatic
+terminal path. The renderer sends only a path-free managed-worktree request and an optional opaque
+peer provision ID. Electron main reloads the persisted Agent/adapter/model/profile, provisions the
+owned worktree, locates the configured built-in executable, reconstructs the argument vector, and
+replaces renderer command fields. Peer arguments come from material created and identity-bound in
+main, not from the renderer's copy. Project, node, adapter, model, worktree, executable, and peer
+bindings are rechecked before PTY spawn. Ordinary Terminal nodes and unsupported/custom adapters
+continue through exact native confirmation.
 
 Codex and Claude Code account connections are a separate main-owned provider-connection boundary.
 The renderer can request a strict provider ID, action, and optional current-draft executable override;

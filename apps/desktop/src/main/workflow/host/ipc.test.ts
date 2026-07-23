@@ -340,7 +340,7 @@ describe('WorkflowIpcService', () => {
         preparationId: 'workflow-preparation-after-git-approval',
         approvalFingerprint: 'workflow-fingerprint-after-git-approval',
         expiresAt: '2099-07-15T20:00:00.000Z',
-        disclosure: { executable: 'forgeboard-test-agent', arguments: ['--stdio'] },
+        disclosure: { executable: 'forgeboard-codex', arguments: ['--stdio'] },
       };
     });
     const fixture = createFixture({
@@ -926,7 +926,7 @@ function fakeExecutor() {
       preparationId: 'workflow-preparation-1',
       approvalFingerprint: 'workflow-fingerprint-1',
       expiresAt: '2099-07-15T20:00:00.000Z',
-      disclosure: { executable: 'forgeboard-test-agent', arguments: ['--stdio'] },
+      disclosure: { executable: 'forgeboard-codex', arguments: ['--stdio'] },
     }),
   );
   const launch = vi.fn(() => Promise.resolve(handle));
@@ -1011,7 +1011,7 @@ function agentCanvas(): Canvas {
       size: { width: 320, height: 180 },
       status: 'ready',
       data: {
-        adapterId: 'test-agent',
+        adapterId: 'codex',
         permissionProfileId: 'worktree-write',
         promptDraft: 'Make a deterministic change.',
       },

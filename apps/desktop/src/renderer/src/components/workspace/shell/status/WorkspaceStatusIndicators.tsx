@@ -23,9 +23,7 @@ export function WorkspaceStatusIndicators({
   const providerDisclosures = agents
     .filter((agent) => agent.installed && isCodingAgent(agent.id))
     .map((agent) => `${agent.label}: ${agent.providerDisclosure}`);
-  const externalProviderAvailable = agents.some(
-    (agent) => agent.installed && isExternalCodingAgent(agent.id),
-  );
+  const codingAgentAvailable = agents.some((agent) => agent.installed && isCodingAgent(agent.id));
   const branch = project.health.branch;
   const SharingIcon = collaborationEnabled && sharingStatus === 'connected' ? Cloud : CloudOff;
 
@@ -45,13 +43,11 @@ export function WorkspaceStatusIndicators({
       <details className="workspace-provider-status">
         <summary className="workspace-status-chip">
           <ShieldCheck size={11} aria-hidden="true" />
-          {externalProviderAvailable
-            ? 'Providers · approved context only'
-            : 'Agents · local demo only'}
+          {codingAgentAvailable ? 'Providers · approved context only' : 'Agents · unavailable'}
         </summary>
         <div className="workspace-provider-disclosure" role="note">
           {providerDisclosures.length === 0 ? (
-            <p>The deterministic test agent stays on this device.</p>
+            <p>No coding agent is currently installed and available.</p>
           ) : (
             providerDisclosures.map((disclosure) => <p key={disclosure}>{disclosure}</p>)
           )}
@@ -92,10 +88,6 @@ export function WorkspaceStatusIndicators({
 
 function isCodingAgent(id: AgentDetection['id']): boolean {
   return id !== 'gh' && id !== 'docker';
-}
-
-function isExternalCodingAgent(id: AgentDetection['id']): boolean {
-  return isCodingAgent(id) && id !== 'test-agent';
 }
 
 function sharingLabel(enabled: boolean, status: WorkspaceSharingStatus): string {

@@ -57,6 +57,7 @@ describe('ManagedTerminalWorkspaceService', () => {
       nodeId: 'agent-two',
       adapterId: 'claude',
     });
+    const automaticLaunch = await service.resolveAutomaticAgentLaunch(first);
 
     expect(first.rootPath).not.toBe(second.rootPath);
     expect(first.view.runId).not.toBe(second.view.runId);
@@ -65,6 +66,12 @@ describe('ManagedTerminalWorkspaceService', () => {
     expect(await git(second.rootPath, ['rev-parse', '--show-toplevel'])).toBe(second.rootPath);
     expect(await git(first.rootPath, ['branch', '--show-current'])).toBe(first.view.branch);
     expect(await git(second.rootPath, ['branch', '--show-current'])).toBe(second.view.branch);
+    expect(automaticLaunch).toEqual({
+      executable: await realpath('/bin/sh'),
+      arguments: ['--model', 'claude-test-model'],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+    });
     await expect(readFile(path.join(first.rootPath, 'README.md'), 'utf8')).resolves.toBe(
       '# fixture\n',
     );
@@ -129,11 +136,12 @@ async function createFixture(): Promise<Fixture> {
   const settings = {
     defaultAgent: 'claude',
     defaultPermissionProfile: 'worktree-write',
-    agentDefaultModels: {},
+    agentExecutableOverrides: { claude: '/bin/sh' },
+    agentDefaultModels: { claude: 'claude-test-model' },
     worktreeRoot: path.join(root, 'managed'),
     branchPrefix: 'forgeboard/',
     worktreeCleanupPolicy: 'manual',
-  } as AppSettings;
+  } as unknown as AppSettings;
   return {
     repository,
     project,

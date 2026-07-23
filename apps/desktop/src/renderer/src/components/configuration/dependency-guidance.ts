@@ -44,9 +44,6 @@ export function agentDependencyGuidance(
   fallbackId: string,
 ): string {
   const id = agent?.id ?? fallbackId;
-  if (id === 'test-agent') {
-    return 'The test agent comes with Forgeboard. If its program is missing, reinstall the app.';
-  }
   if (id === 'custom') {
     return 'Use Browse to pick the program that runs your custom agent, add its version arguments, then refresh. No manifest or environment file is needed.';
   }

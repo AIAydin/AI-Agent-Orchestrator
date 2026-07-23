@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: forgeboard-collaboration
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./apps/collab-server/Dockerfile
+    healthCheckPath: /healthz
+    maxShutdownDelaySeconds: 30
+    disk:
+      name: forgeboard-collaboration-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FORGEBOARD_COLLAB_HOST
+        value: 0.0.0.0
+      - key: FORGEBOARD_COLLAB_DATABASE_PATH
+        value: /data/forgeboard-collab.sqlite
+      - key: FORGEBOARD_COLLAB_SIGNING_KEY
+        generateValue: true
+      - key: FORGEBOARD_COLLAB_ADMIN_TOKEN
+        generateValue: true
+      - key: FORGEBOARD_COLLAB_ALLOWED_ORIGINS
+        value: forgeboard://desktop
+      - key: FORGEBOARD_COLLAB_REQUIRE_ORIGIN
+        value: 'false'
+      - key: FORGEBOARD_COLLAB_PUBLIC_INVITE_URL
+        value: forgeboard://collaboration/invite

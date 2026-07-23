@@ -20,10 +20,10 @@ then, contributors can run a source checkout with:
 corepack pnpm start
 ```
 
-On first launch, either select **Use safe defaults** or complete the setup wizard. Safe defaults use
-the bundled deterministic test agent, require no account, and keep collaboration and update checks
-inactive. The full wizard configures the default agent, permission profile, Docker option, preview
-command, and managed-worktree location entirely in the UI.
+On first launch, either select **Use safe defaults** or complete the setup wizard. Safe defaults do
+not connect to or launch an agent and keep collaboration and update checks inactive. The full wizard
+configures the default agent, permission profile, Docker option, preview command, and
+managed-worktree location entirely in the UI.
 
 ## Connect an agent
 
@@ -34,8 +34,6 @@ Open **Settings → Agents & runtime**.
   Forgeboard does not receive or store the OAuth token.
 - For another installed CLI, use its readiness card. **Browse** can select an executable without
   editing `PATH` or a config file.
-- Use **Deterministic test agent** for a local, offline workflow that exercises real launch,
-  worktree, output, and review behavior without a provider account.
 - Expand **Advanced** only when you need an executable override or model. Saving Settings is what
   persists an override; checking a draft does not silently save it.
 
@@ -60,9 +58,9 @@ confirm the replacement. Its canvas, snapshots, and run records remain associate
 
 ## Build a canvas
 
-Use the project rail to add a node or insert a first-party workflow template. The canvas supports
-pan, zoom, fit, minimap navigation, multi-selection, keyboard movement, copy, paste, duplicate,
-groups, comments, locking, collapse, and resize.
+Use the project rail to add individual agent, task, brief, check, preview, and other node types. The
+canvas supports pan, zoom, fit, minimap navigation, multi-selection, keyboard movement, copy, paste,
+duplicate, groups, comments, locking, collapse, and resize.
 
 - Select a node to edit its inspector.
 - Right-click a node, press the Context Menu key, or press **Shift+F10** for node actions.
@@ -107,7 +105,11 @@ The embedded terminal on an Agent node follows the same Access selection. When *
 worktree** is selected, **Start** or **Restart** creates a fresh managed worktree and branch for that
 session before the provider CLI starts. Each Agent session receives its own worktree, so edits from
 one Agent do not appear in another Agent's folder or in the primary checkout. Forgeboard records the
-run and branch on the node without exposing the worktree path to the renderer.
+run and branch on the node without exposing the worktree path to the renderer. For built-in agents,
+that single click is the whole launch interaction: Electron main reconstructs and revalidates the
+saved executable, model, worktree, and peer-tool arguments, then starts the session without another
+native approval dialog. Custom or extension-provided agents and other access profiles keep native
+launch confirmation.
 
 Attempt history retains lineage, terminal status, bounded output, provider-redacted metadata, and
 token or cost information only when the adapter reports it. Forgeboard does not invent missing usage
@@ -185,10 +187,13 @@ verified Forgeboard backup. The source backup is copied and verified; it is neve
 
 ## Optional collaboration
 
-Collaboration is off by default. Under **Settings → Connectivity**, configure the WebSocket and
-management URLs, then create a room, redeem an invite, or use an already provisioned access token.
-Every network boundary requires native review. Owner, editor, reviewer, and viewer roles are enforced
-in the main process and on the server.
+Collaboration is off by default and has no localhost server configured. Under
+**Settings → Connectivity**, room owners enter the public `wss://` WebSocket and `https://`
+management addresses for their hosted Forgeboard server, then create a room and copy an invite. The
+other person pastes that one link; Forgeboard configures both addresses automatically. Localhost and
+private-network endpoints remain available for advanced direct development connections, but
+Forgeboard refuses to put them into a shared invite. Every network boundary requires native review.
+Owner, editor, reviewer, and viewer roles are enforced in the main process and on the server.
 
 Only allowlisted canvas metadata, presence, and explicitly shared comments enter the collaboration
 document. Prompts, source, file contents, diffs, terminal output, environment data, secrets, and

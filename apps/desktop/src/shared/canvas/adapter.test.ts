@@ -840,7 +840,7 @@ describe('canonical desktop canvas adapter', () => {
     const document = legacy({
       nodes: [
         node('agent-1', 'agent', {
-          adapterId: 'test-agent',
+          adapterId: 'codex',
           permissionProfile: 'worktree-write',
         }),
         node('task-1', 'task', {
@@ -1014,7 +1014,7 @@ describe('canonical desktop canvas adapter', () => {
             runIds: ['check-tests'],
           }),
           node('agent-reviewer', 'agent', {
-            adapterId: 'test-agent',
+            adapterId: 'codex',
             permissionProfile: 'worktree-write',
           }),
           node('gate-1', 'review-gate', {
@@ -1075,7 +1075,7 @@ describe('canonical desktop canvas adapter', () => {
       legacy({
         nodes: [
           node('implementation-1', 'agent', {
-            adapterId: 'test-agent',
+            adapterId: 'codex',
             permissionProfile: 'worktree-write',
           }),
           node('gate-1', 'review-gate', {

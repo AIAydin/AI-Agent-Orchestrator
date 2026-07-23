@@ -8,13 +8,21 @@ import {
   type WorktreeOwnership,
 } from '@forgeboard/git-engine';
 import type { CanvasNode } from '@forgeboard/core';
+import { getBuiltInAgentManifest, locateAgentExecutable } from '@forgeboard/agent-adapters';
 
 import type { AppSettings, Project } from '../../../shared/application/contracts.js';
-import type { TerminalSessionView } from '../../../shared/terminal/index.js';
+import {
+  builtInAgentSessionArguments,
+  type TerminalSessionView,
+} from '../../../shared/terminal/index.js';
 import { synchronizeCanvasDocument } from '../../../shared/canvas/adapter.js';
 import type { LocalStore, StoredRunRecord } from '../../storage.js';
 import { assertPersistedAgentNodeMutable } from '../../runs/context/persisted-agent-context.js';
-import type { PreparedTerminalWorkspace, TerminalWorkspaceManager } from './contracts.js';
+import type {
+  AutomaticTerminalAgentLaunch,
+  PreparedTerminalWorkspace,
+  TerminalWorkspaceManager,
+} from './contracts.js';
 
 type ManagedTerminalWorkspaceStore = Pick<
   LocalStore,
@@ -156,15 +164,68 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
     return workspace;
   }
 
+  public async resolveAutomaticAgentLaunch(
+    workspace: PreparedTerminalWorkspace,
+  ): Promise<AutomaticTerminalAgentLaunch | null> {
+    const record = this.#boundRun(workspace);
+    const configuration = this.#persistedAgentConfiguration(
+      record.projectId,
+      record.nodeId,
+      record.adapterId,
+    );
+    this.#assertRecordedConfiguration(record, configuration);
+    const manifest = getBuiltInAgentManifest(record.adapterId);
+    if (manifest === undefined) return null;
+
+    const arguments_ = builtInAgentSessionArguments(
+      record.adapterId,
+      configuration.model,
+      'worktree-write',
+    );
+    if (arguments_ === null) return null;
+
+    const settings = this.getSettings();
+    const executableOverride = settings.agentExecutableOverrides[record.adapterId]?.trim();
+    const location = await locateAgentExecutable(manifest, {
+      ...(executableOverride === undefined || executableOverride === ''
+        ? {}
+        : { executable: executableOverride }),
+      cwd: workspace.rootPath,
+    });
+    if (!location.available || location.executable === null) {
+      throw new Error(
+        `${manifest.name} is not available: ${location.reason ?? 'executable not found'}`,
+      );
+    }
+
+    const currentConfiguration = this.#persistedAgentConfiguration(
+      record.projectId,
+      record.nodeId,
+      record.adapterId,
+    );
+    this.#assertRecordedConfiguration(record, currentConfiguration);
+    const currentOverride = this.getSettings().agentExecutableOverrides[record.adapterId]?.trim();
+    if ((currentOverride ?? '') !== (executableOverride ?? '')) {
+      throw new Error('The saved Agent executable changed. Save and start the session again.');
+    }
+    return {
+      executable: location.executable,
+      arguments: arguments_,
+      cwdRelative: '.',
+      environmentVariableNames: [],
+    };
+  }
+
   public async assertCurrent(
     workspace: PreparedTerminalWorkspace,
     project: Project,
   ): Promise<void> {
-    this.#persistedAgentConfiguration(
+    const configuration = this.#persistedAgentConfiguration(
       project.id,
       workspace.ownership.taskId ?? '',
       workspace.ownership.agentId,
     );
+    this.#assertRecordedConfiguration(this.#boundRun(workspace), configuration);
     const currentProject = this.store.getProject(project.id);
     if (
       currentProject === undefined ||
@@ -337,6 +398,15 @@ export class ManagedTerminalWorkspaceService implements TerminalWorkspaceManager
       );
     }
     return { model: effectiveAgentModel(agent, settings, persistedAdapter) };
+  }
+
+  #assertRecordedConfiguration(
+    record: StoredRunRecord,
+    configuration: { readonly model: string | null },
+  ): void {
+    if (record.model !== configuration.model) {
+      throw new Error('The saved Agent model changed. Save and start the session again.');
+    }
   }
 
   #boundRun(workspace: PreparedTerminalWorkspace): StoredRunRecord {

@@ -36,14 +36,6 @@ const baseSettings = AppSettingsSchema.parse({
 
 const agents: AgentDetection[] = [
   {
-    id: 'test-agent',
-    label: 'Deterministic test agent',
-    installed: true,
-    executable: '/bundled/test-agent',
-    version: '0.1.0',
-    providerDisclosure: 'Local fixture.',
-  },
-  {
     id: 'codex',
     label: 'OpenAI Codex CLI',
     installed: false,

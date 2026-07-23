@@ -720,7 +720,7 @@ function settings() {
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     worktreeRoot: '/tmp/forgeboard-worktrees',
     terminalShell: '/bin/sh',

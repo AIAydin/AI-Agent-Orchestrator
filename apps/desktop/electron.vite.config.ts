@@ -16,7 +16,6 @@ export default defineConfig({
           '@forgeboard/core',
           '@forgeboard/extension-runtime',
           '@forgeboard/git-engine',
-          '@forgeboard/test-agent',
           '@forgeboard/ui',
           '@forgeboard/windows-durable-fs',
         ],

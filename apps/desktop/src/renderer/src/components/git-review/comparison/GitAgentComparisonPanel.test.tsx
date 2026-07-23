@@ -88,7 +88,7 @@ function summary(id: string): RunHistorySummary {
     id,
     projectId: PROJECT_ID,
     nodeId: id === LEFT_RUN_ID ? 'left-node' : 'right-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     model: null,
     permissionProfile: null,
     providerSessionAvailable: false,
