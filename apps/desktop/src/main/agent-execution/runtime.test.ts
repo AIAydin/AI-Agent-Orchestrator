@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import {
   AgentAdapterManifestSchema,
+  CODEX_MANIFEST,
   createCustomCliAdapter,
   type AgentAdapterManifest,
   type AgentEvent,
@@ -19,7 +20,6 @@ import type {
   GitStatus,
   WorktreeOwnership,
 } from '@forgeboard/git-engine';
-import { TEST_AGENT_MANIFEST } from '@forgeboard/test-agent';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AppSettings, RunEventEnvelope } from '../../shared/application/contracts.js';
@@ -82,6 +82,7 @@ interface RuntimeHarness {
 
 interface HarnessOptions {
   readonly adapterId?: AgentExecutionRequest['adapterId'];
+  readonly manifest?: AgentAdapterManifest;
   readonly failSaveOnceStatuses?: readonly StoredRunRecord['status'][];
   readonly failSaveStatuses?: readonly StoredRunRecord['status'][];
   readonly getTrustedAdapter?: AgentExecutionRuntimeOptionsSubset['getTrustedAdapter'];
@@ -102,7 +103,7 @@ interface HarnessOptions {
 type AgentExecutionRuntimeOptionsSubset = ConstructorParameters<typeof AgentExecutionRuntime>[0];
 
 function request(
-  adapterId: AgentExecutionRequest['adapterId'] = 'test-agent',
+  adapterId: AgentExecutionRequest['adapterId'] = 'codex',
   permissionProfile: AgentExecutionRequest['permissionProfile'] = 'plan-read-only',
   nodeId = 'agent-node',
 ): AgentExecutionRequest {
@@ -188,19 +189,24 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
       run: vi.fn(() => Promise.resolve({ stdout: '', stderr: '', exitCode: 0 })),
     },
   } as unknown as RepositoryService;
-  const adapterId = options.adapterId ?? 'test-agent';
-  const adapter = createCustomCliAdapter({
-    ...TEST_AGENT_MANIFEST,
-    id: adapterId,
-    invocation: {
-      ...TEST_AGENT_MANIFEST.invocation,
-      context: { strategy: 'prompt-references' },
+  const adapterId = options.adapterId ?? 'codex';
+  const adapter = createCustomCliAdapter(
+    options.manifest ?? {
+      ...CODEX_MANIFEST,
+      id: adapterId,
+      invocation: {
+        ...CODEX_MANIFEST.invocation,
+        ...(adapterId === 'codex'
+          ? { runtime: 'pipes' as const, output: 'json-lines' as const }
+          : {}),
+        context: { strategy: 'prompt-references' },
+      },
+      capabilities: {
+        ...CODEX_MANIFEST.capabilities,
+        contextAttachments: true,
+      },
     },
-    capabilities: {
-      ...TEST_AGENT_MANIFEST.capabilities,
-      contextAttachments: true,
-    },
-  });
+  );
   const planner = vi.fn<AgentAdapterPlanner>((input, cwd, _settings, _runId, _auth, sessionId) => {
     const launchRequest = {
       prompt: input.prompt,
@@ -239,7 +245,6 @@ function createHarness(options: HarnessOptions = {}): RuntimeHarness {
     ...(options.worktrees === undefined ? {} : { worktrees: options.worktrees }),
     planAdapter: planner,
     launchSession,
-    resolveTestAgentCliPath: () => Promise.resolve('/test-agent.js'),
     ...(options.now === undefined ? {} : { now: options.now }),
     ...(options.planTtlMs === undefined ? {} : { planTtlMs: options.planTtlMs }),
     ...(options.maxPendingPlans === undefined ? {} : { maxPendingPlans: options.maxPendingPlans }),
@@ -403,11 +408,11 @@ describe('AgentExecutionRuntime admission limits', () => {
 
     const first = harness.runtime.prepare(
       'owner-a',
-      request('test-agent', 'worktree-write', 'first-agent'),
+      request('codex', 'worktree-write', 'first-agent'),
     );
     const rejected = harness.runtime.prepare(
       'owner-b',
-      request('test-agent', 'worktree-write', 'second-agent'),
+      request('codex', 'worktree-write', 'second-agent'),
     );
 
     await expect(rejected).rejects.toThrow('Too many agent plans');
@@ -423,17 +428,11 @@ describe('AgentExecutionRuntime admission limits', () => {
       maxPendingPlansPerOwner: 1,
     });
 
-    const first = harness.runtime.prepare(
-      'owner-a',
-      request('test-agent', 'plan-read-only', 'a-1'),
-    );
-    const rejected = harness.runtime.prepare(
-      'owner-a',
-      request('test-agent', 'plan-read-only', 'a-2'),
-    );
+    const first = harness.runtime.prepare('owner-a', request('codex', 'plan-read-only', 'a-1'));
+    const rejected = harness.runtime.prepare('owner-a', request('codex', 'plan-read-only', 'a-2'));
     const otherOwner = harness.runtime.prepare(
       'owner-b',
-      request('test-agent', 'plan-read-only', 'b-1'),
+      request('codex', 'plan-read-only', 'b-1'),
     );
 
     await expect(rejected).rejects.toThrow('This owner has too many agent plans');
@@ -445,7 +444,7 @@ describe('AgentExecutionRuntime admission limits', () => {
   it('releases a preparation reservation after validation fails', async () => {
     const harness = createHarness({ maxPendingPlans: 1 });
     const missingProjectRequest = {
-      ...request('test-agent', 'plan-read-only', 'missing-project'),
+      ...request('codex', 'plan-read-only', 'missing-project'),
       projectId: '223fae6e-e213-4a10-a0db-0f85b791f7e9',
     };
 
@@ -453,10 +452,7 @@ describe('AgentExecutionRuntime admission limits', () => {
       'project is no longer available',
     );
     await expect(
-      harness.runtime.prepare(
-        'owner-a',
-        request('test-agent', 'plan-read-only', 'retry-after-failure'),
-      ),
+      harness.runtime.prepare('owner-a', request('codex', 'plan-read-only', 'retry-after-failure')),
     ).resolves.toMatchObject({ ownerId: 'owner-a' });
     expect(harness.planner).toHaveBeenCalledOnce();
     await harness.runtime.dispose();
@@ -477,11 +473,11 @@ describe('AgentExecutionRuntime admission limits', () => {
     });
     const firstPlan = await harness.runtime.prepare(
       'owner-a',
-      request('test-agent', 'plan-read-only', 'a-1'),
+      request('codex', 'plan-read-only', 'a-1'),
     );
     const retryablePlan = await harness.runtime.prepare(
       'owner-b',
-      request('test-agent', 'plan-read-only', 'b-1'),
+      request('codex', 'plan-read-only', 'b-1'),
     );
 
     const firstLaunch = harness.runtime.launch(
@@ -527,15 +523,15 @@ describe('AgentExecutionRuntime admission limits', () => {
     });
     const firstPlan = await harness.runtime.prepare(
       'owner-a',
-      request('test-agent', 'plan-read-only', 'a-1'),
+      request('codex', 'plan-read-only', 'a-1'),
     );
     const rejectedPlan = await harness.runtime.prepare(
       'owner-a',
-      request('test-agent', 'plan-read-only', 'a-2'),
+      request('codex', 'plan-read-only', 'a-2'),
     );
     const otherPlan = await harness.runtime.prepare(
       'owner-b',
-      request('test-agent', 'plan-read-only', 'b-1'),
+      request('codex', 'plan-read-only', 'b-1'),
     );
     const firstHandle = await harness.runtime.launch(
       'owner-a',
@@ -589,7 +585,7 @@ describe('AgentExecutionRuntime admission limits', () => {
     const harness = createHarness({ session: controlled.session });
     const activePlan = await harness.runtime.prepare(
       'owner-a',
-      request('test-agent', 'plan-read-only', 'a-active'),
+      request('codex', 'plan-read-only', 'a-active'),
     );
     const activeHandle = await harness.runtime.launch(
       'owner-a',
@@ -598,11 +594,11 @@ describe('AgentExecutionRuntime admission limits', () => {
     );
     const pendingPlan = await harness.runtime.prepare(
       'owner-a',
-      request('test-agent', 'plan-read-only', 'a-pending'),
+      request('codex', 'plan-read-only', 'a-pending'),
     );
     const otherPlan = await harness.runtime.prepare(
       'owner-b',
-      request('test-agent', 'plan-read-only', 'b-pending'),
+      request('codex', 'plan-read-only', 'b-pending'),
     );
 
     await harness.runtime.stopOwner('owner-a');
@@ -623,7 +619,7 @@ describe('AgentExecutionRuntime admission limits', () => {
     const harness = createHarness({ launchSession: () => launchGate.promise });
     const prepared = await harness.runtime.prepare(
       'owner-a',
-      request('test-agent', 'plan-read-only', 'a-launching'),
+      request('codex', 'plan-read-only', 'a-launching'),
     );
     const launching = harness.runtime.launch(
       'owner-a',
@@ -635,11 +631,11 @@ describe('AgentExecutionRuntime admission limits', () => {
 
     const stopping = harness.runtime.stopOwner('owner-a');
     await expect(
-      harness.runtime.prepare('owner-a', request('test-agent', 'plan-read-only', 'a-rejected')),
+      harness.runtime.prepare('owner-a', request('codex', 'plan-read-only', 'a-rejected')),
     ).rejects.toThrow('owner disconnected');
     const otherOwner = await harness.runtime.prepare(
       'owner-b',
-      request('test-agent', 'plan-read-only', 'b-allowed'),
+      request('codex', 'plan-read-only', 'b-allowed'),
     );
     launchGate.resolve(controlled.session);
 
@@ -828,11 +824,12 @@ describe('AgentExecutionRuntime approval binding', () => {
   it('revalidates the exact trusted extension manifest before launch', async () => {
     const adapterId = 'vendor.agent';
     let currentManifest: AgentAdapterManifest = AgentAdapterManifestSchema.parse({
-      ...TEST_AGENT_MANIFEST,
+      ...CODEX_MANIFEST,
       id: adapterId,
     });
     const harness = createHarness({
       adapterId,
+      manifest: currentManifest,
       trustedExtensionAdapter: true,
       getTrustedAdapter: () => Promise.resolve(currentManifest),
     });
@@ -848,13 +845,13 @@ describe('AgentExecutionRuntime approval binding', () => {
   it('does not trust an extension session to claim OS-level process pause', async () => {
     const adapterId = 'vendor.agent';
     const manifest = AgentAdapterManifestSchema.parse({
-      ...TEST_AGENT_MANIFEST,
+      ...CODEX_MANIFEST,
       id: adapterId,
       invocation: {
-        ...TEST_AGENT_MANIFEST.invocation,
+        ...CODEX_MANIFEST.invocation,
         context: { strategy: 'prompt-references' },
       },
-      capabilities: { ...TEST_AGENT_MANIFEST.capabilities, contextAttachments: true },
+      capabilities: { ...CODEX_MANIFEST.capabilities, contextAttachments: true },
     });
     const controlled = controllableSession(4321);
     const session: AgentSession = {
@@ -865,6 +862,7 @@ describe('AgentExecutionRuntime approval binding', () => {
     };
     const harness = createHarness({
       adapterId,
+      manifest,
       trustedExtensionAdapter: true,
       getTrustedAdapter: () => Promise.resolve(manifest),
       session,
@@ -914,10 +912,7 @@ describe('AgentExecutionRuntime approval binding', () => {
       cleanup: vi.fn(),
     } as unknown as WorktreeService;
     const harness = createHarness({ worktrees });
-    const prepared = await harness.runtime.prepare(
-      'owner-a',
-      request('test-agent', 'worktree-write'),
-    );
+    const prepared = await harness.runtime.prepare('owner-a', request('codex', 'worktree-write'));
 
     await expect(
       harness.runtime.launch('owner-a', prepared.planId, prepared.disclosureFingerprint),
@@ -937,7 +932,7 @@ describe('AgentExecutionRuntime approval binding', () => {
     });
 
     const failure = await harness.runtime
-      .prepare('owner-a', request('test-agent', 'worktree-write'))
+      .prepare('owner-a', request('codex', 'worktree-write'))
       .catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(AggregateError);
@@ -1271,21 +1266,20 @@ describe('AgentExecutionRuntime launch handles', () => {
 
     await handle.completion;
 
-    expect(harness.records.get(prepared.runId)).toMatchObject({
-      model: 'provider-model-1',
-      providerSessionId: 'provider-session-7',
-      action: 'launch',
-      parentRunId: null,
-      tokenUsage: {
-        inputTokens: 13,
-        cachedInputTokens: 3,
-        outputTokens: 5,
-        totalTokens: 18,
-      },
-      costUsd: 0.0042,
-      outputPreview: 'Visible agent answer.\n',
+    const record = harness.records.get(prepared.runId);
+    expect(record?.model).toBe('provider-model-1');
+    expect(record?.providerSessionId).toBe('provider-session-7');
+    expect(record?.action).toBe('launch');
+    expect(record?.parentRunId).toBeNull();
+    expect(record?.tokenUsage).toEqual({
+      inputTokens: 13,
+      cachedInputTokens: 3,
+      outputTokens: 5,
+      totalTokens: 18,
     });
-    expect(harness.records.get(prepared.runId)?.outputPreview).not.toMatch(
+    expect(record?.costUsd).toBe(0.0042);
+    expect(record?.outputPreview).toBe('Visible agent answer.\n');
+    expect(record?.outputPreview).not.toMatch(
       /RAW_PROTOCOL_SECRET|USER_INPUT_SECRET|METADATA_SECRET/u,
     );
   });
@@ -1521,10 +1515,7 @@ describe('AgentExecutionRuntime launch handles', () => {
       cleanup,
     } as unknown as WorktreeService;
     const harness = createHarness({ worktrees });
-    const prepared = await harness.runtime.prepare(
-      'owner-a',
-      request('test-agent', 'worktree-write'),
-    );
+    const prepared = await harness.runtime.prepare('owner-a', request('codex', 'worktree-write'));
 
     await harness.runtime.resetForPrivacy();
 
@@ -1584,7 +1575,7 @@ function worktreeOwnership(): WorktreeOwnership {
     branch: 'forgeboard/agent-node',
     baseRef: 'main',
     baseCommit: BASE_COMMIT,
-    agentId: 'test-agent',
+    agentId: 'codex',
     taskId: 'agent-node',
     createdAt: STARTED_AT,
     updatedAt: STARTED_AT,

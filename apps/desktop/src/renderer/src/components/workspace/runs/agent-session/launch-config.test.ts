@@ -70,10 +70,14 @@ describe('agentSessionLaunch', () => {
     ).toEqual(['--model', 'anthropic/claude-sonnet']);
   });
 
-  it('notes non-enforceable profiles and passes no flags for them', () => {
+  it('requests a main-owned worktree for the writable interactive profile', () => {
     const launch = agentSessionLaunch(claude, undefined, 'worktree-write');
     expect(launch.configuration.arguments).toEqual([]);
-    expect(launch.profileNote).toMatch(/project root/i);
+    expect(launch.configuration.workspace).toEqual({
+      kind: 'managed-agent-worktree',
+      adapterId: 'claude',
+    });
+    expect(launch.profileNote).toBeNull();
   });
 
   it('shows the project-root note for the custom profile instead of claiming enforcement', () => {
@@ -112,6 +116,7 @@ describe('agentSessionLaunch', () => {
         arguments: [],
         cwdRelative: '.',
         environmentVariableNames: [],
+        workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
       });
       expect('peerProvisionId' in launch.configuration).toBe(false);
     }
@@ -123,7 +128,6 @@ describe('modelFlagSupported', () => {
     for (const id of ['claude', 'codex', 'gemini', 'opencode']) {
       expect(modelFlagSupported(id)).toBe(true);
     }
-    expect(modelFlagSupported('test-agent')).toBe(false);
     expect(modelFlagSupported('custom')).toBe(false);
     expect(modelFlagSupported('acme.custom-agent')).toBe(false);
   });

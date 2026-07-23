@@ -312,7 +312,7 @@ function settings(): AppSettings {
     canvasGridSize: 16,
     canvasSnapToGrid: true,
     keyboardPreset: 'standard',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     agentExecutableOverrides: {},
     agentDefaultModels: {},

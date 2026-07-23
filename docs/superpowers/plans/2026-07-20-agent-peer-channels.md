@@ -157,7 +157,10 @@ it('toggles muted on a context edge', () => {
 - Consumes: env vars `FORGEBOARD_PEER_URL`, `FORGEBOARD_PEER_TOKEN` (set by Task 7); hub HTTP wire protocol (implemented in Task 6): `GET /v1/peers` → `{ agents: [{ name, provider, live, muted }] }`; `POST /v1/message` body `{ to, message }` → `{ result: 'delivered' | 'muted' | 'rate-limited' | 'no-live-session' | 'unknown-peer' }`; `GET /v1/screen?agent=<name>` → `{ text }`. All with `Authorization: Bearer <token>`; non-2xx → `{ error: string }`.
 - Produces: `dist/main.js` — a standalone script; `handleMessage(message, hub)` pure handler for tests.
 
-- [ ] **Step 1: Scaffold the package.** Copy `packages/test-agent/package.json` as the template (same builder and scripts — check with `cat packages/test-agent/package.json`), rename to `@forgeboard/peer-mcp`, entry `src/main.ts`, output `dist/main.js`, no runtime deps. Verify `pnpm-workspace.yaml` already globs `packages/*` (it does for test-agent); run `pnpm install` to register the package.
+- [ ] **Step 1: Scaffold the package.** Create `packages/peer-mcp/package.json` with the workspace's
+      standard TypeScript builder scripts, name it `@forgeboard/peer-mcp`, use `src/main.ts` as the
+      entry and `dist/main.js` as the output, and add no runtime dependencies. Verify
+      `pnpm-workspace.yaml` globs `packages/*`; run `pnpm install` to register the package.
 
 - [ ] **Step 2: Write the failing protocol tests** (`src/protocol.test.ts`):
 
@@ -783,7 +786,7 @@ export interface PeerEnvironmentProvider {
 **Files:**
 
 - Create: `apps/desktop/src/main/agent-peers/provider-config.ts` (+ `provider-config.test.ts`)
-- Modify: `apps/desktop/package.json` (`build.extraResources`, lines ~97-106 — copy the `test-agent` entry shape)
+- Modify: `apps/desktop/package.json` (`build.extraResources` peer helper entry)
 - Test: `provider-config.test.ts`
 
 **Interfaces:**
@@ -818,7 +821,7 @@ export async function writeProviderPeerMaterial(input: {
 
 - [ ] **Step 3: Run — PASS.**
 
-- [ ] **Step 4: Packaging.** In `apps/desktop/package.json` `build.extraResources`, add alongside the test-agent entry:
+- [ ] **Step 4: Packaging.** In `apps/desktop/package.json` `build.extraResources`, add:
 
 ```json
 {
@@ -828,7 +831,8 @@ export async function writeProviderPeerMaterial(input: {
 }
 ```
 
-Ensure the workspace build produces `packages/peer-mcp/dist` before packaging — check how `test-agent` is included (`grep -rn "test-agent" package.json turbo.json apps/desktop/package.json`) and mirror it.
+Ensure the desktop prebuild produces `packages/peer-mcp/dist` before packaging and verify the
+resource entry directly in `apps/desktop/package.json`.
 
 - [ ] **Step 5: Verification against installed CLIs** (this validates the spec's deferred flags; record results in the commit message):
 

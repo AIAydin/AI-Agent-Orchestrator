@@ -276,7 +276,7 @@ function retentionSettings(): AppSettings {
     canvasGridSize: 16,
     canvasSnapToGrid: true,
     keyboardPreset: 'standard',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'plan-read-only',
     agentExecutableOverrides: {},
     agentDefaultModels: {},

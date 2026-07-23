@@ -26,9 +26,8 @@ GitHub repository, pull-request, and exact-head CI actions through the user's lo
 The permission centre exposes Plan/read-only, Worktree write, Docker isolated, and a reusable
 Custom profile with complete host/Docker controls and honest enforcement disclosures.
 The first-run agent step uses provider-owned browser sign-in for Codex and Claude Code, and requires
-normalized main-process connection evidence before either can become the default. The bundled solo
-test agent needs no account. Gemini, OpenCode, and custom CLIs retain their local executable-readiness
-flow. Only an exact fingerprinted project
+normalized main-process connection evidence before either can become the default. Gemini, OpenCode,
+and custom CLIs retain their local executable-readiness flow. Only an exact fingerprinted project
 check can optionally be remembered for 30 days; saved check approvals can be revoked immediately
 under **Settings → Permissions** and do not authorize agent launches or other actions.
 Data & Privacy also provides UI-configured scheduled and quit-time SQLite backups with a per-folder
@@ -45,7 +44,7 @@ conflicts, offline collaboration, malformed imports, and database recovery, see
 searchable offline inside **Settings → Help & shortcuts**.
 
 The release target is download-first: finished GitHub Releases will provide native installers for
-macOS, Windows, and Linux so a user can install Forgeboard and use its deterministic demo without
+macOS, Windows, and Linux so a user can install Forgeboard and use its safe local demo without
 developer tools. That full installer publication has not yet been verified. The implemented solo
 setup flow is completed in the UI without editing source, JSON, environment files, or hand-written
 configuration; broader unfinished product areas remain listed below and in the checklist.
@@ -84,7 +83,6 @@ packages/
   extension-runtime/ Validated data-only local extension lifecycle
   git-engine/       Safe Git repository/worktree/change services
   ui/               Accessible shared component system
-  test-agent/       Deterministic local agent used by tests and the demo
 config/
   tooling/          Shared TypeScript, lint, formatting, and test configuration
 scripts/
@@ -133,6 +131,13 @@ expiry, and originating window immediately before starting a real PTY. The xterm
 ANSI output, raw input, resize, search, display clearing, replay, interrupt, terminate, and fresh
 reviewed restart. See [Interactive Terminal](docs/terminal/README.md) for its unsandboxed host
 boundary and retention behavior.
+
+The embedded session on a built-in Agent node has a narrower automatic path when **Write in a
+worktree** is selected. **Start** or **Restart** is the only click: Electron main reloads the saved
+Agent identity, creates its isolated worktree, reconstructs the executable, model flags, and
+main-created peer-tool arguments, and revalidates the exact command immediately before spawning.
+Renderer-supplied command fields are replaced. Ordinary Terminal nodes, other access profiles, and
+custom or extension-provided agents retain native launch confirmation.
 
 Web Preview and Mobile Preview nodes are also configured entirely in the inspector. Users choose the
 primary checkout or an available application-owned agent worktree, enter a literal command or select

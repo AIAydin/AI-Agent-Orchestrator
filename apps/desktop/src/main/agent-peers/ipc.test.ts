@@ -17,7 +17,10 @@ const electronMock = vi.hoisted(() => {
 });
 
 vi.mock('electron', () => ({
-  ipcMain: { handle: electronMock.handle, removeHandler: electronMock.removeHandler },
+  ipcMain: {
+    handle: electronMock.handle,
+    removeHandler: electronMock.removeHandler,
+  },
 }));
 
 import type { Project } from '../../shared/application/contracts.js';
@@ -41,7 +44,11 @@ const project: Project = {
   health: { status: 'clean', detail: null },
 } as unknown as Project;
 
-const provisionInput = { projectId: PROJECT_ID, nodeId: NODE_ID, adapterId: 'claude' };
+const provisionInput = {
+  projectId: PROJECT_ID,
+  nodeId: NODE_ID,
+  adapterId: 'claude',
+};
 
 let userDataRoot: string;
 
@@ -78,6 +85,10 @@ describe('AgentPeersIpcService provision', () => {
       PROVISION_ID,
       fixture.materialCleanup,
     );
+    expect(fixture.service.registerLaunchMaterial).toHaveBeenCalledWith(PROVISION_ID, 'claude', [
+      '--mcp-config',
+      join(userDataRoot, 'agent-peers', PROVISION_ID, 'mcp.json'),
+    ]);
     expect(result).toEqual({
       ok: true,
       value: {
@@ -113,7 +124,10 @@ describe('AgentPeersIpcService provision', () => {
 
     const result = await handler(AGENT_PEERS_IPC_CHANNELS.provision)(event, provisionInput);
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
     expect(fixture.service.provision).not.toHaveBeenCalled();
     expect(fixture.writeMaterial).not.toHaveBeenCalled();
   });
@@ -124,7 +138,10 @@ describe('AgentPeersIpcService provision', () => {
 
     const result = await handler(AGENT_PEERS_IPC_CHANNELS.provision)(event, provisionInput);
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
     expect(fixture.service.provision).not.toHaveBeenCalled();
   });
 
@@ -150,7 +167,10 @@ describe('AgentPeersIpcService provision', () => {
       // adapterId omitted -- schema requires min length 1.
     });
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_REQUEST' },
+    });
     expect(fixture.store.getProject).not.toHaveBeenCalled();
     expect(fixture.service.provision).not.toHaveBeenCalled();
   });
@@ -162,7 +182,10 @@ describe('AgentPeersIpcService provision', () => {
 
     const result = await handler(AGENT_PEERS_IPC_CHANNELS.provision)(event, provisionInput);
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
     expect(fixture.service.provision).not.toHaveBeenCalled();
   });
 });
@@ -245,7 +268,10 @@ describe('AgentPeersIpcService lifecycle delegation', () => {
 
     const result = await handler(AGENT_PEERS_IPC_CHANNELS.provision)(event, provisionInput);
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'OPERATION_FAILED' } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED' },
+    });
     expect(fixture.service.provision).not.toHaveBeenCalled();
   });
 });
@@ -255,6 +281,7 @@ interface Fixture {
   readonly service: {
     provision: ReturnType<typeof vi.fn>;
     environmentForProvision: ReturnType<typeof vi.fn>;
+    registerLaunchMaterial: ReturnType<typeof vi.fn>;
     registerCleanup: ReturnType<typeof vi.fn>;
     onMessageDelivered: ReturnType<typeof vi.fn>;
     pauseForShutdown: ReturnType<typeof vi.fn>;
@@ -293,6 +320,7 @@ function createFixture(
       }),
     ),
     environmentForProvision: vi.fn(() => environment),
+    registerLaunchMaterial: vi.fn(),
     registerCleanup: vi.fn(),
     onMessageDelivered: vi.fn(
       (listener: (event: { projectId: string; edgeId: string }) => void) => {
@@ -359,7 +387,11 @@ function liveEvent(id = 7): {
     once,
     send,
   } as unknown as WebContents;
-  return { event: { sender, senderFrame: frame } as IpcMainInvokeEvent, send, once };
+  return {
+    event: { sender, senderFrame: frame } as IpcMainInvokeEvent,
+    send,
+    once,
+  };
 }
 
 function handler(channel: string) {

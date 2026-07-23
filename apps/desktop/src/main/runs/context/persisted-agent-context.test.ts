@@ -88,7 +88,7 @@ describe('PersistedAgentRunContextResolver', () => {
 
   it.each([
     ['prompt', input({ prompt: 'Different prompt' })],
-    ['adapter', input({ adapterId: 'codex' })],
+    ['adapter', input({ adapterId: 'claude' })],
     ['model', input({ model: 'different-model' })],
     ['permission profile', input({ permissionProfile: 'worktree-write' })],
   ] as const)(
@@ -275,7 +275,7 @@ describe('PersistedAgentRunContextResolver', () => {
     await expect(
       resolverFor(root, defaultsDocument).resolve(input(), {
         ...settings(),
-        defaultAgent: 'codex',
+        defaultAgent: 'claude',
         defaultPermissionProfile: 'worktree-write',
       }),
     ).rejects.toThrow(/saved Agent adapter/iu);
@@ -310,7 +310,7 @@ function input(overrides: Partial<PrepareRunInput> = {}): PrepareRunInput {
   return {
     projectId: PROJECT_ID,
     nodeId: 'agent-1',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     prompt: 'Review context',
     permissionProfile: 'plan-read-only',
     ...overrides,
@@ -319,7 +319,7 @@ function input(overrides: Partial<PrepareRunInput> = {}): PrepareRunInput {
 
 function settings(): AppSettings {
   return {
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'plan-read-only',
   } as AppSettings;
 }
@@ -367,7 +367,7 @@ function canvas(
           locked: false,
           collapsed: false,
           color: '#445566',
-          adapterId: 'test-agent',
+          adapterId: 'codex',
           permissionProfile: 'plan-read-only',
           prompt: 'Review context',
           contextAttachmentIds: attachmentIds,

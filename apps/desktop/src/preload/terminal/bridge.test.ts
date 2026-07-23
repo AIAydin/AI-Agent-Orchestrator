@@ -207,6 +207,21 @@ describe('createTerminalApi', () => {
     await expect(api.prepareLaunch(PREPARE)).rejects.toBeTruthy();
   });
 
+  it('rejects a launch plan that changes a managed-worktree request', async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { ...PLAN, workspace: { kind: 'project' } },
+    });
+    const api = createTerminalApi(invoke, () => vi.fn());
+
+    await expect(
+      api.prepareLaunch({
+        ...PREPARE,
+        workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+      }),
+    ).rejects.toBeTruthy();
+  });
+
   it('delivers only valid owner-safe events and removes the exact subscription', () => {
     let eventHandler: ((payload: unknown) => void) | undefined;
     const unsubscribe = vi.fn();

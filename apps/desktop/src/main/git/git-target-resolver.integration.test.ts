@@ -104,7 +104,7 @@ function runRecord(
     id: RUN_ID,
     projectId: PROJECT_ID,
     nodeId: 'agent-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     status: 'succeeded',
     cwd: ownership.worktreePath,
     branch: ownership.branch,
@@ -148,7 +148,7 @@ async function createFixture(
     await new WorktreeService(repositories).provision({
       repositoryPath: repository,
       managedRoot,
-      agentId: 'test-agent',
+      agentId: 'codex',
       taskId: 'agent-node',
     })
   ).ownership;

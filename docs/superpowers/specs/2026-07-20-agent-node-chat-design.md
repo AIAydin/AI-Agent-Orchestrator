@@ -1,7 +1,8 @@
 # Agent node chat — design (v2, hybrid)
 
 Date: 2026-07-20
-Status: Implemented (commits 3140da4..4140497; final whole-branch review passed after fix wave)
+Status: Implemented (commits 3140da4..4140497; final whole-branch review passed after fix wave).
+The managed-worktree interactive-session follow-up was completed on 2026-07-23.
 
 Implementation deviations of record: green traffic light focuses the terminal (not resize); the §5 description/accent overflow popover was not built (agent description currently editable nowhere — follow-up); interactive model flags map claude/codex/gemini/opencode, others hide the Model field. Known pending: commits depend on untracked provider-gate scaffolding (user WIP) — needs a dedicated scaffolding commit for isolated builds.
 
@@ -16,7 +17,7 @@ Every Agent node's face is a live, scrollable session with its agent — visible
 - **Slash commands:** provided natively by the embedded CLIs (`/compact`, `/model`, custom commands like `/goal`). No custom command menu is built.
 - **Everything adjustable on the node:** agent, model, permission profile selects; inline title edit; context-attachment chips.
 - **Sidebar:** removed for agent nodes in this round ("agent-first"); other node kinds keep their panels for a later pass.
-- **Session start friction:** one explicit Start (with the existing terminal launch review) per session; typing inside the session is the CLI's own instant loop. The provider connection gate (run-gate on connection) still blocks starting.
+- **Session start friction:** one explicit Start per session; a built-in worktree session is reconstructed and authorized automatically in Electron main, while unsupported/custom paths retain native terminal review. Typing inside the session is the CLI's own instant loop. The provider connection gate (run-gate on connection) still blocks starting.
 - **Provider looks:** distinct brand themes per provider — palette entries per provider, same layout, different identity.
 
 ## 1. Node face: a floating app window with the real CLI inside
@@ -31,25 +32,39 @@ Reference: the "October"-style canvas — agent nodes read as **macOS-style app 
 
 ## 2. Session lifecycle (reusing terminal infrastructure)
 
-- Renderer: `useTerminalNodeController` (existing) drives the session with a **provider-derived `TerminalNodeConfiguration`** instead of a user-typed command. Start = `prepareLaunch()` → existing launch review (`TerminalLaunchReviewDialog`, once per session) → `confirmLaunch()`. Input, resize, interrupt, terminate, replay: all existing controller methods.
+- Renderer: `useTerminalNodeController` (existing) drives the session with a **provider-derived `TerminalNodeConfiguration`** instead of a user-typed command. Start = `prepareLaunch()` → automatic `confirmLaunch()`; Electron main either reconstructs an eligible built-in worktree command or falls back to native review. Input, resize, interrupt, terminate, replay: all existing controller methods.
 - Sessions are keyed per node (existing owner model), survive node deselection, and are terminated by the existing service shutdown rules.
 - **Provider gate kept:** the Start button is blocked (with inline warning + **Refresh status** / **Open settings** actions) while `useAgentProviderGate` reports the provider disconnected/unknown — same copy and actions as today.
 
-## 3. Provider launch resolution (renderer module, existing terminal IPC)
+## 3. Provider launch resolution
 
-No main-process changes. A renderer module `runs/agent-session/launch-config.ts` maps node config → the existing `TerminalNodeConfiguration`, and the session flows through the untouched `TerminalService` (launch review, audit, PTY):
+A renderer module `runs/agent-session/launch-config.ts` maps node config → the existing
+`TerminalNodeConfiguration`. The session continues through `TerminalService` for main-process
+authorization, audit, and PTY ownership. The managed-worktree follow-up adds a path-free workspace
+request to that contract; Electron main validates the persisted Agent node and selected profile,
+provisions the worktree, reconstructs built-in executable/model/peer arguments from main-owned
+state, and revalidates command and ownership immediately before spawn.
 
 - **Executable:** from agent detection (`AgentDetection.executable`; detection already honors `agentExecutableOverrides`). Missing executable → start card shows "not installed" guidance instead of Start.
 - **Arguments per provider:**
   - `claude`: `['--permission-mode', 'plan']` when profile is `plan-read-only`; `['--model', <model>]` when a model is set.
   - `codex`: `['--sandbox', 'read-only']` when profile is `plan-read-only`; `['-m', <model>]` when a model is set.
   - `opencode` / others: no flags (best-effort; the CLI's own controls apply).
-- **cwd:** the project root (`cwdRelative: ''`) for all interactive sessions in this round. The terminal contract restricts cwd to inside the project, and managed run-worktrees live outside it — so `worktree-write` and `docker-isolated` interactive enforcement is **not** available yet. For those profiles the config row shows an inline note: interactive sessions run at the project root with the CLI's own interactive approval prompts as the guardrail; flow runs keep full profile enforcement. A follow-up adds managed-worktree interactive sessions via a main-side session service.
+- **cwd:** `plan-read-only` and profiles without interactive enforcement use the project root.
+  Selecting `worktree-write` creates a fresh application-owned worktree for that Agent session and
+  starts the provider CLI at its exact root. Separate Agent launches receive separate worktree
+  ownership records and branches; the renderer receives only the durable run ID and branch, never a
+  filesystem path. `docker-isolated` interactive enforcement remains a follow-up and is disclosed
+  inline instead of being presented as enforced.
 - **Environment allowlist:** empty (`environmentVariableNames: []`) — provider CLIs read their own config/auth files.
 
 ## 4. Flow runs: unchanged pipeline, visible on the node
 
-The headless run pipeline (prepare/approve, run events, transcript, summaries, tokens/cost, run history) is untouched. Its output surfaces on the node via the run strip (§1). The interactive terminal and orchestration runs are separate lanes of the same node; they share the node's config (adapter, model, permission profile) and worktree.
+The headless run pipeline (prepare/approve, run events, transcript, summaries, tokens/cost, run
+history) is untouched. Its output surfaces on the node via the run strip (§1). The interactive
+terminal and orchestration runs are separate lanes of the same node. They share the node's adapter,
+model, and permission configuration, while every writable attempt or session owns its exact managed
+worktree.
 
 ## 5. No sidebar for agent nodes
 
@@ -80,7 +95,7 @@ Selecting an agent node shows **no inspector panel** (the inspector renders noth
 
 ## Out of scope
 
-- Managed-worktree and Docker-isolated interactive sessions (flow runs keep both; interactive follow-up needs a main-side session service).
+- Docker-isolated interactive sessions (flow runs keep Docker isolation).
 - Sidebar removal for non-agent node kinds (follow-up pass).
 - Structured turn model / custom chat renderer / custom slash-command menu (superseded by the real TUI).
 - Driving the interactive TUI from flow orchestration (flows keep the headless pipeline).

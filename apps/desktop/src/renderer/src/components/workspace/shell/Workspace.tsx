@@ -119,9 +119,6 @@ import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
 import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
-import { buildWorkflowTemplate } from '../workflows/templates/builder.js';
-import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from '../workflows/templates/catalog.js';
-import { collisionFreeTemplateOrigin } from '../workflows/templates/placement.js';
 import { useDiffReviewNodeController } from '../diff-review/useDiffReviewNodeController.js';
 import { useDiffReviewSession } from '../diff-review/useDiffReviewSession.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
@@ -728,52 +725,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     [collaborationCanvas.graphReadOnly, nodes.length, record, reportCollaborationReadOnly],
   );
 
-  const addWorkflowTemplate = useCallback(
-    (template: WorkflowTemplate) => {
-      if (collaborationCanvas.graphReadOnly) {
-        reportCollaborationReadOnly();
-        return;
-      }
-      try {
-        const origin = collisionFreeTemplateOrigin(template, nodesRef.current, { x: 220, y: 150 });
-        const built = buildWorkflowTemplate(template.id, settings, origin);
-        const selected = built.nodes[0];
-        if (selected === undefined) throw new Error('The workflow template contains no nodes.');
-        record();
-        pendingNodeSelection.current = selected.id;
-        setNodes((items) => [
-          ...items.map((node) => ({ ...node, selected: false })),
-          ...built.nodes.map((node, index) => ({
-            ...node,
-            selected: index === 0,
-          })),
-        ]);
-        setEdges((items) => [
-          ...items.map((edge) => ({ ...edge, selected: false })),
-          ...built.edges,
-        ]);
-        setSelectedNodeId(selected.id);
-        setSelectedEdgeId(null);
-        window.setTimeout(() => {
-          if (pendingNodeSelection.current === selected.id) pendingNodeSelection.current = null;
-        }, 250);
-        setEvents((items) =>
-          [
-            `Added ${built.template.name} workflow with ${built.nodes.length} nodes.`,
-            ...items,
-          ].slice(0, 30),
-        );
-      } catch (cause) {
-        onError(
-          cause instanceof Error
-            ? cause.message
-            : 'Forgeboard could not add the workflow template.',
-        );
-      }
-    },
-    [collaborationCanvas.graphReadOnly, onError, record, reportCollaborationReadOnly, settings],
-  );
-
   const attachProjectFileContext = useCallback(
     async (targetNodeId: string, payload: WorkspaceContextDragPayload): Promise<void> => {
       if (collaborationGraphReadOnlyRef.current) {
@@ -893,12 +844,8 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     (agent): agent is typeof agent & { id: RunAdapterId } =>
       agent.installed && isRunAdapterId(agent.id),
   );
-  const fallbackAdapter = isRunAdapterId(settings.defaultAgent)
-    ? settings.defaultAgent
-    : 'test-agent';
-  const selectedAdapter = selectedNode
-    ? (selectedNode.data.adapterId ?? fallbackAdapter)
-    : 'test-agent';
+  const fallbackAdapter = isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'codex';
+  const selectedAdapter = selectedNode ? (selectedNode.data.adapterId ?? fallbackAdapter) : 'codex';
   const selectedAgent = runnableAgents.find((agent) => agent.id === selectedAdapter);
   const selectedModel = effectiveNodeModel(
     selectedAgent,
@@ -909,9 +856,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     selectedNode?.data.permissionProfile ?? settings.defaultPermissionProfile;
   const selectedPermission = configuredPermission;
   const selectedPermissionUnavailableReason =
-    selectedNode === null
-      ? null
-      : permissionProfileUnavailableReason(selectedPermission, settings, selectedAdapter);
+    selectedNode === null ? null : permissionProfileUnavailableReason(selectedPermission, settings);
   const selectedNodeKind = selectedNode?.data.kind;
   const watchedProviderAdapterIds = useMemo(() => {
     const ids = new Set<string>();
@@ -1093,7 +1038,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         return {
           ...displayed,
           // Single source of truth for the agent-window drag handle, so every creation path
-          // (add, hydrate, collaboration merge, workflow template) restricts dragging to the
+          // (add, hydrate, collaboration merge) restricts dragging to the
           // title bar. Never clobber a handle a node already carries.
           ...(node.data.kind === 'agent' && displayed.dragHandle === undefined
             ? { dragHandle: AGENT_NODE_DRAG_HANDLE }
@@ -1182,9 +1127,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const searchTerm = search.toLowerCase();
   const filteredTemplates = NODE_KINDS.filter((kind) =>
     nodeRegistry.resolve({ kind }).label.toLowerCase().includes(searchTerm),
-  );
-  const filteredWorkflowTemplates = WORKFLOW_TEMPLATES.filter((template) =>
-    `${template.name} ${template.description}`.toLowerCase().includes(searchTerm),
   );
   const filteredExtensionTemplates = extensionTemplates.filter(({ extension, definition }) =>
     `${definition.displayName} ${definition.description} ${extension.manifest.name}`
@@ -1325,7 +1267,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   const paletteActions = createWorkspacePaletteActions({
     runnableAgents,
     extensionTemplates,
-    workflowTemplates: WORKFLOW_TEMPLATES,
     selectedNodeTitle: selectedNode?.data.title ?? null,
     selectedWorkflowScope,
     canRunWorkflow,
@@ -1334,7 +1275,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     addNode,
     addAgentNode,
     addExtensionNode,
-    addWorkflowTemplate,
     fitCanvas: () =>
       void instance?.fitView({
         padding: 0.18,
@@ -1433,7 +1373,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           tab={railTab}
           search={search}
           templates={filteredTemplates}
-          workflowTemplates={filteredWorkflowTemplates}
           extensionTemplates={filteredExtensionTemplates}
           nodes={railTab === 'nodes' ? filteredNodes : nodes}
           nodeRegistry={nodeRegistry}
@@ -1445,7 +1384,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onSearchChange={setSearch}
           onAddNode={addNode}
           onAddAgentNode={addAgentNode}
-          onAddWorkflowTemplate={addWorkflowTemplate}
           onAddExtensionNode={addExtensionNode}
           onInitializeGit={() => void initializeGit()}
           onAttachAgentContext={attachProjectFileContext}

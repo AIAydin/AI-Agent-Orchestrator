@@ -27,6 +27,11 @@ export function hydrateNodeData(
   discovery: Pick<ExtensionDiscoveryView, 'installed' | 'quarantined'>,
 ): WorkshopNode['data'] {
   const current = data as WorkshopNode['data'];
+  if (current.kind === 'agent' && current.adapterId === 'test-agent') {
+    return Object.fromEntries(
+      Object.entries(current).filter(([key]) => key !== 'adapterId'),
+    ) as WorkshopNode['data'];
+  }
   if (current.kind === 'test') return normalizeCheckProducerData(current);
   if (current.kind !== 'extension') return current;
   const binding = resolveExtensionNodeBinding(
@@ -55,7 +60,7 @@ export function hydrateNodeData(
 
 export function isRunAdapterId(value: string): value is RunAdapterId {
   return (
-    ['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom'].includes(value) ||
+    ['codex', 'claude', 'gemini', 'opencode', 'custom'].includes(value) ||
     /^[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9][a-z0-9._-]*)+$/u.test(value)
   );
 }

@@ -1,11 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { access } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { AgentAdapterManifest } from '@forgeboard/agent-adapters';
 import { RepositoryService } from '@forgeboard/git-engine';
 import {
-  app,
   BrowserWindow,
   ipcMain,
   type Dialog,
@@ -149,7 +147,6 @@ export class RunService {
         getTrustedAdapter,
         ...(launchTrustedAdapter === undefined ? {} : { launchTrustedAdapter }),
         repositories,
-        resolveTestAgentCliPath: testAgentCliPath,
       });
   }
 
@@ -880,28 +877,6 @@ function portableRelativePath(root: string, candidate: string): string {
   return path.relative(path.resolve(root), path.resolve(candidate)).split(path.sep).join('/');
 }
 
-async function testAgentCliPath(): Promise<string> {
-  if (app.isPackaged) {
-    const packagedPath = path.join(process.resourcesPath, 'test-agent', 'cli.js');
-    await access(packagedPath);
-    return packagedPath;
-  }
-  const candidates = [
-    path.resolve(app.getAppPath(), '../../../../packages/test-agent/dist/cli.js'),
-    path.resolve(process.cwd(), '../../packages/test-agent/dist/cli.js'),
-    path.resolve(process.cwd(), 'packages/test-agent/dist/cli.js'),
-  ];
-  for (const candidate of candidates) {
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      // Continue through fixed development locations without searching the filesystem.
-    }
-  }
-  throw new Error('The bundled deterministic test agent is missing. Rebuild Forgeboard and retry.');
-}
-
 function runLaunchConfirmation(
   disclosure: RunDisclosure,
   disclosureFingerprint: string,
@@ -959,7 +934,6 @@ function dockerPreparationConfirmation(approval: DockerPreparationApproval): Mes
 }
 
 function requiresDockerPreparation(input: PrepareRunInput, settings: AppSettings): boolean {
-  if (input.adapterId === 'test-agent') return false;
   return (
     input.permissionProfile === 'docker-isolated' ||
     (input.permissionProfile === 'custom' && settings.customPermissionProfile.runtime === 'docker')

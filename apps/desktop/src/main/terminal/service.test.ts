@@ -23,6 +23,11 @@ import {
   type PeerEnvironmentProvider,
   type TerminalServiceStore,
 } from './service.js';
+import type {
+  AutomaticTerminalAgentLaunch,
+  PreparedTerminalWorkspace,
+  TerminalWorkspaceManager,
+} from './workspaces/contracts.js';
 
 const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
 const PLAN_ID = '20000000-0000-4000-8000-000000000001';
@@ -109,6 +114,144 @@ describe('TerminalService', () => {
     );
   });
 
+  it('launches a managed Agent request from the main-resolved worktree root', async () => {
+    const workspaceManager = new FakeTerminalWorkspaceManager();
+    const harness = await fixture({ workspaceManager });
+    const plan = await harness.service.prepareLaunch('owner-a', {
+      ...harness.input,
+      nodeId: 'agent-one',
+      workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+    });
+    let reviewedCwd: string | undefined;
+
+    const session = await harness.service.confirmLaunch('owner-a', plan.planId, (review) => {
+      reviewedCwd = review.exact.cwd;
+      return Promise.resolve('approved');
+    });
+
+    expect(reviewedCwd).toBe(workspaceManager.prepared?.rootPath);
+    expect(harness.spawnedLaunch()?.cwd).toBe(workspaceManager.prepared?.rootPath);
+    expect(session?.workspace).toEqual(workspaceManager.prepared?.view);
+    expect(workspaceManager.running).toHaveLength(1);
+    harness.pty.emitExit({ exitCode: 0, signal: null });
+    await expectEventually(() => Promise.resolve(workspaceManager.finished.length === 1));
+  });
+
+  it('automatically launches the main-reconstructed built-in Agent command and peer arguments', async () => {
+    const workspaceManager = new FakeTerminalWorkspaceManager();
+    workspaceManager.automaticLaunch = {
+      executable: '/bin/sh',
+      arguments: ['--model', 'trusted-model'],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+    };
+    const provider = new FakePeerEnvironmentProvider();
+    provider.environments.set(PEER_PROVISION_ID, {
+      FORGEBOARD_PEER_URL: 'http://127.0.0.1:41999',
+      FORGEBOARD_PEER_TOKEN: 'super-secret-token',
+    });
+    provider.launchMaterials.set(PEER_PROVISION_ID, {
+      projectId: PROJECT_ID,
+      nodeId: 'agent-one',
+      adapterId: 'claude',
+      arguments: ['--mcp-config', '/main-owned/mcp.json'],
+    });
+    const harness = await fixture({ workspaceManager, peerProvider: provider });
+    const plan = await harness.service.prepareLaunch('owner-a', {
+      ...harness.input,
+      nodeId: 'agent-one',
+      arguments: ['--mcp-config', '/renderer-controlled/mcp.json'],
+      workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+      peerProvisionId: PEER_PROVISION_ID,
+    });
+    let authorizationCalls = 0;
+
+    const session = await harness.service.confirmLaunch('owner-a', plan.planId, () => {
+      authorizationCalls += 1;
+      return Promise.resolve('denied');
+    });
+
+    expect(authorizationCalls).toBe(0);
+    expect(provider.launchMaterialForProvisionCalls).toEqual([PEER_PROVISION_ID]);
+    expect(harness.spawnedLaunch()?.arguments).toEqual([
+      '--model',
+      'trusted-model',
+      '--mcp-config',
+      '/main-owned/mcp.json',
+    ]);
+    expect(session?.arguments).toEqual([
+      '--model',
+      'trusted-model',
+      '--mcp-config',
+      '/main-owned/mcp.json',
+    ]);
+    expect(
+      harness.store.audits.some(
+        (audit) =>
+          Array.isArray(audit) &&
+          audit[1] === 'launch' &&
+          typeof audit[3] === 'object' &&
+          audit[3] !== null &&
+          'authorization' in audit[3] &&
+          Reflect.get(audit[3], 'authorization') === 'managed-agent-automatic',
+      ),
+    ).toBe(true);
+  });
+
+  it('blocks an automatic Agent launch when peer material belongs to another node', async () => {
+    const workspaceManager = new FakeTerminalWorkspaceManager();
+    workspaceManager.automaticLaunch = {
+      executable: '/bin/sh',
+      arguments: [],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+    };
+    const provider = new FakePeerEnvironmentProvider();
+    provider.launchMaterials.set(PEER_PROVISION_ID, {
+      projectId: PROJECT_ID,
+      nodeId: 'another-agent',
+      adapterId: 'claude',
+      arguments: ['--mcp-config', '/main-owned/mcp.json'],
+    });
+    const harness = await fixture({ workspaceManager, peerProvider: provider });
+    const plan = await harness.service.prepareLaunch('owner-a', {
+      ...harness.input,
+      nodeId: 'agent-one',
+      workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+      peerProvisionId: PEER_PROVISION_ID,
+    });
+    let authorizationCalls = 0;
+
+    await expect(
+      harness.service.confirmLaunch('owner-a', plan.planId, () => {
+        authorizationCalls += 1;
+        return Promise.resolve('approved');
+      }),
+    ).rejects.toThrow(/peer configuration changed/u);
+
+    expect(authorizationCalls).toBe(0);
+    expect(harness.spawned()).toBe(false);
+    expect(workspaceManager.discarded).toEqual([workspaceManager.prepared]);
+  });
+
+  it('releases an unused managed Agent worktree when native review is denied', async () => {
+    const workspaceManager = new FakeTerminalWorkspaceManager();
+    const harness = await fixture({ workspaceManager });
+    const plan = await harness.service.prepareLaunch('owner-a', {
+      ...harness.input,
+      nodeId: 'agent-one',
+      workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+    });
+
+    await expect(
+      harness.service.confirmLaunch('owner-a', plan.planId, () => Promise.resolve('denied')),
+    ).resolves.toBeNull();
+
+    expect(workspaceManager.prepared).toBeDefined();
+    expect(workspaceManager.discarded).toEqual([workspaceManager.prepared]);
+    expect(harness.spawnedLaunch()).toBeUndefined();
+  });
+
   it('rechecks expiry and async launch authority immediately before spawn', async () => {
     let now = new Date('2026-07-17T16:00:00.000Z');
     const expired = await fixture({ now: () => now, planTtlMs: 10 });
@@ -145,7 +288,10 @@ describe('TerminalService', () => {
   });
 
   it('keeps an expired transcript and session when its required retention audit fails', async () => {
-    const harness = await fixture({ expiredSession: true, failRetentionAudit: true });
+    const harness = await fixture({
+      expiredSession: true,
+      failRetentionAudit: true,
+    });
     const transcript = path.join(harness.transcriptRoot, `${SESSION_ID}.jsonl`);
 
     await expect(harness.service.assertProjectAvailable(PROJECT_ID)).rejects.toThrow(
@@ -156,7 +302,10 @@ describe('TerminalService', () => {
   });
 
   it('keeps an orphaned transcript when its required retention audit fails', async () => {
-    const harness = await fixture({ orphanedTranscript: true, failRetentionAudit: true });
+    const harness = await fixture({
+      orphanedTranscript: true,
+      failRetentionAudit: true,
+    });
     const transcript = path.join(harness.transcriptRoot, `${SESSION_ID}.jsonl`);
 
     await expect(harness.service.assertProjectAvailable(PROJECT_ID)).rejects.toThrow(
@@ -167,7 +316,10 @@ describe('TerminalService', () => {
   });
 
   it('records a redacted failed outcome when an expired session row cannot be deleted', async () => {
-    const harness = await fixture({ expiredSession: true, failSessionDeletion: true });
+    const harness = await fixture({
+      expiredSession: true,
+      failSessionDeletion: true,
+    });
     const transcript = path.join(harness.transcriptRoot, `${SESSION_ID}.jsonl`);
 
     await expect(harness.service.assertProjectAvailable(PROJECT_ID)).rejects.toThrow(
@@ -444,8 +596,11 @@ describe('TerminalService', () => {
 
       await expectEventually(
         async () =>
-          (await harness.service.getSession('owner-a', { sessionId: SESSION_ID }))?.status ===
-          'exited',
+          (
+            await harness.service.getSession('owner-a', {
+              sessionId: SESSION_ID,
+            })
+          )?.status === 'exited',
       );
     });
 
@@ -457,7 +612,9 @@ describe('TerminalService', () => {
       );
       harness.pty.emitData('hello \x1b[31mworld\x1b[0m\r\n');
       await expectEventually(async () => {
-        const replay = await harness.service.replay('owner-a', { sessionId: SESSION_ID });
+        const replay = await harness.service.replay('owner-a', {
+          sessionId: SESSION_ID,
+        });
         return replay?.chunks[0]?.data === 'hello \x1b[31mworld\x1b[0m\r\n';
       });
 
@@ -544,8 +701,11 @@ describe('TerminalService', () => {
       harness.pty.emitExit({ exitCode: 0, signal: null });
       await expectEventually(
         async () =>
-          (await harness.service.getSession('owner-a', { sessionId: SESSION_ID }))?.status ===
-          'exited',
+          (
+            await harness.service.getSession('owner-a', {
+              sessionId: SESSION_ID,
+            })
+          )?.status === 'exited',
       );
 
       expect(provider.releasedSessionIds).toEqual([SESSION_ID]);
@@ -560,7 +720,10 @@ describe('TerminalService', () => {
         FORGEBOARD_PEER_URL: 'http://127.0.0.1:41999',
         FORGEBOARD_PEER_TOKEN: 'super-secret-token',
       });
-      const harness = await fixture({ peerProvider: provider, failAfterSpawn: true });
+      const harness = await fixture({
+        peerProvider: provider,
+        failAfterSpawn: true,
+      });
       const plan = await harness.service.prepareLaunch('owner-a', {
         ...harness.input,
         peerProvisionId: PEER_PROVISION_ID,
@@ -670,6 +833,7 @@ describe('TerminalService', () => {
       readonly failRetentionAudit?: boolean;
       readonly failSessionDeletion?: boolean;
       readonly peerProvider?: PeerEnvironmentProvider;
+      readonly workspaceManager?: TerminalWorkspaceManager;
     } = {},
   ): Promise<{
     readonly service: TerminalService;
@@ -700,7 +864,9 @@ describe('TerminalService', () => {
     }
     if (options.expiredSession === true || options.orphanedTranscript === true) {
       await mkdir(transcriptRoot, { recursive: true, mode: 0o700 });
-      await writeFile(path.join(transcriptRoot, `${SESSION_ID}.jsonl`), '', { mode: 0o600 });
+      await writeFile(path.join(transcriptRoot, `${SESSION_ID}.jsonl`), '', {
+        mode: 0o600,
+      });
     }
     const pty = new FakePty();
     let didSpawn = false;
@@ -722,6 +888,9 @@ describe('TerminalService', () => {
       maximumTranscriptBytes: 1_024 * 1_024,
       maximumTotalTranscriptBytes: 2 * 1_024 * 1_024,
       maximumTranscriptFiles: 10,
+      ...(options.workspaceManager === undefined
+        ? {}
+        : { workspaceManager: options.workspaceManager }),
     });
     if (options.peerProvider !== undefined)
       service.setPeerEnvironmentProvider(options.peerProvider);
@@ -747,6 +916,71 @@ describe('TerminalService', () => {
     };
   }
 });
+
+class FakeTerminalWorkspaceManager implements TerminalWorkspaceManager {
+  prepared: PreparedTerminalWorkspace | undefined;
+  automaticLaunch: AutomaticTerminalAgentLaunch | null = null;
+  readonly running: TerminalSessionView[] = [];
+  readonly finished: TerminalSessionView[] = [];
+  readonly discarded: PreparedTerminalWorkspace[] = [];
+
+  async provision(input: {
+    readonly project: Project;
+    readonly nodeId: string;
+    readonly adapterId: string;
+  }): Promise<PreparedTerminalWorkspace> {
+    const rootPath = path.join(input.project.path, 'managed-agent-root');
+    await mkdir(rootPath);
+    this.prepared = {
+      rootPath,
+      view: {
+        kind: 'managed-agent-worktree',
+        runId: '60000000-0000-4000-8000-000000000001',
+        branch: 'forgeboard/agent-one/claude-1',
+      },
+      ownership: {
+        schemaVersion: 1,
+        id: '70000000-0000-4000-8000-000000000001',
+        repositoryRoot: input.project.path,
+        managedRoot: input.project.path,
+        worktreePath: rootPath,
+        branch: 'forgeboard/agent-one/claude-1',
+        baseRef: 'HEAD',
+        baseCommit: 'a'.repeat(40),
+        agentId: input.adapterId,
+        taskId: input.nodeId,
+        createdAt: '2026-07-23T12:00:00.000Z',
+        updatedAt: '2026-07-23T12:00:00.000Z',
+        status: 'active',
+        cleanupPolicy: 'manual',
+      },
+    };
+    return this.prepared;
+  }
+
+  resolveAutomaticAgentLaunch(): Promise<AutomaticTerminalAgentLaunch | null> {
+    return Promise.resolve(this.automaticLaunch);
+  }
+
+  assertCurrent(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  markRunning(_workspace: PreparedTerminalWorkspace, session: TerminalSessionView): Promise<void> {
+    this.running.push(session);
+    return Promise.resolve();
+  }
+
+  markFinished(_workspace: PreparedTerminalWorkspace, session: TerminalSessionView): Promise<void> {
+    this.finished.push(session);
+    return Promise.resolve();
+  }
+
+  discard(workspace: PreparedTerminalWorkspace): Promise<void> {
+    this.discarded.push(workspace);
+    return Promise.resolve();
+  }
+}
 
 class FakeTerminalStore implements TerminalServiceStore {
   readonly sessions = new Map<string, StoredTerminalSession>();
@@ -868,13 +1102,28 @@ function expiredTerminalSession(): TerminalSessionView {
 
 class FakePeerEnvironmentProvider implements PeerEnvironmentProvider {
   readonly environments = new Map<string, Record<string, string>>();
+  readonly launchMaterials = new Map<
+    string,
+    {
+      readonly projectId: string;
+      readonly nodeId: string;
+      readonly adapterId: string;
+      readonly arguments: readonly string[];
+    }
+  >();
   readonly environmentForProvisionCalls: string[] = [];
+  readonly launchMaterialForProvisionCalls: string[] = [];
   readonly boundCalls: { provisionId: string; sessionId: string }[] = [];
   readonly releasedSessionIds: string[] = [];
 
   environmentForProvision(provisionId: string): Record<string, string> | null {
     this.environmentForProvisionCalls.push(provisionId);
     return this.environments.get(provisionId) ?? null;
+  }
+
+  launchMaterialForProvision(provisionId: string) {
+    this.launchMaterialForProvisionCalls.push(provisionId);
+    return this.launchMaterials.get(provisionId) ?? null;
   }
 
   bindSession(provisionId: string, sessionId: string): void {

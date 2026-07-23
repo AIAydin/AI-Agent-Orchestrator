@@ -648,7 +648,7 @@ async function createFixture(
     await worktrees.provision({
       repositoryPath: repository,
       managedRoot,
-      agentId: 'test-agent',
+      agentId: 'codex',
       taskId: 'delivery-node',
     })
   ).ownership;
@@ -664,7 +664,7 @@ async function createFixture(
       theme: 'system',
       reducedMotion: false,
       density: 'comfortable',
-      defaultAgent: 'test-agent',
+      defaultAgent: 'codex',
       defaultPermissionProfile: 'worktree-write',
       worktreeRoot: managedRoot,
       branchPrefix: 'forgeboard/',
@@ -923,7 +923,7 @@ function runRecord(ownership: WorktreeOwnership): StoredRunRecord {
     id: RUN_ID,
     projectId: PROJECT_ID,
     nodeId: 'delivery-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     status: 'succeeded',
     cwd: ownership.worktreePath,
     branch: ownership.branch,

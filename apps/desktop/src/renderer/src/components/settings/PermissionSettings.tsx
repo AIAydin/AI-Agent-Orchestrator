@@ -45,14 +45,7 @@ export function PermissionSettings({
             }}
           >
             {PERMISSION_PROFILE_OPTIONS.map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                disabled={
-                  draft.defaultAgent === 'test-agent' &&
-                  permissionProfileNeedsDocker(option.value, draft)
-                }
-              >
+              <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
@@ -63,11 +56,7 @@ export function PermissionSettings({
             <article key={option.value}>
               <strong>{option.label}</strong>
               <p>{option.description}</p>
-              <ConfiguredPermissionSummary
-                profile={option.value}
-                settings={draft}
-                adapterId={draft.defaultAgent}
-              />
+              <ConfiguredPermissionSummary profile={option.value} settings={draft} />
             </article>
           ))}
         </div>

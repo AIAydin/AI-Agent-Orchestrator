@@ -38,14 +38,22 @@ const importedDraft = settings({ theme: 'light', density: 'compact' });
 
 const agents: AgentDetection[] = [
   {
-    id: 'test-agent',
-    label: 'Deterministic test agent',
+    id: 'codex',
+    label: 'OpenAI Codex CLI',
     installed: true,
-    executable: '/tmp/test-agent',
-    version: '0.1.0',
-    providerDisclosure: 'Local fixture.',
+    executable: '/usr/local/bin/codex',
+    version: '1.0.0',
+    providerDisclosure: 'Uses the local CLI account.',
   },
 ];
+const geminiAgent: AgentDetection = {
+  id: 'gemini',
+  label: 'Gemini CLI',
+  installed: true,
+  executable: '/usr/local/bin/gemini',
+  version: '1.0.0',
+  providerDisclosure: 'Uses the local CLI account.',
+};
 
 const updateSettings = vi.fn((draft: AppSettings) =>
   Promise.resolve({ ok: true as const, value: draft }),
@@ -108,13 +116,11 @@ function readyAgent(input: AgentReadinessRequest): AgentReadinessResult {
     state: 'ready',
     ready: true,
     source:
-      input.agentId === 'test-agent'
-        ? 'bundled'
-        : input.agentId === 'custom'
-          ? 'custom'
-          : input.executableOverride === undefined
-            ? 'automatic'
-            : 'override',
+      input.agentId === 'custom'
+        ? 'custom'
+        : input.executableOverride === undefined
+          ? 'automatic'
+          : 'override',
     executable: '/canonical/agent',
     version: '2.4.0',
     checkedAt: '2026-07-15T18:00:00.000Z',
@@ -619,19 +625,20 @@ describe('SettingsPanel draft transactions', () => {
   });
 
   it('requires current readiness evidence for a configured non-default agent', async () => {
-    const codex: AgentDetection = {
-      id: 'codex',
-      label: 'OpenAI Codex CLI',
-      installed: true,
-      executable: '/usr/local/bin/codex',
-      version: '2.4.0',
-      providerDisclosure: 'Uses the local CLI account.',
-    };
-    render(<SettingsPanel {...props({ agents: [...agents, codex] })} />);
+    render(
+      <SettingsPanel
+        {...props({
+          settings: settings({ defaultAgent: 'gemini' }),
+          agents: [...agents, geminiAgent],
+        })}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
-    fireEvent.click(screen.getAllByText('Advanced')[0]!);
-    fireEvent.change(screen.getByLabelText('Executable override'), {
+    const codexCard = screen.getByRole('article', { name: 'Codex CLI' });
+    fireEvent.click(within(codexCard).getByText('Advanced'));
+    const codexExecutable = within(codexCard).getByLabelText('Executable override');
+    fireEvent.change(codexExecutable, {
       target: { value: '/chosen/bin/codex' },
     });
     const save = screen.getByRole<HTMLButtonElement>('button', {
@@ -655,7 +662,7 @@ describe('SettingsPanel draft transactions', () => {
       executableOverride: '/chosen/bin/codex',
     });
 
-    fireEvent.change(screen.getByLabelText('Executable override'), {
+    fireEvent.change(codexExecutable, {
       target: { value: '/other/bin/codex' },
     });
     expect(save.disabled).toBe(true);
@@ -667,15 +674,14 @@ describe('SettingsPanel draft transactions', () => {
   });
 
   it('requires an exact readiness refresh after selecting a different detected default', async () => {
-    const codex: AgentDetection = {
-      id: 'codex',
-      label: 'OpenAI Codex CLI',
-      installed: true,
-      executable: '/usr/local/bin/codex',
-      version: '2.4.0',
-      providerDisclosure: 'Uses the local CLI account.',
-    };
-    render(<SettingsPanel {...props({ agents: [...agents, codex] })} />);
+    render(
+      <SettingsPanel
+        {...props({
+          settings: settings({ defaultAgent: 'gemini' }),
+          agents: [...agents, geminiAgent],
+        })}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Agents & runtime' }));
     fireEvent.change(screen.getByLabelText('Default agent'), {
@@ -1511,7 +1517,7 @@ function settings(overrides: Partial<AppSettings>): AppSettings {
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     worktreeRoot: '/tmp/forgeboard-worktrees',
     backupDirectory: '/tmp/forgeboard-backups',

@@ -19,6 +19,7 @@ import {
   TerminalTimestampSchema,
   hasAtMostUtf8Bytes,
 } from './common.js';
+import { TerminalWorkspaceViewSchema } from './workspace.js';
 
 export const TerminalSessionStatusSchema = z.enum([
   'starting',
@@ -55,6 +56,7 @@ export const TerminalSessionViewSchema = z
     earliestSequence: z.number().int().safe().positive(),
     nextSequence: z.number().int().safe().positive(),
     outputTruncated: z.boolean(),
+    workspace: TerminalWorkspaceViewSchema.optional(),
     updatedAt: TerminalTimestampSchema,
   })
   .strict()

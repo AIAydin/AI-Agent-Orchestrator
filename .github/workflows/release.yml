@@ -48,7 +48,6 @@ jobs:
         run: xvfb-run --auto-servernum pnpm test:e2e
       - if: runner.os != 'Linux'
         run: pnpm test:e2e
-      - run: pnpm --filter @forgeboard/test-agent build
       - name: Package macOS
         if: runner.os == 'macOS'
         shell: bash

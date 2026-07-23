@@ -291,11 +291,6 @@ function assertProductionReviewer(
   if (reviewer?.type !== 'agent') {
     throw new Error(`Review Gate ${gate.id} has no valid configured reviewer agent.`);
   }
-  if (reviewer.data.adapterId === 'test-agent') {
-    throw new Error(
-      `Review Gate ${gate.id} uses the deterministic test agent, which cannot authorize Git delivery.`,
-    );
-  }
 }
 
 function reviewedSourceIds(runtime: WorkflowExecutionRuntime, gateNodeId: string): string[] {

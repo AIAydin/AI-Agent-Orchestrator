@@ -10,7 +10,7 @@ import { useAgentWorktreeRecord } from './useAgentWorktreeAvailability.js';
 afterEach(() => vi.restoreAllMocks());
 
 describe('useAgentWorktreeRecord', () => {
-  it('shows an assignment only after durable history confirms an active owned record', async () => {
+  it('revalidates a path-free assignment marker against durable owned history', async () => {
     const get = vi.fn().mockResolvedValue({ ok: true, value: attempt(true) });
     Object.defineProperty(window, 'forgeboard', {
       configurable: true,
@@ -20,7 +20,7 @@ describe('useAgentWorktreeRecord', () => {
     renderHook(() =>
       useAgentWorktreeRecord({
         projectId: PROJECT_ID,
-        nodes: [agentNode()],
+        nodes: [agentNode(true)],
         updateNodeData,
       }),
     );
@@ -57,7 +57,7 @@ describe('useAgentWorktreeRecord', () => {
 const PROJECT_ID = '00000000-0000-4000-8000-000000000002';
 const RUN_ID = '00000000-0000-4000-8000-000000000001';
 
-function agentNode(): WorkshopNode {
+function agentNode(pathFree = false): WorkshopNode {
   return {
     id: 'agent-1',
     type: 'workshop',
@@ -72,7 +72,7 @@ function agentNode(): WorkshopNode {
       color: '#445566',
       runId: RUN_ID,
       branch: 'forgeboard/agent-1',
-      worktreeId: 'worktree-1',
+      ...(pathFree ? { worktreeRecordedActive: true } : { worktreeId: 'worktree-1' }),
     },
   };
 }
@@ -82,7 +82,7 @@ function attempt(worktreeAvailable: boolean): RunHistorySummary {
     id: RUN_ID,
     projectId: PROJECT_ID,
     nodeId: 'agent-1',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     model: null,
     permissionProfile: 'plan-read-only',
     providerSessionAvailable: false,

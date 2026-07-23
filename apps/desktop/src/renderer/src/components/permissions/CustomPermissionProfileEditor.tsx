@@ -100,14 +100,7 @@ export function CustomPermissionProfileEditor({
             }}
           >
             <option value="host">On this computer · limits stated, not enforced</option>
-            <option
-              value="docker"
-              disabled={
-                draft.defaultPermissionProfile === 'custom' && draft.defaultAgent === 'test-agent'
-              }
-            >
-              In a Docker container · enforced, one worktree only
-            </option>
+            <option value="docker">In a Docker container · enforced, one worktree only</option>
           </select>
         </label>
         <label>

@@ -12,6 +12,7 @@ import {
   TerminalRelativeCwdSchema,
   TerminalTimestampSchema,
 } from './common.js';
+import { TerminalWorkspaceRequestSchema } from './workspace.js';
 
 export const TerminalChooseExecutableInputSchema = z
   .object({
@@ -60,6 +61,7 @@ export const TerminalPrepareLaunchInputSchema = z
      * sanctioned exception to the names-only launch env contract, and it stays an id over IPC.
      */
     peerProvisionId: z.string().uuid().optional(),
+    workspace: TerminalWorkspaceRequestSchema.optional(),
   })
   .strict();
 export type TerminalPrepareLaunchInput = z.infer<typeof TerminalPrepareLaunchInputSchema>;
@@ -77,6 +79,7 @@ export const TerminalLaunchPlanViewSchema = z
     environmentVariableNames: TerminalEnvironmentVariableNamesSchema,
     ...TerminalDimensionsSchema.shape,
     permission: TerminalPermissionIndicatorSchema,
+    workspace: TerminalWorkspaceRequestSchema.optional(),
     expiresAt: TerminalTimestampSchema,
   })
   .strict();

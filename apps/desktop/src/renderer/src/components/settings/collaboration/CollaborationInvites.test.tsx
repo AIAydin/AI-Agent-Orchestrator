@@ -20,6 +20,44 @@ const NOW = '2026-07-17T12:00:00.000Z';
 afterEach(cleanup);
 
 describe('collaboration invite settings', () => {
+  it('keeps localhost available for direct work but refuses a misleading shared invite', () => {
+    installApi();
+    render(
+      <Harness
+        collaborationUrl="ws://127.0.0.1:1234"
+        collaborationManagementUrl="http://127.0.0.1:1234/"
+      />,
+    );
+
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: 'Create room + copy 10-minute invite',
+      }).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Create room and connect' }).disabled,
+    ).toBe(false);
+    expect(screen.getByText(/Shared invites require a public wss:\/\//u)).toBeTruthy();
+  });
+
+  it('clears the old disabled localhost defaults instead of turning them into a share link', async () => {
+    installApi();
+    render(
+      <Harness
+        collaborationEnabled={false}
+        collaborationUrl="ws://127.0.0.1:1234"
+        collaborationManagementUrl="http://127.0.0.1:1234/"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText<HTMLInputElement>('Collaboration server URL').value).toBe(''),
+    );
+    expect(screen.getByLabelText<HTMLInputElement>('Collaboration management API URL').value).toBe(
+      '',
+    );
+  });
+
   it('configures the exact server from a new one-paste invite', async () => {
     const api = installApi();
     api.joinInvite.mockResolvedValue({
@@ -320,13 +358,21 @@ function installApi(
   return collaboration;
 }
 
-function Harness() {
+function Harness({
+  collaborationEnabled = true,
+  collaborationUrl = 'wss://collaboration.example.test/team',
+  collaborationManagementUrl = 'https://management.example.test/control',
+}: {
+  collaborationEnabled?: boolean;
+  collaborationUrl?: string;
+  collaborationManagementUrl?: string;
+} = {}) {
   const [settings, setSettings] = useState<AppSettings>(
     AppSettingsSchema.parse({
       theme: 'system',
       reducedMotion: false,
       density: 'comfortable',
-      defaultAgent: 'test-agent',
+      defaultAgent: 'codex',
       defaultPermissionProfile: 'worktree-write',
       worktreeRoot: '/tmp/worktrees',
       terminalShell: '/bin/sh',
@@ -334,9 +380,9 @@ function Harness() {
       previewPortStart: 41_000,
       previewPortEnd: 41_999,
       transcriptRetentionDays: 30,
-      collaborationEnabled: true,
-      collaborationUrl: 'wss://collaboration.example.test/team',
-      collaborationManagementUrl: 'https://management.example.test/control',
+      collaborationEnabled,
+      collaborationUrl,
+      collaborationManagementUrl,
       collaborationDisplayName: 'Local editor',
       collaborationRoom: 'launch-room',
       collaborationReconnect: true,

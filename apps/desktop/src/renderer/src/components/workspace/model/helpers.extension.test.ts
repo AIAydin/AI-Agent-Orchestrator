@@ -76,3 +76,23 @@ describe('extension node hydration', () => {
     expect(hydrated.extensionAvailability).toBe('active');
   });
 });
+
+describe('removed agent compatibility', () => {
+  it('clears the retired adapter from a saved Agent node so the current default takes over', () => {
+    const hydrated = hydrateNodeData(
+      {
+        kind: 'agent',
+        title: 'Implementation',
+        description: '',
+        status: 'idle',
+        locked: false,
+        collapsed: false,
+        adapterId: 'test-agent',
+      },
+      discovery,
+    );
+
+    expect(hydrated).toMatchObject({ kind: 'agent' });
+    expect(hydrated).not.toHaveProperty('adapterId');
+  });
+});

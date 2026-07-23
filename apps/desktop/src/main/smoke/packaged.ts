@@ -9,11 +9,6 @@ import {
   PackagedSmokeReportSchema,
   type PackagedSmokeReport,
 } from '../../shared/smoke/contracts.js';
-import {
-  provePackagedTestAgent,
-  type PackagedSmokeRuns,
-  type PackagedSmokeStore,
-} from './agent-proof.js';
 import { runPackagedRendererFlow, type RendererWebContents } from './renderer-flow.js';
 
 const RENDERER_PROBE_INTERVAL_MS = 100;
@@ -32,10 +27,6 @@ interface PathConfigurableApp {
 export interface PackagedApplicationSmokeInput {
   readonly profile: PackagedSmokeProfile;
   readonly webContents: RendererWebContents;
-  readonly runs: PackagedSmokeRuns;
-  readonly store: PackagedSmokeStore;
-  readonly agentExecutablePath: string;
-  readonly testAgentResourcePath: string;
   readonly verifyGit: () => Promise<string>;
   readonly probeIntervalMs?: number;
   readonly timeoutMs?: number;
@@ -140,15 +131,6 @@ export async function runPackagedApplicationSmoke(
     timeoutMs,
     probeIntervalMs: input.probeIntervalMs ?? RENDERER_PROBE_INTERVAL_MS,
   });
-  const agent = await provePackagedTestAgent({
-    profileRoot: input.profile.root,
-    demo: renderer.demo,
-    runs: input.runs,
-    store: input.store,
-    agentExecutablePath: input.agentExecutablePath,
-    testAgentResourcePath: input.testAgentResourcePath,
-    timeoutMs,
-  });
   const gitVersion = await input.verifyGit();
   return PackagedSmokeReportSchema.parse({
     schemaVersion: 2,
@@ -169,7 +151,6 @@ export async function runPackagedApplicationSmoke(
     demoProjectPath: renderer.demo.projectPath,
     demoCanvasId: renderer.demo.canvasId,
     demoCanvasName: renderer.demo.canvasName,
-    ...agent,
   });
 }
 

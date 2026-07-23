@@ -10,7 +10,10 @@ import {
   type Project,
   type RunAdapterId,
 } from '../../../../../../shared/application/contracts.js';
-import type { TerminalLaunchPlanView } from '../../../../../../shared/terminal/index.js';
+import type {
+  TerminalLaunchPlanView,
+  TerminalSessionView,
+} from '../../../../../../shared/terminal/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import type { AgentProviderGate } from '../useAgentProviderGate.js';
 import { CanvasNodeInteractionProvider } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
@@ -47,11 +50,19 @@ const controller = {
 // Captures the options (in particular `configuration`) the node last passed into the controller
 // hook, so tests can assert the peer provision's extraArguments/peerProvisionId reached it.
 const { controllerOptionsHolder } = vi.hoisted(() => ({
-  controllerOptionsHolder: { current: null as { configuration?: unknown } | null },
+  controllerOptionsHolder: {
+    current: null as {
+      configuration?: unknown;
+      onSessionChange?: (session: TerminalSessionView | null) => void;
+    } | null,
+  },
 }));
 
 vi.mock('../../terminal/useTerminalNodeController.js', () => ({
-  useTerminalNodeController: (options: { configuration?: unknown }) => {
+  useTerminalNodeController: (options: {
+    configuration?: unknown;
+    onSessionChange?: (session: TerminalSessionView | null) => void;
+  }) => {
     controllerOptionsHolder.current = options;
     return controller;
   },
@@ -199,6 +210,7 @@ const REVIEW_PLAN: TerminalLaunchPlanView = {
     network: 'operating-system-user',
     detail: 'The working directory limits context but is not a security sandbox.',
   },
+  workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
   expiresAt: '2026-07-17T16:10:00.000Z',
 };
 
@@ -226,7 +238,9 @@ beforeEach(() => {
     },
   });
   (
-    window as unknown as { forgeboard: { agentPeers: { provision: typeof provisionMock } } }
+    window as unknown as {
+      forgeboard: { agentPeers: { provision: typeof provisionMock } };
+    }
   ).forgeboard = {
     agentPeers: { provision: provisionMock },
   };
@@ -240,6 +254,54 @@ describe('AgentSessionNode', () => {
     // Peer provisioning now happens before prepareLaunch, so the launch fires only after that
     // IPC round trip resolves — no longer synchronously within the click handler.
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+  });
+
+  it('requests a managed worktree and records the durable run returned by main', () => {
+    renderNode();
+    expect(controllerOptionsHolder.current?.configuration).toMatchObject({
+      workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+    });
+
+    controllerOptionsHolder.current?.onSessionChange?.({
+      id: '30000000-0000-4000-8000-000000000001',
+      projectId: 'proj-1',
+      nodeId: NODE_ID,
+      executable: 'claude',
+      arguments: [],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+      columns: 80,
+      rows: 24,
+      permission: {
+        label: 'Local terminal',
+        sandboxed: false,
+        filesystem: 'operating-system-user',
+        network: 'operating-system-user',
+        detail: 'Local terminal.',
+      },
+      status: 'running',
+      startedAt: '2026-07-23T12:00:00.000Z',
+      endedAt: null,
+      exitCode: null,
+      exitSignal: null,
+      earliestSequence: 1,
+      nextSequence: 1,
+      outputTruncated: false,
+      workspace: {
+        kind: 'managed-agent-worktree',
+        runId: '40000000-0000-4000-8000-000000000001',
+        branch: 'forgeboard/node-x/claude-1',
+      },
+      updatedAt: '2026-07-23T12:00:00.000Z',
+    });
+
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, {
+      runId: '40000000-0000-4000-8000-000000000001',
+      branch: 'forgeboard/node-x/claude-1',
+      worktreeId: undefined,
+      worktreeRecordedActive: true,
+      lastRunPermissionProfile: 'worktree-write',
+    });
   });
 
   it('provisions peer tools before preparing the launch, threading the material into the configuration', async () => {
@@ -314,7 +376,12 @@ describe('AgentSessionNode', () => {
         extraArguments: [],
       },
     });
-    controller.session = { id: 's1', status: 'failed', exitCode: 1, exitSignal: null };
+    controller.session = {
+      id: 's1',
+      status: 'failed',
+      exitCode: 1,
+      exitSignal: null,
+    };
     controller.active = false;
     renderNode();
 
@@ -351,7 +418,12 @@ describe('AgentSessionNode', () => {
   });
 
   it('keeps the terminal surface visible after the session ends and shows the exit code', () => {
-    controller.session = { id: 's1', status: 'failed', exitCode: 127, exitSignal: null };
+    controller.session = {
+      id: 's1',
+      status: 'failed',
+      exitCode: 127,
+      exitSignal: null,
+    };
     controller.active = false;
     renderNode();
     // The final output stays readable instead of collapsing to an exit-only card.
@@ -385,7 +457,9 @@ describe('AgentSessionNode', () => {
     // The draft commits on Enter, not on every keystroke.
     expect(spies.updateNodeData).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Hermes' });
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, {
+      title: 'Hermes',
+    });
   });
 
   it('auto-suffixes a rename that collides with another node on the canvas', () => {
@@ -399,7 +473,9 @@ describe('AgentSessionNode', () => {
     const input = screen.getByLabelText('Node title');
     fireEvent.change(input, { target: { value: 'Atlas' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Atlas 2' });
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, {
+      title: 'Atlas 2',
+    });
   });
 
   it('falls back to an assigned friendly name when the rename is emptied out', () => {
@@ -410,7 +486,9 @@ describe('AgentSessionNode', () => {
     const input = screen.getByLabelText('Node title');
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, { title: 'Hermes' });
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, {
+      title: 'Hermes',
+    });
   });
 
   it('cancels a title edit on Escape without committing', () => {
@@ -541,17 +619,11 @@ describe('AgentSessionNode', () => {
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
   });
 
-  it('renders the Model input only when the agent supports model selection', () => {
+  it('keeps provider and model configuration out of the compact terminal footer', () => {
     renderNode();
-    expect(screen.getByLabelText('Model')).toBeTruthy();
-    cleanup();
-
-    const claudeNoModelSelection: AgentDetection & { id: RunAdapterId } = {
-      ...claude,
-      capabilities: { ...claude.capabilities!, modelSelection: false },
-    };
-    render(nodeTree(nodeData(), { runnableAgents: [claudeNoModelSelection] }));
+    expect(screen.queryByLabelText('Agent')).toBeNull();
     expect(screen.queryByLabelText('Model')).toBeNull();
+    expect(screen.getByLabelText('Permission profile')).toBeTruthy();
   });
 
   it('disables permission profile options that require Docker when Docker is off', () => {

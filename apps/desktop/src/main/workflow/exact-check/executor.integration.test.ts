@@ -388,7 +388,7 @@ async function createFixture(
     await worktrees.provision({
       repositoryPath: repository,
       managedRoot,
-      agentId: 'test-agent',
+      agentId: 'codex',
       taskId: 'agent-one',
     })
   ).ownership;
@@ -396,7 +396,7 @@ async function createFixture(
     await worktrees.provision({
       repositoryPath: repository,
       managedRoot,
-      agentId: 'test-agent',
+      agentId: 'codex',
       taskId: 'agent-two',
     })
   ).ownership;
@@ -543,7 +543,7 @@ function baseSettings(managedRoot: string): Partial<AppSettings> {
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     worktreeRoot: managedRoot,
     branchPrefix: 'forgeboard/',

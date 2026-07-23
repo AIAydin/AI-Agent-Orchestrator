@@ -343,7 +343,7 @@ describe('workflow runtime composition', () => {
     expect(approval).toMatchObject({
       nodeId: TASK_NODE_ID,
       executorId: 'workflow-agent',
-      disclosure: { runId: TASK_RUN_ID, nodeId: TASK_NODE_ID, adapterId: 'test-agent' },
+      disclosure: { runId: TASK_RUN_ID, nodeId: TASK_NODE_ID, adapterId: 'codex' },
     });
     if (approval === undefined) throw new Error('Expected an assigned Task approval.');
 
@@ -361,7 +361,7 @@ describe('workflow runtime composition', () => {
     expect(operations.requests).toHaveLength(1);
     expect(operations.requests[0]).toMatchObject({
       nodeId: TASK_NODE_ID,
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       permissionProfile: 'worktree-write',
       context: { attachments: [] },
     });
@@ -644,7 +644,7 @@ function taskWorkflowCanvas() {
     size: { width: 320, height: 180 },
     status: 'ready',
     data: {
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       permissionProfileId: 'worktree-write',
       promptDraft: 'This prompt is not used for the assigned Task.',
     },
@@ -672,7 +672,7 @@ function settings(worktreeRoot: string): AppSettings {
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     worktreeRoot,
     branchPrefix: 'forgeboard/',
@@ -753,7 +753,7 @@ function assignedTaskAgentOperations(): {
           runId: TASK_RUN_ID,
           nodeId: request.nodeId,
           adapterId: request.adapterId,
-          provider: 'Composition test agent',
+          provider: 'Composition Codex',
           executable: process.execPath,
           arguments: ['task-agent.js'],
           cwd: '/managed/task-node',

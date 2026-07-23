@@ -16,7 +16,12 @@ export function useAgentWorktreeRecord({
   updateNodeData,
 }: AgentWorktreeAvailabilityInput): void {
   const candidates = nodes
-    .filter((node) => node.data.kind === 'agent' && node.data.worktreeId !== undefined)
+    .filter(
+      (node) =>
+        node.data.kind === 'agent' &&
+        node.data.runId !== undefined &&
+        (node.data.worktreeId !== undefined || node.data.worktreeRecordedActive === true),
+    )
     .map((node) => ({ nodeId: node.id, runId: node.data.runId }))
     .sort((left, right) => left.nodeId.localeCompare(right.nodeId));
   const candidateKey = JSON.stringify(candidates);

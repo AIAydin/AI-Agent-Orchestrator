@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   PACKAGED_SMOKE_ACTION,
-  PACKAGED_SMOKE_AGENT_PROMPT,
   PACKAGED_SMOKE_CANVAS_NAME,
   PACKAGED_SMOKE_DEMO_PROJECT_NAME,
   PACKAGED_SMOKE_HEADING,
@@ -17,7 +16,6 @@ import {
 } from '../../src/shared/smoke/contracts.js';
 import { createIsolatedSmokeProfile } from './profile.js';
 import {
-  assertSmokeAgentOutput,
   assertSmokeReportProfile,
   assertSqliteDatabase,
   parsePackagedSmokeReport,
@@ -62,11 +60,6 @@ describe('packaged smoke launcher profile', () => {
     const root = join(parent, 'user-data');
     await mkdir(root);
     const databasePath = join(root, 'forgeboard.sqlite');
-    const worktreePath = join(root, 'documents', 'Forgeboard', 'worktrees', 'smoke');
-    const agentOutputPath = join(worktreePath, 'forgeboard-agent-output-smoke.md');
-    const agentOutput = `# Forgeboard deterministic agent output\n\n${PACKAGED_SMOKE_AGENT_PROMPT}\n`;
-    await mkdir(worktreePath, { recursive: true });
-    await writeFile(agentOutputPath, agentOutput);
     await writeFile(
       databasePath,
       Buffer.concat([Buffer.from('SQLite format 3\0'), Buffer.alloc(64)]),
@@ -90,17 +83,6 @@ describe('packaged smoke launcher profile', () => {
       demoProjectPath: join(root, 'demo', PACKAGED_SMOKE_DEMO_PROJECT_NAME),
       demoCanvasId: randomUUID(),
       demoCanvasName: PACKAGED_SMOKE_CANVAS_NAME,
-      agentRun: 'succeeded',
-      durableRun: 'verified',
-      agentRunId: randomUUID(),
-      agentExecutablePath: '/installed/Forgeboard',
-      agentResourcePath: '/installed/resources/test-agent/cli.js',
-      agentProcessId: 4242,
-      agentWorktreePath: worktreePath,
-      agentChangedFiles: ['forgeboard-agent-output-smoke.md'],
-      agentOutputPath,
-      agentOutputSha256: createHash('sha256').update(agentOutput).digest('hex'),
-      agentOutputDigest: 'a'.repeat(64),
     };
 
     const report = parsePackagedSmokeReport(
@@ -109,7 +91,6 @@ describe('packaged smoke launcher profile', () => {
 
     expect(() => assertSmokeReportProfile(report, root)).not.toThrow();
     await expect(assertSqliteDatabase(databasePath)).resolves.toBeUndefined();
-    await expect(assertSmokeAgentOutput(report)).resolves.toBeUndefined();
     expect(() =>
       parsePackagedSmokeReport(
         `${PACKAGED_SMOKE_MARKER} ${JSON.stringify(reportValue)}\n${PACKAGED_SMOKE_MARKER} ${JSON.stringify(reportValue)}\n`,

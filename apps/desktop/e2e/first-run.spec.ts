@@ -109,7 +109,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await expect(settings.getByRole('button', { name: /Choose extension folder/ })).toBeVisible();
 
       await settings.getByRole('button', { name: /Agents & runtime/ }).click();
-      await settings.getByLabel('Default agent').selectOption('test-agent');
+      await settings.getByLabel('Default agent').selectOption('codex');
       await settings.getByLabel('Default permission profile').selectOption('plan-read-only');
       await settings
         .getByLabel('Environment variable names allowed into processes')

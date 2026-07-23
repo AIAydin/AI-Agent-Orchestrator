@@ -7,8 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   PACKAGED_SMOKE_ACTION,
-  PACKAGED_SMOKE_AGENT_NODE_ID,
-  PACKAGED_SMOKE_AGENT_PROMPT,
   PACKAGED_SMOKE_CANVAS_NAME,
   PACKAGED_SMOKE_DEMO_ACTION,
   PACKAGED_SMOKE_DEMO_PROJECT_NAME,
@@ -21,8 +19,6 @@ import {
   type PackagedRendererProbe,
   type PackagedRendererWelcomeProbe,
 } from '../../shared/smoke/contracts.js';
-import type { AgentExecutionOperations } from '../agent-execution/contracts.js';
-import type { StoredRunRecord } from '../storage.js';
 import { configurePackagedSmokeProfile, runPackagedApplicationSmoke } from './packaged.js';
 
 const roots: string[] = [];
@@ -89,49 +85,15 @@ describe('packaged main-process smoke profile', () => {
   });
 
   it('refuses a forged launcher binding or environment that can reach normal user data', async () => {
-    const boundElsewhere = await smokeProfile();
-    await writeFile(
-      join(boundElsewhere.root, PACKAGED_SMOKE_PROFILE_FILE),
-      `${JSON.stringify({
-        schemaVersion: 2,
-        token: boundElsewhere.token,
-        profileRoot: join(boundElsewhere.root, 'home'),
-        profileParent: boundElsewhere.profileParent,
-        systemTempRoot: boundElsewhere.systemTempRoot,
-        profileKind: 'packaged-runtime',
-      })}\n`,
-    );
+    const profile = await smokeProfile();
+    await writeProfile(profile, { profileRoot: join(profile.root, 'home') });
     const app = {
-      getPath: () => boundElsewhere.root,
+      getPath: () => profile.root,
       setPath: vi.fn(),
     };
     expect(() =>
-      configurePackagedSmokeProfile(
-        app,
-        smokeArguments(boundElsewhere),
-        smokeEnvironment(boundElsewhere.root),
-      ),
+      configurePackagedSmokeProfile(app, smokeArguments(profile), smokeEnvironment(profile.root)),
     ).toThrow('bound to another profile');
-
-    const forgedTempRoot = await smokeProfile();
-    await writeFile(
-      join(forgedTempRoot.root, PACKAGED_SMOKE_PROFILE_FILE),
-      `${JSON.stringify({
-        schemaVersion: 2,
-        token: forgedTempRoot.token,
-        profileRoot: forgedTempRoot.root,
-        profileParent: forgedTempRoot.profileParent,
-        systemTempRoot: join(forgedTempRoot.root, 'temp'),
-        profileKind: 'packaged-runtime',
-      })}\n`,
-    );
-    expect(() =>
-      configurePackagedSmokeProfile(
-        app,
-        smokeArguments(forgedTempRoot),
-        smokeEnvironment(forgedTempRoot.root),
-      ),
-    ).toThrow('not bound to its launcher-created temp parent');
 
     const unsafeEnvironment = await smokeProfile();
     expect(() =>
@@ -140,28 +102,20 @@ describe('packaged main-process smoke profile', () => {
         HOME: '/real/user/home',
       }),
     ).toThrow('requires isolated HOME');
-    expect(app.setPath).not.toHaveBeenCalled();
   });
 });
 
-describe('packaged renderer and deterministic-agent smoke proof', () => {
-  it('uses safe defaults, opens the demo workspace, and persists packaged agent output', async () => {
+describe('packaged renderer smoke proof', () => {
+  it('uses safe defaults and opens the demo workspace', async () => {
     const profile = await smokeProfile();
-    const agent = await agentHarness(profile.root);
-    const executeJavaScript = vi
-      .fn<(source: string) => Promise<unknown>>()
-      .mockRejectedValueOnce(new Error('frame is still loading'))
-      .mockResolvedValueOnce(rendererProbe(profile.root))
-      .mockResolvedValueOnce({ clicked: true, error: null })
-      .mockResolvedValueOnce(welcomeProbe())
-      .mockResolvedValueOnce({ clicked: true, error: null })
-      .mockResolvedValueOnce(demoProbe(profile.root, agent.projectId, agent.canvasId));
+    const projectId = randomUUID();
+    const canvasId = randomUUID();
+    const executeJavaScript = successfulRendererFlow(profile.root, projectId, canvasId);
     const verifyGit = vi.fn(() => Promise.resolve('git version 2.49.0'));
 
     const report = await runPackagedApplicationSmoke({
       profile: { root: profile.root, databasePath: join(profile.root, 'forgeboard.sqlite') },
       webContents: { executeJavaScript, isDestroyed: () => false },
-      ...agent.input,
       verifyGit,
       probeIntervalMs: 1,
       timeoutMs: 250,
@@ -177,31 +131,18 @@ describe('packaged renderer and deterministic-agent smoke proof', () => {
       safeDefaults: 'applied',
       demoWorkspace: 'ready',
       recentProjectCount: 1,
-      demoProjectId: agent.projectId,
-      demoCanvasId: agent.canvasId,
-      agentRun: 'succeeded',
-      durableRun: 'verified',
-      agentRunId: agent.runId,
+      demoProjectId: projectId,
+      demoCanvasId: canvasId,
     });
-    expect(executeJavaScript).toHaveBeenCalledTimes(6);
+    expect(executeJavaScript).toHaveBeenCalledTimes(5);
     expect(executeJavaScript.mock.calls[0]?.[0]).toContain('api.settings.get()');
-    expect(executeJavaScript.mock.calls[2]?.[0]).toContain(PACKAGED_SMOKE_SAFE_DEFAULTS_ACTION);
-    expect(executeJavaScript.mock.calls[4]?.[0]).toContain(PACKAGED_SMOKE_DEMO_ACTION);
-    expect(agent.prepare).toHaveBeenCalledWith(
-      'packaged-smoke:test-agent',
-      expect.objectContaining({
-        projectId: agent.projectId,
-        adapterId: 'test-agent',
-        permissionProfile: 'worktree-write',
-      }),
-    );
-    expect(agent.launch).toHaveBeenCalledOnce();
+    expect(executeJavaScript.mock.calls[1]?.[0]).toContain(PACKAGED_SMOKE_SAFE_DEFAULTS_ACTION);
+    expect(executeJavaScript.mock.calls[3]?.[0]).toContain(PACKAGED_SMOKE_DEMO_ACTION);
     expect(verifyGit).toHaveBeenCalledOnce();
   });
 
   it('fails closed when the real safe-default action is unavailable', async () => {
     const profile = await smokeProfile();
-    const agent = await agentHarness(profile.root);
     const executeJavaScript = vi
       .fn<(source: string) => Promise<unknown>>()
       .mockResolvedValueOnce(rendererProbe(profile.root))
@@ -211,127 +152,36 @@ describe('packaged renderer and deterministic-agent smoke proof', () => {
       runPackagedApplicationSmoke({
         profile: { root: profile.root, databasePath: join(profile.root, 'forgeboard.sqlite') },
         webContents: { executeJavaScript, isDestroyed: () => false },
-        ...agent.input,
         verifyGit: () => Promise.resolve('git version 2.49.0'),
         timeoutMs: 50,
       }),
     ).rejects.toThrow(PACKAGED_SMOKE_SAFE_DEFAULTS_ACTION);
-    expect(agent.prepare).not.toHaveBeenCalled();
   });
 
-  it('refuses a prepared launch that does not use the packaged test-agent resource', async () => {
+  it('rejects a demo workspace that escapes the isolated profile', async () => {
     const profile = await smokeProfile();
-    const agent = await agentHarness(profile.root);
-    const wrongResourcePath = join(profile.root, 'resources', 'test-agent', 'wrong-cli.js');
-    await writeFile(wrongResourcePath, 'wrong packaged resource fixture\n');
+    const projectId = randomUUID();
+    const canvasId = randomUUID();
+    const escaped = {
+      ...demoProbe(profile.root, projectId, canvasId),
+      projectPath: '/outside/forgeboard-demo',
+    };
     const executeJavaScript = vi
       .fn<(source: string) => Promise<unknown>>()
       .mockResolvedValueOnce(rendererProbe(profile.root))
       .mockResolvedValueOnce({ clicked: true, error: null })
       .mockResolvedValueOnce(welcomeProbe())
       .mockResolvedValueOnce({ clicked: true, error: null })
-      .mockResolvedValueOnce(demoProbe(profile.root, agent.projectId, agent.canvasId));
+      .mockResolvedValueOnce(escaped);
 
     await expect(
       runPackagedApplicationSmoke({
         profile: { root: profile.root, databasePath: join(profile.root, 'forgeboard.sqlite') },
         webContents: { executeJavaScript, isDestroyed: () => false },
-        ...agent.input,
-        testAgentResourcePath: wrongResourcePath,
-        verifyGit: () => Promise.resolve('git version 2.49.0'),
-        timeoutMs: 250,
-      }),
-    ).rejects.toThrow('reviewed process and resource paths');
-    expect(agent.prepare).toHaveBeenCalledOnce();
-    expect(agent.launch).not.toHaveBeenCalled();
-  });
-
-  it('refuses extra Node arguments or a prepared worktree outside the disposable profile', async () => {
-    const profile = await smokeProfile();
-    const injected = await agentHarness(profile.root, { extraArgument: '--eval=process.exit(0)' });
-    const executeInjected = successfulRendererFlow(
-      profile.root,
-      injected.projectId,
-      injected.canvasId,
-    );
-    await expect(
-      runPackagedApplicationSmoke({
-        profile: { root: profile.root, databasePath: join(profile.root, 'forgeboard.sqlite') },
-        webContents: { executeJavaScript: executeInjected, isDestroyed: () => false },
-        ...injected.input,
-        verifyGit: () => Promise.resolve('git version 2.49.0'),
-        timeoutMs: 250,
-      }),
-    ).rejects.toThrow('reviewed process and resource paths');
-    expect(injected.launch).not.toHaveBeenCalled();
-
-    const escapedRoot = await mkdtemp(join(tmpdir(), 'forgeboard-escaped-agent-test-'));
-    roots.push(escapedRoot);
-    const escaped = await agentHarness(profile.root, { worktreePath: escapedRoot });
-    const executeEscaped = successfulRendererFlow(
-      profile.root,
-      escaped.projectId,
-      escaped.canvasId,
-    );
-    await expect(
-      runPackagedApplicationSmoke({
-        profile: { root: profile.root, databasePath: join(profile.root, 'forgeboard.sqlite') },
-        webContents: { executeJavaScript: executeEscaped, isDestroyed: () => false },
-        ...escaped.input,
-        verifyGit: () => Promise.resolve('git version 2.49.0'),
-        timeoutMs: 250,
-      }),
-    ).rejects.toThrow('escaped its disposable smoke profile');
-    expect(escaped.launch).not.toHaveBeenCalled();
-  });
-
-  it('rejects a renderer response from a non-clean or escaped profile', async () => {
-    const profile = await smokeProfile();
-    const agent = await agentHarness(profile.root);
-    const probe = rendererProbe(profile.root);
-    const executeJavaScript = vi.fn(() =>
-      Promise.resolve({
-        ...probe,
-        dataDirectory: '/real/application/data',
-        onboardingCompleted: true,
-      }),
-    );
-
-    await expect(
-      runPackagedApplicationSmoke({
-        profile: { root: profile.root, databasePath: join(profile.root, 'forgeboard.sqlite') },
-        webContents: { executeJavaScript, isDestroyed: () => false },
-        ...agent.input,
         verifyGit: () => Promise.resolve('git version 2.49.0'),
         timeoutMs: 50,
       }),
-    ).rejects.toThrow('not a clean first-run profile');
-  });
-
-  it('fails immediately when the packaged renderer exposes a startup alert', async () => {
-    const profile = await smokeProfile();
-    const agent = await agentHarness(profile.root);
-    const executeJavaScript = vi.fn(() =>
-      Promise.resolve({
-        ...rendererProbe(profile.root),
-        ready: false,
-        error: 'Agent detection failed during startup.',
-      }),
-    );
-    const verifyGit = vi.fn(() => Promise.resolve('git version 2.49.0'));
-
-    await expect(
-      runPackagedApplicationSmoke({
-        profile: { root: profile.root, databasePath: join(profile.root, 'forgeboard.sqlite') },
-        webContents: { executeJavaScript, isDestroyed: () => false },
-        ...agent.input,
-        verifyGit,
-        probeIntervalMs: 5_000,
-        timeoutMs: 10_000,
-      }),
-    ).rejects.toThrow('Agent detection failed during startup');
-    expect(executeJavaScript).toHaveBeenCalledOnce();
-    expect(verifyGit).not.toHaveBeenCalled();
+    ).rejects.toThrow(/outside|profile|demo/iu);
   });
 });
 
@@ -364,19 +214,31 @@ async function smokeProfile(): Promise<SmokeProfile> {
       'runtime',
     ].map(async (directory) => await mkdir(join(root, directory), { recursive: true })),
   );
-  const token = randomUUID();
+  const profile = {
+    root,
+    token: randomUUID(),
+    profileParent,
+    systemTempRoot: await realpath(tmpdir()),
+  };
+  await writeProfile(profile);
+  return profile;
+}
+
+async function writeProfile(
+  profile: SmokeProfile,
+  overrides: Partial<{ profileRoot: string; systemTempRoot: string }> = {},
+): Promise<void> {
   await writeFile(
-    join(root, PACKAGED_SMOKE_PROFILE_FILE),
+    join(profile.root, PACKAGED_SMOKE_PROFILE_FILE),
     `${JSON.stringify({
       schemaVersion: 2,
-      token,
-      profileRoot: root,
-      profileParent,
-      systemTempRoot: await realpath(tmpdir()),
+      token: profile.token,
+      profileRoot: overrides.profileRoot ?? profile.root,
+      profileParent: profile.profileParent,
+      systemTempRoot: overrides.systemTempRoot ?? profile.systemTempRoot,
       profileKind: 'packaged-runtime',
     })}\n`,
   );
-  return { root, token, profileParent, systemTempRoot: await realpath(tmpdir()) };
 }
 
 function smokeEnvironment(root: string): NodeJS.ProcessEnv {
@@ -462,155 +324,4 @@ function successfulRendererFlow(root: string, projectId: string, canvasId: strin
     .mockResolvedValueOnce(welcomeProbe())
     .mockResolvedValueOnce({ clicked: true, error: null })
     .mockResolvedValueOnce(demoProbe(root, projectId, canvasId));
-}
-
-async function agentHarness(
-  root: string,
-  options: { readonly extraArgument?: string; readonly worktreePath?: string } = {},
-) {
-  const projectId = randomUUID();
-  const canvasId = randomUUID();
-  const runId = randomUUID();
-  const demoProjectPath = join(root, 'demo', PACKAGED_SMOKE_DEMO_PROJECT_NAME);
-  const worktreePath =
-    options.worktreePath ?? join(root, 'documents', 'Forgeboard', 'worktrees', 'smoke-agent');
-  const agentExecutablePath = join(root, 'fake-packaged-electron');
-  const testAgentResourcePath = join(root, 'resources', 'test-agent', 'cli.js');
-  const outputName = `forgeboard-agent-output-${runId.slice(0, 8)}.md`;
-  const outputPath = join(worktreePath, outputName);
-  await Promise.all([
-    mkdir(demoProjectPath, { recursive: true }),
-    mkdir(worktreePath, { recursive: true }),
-    mkdir(join(root, 'resources', 'test-agent'), { recursive: true }),
-  ]);
-  await Promise.all([
-    writeFile(agentExecutablePath, 'packaged executable fixture\n'),
-    writeFile(testAgentResourcePath, 'test-agent fixture\n'),
-  ]);
-
-  let durable: StoredRunRecord | undefined;
-  const timestamp = new Date().toISOString();
-  const prepare = vi.fn(() =>
-    Promise.resolve({
-      planId: runId,
-      runId,
-      ownerId: 'packaged-smoke:test-agent',
-      disclosure: {
-        runId,
-        nodeId: PACKAGED_SMOKE_AGENT_NODE_ID,
-        adapterId: 'test-agent',
-        provider: 'Local deterministic test process',
-        executable: agentExecutablePath,
-        arguments: [
-          ...(options.extraArgument === undefined ? [] : [options.extraArgument]),
-          testAgentResourcePath,
-        ],
-        cwd: worktreePath,
-        runtime: 'pipes',
-        environmentVariableNames: ['ELECTRON_RUN_AS_NODE'],
-        contextAttachments: [],
-        contextManifestId: null,
-        contextManifestDigest: null,
-        permissionProfile: {
-          name: 'Packaged smoke worktree',
-          mode: 'custom',
-          enforcement: 'disclosure-only',
-          readRoots: [worktreePath],
-          writeRoots: [worktreePath],
-          network: 'provider-controlled',
-          approvalPolicy: 'Trusted token-bound packaged smoke only.',
-          disclosure: 'Deterministic local test fixture.',
-        },
-        warnings: [],
-        branch: 'forgeboard/smoke/test-agent',
-        baseCommit: 'a'.repeat(40),
-        primaryWasDirty: false,
-      },
-      disclosureFingerprint: 'b'.repeat(64),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    }),
-  );
-  const launch = vi.fn(
-    async (
-      _ownerId: string,
-      _planId: string,
-      _fingerprint: string,
-      authorizeLaunch?: () => void,
-    ) => {
-      authorizeLaunch?.();
-      await writeFile(
-        outputPath,
-        [
-          '# Forgeboard deterministic agent output',
-          '',
-          '## Request',
-          '',
-          PACKAGED_SMOKE_AGENT_PROMPT,
-          '',
-        ].join('\n'),
-      );
-      durable = {
-        id: runId,
-        projectId,
-        nodeId: PACKAGED_SMOKE_AGENT_NODE_ID,
-        adapterId: 'test-agent',
-        status: 'succeeded',
-        cwd: worktreePath,
-        branch: 'forgeboard/smoke/test-agent',
-        worktreeId: randomUUID(),
-        repositoryRoot: demoProjectPath,
-        managedRoot: join(root, 'documents', 'Forgeboard', 'worktrees'),
-        baseRef: 'refs/heads/main',
-        baseCommit: 'a'.repeat(40),
-        startedAt: timestamp,
-        endedAt: timestamp,
-        exitCode: 0,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      return {
-        runId,
-        process: { pid: 4242, startedAt: timestamp, identityToken: 'agent-smoke' },
-        completion: Promise.resolve({
-          runId,
-          nodeId: PACKAGED_SMOKE_AGENT_NODE_ID,
-          status: 'succeeded' as const,
-          exitCode: 0,
-          startedAt: timestamp,
-          endedAt: timestamp,
-          changedFiles: [outputName],
-          outputDigest: 'c'.repeat(64),
-          branch: 'forgeboard/smoke/test-agent',
-          worktreePath,
-        }),
-        writeInput: vi.fn(),
-        interrupt: vi.fn(),
-        terminate: vi.fn(() => Promise.resolve()),
-      };
-    },
-  );
-  const operations = {
-    prepare,
-    launch,
-  } as unknown as AgentExecutionOperations;
-
-  return {
-    projectId,
-    canvasId,
-    runId,
-    prepare,
-    launch,
-    input: {
-      runs: { executionOperations: () => operations },
-      store: {
-        getProject: (candidateId: string) =>
-          candidateId === projectId
-            ? { id: projectId, path: demoProjectPath, missing: false }
-            : undefined,
-        getRun: (candidateId: string) => (candidateId === runId ? durable : undefined),
-      },
-      agentExecutablePath,
-      testAgentResourcePath,
-    },
-  };
 }

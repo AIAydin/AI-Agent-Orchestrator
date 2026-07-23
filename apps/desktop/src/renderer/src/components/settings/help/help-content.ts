@@ -62,21 +62,20 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
       'The official provider CLI opens browser sign-in. Forgeboard never sees or stores the OAuth token, reads no provider credential store, and does not proxy model traffic.',
       'Wait for normalized Connected evidence. Needs refresh is not connected; choose Refresh or Reconnect. Use Cancel sign-in while active or Disconnect for a connected CLI.',
       'Expand Advanced only for an optional executable override, default model, or readiness check. The current override is validated for the reviewed connection action; save Settings separately to persist it.',
-      'Gemini and OpenCode do not use this OAuth flow. Choose Deterministic test agent for a fully local no-account workflow.',
+      'Gemini and OpenCode do not use this OAuth flow; configure their installed executables or use a custom tool instead.',
     ],
   },
   {
     id: 'agent-not-detected',
     title: 'Forgeboard cannot find your agent program',
-    summary:
-      'Try the built-in test agent right away, or tell Forgeboard where your agent program is installed.',
+    summary: 'Tell Forgeboard where your agent program is installed.',
     keywords: ['missing', 'cli', 'codex', 'claude', 'gemini', 'opencode', 'executable', 'path'],
     icon: Bot,
     steps: [
       'Open Settings → Agents & runtime and find the provider — the maker of the agent you use.',
       'Choose Browse next to Executable override and pick the agent program on your computer. You do not need to edit any files or system settings.',
       'For Codex or Claude Code, connect through the provider card and complete the official browser sign-in. Forgeboard never sees or stores the provider token. Gemini, OpenCode, and custom tools keep their local readiness flow.',
-      'If you do not have an agent program installed, choose Deterministic test agent. It behaves like a real agent, so you can practice running agents and reviewing their changes — even offline.',
+      'If you do not have a supported agent installed, install one from its provider or configure a custom command-line tool.',
     ],
   },
   {

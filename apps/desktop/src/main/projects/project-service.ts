@@ -23,7 +23,6 @@ import {
   RepositoryService,
   type GitDelegateAuthorizer,
 } from '@forgeboard/git-engine';
-import { TEST_AGENT_MANIFEST, TEST_AGENT_PACKAGE_VERSION } from '@forgeboard/test-agent';
 import type { App, BrowserWindow, Dialog, MessageBoxOptions, OpenDialogOptions } from 'electron';
 
 import type {
@@ -52,8 +51,6 @@ const execFileAsync = promisify(execFile);
 const MAX_OUTPUT = 2 * 1024 * 1024;
 
 const PROVIDER_DISCLOSURES = {
-  'test-agent':
-    'A built-in test agent that always replies the same way and never contacts a model provider.',
   codex: 'Codex CLI may send explicitly selected context to OpenAI under your CLI account terms.',
   claude:
     'Claude Code may send explicitly selected context to Anthropic under your CLI account terms.',
@@ -506,7 +503,7 @@ export class ProjectService {
       authority?.assertCurrent();
       await writeFile(
         join(target, 'src', 'message.ts'),
-        "export const message = 'Ready for a deterministic agent run.';\n",
+        "export const message = 'Ready for your first Forgeboard run.';\n",
       );
       authority?.assertCurrent();
       await writeFile(marker, '1\n');
@@ -647,13 +644,11 @@ export class ProjectService {
 }
 
 export async function detectAgents(
-  testAgentPath: string,
   trustedExtensionAdapters: readonly AgentAdapterManifest[] = [],
   executableOverrides: Readonly<Record<string, string>> = {},
   customAgent?: CustomAgentConfiguration,
 ): Promise<AgentDetection[]> {
   const definitions = [
-    ['test-agent', 'Deterministic test agent', testAgentPath],
     ['codex', 'OpenAI Codex CLI', 'codex'],
     ['claude', 'Anthropic Claude Code', 'claude'],
     ['gemini', 'Google Gemini CLI', 'gemini'],
@@ -665,24 +660,18 @@ export async function detectAgents(
   const builtInDetections = Promise.all(
     definitions.map(async ([id, label, executable]) => {
       const configured = executableOverrides[id]?.trim();
-      const located =
-        id === 'test-agent'
-          ? executable
-          : configured
-            ? await validateExecutableOverride(configured)
-            : await findExecutable(executable);
-      const manifest =
-        id === 'test-agent'
-          ? TEST_AGENT_MANIFEST
-          : ['codex', 'claude', 'gemini', 'opencode'].includes(id)
-            ? getBuiltInAgentManifest(id)
-            : undefined;
+      const located = configured
+        ? await validateExecutableOverride(configured)
+        : await findExecutable(executable);
+      const manifest = ['codex', 'claude', 'gemini', 'opencode'].includes(id)
+        ? getBuiltInAgentManifest(id)
+        : undefined;
       return {
         id,
         label,
-        installed: id === 'test-agent' || Boolean(located),
+        installed: Boolean(located),
         executable: located,
-        version: id === 'test-agent' ? TEST_AGENT_PACKAGE_VERSION : null,
+        version: null,
         providerDisclosure: PROVIDER_DISCLOSURES[id],
         ...(manifest === undefined
           ? {}

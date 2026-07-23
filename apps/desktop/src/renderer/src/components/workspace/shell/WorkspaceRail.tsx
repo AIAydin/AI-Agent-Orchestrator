@@ -1,4 +1,4 @@
-import { ChevronRight, Files, GitBranch, Layers3, Search, Workflow } from 'lucide-react';
+import { ChevronRight, Files, GitBranch, Layers3, Search } from 'lucide-react';
 
 import type {
   AgentDetection,
@@ -12,14 +12,12 @@ import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import type { ExtensionTemplate } from '../model/types.js';
 import { providerTheme } from '../node-registry/provider-themes.js';
 import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
-import type { WorkflowTemplate } from '../workflows/templates/catalog.js';
 
 interface WorkspaceRailProps {
   project: Project;
   tab: 'project' | 'nodes';
   search: string;
   templates: NodeKind[];
-  workflowTemplates: readonly WorkflowTemplate[];
   extensionTemplates: ExtensionTemplate[];
   nodes: WorkshopNode[];
   nodeRegistry?: NodeTypeRegistry;
@@ -31,7 +29,6 @@ interface WorkspaceRailProps {
   onSearchChange: (value: string) => void;
   onAddNode: (kind: NodeKind) => void;
   onAddAgentNode: (adapterId: RunAdapterId) => void;
-  onAddWorkflowTemplate: (template: WorkflowTemplate) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
   onSelectNode: (node: WorkshopNode) => void;
@@ -46,7 +43,6 @@ export function WorkspaceRail({
   tab,
   search,
   templates,
-  workflowTemplates,
   extensionTemplates,
   nodes,
   nodeRegistry = BUILT_IN_NODE_REGISTRY,
@@ -58,7 +54,6 @@ export function WorkspaceRail({
   onSearchChange,
   onAddNode,
   onAddAgentNode,
-  onAddWorkflowTemplate,
   onAddExtensionNode,
   onInitializeGit,
   onSelectNode,
@@ -106,15 +101,12 @@ export function WorkspaceRail({
           <ProjectTemplates
             project={project}
             templates={templates}
-            workflowTemplates={workflowTemplates}
             extensionTemplates={extensionTemplates}
             nodeRegistry={nodeRegistry}
             initializingGit={initializingGit}
-            readOnly={collaborationGraphReadOnly}
             runnableAgents={runnableAgents}
             onAddNode={onAddNode}
             onAddAgentNode={onAddAgentNode}
-            onAddWorkflowTemplate={onAddWorkflowTemplate}
             onAddExtensionNode={onAddExtensionNode}
             onInitializeGit={onInitializeGit}
           />
@@ -129,15 +121,12 @@ export function WorkspaceRail({
 interface ProjectTemplatesProps {
   project: Project;
   templates: NodeKind[];
-  workflowTemplates: readonly WorkflowTemplate[];
   extensionTemplates: ExtensionTemplate[];
   nodeRegistry: NodeTypeRegistry;
   initializingGit: boolean;
-  readOnly: boolean;
   runnableAgents: readonly (AgentDetection & { id: RunAdapterId })[];
   onAddNode: (kind: NodeKind) => void;
   onAddAgentNode: (adapterId: RunAdapterId) => void;
-  onAddWorkflowTemplate: (template: WorkflowTemplate) => void;
   onAddExtensionNode: (template: ExtensionTemplate) => void;
   onInitializeGit: () => void;
 }
@@ -145,15 +134,12 @@ interface ProjectTemplatesProps {
 function ProjectTemplates({
   project,
   templates,
-  workflowTemplates,
   extensionTemplates,
   nodeRegistry,
   initializingGit,
-  readOnly,
   runnableAgents,
   onAddNode,
   onAddAgentNode,
-  onAddWorkflowTemplate,
   onAddExtensionNode,
   onInitializeGit,
 }: ProjectTemplatesProps) {
@@ -193,31 +179,6 @@ function ProjectTemplates({
             ))}
           </div>
         )}
-      </section>
-      <section className="template-section" aria-labelledby="workflow-template-heading">
-        <header>
-          <h2 id="workflow-template-heading">Workflow templates</h2>
-          <span>{workflowTemplates.length}</span>
-        </header>
-        <div className="template-list">
-          {workflowTemplates.map((template) => (
-            <button
-              type="button"
-              key={template.id}
-              disabled={readOnly}
-              onClick={() => onAddWorkflowTemplate(template)}
-            >
-              <span style={{ color: 'var(--yellow)' }}>
-                <Workflow size={15} />
-              </span>
-              <span>
-                <strong>{template.name}</strong>
-                <small>{template.description}</small>
-              </span>
-              <ChevronRight size={13} />
-            </button>
-          ))}
-        </div>
       </section>
       <section className="template-section">
         <header>

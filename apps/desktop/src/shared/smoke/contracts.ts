@@ -10,9 +10,6 @@ export const PACKAGED_SMOKE_SAFE_DEFAULTS_ACTION = 'Use safe defaults';
 export const PACKAGED_SMOKE_DEMO_ACTION = 'Explore the safe demo';
 export const PACKAGED_SMOKE_DEMO_PROJECT_NAME = 'forgeboard-demo';
 export const PACKAGED_SMOKE_CANVAS_NAME = 'Workshop';
-export const PACKAGED_SMOKE_AGENT_NODE_ID = 'packaged-smoke-agent';
-export const PACKAGED_SMOKE_AGENT_PROMPT =
-  'Verify the packaged safe demo with the bundled deterministic local agent.';
 
 export const PackagedSmokeProfileFileSchema = z
   .object({
@@ -103,17 +100,6 @@ export const PackagedSmokeReportSchema = z
     demoProjectPath: z.string().min(1),
     demoCanvasId: z.string().uuid(),
     demoCanvasName: z.literal(PACKAGED_SMOKE_CANVAS_NAME),
-    agentRun: z.literal('succeeded'),
-    durableRun: z.literal('verified'),
-    agentRunId: z.string().uuid(),
-    agentExecutablePath: z.string().min(1),
-    agentResourcePath: z.string().min(1),
-    agentProcessId: z.number().int().positive(),
-    agentWorktreePath: z.string().min(1),
-    agentChangedFiles: z.tuple([z.string().min(1)]),
-    agentOutputPath: z.string().min(1),
-    agentOutputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
-    agentOutputDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   })
   .strict();
 export type PackagedSmokeReport = z.infer<typeof PackagedSmokeReportSchema>;

@@ -1,13 +1,11 @@
 import {
   detectAgent,
-  AgentAdapterManifestSchema,
   getBuiltInAgentManifest,
   locateAgentExecutable,
   type AgentAdapterManifest,
   type AgentDetectionResult,
   type AgentExecutableProbe,
 } from '@forgeboard/agent-adapters';
-import { TEST_AGENT_MANIFEST, TEST_AGENT_PACKAGE_VERSION } from '@forgeboard/test-agent';
 
 import {
   AgentReadinessRequestSchema,
@@ -87,10 +85,7 @@ export class AgentReadinessService {
   readonly #now: () => Date;
   readonly #verifiedSettingsReadiness = new Map<string, VerifiedSettingsReadiness>();
 
-  public constructor(
-    private readonly testAgentPath: string,
-    dependencies: AgentReadinessServiceDependencies = {},
-  ) {
+  public constructor(dependencies: AgentReadinessServiceDependencies = {}) {
     this.#locateExecutable = dependencies.locateExecutable ?? locateAgentExecutable;
     this.#probeAgent = dependencies.probeAgent ?? detectAgent;
     this.#identifyExecutable = dependencies.identifyExecutable ?? readinessExecutableIdentity;
@@ -123,7 +118,7 @@ export class AgentReadinessService {
       };
     }
 
-    const requestedExecutable = executableForRequest(request, this.testAgentPath, manifest);
+    const requestedExecutable = executableForRequest(request, manifest);
     let located: AgentDetectionResult;
     try {
       located = await this.#locateExecutable(manifest, {
@@ -316,22 +311,7 @@ export class AgentReadinessService {
   public async verifySettingsReadiness(input: unknown): Promise<AgentReadinessResult> {
     const request = AgentReadinessRequestSchema.parse(input);
     const fingerprint = readinessRequestFingerprint(request);
-    let verified = this.#verifiedSettingsReadiness.get(fingerprint);
-    if (verified === undefined && request.agentId === 'test-agent') {
-      const prepared = await this.prepare(request);
-      if (prepared.outcome !== 'probe') {
-        throw new Error(
-          prepared.result.reason ?? 'The bundled deterministic agent is not ready for Settings.',
-        );
-      }
-      const bundled = this.#result(request, 'bundled', 'ready', {
-        executable: prepared.plan.executable,
-        version: TEST_AGENT_PACKAGE_VERSION,
-        effectiveCapabilities: capabilitySummary(prepared.plan.manifest.capabilities),
-      });
-      this.#rememberSettingsReadiness(prepared.plan, bundled);
-      verified = this.#verifiedSettingsReadiness.get(fingerprint);
-    }
+    const verified = this.#verifiedSettingsReadiness.get(fingerprint);
     if (verified === undefined) {
       throw new Error(
         `Refresh readiness for ${request.agentId} from the current Settings draft before saving.`,
@@ -440,12 +420,6 @@ function capabilitySummary(capabilities: AgentAdapterManifest['capabilities']) {
 
 function manifestForRequest(request: AgentReadinessRequest): AgentAdapterManifest {
   if (request.agentId === 'custom') return customAgentManifest(request.configuration);
-  if (request.agentId === 'test-agent') {
-    return AgentAdapterManifestSchema.parse({
-      ...TEST_AGENT_MANIFEST,
-      id: 'test-agent',
-    });
-  }
   const manifest = getBuiltInAgentManifest(request.agentId);
   if (manifest === undefined) throw new Error(`Unsupported readiness agent: ${request.agentId}`);
   return manifest;
@@ -453,10 +427,8 @@ function manifestForRequest(request: AgentReadinessRequest): AgentAdapterManifes
 
 function executableForRequest(
   request: AgentReadinessRequest,
-  testAgentPath: string,
   manifest: AgentAdapterManifest,
 ): string {
-  if (request.agentId === 'test-agent') return testAgentPath;
   if (request.agentId === 'custom') return request.configuration.executable;
   return request.executableOverride ?? manifest.executable.command;
 }

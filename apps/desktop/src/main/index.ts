@@ -143,10 +143,6 @@ void app
       const report = await runPackagedApplicationSmoke({
         profile: packagedSmokeProfile,
         webContents: mainWindow.webContents,
-        runs: services.runs,
-        store,
-        agentExecutablePath: process.execPath,
-        testAgentResourcePath: join(process.resourcesPath, 'test-agent', 'cli.js'),
         verifyGit: verifyBundledGit,
       });
       quitReady = true;

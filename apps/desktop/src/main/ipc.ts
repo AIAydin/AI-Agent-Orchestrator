@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
 import { GitRemoteConfigurationService } from '@forgeboard/git-engine';
@@ -99,6 +99,7 @@ import {
 import { createNativePreviewActionAuthorizer } from './agent-peers/preview-control/native-approval.js';
 import { TerminalIpcService } from './terminal/ipc.js';
 import { TerminalService } from './terminal/service.js';
+import { ManagedTerminalWorkspaceService } from './terminal/workspaces/service.js';
 import { UpdateIpcService } from './updates/service.js';
 import { VoiceIpcService } from './voice/service.js';
 import { createWorkflowRuntimeComposition } from './workflow/host/composition.js';
@@ -121,7 +122,7 @@ export function createDefaultSettings(): AppSettings {
     canvasGridSize: 16,
     canvasSnapToGrid: true,
     keyboardPreset: 'standard',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     agentExecutableOverrides: {},
     agentDefaultModels: {},
@@ -198,8 +199,8 @@ export function createDefaultSettings(): AppSettings {
     backupOnQuit: true,
     backupRetentionCount: 30,
     collaborationEnabled: false,
-    collaborationUrl: 'ws://127.0.0.1:1234',
-    collaborationManagementUrl: 'http://127.0.0.1:1234/',
+    collaborationUrl: '',
+    collaborationManagementUrl: '',
     collaborationDisplayName: 'Local user',
     collaborationSubject: 'local-user',
     collaborationColor: '#6d5efc',
@@ -310,8 +311,15 @@ export function registerIpcHandlers(
   // Shared with `AgentPeersService` below (`setPeerEnvironmentProvider`) so a single
   // `TerminalService` instance is the source of truth for both the terminal IPC surface and the
   // agent-peer hub's session bridge.
-  const terminalCore = new TerminalService(store, join(transcripts, 'terminal'), () =>
-    store.getSettings(createDefaultSettings()),
+  const getCurrentSettings = (): AppSettings => store.getSettings(createDefaultSettings());
+  const terminalWorkspaces = new ManagedTerminalWorkspaceService(store, getCurrentSettings, {
+    repositories,
+  });
+  const terminalCore = new TerminalService(
+    store,
+    join(transcripts, 'terminal'),
+    getCurrentSettings,
+    { workspaceManager: terminalWorkspaces },
   );
   const terminal = new TerminalIpcService(dialog, terminalCore, approvals, undefined, (event) =>
     collaboration.assertTerminalMutationAuthorized(event.sender),
@@ -339,10 +347,7 @@ export function registerIpcHandlers(
   );
   terminalCore.setPeerEnvironmentProvider(agentPeersHub);
   const agentPeers = new AgentPeersIpcService(app, agentPeersHub, store);
-  const testAgentPath = app.isPackaged
-    ? join(process.resourcesPath, 'test-agent', 'cli.js')
-    : resolve(process.cwd(), '../../packages/test-agent/dist/cli.js');
-  const agentReadiness = new AgentReadinessService(testAgentPath);
+  const agentReadiness = new AgentReadinessService();
   const readiness = new AgentReadinessIpcService(dialog, agentReadiness, store, runDataOperation);
   const providerConnections = new ProviderConnectionIpcService(
     dialog,
@@ -665,7 +670,6 @@ export function registerIpcHandlers(
     return await runDataOperation(async () => {
       const settings = store.getSettings(createDefaultSettings());
       return detectAgents(
-        testAgentPath,
         await extensions.listActiveAgentAdapters(),
         settings.agentExecutableOverrides,
         settings.customAgent,

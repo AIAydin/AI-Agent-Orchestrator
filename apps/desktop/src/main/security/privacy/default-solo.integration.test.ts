@@ -168,7 +168,7 @@ describe('default solo privacy integration', () => {
 
       expect(disclosure).toMatchObject({
         nodeId: AGENT_NODE_ID,
-        adapterId: 'test-agent',
+        adapterId: 'codex',
         provider: 'Local deterministic context recorder',
         contextAttachments: [{ path: allowedPath, kind: 'file', sha256: allowedDigest }],
         permissionProfile: {
@@ -253,7 +253,6 @@ function openApplication(fixture: RepositoryFixture): OpenApplication {
     emit: () => undefined,
     repositories,
     planAdapter: planner,
-    resolveTestAgentCliPath: () => Promise.resolve(fixture.recorderScript),
   });
   const composition = createWorkflowRuntimeComposition({
     store,
@@ -289,7 +288,7 @@ function contextRecorderPlanner(
 ): AgentAdapterPlanner {
   const adapter = createCustomCliAdapter({
     schemaVersion: 1,
-    id: 'test-agent',
+    id: 'codex',
     name: 'Local deterministic context recorder',
     provider: {
       name: 'Local deterministic context recorder',
@@ -362,7 +361,7 @@ function contextCanvas(name: string, relativePath: string): Canvas {
     ...nodeBase(AGENT_NODE_ID, 'Privacy verification agent'),
     type: 'agent',
     data: {
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       permissionProfileId: 'plan-read-only',
       promptDraft: 'Inspect only the selected context.',
       contextAttachmentIds: [FILE_NODE_ID],
@@ -518,7 +517,7 @@ function settings(managedRoot: string): AppSettings {
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'plan-read-only',
     worktreeRoot: managedRoot,
     branchPrefix: 'forgeboard/',

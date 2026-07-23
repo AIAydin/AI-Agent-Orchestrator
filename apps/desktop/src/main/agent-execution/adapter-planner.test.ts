@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { AgentAdapterManifestSchema, CODEX_MANIFEST } from '@forgeboard/agent-adapters';
 
 import type { AppSettings } from '../../shared/application/contracts.js';
 import { createDefaultAgentAdapterPlanner } from './adapter-planner.js';
@@ -19,76 +20,6 @@ afterEach(async () => {
 });
 
 describe('default agent adapter planner launch binding', () => {
-  it('makes the bundled offline reviewer emit only the exact main-bound approved record', async () => {
-    const repositoryPath = await temporaryDirectory();
-    const cliPath = path.join(repositoryPath, 'test-agent-cli.js');
-    await writeFile(cliPath, 'process.exit(0);\n');
-    const planner = createDefaultAgentAdapterPlanner({
-      getTrustedAdapter: () => Promise.resolve(undefined),
-      resolveTestAgentCliPath: () => Promise.resolve(cliPath),
-    });
-    const record = reviewerRecordTemplate();
-    const planned = await planner(
-      {
-        ...request(),
-        reviewerProtocol: true,
-        prompt: reviewerPrompt(record),
-      },
-      repositoryPath,
-      { envAllowlist: [] } as unknown as AppSettings,
-      '123fae6e-e213-4a10-a0db-0f85b791f7e9',
-    );
-
-    const command = JSON.parse(planned.plan.initialStdin?.trim() ?? '') as {
-      actions: Array<{ type: string; metadata?: Record<string, unknown> }>;
-    };
-    expect(command.actions.at(-1)).toMatchObject({
-      type: 'complete',
-      metadata: {
-        reviewerFinalRecord: {
-          ...record,
-          assessments: [
-            {
-              ...record.assessments[0],
-              verdict: 'approved',
-              findings: [],
-              summary: 'Deterministic offline reviewer approved the exact bound output.',
-            },
-          ],
-        },
-      },
-    });
-  });
-
-  it('fails the offline reviewer closed when the bound record is absent or ambiguous', async () => {
-    const repositoryPath = await temporaryDirectory();
-    const cliPath = path.join(repositoryPath, 'test-agent-cli.js');
-    await writeFile(cliPath, 'process.exit(0);\n');
-    const planner = createDefaultAgentAdapterPlanner({
-      getTrustedAdapter: () => Promise.resolve(undefined),
-      resolveTestAgentCliPath: () => Promise.resolve(cliPath),
-    });
-    const record = reviewerRecordTemplate();
-    const once = reviewerPrompt(record);
-
-    await expect(
-      planner(
-        { ...request(), reviewerProtocol: true, prompt: 'No bound reviewer record.' },
-        repositoryPath,
-        { envAllowlist: [] } as unknown as AppSettings,
-        '123fae6e-e213-4a10-a0db-0f85b791f7e9',
-      ),
-    ).rejects.toThrow(/missing or ambiguous/iu);
-    await expect(
-      planner(
-        { ...request(), reviewerProtocol: true, prompt: `${once}\n${once}` },
-        repositoryPath,
-        { envAllowlist: [] } as unknown as AppSettings,
-        '123fae6e-e213-4a10-a0db-0f85b791f7e9',
-      ),
-    ).rejects.toThrow(/missing or ambiguous/iu);
-  });
-
   it('uses provider-specific headless JSONL only for Codex and Claude reviewer runs', async () => {
     if (process.platform === 'win32') return;
     const repositoryPath = await temporaryDirectory();
@@ -98,7 +29,6 @@ describe('default agent adapter planner launch binding', () => {
       await chmod(executable, 0o700);
       const planner = createDefaultAgentAdapterPlanner({
         getTrustedAdapter: () => Promise.resolve(undefined),
-        resolveTestAgentCliPath: () => Promise.reject(new Error('not used')),
       });
       const settings = {
         envAllowlist: [],
@@ -133,14 +63,20 @@ describe('default agent adapter planner launch binding', () => {
 
   it('rejects a node model when the selected adapter does not support model selection', async () => {
     const repositoryPath = await temporaryDirectory();
+    const manifest = AgentAdapterManifestSchema.parse({
+      ...CODEX_MANIFEST,
+      id: 'fixture.no-model',
+      invocation: { ...CODEX_MANIFEST.invocation, modelArguments: [] },
+      capabilities: { ...CODEX_MANIFEST.capabilities, modelSelection: false },
+    });
     const planner = createDefaultAgentAdapterPlanner({
-      getTrustedAdapter: () => Promise.resolve(undefined),
-      resolveTestAgentCliPath: () => Promise.reject(new Error('must not resolve the executable')),
+      getTrustedAdapter: (adapterId) =>
+        Promise.resolve(adapterId === manifest.id ? manifest : undefined),
     });
 
     await expect(
       planner(
-        { ...request(), model: 'unsupported-model' },
+        { ...request(), adapterId: manifest.id, model: 'unsupported-model' },
         repositoryPath,
         { envAllowlist: [] } as unknown as AppSettings,
         '123fae6e-e213-4a10-a0db-0f85b791f7e9',
@@ -156,7 +92,6 @@ describe('default agent adapter planner launch binding', () => {
     await chmod(executable, 0o700);
     const planner = createDefaultAgentAdapterPlanner({
       getTrustedAdapter: () => Promise.resolve(undefined),
-      resolveTestAgentCliPath: () => Promise.reject(new Error('not used')),
     });
 
     const planned = await planner(
@@ -175,27 +110,6 @@ describe('default agent adapter planner launch binding', () => {
     expect(planned.plan.disclosure.arguments).not.toContain('settings-model');
   });
 
-  it('rejects replacement of the bundled test-agent script after review', async () => {
-    const repositoryPath = await temporaryDirectory();
-    const cliPath = path.join(repositoryPath, 'test-agent-cli.js');
-    await writeFile(cliPath, 'process.exit(0);\n');
-    const planner = createDefaultAgentAdapterPlanner({
-      getTrustedAdapter: () => Promise.resolve(undefined),
-      resolveTestAgentCliPath: () => Promise.resolve(cliPath),
-    });
-
-    const planned = await planner(
-      request(),
-      repositoryPath,
-      { envAllowlist: [] } as unknown as AppSettings,
-      '123fae6e-e213-4a10-a0db-0f85b791f7e9',
-    );
-    await expect(planned.revalidateBeforeLaunch?.()).resolves.toBeUndefined();
-
-    await writeFile(cliPath, 'process.exit(7);\n');
-    await expect(planned.revalidateBeforeLaunch?.()).rejects.toThrow(/launch file changed/iu);
-  });
-
   it('rejects a Docker client that replaces itself while rechecking the image tag', async () => {
     if (process.platform === 'win32') return;
     const repositoryPath = await temporaryDirectory();
@@ -208,7 +122,6 @@ describe('default agent adapter planner launch binding', () => {
     await Promise.all([chmod(dockerExecutable, 0o700), chmod(replacement, 0o700)]);
     const planner = createDefaultAgentAdapterPlanner({
       getTrustedAdapter: () => Promise.resolve(undefined),
-      resolveTestAgentCliPath: () => Promise.reject(new Error('not used')),
     });
 
     const planned = await planner(
@@ -244,7 +157,6 @@ describe('default agent adapter planner launch binding', () => {
     await chmod(dockerExecutable, 0o700);
     const planner = createDefaultAgentAdapterPlanner({
       getTrustedAdapter: () => Promise.resolve(undefined),
-      resolveTestAgentCliPath: () => Promise.reject(new Error('not used')),
     });
 
     await expect(
@@ -263,40 +175,10 @@ function request(): AgentExecutionRequest {
   return {
     projectId: '123fae6e-e213-4a10-a0db-0f85b791f7e9',
     nodeId: 'agent-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     prompt: 'Inspect this repository.',
     permissionProfile: 'plan-read-only',
     context: { attachments: [], manifestId: 'context-v1', manifestDigest: 'a'.repeat(64) },
-  };
-}
-
-function reviewerPrompt(record: ReturnType<typeof reviewerRecordTemplate>): string {
-  return [
-    'Review the exact output.',
-    'Your final response must be one dedicated structured message payload matching this exact record shape and bound values:',
-    JSON.stringify(record, null, 2),
-    'Do not wrap the record.',
-  ].join('\n');
-}
-
-function reviewerRecordTemplate() {
-  return {
-    type: 'forgeboard.reviewer-assessment.final' as const,
-    schemaVersion: 1 as const,
-    executionId: 'workflow-execution-1',
-    reviewerNodeId: 'reviewer-agent',
-    reviewerAttempt: 2,
-    assessments: [
-      {
-        reviewEdgeId: 'implementation-review',
-        reviewedNodeId: 'implementation',
-        reviewedNodeAttempt: 2,
-        reviewedOutputDigest: `sha256:${'a'.repeat(64)}`,
-        verdict: 'approved | changes-requested' as const,
-        findings: [],
-        summary: null,
-      },
-    ],
   };
 }
 

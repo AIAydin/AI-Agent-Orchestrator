@@ -6,12 +6,12 @@ import { pathToFileURL } from 'node:url';
 
 import {
   AgentAdapterManifestSchema,
+  CODEX_MANIFEST,
   createCustomCliAdapter,
   planDockerAgentLaunch,
   type PermissionProfile,
   type PreparedAgentLaunch,
 } from '@forgeboard/agent-adapters';
-import { TEST_AGENT_MANIFEST } from '@forgeboard/test-agent';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { AgentExecutionContextRequest } from '../contracts.js';
@@ -518,11 +518,13 @@ function hostPlan(
   attachments = fixture.context.attachments,
 ): PreparedAgentLaunch {
   const manifest = AgentAdapterManifestSchema.parse({
-    ...TEST_AGENT_MANIFEST,
+    ...CODEX_MANIFEST,
     id: 'snapshot-test',
     invocation: {
-      ...TEST_AGENT_MANIFEST.invocation,
+      ...CODEX_MANIFEST.invocation,
       resumeArguments: undefined,
+      modelArguments: [],
+      permissionArguments: { custom: [] },
       promptTransport: options.transport,
       launchArguments:
         options.transport === 'argument'
@@ -538,8 +540,10 @@ function hostPlan(
             },
     },
     capabilities: {
-      ...TEST_AGENT_MANIFEST.capabilities,
+      ...CODEX_MANIFEST.capabilities,
       contextAttachments: true,
+      modelSelection: false,
+      permissionModes: ['custom'],
       resume: false,
     },
   });

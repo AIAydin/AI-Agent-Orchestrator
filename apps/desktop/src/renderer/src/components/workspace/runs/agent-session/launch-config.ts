@@ -2,6 +2,10 @@ import type {
   AgentDetection,
   PermissionProfile,
 } from '../../../../../../shared/application/contracts.js';
+import {
+  builtInAgentModelFlagSupported,
+  builtInAgentSessionArguments,
+} from '../../../../../../shared/terminal/index.js';
 import type { TerminalNodeConfiguration } from '../../terminal/types.js';
 
 export interface AgentSessionLaunch {
@@ -16,23 +20,11 @@ export interface AgentSessionPeerLaunchMaterial {
 }
 
 /**
- * The model CLI flag each adapter accepts, hardcoded here to mirror the manifest `modelArguments`
- * in `@forgeboard/agent-adapters` without importing across the package boundary. An adapter absent
- * from this map cannot receive a typed model, so its Model field must stay hidden.
- */
-const MODEL_FLAG_BY_ADAPTER: Readonly<Record<string, string>> = {
-  claude: '--model',
-  codex: '-m',
-  gemini: '--model',
-  opencode: '--model',
-};
-
-/**
  * Whether a typed model reaches the launched command for this adapter. Callers gate the Model input
  * on this so a visible Model field always affects the command it produces.
  */
 export function modelFlagSupported(adapterId: string): boolean {
-  return Object.prototype.hasOwnProperty.call(MODEL_FLAG_BY_ADAPTER, adapterId);
+  return builtInAgentModelFlagSupported(adapterId);
 }
 
 /** Why an interactive session cannot start, or null when it can. */
@@ -51,35 +43,41 @@ export function agentSessionLaunch(
   peers: AgentSessionPeerLaunchMaterial | null = null,
 ): AgentSessionLaunch {
   const executable = agent.executable ?? '';
-  const trimmedModel = model?.trim() ?? '';
-  const args: string[] = [];
+  const args = builtInAgentSessionArguments(
+    agent.id,
+    model,
+    profile,
+    peers?.extraArguments ?? [],
+  ) ?? [...(peers?.extraArguments ?? [])];
   let enforced = false;
   if (agent.id === 'claude') {
     if (profile === 'plan-read-only') {
-      args.push('--permission-mode', 'plan');
       enforced = true;
     }
   } else if (agent.id === 'codex') {
     if (profile === 'plan-read-only') {
-      args.push('--sandbox', 'read-only');
       enforced = true;
     }
   }
-  const modelFlag = MODEL_FLAG_BY_ADAPTER[agent.id];
-  if (modelFlag !== undefined && trimmedModel !== '') {
-    args.push(modelFlag, trimmedModel);
-  }
-  if (peers !== null) args.push(...peers.extraArguments);
+  if (profile === 'worktree-write') enforced = true;
   return {
     configuration: {
       executable,
       arguments: args,
       cwdRelative: '.',
       environmentVariableNames: [],
+      ...(profile === 'worktree-write'
+        ? {
+            workspace: {
+              kind: 'managed-agent-worktree' as const,
+              adapterId: agent.id,
+            },
+          }
+        : {}),
       ...(peers !== null ? { peerProvisionId: peers.provisionId } : {}),
     },
     profileNote: enforced
       ? null
-      : 'Interactive sessions run at the project root; this profile fully applies to flow runs. The CLI asks before writing.',
+      : 'This interactive profile is not enforced yet. The session runs at the project root and the CLI asks before writing.',
   };
 }

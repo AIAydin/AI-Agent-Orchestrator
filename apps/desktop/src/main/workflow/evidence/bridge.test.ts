@@ -440,7 +440,7 @@ function agentNode(id: string) {
     id,
     title: id,
     type: 'agent' as const,
-    data: { adapterId: 'test-agent', permissionProfileId: 'worktree-write' },
+    data: { adapterId: 'codex', permissionProfileId: 'worktree-write' },
   };
 }
 

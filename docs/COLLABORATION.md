@@ -2,6 +2,9 @@
 
 Forgeboard's desktop application is local-first. Solo projects do not start, contact, or depend on this service. The collaboration server is an optional Hocuspocus/Yjs transport for teams that choose to share canvas metadata.
 
+For the ready-to-deploy hosted setup, see
+[Host Forgeboard collaboration](deployment/COLLABORATION_HOSTING.md).
+
 No source-code edit is required to run it. A local development server starts with safe localhost defaults:
 
 ```bash
@@ -16,14 +19,20 @@ The desktop client configures and controls ordinary room and invite sessions wit
 environment, or manifest edits. Its UI supports room creation, owner recovery and renewal,
 paginated membership and audit access, version-safe role changes and revocation, invite redemption,
 owner invite creation, paginated durable invite-history review, restart-safe revocation, and
-current-session-only link copy. Deployment environment variables
-remain only for operators of this optional service; ordinary desktop users do not edit them.
+current-session-only link copy. New desktop profiles do not contain a localhost collaboration
+address. Deployment environment variables remain only for operators of this optional service;
+ordinary desktop users enter the hosted addresses in Settings or receive them inside an invite.
 
 ## Desktop connection and recovery
 
-In **Settings → Connectivity**, enable collaboration and enter the WebSocket server URL,
-collaboration management API URL, collaborator identity, display name, and color. The management URL
-must use HTTPS, except that plain HTTP is accepted for a loopback server on the same device. It is an
+In **Settings → Connectivity**, a room owner enters the hosted WebSocket and management API URLs,
+room name, and identity before creating the room. A shared invite can be created only when those
+addresses use public `wss://` and `https://` endpoints that another computer can reach. Loopback,
+private-network, local-domain, insecure, and single-label addresses are rejected before invite
+creation, so Forgeboard cannot copy a link that points its recipient back at their own computer.
+
+Localhost remains available only for advanced direct connections and contributor development. Plain
+HTTP management is accepted only for a loopback server on the same device. The management URL is an
 explicit setting: Forgeboard does not derive or guess it from the WebSocket URL.
 
 The ordinary invite path accepts a trusted invite link and remains disabled until the explicit
@@ -50,7 +59,8 @@ revoke a non-owner membership. Each network read or effect has a fresh cancel-de
 and stale member versions force a refresh instead of replaying an outdated action.
 
 For invites, the owner chooses editor, reviewer, or viewer access, a bounded lifetime, and a
-maximum-use count. Create, list, and revoke each require a fresh cancel-default native review.
+maximum-use count. Invite creation is disabled for local-only room sessions. Create, list, and revoke
+each require a fresh cancel-default native review.
 **Refresh invites**, **Previous**, and **Next** perform explicit owner-reviewed network reads of
 bounded, cursor-paginated durable history. Rows contain only token-free metadata: role, creation and
 expiry times, use count, and active, expired, exhausted, revoked, or invalidated status. After
@@ -154,7 +164,7 @@ compromised token stops authorizing HTTP and WebSocket operations.
 | -------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------- |
 | `NODE_ENV`                                   | `development`                              | Set `production`                                                    |
 | `FORGEBOARD_COLLAB_HOST`                     | `127.0.0.1`                                | `0.0.0.0` in a container, with a firewall/reverse proxy             |
-| `FORGEBOARD_COLLAB_PORT`                     | `1234`                                     | Any unprivileged internal port                                      |
+| `FORGEBOARD_COLLAB_PORT`                     | `PORT` from the host, otherwise `1234`     | Any unprivileged internal port                                      |
 | `FORGEBOARD_COLLAB_DATABASE_PATH`            | `./data/forgeboard-collab.sqlite`          | A persistent, encrypted volume                                      |
 | `FORGEBOARD_COLLAB_SIGNING_KEY`              | Ephemeral random key                       | Required; at least 32 random bytes, stored in a secret manager      |
 | `FORGEBOARD_COLLAB_ADMIN_TOKEN`              | Not needed for loopback bootstrap          | Required; at least 24 random characters, stored in a secret manager |
@@ -196,6 +206,9 @@ docker run --name forgeboard-collab \
 ```
 
 The image runs as UID/GID `10001`, has a built-in `/healthz` probe, and writes only to `/data` (plus the optional temporary filesystem shown above). Bind the service to loopback or a private container network; expose it publicly only through a TLS reverse proxy.
+
+The production image also honors a hosting platform's standard `PORT` variable when
+`FORGEBOARD_COLLAB_PORT` is absent. Its container health check follows the same resolved port.
 
 ## TLS and reverse proxy
 

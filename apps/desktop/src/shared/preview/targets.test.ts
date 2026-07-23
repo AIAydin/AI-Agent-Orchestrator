@@ -47,7 +47,7 @@ describe('preview target contracts', () => {
         },
         {
           target: { kind: 'agent-run', runId: RUN_ID },
-          label: 'test-agent · agent-node',
+          label: 'codex · agent-node',
           badge: 'Agent worktree',
           available: false,
           unavailableReason: 'The worktree is unavailable.',

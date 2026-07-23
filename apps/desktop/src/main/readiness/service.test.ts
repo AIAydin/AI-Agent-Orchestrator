@@ -37,7 +37,7 @@ describe('AgentReadinessService', () => {
   it('checks an unsaved override by canonical identity and validates its version', async () => {
     const locateExecutable = vi.fn(() => Promise.resolve(detection({ version: undefined })));
     const probeAgent = vi.fn<ProbeAgent>(() => Promise.resolve(detection()));
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable,
       probeAgent,
       identifyExecutable,
@@ -90,7 +90,7 @@ describe('AgentReadinessService', () => {
       ),
     );
     const probeAgent = vi.fn(() => Promise.resolve(detection()));
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable,
       probeAgent,
       identifyExecutable,
@@ -105,7 +105,7 @@ describe('AgentReadinessService', () => {
   });
 
   it('refuses to call unmatched or empty version output ready', async () => {
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable: vi.fn(() => Promise.resolve(detection({ version: undefined }))),
       identifyExecutable,
       probeAgent: vi.fn(() =>
@@ -127,7 +127,7 @@ describe('AgentReadinessService', () => {
   });
 
   it('rejects probe evidence for another executable or adapter', async () => {
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable: vi.fn(() => Promise.resolve(detection())),
       identifyExecutable,
       probeAgent: vi.fn(() =>
@@ -150,7 +150,7 @@ describe('AgentReadinessService', () => {
   it('fails an incomplete custom draft without executing it', async () => {
     const locateExecutable = vi.fn(() => Promise.resolve(detection()));
     const probeAgent = vi.fn(() => Promise.resolve(detection()));
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable,
       probeAgent,
       identifyExecutable,
@@ -180,70 +180,6 @@ describe('AgentReadinessService', () => {
     expect(probeAgent).not.toHaveBeenCalled();
   });
 
-  it('checks the bundled deterministic executable instead of trusting a UI path', async () => {
-    const locateExecutable = vi.fn(() =>
-      Promise.resolve(
-        detection({
-          adapterId: 'test-agent',
-          executable: '/canonical/bundled/test-agent',
-          version: undefined,
-        }),
-      ),
-    );
-    const probeAgent = vi.fn(() =>
-      Promise.resolve(
-        detection({
-          adapterId: 'test-agent',
-          executable: '/canonical/bundled/test-agent',
-          version: '0.1.0',
-          rawVersion: 'forgeboard-test-agent 0.1.0',
-        }),
-      ),
-    );
-    const service = new AgentReadinessService('/bundled/test-agent', {
-      locateExecutable,
-      probeAgent,
-      identifyExecutable,
-    });
-
-    await expect(service.check({ agentId: 'test-agent' }, authorizeProbe)).resolves.toMatchObject({
-      ready: true,
-      source: 'bundled',
-      version: '0.1.0',
-    });
-    expect(locateExecutable).toHaveBeenCalledWith(expect.anything(), {
-      executable: '/bundled/test-agent',
-    });
-  });
-
-  it('proves the bundled Settings agent passively without starting its subprocess', async () => {
-    const locateExecutable = vi.fn(() =>
-      Promise.resolve(
-        detection({
-          adapterId: 'test-agent',
-          executable: '/canonical/bundled/test-agent',
-          version: undefined,
-        }),
-      ),
-    );
-    const probeAgent = vi.fn<ProbeAgent>();
-    const service = new AgentReadinessService('/bundled/test-agent', {
-      locateExecutable,
-      probeAgent,
-      identifyExecutable,
-    });
-
-    await expect(service.verifySettingsReadiness({ agentId: 'test-agent' })).resolves.toMatchObject(
-      {
-        ready: true,
-        source: 'bundled',
-        executable: '/canonical/bundled/test-agent',
-      },
-    );
-    expect(locateExecutable).toHaveBeenCalledTimes(2);
-    expect(probeAgent).not.toHaveBeenCalled();
-  });
-
   it('refuses executable drift at the final per-process authorization boundary', async () => {
     let processStarted = false;
     const changedIdentity = { ...EXECUTABLE_IDENTITY, sha256: 'b'.repeat(64) };
@@ -261,7 +197,7 @@ describe('AgentReadinessService', () => {
       processStarted = true;
       return detection();
     });
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable: vi.fn(() => Promise.resolve(detection({ version: undefined }))),
       identifyExecutable: identify,
       probeAgent,
@@ -294,7 +230,7 @@ describe('AgentReadinessService', () => {
       processesStarted += 1;
       return detection();
     });
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable: vi.fn(() => Promise.resolve(detection({ version: undefined }))),
       identifyExecutable,
       probeAgent,
@@ -324,7 +260,7 @@ describe('AgentReadinessService', () => {
       processStarted = true;
       return detection();
     });
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable: vi.fn(() => Promise.resolve(detection({ version: undefined }))),
       identifyExecutable,
       probeAgent,
@@ -345,7 +281,7 @@ describe('AgentReadinessService', () => {
     let identity = EXECUTABLE_IDENTITY;
     const locateExecutable = vi.fn(() => Promise.resolve(detection()));
     const probeAgent = vi.fn<ProbeAgent>(() => Promise.resolve(detection()));
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable,
       identifyExecutable: () => Promise.resolve(identity),
       probeAgent,
@@ -377,7 +313,7 @@ describe('AgentReadinessService', () => {
 
   it('does not let readiness for executable override A authorize changed override B', async () => {
     const locateExecutable = vi.fn(() => Promise.resolve(detection()));
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable,
       identifyExecutable,
       probeAgent: vi.fn<ProbeAgent>(() => Promise.resolve(detection())),
@@ -407,7 +343,7 @@ describe('AgentReadinessService', () => {
       executable: '/canonical/bin/custom-agent',
     });
     const locateExecutable = vi.fn(() => Promise.resolve(customDetection));
-    const service = new AgentReadinessService('/bundled/test-agent', {
+    const service = new AgentReadinessService({
       locateExecutable,
       identifyExecutable,
       probeAgent: vi.fn<ProbeAgent>(() => Promise.resolve(customDetection)),

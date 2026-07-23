@@ -4,6 +4,7 @@ import { GripHorizontal } from 'lucide-react';
 
 import type { PermissionProfile } from '../../../../../../shared/application/contracts.js';
 import type { AgentPeersProvisionView } from '../../../../../../shared/agent-peers/index.js';
+import type { TerminalSessionView } from '../../../../../../shared/terminal/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import { isRunAdapterId } from '../../model/helpers.js';
 import { providerTheme } from '../../node-registry/provider-themes.js';
@@ -21,7 +22,6 @@ import { effectiveNodeModel } from '../agent-node/model-selection.js';
 import {
   agentSessionLaunch,
   agentSessionUnavailableReason,
-  modelFlagSupported,
   type AgentSessionPeerLaunchMaterial,
 } from './launch-config.js';
 import { useAgentSession } from './AgentSessionContext.js';
@@ -81,21 +81,37 @@ export function AgentSessionNode({
   const [peerMaterial, setPeerMaterial] = useState<AgentSessionPeerLaunchMaterial | null>(null);
   const [peerHint, setPeerHint] = useState<string | null>(null);
 
-  const fallbackAdapter = isRunAdapterId(settings.defaultAgent)
-    ? settings.defaultAgent
-    : 'test-agent';
+  const fallbackAdapter = isRunAdapterId(settings.defaultAgent) ? settings.defaultAgent : 'codex';
   const adapter = data.adapterId ?? fallbackAdapter;
   const agent = runnableAgents.find((candidate) => candidate.id === adapter);
 
   const model = effectiveNodeModel(agent, data.model, settings.agentDefaultModels[adapter]);
   const profile: PermissionProfile = data.permissionProfile ?? 'worktree-write';
   const launch = agent ? agentSessionLaunch(agent, model, profile, peerMaterial) : null;
+  const recordedWorkspaceRunRef = useRef<string | null>(null);
+  const recordManagedWorkspace = (session: TerminalSessionView | null): void => {
+    if (
+      session?.workspace?.kind !== 'managed-agent-worktree' ||
+      recordedWorkspaceRunRef.current === session.workspace.runId
+    ) {
+      return;
+    }
+    recordedWorkspaceRunRef.current = session.workspace.runId;
+    updateNodeData(id, {
+      runId: session.workspace.runId,
+      branch: session.workspace.branch,
+      worktreeId: undefined,
+      worktreeRecordedActive: true,
+      lastRunPermissionProfile: 'worktree-write',
+    });
+  };
 
   const controller = useTerminalNodeController({
     projectId: project.id,
     nodeId: id,
     configuration: launch?.configuration ?? EMPTY_CONFIGURATION,
     onError: reportError,
+    onSessionChange: recordManagedWorkspace,
     operations: terminalOperationsFromWindow(),
   });
 
@@ -105,10 +121,6 @@ export function AgentSessionNode({
   const unavailableReason = agentSessionUnavailableReason(agent);
   const blocked = gate !== null && gate.state !== 'connected';
   const canStart = unavailableReason === null && !blocked;
-  // Only surface the Model field when the agent both advertises model selection AND launch-config
-  // maps a model flag for it; otherwise a typed model would be silently dropped from the command.
-  const modelSelection =
-    agent?.capabilities?.modelSelection === true && modelFlagSupported(adapter);
 
   const hasActiveSession = controller.session !== null && controller.active;
   const endedSession = controller.session !== null && !controller.active;
@@ -188,7 +200,10 @@ export function AgentSessionNode({
         setPeerMaterial(
           view === null
             ? null
-            : { provisionId: view.provisionId, extraArguments: view.extraArguments },
+            : {
+                provisionId: view.provisionId,
+                extraArguments: view.extraArguments,
+              },
         );
         setPeerHint(
           view === null
@@ -225,11 +240,10 @@ export function AgentSessionNode({
   }, [endedSession]);
 
   // Agent sessions skip the in-app "Terminal safety review" page: one Start click goes straight to
-  // the agent. As soon as prepareLaunch resolves with a pending plan, auto-confirm it (capturing the
-  // launched config key first, exactly as the removed review dialog did). This also drives the
-  // restart-to-apply and exit-strip Restart flows, since both re-enter through prepareLaunch. The
-  // guard makes the confirm fire once per plan even under React's double-invoked effects. The
-  // main-process native confirmation (if configured) is untouched.
+  // main-process authorization. Built-in worktree sessions are reconstructed and launched
+  // automatically there; unsupported/custom paths may still require native confirmation. Capturing
+  // the launched config key first also drives restart-to-apply and exit-strip Restart. The guard
+  // makes confirm fire once per plan even under React's double-invoked effects.
   const autoConfirmedPlanIdRef = useRef<string | null>(null);
   const pendingPlanId = controller.pendingPlan?.planId ?? null;
   useEffect(() => {
@@ -240,7 +254,7 @@ export function AgentSessionNode({
   }, [pendingPlanId]);
 
   // A plan can still be pending if the node unmounts between prepare and auto-confirm; cancel it so
-  // no reviewed-but-unconfirmed launch is left dangling.
+  // no prepared-but-unconfirmed launch is left dangling.
   useEffect(() => () => void controllerRef.current.cancelLaunch().catch(() => undefined), []);
 
   const requestRestartToApply = (): void => {
@@ -414,68 +428,32 @@ export function AgentSessionNode({
       {controller.notice !== null && <p className="agent-session-notice">{controller.notice}</p>}
 
       <div className="agent-window-strip nowheel nodrag">
-        <select
-          className="nodrag"
-          aria-label="Agent"
-          name={`node-${id}-agent-adapter`}
-          value={adapter}
-          disabled={readOnly}
-          onFocus={recordHistory}
-          onChange={(event) => {
-            const adapterId = event.target.value;
-            const nextAgent = runnableAgents.find((candidate) => candidate.id === adapterId);
-            updateNodeData(id, {
-              adapterId,
-              ...(nextAgent?.capabilities?.modelSelection === true ? {} : { model: undefined }),
-            });
-          }}
-        >
-          {runnableAgents.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {candidate.label} {candidate.version ? `(${candidate.version})` : ''}
-            </option>
-          ))}
-        </select>
-        {modelSelection && (
-          <input
+        <label className="agent-window-field">
+          <span>Access</span>
+          <select
             className="nodrag"
-            aria-label="Model"
-            name={`node-${id}-agent-model`}
-            value={data.model ?? ''}
+            aria-label="Permission profile"
+            name={`node-${id}-permission-profile`}
+            value={profile}
             disabled={readOnly}
-            maxLength={200}
-            placeholder={settings.agentDefaultModels[adapter] ?? 'Provider default'}
             onFocus={recordHistory}
             onChange={(event) =>
               updateNodeData(id, {
-                model: event.target.value.trim() === '' ? undefined : event.target.value,
+                permissionProfile: event.target.value as PermissionProfile,
               })
             }
-          />
-        )}
-        <select
-          className="nodrag"
-          aria-label="Permission profile"
-          name={`node-${id}-permission-profile`}
-          value={profile}
-          disabled={readOnly}
-          onFocus={recordHistory}
-          onChange={(event) =>
-            updateNodeData(id, { permissionProfile: event.target.value as PermissionProfile })
-          }
-        >
-          {PERMISSION_PROFILE_OPTIONS.map((option) => (
-            <option
-              key={option.value}
-              value={option.value}
-              disabled={
-                permissionProfileUnavailableReason(option.value, settings, adapter) !== null
-              }
-            >
-              {option.label}
-            </option>
-          ))}
-        </select>
+          >
+            {PERMISSION_PROFILE_OPTIONS.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={permissionProfileUnavailableReason(option.value, settings) !== null}
+              >
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         {launch?.profileNote != null && (
           <small className="agent-profile-note">{launch.profileNote}</small>
         )}

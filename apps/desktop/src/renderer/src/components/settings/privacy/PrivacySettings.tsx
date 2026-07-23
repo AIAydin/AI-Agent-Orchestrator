@@ -453,7 +453,7 @@ export function PrivacySettings({
 }
 
 function isCodingAgent(id: AgentDetection['id']): boolean {
-  return ['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom'].includes(id);
+  return ['codex', 'claude', 'gemini', 'opencode', 'custom'].includes(id);
 }
 
 function BackupHealthSummary({ health }: { health: BackupHealth }) {

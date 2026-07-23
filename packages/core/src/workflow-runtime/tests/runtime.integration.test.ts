@@ -70,7 +70,7 @@ function agentNode(id: string) {
     ...baseNode,
     id,
     type: 'agent' as const,
-    data: { adapterId: 'test-agent', permissionProfileId: 'worktree' },
+    data: { adapterId: 'codex', permissionProfileId: 'worktree' },
   };
 }
 

@@ -43,6 +43,10 @@ import {
   type TerminalPtyHandle,
 } from './pty-process.js';
 import { trustedTerminalLaunchFingerprint } from './trusted-launch.js';
+import type {
+  PreparedTerminalWorkspace,
+  TerminalWorkspaceManager,
+} from './workspaces/contracts.js';
 
 const DEFAULT_PLAN_TTL_MS = 60_000;
 const MAX_PENDING_PLANS = 128;
@@ -109,6 +113,13 @@ export type TerminalLaunchAuthorizer = (
 export interface PeerEnvironmentProvider {
   /** `null` means the provision is unknown, expired, or the hub is not currently listening. */
   environmentForProvision(provisionId: string): Record<string, string> | null;
+  /** Exact main-created provider CLI arguments and their project/node/adapter binding. */
+  launchMaterialForProvision(provisionId: string): {
+    readonly projectId: string;
+    readonly nodeId: string;
+    readonly adapterId: string;
+    readonly arguments: readonly string[];
+  } | null;
   /** Binds a provision to its spawned session so the hub can invalidate it on session exit. */
   bindSession(provisionId: string, sessionId: string): void;
   /** Best-effort, idempotent: a session that was never bound to a provision is a safe no-op. */
@@ -133,12 +144,16 @@ export interface TerminalServiceOptions {
   readonly maximumTranscriptBytes?: number;
   readonly maximumTotalTranscriptBytes?: number;
   readonly maximumTranscriptFiles?: number;
+  readonly workspaceManager?: TerminalWorkspaceManager;
 }
 
 interface PendingLaunch {
   readonly ownerId: string;
   readonly plan: TerminalLaunchPlanView;
   readonly resolved: ResolvedTerminalLaunch;
+  readonly input: TerminalPrepareLaunchInput;
+  readonly workspace?: PreparedTerminalWorkspace;
+  readonly authorization: 'native-or-saved-approval' | 'managed-agent-automatic';
   /** Opaque hub provision id from the renderer; never a resolved URL/token (see IPC schema). */
   readonly peerProvisionId?: string;
 }
@@ -146,6 +161,7 @@ interface PendingLaunch {
 interface ActiveTerminal {
   readonly ownerId: string;
   readonly resolved: ResolvedTerminalLaunch;
+  readonly workspace?: PreparedTerminalWorkspace;
   readonly done: Promise<TerminalSessionView>;
   resolveDone(session: TerminalSessionView): void;
   view: TerminalSessionView;
@@ -173,7 +189,7 @@ interface ExactSession {
 
 export type TerminalEventListener = (ownerId: string, event: TerminalEvent) => void;
 
-/** Main-process authority for literal, native-confirmed, owner-bound local PTY sessions. */
+/** Main-process authority for exact, owner-bound, reviewed or reconstructed local PTY sessions. */
 export class TerminalService {
   readonly #plans = new Map<string, PendingLaunch>();
   readonly #prepareOwners = new Map<string, string>();
@@ -189,6 +205,7 @@ export class TerminalService {
   readonly #terminateGraceMs: number;
   readonly #forceTerminateMs: number;
   readonly #transcripts: TerminalTranscriptFiles;
+  readonly #workspaceManager: TerminalWorkspaceManager | undefined;
   readonly #ready: Promise<void>;
   #peerProvider: PeerEnvironmentProvider | undefined;
   #paused = false;
@@ -226,6 +243,7 @@ export class TerminalService {
       options.maximumTotalTranscriptBytes,
       options.maximumTranscriptFiles,
     );
+    this.#workspaceManager = options.workspaceManager;
     this.#ready = this.#initialize();
     void this.#ready.catch(() => undefined);
   }
@@ -273,12 +291,15 @@ export class TerminalService {
         columns: resolved.columns,
         rows: resolved.rows,
         permission: TERMINAL_PERMISSION_INDICATOR,
+        ...(parsed.workspace === undefined ? {} : { workspace: parsed.workspace }),
         expiresAt: new Date(this.#now().getTime() + this.#planTtlMs).toISOString(),
       });
       this.#plans.set(plan.planId, {
         ownerId,
         plan,
         resolved,
+        input: parsed,
+        authorization: 'native-or-saved-approval',
         ...(parsed.peerProvisionId === undefined
           ? {}
           : { peerProvisionId: parsed.peerProvisionId }),
@@ -307,48 +328,52 @@ export class TerminalService {
     assertAuthority: () => void = () => undefined,
   ): Promise<TerminalSessionView | null> {
     await this.#assertAvailable();
-    const pending = this.#takePlan(ownerId, planId);
-    await assertTerminalLaunchCurrent(
-      pending.resolved,
-      this.store.getProject(pending.resolved.projectId),
-      this.getSettings(),
-    );
-    assertAuthority();
-    const environmentVariableNames =
-      pending.peerProvisionId === undefined
-        ? [...pending.resolved.environmentVariableNames]
-        : [...pending.resolved.environmentVariableNames, ...PEER_ENVIRONMENT_VARIABLE_NAMES];
-    const decision = await authorize({
-      view: structuredClone(pending.plan),
-      approvalFingerprint: trustedTerminalLaunchFingerprint({
-        executable: pending.resolved.executableIdentity,
-        arguments: pending.resolved.arguments,
-        cwd: pending.resolved.cwdIdentity,
-        environmentVariableNames,
-      }),
-      exact: {
-        executable: pending.resolved.executable,
-        arguments: [...pending.resolved.arguments],
-        cwd: pending.resolved.cwd,
-        // Transparency: disclose the peer env NAMES (never values) when a provision is attached,
-        // even though the actual URL/token are only resolved later, in `#launch`, right before spawn.
-        environmentVariableNames,
-      },
-    });
-    assertAuthority();
-    if (decision !== 'approved') {
-      this.#safeAudit('launch', 'denied', {
-        planId,
-        projectId: pending.plan.projectId,
-        nodeId: pending.plan.nodeId,
-        reason: 'native-confirmation-cancelled',
-      });
-      return null;
+    let pending = this.#takePlan(ownerId, planId);
+    let handedOff = false;
+    let discardAttempted = false;
+    try {
+      await this.#assertPendingLaunchCurrent(pending);
+      assertAuthority();
+      this.#assertConcurrency(ownerId);
+      pending = await this.#prepareManagedWorkspace(pending);
+      await this.#assertPendingLaunchCurrent(pending);
+      const decision =
+        pending.authorization === 'managed-agent-automatic'
+          ? 'approved'
+          : await authorize(this.#nativeReview(pending));
+      assertAuthority();
+      await this.#assertPendingLaunchCurrent(pending);
+      if (decision !== 'approved') {
+        this.#safeAudit('launch', 'denied', {
+          planId,
+          projectId: pending.plan.projectId,
+          nodeId: pending.plan.nodeId,
+          reason: 'native-confirmation-cancelled',
+        });
+        if (pending.workspace !== undefined) {
+          discardAttempted = true;
+          await this.#workspaceManager?.discard(pending.workspace);
+        }
+        return null;
+      }
+      this.#assertPlanFresh(pending.plan);
+      await this.#assertAvailable();
+      this.#assertConcurrency(ownerId);
+      handedOff = true;
+      return await this.#launch(ownerId, pending, assertAuthority);
+    } catch (error) {
+      if (!handedOff && !discardAttempted && pending.workspace !== undefined) {
+        try {
+          await this.#workspaceManager?.discard(pending.workspace);
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            'The Agent launch failed and its unused worktree could not be released.',
+          );
+        }
+      }
+      throw error;
     }
-    this.#assertPlanFresh(pending.plan);
-    await this.#assertAvailable();
-    this.#assertConcurrency(ownerId);
-    return await this.#launch(ownerId, pending, assertAuthority);
   }
 
   public async cancelLaunch(
@@ -509,7 +534,11 @@ export class TerminalService {
       return 'no-live-session';
     }
     active.handle.write(formatPeerDelivery(sender, message));
-    this.#safeAudit('input', 'allowed', { sessionId, source: 'agent-peer', sender });
+    this.#safeAudit('input', 'allowed', {
+      sessionId,
+      source: 'agent-peer',
+      sender,
+    });
     return 'delivered';
   }
 
@@ -726,6 +755,7 @@ export class TerminalService {
       earliestSequence: 1,
       nextSequence: 1,
       outputTruncated: false,
+      ...(pending.workspace === undefined ? {} : { workspace: pending.workspace.view }),
       updatedAt: createdAt,
     });
     await this.#transcripts.create(sessionId);
@@ -737,7 +767,7 @@ export class TerminalService {
     }
     const resolved: ResolvedTerminalLaunch =
       peerEnvironment === undefined ? pending.resolved : { ...pending.resolved, peerEnvironment };
-    const active = createActive(ownerId, resolved, starting);
+    const active = createActive(ownerId, resolved, starting, pending.workspace);
     this.#active.set(sessionId, active);
     this.#rememberExact(ownerId, starting);
     if (pending.peerProvisionId !== undefined) {
@@ -745,6 +775,9 @@ export class TerminalService {
     }
     let exitListenerAttached = false;
     try {
+      if (pending.workspace !== undefined) {
+        await this.#workspaceManager?.markRunning(pending.workspace, starting);
+      }
       const handle = await this.#ptyFactory(resolved, async () => {
         assertAuthority();
         await this.#assertAvailable();
@@ -755,6 +788,13 @@ export class TerminalService {
           this.store.getProject(resolved.projectId),
           this.getSettings(),
         );
+        if (pending.workspace !== undefined) {
+          const project = this.store.getProject(resolved.projectId);
+          if (project === undefined) {
+            throw new Error('The selected Agent project is no longer available.');
+          }
+          await this.#workspaceManager?.assertCurrent(pending.workspace, project);
+        }
         assertAuthority();
         this.store.appendAudit('terminal', 'launch', 'allowed', {
           projectId: starting.projectId,
@@ -764,6 +804,7 @@ export class TerminalService {
           argumentCount: resolved.arguments.length,
           cwdRelative: resolved.cwdRelative,
           environmentVariableNames: resolved.environmentVariableNames,
+          authorization: pending.authorization,
           phase: 'authorized-before-spawn',
         });
       });
@@ -833,6 +874,29 @@ export class TerminalService {
       throw new Error('Peer session expired. Start again.');
     }
     return environment;
+  }
+
+  #nativeReview(pending: PendingLaunch): TerminalLaunchNativeReview {
+    const environmentVariableNames =
+      pending.peerProvisionId === undefined
+        ? [...pending.resolved.environmentVariableNames]
+        : [...pending.resolved.environmentVariableNames, ...PEER_ENVIRONMENT_VARIABLE_NAMES];
+    return {
+      view: structuredClone(pending.plan),
+      approvalFingerprint: trustedTerminalLaunchFingerprint({
+        executable: pending.resolved.executableIdentity,
+        arguments: pending.resolved.arguments,
+        cwd: pending.resolved.cwdIdentity,
+        environmentVariableNames,
+      }),
+      exact: {
+        executable: pending.resolved.executable,
+        arguments: [...pending.resolved.arguments],
+        cwd: pending.resolved.cwd,
+        // Transparency: disclose peer env NAMES, never values, when a provision is attached.
+        environmentVariableNames,
+      },
+    };
   }
 
   #onOutput(active: ActiveTerminal, untrustedData: string): void {
@@ -1035,6 +1099,18 @@ export class TerminalService {
         errorKind: error instanceof Error ? error.name.slice(0, 128) : 'unknown-error',
       });
     } finally {
+      if (active.workspace !== undefined) {
+        try {
+          await this.#workspaceManager?.markFinished(active.workspace, active.view);
+        } catch (error) {
+          persistenceFailed = true;
+          this.#safeAudit('workspace-persistence', 'failed', {
+            ...this.#auditTarget(active),
+            runId: active.workspace.view.runId,
+            errorKind: error instanceof Error ? error.name.slice(0, 128) : 'unknown-error',
+          });
+        }
+      }
       this.#active.delete(active.view.id);
       try {
         // Unconditional and idempotent: a session that never had a peer provision attached is a
@@ -1181,6 +1257,106 @@ export class TerminalService {
   #assertRunning(active: ActiveTerminal): void {
     if (active.handle === null || active.view.status !== 'running' || active.finalizing) {
       throw new Error('This terminal has stopped and no longer accepts input.');
+    }
+  }
+
+  async #prepareManagedWorkspace(pending: PendingLaunch): Promise<PendingLaunch> {
+    if (pending.input.workspace?.kind !== 'managed-agent-worktree') return pending;
+    const manager = this.#workspaceManager;
+    if (manager === undefined) {
+      throw new Error('Managed Agent worktrees are unavailable in this Forgeboard build.');
+    }
+    const project = this.#project(pending.plan.projectId);
+    const workspace = await manager.provision({
+      project,
+      nodeId: pending.plan.nodeId,
+      adapterId: pending.input.workspace.adapterId,
+    });
+    try {
+      const automatic = await manager.resolveAutomaticAgentLaunch(workspace);
+      if (automatic === null) {
+        const resolved = await resolveTerminalLaunch(
+          project,
+          pending.input,
+          this.getSettings(),
+          workspace.rootPath,
+        );
+        return { ...pending, resolved, workspace };
+      }
+      const peerArguments = this.#automaticPeerArguments(pending, workspace);
+      const input = TerminalPrepareLaunchInputSchema.parse({
+        ...pending.input,
+        executable: automatic.executable,
+        arguments: [...automatic.arguments, ...peerArguments],
+        cwdRelative: automatic.cwdRelative,
+        environmentVariableNames: [...automatic.environmentVariableNames],
+      });
+      const resolved = await resolveTerminalLaunch(
+        project,
+        input,
+        this.getSettings(),
+        workspace.rootPath,
+      );
+      const plan = TerminalLaunchPlanViewSchema.parse({
+        ...pending.plan,
+        executable: resolved.configuredExecutable,
+        arguments: [...resolved.arguments],
+        cwdRelative: resolved.cwdRelative,
+        environmentVariableNames: [...resolved.environmentVariableNames],
+      });
+      return {
+        ...pending,
+        authorization: 'managed-agent-automatic',
+        input,
+        plan,
+        resolved,
+        workspace,
+      };
+    } catch (error) {
+      try {
+        await manager.discard(workspace);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Forgeboard could not prepare or release the Agent worktree.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  #automaticPeerArguments(
+    pending: PendingLaunch,
+    workspace: PreparedTerminalWorkspace,
+  ): readonly string[] {
+    if (pending.peerProvisionId === undefined) return [];
+    const material = this.#peerProvider?.launchMaterialForProvision(pending.peerProvisionId);
+    if (material === null || material === undefined) {
+      throw new Error('Peer session expired. Start again.');
+    }
+    if (
+      material.projectId !== pending.plan.projectId ||
+      material.nodeId !== pending.plan.nodeId ||
+      material.adapterId !== workspace.ownership.agentId
+    ) {
+      this.#safeAudit('launch', 'failed', {
+        projectId: pending.plan.projectId,
+        nodeId: pending.plan.nodeId,
+        reason: 'peer-launch-binding-mismatch',
+      });
+      throw new Error('The Agent peer configuration changed. Start the session again.');
+    }
+    return [...material.arguments];
+  }
+
+  async #assertPendingLaunchCurrent(pending: PendingLaunch): Promise<void> {
+    const project = this.store.getProject(pending.resolved.projectId);
+    await assertTerminalLaunchCurrent(pending.resolved, project, this.getSettings());
+    if (pending.workspace !== undefined) {
+      if (project === undefined) {
+        throw new Error('The selected Agent project is no longer available.');
+      }
+      await this.#workspaceManager?.assertCurrent(pending.workspace, project);
     }
   }
 
@@ -1366,6 +1542,7 @@ function createActive(
   ownerId: string,
   resolved: ResolvedTerminalLaunch,
   view: TerminalSessionView,
+  workspace?: PreparedTerminalWorkspace,
 ): ActiveTerminal {
   let resolveDone: (session: TerminalSessionView) => void = () => undefined;
   const done = new Promise<TerminalSessionView>((resolvePromise) => {
@@ -1374,6 +1551,7 @@ function createActive(
   return {
     ownerId,
     resolved,
+    ...(workspace === undefined ? {} : { workspace }),
     done,
     resolveDone,
     view,

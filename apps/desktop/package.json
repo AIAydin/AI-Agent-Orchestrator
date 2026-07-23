@@ -13,9 +13,9 @@
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
-    "predev": "corepack pnpm --dir ../../packages/test-agent build && corepack pnpm --dir ../../packages/peer-mcp build",
+    "predev": "corepack pnpm --dir ../../packages/peer-mcp build",
     "dev": "electron-vite dev",
-    "prebuild": "corepack pnpm --dir ../../packages/test-agent build && corepack pnpm --dir ../../packages/peer-mcp build",
+    "prebuild": "corepack pnpm --dir ../../packages/peer-mcp build",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
     "pretest:e2e": "corepack pnpm --dir ../collab-server build && corepack pnpm build",
@@ -30,7 +30,6 @@
     "@forgeboard/core": "workspace:*",
     "@forgeboard/extension-runtime": "workspace:*",
     "@forgeboard/git-engine": "workspace:*",
-    "@forgeboard/test-agent": "workspace:*",
     "@forgeboard/ui": "workspace:*",
     "@forgeboard/windows-durable-fs": "workspace:*",
     "@hocuspocus/provider": "catalog:",
@@ -95,16 +94,6 @@
       {
         "from": "../../third_party/git/COPYING",
         "to": "licenses/git/COPYING"
-      },
-      {
-        "from": "../../packages/test-agent/dist",
-        "to": "test-agent",
-        "filter": [
-          "cli.js",
-          "cli.js.map",
-          "chunk-*.js",
-          "chunk-*.js.map"
-        ]
       },
       {
         "from": "../../packages/peer-mcp/dist",

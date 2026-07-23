@@ -939,7 +939,7 @@ async function createReviewArtifact(
 
 export class ReviewerFinalRecordCapture {
   #candidate: z.infer<typeof WorkflowReviewerFinalRecordSchema> | undefined;
-  #candidateProtocol: 'codex' | 'claude' | 'direct' | 'test-agent' | undefined;
+  #candidateProtocol: 'codex' | 'claude' | 'direct' | undefined;
   #invalid = false;
   #terminalSucceeded = false;
   #protocolTerminal = false;
@@ -967,19 +967,6 @@ export class ReviewerFinalRecordCapture {
           } else {
             this.#protocolTerminal = true;
           }
-          return;
-        }
-        if (payloadType === 'completed' && isRecord(event.payload['metadata'])) {
-          const record = WorkflowReviewerFinalRecordSchema.safeParse(
-            event.payload['metadata']['reviewerFinalRecord'],
-          );
-          if (record.success && this.#candidate === undefined && !this.#protocolTerminal) {
-            this.#candidate = record.data;
-            this.#candidateProtocol = 'test-agent';
-            this.#protocolTerminal = true;
-            return;
-          }
-          this.#invalid = true;
           return;
         }
       }

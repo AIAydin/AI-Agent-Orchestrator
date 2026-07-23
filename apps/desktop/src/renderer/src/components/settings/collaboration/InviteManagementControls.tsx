@@ -9,6 +9,7 @@ import type {
 interface InviteManagementControlsProps {
   readonly page: CollaborationInviteHistoryPage | null;
   readonly busy: boolean;
+  readonly inviteConnectionIssue: string | null;
   readonly onCreateQuick: () => Promise<void>;
   readonly onCreate: (input: CollaborationInviteCreateInput) => Promise<void>;
   readonly onCopy: (inviteId: string) => Promise<void>;
@@ -29,6 +30,7 @@ const EXPIRATIONS = [
 export function InviteManagementControls({
   page,
   busy,
+  inviteConnectionIssue,
   onCreateQuick,
   onCreate,
   onCopy,
@@ -49,11 +51,16 @@ export function InviteManagementControls({
       <button
         className="button primary"
         type="button"
-        disabled={busy}
+        disabled={busy || inviteConnectionIssue !== null}
         onClick={() => void onCreateQuick()}
       >
         Create &amp; copy 10-minute invite
       </button>
+      {inviteConnectionIssue !== null && (
+        <p className="collaboration-missing-links" role="status">
+          {inviteConnectionIssue}
+        </p>
+      )}
       <hr />
       <strong>Create invite</strong>
       <div className="two-column">
@@ -102,7 +109,13 @@ export function InviteManagementControls({
       <button
         className="button"
         type="button"
-        disabled={busy || !Number.isInteger(maxUses) || maxUses < 1 || maxUses > 100}
+        disabled={
+          busy ||
+          inviteConnectionIssue !== null ||
+          !Number.isInteger(maxUses) ||
+          maxUses < 1 ||
+          maxUses > 100
+        }
         onClick={() => void onCreate({ role, expiresInSeconds, maxUses })}
       >
         Create invite
@@ -154,7 +167,7 @@ export function InviteManagementControls({
                 <button
                   className="button"
                   type="button"
-                  disabled={busy}
+                  disabled={busy || inviteConnectionIssue !== null}
                   onClick={() => void onCopy(invite.id)}
                 >
                   Copy

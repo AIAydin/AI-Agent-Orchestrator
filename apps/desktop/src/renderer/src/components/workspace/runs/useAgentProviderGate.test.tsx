@@ -35,13 +35,13 @@ afterEach(cleanup);
 
 describe('useAgentProviderGate', () => {
   it('checks each provider exactly once and never contacts providers for other agents', async () => {
-    const hook = renderGate(['claude', 'claude', 'test-agent', 'gemini', 'custom']);
+    const hook = renderGate(['claude', 'claude', 'opencode', 'gemini', 'custom']);
 
     await waitFor(() => expect(hook.result.current.gateFor('claude')?.settled).toBe(true));
 
     expect(get).toHaveBeenCalledTimes(1);
     expect(get).toHaveBeenCalledWith({ providerId: 'claude' });
-    expect(hook.result.current.gateFor('test-agent')).toBeNull();
+    expect(hook.result.current.gateFor('opencode')).toBeNull();
     expect(hook.result.current.gateFor('gemini')).toBeNull();
     expect(hook.result.current.gateFor('custom')).toBeNull();
 
@@ -99,7 +99,7 @@ describe('useAgentProviderGate', () => {
     await waitFor(() => expect(hook.result.current.gateFor('claude')?.settled).toBe(true));
     get.mockClear();
 
-    await expect(hook.result.current.verifyAdapterConnection('test-agent')).resolves.toBeNull();
+    await expect(hook.result.current.verifyAdapterConnection('opencode')).resolves.toBeNull();
     expect(get).not.toHaveBeenCalled();
 
     get.mockResolvedValueOnce({ ok: true, value: status('disconnected') });

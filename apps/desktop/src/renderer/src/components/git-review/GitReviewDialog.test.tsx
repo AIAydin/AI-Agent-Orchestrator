@@ -97,7 +97,7 @@ const agentReview: GitReviewView = {
     ...worktreeTarget,
     nodeId: 'agent-node-1',
     worktreeId,
-    agentId: 'test-agent',
+    agentId: 'codex',
     baseRef: 'refs/heads/main',
     baseCommit: baseOid,
   },

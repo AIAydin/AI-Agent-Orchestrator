@@ -186,6 +186,8 @@ function initializeOwnerDocument(): Y.Doc {
 describe('optional collaboration service', () => {
   it('synchronizes allowlisted metadata between two authorized clients and enforces owner APIs', async () => {
     const { address, adminToken } = await startService();
+    expect(address.host).toBe('127.0.0.1');
+    expect(new URL(address.httpUrl).hostname).toBe('127.0.0.1');
     expect((await requestJson(address, '/healthz')).status).toBe(200);
     const ownerToken = await createRoom(address, adminToken);
     const editorToken = await inviteAndRedeem(address, ownerToken, 'editor', 'editor-1');

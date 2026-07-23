@@ -75,6 +75,42 @@ export const CollaborationManagementUrlSchema = z
   });
 export type CollaborationManagementUrl = z.infer<typeof CollaborationManagementUrlSchema>;
 
+const PUBLIC_INVITE_CONNECTION_MESSAGE =
+  'Shared invites require a public wss:// WebSocket address and https:// management address. Localhost and private-network addresses are available only for direct connections.';
+
+/**
+ * Returns the reason a collaboration connection cannot be placed in an invite shared over the
+ * internet. Direct connections intentionally retain the broader localhost-compatible schemas.
+ */
+export function collaborationPublicInviteConnectionIssue(
+  rawServerUrl: string,
+  rawManagementBaseUrl: string,
+): string | null {
+  const serverResult = CollaborationServerUrlSchema.safeParse(rawServerUrl);
+  const managementResult = CollaborationManagementUrlSchema.safeParse(rawManagementBaseUrl);
+  if (!serverResult.success || !managementResult.success) {
+    return 'Add both valid collaboration server addresses before creating a shared invite.';
+  }
+  const serverUrl = new URL(serverResult.data);
+  const managementUrl = new URL(managementResult.data);
+  if (
+    serverUrl.protocol !== 'wss:' ||
+    managementUrl.protocol !== 'https:' ||
+    isPrivateOrLocalHostname(serverUrl.hostname) ||
+    isPrivateOrLocalHostname(managementUrl.hostname)
+  ) {
+    return PUBLIC_INVITE_CONNECTION_MESSAGE;
+  }
+  return null;
+}
+
+export function isPublicCollaborationInviteConnection(
+  serverUrl: string,
+  managementBaseUrl: string,
+): boolean {
+  return collaborationPublicInviteConnectionIssue(serverUrl, managementBaseUrl) === null;
+}
+
 export const CollaborationRoomIdSchema = z
   .string()
   .trim()
@@ -145,5 +181,62 @@ function isLoopbackHostname(hostname: string): boolean {
     octets.length === 4 &&
     octets[0] === '127' &&
     octets.every((octet) => /^\d{1,3}$/u.test(octet) && Number(octet) <= 255)
+  );
+}
+
+function isPrivateOrLocalHostname(hostname: string): boolean {
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/gu, '')
+    .replace(/\.$/u, '');
+  if (
+    normalized === '' ||
+    normalized === 'localhost' ||
+    normalized.endsWith('.localhost') ||
+    normalized.endsWith('.local') ||
+    normalized.endsWith('.home.arpa')
+  ) {
+    return true;
+  }
+  const ipv4 = parseIpv4(normalized);
+  if (ipv4 !== null) return isPrivateIpv4(ipv4);
+  if (normalized.includes(':')) {
+    return (
+      normalized === '::' ||
+      normalized === '::1' ||
+      normalized.startsWith('fc') ||
+      normalized.startsWith('fd') ||
+      /^fe[89ab]/u.test(normalized) ||
+      normalized.startsWith('ff') ||
+      normalized.startsWith('2001:db8:') ||
+      normalized.startsWith('::ffff:')
+    );
+  }
+  return !normalized.includes('.');
+}
+
+function parseIpv4(hostname: string): readonly number[] | null {
+  const octets = hostname.split('.');
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !/^\d{1,3}$/u.test(octet) || Number(octet) > 255)
+  ) {
+    return null;
+  }
+  return octets.map(Number);
+}
+
+function isPrivateIpv4(octets: readonly number[]): boolean {
+  const [first = -1, second = -1] = octets;
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 100 && second >= 64 && second <= 127) ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 198 && (second === 18 || second === 19)) ||
+    first >= 224
   );
 }
