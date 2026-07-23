@@ -13,6 +13,7 @@ test-results/
 .env.*
 !.env.example
 .forgeboard/
+notes/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
