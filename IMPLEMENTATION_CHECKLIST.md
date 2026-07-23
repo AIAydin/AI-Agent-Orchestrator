@@ -1999,3 +1999,17 @@ unchecked when only a subset of their required behavior has proof.
   and 5 quality tests passed. Typecheck, zero-warning lint, formatting, the 1,478-file structure
   gate, the 854-file production-control audit, the collaboration artifact startup smoke, and the
   complete production build also passed.
+- 2026-07-23: embedded Agent sessions now honor **Write in a worktree** instead of starting in the
+  primary checkout. The renderer submits only a path-free managed-worktree request; Electron main
+  revalidates the persisted Agent adapter and permission profile, creates a distinct owned worktree
+  and durable run record per launch, binds native review and PTY spawn to that exact Git root, and
+  rechecks project, directory, executable, and worktree ownership immediately before spawn. Native
+  denial releases an unused pristine worktree, while changed or committed work remains preserved for
+  review. A real-Git integration test proved two Claude Agent nodes received different roots and
+  branches, isolated one Agent's uncommitted file from both the other Agent and primary checkout,
+  preserved tracked and untracked dirty-primary work byte-for-byte, persisted completion evidence,
+  and safely cleaned only the unused worktree. All 91 focused unit tests across eight contract,
+  preload, main-service, controller, and renderer files passed, together with that integration test,
+  desktop strict typecheck, zero-warning focused lint, formatting, three documentation tests, the
+  1,482-file structure gate, the 857-file production-control audit, `git diff --check`, and the
+  complete desktop production build.

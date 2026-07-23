@@ -17,3 +17,4 @@ export * from './common.js';
 export * from './events.js';
 export * from './launch.js';
 export * from './sessions.js';
+export * from './workspace.js';

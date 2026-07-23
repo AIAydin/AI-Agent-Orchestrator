@@ -96,6 +96,7 @@ export function useTerminalNodeController({
         configuration.arguments,
         configuration.cwdRelative,
         configuration.environmentVariableNames,
+        configuration.workspace,
       ]),
     [configuration, nodeId, projectId],
   );
@@ -315,6 +316,7 @@ export function useTerminalNodeController({
         ...(configuration.peerProvisionId
           ? { peerProvisionId: configuration.peerProvisionId }
           : {}),
+        ...(configuration.workspace === undefined ? {} : { workspace: configuration.workspace }),
       });
       const plan = unwrap(await operations.prepareLaunch(input));
       if (!mountedRef.current || generation !== generationRef.current) {

@@ -334,13 +334,10 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
             </span>
           )}
           {data.kind === 'agent' &&
-            (data.branch !== undefined ||
-              (data.worktreeId !== undefined && data.worktreeRecordedActive === true)) && (
+            (data.branch !== undefined || data.worktreeRecordedActive === true) && (
               <span className="node-worktree-badges" aria-label="Agent Git workspace">
                 {data.branch !== undefined && <span>Branch · {data.branch}</span>}
-                {data.worktreeId !== undefined && data.worktreeRecordedActive === true && (
-                  <span>Worktree assigned</span>
-                )}
+                {data.worktreeRecordedActive === true && <span>Worktree assigned</span>}
               </span>
             )}
           {data.kind === 'extension' && data.extensionAvailability !== 'active' && (

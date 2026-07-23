@@ -4,6 +4,7 @@ import { GripHorizontal } from 'lucide-react';
 
 import type { PermissionProfile } from '../../../../../../shared/application/contracts.js';
 import type { AgentPeersProvisionView } from '../../../../../../shared/agent-peers/index.js';
+import type { TerminalSessionView } from '../../../../../../shared/terminal/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import { isRunAdapterId } from '../../model/helpers.js';
 import { providerTheme } from '../../node-registry/provider-themes.js';
@@ -90,12 +91,30 @@ export function AgentSessionNode({
   const model = effectiveNodeModel(agent, data.model, settings.agentDefaultModels[adapter]);
   const profile: PermissionProfile = data.permissionProfile ?? 'worktree-write';
   const launch = agent ? agentSessionLaunch(agent, model, profile, peerMaterial) : null;
+  const recordedWorkspaceRunRef = useRef<string | null>(null);
+  const recordManagedWorkspace = (session: TerminalSessionView | null): void => {
+    if (
+      session?.workspace?.kind !== 'managed-agent-worktree' ||
+      recordedWorkspaceRunRef.current === session.workspace.runId
+    ) {
+      return;
+    }
+    recordedWorkspaceRunRef.current = session.workspace.runId;
+    updateNodeData(id, {
+      runId: session.workspace.runId,
+      branch: session.workspace.branch,
+      worktreeId: undefined,
+      worktreeRecordedActive: true,
+      lastRunPermissionProfile: 'worktree-write',
+    });
+  };
 
   const controller = useTerminalNodeController({
     projectId: project.id,
     nodeId: id,
     configuration: launch?.configuration ?? EMPTY_CONFIGURATION,
     onError: reportError,
+    onSessionChange: recordManagedWorkspace,
     operations: terminalOperationsFromWindow(),
   });
 

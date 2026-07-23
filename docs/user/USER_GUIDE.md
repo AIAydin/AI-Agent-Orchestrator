@@ -103,6 +103,12 @@ ownership. **Resume review** is available only for a supported interrupted provi
 always launches a newly reviewed continuation. **Retry review** starts an eligible failed attempt in
 a fresh worktree.
 
+The embedded terminal on an Agent node follows the same Access selection. When **Write in a
+worktree** is selected, **Start** or **Restart** creates a fresh managed worktree and branch for that
+session before the provider CLI starts. Each Agent session receives its own worktree, so edits from
+one Agent do not appear in another Agent's folder or in the primary checkout. Forgeboard records the
+run and branch on the node without exposing the worktree path to the renderer.
+
 Attempt history retains lineage, terminal status, bounded output, provider-redacted metadata, and
 token or cost information only when the adapter reports it. Forgeboard does not invent missing usage
 or output.

@@ -17,12 +17,12 @@ const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
 const SESSION_ID = '20000000-0000-4000-8000-000000000001';
 const PLAN_ID = '30000000-0000-4000-8000-000000000001';
 const NOW = '2026-07-17T18:00:00.000Z';
-const CONFIGURATION: TerminalNodeConfiguration = {
+const CONFIGURATION = {
   executable: '/bin/zsh',
   arguments: ['-l', '--no-rcs'],
   cwdRelative: 'apps/desktop',
   environmentVariableNames: ['HOME', 'PATH', 'TERM'],
-};
+} satisfies TerminalNodeConfiguration;
 const PERMISSION = {
   label: 'Unsandboxed local terminal',
   sandboxed: false as const,
