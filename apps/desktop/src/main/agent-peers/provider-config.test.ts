@@ -1,7 +1,6 @@
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,11 +15,6 @@ vi.mock('electron', () => ({
 }));
 
 import { shimEntryPath, writeProviderPeerMaterial } from './provider-config.js';
-
-const TEST_FILE_DIR = dirname(fileURLToPath(import.meta.url));
-// apps/desktop/src/main/agent-peers -> repo root is 5 levels up.
-const REPO_ROOT = resolve(TEST_FILE_DIR, '../../../../..');
-const APPS_DESKTOP_DIR = resolve(TEST_FILE_DIR, '../../..');
 
 const ENVIRONMENT = Object.freeze({
   FORGEBOARD_PEER_URL: 'http://127.0.0.1:54999',
@@ -50,15 +44,6 @@ describe('shimEntryPath', () => {
   it('resolves the dev dist path relative to cwd when not packaged', () => {
     electronMock.isPackaged = false;
     expect(shimEntryPath()).toBe(resolve(process.cwd(), '../../packages/peer-mcp/dist/main.js'));
-  });
-
-  it('the dev target exists on disk once packages/peer-mcp has been built (Task 3)', async () => {
-    // cwd-independent check: confirms the real build artifact this repo's dev-mode
-    // shimEntryPath() would resolve to (when invoked with cwd = apps/desktop, as the real
-    // app always is) genuinely exists.
-    const devTarget = resolve(APPS_DESKTOP_DIR, '../../packages/peer-mcp/dist/main.js');
-    expect(devTarget).toBe(join(REPO_ROOT, 'packages/peer-mcp/dist/main.js'));
-    await expect(stat(devTarget)).resolves.toBeDefined();
   });
 });
 

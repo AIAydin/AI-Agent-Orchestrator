@@ -37,7 +37,12 @@ export function createWorkspacePaletteActions(input: WorkspacePaletteActionInput
         `Add ${agent.label} agent`,
         'Canvas',
         () => input.addAgentNode(agent.id),
-        [`create a ${agent.label} agent`, `new ${agent.label} agent`],
+        [
+          `create a ${agent.label} agent`,
+          `new ${agent.label} agent`,
+          `start a ${agent.label} agent`,
+          `start ${agent.label} agent`,
+        ],
       ),
     ),
     safeAction('add-task', 'Add a task', 'Canvas', () => input.addNode('task'), [

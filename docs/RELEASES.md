@@ -36,7 +36,12 @@ for normal end-user installation.
 ## Creating a release
 
 1. Confirm `pnpm verify`, Electron E2E, `pnpm package`, and `pnpm smoke:packaged` are green.
-2. Update the identical versions in the root and desktop package manifests and update release notes.
+2. Run `corepack pnpm version:bump <new-semver>` (for example,
+   `corepack pnpm version:bump 0.2.0`). The command validates that the current root and desktop
+   versions agree, updates both manifests together, and creates the matching
+   `docs/releases/v<new-semver>.md` file. It preserves an existing matching notes file and refuses
+   invalid, unchanged, lower, or inconsistent versions without modifying the manifests. Review and
+   complete the prepared notes before continuing.
 3. Create and push a `v*` tag whose value is exactly `v` plus that package version. The workflow
    enforces the tag/version binding; cryptographic Git tag signing is an optional maintainer policy,
    not a release-workflow guarantee.

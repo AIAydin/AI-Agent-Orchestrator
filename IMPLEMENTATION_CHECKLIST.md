@@ -1873,6 +1873,11 @@ unchecked when only a subset of their required behavior has proof.
   and Video context wiring. Duplicate names, missing nodes, read-only canvases, locks, and duplicate
   connections fail closed. Seven focused registry and matcher tests passed; the desktop typecheck
   reached only an unrelated concurrent Preview test fixture error in the existing dirty tree.
+  Follow-up provider aliases now accept natural `start a Claude Code agent` and
+  `start Claude Code agent` phrasing as the safe create-Agent-node action without weakening process
+  launch review. The exact transcribed screenshot phrase is covered; four focused matcher/registry
+  tests, desktop typecheck, formatting, zero-warning focused lint, whitespace validation, and the
+  1,476-file structure gate passed.
 - 2026-07-21: native terminal approval gained an explicit UI-managed 30-day trust option for the
   exact project, canonical executable identity, arguments, working-folder identity, and disclosed
   environment-variable names. Unchanged launches reuse the durable main-process approval without a
@@ -1974,3 +1979,23 @@ unchecked when only a subset of their required behavior has proof.
   formatting, the 1,476-file structure gate, and the 854-file production-control audit passed. The
   release artifact test now supplies an explicitly empty environment for its local-manifest case;
   all 34 release and startup tests pass with a simulated CI `GITHUB_SHA`.
+- 2026-07-23: release maintainers gained `corepack pnpm version:bump <new-semver>`. The command
+  validates strict SemVer precedence, refuses to repair root/desktop version drift, updates both
+  manifests with rollback on a partial write, creates matching prepared release notes without
+  overwriting maintainer-written notes, and never tags or publishes automatically. Seven focused
+  success, preservation, refusal, precedence, rollback, and package-wiring tests passed, along with
+  focused zero-warning lint, formatting, diff whitespace validation, the 1,478-file structure gate,
+  and the 854-file production-control audit. The exact package-script route, CLI help, and
+  invalid-input refusal also ran without changing the repository version. Pnpm's default
+  dependency-state repair still stops before scripts in this checkout because its existing
+  `node_modules` is out of sync; package routing was therefore verified with that automatic repair
+  disabled rather than presenting the local dependency installation as healthy.
+- 2026-07-23: clean-run verification no longer assumes a prebuilt peer-MCP artifact, an interactive
+  `TERM`, the host's login shell, or a specific numeric user id. Windows account identity now comes
+  from the literal system `whoami.exe` path with strict bounded CSV/SID parsing before the existing
+  fail-closed PowerShell ACL authority runs. Database swap detection also binds size and change and
+  modification times alongside device and inode identity. The isolated full unit suite passed all
+  3,110 tests across 455 files; all 335 integration tests, 41 release/startup tests, 3 docs tests,
+  and 5 quality tests passed. Typecheck, zero-warning lint, formatting, the 1,478-file structure
+  gate, the 854-file production-control audit, the collaboration artifact startup smoke, and the
+  complete production build also passed.

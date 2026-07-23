@@ -36,6 +36,7 @@ describe('workspace palette action registry', () => {
 
     const claude = actions.find((action) => action.id === 'add-agent-claude');
     expect(claude?.voiceAliases).toContain('create a Claude Code agent');
+    expect(claude?.voiceAliases).toContain('start a Claude Code agent');
     expect(claude?.voiceSafety).toBe('safe');
     claude?.run();
     expect(addAgentNode).toHaveBeenCalledWith('claude');

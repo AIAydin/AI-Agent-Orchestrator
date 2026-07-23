@@ -7,6 +7,7 @@ import {
   assertPrivateWindowsDirectoryAcl,
   assertPrivateWindowsFileAcl,
   assertSafeWindowsParentAcl,
+  parseWindowsUserSid,
   parseWindowsDirectoryAcl,
   type WindowsDirectoryAcl,
 } from './filesystem-acl.js';
@@ -205,6 +206,16 @@ describe('Windows filesystem ACL boundary', () => {
     expectBoundaryCode(() => parseWindowsDirectoryAcl('{not-json'), 'inspection-unavailable');
   });
 
+  it('parses only the SID field from bounded whoami CSV output', () => {
+    expect(parseWindowsUserSid(`"WORKGROUP\\forgeboard","${USER_SID}"\r\n`)).toBe(USER_SID);
+    expect(() => parseWindowsUserSid(`"WORKGROUP\\forgeboard","not-a-sid"`)).toThrow(
+      /identity response/u,
+    );
+    expect(() => parseWindowsUserSid(`"WORKGROUP\\forgeboard","${USER_SID}","unexpected"`)).toThrow(
+      /identity response/u,
+    );
+  });
+
   it('passes weird literal paths only through the authority environment and fails closed on inspection', async () => {
     const calls: Array<{
       readonly script: string;
@@ -213,14 +224,9 @@ describe('Windows filesystem ACL boundary', () => {
     const weirdPath = String.raw`C:\Users\A Name\$(not-code);'context`;
     const run = vi.fn((script: string, environment: Readonly<Record<string, string>>) => {
       calls.push({ script, environment });
-      if (script.includes('WindowsIdentity')) {
-        return Promise.resolve({
-          stdout: JSON.stringify({ schemaVersion: 2, sid: USER_SID }),
-        });
-      }
       return Promise.reject(new Error('injected ACL inspection failure'));
     });
-    const authority = new PowerShellWindowsFilesystemSecurity(run);
+    const authority = new PowerShellWindowsFilesystemSecurity(run, () => Promise.resolve(USER_SID));
     const sid = await authority.currentUserSid();
 
     await expect(authority.assertSafeParent(weirdPath, sid)).rejects.toMatchObject({
@@ -231,22 +237,18 @@ describe('Windows filesystem ACL boundary', () => {
   });
 
   it('does not cache a failed token identity lookup', async () => {
-    const run = vi
-      .fn<
-        (
-          script: string,
-          environment: Readonly<Record<string, string>>,
-        ) => Promise<{ stdout: string }>
-      >()
+    const resolveWindowsUserSid = vi
+      .fn<() => Promise<string>>()
       .mockRejectedValueOnce(new Error('identity unavailable'))
-      .mockResolvedValueOnce({
-        stdout: JSON.stringify({ schemaVersion: 2, sid: USER_SID }),
-      });
-    const authority = new PowerShellWindowsFilesystemSecurity(run);
+      .mockResolvedValueOnce(USER_SID);
+    const authority = new PowerShellWindowsFilesystemSecurity(
+      vi.fn(() => Promise.reject(new Error('unexpected PowerShell call'))),
+      resolveWindowsUserSid,
+    );
 
     await expect(authority.currentUserSid()).rejects.toBeInstanceOf(WindowsAclBoundaryError);
     await expect(authority.currentUserSid()).resolves.toBe(USER_SID);
-    expect(run).toHaveBeenCalledTimes(2);
+    expect(resolveWindowsUserSid).toHaveBeenCalledTimes(2);
   });
 
   it('protects and verifies a literal file path through the bounded authority', async () => {

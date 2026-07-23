@@ -29,6 +29,7 @@
     "test:integration": "vitest --config config/tooling/vitest.config.ts run --project integration",
     "test:e2e": "corepack pnpm --filter @forgeboard/desktop test:e2e",
     "verify": "corepack pnpm check:structure && corepack pnpm check:production-controls && corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
+    "version:bump": "node scripts/release/version/bump.mjs",
     "package": "corepack pnpm --filter @forgeboard/desktop package",
     "smoke:packaged": "corepack pnpm --filter @forgeboard/desktop smoke:packaged",
     "smoke:installer": "corepack pnpm --filter @forgeboard/desktop smoke:installer"
