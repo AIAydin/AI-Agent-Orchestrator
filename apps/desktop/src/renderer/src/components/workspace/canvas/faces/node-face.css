@@ -13,6 +13,13 @@
   flex-direction: column;
   overflow: hidden;
 }
+/* The text node's floating header pill (top: -38px) and rotate handle (top: -64px) live outside
+   the node's own box by design (canvas.css). The shared clip above hides them entirely for mouse
+   and screen interaction, so text nodes opt back out of it; other kinds keep clipping content
+   that overflows their fixed-height card. */
+.canvas-node[data-node-kind='text']:not(.collapsed) {
+  overflow: visible;
+}
 .canvas-node[data-node-kind='diagram']:not(.collapsed) > header,
 .canvas-node[data-node-kind='whiteboard']:not(.collapsed) > header,
 .canvas-node[data-node-kind='brief']:not(.collapsed) > header,

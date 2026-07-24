@@ -116,8 +116,8 @@ schema as every node.
 
 - Core: schema round-trip, defaults, clamps, union membership, import revalidation.
 - Renderer unit: registry definition (frameless flag), face editing (commit, cancel,
-  whitespace-only auto-delete), size presets, rotation numeric field clamp, locked/read-only
-  behavior, pane double-click creation path.
+  placeholder rendering for empty text), size presets, rotation numeric field clamp,
+  locked/read-only behavior, pane double-click creation path.
 - E2E (Playwright, existing patterns): double-click empty canvas, type, commit, rotate via
   details panel, reload, assert persistence and rendering.
 - Full `corepack pnpm verify` passes before PR.
@@ -131,3 +131,41 @@ schema as every node.
   and controls; the gesture now creates value instead of duplicating an existing zoom path.
 - Frameless flag touches the shared `CanvasNode` shell: implemented as opt-in so all existing
   node kinds render byte-identically when the flag is absent.
+
+## Deviations (2026-07-24)
+
+Found during Task 8 (e2e test authoring + full verification) against the shipped implementation
+on `feature/canvas-text-node`.
+
+- **Rotation UI was unreachable for a selected text node (blocking bug, found by e2e, fixed in
+  this pass).** The floating details/settings header (`.canvas-node.text-node > header`,
+  `top: -38px`, the only way to reach the "Rotation (degrees)" field) and the drag rotate handle
+  (`.text-rotate-handle`, `top: -64px`) are both positioned outside the node's own box, by design,
+  in `canvas.css`. But `apps/desktop/src/renderer/src/components/workspace/canvas/faces/node-face.css`
+  still listed `.canvas-node[data-node-kind='text']:not(.collapsed)` in the shared
+  `display: flex; flex-direction: column; overflow: hidden;` rule used by the document/status faces
+  (added when the text face joined that group in commit `edf5c96`, before the floating chrome
+  existed). The clip silently discarded both floating controls: `getComputedStyle` reported
+  `opacity: 1; pointer-events: auto;` on the header once selected, but no pointer event ever
+  reached it — `document.elementFromPoint` at the details button's screen center resolved to
+  `.react-flow__pane`, not the button. This defeated "A rotate handle floats above the selected
+  box" and "the node details panel shows a numeric degrees field ... so rotation is fully operable
+  by keyboard and assistive technology" in the Rotation section above: neither path was usable by
+  a mouse. Found by the Task 8 e2e spec (`apps/desktop/e2e/canvas/interactions/text-node.spec.ts`),
+  which timed out on `node.locator('.node-details-button').click()`. **Fixed** by giving the
+  `text` kind its own `overflow: visible` override directly below the shared clip rule in
+  `node-face.css`, scoped to `text` only — the shared rule and the other 8 node kinds that rely on
+  its clipping are untouched.
+
+- **The unlocked-empty placeholder display state is effectively unreachable through normal use.**
+  `TextNodeFace` mounts straight into the inline editor whenever the node is unlocked and
+  `text === ''` (`useState(() => !readOnly && text === '')` only evaluates on mount), so the
+  "Type…" placeholder branch for an _unlocked_ node is only ever visited by deliberately blurring
+  the editor without typing anything. `TextNodeFace.test.tsx` only asserts the placeholder for the
+  locked case; the unlocked-and-blurred path is untested. This matches the spec's intent ("a newly
+  created text box opens its editor immediately") but is worth calling out since the placeholder
+  copy exists in the shipped code for a state a user is unlikely to deliberately produce.
+
+Collaboration content-field device-locality (`text`, `fontSize`, `rotationDeg`) was re-checked
+against the shipped code and matches the Persistence section above exactly; no additional
+undocumented device-local fields were found.
