@@ -1993,8 +1993,8 @@ unchecked when only a subset of their required behavior has proof.
   tests and six integration tests passed.
 - 2026-07-24: PR #22 was reconciled with current `main` and newer branch commits without discarding
   managed-worktree, hosting, startup, Settings, Terminal, canvas, E2E, or invite behavior.
-- 2026-07-24: the post-merge repair persists a new Agent node before peer provisioning and launch,
-  keeps failed saves non-mutating, and aligns Agent, Terminal, and Test-node Electron coverage with
-  shipped labels, PTY behavior, and durable artifact evidence. The three affected E2E journeys,
-  3,107 unit and 332 integration tests, the 1,462-file structure gate, 852-file control audit,
+- 2026-07-24: the post-merge repair persists Agent nodes before launch, makes the canvas hint
+  click-through, centers searched nodes by rendered bounds, and keeps Windows ACL checks bound to
+  explicit system paths. Four affected E2E journeys, 36 focused unit and 34 focused integration
+  tests, 3,107 unit and 332 integration tests, the 1,462-file structure gate, 852-file control audit,
   formatting, lint, typecheck, production build, and whitespace validation passed.

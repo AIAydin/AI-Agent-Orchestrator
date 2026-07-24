@@ -688,6 +688,10 @@ function systemPowerShellPath(): string {
 }
 
 function systemWindowsPath(...segments: readonly string[]): string {
+  return path.win32.join(systemWindowsRoot(), ...segments);
+}
+
+function systemWindowsRoot(): string {
   const systemRoot =
     process.env['SystemRoot'] ?? process.env['SYSTEMROOT'] ?? process.env['WINDIR'];
   if (
@@ -701,14 +705,25 @@ function systemWindowsPath(...segments: readonly string[]): string {
       'Forgeboard could not resolve the system Windows permission authority. No agent context was launched.',
     );
   }
-  return path.win32.join(path.win32.normalize(systemRoot), ...segments);
+  return path.win32.normalize(systemRoot);
 }
 
 function windowsAuthorityEnvironment(
   authorityValues: Readonly<Record<string, string>>,
 ): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = { ...authorityValues };
-  for (const name of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP'] as const) {
+  const systemRoot = systemWindowsRoot();
+  const system32 = path.win32.join(systemRoot, 'System32');
+  const powershell = path.win32.join(system32, 'WindowsPowerShell', 'v1.0');
+  const environment: NodeJS.ProcessEnv = {
+    SystemRoot: systemRoot,
+    WINDIR: systemRoot,
+    ComSpec: path.win32.join(system32, 'cmd.exe'),
+    Path: [system32, systemRoot, powershell].join(';'),
+    PATHEXT: '.COM;.EXE;.BAT;.CMD',
+    PSModulePath: path.win32.join(powershell, 'Modules'),
+    ...authorityValues,
+  };
+  for (const name of ['TEMP', 'TMP'] as const) {
     const value = process.env[name];
     if (value !== undefined) environment[name] = value;
   }

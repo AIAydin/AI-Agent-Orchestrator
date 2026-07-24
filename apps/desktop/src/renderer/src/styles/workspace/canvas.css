@@ -75,6 +75,7 @@
   padding: 5px 8px !important;
   border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
   border-radius: 6px;
+  pointer-events: none;
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   color: var(--text-faint);
   font-size: var(--text-2xs);

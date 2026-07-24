@@ -438,9 +438,16 @@ describe('PreviewRuntime', () => {
   it('drains an in-flight readiness attempt without auditing after disposal', async () => {
     root = await mkdtemp(join(tmpdir(), 'forgeboard-preview-runtime-'));
     const audits: string[] = [];
+    let resolveAuthorized: () => void = () => undefined;
+    const authorized = new Promise<void>((resolve) => {
+      resolveAuthorized = resolve;
+    });
     const store: PreviewRuntimeStore = {
       listProjects: () => [projectAt(root ?? '')],
-      appendAudit: (_category, action, outcome) => audits.push(`${action}:${outcome}`),
+      appendAudit: (_category, action, outcome) => {
+        audits.push(`${action}:${outcome}`);
+        if (action === 'start' && outcome === 'allowed') resolveAuthorized();
+      },
     };
     const settings = AppSettingsSchema.parse({
       theme: 'system',
@@ -475,7 +482,7 @@ describe('PreviewRuntime', () => {
       readinessPath: '/',
       urlPath: '/',
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await authorized;
 
     await runtime.dispose();
     await expect(starting).rejects.toThrow();
