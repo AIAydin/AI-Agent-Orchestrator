@@ -156,6 +156,22 @@ on `feature/canvas-text-node`.
   `text` kind its own `overflow: visible` override directly below the shared clip rule in
   `node-face.css`, scoped to `text` only — the shared rule and the other 8 node kinds that rely on
   its clipping are untouched.
+- **No `frameless: true` registry capability flag.** The spec sketched a shared behavior flag for
+  frameless rendering, but `SharedNodeBehaviors` in `node-registry/registry.ts` fixes every
+  built-in behavior flag (`resizable`, `collapsible`, `lockable`, etc.) as identical across all
+  node kinds, and its contract test enforces that. Adding a per-kind flag would be a larger
+  contract change than this feature warrants, so the shell (`CanvasNode.tsx`) branches on
+  `data.kind === 'text'` directly instead.
+- **Rotation control location.** `TextRotateHandle.tsx` lives alongside the other text-node
+  components in `content/text/`, not under `canvas/interactions/` as the spec sketched.
+- **Cardinal-angle snapping timing.** The ±3° cardinal snap applies continuously during the drag,
+  not only on release as the spec implied. Shift stepping and the ±3° snap threshold otherwise
+  behave as specified.
+- **Text nodes excluded from context-menu Collapse (whole-branch review, this pass).** Because the
+  frameless text shell renders no chrome when collapsed, the "Collapse" action in
+  `CanvasNodeContextMenu.tsx` produced an invisible 35px strip for `kind === 'text'`. The item is
+  now disabled (with an explanatory tooltip) for text nodes, matching the menu's existing pattern
+  for other conditionally-unavailable actions rather than removing the item from the DOM.
 
 - **The unlocked-empty placeholder display state is effectively unreachable through normal use.**
   `TextNodeFace` mounts straight into the inline editor whenever the node is unlocked and
