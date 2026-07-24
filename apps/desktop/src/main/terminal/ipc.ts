@@ -48,9 +48,9 @@ const LOCAL_ACTOR = 'local-user';
 export class TerminalIpcService {
   readonly #channels: string[] = [];
   readonly #operations = new Set<Promise<unknown>>();
-  readonly #ownerIds = new WeakMap<WebContents, string>();
-  readonly #owners = new Map<string, WebContents>();
+  readonly #applicationOwnerId = `terminal:application:${randomUUID()}`;
   readonly #unsubscribe: () => void;
+  #owner: WebContents | null = null;
   #paused = false;
   #disposed = false;
 
@@ -257,7 +257,7 @@ export class TerminalIpcService {
     this.#unsubscribe();
     await this.#drain();
     await this.service.dispose();
-    this.#owners.clear();
+    this.#owner = null;
   }
 
   #handle<Args extends unknown[], Output>(
@@ -283,7 +283,7 @@ export class TerminalIpcService {
       this.#assertNotDisposed();
       if (this.#paused)
         throw new Error('Terminal operations are paused while Forgeboard changes local data.');
-      assertLiveMainFrame(event, 'Terminal operation');
+      this.#requireWindow(event);
       this.#ownerId(event.sender);
       const args = inputSchema.parse(rawArgs);
       const value = outputSchema.parse(await operation(event, ...args));
@@ -306,23 +306,23 @@ export class TerminalIpcService {
   }
 
   #ownerId(owner: WebContents): string {
-    const existing = this.#ownerIds.get(owner);
-    if (existing !== undefined) return existing;
-    const ownerId = `terminal:web-contents:${String(owner.id)}:${randomUUID()}`;
-    this.#ownerIds.set(owner, ownerId);
-    this.#owners.set(ownerId, owner);
+    if (this.#owner === owner) return this.#applicationOwnerId;
+    if (this.#owner !== null && !this.#owner.isDestroyed()) {
+      throw new Error('Another live Forgeboard window is already connected to these terminals.');
+    }
+    this.#owner = owner;
     owner.once('destroyed', () => {
-      this.#ownerIds.delete(owner);
-      if (this.#owners.get(ownerId) === owner) this.#owners.delete(ownerId);
-      if (this.#disposed) return;
-      void this.#track(this.service.discardOwner(ownerId));
+      // A renderer reload or a closed/reopened macOS window must not kill local PTYs. The next
+      // live main frame reconnects to this application-scoped owner and replays persisted output.
+      // Explicit Stop, node deletion, privacy reset, and application disposal still terminate.
+      if (this.#owner === owner) this.#owner = null;
     });
-    return ownerId;
+    return this.#applicationOwnerId;
   }
 
   #send(ownerId: string, untrusted: TerminalEvent): void {
-    const owner = this.#owners.get(ownerId);
-    if (owner === undefined || owner.isDestroyed()) return;
+    const owner = ownerId === this.#applicationOwnerId ? this.#owner : null;
+    if (owner === null || owner.isDestroyed()) return;
     owner.send(TERMINAL_IPC_CHANNELS.event, TerminalEventSchema.parse(untrusted));
   }
 
@@ -340,7 +340,8 @@ export class TerminalIpcService {
     if (
       expected.isDestroyed() ||
       this.resolveWindow(event) !== expected ||
-      (ownerId !== undefined && this.#owners.get(ownerId) !== event.sender)
+      (ownerId !== undefined &&
+        (ownerId !== this.#applicationOwnerId || this.#owner !== event.sender))
     ) {
       throw new Error('The originating Forgeboard terminal window changed or closed.');
     }
