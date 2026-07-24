@@ -1,15 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  PowerShellWindowsFilesystemSecurity,
+  NativeWindowsFilesystemSecurity,
   WindowsAclBoundaryError,
   assertConfidentialWindowsParentAcl,
   assertPrivateWindowsDirectoryAcl,
   assertPrivateWindowsFileAcl,
   assertSafeWindowsParentAcl,
-  boundedPowerShellExecutionDiagnostic,
-  boundedPowerShellFailureDiagnostic,
-  parseWindowsUserSid,
   parseWindowsDirectoryAcl,
   type WindowsDirectoryAcl,
 } from './filesystem-acl.js';
@@ -208,53 +205,24 @@ describe('Windows filesystem ACL boundary', () => {
     expectBoundaryCode(() => parseWindowsDirectoryAcl('{not-json'), 'inspection-unavailable');
   });
 
-  it('parses only the SID field from bounded whoami CSV output', () => {
-    expect(parseWindowsUserSid(`"WORKGROUP\\forgeboard","${USER_SID}"\r\n`)).toBe(USER_SID);
-    expect(() => parseWindowsUserSid(`"WORKGROUP\\forgeboard","not-a-sid"`)).toThrow(
-      /identity response/u,
-    );
-    expect(() => parseWindowsUserSid(`"WORKGROUP\\forgeboard","${USER_SID}","unexpected"`)).toThrow(
-      /identity response/u,
-    );
-  });
-
-  it('extracts only bounded authority diagnostics from PowerShell stderr', () => {
-    expect(
-      boundedPowerShellFailureDiagnostic(
-        'noise FORGEBOARD_WINDOWS_AUTHORITY_ERROR:System.MethodAccessException,MethodInvocationException tail',
-      ),
-    ).toBe('System.MethodAccessException,MethodInvocationException');
-    expect(
-      boundedPowerShellFailureDiagnostic(
-        'FORGEBOARD_WINDOWS_AUTHORITY_ERROR:C:\\Users\\Aydin\\secret,unsafe message',
-      ),
-    ).toBeNull();
-    expect(
-      boundedPowerShellExecutionDiagnostic({ code: null, killed: true, signal: 'SIGKILL' }, ''),
-    ).toBe('authority-timeout');
-    expect(boundedPowerShellExecutionDiagnostic({ code: 'ENOENT' }, '')).toBe(
-      'authority-unavailable',
-    );
-  });
-
-  it('passes weird literal paths only through the authority environment and fails closed on inspection', async () => {
-    const calls: Array<{
-      readonly script: string;
-      readonly environment: Readonly<Record<string, string>>;
-    }> = [];
+  it('passes weird literal paths only to the native authority and fails closed on inspection', async () => {
+    const calls: string[] = [];
     const weirdPath = String.raw`C:\Users\A Name\$(not-code);'context`;
-    const run = vi.fn((script: string, environment: Readonly<Record<string, string>>) => {
-      calls.push({ script, environment });
+    const inspect = vi.fn((path: string) => {
+      calls.push(path);
       return Promise.reject(new Error('injected ACL inspection failure'));
     });
-    const authority = new PowerShellWindowsFilesystemSecurity(run, () => Promise.resolve(USER_SID));
+    const authority = new NativeWindowsFilesystemSecurity(
+      inspect,
+      vi.fn(() => Promise.reject(new Error('unexpected protection call'))),
+      () => Promise.resolve(USER_SID),
+    );
     const sid = await authority.currentUserSid();
 
     await expect(authority.assertSafeParent(weirdPath, sid)).rejects.toMatchObject({
       code: 'inspection-unavailable',
     });
-    expect(calls.at(-1)?.environment['FORGEBOARD_WINDOWS_ACL_PATH']).toBe(weirdPath);
-    expect(calls.at(-1)?.script).not.toContain(weirdPath);
+    expect(calls).toEqual([weirdPath]);
   });
 
   it('does not cache a failed token identity lookup', async () => {
@@ -262,8 +230,9 @@ describe('Windows filesystem ACL boundary', () => {
       .fn<() => Promise<string>>()
       .mockRejectedValueOnce(new Error('identity unavailable'))
       .mockResolvedValueOnce(USER_SID);
-    const authority = new PowerShellWindowsFilesystemSecurity(
-      vi.fn(() => Promise.reject(new Error('unexpected PowerShell call'))),
+    const authority = new NativeWindowsFilesystemSecurity(
+      vi.fn(() => Promise.reject(new Error('unexpected inspection call'))),
+      vi.fn(() => Promise.reject(new Error('unexpected protection call'))),
       resolveWindowsUserSid,
     );
 
@@ -273,10 +242,6 @@ describe('Windows filesystem ACL boundary', () => {
   });
 
   it('protects and verifies a literal file path through the bounded authority', async () => {
-    const calls: Array<{
-      readonly script: string;
-      readonly environment: Readonly<Record<string, string>>;
-    }> = [];
     const filePath = String.raw`C:\Users\A Name\backup $(literal);'.sqlite3`;
     const exactFileReport = JSON.stringify({
       schemaVersion: 2,
@@ -289,23 +254,14 @@ describe('Windows filesystem ACL boundary', () => {
         rule(SYSTEM_SID, 0x1f01ff, { inheritanceFlags: 0 }),
       ],
     });
-    const run = vi.fn((script: string, environment: Readonly<Record<string, string>>) => {
-      calls.push({ script, environment });
-      return Promise.resolve({
-        stdout: script.includes('[System.IO.File]::GetAccessControl') ? exactFileReport : '',
-      });
-    });
-    const authority = new PowerShellWindowsFilesystemSecurity(run);
+    const inspect = vi.fn(() => Promise.resolve(exactFileReport));
+    const protect = vi.fn(() => Promise.resolve());
+    const authority = new NativeWindowsFilesystemSecurity(inspect, protect);
 
     await authority.protectPrivateFile(filePath, USER_SID);
 
-    expect(calls).toHaveLength(2);
-    expect(
-      calls.every((call) => call.environment['FORGEBOARD_WINDOWS_ACL_PATH'] === filePath),
-    ).toBe(true);
-    expect(calls.every((call) => !call.script.includes(filePath))).toBe(true);
-    expect(calls.at(-1)?.script).toContain('hasUnsupportedDaclAce');
-    expect(calls.at(-1)?.script).toContain('CommonAce');
+    expect(protect).toHaveBeenCalledWith(filePath, USER_SID, false);
+    expect(inspect).toHaveBeenCalledWith(filePath);
   });
 });
 
