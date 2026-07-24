@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 
 const ACL_SCHEMA_VERSION = 2;
-const POWERSHELL_TIMEOUT_MS = 8_000;
+const POWERSHELL_TIMEOUT_MS = 30_000;
 const POWERSHELL_MAX_BUFFER_BYTES = 64 * 1024;
 const SYSTEM_SID = 'S-1-5-18';
 const ADMINISTRATORS_SID = 'S-1-5-32-544';
@@ -648,10 +648,8 @@ async function runSystemPowerShell(
       },
       (error, stdout, stderr) => {
         if (error !== null) {
-          const diagnostic = boundedPowerShellFailureDiagnostic(stderr);
-          process.stderr.write(
-            `Forgeboard Windows permission authority failed: ${diagnostic ?? 'unclassified'}\n`,
-          );
+          const diagnostic = boundedPowerShellExecutionDiagnostic(error, stderr);
+          process.stderr.write(`Forgeboard Windows permission authority failed: ${diagnostic}\n`);
           reject(new Error('The bounded Windows permission authority failed.'));
           return;
         }
@@ -668,6 +666,21 @@ export function boundedPowerShellFailureDiagnostic(stderr: string): string | nul
     'u',
   ).exec(stderr);
   return match === null ? null : `${match[1]},${match[2]}`;
+}
+
+export function boundedPowerShellExecutionDiagnostic(
+  error: {
+    readonly code?: string | number | null | undefined;
+    readonly killed?: boolean | undefined;
+    readonly signal?: string | null | undefined;
+  },
+  stderr: string,
+): string {
+  const scriptDiagnostic = boundedPowerShellFailureDiagnostic(stderr);
+  if (scriptDiagnostic !== null) return scriptDiagnostic;
+  if (error.killed === true && error.signal === 'SIGKILL') return 'authority-timeout';
+  if (error.code === 'ENOENT') return 'authority-unavailable';
+  return 'unclassified';
 }
 
 async function resolveSystemWindowsUserSid(): Promise<string> {

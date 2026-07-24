@@ -1997,4 +1997,4 @@ unchecked when only a subset of their required behavior has proof.
 - 2026-07-24: PR #22 was reconciled with current `main` without discarding managed-worktree,
   hosting, startup, Settings, Terminal, canvas, E2E, invite, or persistent-session behavior.
 - 2026-07-24: the post-merge repair persists Agent nodes before launch; fixes canvas hint, search,
-  and input; hardens PTY, Git, preview, and Windows ACL checks; and passed every production gate.
+  and input; and hardens PTY, Git, preview, and bounded Windows ACL checks across cold starts.

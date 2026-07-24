@@ -7,6 +7,7 @@ import {
   assertPrivateWindowsDirectoryAcl,
   assertPrivateWindowsFileAcl,
   assertSafeWindowsParentAcl,
+  boundedPowerShellExecutionDiagnostic,
   boundedPowerShellFailureDiagnostic,
   parseWindowsUserSid,
   parseWindowsDirectoryAcl,
@@ -228,6 +229,12 @@ describe('Windows filesystem ACL boundary', () => {
         'FORGEBOARD_WINDOWS_AUTHORITY_ERROR:C:\\Users\\Aydin\\secret,unsafe message',
       ),
     ).toBeNull();
+    expect(
+      boundedPowerShellExecutionDiagnostic({ code: null, killed: true, signal: 'SIGKILL' }, ''),
+    ).toBe('authority-timeout');
+    expect(boundedPowerShellExecutionDiagnostic({ code: 'ENOENT' }, '')).toBe(
+      'authority-unavailable',
+    );
   });
 
   it('passes weird literal paths only through the authority environment and fails closed on inspection', async () => {
