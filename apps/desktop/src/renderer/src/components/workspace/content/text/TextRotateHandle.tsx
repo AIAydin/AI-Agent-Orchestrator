@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { RotateCw } from 'lucide-react';
 
 import { useAgentSession } from '../../runs/agent-session/AgentSessionContext.js';
@@ -7,6 +7,13 @@ import { snappedRotation } from './text-rotation.js';
 export function TextRotateHandle({ id }: { readonly id: string }) {
   const session = useAgentSession();
   const recorded = useRef(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      cleanupRef.current?.();
+    };
+  }, []);
 
   return (
     <button
@@ -34,7 +41,9 @@ export function TextRotateHandle({ id }: { readonly id: string }) {
         const stop = () => {
           window.removeEventListener('pointermove', move);
           window.removeEventListener('pointerup', stop);
+          cleanupRef.current = null;
         };
+        cleanupRef.current = stop;
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', stop);
       }}

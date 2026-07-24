@@ -272,6 +272,15 @@ describe('CanvasNode presentation interactions', () => {
     fireEvent.click(large);
     expect(updateNodeData).toHaveBeenCalledWith('node-1', { fontSize: 'l' });
   });
+
+  it('disables size controls for a locked text node and enables them once unlocked and selected', () => {
+    renderNode(nodeData({ kind: 'text', locked: true }), { selected: true });
+    expect(screen.getByRole('button', { name: 'Small text' })).toHaveProperty('disabled', true);
+
+    cleanup();
+    renderNode(nodeData({ kind: 'text', locked: false }), { selected: true });
+    expect(screen.getByRole('button', { name: 'Small text' })).toHaveProperty('disabled', false);
+  });
 });
 
 function renderNode(

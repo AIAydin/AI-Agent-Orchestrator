@@ -657,6 +657,11 @@
   background: color-mix(in srgb, var(--node-accent) 18%, transparent);
 }
 
+.text-size-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .text-rotate-handle {
   position: absolute;
   top: -64px;

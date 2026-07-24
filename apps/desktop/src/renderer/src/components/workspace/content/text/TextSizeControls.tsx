@@ -9,9 +9,11 @@ const SIZES = [
 export function TextSizeControls({
   id,
   fontSize,
+  disabled,
 }: {
   readonly id: string;
   readonly fontSize: 's' | 'm' | 'l';
+  readonly disabled: boolean;
 }) {
   const session = useAgentSession();
   return (
@@ -23,6 +25,7 @@ export function TextSizeControls({
           className={fontSize === size.value ? 'text-size-button active' : 'text-size-button'}
           aria-label={size.description}
           aria-pressed={fontSize === size.value}
+          disabled={disabled}
           onClick={(event) => {
             event.stopPropagation();
             session.recordHistory();

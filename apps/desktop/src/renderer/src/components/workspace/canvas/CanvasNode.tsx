@@ -223,7 +223,7 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
         {
           '--node-accent': theme?.accent ?? data.color,
           '--provider-tint': theme?.titleBarTint ?? 'transparent',
-          ...(isText ? { ['--text-rotation' as string]: `${data.rotationDeg ?? 0}deg` } : {}),
+          ...(isText ? { '--text-rotation': `${data.rotationDeg ?? 0}deg` } : {}),
         } as React.CSSProperties
       }
       role={groupFrame ? 'group' : undefined}
@@ -271,7 +271,11 @@ export function CanvasNode({ id, data, selected }: NodeProps<WorkshopNode>) {
       <header>
         {isText ? (
           <>
-            <TextSizeControls id={id} fontSize={data.fontSize ?? 'm'} />
+            <TextSizeControls
+              id={id}
+              fontSize={data.fontSize ?? 'm'}
+              disabled={!canChangePresentation}
+            />
             {data.locked && <Lock size={12} aria-label="Locked" />}
             <CanvasNodeDetailsPopover id={id} data={data} readOnly={!canChangePresentation} />
           </>
