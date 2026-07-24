@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 import {
   ARTIFACT_PATH,
   LIVE_MARKER,
@@ -32,9 +36,7 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
   const externalRequests: string[] = [];
 
   try {
-    markPhase('launch-first-session');
     const firstSession = await launchDesktop(userDataDirectory);
-    markPhase('launched-first-session');
     electronApp = firstSession.app;
     let page = firstSession.page;
     watchExternalRequests(page, externalRequests);
@@ -42,7 +44,6 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
     await openSafeDemo(page);
 
     const panel = await addAndSelectTestNode(page);
-    markPhase('selected-test-node');
     await test.step('configure the long-running exact command and artifact path in the UI', async () => {
       await configureTestNode(panel, LONG_RUNNING_SCRIPT);
       const configuration = panel.getByRole('group', {
@@ -54,10 +55,8 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
       );
       await expect(configuration.getByLabel(/Result files to keep/u)).toHaveValue(ARTIFACT_PATH);
     });
-    markPhase('configured-long-running-command');
 
     await test.step('review the exact launch, observe live parsed output, and cancel only the node', async () => {
-      markPhase('review-long-running-command');
       await panel.getByRole('button', { name: 'Review and run' }).click();
       const launch = await openLaunchDecision(page);
       await expect(launch).toContainText(LIVE_MARKER);
@@ -69,7 +68,6 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         marker: LIVE_MARKER,
       });
 
-      markPhase('approved-long-running-command');
       await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Running');
       await expect(panel.getByLabel('Test output').first()).toContainText(LIVE_MARKER);
       await expectParsedSummary(panel, {
@@ -79,11 +77,9 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         total: 1,
       });
 
-      markPhase('observed-long-running-output');
       await queueWorkflowNativeResponse(electronApp!, 1);
       await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
       expectExactNodeCancelConfirmation(await waitForWorkflowNativeDialog(electronApp!, 1));
-      markPhase('confirmed-node-cancellation');
       await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Cancelled');
       await expect.poll(async () => await panel.textContent()).toContain(LIVE_MARKER);
       await expectParsedSummary(panel, {
@@ -93,11 +89,9 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         total: 1,
       });
     });
-    markPhase('observed-node-cancellation');
 
     await test.step('reconfigure, rerun, parse the passing summary, and expose a verified artifact', async () => {
       await configureTestNode(panel, PASSING_SCRIPT);
-      markPhase('configured-passing-command');
       await panel.getByRole('button', { name: 'Review and run' }).click();
       const launch = await openLaunchDecision(page);
       await expect(launch).toContainText(PASS_MARKER);
@@ -108,7 +102,6 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         marker: PASS_MARKER,
       });
 
-      markPhase('approved-passing-command');
       await expect(panel.locator('.node-face-strip .node-face-status')).toHaveText('Passed');
       await expect(panel.getByLabel('Test output').first()).toContainText(PASS_MARKER);
       await expectParsedSummary(panel, {
@@ -137,23 +130,17 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         'Cancelled',
       );
     });
-    markPhase('observed-passing-artifact');
 
-    markPhase('close-first-session');
     await electronApp.close();
-    markPhase('closed-first-session');
     electronApp = null;
 
-    markPhase('launch-restored-session');
     const restoredSession = await launchDesktop(userDataDirectory);
-    markPhase('launched-restored-session');
     electronApp = restoredSession.app;
     page = restoredSession.page;
     watchExternalRequests(page, externalRequests);
     await expect(page.locator('.setup-shell')).toHaveCount(0);
     await page.locator('.recent-list button').click();
     const restoredPanel = await selectRestoredTestNode(page);
-    markPhase('selected-restored-test-node');
 
     await test.step('restart restores the prior output, summary, artifact, and cancelled attempt', async () => {
       await expect(restoredPanel.locator('.node-face-strip .node-face-status')).toHaveText(
@@ -173,17 +160,10 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         restoredPanel.getByRole('region', { name: 'Previous test attempts' }),
       ).toContainText('Cancelled');
     });
-    markPhase('verified-restored-test-node');
 
     expect(externalRequests).toEqual([]);
   } finally {
-    markPhase('cleanup-session');
-    await electronApp?.close().catch(() => undefined);
-    markPhase('cleanup-session-complete');
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });
-
-function markPhase(phase: string): void {
-  process.stdout.write(`[test-node-e2e] ${phase}\n`);
-}

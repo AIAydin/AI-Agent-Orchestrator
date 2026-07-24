@@ -51,6 +51,46 @@ export async function launchDesktop(
   return { app, page };
 }
 
+/**
+ * Finalizers must not let a Playwright driver handshake strand the worker after product behavior
+ * has already been verified. Tests that need to prove graceful shutdown should still await
+ * `app.close()` explicitly before using this bounded cleanup for their final session.
+ */
+export async function closeElectronAfterTest(
+  app: ElectronApplication | null,
+  timeoutMs = 5_000,
+): Promise<void> {
+  if (app === null) return;
+  const child = app.process();
+  const exited =
+    child.exitCode !== null || child.signalCode !== null
+      ? Promise.resolve()
+      : new Promise<void>((resolvePromise) => {
+          child.once('exit', () => resolvePromise());
+        });
+  const closeSettled = app.close().then(
+    () => undefined,
+    () => undefined,
+  );
+  if (await settlesWithin(closeSettled, timeoutMs)) return;
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  await settlesWithin(exited, timeoutMs);
+}
+
+async function settlesWithin(operation: Promise<unknown>, timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation.then(() => true),
+      new Promise<false>((resolvePromise) => {
+        timer = setTimeout(() => resolvePromise(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export async function approveNextNativeAgentLaunch(
   app: ElectronApplication,
   reviewDialog: Locator,
