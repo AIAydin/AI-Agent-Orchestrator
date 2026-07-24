@@ -1996,5 +1996,5 @@ unchecked when only a subset of their required behavior has proof.
   formatting, structure and production-control gates, whitespace validation, and build passed.
 - 2026-07-24: PR #22 was reconciled with current `main` without discarding managed-worktree,
   hosting, startup, Settings, Terminal, canvas, E2E, invite, or persistent-session behavior.
-- 2026-07-24: the post-merge repair persists Agent nodes before launch; fixes canvas hint, search,
-  and input; injects bundled Git into Preview; and uses native Windows ACLs without process hangs.
+- 2026-07-24: the post-merge repair persists Agent nodes; fixes canvas input; injects bundled Git
+  into Preview; uses native Windows ACLs; and checks Test artifacts by visible Refresh, not IPC.
