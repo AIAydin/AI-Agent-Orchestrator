@@ -7,6 +7,7 @@ import {
   assertPrivateWindowsDirectoryAcl,
   assertPrivateWindowsFileAcl,
   assertSafeWindowsParentAcl,
+  boundedPowerShellFailureDiagnostic,
   parseWindowsUserSid,
   parseWindowsDirectoryAcl,
   type WindowsDirectoryAcl,
@@ -214,6 +215,19 @@ describe('Windows filesystem ACL boundary', () => {
     expect(() => parseWindowsUserSid(`"WORKGROUP\\forgeboard","${USER_SID}","unexpected"`)).toThrow(
       /identity response/u,
     );
+  });
+
+  it('extracts only bounded authority diagnostics from PowerShell stderr', () => {
+    expect(
+      boundedPowerShellFailureDiagnostic(
+        'noise FORGEBOARD_WINDOWS_AUTHORITY_ERROR:System.MethodAccessException,MethodInvocationException tail',
+      ),
+    ).toBe('System.MethodAccessException,MethodInvocationException');
+    expect(
+      boundedPowerShellFailureDiagnostic(
+        'FORGEBOARD_WINDOWS_AUTHORITY_ERROR:C:\\Users\\Aydin\\secret,unsafe message',
+      ),
+    ).toBeNull();
   });
 
   it('passes weird literal paths only through the authority environment and fails closed on inspection', async () => {
