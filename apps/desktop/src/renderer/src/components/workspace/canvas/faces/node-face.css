@@ -7,7 +7,8 @@
 .canvas-node[data-node-kind='task']:not(.collapsed),
 .canvas-node[data-node-kind='review-gate']:not(.collapsed),
 .canvas-node[data-node-kind='git-pr']:not(.collapsed),
-.canvas-node[data-node-kind='test']:not(.collapsed) {
+.canvas-node[data-node-kind='test']:not(.collapsed),
+.canvas-node[data-node-kind='text']:not(.collapsed) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -19,7 +20,8 @@
 .canvas-node[data-node-kind='task']:not(.collapsed) > header,
 .canvas-node[data-node-kind='review-gate']:not(.collapsed) > header,
 .canvas-node[data-node-kind='git-pr']:not(.collapsed) > header,
-.canvas-node[data-node-kind='test']:not(.collapsed) > header {
+.canvas-node[data-node-kind='test']:not(.collapsed) > header,
+.canvas-node[data-node-kind='text']:not(.collapsed) > header {
   flex: 0 0 auto;
 }
 .canvas-node[data-node-kind='terminal']:not(.collapsed),
