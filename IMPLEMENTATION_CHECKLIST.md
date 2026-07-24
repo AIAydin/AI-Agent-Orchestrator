@@ -1981,20 +1981,19 @@ unchecked when only a subset of their required behavior has proof.
   production build, 3,072 unit assertions, and 324 integration assertions; its recorded full-gate
   exceptions were a partial Electron install and unrelated in-progress files.
 - 2026-07-24: the workspace project sidebar closes from an always-visible command-bar control,
-  returns its width to the canvas, and persists the choice. Ten tests and every production gate
-  passed; the Electron journey lacked an approved runtime, and E2E typecheck retains existing errors.
-- 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
-  count caps; ordinary launches are limited only by the computer's available resources. Transcript
-  creation likewise has no product-level file-count ceiling while retaining per-session and global
-  byte bounds. A 12-session same-window regression exceeds both retired limits, and OpenCode's
-  installed default TUI remains a zero-argument, main-managed worktree launch. All 3,102 unit tests
-  passed. Of 332 integration tests, 330 passed in the unrestricted full run; both load-sensitive cases
-  passed under unchanged default timeouts in isolation. Docs, quality, typecheck, lint, formatting,
-  structure, controls, and the complete production build passed.
-  Canvas navigation also gains an idle-bounded lightweight paint mode and terminal/preview containment;
-  final-state lint, typecheck, formatting, and 55 affected renderer tests passed.
-- 2026-07-24: startup recovery now compares the complete stable database identity across provenance
-  inspection, so inode reuse cannot hide a replaced primary. Packaged smoke now mirrors normal
-  startup by deferring optional Agent-context storage failures while the protected context path
-  remains fail-closed when an Agent actually requests it. The 19 focused unit tests and six
-  integration tests passed.
+  returns its width to the canvas, persists the choice, and passed ten tests and all production gates.
+- 2026-07-24: running Agent and Terminal sessions and transcript creation no longer have product
+  count caps; byte bounds remain. A 12-session regression and 3,102 unit tests passed. Of 332
+  integration tests, both load-sensitive cases passed unchanged in isolation after 330 passed
+  together. Docs, quality, typecheck, lint, formatting, structure, controls, and build passed.
+  Canvas navigation's idle-bounded lightweight paint mode and terminal/preview containment passed
+  final lint, typecheck, formatting, and 55 affected renderer tests.
+- 2026-07-24: startup recovery binds complete stable database identity, and packaged smoke defers
+  optional Agent-context storage failures while real Agent context stays fail-closed. Nineteen
+  focused unit and six integration tests passed.
+- 2026-07-24: live Agent and Terminal PTYs now survive renderer and macOS window replacement through
+  one application-scoped owner; the next window reconnects and replays persisted output. Explicit
+  Stop, node deletion, privacy reset, and application shutdown still terminate. Exit strips now
+  distinguish stopped, interrupted, and disconnected sessions and render signal 15 as `SIGTERM`.
+  All 3,108 unit and 332 integration tests, docs, quality, workspace typecheck, zero-warning lint,
+  formatting, structure and production-control gates, whitespace validation, and build passed.
