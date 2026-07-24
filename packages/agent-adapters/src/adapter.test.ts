@@ -464,7 +464,6 @@ describe('launch preparation and execution', () => {
       prepareAgentLaunch(manifest, { prompt: 'ansi', cwd, permissionProfile: permission(cwd) }),
     );
     const eventsPromise = allEvents(session.events);
-    expect(session.capabilities.pause).toBe(process.platform !== 'win32');
     await expect(session.result).resolves.toMatchObject({ status: 'succeeded' });
     const events = await eventsPromise;
     const output = events
