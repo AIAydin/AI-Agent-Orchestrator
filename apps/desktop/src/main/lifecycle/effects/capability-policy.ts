@@ -308,9 +308,6 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
   ]),
   'recovery/import-file.ts': entry('audited-authority', ['node:fs/promises#open']),
   'runs/run-service.ts': entry('reviewed-runtime', ['@forgeboard/git-engine#RepositoryService']),
-  'security/windows/filesystem-acl.ts': entry('durable-internal-state', [
-    'node:child_process#execFile',
-  ]),
   'settings/settings-ipc.ts': entry('audited-authority', ['node:fs/promises#writeFile']),
   'smoke/packaged.ts': entry('test-and-packaging', ['node:fs#unlinkSync']),
   'storage/backup/health.ts': entry('durable-internal-state', ['node:sqlite#DatabaseSync']),

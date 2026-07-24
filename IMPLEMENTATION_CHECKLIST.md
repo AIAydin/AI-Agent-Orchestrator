@@ -1944,10 +1944,10 @@ unchecked when only a subset of their required behavior has proof.
   `node_modules` is out of sync; package routing was therefore verified with that automatic repair
   disabled rather than presenting the local dependency installation as healthy.
 - 2026-07-23: clean-run verification no longer assumes a prebuilt peer-MCP artifact, an interactive
-  `TERM`, the host's login shell, or a specific numeric user id. Windows account identity now comes
-  from the literal system `whoami.exe` path with strict bounded CSV/SID parsing before the existing
-  fail-closed PowerShell ACL authority runs. Database swap detection also binds size and change and
-  modification times alongside device and inode identity. The isolated full unit suite passed all
+  `TERM`, the host's login shell, or a specific numeric user id. Windows account identity and
+  fail-closed ACL authority now use direct Node-API Win32 calls with exact current-user and
+  LocalSystem DACL validation. Database swap detection also binds size and change and modification
+  times alongside device and inode identity. The isolated full unit suite passed all
   3,110 tests across 455 files; all 335 integration tests, 41 release/startup tests, 3 docs tests,
   and 5 quality tests passed. Typecheck, zero-warning lint, formatting, the 1,478-file structure
   gate, the 854-file production-control audit, the collaboration artifact startup smoke, and the
@@ -1997,4 +1997,4 @@ unchecked when only a subset of their required behavior has proof.
 - 2026-07-24: PR #22 was reconciled with current `main` without discarding managed-worktree,
   hosting, startup, Settings, Terminal, canvas, E2E, invite, or persistent-session behavior.
 - 2026-07-24: the post-merge repair persists Agent nodes before launch; fixes canvas hint, search,
-  and input; and hardens PTY, Git, preview, and native Windows ACL checks without subprocess hangs.
+  and input; injects bundled Git into Preview; and uses native Windows ACLs without process hangs.
