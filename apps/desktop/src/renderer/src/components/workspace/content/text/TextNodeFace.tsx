@@ -57,6 +57,7 @@ export function TextNodeFace({ id, data }: NodeFaceProps) {
         <textarea
           ref={editorRef}
           className="text-face-editor nodrag nowheel"
+          name={`node-${id}-text`}
           aria-label="Text content"
           value={text}
           rows={1}

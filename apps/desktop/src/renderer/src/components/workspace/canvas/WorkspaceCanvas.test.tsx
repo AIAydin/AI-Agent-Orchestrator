@@ -224,6 +224,7 @@ describe('WorkspaceCanvas pane double-click text creation', () => {
 
     expect(canvasProps.onAddNode).toHaveBeenCalledWith(
       'text',
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
     );
   });

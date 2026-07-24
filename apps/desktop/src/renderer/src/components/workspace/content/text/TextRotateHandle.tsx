@@ -20,6 +20,11 @@ export function TextRotateHandle({ id }: { readonly id: string }) {
       type="button"
       className="text-rotate-handle nodrag"
       aria-label="Rotate text"
+      onClick={(event) => {
+        // Dragging is handled entirely by the pointer handlers below; the click that follows a
+        // pointerup should not bubble to the node underneath and toggle its selection.
+        event.stopPropagation();
+      }}
       onPointerDown={(event) => {
         event.stopPropagation();
         event.preventDefault();

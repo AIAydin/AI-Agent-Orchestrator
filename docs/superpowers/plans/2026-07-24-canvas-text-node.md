@@ -25,10 +25,12 @@
 ### Task 1: Core domain schema
 
 **Files:**
+
 - Modify: `packages/core/src/model/domain.ts` (add `TextNodeSchema` next to `NoteImageNodeSchema` ~line 618; add to `CanvasNodeSchema` union ~line 660)
 - Test: `packages/core/src/model/domain.test.ts`
 
 **Interfaces:**
+
 - Produces: `TextNodeSchema` export; `'text'` becomes a valid `CanvasNodeType`. Data shape `{ text: string; fontSize: 's'|'m'|'l'; rotationDeg: number }`.
 
 - [ ] **Step 1: Write the failing test** — append to `packages/core/src/model/domain.test.ts` (follow the file's existing describe/it style and imports; `CanvasNodeSchema` is already imported there):
@@ -66,9 +68,7 @@ describe('text node schema', () => {
   });
 
   it('rejects out-of-range rotation and oversized text', () => {
-    expect(() =>
-      CanvasNodeSchema.parse({ ...baseText, data: { rotationDeg: 200 } }),
-    ).toThrow();
+    expect(() => CanvasNodeSchema.parse({ ...baseText, data: { rotationDeg: 200 } })).toThrow();
     expect(() =>
       CanvasNodeSchema.parse({ ...baseText, data: { text: 'x'.repeat(10_001) } }),
     ).toThrow();
@@ -104,10 +104,12 @@ Add `TextNodeSchema,` to the `CanvasNodeSchema` discriminated union array (after
 ### Task 2: Collaboration contract registration
 
 **Files:**
+
 - Modify: `apps/desktop/src/shared/collaboration/metadata-contracts.ts` (`CollaborationNodeTypeSchema` enum, lines 32-49)
 - Modify: `apps/desktop/src/shared/collaboration/canvas-metadata.ts` (`collaborationNodeType` switch, lines 285-310)
 
 **Interfaces:**
+
 - Produces: `'text'` is an accepted collaboration node type; text nodes project base metadata (title/position/size/color/lock/group) into room snapshots instead of being dropped. Content fields (`text`, `fontSize`, `rotationDeg`) intentionally do NOT sync (same as note-image markdown).
 
 - [ ] **Step 1: Add `'text'`** to the `z.enum([...])` in `CollaborationNodeTypeSchema` (alphabetical position beside the other kinds).
@@ -120,6 +122,7 @@ Add `TextNodeSchema,` to the `CanvasNodeSchema` discriminated union array (after
 ### Task 3: Registry kind, dimensions, and node data fields
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/workspace/node-registry/registry.ts` (`NODE_KINDS` line 28; `BUILT_INS` line 98; lucide import line 1-24)
 - Modify: `apps/desktop/src/shared/canvas/node-dimensions.ts` (`DOCUMENT_NODE_DIMENSIONS`, lines 67-102)
 - Modify: `apps/desktop/src/renderer/src/components/workspace/canvas/CanvasNode.tsx` (`WorkshopNodeData` interface)
@@ -127,6 +130,7 @@ Add `TextNodeSchema,` to the `CanvasNodeSchema` discriminated union array (after
 - Test: `apps/desktop/src/renderer/src/components/workspace/model/node-persistence.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: renderer kind `'text'` (in `NODE_KINDS`, palette appears automatically via `filteredTemplates`); registry definition `label: 'Text'`, `description: 'A floating text label'`, `color: '#8f9bb3'`, icon `Type` (lucide); dimensions default `{ width: 260, height: 64 }`, minimum `{ width: 120, height: 40 }`; `WorkshopNodeData` gains `text?: string; fontSize?: 's' | 'm' | 'l'; rotationDeg?: number;`.
 
@@ -146,9 +150,10 @@ In `node-persistence.test.ts`, mirror the per-kind dimension expectations (lines
 ```ts
 it('uses text label dimensions', () => {
   expect(initialWorkshopNodeDimensions('text')).toEqual({ width: 260, height: 64 });
-  expect(
-    persistedWorkshopNodeDimensions(node('text', { width: 10, height: 10 })),
-  ).toEqual({ width: 120, height: 40 });
+  expect(persistedWorkshopNodeDimensions(node('text', { width: 10, height: 10 }))).toEqual({
+    width: 120,
+    height: 40,
+  });
 });
 ```
 
@@ -167,7 +172,7 @@ it('uses text label dimensions', () => {
   },
 ```
 
-  - `CanvasNode.tsx` `WorkshopNodeData`: add after `markdown?: string;`:
+- `CanvasNode.tsx` `WorkshopNodeData`: add after `markdown?: string;`:
 
 ```ts
   text?: string;
@@ -183,6 +188,7 @@ it('uses text label dimensions', () => {
 ### Task 4: Text face, edit bus, and face styles
 
 **Files:**
+
 - Create: `apps/desktop/src/renderer/src/components/workspace/content/text/text-edit-bus.ts`
 - Create: `apps/desktop/src/renderer/src/components/workspace/content/text/text-edit-bus.test.ts`
 - Create: `apps/desktop/src/renderer/src/components/workspace/content/text/TextNodeFace.tsx`
@@ -192,6 +198,7 @@ it('uses text label dimensions', () => {
 - Modify: `apps/desktop/src/renderer/src/components/workspace/canvas/faces/node-face.css` (add `'text'` to a flex-column kind group)
 
 **Interfaces:**
+
 - Consumes: `useAgentSession()` (`updateNodeData(id, partial)`, `recordHistory()`, `graphReadOnly`), `useCanvasNodeInteractions()` (`readOnly`), `NodeFaceProps { id, data }`.
 - Produces: `TextNodeFace` (registered as `text` face); edit bus API `requestTextEdit(nodeId: string): void` and `onTextEditRequest(listener: (nodeId: string) => void): () => void`; face root `<section className="node-face text-node-face" data-text-size={data.fontSize ?? 'm'}>`; textarea has `aria-label="Text content"`; display div class `text-face-display`, placeholder class `text-face-placeholder` with copy `Type…`.
 
@@ -352,9 +359,13 @@ export function TextNodeFace({ id, data }: NodeFaceProps) {
   const startedRef = useRef(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
 
-  useEffect(() => onTextEditRequest((nodeId) => {
-    if (nodeId === id && !readOnly) setEditing(true);
-  }), [id, readOnly]);
+  useEffect(
+    () =>
+      onTextEditRequest((nodeId) => {
+        if (nodeId === id && !readOnly) setEditing(true);
+      }),
+    [id, readOnly],
+  );
 
   useEffect(() => {
     if (!editing) {
@@ -471,6 +482,7 @@ In `node-face.css`, add `'text'` to the kind group that applies `display: flex; 
 ### Task 5: Frameless shell variant, rotation handle, and size controls
 
 **Files:**
+
 - Create: `apps/desktop/src/renderer/src/components/workspace/content/text/TextRotateHandle.tsx`
 - Create: `apps/desktop/src/renderer/src/components/workspace/content/text/TextSizeControls.tsx`
 - Create: `apps/desktop/src/renderer/src/components/workspace/content/text/text-rotation.ts`
@@ -480,6 +492,7 @@ In `node-face.css`, add `'text'` to the kind group that applies `display: flex; 
 - Test: `apps/desktop/src/renderer/src/components/workspace/canvas/CanvasNode.test.tsx` (extend, following its existing mock setup for `@xyflow/react` and the face registry)
 
 **Interfaces:**
+
 - Consumes: `useAgentSession()` for writes; `data.rotationDeg` / `data.fontSize` from Task 3.
 - Produces: pure helpers in `text-rotation.ts`: `normalizeRotation(value: number): number` (wraps into −180..180) and `snappedRotation(raw: number, shiftKey: boolean): number` (Shift → 15° steps; within 3° of a cardinal −180/−90/0/90/180 → snap); `TextRotateHandle({ id })` renders `button.text-rotate-handle` with `aria-label="Rotate text"`; `TextSizeControls({ id, fontSize })` renders three buttons labelled `S`, `M`, `L` (aria-labels `Small text`, `Medium text`, `Large text`).
 
@@ -519,7 +532,7 @@ const CARDINALS = [-180, -90, 0, 90, 180] as const;
 const CARDINAL_SNAP_DEGREES = 3;
 
 export function normalizeRotation(value: number): number {
-  const wrapped = ((value % 360) + 540) % 360 - 180;
+  const wrapped = (((value % 360) + 540) % 360) - 180;
   return wrapped === -180 && value > 0 ? 180 : wrapped;
 }
 
@@ -527,7 +540,8 @@ export function snappedRotation(raw: number, shiftKey: boolean): number {
   const normalized = normalizeRotation(raw);
   if (shiftKey) return normalizeRotation(Math.round(normalized / 15) * 15);
   for (const cardinal of CARDINALS) {
-    if (Math.abs(normalized - cardinal) <= CARDINAL_SNAP_DEGREES) return normalizeRotation(cardinal);
+    if (Math.abs(normalized - cardinal) <= CARDINAL_SNAP_DEGREES)
+      return normalizeRotation(cardinal);
   }
   return Math.round(normalized * 10) / 10;
 }
@@ -645,8 +659,9 @@ export function TextSizeControls({
 )}
 ```
 
-  (Keep the existing header for all other kinds byte-identical; the collapse button and status dot are simply not rendered in the text branch.)
-  - After the face render, add: `{isText && selected && canChangePresentation && <TextRotateHandle id={id} />}`.
+(Keep the existing header for all other kinds byte-identical; the collapse button and status dot are simply not rendered in the text branch.)
+
+- After the face render, add: `{isText && selected && canChangePresentation && <TextRotateHandle id={id} />}`.
 
 - [ ] **Step 5: Shell CSS in `styles/workspace/canvas.css`** (append a text-node section):
 
@@ -731,7 +746,14 @@ export function TextSizeControls({
 }
 
 .react-flow__node:has(.canvas-node[data-node-kind='text'])
-  .react-flow__resize-control:is(.top, .bottom, .top-left, .top-right, .bottom-left, .bottom-right) {
+  .react-flow__resize-control:is(
+    .top,
+    .bottom,
+    .top-left,
+    .top-right,
+    .bottom-left,
+    .bottom-right
+  ) {
   display: none;
 }
 ```
@@ -758,10 +780,12 @@ it('renders the text kind frameless: no handles, no collapse, rotation transform
 ### Task 6: Rotation field in the details popover
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/workspace/canvas/node-details/CanvasNodeDetailsPopover.tsx` (`SettingsSection`, lines 143-177)
 - Test: `apps/desktop/src/renderer/src/components/workspace/canvas/node-details/CanvasNodeDetails.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `normalizeRotation` from `content/text/text-rotation.js` (Task 5); `useAgentSession()`.
 - Produces: for `data.kind === 'text'` only, a labelled number input `Rotation (degrees)` writing `rotationDeg`.
 
@@ -782,23 +806,25 @@ it('edits rotation for text nodes from the settings tab', async () => {
 - [ ] **Step 2: Implement** — inside `SettingsSection`'s fieldset, after the Accent colour label:
 
 ```tsx
-{data.kind === 'text' && (
-  <label>
-    Rotation (degrees)
-    <input
-      type="number"
-      name={`node-${id}-details-rotation`}
-      min={-180}
-      max={180}
-      step={1}
-      value={Math.round(data.rotationDeg ?? 0)}
-      onFocus={recordHistory}
-      onChange={(event) =>
-        updateNodeData(id, { rotationDeg: normalizeRotation(Number(event.target.value) || 0) })
-      }
-    />
-  </label>
-)}
+{
+  data.kind === 'text' && (
+    <label>
+      Rotation (degrees)
+      <input
+        type="number"
+        name={`node-${id}-details-rotation`}
+        min={-180}
+        max={180}
+        step={1}
+        value={Math.round(data.rotationDeg ?? 0)}
+        onFocus={recordHistory}
+        onChange={(event) =>
+          updateNodeData(id, { rotationDeg: normalizeRotation(Number(event.target.value) || 0) })
+        }
+      />
+    </label>
+  );
+}
 ```
 
 - [ ] **Step 3: Run** the details test file → PASS (whole file green).
@@ -809,11 +835,13 @@ it('edits rotation for text nodes from the settings tab', async () => {
 ### Task 7: Double-click creation, Enter-to-edit, and connection guard
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/workspace/canvas/WorkspaceCanvas.tsx`
 - Modify: `apps/desktop/src/renderer/src/components/workspace/shell/Workspace.tsx` (`onConnect`, lines 1514-1545)
 - Test: `apps/desktop/src/renderer/src/components/workspace/canvas/WorkspaceCanvas.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `onAddNode(kind, position?)` prop (already exists, line 110); `requestTextEdit` from the bus; `instance.screenToFlowPosition`; text default dimensions `{ 260, 64 }` (Task 3).
 - Produces: `zoomOnDoubleClick={false}`; double-click on `.react-flow__pane` creates a centered text node; Enter on a focused text node opens its editor; `onConnect` refuses edges touching a text node.
 
@@ -826,7 +854,10 @@ it('creates a text node when the pane is double-clicked', () => {
   const pane = container.querySelector('.react-flow__pane');
   expect(pane).not.toBeNull();
   fireEvent.doubleClick(pane as Element, { clientX: 400, clientY: 300 });
-  expect(onAddNode).toHaveBeenCalledWith('text', expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }));
+  expect(onAddNode).toHaveBeenCalledWith(
+    'text',
+    expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+  );
 });
 ```
 
@@ -847,7 +878,7 @@ onDoubleClick={(event) => {
 }}
 ```
 
-  - In the existing `onKeyDownCapture` handler, after the editable-element guard (line ~382), add:
+- In the existing `onKeyDownCapture` handler, after the editable-element guard (line ~382), add:
 
 ```tsx
 if (event.key === 'Enter') {
@@ -856,7 +887,12 @@ if (event.key === 'Enter') {
   );
   const nodeId = nodeElement?.dataset['id'];
   const node = nodeId === undefined ? undefined : nodes.find((item) => item.id === nodeId);
-  if (node !== undefined && node.data.kind === 'text' && !collaborationGraphReadOnly && !node.data.locked) {
+  if (
+    node !== undefined &&
+    node.data.kind === 'text' &&
+    !collaborationGraphReadOnly &&
+    !node.data.locked
+  ) {
     event.preventDefault();
     event.stopPropagation();
     requestTextEdit(node.id);
@@ -865,14 +901,16 @@ if (event.key === 'Enter') {
 }
 ```
 
-  (Import `requestTextEdit` from `../content/text/text-edit-bus.js`; `nodes` is already a prop.)
+(Import `requestTextEdit` from `../content/text/text-edit-bus.js`; `nodes` is already a prop.)
 
 - [ ] **Step 3: Connection guard in `Workspace.tsx` `onConnect`** — after the `canConnectUnlocked` check:
 
 ```tsx
 const endpoints = [connection.source, connection.target];
 if (nodes.some((node) => endpoints.includes(node.id) && node.data.kind === 'text')) {
-  setEvents((items) => ['Text nodes are annotations and cannot be connected.', ...items].slice(0, 30));
+  setEvents((items) =>
+    ['Text nodes are annotations and cannot be connected.', ...items].slice(0, 30),
+  );
   return;
 }
 ```
@@ -885,10 +923,12 @@ if (nodes.some((node) => endpoints.includes(node.id) && node.data.kind === 'text
 ### Task 8: End-to-end test, spec deviations, full verification
 
 **Files:**
+
 - Create: `apps/desktop/e2e/canvas/interactions/text-node.spec.ts`
 - Modify: `docs/superpowers/specs/2026-07-24-canvas-text-node-design.md` (append a `## Deviations` section only if implementation diverged)
 
 **Interfaces:**
+
 - Consumes: e2e harness (`createCanvasUserData`, `openSafeDemo`, `reopenRecentProject`, `closeCanvasHarness` from `./harness.js`), selectors per `canvas-actions.ts` conventions, plus the face classes from Task 4.
 
 - [ ] **Step 1: Write the e2e spec:**
@@ -896,7 +936,12 @@ if (nodes.some((node) => endpoints.includes(node.id) && node.data.kind === 'text
 ```ts
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { closeCanvasHarness, createCanvasUserData, openSafeDemo, reopenRecentProject } from './harness.js';
+import {
+  closeCanvasHarness,
+  createCanvasUserData,
+  openSafeDemo,
+  reopenRecentProject,
+} from './harness.js';
 
 test('text node: create from palette, type, rotate, persist across relaunch', async () => {
   const userDataDirectory = await createCanvasUserData();
@@ -927,7 +972,11 @@ test('text node: create from palette, type, rotate, persist across relaunch', as
     });
 
     await test.step('persists across relaunch', async () => {
-      const secondSession = await reopenRecentProject(electronApp, userDataDirectory, externalRequests);
+      const secondSession = await reopenRecentProject(
+        electronApp,
+        userDataDirectory,
+        externalRequests,
+      );
       electronApp = secondSession.app;
       const reopenedPage = secondSession.page;
       await expect(reopenedPage.locator('.text-face-display')).toHaveText('Ship it Friday');

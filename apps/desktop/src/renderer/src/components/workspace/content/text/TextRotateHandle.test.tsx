@@ -64,6 +64,7 @@ describe('TextRotateHandle', () => {
 
     expect(recordHistory).toHaveBeenCalledTimes(1);
     expect(updateNodeData).toHaveBeenCalledWith('n1', {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       rotationDeg: expect.any(Number),
     });
   });

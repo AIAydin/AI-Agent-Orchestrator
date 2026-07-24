@@ -424,9 +424,7 @@ describe('text node schema', () => {
   });
 
   it('rejects out-of-range rotation and oversized text', () => {
-    expect(() =>
-      CanvasNodeSchema.parse({ ...baseText, data: { rotationDeg: 200 } }),
-    ).toThrow();
+    expect(() => CanvasNodeSchema.parse({ ...baseText, data: { rotationDeg: 200 } })).toThrow();
     expect(() =>
       CanvasNodeSchema.parse({ ...baseText, data: { text: 'x'.repeat(10_001) } }),
     ).toThrow();
