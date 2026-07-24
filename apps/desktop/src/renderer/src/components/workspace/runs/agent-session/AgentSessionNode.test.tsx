@@ -453,6 +453,20 @@ describe('AgentSessionNode', () => {
     expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy();
   });
 
+  it('labels a Forgeboard stop as SIGTERM instead of presenting signal 15 like a timeout', () => {
+    controller.session = {
+      id: 's1',
+      status: 'terminated',
+      exitCode: 0,
+      exitSignal: '15',
+    };
+    controller.active = false;
+    renderNode();
+
+    expect(screen.getByText('Session stopped · exit 0 · signal SIGTERM')).toBeTruthy();
+    expect(screen.queryByText(/· 15/u)).toBeNull();
+  });
+
   it('records a permission profile change', () => {
     renderNode();
     fireEvent.change(screen.getByLabelText('Permission profile'), {

@@ -1978,23 +1978,23 @@ unchecked when only a subset of their required behavior has proof.
   quality, controls, build, 3,072 unit assertions, and 324 integration assertions passed; recorded
   exceptions were a partial Electron install and unrelated in-progress files.
 - 2026-07-24: the workspace project sidebar closes from an always-visible command-bar control,
-  returns its width to the canvas, and persists the choice. Ten tests and every production gate passed;
-  the Electron journey lacked an approved runtime, and E2E typecheck retains existing errors.
-- 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
-  count caps; transcripts retain byte bounds without a file-count ceiling. A 12-session regression
-  exceeds both retired limits, and OpenCode's default TUI remains a zero-argument managed-worktree
-  launch. All 3,102 unit tests passed; 330 of 332 integration tests passed together and both
-  load-sensitive cases passed alone under unchanged timeouts. Docs, quality, typecheck, lint,
-  formatting, structure, controls, and the build passed. Canvas navigation also gains idle-bounded
-  lightweight paint mode and terminal/preview containment; 55 affected renderer tests passed.
-- 2026-07-24: startup recovery now compares the complete stable database identity across provenance
-  inspection, so inode reuse cannot hide a replaced primary. Packaged smoke defers optional
-  Agent-context storage failures while actual Agent context remains fail-closed. The 19 focused unit
-  tests and six integration tests passed.
-- 2026-07-24: PR #22 was reconciled with current `main` and newer branch commits without discarding
-  managed-worktree, hosting, startup, Settings, Terminal, canvas, E2E, or invite behavior.
-- 2026-07-24: the post-merge repair persists Agent nodes before launch, makes the canvas hint
-  click-through, centers searched nodes by rendered bounds, and binds Windows ACL checks to explicit
-  system paths with bounded failure diagnostics. Four affected E2E journeys, 36 focused unit and 34
-  focused integration tests, 3,107 unit and 332 integration tests, the 1,462-file structure gate,
-  852-file control audit, formatting, lint, typecheck, production build, and whitespace passed.
+  returns its width to the canvas, persists the choice, and passed ten tests and all production gates.
+- 2026-07-24: running Agent and Terminal sessions and transcript creation no longer have product
+  count caps; byte bounds remain. A 12-session regression and 3,102 unit tests passed. Of 332
+  integration tests, both load-sensitive cases passed unchanged in isolation after 330 passed
+  together. Docs, quality, typecheck, lint, formatting, structure, controls, and build passed.
+  Canvas navigation's idle-bounded lightweight paint mode and terminal/preview containment passed
+  final lint, typecheck, formatting, and 55 affected renderer tests.
+- 2026-07-24: startup recovery binds complete stable database identity, and packaged smoke defers
+  optional Agent-context storage failures while real Agent context stays fail-closed. Nineteen
+  focused unit and six integration tests passed.
+- 2026-07-24: live Agent and Terminal PTYs now survive renderer and macOS window replacement through
+  one application-scoped owner; the next window reconnects and replays persisted output. Explicit
+  Stop, node deletion, privacy reset, and application shutdown still terminate. Exit strips now
+  distinguish stopped, interrupted, and disconnected sessions and render signal 15 as `SIGTERM`.
+  All 3,108 unit and 332 integration tests, docs, quality, workspace typecheck, zero-warning lint,
+  formatting, structure and production-control gates, whitespace validation, and build passed.
+- 2026-07-24: PR #22 was reconciled with current `main` without discarding managed-worktree,
+  hosting, startup, Settings, Terminal, canvas, E2E, invite, or persistent-session behavior.
+- 2026-07-24: the post-merge repair persists Agent nodes before launch; fixes canvas hint, search,
+  and input; hardens PTY, Git, preview, and Windows ACL checks; and passed every production gate.
