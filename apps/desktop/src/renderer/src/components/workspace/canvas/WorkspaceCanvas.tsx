@@ -63,6 +63,7 @@ import {
   CanvasNodeContextMenu,
   type CanvasNodeContextMenuPosition,
 } from './context-menu/CanvasNodeContextMenu.js';
+import { requestTextEdit } from '../content/text/text-edit-bus.js';
 
 // Override the built-in `smoothstep` edge with our own renderer so every edge
 // (all created with `type: 'smoothstep'`) shows the on-canvas config popover.
@@ -244,6 +245,14 @@ export function WorkspaceCanvas({
         if (position !== undefined) onCollaborationCursorMove(position);
       }}
       onPointerLeave={onCollaborationCursorLeave}
+      onDoubleClick={(event) => {
+        if (collaborationGraphReadOnly) return;
+        const target = event.target as HTMLElement;
+        if (!target.classList.contains('react-flow__pane')) return;
+        const position = instance?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        if (position === undefined) return;
+        onAddNode('text', { x: position.x - 130, y: position.y - 32 });
+      }}
       onDragOver={(event) => {
         if (hasWorkspaceContextDrag(event.dataTransfer)) {
           const target = contextDropTarget(event.target, nodes);
@@ -380,6 +389,23 @@ export function WorkspaceCanvas({
                   ) {
                     return;
                   }
+                  if (event.key === 'Enter') {
+                    const nodeElement = target.closest<HTMLElement>('.react-flow__node[data-id]');
+                    const nodeId = nodeElement?.dataset['id'];
+                    const node =
+                      nodeId === undefined ? undefined : nodes.find((item) => item.id === nodeId);
+                    if (
+                      node !== undefined &&
+                      node.data.kind === 'text' &&
+                      !collaborationGraphReadOnly &&
+                      !node.data.locked
+                    ) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      requestTextEdit(node.id);
+                      return;
+                    }
+                  }
                   const movement = keyboardMovementForKey(event.key, event.shiftKey);
                   if (movement === null) return;
                   if (collaborationGraphReadOnly) {
@@ -432,6 +458,7 @@ export function WorkspaceCanvas({
                     }));
                   }
                 }}
+                zoomOnDoubleClick={false}
                 nodeDragThreshold={4}
                 nodesDraggable={!collaborationGraphReadOnly}
                 nodesConnectable={!collaborationGraphReadOnly}
