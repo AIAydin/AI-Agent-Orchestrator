@@ -42,6 +42,9 @@ export interface WorkshopNodeData extends Record<string, unknown> {
   model?: string | undefined;
   contextAttachmentIds?: string[];
   markdown?: string;
+  text?: string;
+  fontSize?: 's' | 'm' | 'l';
+  rotationDeg?: number;
   checklist?: Array<{
     id: string;
     label: string;

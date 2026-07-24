@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ExtensionCanvasNodeTypeView } from '../../../../../shared/application/contracts.js';
-import { NODE_KINDS, NodeTypeRegistry, extensionNodeTypeKey } from './registry.js';
+import {
+  NODE_DEFINITIONS,
+  NODE_KINDS,
+  NodeTypeRegistry,
+  extensionNodeTypeKey,
+} from './registry.js';
 
 describe('NodeTypeRegistry', () => {
+  it('registers the text node kind', () => {
+    expect(NODE_KINDS).toContain('text');
+    const definition = NODE_DEFINITIONS.text;
+    expect(definition.label).toBe('Text');
+    expect(definition.color).toBe('#8f9bb3');
+  });
+
   it('registers every required built-in with the complete shared behavior contract', () => {
     const registry = new NodeTypeRegistry();
     expect(registry.builtIns().map(({ kind }) => kind)).toEqual(NODE_KINDS);
