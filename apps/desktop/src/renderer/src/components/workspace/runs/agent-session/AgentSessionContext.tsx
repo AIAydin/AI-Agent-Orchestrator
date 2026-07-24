@@ -68,6 +68,7 @@ export interface AgentSessionContextValue {
   recheckProvider(adapterId: string): void;
   openSettings(): void;
   reportError(message: string): void;
+  flushCanvas(): Promise<boolean>;
   updateNodeData(nodeId: string, data: Partial<WorkshopNodeData>): void;
   fitGroupFrame(nodeId: string): void;
   arrangeGroupFrame(nodeId: string, layout: NonNullable<WorkshopNodeData['layout']>): void;

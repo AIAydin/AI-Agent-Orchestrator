@@ -1991,10 +1991,10 @@ unchecked when only a subset of their required behavior has proof.
   inspection, so inode reuse cannot hide a replaced primary. Packaged smoke defers optional
   Agent-context storage failures while actual Agent context remains fail-closed. The 19 focused unit
   tests and six integration tests passed.
-- 2026-07-24: PR #22 was reconciled with current `main` and the newer branch commits without
-  discarding managed-worktree, hosted-collaboration, startup, or renderer behavior. Settings saves
-  no longer fail on an unchanged unavailable default Agent, Terminal arguments remain editable,
-  expanded canvas details stay above overlapping nodes, and E2E coverage follows shipped in-canvas
-  controls and the public-host invite policy. The 1,461-file structure gate, 852-file control audit,
-  formatting, lint, typecheck, all 3,099 unit and 332 integration tests, docs, quality, the complete
-  production build, and whitespace validation passed in isolation.
+- 2026-07-24: PR #22 was reconciled with current `main` and newer branch commits without discarding
+  managed-worktree, hosting, startup, Settings, Terminal, canvas, E2E, or invite behavior.
+- 2026-07-24: the post-merge repair persists a new Agent node before peer provisioning and launch,
+  keeps failed saves non-mutating, and aligns Agent, Terminal, and Test-node Electron coverage with
+  shipped labels, PTY behavior, and durable artifact evidence. The three affected E2E journeys,
+  3,107 unit and 332 integration tests, the 1,462-file structure gate, 852-file control audit,
+  formatting, lint, typecheck, production build, and whitespace validation passed.

@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { expect, test, type ElectronApplication } from '@playwright/test';
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
 import { launchDesktop, watchExternalRequests } from '../support/electron.js';
 import {
@@ -109,10 +109,19 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
       const workflows = page
         .locator('.activity-drawer')
         .getByRole('tabpanel', { name: 'Workflows' });
-      await workflows.getByRole('button', { name: 'Refresh' }).click();
-      const artifacts = panel.getByRole('region', {
-        name: 'Verified test artifacts',
-      });
+      const nodeId = await panel.evaluate(
+        (element) => element.closest('.react-flow__node')?.getAttribute('data-id') ?? '',
+      );
+      expect(nodeId).not.toBe('');
+      await expect
+        .poll(async () => await persistedWorkflowArtifactPaths(page, nodeId), {
+          timeout: 30_000,
+        })
+        .toContain(ARTIFACT_PATH);
+      const refresh = workflows.getByRole('button', { name: 'Refresh' });
+      await refresh.click();
+      await expect(refresh).toBeEnabled();
+      const artifacts = panel.getByLabel('Verified test artifacts');
       await expect(artifacts).toContainText(ARTIFACT_PATH, { timeout: 30_000 });
       await expect(
         artifacts.getByRole('button', { name: 'Reveal test-node-result.json' }),
@@ -147,9 +156,9 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
         skipped: 1,
         total: 5,
       });
-      await expect(
-        restoredPanel.getByRole('region', { name: 'Verified test artifacts' }),
-      ).toContainText(ARTIFACT_PATH);
+      await expect(restoredPanel.getByLabel('Verified test artifacts')).toContainText(
+        ARTIFACT_PATH,
+      );
       await expect(
         restoredPanel.getByRole('region', { name: 'Previous test attempts' }),
       ).toContainText('Cancelled');
@@ -161,3 +170,63 @@ test('a Test node streams, cancels, reruns, verifies artifacts, and restores ent
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });
+
+async function persistedWorkflowArtifactPaths(page: Page, nodeId: string): Promise<string[]> {
+  return await page.evaluate(async (selectedNodeId) => {
+    interface BrowserResult<T> {
+      readonly ok: boolean;
+      readonly value?: T;
+    }
+    interface BrowserProject {
+      readonly id: string;
+    }
+    interface BrowserCanvas {
+      readonly id: string;
+    }
+    interface BrowserWorkflow {
+      readonly testResults: readonly {
+        readonly artifacts: readonly {
+          readonly nodeId: string;
+          readonly relativePath: string;
+        }[];
+      }[];
+    }
+    const api = (
+      globalThis as unknown as {
+        forgeboard: {
+          projects: {
+            recent: () => Promise<BrowserResult<readonly BrowserProject[]>>;
+          };
+          canvas: {
+            load: (projectId: string) => Promise<BrowserResult<BrowserCanvas>>;
+          };
+          workflows: {
+            list: (input: {
+              projectId: string;
+              canvasId: string;
+              limit: number;
+            }) => Promise<BrowserResult<readonly BrowserWorkflow[]>>;
+          };
+        };
+      }
+    ).forgeboard;
+    const projects = await api.projects.recent();
+    const project = projects.value?.[0];
+    if (!projects.ok || project === undefined) return [];
+    const canvas = await api.canvas.load(project.id);
+    if (!canvas.ok || canvas.value === undefined) return [];
+    const workflows = await api.workflows.list({
+      projectId: project.id,
+      canvasId: canvas.value.id,
+      limit: 50,
+    });
+    if (!workflows.ok || workflows.value === undefined) return [];
+    return workflows.value.flatMap((workflow) =>
+      workflow.testResults.flatMap((result) =>
+        result.artifacts
+          .filter((artifact) => artifact.nodeId === selectedNodeId)
+          .map((artifact) => artifact.relativePath),
+      ),
+    );
+  }, nodeId);
+}

@@ -1303,6 +1303,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     recheckProvider,
     openSettings: onOpenSettings,
     reportError: onError,
+    flushCanvas,
     updateNodeData,
     fitGroupFrame,
     arrangeGroupFrame,

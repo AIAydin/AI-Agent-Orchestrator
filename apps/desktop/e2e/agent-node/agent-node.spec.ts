@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -13,12 +13,13 @@ const READY_MARKER = 'FORGEBOARD_FAKE_OPENCODE_READY';
 const EXIT_MARKER = 'FORGEBOARD_FAKE_OPENCODE_EXIT';
 
 test('Agent sessions launch a reconstructed built-in command in a managed worktree', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'forgeboard-agent-node-e2e-'));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'forgeboard-agent-node-e2e-')));
   const userDataDirectory = join(root, 'user-data');
   const repositoryPath = join(root, 'primary-repository');
   const worktreeRoot = join(root, 'managed-worktrees');
   const fakeExecutable = await writeFakeOpenCode(root);
   const before = await createRepository(repositoryPath);
+  await mkdir(worktreeRoot, { recursive: true });
   const externalRequests: string[] = [];
   let app: ElectronApplication | null = null;
 
@@ -35,25 +36,43 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
     await settings.getByRole('button', { name: /Git & previews/ }).click();
     await settings.getByLabel('Managed worktree location').fill(worktreeRoot);
     await settings.getByRole('button', { name: 'Agents & runtime' }).click();
-    const openCode = settings.getByRole('article', { name: 'OpenCode' });
+    const openCode = settings.locator('.agent-setting').filter({ hasText: 'OpenCode' });
     await openCode.getByLabel('Executable override').fill(fakeExecutable);
     await openCode.getByLabel('Default model (optional)').selectOption(MODEL_ID);
     await settings.getByLabel('Default agent').selectOption('opencode');
-    await openCode.getByRole('button', { name: /Check OpenCode again/u }).click();
-    await expect(openCode.getByText(/executable is ready/u)).toBeVisible();
-    await settings.getByRole('button', { name: /Save settings/u }).click();
+    const openCodeReadiness = settings
+      .locator('.agent-readiness-list')
+      .getByRole('button', { name: /Check OpenCode again/u });
+    await openCodeReadiness.click();
+    await expect(
+      settings.locator('.agent-readiness-list').getByText(/executable is ready/u),
+    ).toBeVisible();
+    const saveSettings = settings.getByRole('button', {
+      name: /Save settings/u,
+    });
+    const blockingMessages = await settings.locator('footer [role="alert"]').allTextContents();
+    await expect(
+      saveSettings,
+      `Settings save remained blocked: ${blockingMessages.join(' | ')}`,
+    ).toBeEnabled();
+    await saveSettings.click();
     await expect(settings).toBeHidden();
 
     await choosePath(app, repositoryPath);
     await page.getByRole('button', { name: /Open a project folder/i }).click();
     await expect(page.locator('.project-switcher')).toContainText('primary-repository');
-    await page
-      .locator('.template-section')
-      .getByRole('button', { name: /OpenCode/u })
-      .click();
+    const templates = page.locator('.template-section');
+    const openCodeTemplate = templates.getByRole('button', {
+      name: /opencode/iu,
+    });
+    await expect(
+      openCodeTemplate,
+      `Available templates: ${(await templates.allTextContents()).join(' | ')}`,
+    ).toBeVisible();
+    await openCodeTemplate.click();
 
     const agent = page.getByRole('article', { name: /^Agent: /u });
-    await expect(agent).toContainText('OpenCode');
+    await expect(agent).toContainText(/opencode/iu);
     await expect(agent.getByLabel('Permission profile')).toHaveValue('worktree-write');
     await agent.getByRole('button', { name: 'Start session' }).click();
     await expectTerminalText(agent, READY_MARKER);
@@ -63,7 +82,11 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
     await terminal.pressSequentially('exit');
     await terminal.press('Enter');
     await expectTerminalText(agent, EXIT_MARKER);
-    await expect(agent.getByText(/Session ended/u)).toBeVisible({ timeout: 20_000 });
+    await terminal.pressSequentially('exit');
+    await terminal.press('Enter');
+    await expect(agent.getByText(/Session ended/u)).toBeVisible({
+      timeout: 20_000,
+    });
 
     expect(await primarySnapshot(repositoryPath)).toEqual(before);
     expect(await findFiles(repositoryPath, 'forgeboard-agent-proof.txt')).toEqual([]);
