@@ -66,29 +66,12 @@ export async function launchDesktop(
  * behavior has already been verified. Tests that need to prove graceful shutdown should still
  * await `app.close()` explicitly before using this bounded cleanup for their final session.
  */
-export async function closeElectronAfterTest(
-  app: ElectronApplication | null,
-  timeoutMs = 5_000,
-): Promise<void> {
+export async function closeElectronAfterTest(app: ElectronApplication | null): Promise<void> {
   if (app === null) return;
   // Playwright 1.53 tracks launched process groups for worker teardown. Its test-only kill path
-  // removes that registration and terminates descendants that can otherwise retain Linux stdio.
+  // removes that registration and terminates descendants that can retain stdio and user-data locks.
   const implementation = (app as unknown as ElectronApplicationInternals)._toImpl();
-  await settlesWithin(implementation._browserContext._browser.killForTests(), timeoutMs);
-}
-
-async function settlesWithin(operation: Promise<unknown>, timeoutMs: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation.then(() => true),
-      new Promise<false>((resolvePromise) => {
-        timer = setTimeout(() => resolvePromise(false), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
+  await implementation._browserContext._browser.killForTests();
 }
 
 export async function approveNextNativeAgentLaunch(
