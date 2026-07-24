@@ -50,6 +50,10 @@
     grid-template-columns: 210px minmax(0, 1fr);
     grid-template-areas: 'rail canvas' 'rail activity';
   }
+  .workspace-grid.project-sidebar-closed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'canvas' 'activity';
+  }
   .workspace-resize-handle {
     display: none;
   }

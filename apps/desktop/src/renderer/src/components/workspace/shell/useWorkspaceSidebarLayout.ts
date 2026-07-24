@@ -23,8 +23,10 @@ export interface SidebarLayoutControls {
   /** Effective width in pixels (stored preference or the responsive default). */
   readonly width: number;
   readonly range: SidebarRange;
+  readonly collapsed: boolean;
   readonly resize: (width: number) => void;
   readonly reset: () => void;
+  readonly toggleCollapsed: () => void;
 }
 
 export interface WorkspaceSidebarLayout {
@@ -109,6 +111,13 @@ export function useWorkspaceSidebarLayout(): WorkspaceSidebarLayout {
     );
   }, []);
 
+  const toggleRailCollapsed = useCallback(() => {
+    setPreferences((current) => ({
+      ...current,
+      railCollapsed: !current.railCollapsed,
+    }));
+  }, []);
+
   const gridStyle = useMemo<CSSProperties>(() => {
     const style: Record<string, string> = {};
     if (preferences.railWidth !== null) {
@@ -122,8 +131,10 @@ export function useWorkspaceSidebarLayout(): WorkspaceSidebarLayout {
     rail: {
       width: railWidth,
       range: RAIL_WIDTH_RANGE,
+      collapsed: preferences.railCollapsed,
       resize: resizeRail,
       reset: resetRail,
+      toggleCollapsed: toggleRailCollapsed,
     },
   };
 }
