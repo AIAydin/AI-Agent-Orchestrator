@@ -52,9 +52,9 @@ export async function launchDesktop(
 }
 
 /**
- * Finalizers must not let a Playwright driver handshake strand the worker after product behavior
- * has already been verified. Tests that need to prove graceful shutdown should still await
- * `app.close()` explicitly before using this bounded cleanup for their final session.
+ * Finalizers must not start a Playwright close handshake that can strand the worker after product
+ * behavior has already been verified. Tests that need to prove graceful shutdown should still
+ * await `app.close()` explicitly before using this process-only cleanup for their final session.
  */
 export async function closeElectronAfterTest(
   app: ElectronApplication | null,
@@ -68,12 +68,7 @@ export async function closeElectronAfterTest(
       : new Promise<void>((resolvePromise) => {
           child.once('exit', () => resolvePromise());
         });
-  const closeSettled = app.close().then(
-    () => undefined,
-    () => undefined,
-  );
-  if (await settlesWithin(closeSettled, timeoutMs)) return;
-  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  child.kill('SIGKILL');
   await settlesWithin(exited, timeoutMs);
 }
 
