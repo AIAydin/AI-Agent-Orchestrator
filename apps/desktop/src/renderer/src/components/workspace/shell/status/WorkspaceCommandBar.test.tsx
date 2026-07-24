@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Project } from '../../../../../../shared/application/contracts.js';
@@ -16,6 +16,7 @@ describe('WorkspaceCommandBar', () => {
       ['Undo', 'Nothing to undo'],
       ['Redo', 'Nothing to redo'],
       ['Zoom to fit the canvas', 'Fit every node on the canvas'],
+      ['Hide project sidebar', 'Hide the project sidebar'],
       ['Settings', 'Open Forgeboard settings'],
     ] as const;
     for (const [buttonName, description] of expected) {
@@ -23,6 +24,32 @@ describe('WorkspaceCommandBar', () => {
       const tooltip = screen.getByRole('tooltip', { name: description });
       expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
     }
+  });
+
+  it('provides a persistent place to close and reopen the project sidebar', () => {
+    const onToggleProjectSidebar = vi.fn();
+    const { rerender } = render(
+      <WorkspaceCommandBar
+        {...commandBarProps()}
+        onToggleProjectSidebar={onToggleProjectSidebar}
+      />,
+    );
+
+    const hideButton = screen.getByRole('button', {
+      name: 'Hide project sidebar',
+    });
+    expect(hideButton.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(hideButton);
+    expect(onToggleProjectSidebar).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <WorkspaceCommandBar
+        {...commandBarProps()}
+        projectSidebarOpen={false}
+        onToggleProjectSidebar={onToggleProjectSidebar}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Show project sidebar' })).toBeTruthy();
   });
 
   it('omits workflow run actions while describing live workflow status', () => {
@@ -53,7 +80,9 @@ function commandBarProps() {
     commandPaletteShortcut: '⌘K',
     collaborationEnabled: false,
     sharingStatus: 'not-connected' as const,
+    projectSidebarOpen: true,
     onCloseProject: callback,
+    onToggleProjectSidebar: callback,
     onUndo: callback,
     onRedo: callback,
     onFitCanvas: callback,

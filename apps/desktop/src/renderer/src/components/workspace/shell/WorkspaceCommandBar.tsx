@@ -4,6 +4,8 @@ import {
   Command,
   GitCompareArrows,
   Maximize2,
+  PanelLeftClose,
+  PanelLeftOpen,
   Redo2,
   Settings,
   Undo2,
@@ -28,7 +30,9 @@ interface WorkspaceCommandBarProps {
   commandPaletteShortcut: string;
   collaborationEnabled: boolean;
   sharingStatus: WorkspaceSharingStatus;
+  projectSidebarOpen: boolean;
   onCloseProject: () => void;
+  onToggleProjectSidebar: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onFitCanvas: () => void;
@@ -49,7 +53,9 @@ export function WorkspaceCommandBar({
   commandPaletteShortcut,
   collaborationEnabled,
   sharingStatus,
+  projectSidebarOpen,
   onCloseProject,
+  onToggleProjectSidebar,
   onUndo,
   onRedo,
   onFitCanvas,
@@ -68,6 +74,20 @@ export function WorkspaceCommandBar({
         </span>
         <ChevronDown size={14} />
       </button>
+      <WorkspaceTooltip
+        content={projectSidebarOpen ? 'Hide the project sidebar' : 'Show the project sidebar'}
+      >
+        <button
+          className="icon-button project-sidebar-toggle"
+          type="button"
+          aria-label={projectSidebarOpen ? 'Hide project sidebar' : 'Show project sidebar'}
+          aria-controls="workspace-project-sidebar"
+          aria-expanded={projectSidebarOpen}
+          onClick={onToggleProjectSidebar}
+        >
+          {projectSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+        </button>
+      </WorkspaceTooltip>
       <span className="toolbar-separator" />
       <WorkspaceTooltip content={canUndo ? 'Undo the last canvas change' : 'Nothing to undo'}>
         <button

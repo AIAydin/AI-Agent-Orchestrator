@@ -2013,3 +2013,12 @@ unchecked when only a subset of their required behavior has proof.
   desktop strict typecheck, zero-warning focused lint, formatting, three documentation tests, the
   1,482-file structure gate, the 857-file production-control audit, `git diff --check`, and the
   complete desktop production build.
+- 2026-07-24: the workspace project sidebar can now be closed and reopened from an always-visible,
+  labeled command-bar control. Closing it removes both the rail and resize handle, gives their width
+  back to the canvas at desktop and narrow breakpoints, and persists the choice locally while older
+  saved preferences continue to open the rail by default. Ten focused rail, layout, and command-bar tests,
+  focused zero-warning lint, formatting, desktop strict typecheck, the 1,483-file structure gate,
+  `git diff --check`, and the complete desktop production build passed. A real Electron rail-width
+  journey covers the visible interaction; its local launch remained unavailable because the isolated
+  dependency install did not contain an approved Electron runtime. The separate E2E typecheck also
+  remains red on pre-existing errors in recovery and settings scenarios outside this change.

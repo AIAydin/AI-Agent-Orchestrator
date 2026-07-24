@@ -6,6 +6,9 @@
   border-right: 1px solid var(--line);
   background: var(--surface);
 }
+.project-rail[hidden] {
+  display: none;
+}
 .rail-tabs {
   height: 40px;
   display: flex;

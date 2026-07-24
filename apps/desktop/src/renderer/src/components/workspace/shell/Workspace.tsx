@@ -1405,7 +1405,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         commandPaletteShortcut={commandPaletteShortcutLabel(settings.keyboardPreset)}
         collaborationEnabled={settings.collaborationEnabled}
         sharingStatus={collaborationCanvas.connectionStatus}
+        projectSidebarOpen={!sidebarLayout.rail.collapsed}
         onCloseProject={() => void closeProject()}
+        onToggleProjectSidebar={sidebarLayout.rail.toggleCollapsed}
         onUndo={undo}
         onRedo={redo}
         onFitCanvas={() =>
@@ -1425,10 +1427,13 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       />
 
       <div
-        className={`workspace-grid ${activityOpen ? '' : 'activity-closed'}`}
+        className={`workspace-grid ${activityOpen ? '' : 'activity-closed'} ${
+          sidebarLayout.rail.collapsed ? 'project-sidebar-closed' : ''
+        }`}
         style={sidebarLayout.gridStyle}
       >
         <WorkspaceRail
+          hidden={sidebarLayout.rail.collapsed}
           project={project}
           tab={railTab}
           search={search}
@@ -1465,15 +1470,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
             });
           }}
         />
-        <WorkspaceResizeHandle
-          label="Resize project rail"
-          className="rail-resize"
-          edge="start"
-          range={sidebarLayout.rail.range}
-          width={sidebarLayout.rail.width}
-          onResize={sidebarLayout.rail.resize}
-          onReset={sidebarLayout.rail.reset}
-        />
+        {!sidebarLayout.rail.collapsed && (
+          <WorkspaceResizeHandle
+            label="Resize project rail"
+            className="rail-resize"
+            edge="start"
+            range={sidebarLayout.rail.range}
+            width={sidebarLayout.rail.width}
+            onResize={sidebarLayout.rail.resize}
+            onReset={sidebarLayout.rail.reset}
+          />
+        )}
         <AgentSessionProvider value={agentSessionValue}>
           <WorkflowRuntimeProvider value={workflowRuntimeValue}>
             <NodeCommentsProvider value={nodeCommentsValue}>
