@@ -56,6 +56,16 @@ export async function launchDesktop(
     env: environment,
     timeout: 30_000,
   });
+  const implementation = electronImplementation(app);
+  const closeGracefully = app.close.bind(app);
+  app.close = async () => {
+    try {
+      await closeGracefully();
+    } finally {
+      // Windows can report the application closed before descendants release the user-data lock.
+      await implementation._browserContext._browser.killForTests();
+    }
+  };
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   return { app, page };
@@ -70,8 +80,13 @@ export async function closeElectronAfterTest(app: ElectronApplication | null): P
   if (app === null) return;
   // Playwright 1.53 tracks launched process groups for worker teardown. Its test-only kill path
   // removes that registration and terminates descendants that can retain stdio and user-data locks.
-  const implementation = (app as unknown as ElectronApplicationInternals)._toImpl();
-  await implementation._browserContext._browser.killForTests();
+  await electronImplementation(app)._browserContext._browser.killForTests();
+}
+
+function electronImplementation(
+  app: ElectronApplication,
+): ReturnType<ElectronApplicationInternals['_toImpl']> {
+  return (app as unknown as ElectronApplicationInternals)._toImpl();
 }
 
 export async function approveNextNativeAgentLaunch(
