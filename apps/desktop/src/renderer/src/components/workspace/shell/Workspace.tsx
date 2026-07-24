@@ -1470,6 +1470,18 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
                     );
                     return;
                   }
+                  const endpoints = [connection.source, connection.target];
+                  if (
+                    nodes.some((node) => endpoints.includes(node.id) && node.data.kind === 'text')
+                  ) {
+                    setEvents((items) =>
+                      ['Text nodes are annotations and cannot be connected.', ...items].slice(
+                        0,
+                        30,
+                      ),
+                    );
+                    return;
+                  }
                   record();
                   setEdges((items) =>
                     addEdge(

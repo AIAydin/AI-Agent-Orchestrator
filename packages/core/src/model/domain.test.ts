@@ -391,3 +391,42 @@ describe('domain schemas', () => {
     expect(CanvasSchema.safeParse(canvas).success).toBe(false);
   });
 });
+
+describe('text node schema', () => {
+  const baseText = {
+    id: '018f6ff0-0000-7000-8000-000000000001',
+    type: 'text',
+    title: 'Text',
+    color: '#8f9bb3',
+    icon: 'type',
+    position: { x: 10, y: 20 },
+    size: { width: 260, height: 64 },
+    createdAt: '2026-07-24T00:00:00.000Z',
+    updatedAt: '2026-07-24T00:00:00.000Z',
+    data: {},
+  };
+
+  it('applies defaults for an empty data object', () => {
+    const parsed = CanvasNodeSchema.parse(baseText);
+    if (parsed.type !== 'text') throw new Error('expected text node');
+    expect(parsed.data.text).toBe('');
+    expect(parsed.data.fontSize).toBe('m');
+    expect(parsed.data.rotationDeg).toBe(0);
+  });
+
+  it('accepts explicit fields and round-trips them', () => {
+    const parsed = CanvasNodeSchema.parse({
+      ...baseText,
+      data: { text: 'Ship it', fontSize: 'l', rotationDeg: -45 },
+    });
+    if (parsed.type !== 'text') throw new Error('expected text node');
+    expect(parsed.data).toEqual({ text: 'Ship it', fontSize: 'l', rotationDeg: -45 });
+  });
+
+  it('rejects out-of-range rotation and oversized text', () => {
+    expect(() => CanvasNodeSchema.parse({ ...baseText, data: { rotationDeg: 200 } })).toThrow();
+    expect(() =>
+      CanvasNodeSchema.parse({ ...baseText, data: { text: 'x'.repeat(10_001) } }),
+    ).toThrow();
+  });
+});

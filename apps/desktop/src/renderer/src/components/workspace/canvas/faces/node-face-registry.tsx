@@ -6,6 +6,7 @@ import { DiffNodeFace } from '../../content/diff/DiffNodeFace.js';
 import { FileNodeFace } from '../../content/file/FileNodeFace.js';
 import { VideoNodeFace } from '../../content/video/VideoNodeFace.js';
 import { NoteImageNodeFace } from '../../content/note-image/NoteImageNodeFace.js';
+import { TextNodeFace } from '../../content/text/TextNodeFace.js';
 import { WhiteboardNodeFace } from '../../content/whiteboard/WhiteboardNodeFace.js';
 import { ExtensionNodeFace } from '../../content/ExtensionNodeFace.js';
 import { GroupFrameNodeFace } from '../GroupFrameNodeFace.js';
@@ -56,6 +57,7 @@ const FACES: Readonly<Partial<Record<string, NodeFaceComponent>>> = {
   task: TaskNodeFace,
   terminal: TerminalNodeFace,
   test: TestNodeFace,
+  text: TextNodeFace,
   whiteboard: WhiteboardNodeFace,
 };
 

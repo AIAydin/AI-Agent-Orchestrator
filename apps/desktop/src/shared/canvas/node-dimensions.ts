@@ -99,6 +99,10 @@ export const DOCUMENT_NODE_DIMENSIONS: Readonly<
     default: { width: 400, height: 340 },
     minimum: { width: 300, height: 240 },
   },
+  text: {
+    default: { width: 260, height: 64 },
+    minimum: { width: 120, height: 40 },
+  },
 };
 
 /** Face dimensions for the heavier content node kinds (sub-plan 2c). */
