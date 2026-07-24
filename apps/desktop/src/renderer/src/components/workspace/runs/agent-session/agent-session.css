@@ -140,6 +140,8 @@
 .agent-terminal {
   flex: 1;
   min-height: 0;
+  contain: layout paint style;
+  overflow: hidden;
   background:
     radial-gradient(
       circle at 50% -35%,

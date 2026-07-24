@@ -233,6 +233,7 @@
 .terminal-xterm-host {
   position: absolute;
   inset: 0;
+  contain: layout paint style;
   overflow: hidden;
   padding: 10px;
   background: #0b0f14;

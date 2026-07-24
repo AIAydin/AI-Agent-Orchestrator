@@ -114,6 +114,27 @@ describe('TerminalService', () => {
     );
   });
 
+  it('does not impose a Forgeboard process or window cap on running terminals', async () => {
+    const harness = await fixture();
+    const sessions: TerminalSessionView[] = [];
+
+    for (let index = 0; index < 12; index += 1) {
+      const plan = await harness.service.prepareLaunch('owner-a', {
+        ...harness.input,
+        nodeId: `terminal-${String(index + 1)}`,
+      });
+      const session = await harness.service.confirmLaunch('owner-a', plan.planId, () =>
+        Promise.resolve('approved'),
+      );
+      if (session === null) throw new Error('The approved terminal did not launch.');
+      sessions.push(session);
+    }
+
+    expect(sessions).toHaveLength(12);
+    expect(sessions.every((session) => session.status === 'running')).toBe(true);
+    expect(harness.ptys).toHaveLength(12);
+  });
+
   it('launches a managed Agent request from the main-resolved worktree root', async () => {
     const workspaceManager = new FakeTerminalWorkspaceManager();
     const harness = await fixture({ workspaceManager });
@@ -839,6 +860,7 @@ describe('TerminalService', () => {
     readonly service: TerminalService;
     readonly store: FakeTerminalStore;
     readonly pty: FakePty;
+    readonly ptys: readonly FakePty[];
     readonly input: TerminalPrepareLaunchInput;
     readonly project: Project;
     readonly transcriptRoot: string;
@@ -869,25 +891,30 @@ describe('TerminalService', () => {
       });
     }
     const pty = new FakePty();
+    const ptys: FakePty[] = [];
     let didSpawn = false;
     let lastSpawnedLaunch: ResolvedTerminalLaunch | undefined;
     const ids = [PLAN_ID, SESSION_ID];
+    let generatedId = 2;
     const service = new TerminalService(store, transcriptRoot, () => settings(), {
       ...(options.now === undefined ? {} : { now: options.now }),
       ...(options.planTtlMs === undefined ? {} : { planTtlMs: options.planTtlMs }),
-      createId: () => ids.shift() ?? '40000000-0000-4000-8000-000000000001',
+      createId: () =>
+        ids.shift() ?? `40000000-0000-4000-8000-${String(generatedId++).padStart(12, '0')}`,
       ptyFactory: async (launch, beforeSpawn) => {
         await beforeSpawn();
         didSpawn = true;
         lastSpawnedLaunch = launch;
         if (options.failAfterSpawn === true) store.failUpdateCount = 1;
-        return pty;
+        const spawnedPty = ptys.length === 0 ? pty : new FakePty();
+        ptys.push(spawnedPty);
+        return spawnedPty;
       },
       terminateGraceMs: 20,
       forceTerminateMs: 20,
       maximumTranscriptBytes: 1_024 * 1_024,
       maximumTotalTranscriptBytes: 2 * 1_024 * 1_024,
-      maximumTranscriptFiles: 10,
+      maximumTranscriptFiles: 100,
       ...(options.workspaceManager === undefined
         ? {}
         : { workspaceManager: options.workspaceManager }),
@@ -899,6 +926,7 @@ describe('TerminalService', () => {
       service,
       store,
       pty,
+      ptys,
       project,
       transcriptRoot,
       spawned: () => didSpawn,

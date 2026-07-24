@@ -1977,6 +1977,7 @@ unchecked when only a subset of their required behavior has proof.
   fixtures, documentation, and the lockfile. Legacy settings and saved Agent nodes now discard the
   removed adapter identifier during repair/hydration, while user-authored saved workflows and the
   ordinary node palette remain intact. No active package, runtime, UI, documentation, or workflow
+<<<<<<< HEAD
   template references remain. The checkpoint passed strict typecheck, docs, quality, controls,
   production build, 3,072 unit assertions, and 324 integration assertions; its recorded full-gate
   exceptions were a partial Electron install and unrelated in-progress files.
@@ -1986,3 +1987,20 @@ unchecked when only a subset of their required behavior has proof.
   tests, lint, formatting, desktop typecheck, structure, `git diff --check`, and production build
   passed. The Electron journey exists; its local run lacked an approved Electron runtime, and E2E
   typecheck retains pre-existing recovery/settings errors.
+=======
+  template references remain. The current checkpoint passed strict workspace typecheck, docs and
+  quality tests, the production-control audit, the complete production build, 3,072 unit assertions,
+  and 324 integration assertions. Full-gate exceptions are recorded honestly: this checkout's
+  partial Electron installation blocks three unit suites and two integration cases, and unrelated
+  in-progress terminal-worktree/root-media files still fail lint, formatting, capability review, and
+  the loose-root structure check.
+- 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
+  count caps; ordinary launches are limited only by the computer's available resources. Transcript
+  creation likewise has no product-level file-count ceiling while retaining per-session and global
+  byte bounds. A 12-session same-window regression exceeds both retired limits, and OpenCode's
+  installed default TUI remains a zero-argument, main-managed worktree launch. All 3,100 unit tests
+  passed (one unrelated load timeout passed on isolated retry), together with 332 integration tests,
+  3 docs tests, 7 quality tests, typecheck, lint, formatting, structure, controls, and production build.
+  Canvas navigation also gains an idle-bounded lightweight paint mode and terminal/preview containment;
+  final-state lint, typecheck, formatting, and 55 affected renderer tests passed.
+>>>>>>> adef374 (fix: remove terminal limits and smooth canvas navigation)
