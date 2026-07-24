@@ -1977,23 +1977,13 @@ unchecked when only a subset of their required behavior has proof.
   fixtures, documentation, and the lockfile. Legacy settings and saved Agent nodes now discard the
   removed adapter identifier during repair/hydration, while user-authored saved workflows and the
   ordinary node palette remain intact. No active package, runtime, UI, documentation, or workflow
-<<<<<<< HEAD
   template references remain. The checkpoint passed strict typecheck, docs, quality, controls,
   production build, 3,072 unit assertions, and 324 integration assertions; its recorded full-gate
   exceptions were a partial Electron install and unrelated in-progress files.
-- 2026-07-24: the workspace project sidebar can now be closed and reopened from an always-visible
-  command-bar control. Closing it returns the rail and resize-handle width to the canvas at desktop
-  and narrow breakpoints, and the choice persists while older preferences default open. Ten focused
-  tests, lint, formatting, desktop typecheck, structure, `git diff --check`, and production build
-  passed. The Electron journey exists; its local run lacked an approved Electron runtime, and E2E
-  typecheck retains pre-existing recovery/settings errors.
-=======
-  template references remain. The current checkpoint passed strict workspace typecheck, docs and
-  quality tests, the production-control audit, the complete production build, 3,072 unit assertions,
-  and 324 integration assertions. Full-gate exceptions are recorded honestly: this checkout's
-  partial Electron installation blocks three unit suites and two integration cases, and unrelated
-  in-progress terminal-worktree/root-media files still fail lint, formatting, capability review, and
-  the loose-root structure check.
+- 2026-07-24: the workspace project sidebar closes and reopens from an always-visible command-bar
+  control, returns its width to the canvas, and persists the choice. Ten focused tests, lint,
+  formatting, desktop typecheck, structure, `git diff --check`, and production build passed; the
+  Electron journey lacked an approved runtime, and E2E typecheck retains pre-existing errors.
 - 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
   count caps; ordinary launches are limited only by the computer's available resources. Transcript
   creation likewise has no product-level file-count ceiling while retaining per-session and global
@@ -2003,4 +1993,7 @@ unchecked when only a subset of their required behavior has proof.
   3 docs tests, 7 quality tests, typecheck, lint, formatting, structure, controls, and production build.
   Canvas navigation also gains an idle-bounded lightweight paint mode and terminal/preview containment;
   final-state lint, typecheck, formatting, and 55 affected renderer tests passed.
->>>>>>> adef374 (fix: remove terminal limits and smooth canvas navigation)
+- 2026-07-24: startup recovery now compares the complete stable database identity across provenance
+  inspection, so inode reuse cannot hide a replaced primary. Packaged smoke now mirrors normal
+  startup by deferring optional Agent-context storage failures while the protected context path
+  remains fail-closed when an Agent actually requests it.

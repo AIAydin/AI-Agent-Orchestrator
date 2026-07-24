@@ -124,7 +124,10 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
   let canonicalUserData: string | undefined;
   let databasePath: string | undefined;
   let reconciliationCompleted = false;
-  let cleanupReport: DeferredStagingCleanupReport = { failedCount: 0, removedCount: 0 };
+  let cleanupReport: DeferredStagingCleanupReport = {
+    failedCount: 0,
+    removedCount: 0,
+  };
   let cleanupWarningRecorded = false;
   let windowsSid: string | undefined;
 
@@ -203,7 +206,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
       if (!provenance.ok) throw new StartupDatabaseOpenError(provenance.reason);
       requiresAuditDeleteTriggerUpgrade = provenance.requiresAuditDeleteTriggerUpgrade === true;
       expectedIdentity = stableDatabaseIdentity(preparedDatabasePath);
-      if (!sameFilesystemIdentity(beforeProvenance, expectedIdentity)) {
+      if (!sameStableFileIdentity(beforeProvenance, expectedIdentity)) {
         throw new Error('The local database changed during provenance inspection.');
       }
     }
@@ -238,7 +241,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
     const provenance = inspectProvenance(databasePath);
     if (!provenance.ok) throw new StartupDatabaseOpenError(provenance.reason);
     const expectedIdentity = stableDatabaseIdentity(databasePath);
-    if (!sameFilesystemIdentity(beforeProvenance, expectedIdentity)) {
+    if (!sameStableFileIdentity(beforeProvenance, expectedIdentity)) {
       throw new Error('The private recovery database changed during provenance inspection.');
     }
     const candidate = createStore(databasePath, defaults, expectedIdentity);
@@ -595,4 +598,16 @@ function sameFilesystemIdentity(
   after: { readonly dev: number; readonly ino: number },
 ): boolean {
   return before.dev === after.dev && before.ino === after.ino;
+}
+
+function sameStableFileIdentity(
+  before: ExpectedDatabaseIdentity,
+  after: ExpectedDatabaseIdentity,
+): boolean {
+  return (
+    sameFilesystemIdentity(before, after) &&
+    before.ctimeMs === after.ctimeMs &&
+    before.mtimeMs === after.mtimeMs &&
+    before.size === after.size
+  );
 }

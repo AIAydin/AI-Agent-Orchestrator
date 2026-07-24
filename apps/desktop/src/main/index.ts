@@ -62,11 +62,6 @@ void app
       process.platform === 'win32' ? app.getPath('userData') : undefined,
     );
     if (!contextSnapshotStorage.ready) {
-      if (packagedSmokeProfile !== null) {
-        throw new Error(contextSnapshotStorage.reason, {
-          cause: contextSnapshotStorage.error,
-        });
-      }
       process.stderr.write(
         `Forgeboard context startup deferred: ${contextSnapshotStorage.reason}\n`,
       );
