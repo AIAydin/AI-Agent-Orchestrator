@@ -1973,21 +1973,28 @@ unchecked when only a subset of their required behavior has proof.
   other profiles, and custom/extension adapters retain native confirmation. All 81 focused unit
   tests, the real-Git managed-worktree integration test, and desktop strict typecheck passed.
 - 2026-07-23: the retired bundled test agent and first-party workflow-template feature were removed
-  from packages, runtime planning, readiness, smoke/release resources, renderer controls, E2E
-  fixtures, documentation, and the lockfile. Legacy settings and saved Agent nodes now discard the
-  removed adapter identifier during repair/hydration, while user-authored saved workflows and the
-  ordinary node palette remain intact. No active package, runtime, UI, documentation, or workflow
-  template references remain. The current checkpoint passed strict workspace typecheck, docs and
-  quality tests, the production-control audit, the complete production build, 3,072 unit assertions,
-  and 324 integration assertions. Full-gate exceptions are recorded honestly: this checkout's
-  partial Electron installation blocks three unit suites and two integration cases, and unrelated
-  in-progress terminal-worktree/root-media files still fail lint, formatting, capability review, and
-  the loose-root structure check.
-- 2026-07-24: PR #22 was reconciled with current `main` without discarding its managed-worktree,
-  hosted-collaboration, or renderer behavior. Current settings saves no longer fail on an unchanged
-  unavailable default Agent, packaged startup defers an unavailable context-snapshot store, Terminal
-  arguments are again editable in the node, expanded canvas details stay above overlapping nodes,
-  and end-to-end coverage follows the shipped in-canvas controls and public-host invite policy. The
-  1,461-file structure gate, 852-file production-control audit, formatting, zero-warning lint,
-  workspace typecheck, all 3,099 unit tests, all 332 integration tests, three documentation tests,
-  seven quality tests, the complete production build, and whitespace validation passed in isolation.
+  throughout runtime, UI, tests, docs, and the lockfile. Legacy settings and saved Agent nodes discard
+  the retired adapter while user workflows and the ordinary palette remain intact. Typecheck, docs,
+  quality, controls, build, 3,072 unit assertions, and 324 integration assertions passed; recorded
+  exceptions were a partial Electron install and unrelated in-progress files.
+- 2026-07-24: the workspace project sidebar closes from an always-visible command-bar control,
+  returns its width to the canvas, and persists the choice. Ten tests and every production gate passed;
+  the Electron journey lacked an approved runtime, and E2E typecheck retains existing errors.
+- 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
+  count caps; transcripts retain byte bounds without a file-count ceiling. A 12-session regression
+  exceeds both retired limits, and OpenCode's default TUI remains a zero-argument managed-worktree
+  launch. All 3,102 unit tests passed; 330 of 332 integration tests passed together and both
+  load-sensitive cases passed alone under unchanged timeouts. Docs, quality, typecheck, lint,
+  formatting, structure, controls, and the build passed. Canvas navigation also gains idle-bounded
+  lightweight paint mode and terminal/preview containment; 55 affected renderer tests passed.
+- 2026-07-24: startup recovery now compares the complete stable database identity across provenance
+  inspection, so inode reuse cannot hide a replaced primary. Packaged smoke defers optional
+  Agent-context storage failures while actual Agent context remains fail-closed. The 19 focused unit
+  tests and six integration tests passed.
+- 2026-07-24: PR #22 was reconciled with current `main` and the newer branch commits without
+  discarding managed-worktree, hosted-collaboration, startup, or renderer behavior. Settings saves
+  no longer fail on an unchanged unavailable default Agent, Terminal arguments remain editable,
+  expanded canvas details stay above overlapping nodes, and E2E coverage follows shipped in-canvas
+  controls and the public-host invite policy. The 1,461-file structure gate, 852-file control audit,
+  formatting, lint, typecheck, all 3,099 unit and 332 integration tests, docs, quality, the complete
+  production build, and whitespace validation passed in isolation.

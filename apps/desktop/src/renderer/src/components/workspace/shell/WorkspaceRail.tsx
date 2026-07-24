@@ -14,6 +14,7 @@ import { providerTheme } from '../node-registry/provider-themes.js';
 import { BUILT_IN_NODE_REGISTRY, type NodeTypeRegistry } from '../node-registry/registry.js';
 
 interface WorkspaceRailProps {
+  hidden?: boolean;
   project: Project;
   tab: 'project' | 'nodes';
   search: string;
@@ -39,6 +40,7 @@ interface WorkspaceRailProps {
 }
 
 export function WorkspaceRail({
+  hidden = false,
   project,
   tab,
   search,
@@ -60,7 +62,7 @@ export function WorkspaceRail({
   onAttachAgentContext,
 }: WorkspaceRailProps) {
   return (
-    <aside className="project-rail">
+    <aside id="workspace-project-sidebar" className="project-rail" hidden={hidden}>
       <div className="rail-tabs">
         <button
           className={tab === 'project' ? 'active' : ''}

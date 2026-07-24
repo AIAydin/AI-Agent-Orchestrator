@@ -79,6 +79,9 @@ describe('WorkspaceRail accessibility', () => {
     expect(screen.getByRole('button', { name: 'Nodes' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('textbox', { name: 'Search canvas nodes' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toBe('No matching nodes on this canvas.');
+
+    rerender(<WorkspaceRail {...props} tab="nodes" hidden />);
+    expect(document.querySelector('#workspace-project-sidebar')?.hasAttribute('hidden')).toBe(true);
   });
 
   it('offers an explicit UI path for initializing an existing non-Git folder', () => {

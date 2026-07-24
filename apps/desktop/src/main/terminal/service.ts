@@ -51,8 +51,6 @@ import type {
 const DEFAULT_PLAN_TTL_MS = 60_000;
 const MAX_PENDING_PLANS = 128;
 const MAX_PENDING_PLANS_PER_OWNER = 32;
-const DEFAULT_MAX_ACTIVE = 8;
-const DEFAULT_MAX_ACTIVE_PER_OWNER = 4;
 const MAX_PENDING_OUTPUT_BYTES = 1024 * 1_024;
 const MAX_LIVE_OUTPUT_BYTES = 1024 * 1_024;
 const MAX_LIVE_CHUNKS_PER_TURN = 4;
@@ -137,8 +135,6 @@ export interface TerminalServiceOptions {
   readonly createId?: () => string;
   readonly ptyFactory?: TerminalPtyFactory;
   readonly planTtlMs?: number;
-  readonly maxActive?: number;
-  readonly maxActivePerOwner?: number;
   readonly terminateGraceMs?: number;
   readonly forceTerminateMs?: number;
   readonly maximumTranscriptBytes?: number;
@@ -200,8 +196,6 @@ export class TerminalService {
   readonly #createId: () => string;
   readonly #ptyFactory: TerminalPtyFactory;
   readonly #planTtlMs: number;
-  readonly #maxActive: number;
-  readonly #maxActivePerOwner: number;
   readonly #terminateGraceMs: number;
   readonly #forceTerminateMs: number;
   readonly #transcripts: TerminalTranscriptFiles;
@@ -221,12 +215,6 @@ export class TerminalService {
     this.#createId = options.createId ?? randomUUID;
     this.#ptyFactory = options.ptyFactory ?? createTerminalPty;
     this.#planTtlMs = boundedInteger(options.planTtlMs ?? DEFAULT_PLAN_TTL_MS, 1, 10 * 60_000);
-    this.#maxActive = boundedInteger(options.maxActive ?? DEFAULT_MAX_ACTIVE, 1, 64);
-    this.#maxActivePerOwner = boundedInteger(
-      options.maxActivePerOwner ?? DEFAULT_MAX_ACTIVE_PER_OWNER,
-      1,
-      this.#maxActive,
-    );
     this.#terminateGraceMs = boundedInteger(
       options.terminateGraceMs ?? DEFAULT_TERMINATE_GRACE_MS,
       10,
@@ -334,7 +322,6 @@ export class TerminalService {
     try {
       await this.#assertPendingLaunchCurrent(pending);
       assertAuthority();
-      this.#assertConcurrency(ownerId);
       pending = await this.#prepareManagedWorkspace(pending);
       await this.#assertPendingLaunchCurrent(pending);
       const decision =
@@ -358,7 +345,6 @@ export class TerminalService {
       }
       this.#assertPlanFresh(pending.plan);
       await this.#assertAvailable();
-      this.#assertConcurrency(ownerId);
       handedOff = true;
       return await this.#launch(ownerId, pending, assertAuthority);
     } catch (error) {
@@ -782,7 +768,6 @@ export class TerminalService {
         assertAuthority();
         await this.#assertAvailable();
         this.#assertPlanFresh(pending.plan);
-        this.#assertConcurrency(ownerId, sessionId);
         await assertTerminalLaunchCurrent(
           resolved,
           this.store.getProject(resolved.projectId),
@@ -1418,18 +1403,6 @@ export class TerminalService {
   #assertPlanFresh(plan: TerminalLaunchPlanView): void {
     if (Date.parse(plan.expiresAt) <= this.#now().getTime()) {
       throw new Error('The terminal approval expired. Review the launch again.');
-    }
-  }
-
-  #assertConcurrency(ownerId: string, ignoreSessionId?: string): void {
-    const active = [...this.#active.values()].filter(
-      (session) => session.view.id !== ignoreSessionId && !session.finalizing,
-    );
-    if (active.length >= this.#maxActive) {
-      throw new Error('Too many terminals are running. Close one first.');
-    }
-    if (active.filter((session) => session.ownerId === ownerId).length >= this.#maxActivePerOwner) {
-      throw new Error('This window has too many terminals running. Close one first.');
     }
   }
 

@@ -22,7 +22,7 @@ import {
 
 const DEFAULT_MAX_TRANSCRIPT_BYTES = 16 * 1_024 * 1_024;
 const DEFAULT_MAX_TOTAL_TRANSCRIPT_BYTES = 256 * 1_024 * 1_024;
-const DEFAULT_MAX_TRANSCRIPT_FILES = 10_000;
+const DEFAULT_MAX_TRANSCRIPT_FILES = Number.MAX_SAFE_INTEGER;
 
 export interface TranscriptAppendResult {
   readonly transcriptBytes: number;

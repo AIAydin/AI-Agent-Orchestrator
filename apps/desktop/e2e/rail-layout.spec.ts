@@ -6,7 +6,7 @@ import { test, expect, type ElectronApplication } from '@playwright/test';
 
 import { launchDesktop } from './support/electron.js';
 
-test('the project rail never overflows horizontally, even at narrow widths', async () => {
+test('the project rail stays bounded and can give its space back to the canvas', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-rail-layout-'));
   const managedWorktreeRoot = join(await realpath(userDataDirectory), 'managed-worktrees');
   let electronApp: ElectronApplication | null = null;
@@ -75,6 +75,27 @@ test('the project rail never overflows horizontally, even at narrow widths', asy
       return offenders;
     });
     expect(overflows).toEqual([]);
+
+    const grid = page.locator('.workspace-grid');
+    const rail = page.locator('.project-rail');
+    const canvas = page.locator('.canvas-region');
+    const railWidth = (await rail.boundingBox())?.width ?? 0;
+    const openCanvasWidth = (await canvas.boundingBox())?.width ?? 0;
+
+    await page.getByRole('button', { name: 'Hide project sidebar' }).click();
+    await expect(rail).toBeHidden();
+    await expect(grid).toHaveClass(/project-sidebar-closed/u);
+    await expect(page.getByRole('button', { name: 'Show project sidebar' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect((await canvas.boundingBox())?.width ?? 0).toBeGreaterThan(
+      openCanvasWidth + railWidth - 2,
+    );
+
+    await page.getByRole('button', { name: 'Show project sidebar' }).click();
+    await expect(rail).toBeVisible();
+    await expect(grid).not.toHaveClass(/project-sidebar-closed/u);
   } finally {
     await electronApp?.close().catch(() => undefined);
     await rm(userDataDirectory, { recursive: true, force: true }).catch(() => undefined);

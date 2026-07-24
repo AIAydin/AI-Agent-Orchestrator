@@ -92,6 +92,7 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  contain: layout paint style;
   display: flex;
   align-items: stretch;
   justify-content: center;

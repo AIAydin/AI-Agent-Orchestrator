@@ -5,6 +5,9 @@
   min-height: 0;
   background: var(--canvas);
 }
+.canvas-region .react-flow__viewport {
+  will-change: transform;
+}
 .react-flow__pane {
   cursor: default;
 }
@@ -55,9 +58,8 @@
   padding: 7px 9px !important;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   color: var(--text-soft);
-  backdrop-filter: blur(8px);
 }
 .canvas-title span {
   color: var(--text);
@@ -73,11 +75,10 @@
   padding: 5px 8px !important;
   border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   color: var(--text-faint);
   font-size: var(--text-2xs);
   line-height: 1;
-  backdrop-filter: blur(8px);
 }
 .canvas-alignment-guide {
   position: absolute;
@@ -98,9 +99,8 @@
   padding: 24px !important;
   border: 1px dashed var(--line-strong);
   border-radius: 13px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
   text-align: center;
-  backdrop-filter: blur(9px);
 }
 .empty-orbit {
   width: 46px;
@@ -133,6 +133,30 @@
 .canvas-empty .button {
   min-height: 30px;
   font-size: var(--text-sm);
+}
+.canvas-region.canvas-navigating .canvas-title,
+.canvas-region.canvas-navigating .canvas-keyboard-hint,
+.canvas-region.canvas-navigating .canvas-empty {
+  background: var(--surface);
+  backdrop-filter: none;
+}
+.canvas-region.canvas-navigating .canvas-node,
+.canvas-region.canvas-navigating .canvas-node.agent-window,
+.canvas-region.canvas-navigating .canvas-node.agent-window.selected,
+.canvas-region.canvas-navigating .agent-window-titlebar,
+.canvas-region.canvas-navigating .traffic,
+.canvas-region.canvas-navigating .canvas-alignment-guide,
+.canvas-region.canvas-navigating .collaboration-selection,
+.canvas-region.canvas-navigating .collaboration-name {
+  box-shadow: none;
+}
+.canvas-region.canvas-navigating .canvas-node,
+.canvas-region.canvas-navigating .traffic,
+.canvas-region.canvas-navigating .agent-window-field {
+  transition: none;
+}
+.canvas-region.canvas-navigating .collaboration-cursor {
+  filter: none;
 }
 .canvas-loading {
   height: 100%;

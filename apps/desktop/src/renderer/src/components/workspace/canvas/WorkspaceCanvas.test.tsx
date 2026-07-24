@@ -163,13 +163,18 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     expect(screen.getByText(/cannot edit the shared canvas/u)).toBeTruthy();
   });
 
-  it('reports a bounded completed viewport move for autosave but not for read-only roles', () => {
+  it('uses the lightweight navigation mode and saves only the completed bounded viewport', () => {
     const canvasProps = props(vi.fn());
-    render(<WorkspaceCanvas {...canvasProps} />);
+    const view = render(<WorkspaceCanvas {...canvasProps} />);
     const flowProps = mocks.reactFlowProps as {
+      onMoveStart: () => void;
+      onMove: () => void;
       onMoveEnd: (event: unknown, viewport: { x: number; y: number; zoom: number }) => void;
     };
+    const region = canvasRegion(view.container);
 
+    act(() => flowProps.onMoveStart());
+    expect(region.classList.contains('canvas-navigating')).toBe(true);
     act(() => flowProps.onMoveEnd({}, { x: -220, y: 48, zoom: 9 }));
     expect(canvasProps.onViewportChange).toHaveBeenCalledWith({
       x: -220,
@@ -180,10 +185,37 @@ describe('WorkspaceCanvas keyboard and alignment interaction', () => {
     cleanup();
     const readOnlyProps = props(vi.fn());
     readOnlyProps.collaborationGraphReadOnly = true;
-    render(<WorkspaceCanvas {...readOnlyProps} />);
+    const readOnlyView = render(<WorkspaceCanvas {...readOnlyProps} />);
     const readOnlyFlowProps = mocks.reactFlowProps as typeof flowProps;
+    act(() => readOnlyFlowProps.onMoveStart());
     act(() => readOnlyFlowProps.onMoveEnd({}, { x: 1, y: 2, zoom: 1.2 }));
+    expect(canvasRegion(readOnlyView.container).classList.contains('canvas-navigating')).toBe(true);
     expect(readOnlyProps.onViewportChange).not.toHaveBeenCalled();
+  });
+
+  it('leaves lightweight navigation mode after wheel input becomes idle', () => {
+    vi.useFakeTimers();
+    try {
+      const view = render(<WorkspaceCanvas {...props(vi.fn())} />);
+      const flowProps = mocks.reactFlowProps as {
+        onMoveStart: () => void;
+        onMove: () => void;
+      };
+      const region = canvasRegion(view.container);
+
+      act(() => {
+        flowProps.onMoveStart();
+        flowProps.onMove();
+      });
+      expect(region.classList.contains('canvas-navigating')).toBe(true);
+
+      act(() => {
+        vi.advanceTimersByTime(181);
+      });
+      expect(region.classList.contains('canvas-navigating')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('explicitly restores the saved viewport without fitting content', async () => {
