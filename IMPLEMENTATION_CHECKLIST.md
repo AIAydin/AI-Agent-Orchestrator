@@ -1983,3 +1983,11 @@ unchecked when only a subset of their required behavior has proof.
   partial Electron installation blocks three unit suites and two integration cases, and unrelated
   in-progress terminal-worktree/root-media files still fail lint, formatting, capability review, and
   the loose-root structure check.
+- 2026-07-24: PR #22 was reconciled with current `main` without discarding its managed-worktree,
+  hosted-collaboration, or renderer behavior. Current settings saves no longer fail on an unchanged
+  unavailable default Agent, packaged startup defers an unavailable context-snapshot store, Terminal
+  arguments are again editable in the node, expanded canvas details stay above overlapping nodes,
+  and end-to-end coverage follows the shipped in-canvas controls and public-host invite policy. The
+  1,461-file structure gate, 852-file production-control audit, formatting, zero-warning lint,
+  workspace typecheck, all 3,099 unit tests, all 332 integration tests, three documentation tests,
+  seven quality tests, the complete production build, and whitespace validation passed in isolation.

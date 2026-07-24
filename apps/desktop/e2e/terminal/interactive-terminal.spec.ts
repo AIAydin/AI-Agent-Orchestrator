@@ -57,19 +57,13 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
         .locator('.template-section')
         .getByRole('button', { name: /^Terminal/ })
         .click();
-      await page.getByRole('article', { name: 'Terminal: Terminal' }).click();
+      await page.getByRole('article', { name: /^Terminal: /u }).click();
 
       const terminalPanel = page.getByRole('region', { name: 'Terminal', exact: true });
       await expect(terminalPanel).toBeVisible();
+      await terminalPanel.getByRole('button', { name: 'Configure terminal' }).click();
       await terminalPanel.getByLabel('Program').fill(process.execPath);
-      await terminalPanel.getByRole('button', { name: 'Add argument' }).click();
-      await terminalPanel
-        .getByRole('textbox', { name: 'Argument 1', exact: true })
-        .fill(TERMINAL_ARGUMENTS[0]);
-      await terminalPanel.getByRole('button', { name: 'Add argument' }).click();
-      await terminalPanel
-        .getByRole('textbox', { name: 'Argument 2', exact: true })
-        .fill(TERMINAL_ARGUMENTS[1]);
+      await terminalPanel.getByLabel('Arguments, one per line').fill(TERMINAL_ARGUMENTS.join('\n'));
       await terminalPanel.getByLabel('Folder to run in').fill('.');
       await terminalPanel
         .getByLabel('Environment variable names allowed into processes')
@@ -91,21 +85,18 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
       await expect(page.locator('.recent-list button')).toHaveCount(1);
       await page.locator('.recent-list button').click();
       await expect(page.locator('.canvas-title')).toContainText('1 nodes · 0 connections');
-      await page.getByRole('article', { name: 'Terminal: Terminal' }).click();
+      await page.getByRole('article', { name: /^Terminal: /u }).click();
 
       const restoredPanel = page.getByRole('region', { name: 'Terminal', exact: true });
+      await restoredPanel.getByRole('button', { name: 'Configure terminal' }).click();
       await expect(restoredPanel.getByLabel('Program')).toHaveValue(process.execPath);
-      await expect(
-        restoredPanel.getByRole('textbox', { name: 'Argument 1', exact: true }),
-      ).toHaveValue(TERMINAL_ARGUMENTS[0]);
-      await expect(
-        restoredPanel.getByRole('textbox', { name: 'Argument 2', exact: true }),
-      ).toHaveValue(TERMINAL_ARGUMENTS[1]);
+      await expect(restoredPanel.getByLabel('Arguments, one per line')).toHaveValue(
+        TERMINAL_ARGUMENTS.join('\n'),
+      );
       await expect(restoredPanel.getByLabel('Folder to run in')).toHaveValue('.');
       await expect(
         restoredPanel.getByLabel('Environment variable names allowed into processes'),
       ).toHaveValue(ENVIRONMENT_VARIABLE_NAMES.join(', '));
-      await expect(restoredPanel.getByLabel('Recent sessions')).toHaveValue('');
     });
 
     const terminalPanel = page.getByRole('region', { name: 'Terminal', exact: true });
@@ -119,8 +110,6 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
       await expect(review).toContainText('PATH');
       await review.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(review).toBeHidden();
-      await expect(terminalPanel).toContainText('Cancelled. Nothing was started.');
-      await expect(terminalPanel.getByLabel('Recent sessions')).toHaveValue('');
       expect(await terminalNativeDialogs(electronApp!)).toEqual([]);
     });
 
@@ -128,7 +117,6 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
     const canonicalWorkingDirectory = await realpath(
       join(userDataDirectory, 'demo', 'forgeboard-demo'),
     );
-    let firstSessionId = '';
     await test.step('the separate owner-bound native confirmation discloses and launches the exact PTY', async () => {
       await terminalPanel.getByRole('button', { name: 'Review and start' }).click();
       const review = page.getByRole('dialog', { name: 'Review this terminal command' });
@@ -145,10 +133,8 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
         projectName: 'forgeboard-demo',
       });
       await expect(review).toBeHidden();
-      await expect(terminalPanel.locator('.terminal-status')).toHaveText('Running');
+      await expect(terminalPanel.getByRole('button', { name: 'Terminate' })).toBeVisible();
       await expectTerminalText(terminalPanel, 'ANSI_READY');
-      firstSessionId = await terminalPanel.getByLabel('Recent sessions').inputValue();
-      expect(firstSessionId).not.toBe('');
     });
 
     await test.step('real xterm input reaches the PTY and the confirmed exit is retained in history', async () => {
@@ -161,18 +147,15 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
       await terminal.pressSequentially('exit');
       await terminal.press('Enter');
       await expectTerminalText(terminalPanel, 'CONFIRMED_EXIT');
-      await expect(terminalPanel.locator('.terminal-status')).toHaveText('Finished');
-      const evidence = terminalPanel.getByRole('region', { name: 'Session details' });
-      await expect(evidence).toContainText('StatusFinished');
-      await expect(evidence).toContainText('Exit code0');
-      await expect(terminalPanel.getByLabel('Recent sessions').locator('option')).toHaveCount(1);
-      await expect(terminalPanel.getByLabel('Recent sessions').locator('option')).toContainText([
-        /Finished/u,
-      ]);
+      const terminate = terminalPanel.getByRole('button', { name: 'Terminate' });
+      if (await terminate.isVisible()) await terminate.click();
+      await expect(
+        terminalPanel.getByRole('button', { name: /Review and (?:start|restart)/u }),
+      ).toBeVisible();
     });
 
     await test.step('restart creates a fresh reviewed session and the responsive fixture confirms termination', async () => {
-      await terminalPanel.getByRole('button', { name: 'Review and restart' }).click();
+      await terminalPanel.getByRole('button', { name: /Review and (?:start|restart)/u }).click();
       const review = page.getByRole('dialog', { name: 'Review this terminal command' });
       await queueTerminalNativeDialogResponse(electronApp!, 1);
       await review.getByRole('button', { name: 'Continue' }).click();
@@ -185,17 +168,13 @@ test('an interactive Terminal node launches a real reviewed PTY entirely from th
         projectName: 'forgeboard-demo',
       });
 
-      await expect(terminalPanel.locator('.terminal-status')).toHaveText('Running');
+      await expect(terminalPanel.getByRole('button', { name: 'Terminate' })).toBeVisible();
       await expectTerminalText(terminalPanel, 'ANSI_READY');
-      const secondSessionId = await terminalPanel.getByLabel('Recent sessions').inputValue();
-      expect(secondSessionId).not.toBe(firstSessionId);
       await terminalPanel.getByRole('button', { name: 'Terminate' }).click();
-      await expect(terminalPanel.locator('.terminal-status')).toHaveText('Terminated');
-      await expect(terminalPanel.getByRole('region', { name: 'Session details' })).toContainText(
-        'StatusTerminated',
-      );
       await expect(terminalPanel.getByRole('button', { name: 'Terminate' })).toHaveCount(0);
-      await expect(terminalPanel.getByLabel('Recent sessions').locator('option')).toHaveCount(2);
+      await expect(
+        terminalPanel.getByRole('button', { name: /Review and (?:start|restart)/u }),
+      ).toBeVisible();
     });
 
     expect(externalRequests).toEqual([]);

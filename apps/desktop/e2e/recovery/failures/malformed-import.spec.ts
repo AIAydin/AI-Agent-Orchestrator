@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../../support/electron.js';
+import { launchDesktop, renameCanvasNode, watchExternalRequests } from '../../support/electron.js';
 
 test('a malformed replace-import fails before confirmation and preserves local work', async () => {
   const root = await mkdtemp(join(tmpdir(), 'forgeboard-malformed-import-e2e-'));
@@ -30,8 +30,10 @@ test('a malformed replace-import fails before confirmation and preserves local w
       .locator('.template-section')
       .getByRole('button', { name: /Product brief/ })
       .click();
-    await page.getByRole('article', { name: 'Product brief: Product brief' }).click();
-    await page.locator('.inspector').getByLabel('Title').fill('Must survive malformed import');
+    await renameCanvasNode(
+      page.getByRole('article', { name: /^Product brief: /u }),
+      'Must survive malformed import',
+    );
     await expect(
       page.getByRole('article', { name: 'Product brief: Must survive malformed import' }),
     ).toBeVisible();

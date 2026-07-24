@@ -453,6 +453,9 @@
   flex: 0 0 auto;
   display: flex;
 }
+.react-flow__node:has(.node-details-button[aria-expanded='true']) {
+  z-index: 1100 !important;
+}
 .node-details-button {
   width: 24px;
   height: 24px;

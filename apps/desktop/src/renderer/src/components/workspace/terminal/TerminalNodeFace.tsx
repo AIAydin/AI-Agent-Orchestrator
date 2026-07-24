@@ -4,6 +4,7 @@
 import { CircleStop, Keyboard, Play, RotateCcw, Settings2, TerminalSquare } from 'lucide-react';
 import { useRef, useState, type JSX } from 'react';
 
+import { LITERAL_ARGUMENT_HELP, parseLiteralArguments } from '../../../lib/literal-arguments.js';
 import { EnvironmentAllowlistEditor } from '../../configuration/EnvironmentAllowlistEditor.js';
 import type { NodeFaceProps } from '../canvas/faces/node-face-registry.js';
 import { useCanvasNodeInteractions } from '../canvas/interactions/CanvasNodeInteractionContext.js';
@@ -137,6 +138,25 @@ export function TerminalNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                     : (event) => updateConfiguration({ executable: event.target.value })
                 }
               />
+            </label>
+            <label className="node-face-row">
+              Arguments
+              <textarea
+                aria-label="Arguments, one per line"
+                name={`node-${id}-terminal-face-arguments`}
+                value={configuration.arguments.join('\n')}
+                readOnly={readOnly}
+                onFocus={session.recordHistory}
+                onChange={
+                  readOnly
+                    ? undefined
+                    : (event) =>
+                        updateConfiguration({
+                          arguments: parseLiteralArguments(event.target.value),
+                        })
+                }
+              />
+              <small>{LITERAL_ARGUMENT_HELP}</small>
             </label>
             <label className="node-face-row">
               Folder
