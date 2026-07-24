@@ -33,9 +33,10 @@ remains available via scroll, pinch, and the zoom controls. Double-clicking a no
 other interactive surface is unaffected.
 
 Editing. Double-clicking an existing text box, or pressing Enter while it has canvas focus, opens
-the inline editor. Escape or clicking elsewhere commits the text. A text box committed with only
-whitespace is deleted automatically. Pasted content is flattened to plain text. Newlines are
-allowed.
+the inline editor. Escape or clicking elsewhere commits the text. A newly created text box opens
+its editor immediately; a text box with no content renders a subtle placeholder and is removed
+like any node (Delete key or context menu). Pasted content is flattened to plain text. Newlines
+are allowed.
 
 Selection and movement. Clicking selects the box with the standard selection ring and resize
 handles. Dragging moves it; arrow keys move it per existing canvas keyboard rules; existing
@@ -98,11 +99,12 @@ persistence exactly as other kinds are (`model/node-persistence.ts`), with a
 
 ## Persistence, collaboration, limits
 
-The node persists through existing canvas persistence and schema versioning; portable JSON
-export/import and snapshots inherit it via the union. Collaboration sync treats `text`,
-`fontSize`, and `rotationDeg` as ordinary allowlisted node data with the same conflict handling as
-other same-field edits (pause for review rather than overwrite). The 10k character cap bounds
-sync payloads and storage.
+The node persists through existing canvas persistence (kind and data pass through verbatim);
+portable JSON export and snapshots inherit it. Collaboration metadata is field-allowlisted: the
+`text` node type is registered in the collaboration node-type contract so its base metadata
+(title, position, size, color, lock state, group membership) syncs like every other node, while
+`text`, `fontSize`, and `rotationDeg` stay device-local in v1 — exactly as note-image markdown
+content does today. The 10k character cap bounds storage.
 
 ## Security and validation
 
