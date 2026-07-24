@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { access } from 'node:fs/promises';
+import { access, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import {
   _electron as electron,
@@ -34,6 +35,7 @@ interface ElectronApplicationInternals {
 const desktopRoot = resolve(import.meta.dirname, '../..');
 const mainEntry = join(desktopRoot, 'dist', 'main', 'index.js');
 const require = createRequire(import.meta.url);
+const userDataDirectories = new WeakMap<ElectronApplication, string>();
 
 export async function launchDesktop(
   userDataDirectory: string,
@@ -56,6 +58,7 @@ export async function launchDesktop(
     env: environment,
     timeout: 30_000,
   });
+  userDataDirectories.set(app, userDataDirectory);
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   return { app, page };
@@ -71,12 +74,31 @@ export async function closeElectronAfterTest(app: ElectronApplication | null): P
   // Playwright 1.53 tracks launched process groups for worker teardown. Its test-only kill path
   // removes that registration and terminates descendants that can retain stdio and user-data locks.
   await electronImplementation(app)._browserContext._browser.killForTests();
+  if (process.platform === 'win32') {
+    const userDataDirectory = userDataDirectories.get(app);
+    if (userDataDirectory !== undefined) {
+      await removeWindowsLockFile(join(userDataDirectory, 'lockfile'));
+    }
+  }
 }
 
 function electronImplementation(
   app: ElectronApplication,
 ): ReturnType<ElectronApplicationInternals['_toImpl']> {
   return (app as unknown as ElectronApplicationInternals)._toImpl();
+}
+
+async function removeWindowsLockFile(path: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rm(path, { force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if ((code !== 'EBUSY' && code !== 'EPERM') || attempt >= 49) throw error;
+      await delay(100);
+    }
+  }
 }
 
 export async function approveNextNativeAgentLaunch(
