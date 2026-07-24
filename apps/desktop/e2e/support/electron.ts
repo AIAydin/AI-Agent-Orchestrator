@@ -21,6 +21,14 @@ export interface LaunchDesktopOptions {
   readonly environment?: Readonly<Record<string, string>>;
 }
 
+interface ElectronApplicationInternals {
+  _toImpl(): {
+    _nodeConnection: {
+      close(): void;
+    };
+  };
+}
+
 const desktopRoot = resolve(import.meta.dirname, '../..');
 const mainEntry = join(desktopRoot, 'dist', 'main', 'index.js');
 const require = createRequire(import.meta.url);
@@ -54,7 +62,7 @@ export async function launchDesktop(
 /**
  * Finalizers must not start a Playwright close handshake that can strand the worker after product
  * behavior has already been verified. Tests that need to prove graceful shutdown should still
- * await `app.close()` explicitly before using this process-only cleanup for their final session.
+ * await `app.close()` explicitly before using this bounded cleanup for their final session.
  */
 export async function closeElectronAfterTest(
   app: ElectronApplication | null,
@@ -68,6 +76,9 @@ export async function closeElectronAfterTest(
       : new Promise<void>((resolvePromise) => {
           child.once('exit', () => resolvePromise());
         });
+  // Playwright 1.53 leaves Electron's main-process inspector socket open after a forced exit on
+  // Linux. Close the pinned implementation's transport synchronously so the worker can tear down.
+  (app as unknown as ElectronApplicationInternals)._toImpl()._nodeConnection.close();
   child.kill('SIGKILL');
   await settlesWithin(exited, timeoutMs);
 }
