@@ -43,8 +43,7 @@ An optional executable override from the current UI draft is validated, identity
 native review, and revalidated before the CLI starts. The connection operation does not persist that
 override; only saving Settings does. The optional default-model field is launch configuration, not
 an OAuth credential. These connection controls apply only to Codex and Claude Code. Forgeboard does
-not claim OAuth management for Gemini, OpenCode, or custom CLIs. The deterministic local test agent
-requires no provider account and does not contact a model provider.
+not claim OAuth management for Gemini, OpenCode, or custom CLIs.
 
 ## Application update checks
 
@@ -80,8 +79,10 @@ check for this project for 30 days** in the native dialog, Forgeboard keeps a de
 the exact project, command/action fingerprint, and resolved executable/package-script identity. The
 renderer cannot choose which saved approval authorizes a launch. **Settings → Permissions → Scoped
 approvals** lists and immediately revokes these records. Agent launches, context expansion, Docker
-pulls, implemented external sends, and destructive Git actions remain per-use and do not inherit the
-check grant; unfinished action surfaces remain unavailable.
+pulls, implemented external sends, and destructive Git actions do not inherit the check grant.
+Built-in interactive worktree sessions instead use their explicit **Start** action plus a
+main-reconstructed command; other Agent launch paths remain per-use. Unfinished action surfaces
+remain unavailable.
 
 The Git / PR node can perform an exact normal push and, through an optional local `gh` CLI, explicit
 GitHub repository, pull-request, and exact-head CI actions. Every operation is initiated in the UI

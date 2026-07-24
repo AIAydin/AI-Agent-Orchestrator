@@ -24,7 +24,7 @@ export function CustomAgentSettings({ draft, setDraft, busy, perform }: AsyncSet
               ...draft,
               customAgent: { ...draft.customAgent, enabled: event.target.checked },
               ...(!event.target.checked && draft.defaultAgent === 'custom'
-                ? { defaultAgent: 'test-agent' as const }
+                ? { defaultAgent: 'codex' as const }
                 : {}),
             })
           }

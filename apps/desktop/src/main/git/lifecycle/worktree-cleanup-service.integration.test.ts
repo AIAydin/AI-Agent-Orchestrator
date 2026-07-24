@@ -41,7 +41,7 @@ describe('WorktreeCleanupService with a real repository', () => {
       await worktrees.provision({
         repositoryPath: repository,
         managedRoot,
-        agentId: 'test-agent',
+        agentId: 'codex',
         taskId: 'agent-node',
         baseRef: 'main',
         cleanupPolicy: 'manual',
@@ -166,7 +166,7 @@ describe('WorktreeCleanupService with a real repository', () => {
       await worktrees.provision({
         repositoryPath: repository,
         managedRoot,
-        agentId: 'test-agent',
+        agentId: 'codex',
         taskId: 'agent-node',
         baseRef: 'main',
         cleanupPolicy: 'manual',
@@ -312,7 +312,7 @@ function runRecord(
     id: RUN_ID,
     projectId: PROJECT_ID,
     nodeId: 'agent-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     status: 'succeeded',
     cwd: ownership.worktreePath,
     branch: ownership.branch,

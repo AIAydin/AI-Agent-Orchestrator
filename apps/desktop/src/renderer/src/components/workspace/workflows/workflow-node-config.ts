@@ -24,8 +24,7 @@ export function initialWorkflowNodeData(
   if (kind === 'agent') {
     const adapterId = settings.defaultAgent;
     const permissionProfile =
-      permissionProfileUnavailableReason(settings.defaultPermissionProfile, settings, adapterId) !==
-      null
+      permissionProfileUnavailableReason(settings.defaultPermissionProfile, settings) !== null
         ? 'worktree-write'
         : settings.defaultPermissionProfile;
     return { adapterId, permissionProfile };
@@ -174,14 +173,11 @@ export function gateLabelFromView(state: WorkflowReviewGateView['status']): stri
 
 /** Adapters that can act as a review-gate reviewer agent. */
 export function reviewerAdapterSupported(adapterId: string): boolean {
-  return adapterId === 'test-agent' || adapterId === 'codex' || adapterId === 'claude';
+  return adapterId === 'codex' || adapterId === 'claude';
 }
 
-/** Option label for a reviewer agent, distinguishing the deterministic test fixture. */
 export function reviewerOptionLabel(title: string, adapterId: string): string {
-  return adapterId === 'test-agent'
-    ? `${title} · Test agent (deterministic fixture)`
-    : `${title} · ${adapterId}`;
+  return `${title} · ${adapterId}`;
 }
 
 /** Clamp a text-input integer into [minimum, maximum], falling back to the minimum. */

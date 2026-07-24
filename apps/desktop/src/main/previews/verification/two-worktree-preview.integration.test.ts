@@ -474,7 +474,7 @@ function previewSettings(managedRoot: string, collision: CollisionRange): AppSet
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     worktreeRoot: managedRoot,
     worktreeCleanupPolicy: 'manual',

@@ -13,6 +13,7 @@ export const TERMINAL_IPC_CHANNELS = Object.freeze({
   event: 'terminal:event',
 } as const);
 
+export * from './agent-launch.js';
 export * from './common.js';
 export * from './events.js';
 export * from './launch.js';

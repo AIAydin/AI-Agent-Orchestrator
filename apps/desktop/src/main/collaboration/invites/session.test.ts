@@ -239,6 +239,23 @@ describe('CollaborationInviteSessionAuthority', () => {
     expect(authority.createdInviteCount).toBe(0);
   });
 
+  it('refuses to create a shared invite from a localhost-only room session', () => {
+    const authority = new CollaborationInviteSessionAuthority(() => NOW);
+    authority.establish(
+      binding({
+        serverUrl: 'ws://127.0.0.1:1234',
+        managementBaseUrl: 'http://127.0.0.1:1234/',
+      }),
+    );
+    const lease = authority.ownerLease('ws://127.0.0.1:1234', 'http://127.0.0.1:1234/', 'room-1');
+
+    expect(() => authority.assertCanCreateInvite(lease)).toThrow(/public wss:\/\/.*https:\/\//u);
+    expect(() => authority.recordCreatedInvite(lease, invite())).toThrow(
+      /public wss:\/\/.*https:\/\//u,
+    );
+    expect(authority.createdInviteCount).toBe(0);
+  });
+
   it('authorizes listed historical revocation without recreating volatile copy authority', () => {
     const authority = new CollaborationInviteSessionAuthority(() => NOW);
     authority.establish(binding());

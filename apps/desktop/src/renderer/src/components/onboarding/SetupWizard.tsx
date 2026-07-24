@@ -40,7 +40,6 @@ import { useCommandReadiness } from '../configuration/useCommandReadiness.js';
 import { AgentReadinessPanel } from '../readiness/AgentReadinessPanel.js';
 import {
   currentReadinessResult,
-  isReadinessAgentId,
   launchDetectionIsReady,
   readinessDraftForAgent,
 } from '../readiness/readiness-ui.js';
@@ -100,11 +99,8 @@ export function SetupWizard(props: SetupWizardProps) {
   const selectedPermissionUnavailable = permissionProfileUnavailableReason(
     draft.defaultPermissionProfile,
     draft,
-    draft.defaultAgent,
   );
-  const readinessAgentId = isReadinessAgentId(draft.defaultAgent)
-    ? draft.defaultAgent
-    : 'test-agent';
+  const readinessAgentId = draft.defaultAgent;
   const selectedAgent = availableAgents.find((agent) => agent.id === readinessAgentId);
   const selectedReadinessDraft = readinessDraftForAgent(draft, readinessAgentId);
   const selectedReadiness = currentReadinessResult(agentReadiness, selectedReadinessDraft);
@@ -277,10 +273,7 @@ export function SetupWizard(props: SetupWizardProps) {
                 <Bot size={14} /> Agent
               </span>
               <h1 id="setup-title">Choose your starting agent</h1>
-              <p>
-                Agents run on this computer with the sign-in they already have. The built-in test
-                agent works offline.
-              </p>
+              <p>Agents run on this computer with the sign-in they already have.</p>
               <div className="setup-agent-list" role="radiogroup" aria-label="Default agent">
                 {availableAgents.map((agent) => {
                   const selected = draft.defaultAgent === agent.id;
@@ -295,12 +288,6 @@ export function SetupWizard(props: SetupWizardProps) {
                           setDraft({
                             ...draft,
                             defaultAgent: agent.id as AppSettings['defaultAgent'],
-                            ...(agent.id === 'test-agent' &&
-                            permissionProfileNeedsDocker(draft.defaultPermissionProfile, draft)
-                              ? {
-                                  defaultPermissionProfile: 'worktree-write' as const,
-                                }
-                              : {}),
                             ...(agent.id === 'custom'
                               ? {
                                   customAgent: {
@@ -324,9 +311,7 @@ export function SetupWizard(props: SetupWizardProps) {
                             ? `${selectedReadiness.version} · checked just now`
                             : agent.installed
                               ? (agent.version ?? 'Found on this device')
-                              : agent.id === 'test-agent'
-                                ? 'Built in and ready'
-                                : 'Not installed — optional'}
+                              : 'Not installed — optional'}
                         </small>
                       </span>
                       <span
@@ -353,7 +338,7 @@ export function SetupWizard(props: SetupWizardProps) {
                   <p className="setup-connection-guidance" role="status">
                     {providerStatuses[draft.defaultAgent]?.state === 'connected'
                       ? `${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} is connected and ready.`
-                      : `Connect ${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} here or choose the local test agent. You can connect later in Settings.`}
+                      : `Connect ${draft.defaultAgent === 'codex' ? 'Codex CLI' : 'Claude Code'} here. You can change agents later in Settings.`}
                   </p>
                   <ProviderConnectionCards
                     compact
@@ -431,8 +416,7 @@ export function SetupWizard(props: SetupWizardProps) {
                   />
                 </div>
               )}
-              {draft.defaultAgent !== 'test-agent' &&
-                draft.defaultAgent !== 'custom' &&
+              {draft.defaultAgent !== 'custom' &&
                 draft.defaultAgent !== 'codex' &&
                 draft.defaultAgent !== 'claude' && (
                   <div className="setup-path-field">
@@ -623,14 +607,9 @@ export function SetupWizard(props: SetupWizardProps) {
                 />
                 <ChoiceCard
                   title="Docker isolated"
-                  description={
-                    draft.defaultAgent === 'test-agent'
-                      ? 'Pick an agent that can run in Docker first.'
-                      : 'Run in a Docker container, walled off from the rest of your computer.'
-                  }
+                  description="Run in a Docker container, walled off from the rest of your computer."
                   icon={<Container size={20} />}
                   checked={draft.defaultPermissionProfile === 'docker-isolated'}
-                  disabled={draft.defaultAgent === 'test-agent'}
                   onSelect={() =>
                     setDraft({
                       ...draft,
@@ -950,7 +929,7 @@ function ChoiceCard({
 }
 
 function isCodingAgent(id: AgentDetection['id']): boolean {
-  return ['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom'].includes(id);
+  return ['codex', 'claude', 'gemini', 'opencode', 'custom'].includes(id);
 }
 
 function agentLabel(agents: AgentDetection[], id: AppSettings['defaultAgent']): string {

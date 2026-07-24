@@ -6,6 +6,35 @@ import type { AppSettings } from '../../../shared/application/contracts.js';
 import { planLegacySettingsRepair } from './plan.js';
 
 describe('legacy settings repair planning', () => {
+  it('migrates the removed built-in agent without discarding unrelated settings', () => {
+    const defaults = settings();
+    const source = {
+      ...defaults,
+      defaultAgent: 'test-agent',
+      agentExecutableOverrides: {
+        codex: '/usr/local/bin/codex',
+        'test-agent': '/obsolete/fixture',
+      },
+      agentDefaultModels: {
+        claude: 'sonnet',
+        'test-agent': 'obsolete-model',
+      },
+    };
+
+    const planned = planLegacySettingsRepair(JSON.stringify(source), 12, defaults);
+
+    expect(planned?.settings).toMatchObject({
+      defaultAgent: 'codex',
+      agentExecutableOverrides: { codex: '/usr/local/bin/codex' },
+      agentDefaultModels: { claude: 'sonnet' },
+    });
+    expect(planned?.evidence.repairedFieldPaths).toEqual([
+      'defaultAgent',
+      'agentExecutableOverrides',
+      'agentDefaultModels',
+    ]);
+  });
+
   it('repairs every tightened legacy category without replacing unaffected settings', () => {
     const defaults = settings();
     const source = structuredClone(defaults) as AppSettings & Record<string, unknown>;
@@ -249,7 +278,7 @@ function settings(): AppSettings {
     canvasGridSize: 16,
     canvasSnapToGrid: true,
     keyboardPreset: 'standard',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     agentExecutableOverrides: {},
     agentDefaultModels: {},

@@ -67,6 +67,7 @@ import {
 // Override the built-in `smoothstep` edge with our own renderer so every edge
 // (all created with `type: 'smoothstep'`) shows the on-canvas config popover.
 const WORKSHOP_EDGE_TYPES: EdgeTypes = { smoothstep: TypedConnectionEdge };
+const CANVAS_NAVIGATION_IDLE_MS = 180;
 
 interface OpenNodeContextMenu {
   readonly nodeId: string;
@@ -164,6 +165,7 @@ export function WorkspaceCanvas({
   deletionProtectedNodeIds,
 }: WorkspaceCanvasProps) {
   const regionRef = useRef<HTMLElement>(null);
+  const navigationIdleTimerRef = useRef<number | null>(null);
   useViewportRestore(instance, canvas?.id ?? null, canvas?.viewport ?? null);
   const [alignmentGuides, setAlignmentGuides] = useState<CanvasAlignmentGuides>({});
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState({
@@ -230,6 +232,16 @@ export function WorkspaceCanvas({
           cause instanceof Error ? cause.message : 'The File node could not be attached.',
         );
       });
+  };
+  const scheduleCanvasNavigationEnd = (): void => {
+    regionRef.current?.classList.add('canvas-navigating');
+    if (navigationIdleTimerRef.current !== null) {
+      window.clearTimeout(navigationIdleTimerRef.current);
+    }
+    navigationIdleTimerRef.current = window.setTimeout(() => {
+      navigationIdleTimerRef.current = null;
+      regionRef.current?.classList.remove('canvas-navigating');
+    }, CANVAS_NAVIGATION_IDLE_MS);
   };
 
   return (
@@ -334,7 +346,10 @@ export function WorkspaceCanvas({
                 edgeTypes={WORKSHOP_EDGE_TYPES}
                 onInit={onInstance}
                 defaultViewport={normalizeCanvasViewport(canvas.viewport)}
+                onMoveStart={scheduleCanvasNavigationEnd}
+                onMove={scheduleCanvasNavigationEnd}
                 onMoveEnd={(_event, viewport) => {
+                  scheduleCanvasNavigationEnd();
                   if (!collaborationGraphReadOnly)
                     onViewportChange(normalizeCanvasViewport(viewport));
                 }}

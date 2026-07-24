@@ -17,7 +17,7 @@ Every Agent node's face is a live, scrollable session with its agent — visible
 - **Slash commands:** provided natively by the embedded CLIs (`/compact`, `/model`, custom commands like `/goal`). No custom command menu is built.
 - **Everything adjustable on the node:** agent, model, permission profile selects; inline title edit; context-attachment chips.
 - **Sidebar:** removed for agent nodes in this round ("agent-first"); other node kinds keep their panels for a later pass.
-- **Session start friction:** one explicit Start (with the existing terminal launch review) per session; typing inside the session is the CLI's own instant loop. The provider connection gate (run-gate on connection) still blocks starting.
+- **Session start friction:** one explicit Start per session; a built-in worktree session is reconstructed and authorized automatically in Electron main, while unsupported/custom paths retain native terminal review. Typing inside the session is the CLI's own instant loop. The provider connection gate (run-gate on connection) still blocks starting.
 - **Provider looks:** distinct brand themes per provider — palette entries per provider, same layout, different identity.
 
 ## 1. Node face: a floating app window with the real CLI inside
@@ -32,18 +32,18 @@ Reference: the "October"-style canvas — agent nodes read as **macOS-style app 
 
 ## 2. Session lifecycle (reusing terminal infrastructure)
 
-- Renderer: `useTerminalNodeController` (existing) drives the session with a **provider-derived `TerminalNodeConfiguration`** instead of a user-typed command. Start = `prepareLaunch()` → existing launch review (`TerminalLaunchReviewDialog`, once per session) → `confirmLaunch()`. Input, resize, interrupt, terminate, replay: all existing controller methods.
+- Renderer: `useTerminalNodeController` (existing) drives the session with a **provider-derived `TerminalNodeConfiguration`** instead of a user-typed command. Start = `prepareLaunch()` → automatic `confirmLaunch()`; Electron main either reconstructs an eligible built-in worktree command or falls back to native review. Input, resize, interrupt, terminate, replay: all existing controller methods.
 - Sessions are keyed per node (existing owner model), survive node deselection, and are terminated by the existing service shutdown rules.
 - **Provider gate kept:** the Start button is blocked (with inline warning + **Refresh status** / **Open settings** actions) while `useAgentProviderGate` reports the provider disconnected/unknown — same copy and actions as today.
 
 ## 3. Provider launch resolution
 
 A renderer module `runs/agent-session/launch-config.ts` maps node config → the existing
-`TerminalNodeConfiguration`. The session continues through `TerminalService` for launch review,
-audit, and PTY ownership. The managed-worktree follow-up adds a path-free workspace request to that
-contract; Electron main validates the persisted Agent node and selected profile, provisions the
-worktree, re-resolves the reviewed launch from that exact root, and revalidates ownership immediately
-before spawn.
+`TerminalNodeConfiguration`. The session continues through `TerminalService` for main-process
+authorization, audit, and PTY ownership. The managed-worktree follow-up adds a path-free workspace
+request to that contract; Electron main validates the persisted Agent node and selected profile,
+provisions the worktree, reconstructs built-in executable/model/peer arguments from main-owned
+state, and revalidates command and ownership immediately before spawn.
 
 - **Executable:** from agent detection (`AgentDetection.executable`; detection already honors `agentExecutableOverrides`). Missing executable → start card shows "not installed" guidance instead of Start.
 - **Arguments per provider:**

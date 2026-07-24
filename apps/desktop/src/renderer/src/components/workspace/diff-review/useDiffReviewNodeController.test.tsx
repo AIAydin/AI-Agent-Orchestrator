@@ -59,7 +59,7 @@ describe('useDiffReviewNodeController', () => {
       {
         runId: RUN_ID,
         nodeLabel: 'Implementation agent',
-        agentLabel: 'Deterministic test agent',
+        agentLabel: 'Deterministic Codex',
         status: 'succeeded',
         branch: 'forgeboard/implementation',
         worktreeState: 'active',
@@ -68,7 +68,7 @@ describe('useDiffReviewNodeController', () => {
       {
         runId: PENDING_RUN_ID,
         nodeLabel: 'Implementation agent',
-        agentLabel: 'Deterministic test agent',
+        agentLabel: 'Deterministic Codex',
         status: 'succeeded',
         branch: 'forgeboard/implementation',
         worktreeState: 'cleanup-pending',
@@ -129,9 +129,9 @@ function project(): Project {
 function agents(): AgentDetection[] {
   return [
     {
-      id: 'test-agent',
-      label: 'Deterministic test agent',
-      executable: '/Applications/Forgeboard/TestAgent',
+      id: 'codex',
+      label: 'Deterministic Codex',
+      executable: '/Applications/Forgeboard/CodexAgent',
       installed: true,
       version: '1.0.0',
       providerDisclosure: 'Local deterministic fixture.',
@@ -148,7 +148,7 @@ function runSummary(
     id,
     projectId: PROJECT_ID,
     nodeId: 'agent-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     model: null,
     providerSessionAvailable: false,
     resumeSupported: false,
@@ -219,7 +219,7 @@ function review(target: GitTargetInput): GitReviewView {
             ...target,
             nodeId: 'agent-node',
             worktreeId: '91000000-0000-4000-8000-000000000003',
-            agentId: 'test-agent',
+            agentId: 'codex',
             baseRef: 'refs/heads/main',
             baseCommit: 'a'.repeat(40),
           },

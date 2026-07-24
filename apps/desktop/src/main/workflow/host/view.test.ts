@@ -38,7 +38,7 @@ describe('renderer-safe workflow view', () => {
           preparationId: 'prepared-agent-1',
           approvalFingerprint: '12345678abcdef',
           expiresAt: T2,
-          disclosure: { executable: 'forgeboard-test-agent', environmentVariableNames: ['PATH'] },
+          disclosure: { executable: 'forgeboard-codex', environmentVariableNames: ['PATH'] },
         },
       ]),
     );
@@ -190,7 +190,7 @@ function queuedRuntime(): WorkflowExecutionRuntime {
         size: { width: 320, height: 180 },
         status: 'ready',
         data: {
-          adapterId: 'test-agent',
+          adapterId: 'codex',
           permissionProfileId: 'worktree-write',
           promptDraft: 'Make a deterministic change.',
         },
@@ -285,7 +285,7 @@ function persistedAgentRun() {
     id: AGENT_RUN_ID,
     projectId: PROJECT_ID,
     nodeId: NODE_ID,
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     status: 'succeeded' as const,
     cwd: '/managed/agent-run',
     branch: 'forgeboard/agent-run',

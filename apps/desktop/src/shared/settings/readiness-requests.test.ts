@@ -12,7 +12,7 @@ const settings = AppSettingsSchema.parse({
   theme: 'system',
   reducedMotion: false,
   density: 'comfortable',
-  defaultAgent: 'test-agent',
+  defaultAgent: 'gemini',
   defaultPermissionProfile: 'worktree-write',
   worktreeRoot: '/tmp/forgeboard-worktrees',
   terminalShell: '/bin/sh',
@@ -34,7 +34,7 @@ describe('shared Settings readiness request derivation', () => {
     });
 
     expect(settingsAgentReadinessRequests(draft)).toEqual([
-      { agentId: 'test-agent' },
+      { agentId: 'gemini' },
       { agentId: 'codex', executableOverride: '/chosen/codex' },
       { agentId: 'claude' },
       { agentId: 'custom', configuration: draft.customAgent },

@@ -4,15 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
-import {
-  approveNextNativeAgentLaunch,
-  launchDesktop,
-  watchExternalRequests,
-} from '../support/electron.js';
+import { launchDesktop, watchExternalRequests } from '../support/electron.js';
 
 const shortcutModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
-test('the primary local-agent path and appearance controls work with only the keyboard', async () => {
+test('onboarding and appearance controls work with only the keyboard', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-keyboard-e2e-'));
   const managedWorktreeRoot = join(await realpath(userDataDirectory), 'managed-worktrees');
   const externalRequests: string[] = [];
@@ -45,50 +41,6 @@ test('the primary local-agent path and appearance controls work with only the ke
         'Enter',
       );
       await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
-    });
-
-    await test.step('a deterministic local agent is configured, reviewed, and run by keyboard', async () => {
-      await runPaletteCommand(page, 'Add an agent');
-      const agentNode = page.getByRole('article', { name: 'Agent: Agent' });
-      await expect(agentNode).toBeVisible();
-
-      const runConfiguration = page.getByRole('region', {
-        name: 'Agent run settings',
-      });
-      await chooseSelectOptionWithKeyboard(
-        page,
-        runConfiguration.getByLabel('Agent to run'),
-        'test-agent',
-      );
-      await chooseSelectOptionWithKeyboard(
-        page,
-        runConfiguration.getByLabel('Permission profile'),
-        'worktree-write',
-      );
-      const prompt = runConfiguration.getByLabel('Prompt');
-      await tabTo(page, prompt);
-      await page.keyboard.press(`${shortcutModifier}+A`);
-      await page.keyboard.type('Create the deterministic keyboard-only workflow output.');
-      await pressFocused(
-        page,
-        runConfiguration.getByRole('button', { name: 'Review and run Agent' }),
-        'Enter',
-      );
-
-      const disclosure = page.getByRole('dialog', {
-        name: 'Review this run before it starts',
-      });
-      await expect(disclosure).toBeVisible();
-      const approve = disclosure.getByRole('button', {
-        name: 'Approve and start',
-      });
-      await tabTo(page, approve);
-      await approveNextNativeAgentLaunch(session.app, disclosure, 'test-agent', async () => {
-        await page.keyboard.press('Enter');
-      });
-      await expect(agentNode.locator('.node-status-label')).toContainText('succeeded', {
-        timeout: 20_000,
-      });
     });
 
     await test.step('theme and reduced-motion choices change real computed presentation', async () => {
@@ -155,22 +107,6 @@ async function runPaletteCommand(page: Page, command: string): Promise<void> {
   await page.keyboard.type(command);
   await page.keyboard.press('Enter');
   await expect(palette).toBeHidden();
-}
-
-async function chooseSelectOptionWithKeyboard(
-  page: Page,
-  select: Locator,
-  value: string,
-): Promise<void> {
-  const values = await select
-    .locator('option')
-    .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
-  const index = values.indexOf(value);
-  if (index < 0) throw new Error(`The keyboard target option ${value} is unavailable.`);
-  await tabTo(page, select);
-  await page.keyboard.press('Home');
-  for (let step = 0; step < index; step += 1) await page.keyboard.press('ArrowDown');
-  await expect(select).toHaveValue(value);
 }
 
 async function pressFocused(page: Page, target: Locator, key: 'Enter' | 'Space'): Promise<void> {

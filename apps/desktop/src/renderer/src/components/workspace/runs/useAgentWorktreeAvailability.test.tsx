@@ -82,7 +82,7 @@ function attempt(worktreeAvailable: boolean): RunHistorySummary {
     id: RUN_ID,
     projectId: PROJECT_ID,
     nodeId: 'agent-1',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     model: null,
     permissionProfile: 'plan-read-only',
     providerSessionAvailable: false,

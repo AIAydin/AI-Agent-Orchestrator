@@ -70,6 +70,22 @@ describe('agentSessionLaunch', () => {
     ).toEqual(['--model', 'anthropic/claude-sonnet']);
   });
 
+  it('starts the installed OpenCode default TUI without synthetic arguments', () => {
+    const launch = agentSessionLaunch(opencode, undefined, 'worktree-write');
+
+    expect(launch.configuration).toEqual({
+      executable: '/usr/local/bin/opencode',
+      arguments: [],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+      workspace: {
+        kind: 'managed-agent-worktree',
+        adapterId: 'opencode',
+      },
+    });
+    expect(launch.profileNote).toBeNull();
+  });
+
   it('requests a main-owned worktree for the writable interactive profile', () => {
     const launch = agentSessionLaunch(claude, undefined, 'worktree-write');
     expect(launch.configuration.arguments).toEqual([]);
@@ -128,7 +144,6 @@ describe('modelFlagSupported', () => {
     for (const id of ['claude', 'codex', 'gemini', 'opencode']) {
       expect(modelFlagSupported(id)).toBe(true);
     }
-    expect(modelFlagSupported('test-agent')).toBe(false);
     expect(modelFlagSupported('custom')).toBe(false);
     expect(modelFlagSupported('acme.custom-agent')).toBe(false);
   });

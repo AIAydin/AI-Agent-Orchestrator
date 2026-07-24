@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
 import { GitRemoteConfigurationService } from '@forgeboard/git-engine';
@@ -122,7 +122,7 @@ export function createDefaultSettings(): AppSettings {
     canvasGridSize: 16,
     canvasSnapToGrid: true,
     keyboardPreset: 'standard',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     agentExecutableOverrides: {},
     agentDefaultModels: {},
@@ -199,8 +199,8 @@ export function createDefaultSettings(): AppSettings {
     backupOnQuit: true,
     backupRetentionCount: 30,
     collaborationEnabled: false,
-    collaborationUrl: 'ws://127.0.0.1:1234',
-    collaborationManagementUrl: 'http://127.0.0.1:1234/',
+    collaborationUrl: '',
+    collaborationManagementUrl: '',
     collaborationDisplayName: 'Local user',
     collaborationSubject: 'local-user',
     collaborationColor: '#6d5efc',
@@ -347,10 +347,7 @@ export function registerIpcHandlers(
   );
   terminalCore.setPeerEnvironmentProvider(agentPeersHub);
   const agentPeers = new AgentPeersIpcService(app, agentPeersHub, store);
-  const testAgentPath = app.isPackaged
-    ? join(process.resourcesPath, 'test-agent', 'cli.js')
-    : resolve(process.cwd(), '../../packages/test-agent/dist/cli.js');
-  const agentReadiness = new AgentReadinessService(testAgentPath);
+  const agentReadiness = new AgentReadinessService();
   const readiness = new AgentReadinessIpcService(dialog, agentReadiness, store, runDataOperation);
   const providerConnections = new ProviderConnectionIpcService(
     dialog,
@@ -673,7 +670,6 @@ export function registerIpcHandlers(
     return await runDataOperation(async () => {
       const settings = store.getSettings(createDefaultSettings());
       return detectAgents(
-        testAgentPath,
         await extensions.listActiveAgentAdapters(),
         settings.agentExecutableOverrides,
         settings.customAgent,

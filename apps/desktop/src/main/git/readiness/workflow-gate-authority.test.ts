@@ -51,16 +51,6 @@ describe('DeliveryWorkflowGateAuthority', () => {
     expect(() => authority.bind(target, EXECUTION_ID)).toThrow('ambiguous reviewed sources');
   });
 
-  it('rejects a relevant gate configured with the deterministic test-agent reviewer', () => {
-    const authority = new DeliveryWorkflowGateAuthority(
-      reader(execution(runtimeWithGates(['succeeded'], false, true))),
-    );
-
-    expect(() => authority.bind(target, EXECUTION_ID)).toThrow(
-      'deterministic test agent, which cannot authorize Git delivery',
-    );
-  });
-
   it('rejects a succeeded record whose runtime identity or status disagrees', () => {
     const runtime = runtimeWithGates(['succeeded']);
     const mismatched = execution({
@@ -93,9 +83,8 @@ describe('DeliveryWorkflowGateAuthority', () => {
 function runtimeWithGates(
   gateStatuses: readonly ('succeeded' | 'failed')[],
   ambiguous = false,
-  fixtureReviewer = false,
 ): WorkflowExecutionRuntime {
-  const canvas = workflowCanvas(gateStatuses.length, ambiguous, fixtureReviewer);
+  const canvas = workflowCanvas(gateStatuses.length, ambiguous);
   const initial = createWorkflowExecutionRuntime(canvas, {
     planId: 'plan-1',
     runId: EXECUTION_ID,
@@ -144,7 +133,7 @@ function runtimeWithGates(
   };
 }
 
-function workflowCanvas(gateCount: number, ambiguous: boolean, fixtureReviewer = false): Canvas {
+function workflowCanvas(gateCount: number, ambiguous: boolean): Canvas {
   const base = {
     title: 'Node',
     color: '#445566',
@@ -158,7 +147,7 @@ function workflowCanvas(gateCount: number, ambiguous: boolean, fixtureReviewer =
     ...base,
     id,
     type: 'agent' as const,
-    data: { adapterId: 'test-agent', permissionProfileId: 'worktree' },
+    data: { adapterId: 'codex', permissionProfileId: 'worktree' },
   });
   const gates = Array.from({ length: gateCount }, (_, index) => ({
     ...base,
@@ -168,7 +157,6 @@ function workflowCanvas(gateCount: number, ambiguous: boolean, fixtureReviewer =
       humanApprovalRequired: false,
       requiredCheckIds: [],
       retryPolicy: { maximumIterations: 1, backoffMs: 0 },
-      ...(fixtureReviewer ? { reviewerAgentId: 'fixture-reviewer' } : {}),
     },
   }));
   return CanvasSchema.parse({
@@ -179,7 +167,6 @@ function workflowCanvas(gateCount: number, ambiguous: boolean, fixtureReviewer =
     nodes: [
       agent('agent-1'),
       ...(ambiguous ? [agent('agent-2')] : []),
-      ...(fixtureReviewer ? [agent('fixture-reviewer')] : []),
       { ...base, id: 'sink-1', type: 'task', data: {} },
       ...gates,
     ],

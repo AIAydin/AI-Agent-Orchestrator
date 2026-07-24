@@ -11,7 +11,8 @@ const EnvironmentSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     FORGEBOARD_COLLAB_HOST: z.string().trim().min(1).default('127.0.0.1'),
-    FORGEBOARD_COLLAB_PORT: z.coerce.number().int().min(0).max(65_535).default(1234),
+    FORGEBOARD_COLLAB_PORT: z.coerce.number().int().min(0).max(65_535).optional(),
+    PORT: z.coerce.number().int().min(1).max(65_535).optional(),
     FORGEBOARD_COLLAB_DATABASE_PATH: z
       .string()
       .trim()
@@ -134,7 +135,7 @@ export function loadCollaborationConfig(
   return {
     environment: parsed.NODE_ENV,
     host: parsed.FORGEBOARD_COLLAB_HOST,
-    port: parsed.FORGEBOARD_COLLAB_PORT,
+    port: parsed.FORGEBOARD_COLLAB_PORT ?? parsed.PORT ?? 1234,
     databasePath:
       parsed.FORGEBOARD_COLLAB_DATABASE_PATH === ':memory:'
         ? ':memory:'

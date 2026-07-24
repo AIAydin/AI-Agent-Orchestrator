@@ -30,7 +30,7 @@ describe('agent readiness contracts', () => {
     ).toBe(true);
   });
 
-  it('rejects unknown keys, unsafe paths, and a bundled-agent override', () => {
+  it('rejects unknown keys and unsafe executable paths', () => {
     expect(
       AgentReadinessRequestSchema.safeParse({ agentId: 'codex', surprise: true }).success,
     ).toBe(false);
@@ -44,12 +44,6 @@ describe('agent readiness contracts', () => {
       AgentReadinessRequestSchema.safeParse({
         agentId: 'codex',
         executableOverride: 'codex\t--dangerous',
-      }).success,
-    ).toBe(false);
-    expect(
-      AgentReadinessRequestSchema.safeParse({
-        agentId: 'test-agent',
-        executableOverride: '/tmp/not-the-bundled-agent',
       }).success,
     ).toBe(false);
   });

@@ -3,6 +3,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import type { CanvasEdge, CanvasNode } from '@forgeboard/core/domain';
 
+import { AgentPeersAdapterIdSchema } from '../../shared/agent-peers/index.js';
+import { TerminalArgumentsSchema } from '../../shared/terminal/index.js';
 import type {
   AgentPreviewAction,
   AgentPreviewActionIntent,
@@ -82,12 +84,20 @@ export interface PeerProvision {
   readonly url: string;
 }
 
+export interface AgentPeerLaunchMaterial {
+  readonly projectId: string;
+  readonly nodeId: string;
+  readonly adapterId: string;
+  readonly arguments: readonly string[];
+}
+
 interface ProvisionRecord {
   readonly provisionId: string;
   readonly token: string;
   readonly projectId: string;
   readonly nodeId: string;
   sessionId: string | null;
+  launchMaterial: AgentPeerLaunchMaterial | null;
   readonly createdAt: number;
 }
 
@@ -153,6 +163,7 @@ export class AgentPeersService {
       projectId,
       nodeId,
       sessionId: null,
+      launchMaterial: null,
       createdAt: this.#now(),
     };
     this.#provisionsById.set(provisionId, record);
@@ -172,6 +183,40 @@ export class AgentPeersService {
       FORGEBOARD_PEER_URL: this.#originUrl(),
       FORGEBOARD_PEER_TOKEN: record.token,
     };
+  }
+
+  /**
+   * Records the exact provider arguments created inside Electron main. Automatic Agent launches
+   * consume this record instead of trusting the renderer's copy of `extraArguments`.
+   */
+  registerLaunchMaterial(
+    provisionId: string,
+    adapterId: string,
+    arguments_: readonly string[],
+  ): void {
+    this.#pruneExpiredProvisions();
+    const record = this.#provisionsById.get(provisionId);
+    if (record === undefined || record.sessionId !== null) {
+      throw new Error('Peer session expired. Start again.');
+    }
+    if (record.launchMaterial !== null) {
+      throw new Error('Peer launch material was already registered.');
+    }
+    record.launchMaterial = {
+      projectId: record.projectId,
+      nodeId: record.nodeId,
+      adapterId: AgentPeersAdapterIdSchema.parse(adapterId),
+      arguments: TerminalArgumentsSchema.parse([...arguments_]),
+    };
+  }
+
+  /** Main-process-only exact launch metadata for automatic Agent command reconstruction. */
+  launchMaterialForProvision(provisionId: string): AgentPeerLaunchMaterial | null {
+    this.#pruneExpiredProvisions();
+    const material = this.#provisionsById.get(provisionId)?.launchMaterial;
+    return material === null || material === undefined
+      ? null
+      : { ...material, arguments: [...material.arguments] };
   }
 
   /** Binds a provision to its spawned session, which exempts it from unbound-provision expiry. */

@@ -17,6 +17,7 @@ import {
   CollaborationServerUrlSchema,
   CollaborationSubjectSchema,
   CollaborationTimestampSchema,
+  collaborationPublicInviteConnectionIssue,
 } from '../values.js';
 
 export { CollaborationManagementUrlSchema, type CollaborationManagementUrl } from '../values.js';
@@ -115,6 +116,8 @@ export function collaborationInviteLinkWithConnection(
   const link = new URL(CollaborationInviteLinkSchema.parse(rawLink));
   const serverUrl = CollaborationServerUrlSchema.parse(rawConnection.serverUrl);
   const managementBaseUrl = CollaborationManagementUrlSchema.parse(rawConnection.managementBaseUrl);
+  const connectionIssue = collaborationPublicInviteConnectionIssue(serverUrl, managementBaseUrl);
+  if (connectionIssue !== null) throw new Error(connectionIssue);
   link.searchParams.set('management', managementBaseUrl);
   link.searchParams.set('server', serverUrl);
   return CollaborationInviteLinkSchema.parse(link.toString());
@@ -157,6 +160,16 @@ function validateInviteConnectionParameters(url: URL, context: z.RefinementCtx):
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'The invite WebSocket endpoint is invalid.',
+    });
+  }
+  const connectionIssue = collaborationPublicInviteConnectionIssue(
+    serverValues[0] ?? '',
+    managementValues[0] ?? '',
+  );
+  if (connectionIssue !== null) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: connectionIssue,
     });
   }
 }

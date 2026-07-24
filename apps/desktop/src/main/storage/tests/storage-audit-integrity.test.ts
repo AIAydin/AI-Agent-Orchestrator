@@ -343,7 +343,7 @@ function defaultSettings(): AppSettings {
     canvasGridSize: 16,
     canvasSnapToGrid: true,
     keyboardPreset: 'standard' as const,
-    defaultAgent: 'test-agent' as const,
+    defaultAgent: 'codex' as const,
     defaultPermissionProfile: 'plan-read-only' as const,
     agentExecutableOverrides: {},
     agentDefaultModels: {},

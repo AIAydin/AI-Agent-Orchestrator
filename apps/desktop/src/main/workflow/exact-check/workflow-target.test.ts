@@ -136,7 +136,7 @@ function agentNode(id: string): CanvasNode {
     ...nodeBase(id, id),
     type: 'agent',
     data: {
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       permissionProfileId: 'worktree-write',
       contextAttachmentIds: [],
       promptDraft: 'Make a deterministic change.',

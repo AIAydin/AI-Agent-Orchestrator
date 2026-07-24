@@ -22,7 +22,7 @@ const settings = AppSettingsSchema.parse({
   theme: 'system',
   reducedMotion: false,
   density: 'comfortable',
-  defaultAgent: 'test-agent',
+  defaultAgent: 'codex',
   defaultPermissionProfile: 'worktree-write',
   worktreeRoot: '/tmp/forgeboard-worktrees',
   terminalShell: '/bin/sh',
@@ -35,14 +35,6 @@ const settings = AppSettingsSchema.parse({
 });
 
 const agents: AgentDetection[] = [
-  {
-    id: 'test-agent',
-    label: 'Deterministic test agent',
-    installed: true,
-    executable: '/tmp/test-agent',
-    version: '0.1.0',
-    providerDisclosure: 'Local fixture.',
-  },
   {
     id: 'codex',
     label: 'OpenAI Codex CLI',
@@ -220,7 +212,7 @@ describe('SetupWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
     fireEvent.click(screen.getByRole('radio', { name: /OpenAI Codex CLI/i }));
     expect(await screen.findByRole('button', { name: 'Connect with OpenAI' })).toBeTruthy();
-    expect(screen.getByText(/connect Codex CLI here or choose the local test agent/i)).toBeTruthy();
+    expect(screen.getByText(/connect Codex CLI here/i)).toBeTruthy();
     expect(screen.getByText(/official sign-in opens in your browser/i)).toBeTruthy();
     expect(screen.getByText('Advanced').closest('details')?.open).toBe(false);
     expect(screen.getByRole('button', { name: /Continue/ }).hasAttribute('disabled')).toBe(true);
@@ -242,7 +234,7 @@ describe('SetupWizard', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await continueFromAgentStep();
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
 
     expect(screen.getByLabelText<HTMLSelectElement>('Project for command suggestions').value).toBe(
@@ -318,7 +310,7 @@ describe('SetupWizard', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await continueFromAgentStep();
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     fireEvent.change(screen.getByLabelText('Development server executable'), {
       target: { value: 'missing-preview-tool' },
@@ -441,7 +433,7 @@ describe('SetupWizard', () => {
 
   it('remediates a missing selected CLI and validates the unsaved override before continuing', async () => {
     const missingCodex: AgentDetection = {
-      ...agents[1]!,
+      ...agents[0]!,
       installed: false,
       executable: null,
       version: null,
@@ -467,7 +459,7 @@ describe('SetupWizard', () => {
     render(
       <SetupWizard
         settings={settings}
-        agents={[agents[0]!, missingCodex]}
+        agents={[missingCodex]}
         checkAgentReadiness={checkAgentReadiness}
         onComplete={onComplete}
         onSkip={() => Promise.resolve()}
@@ -583,7 +575,7 @@ describe('SetupWizard', () => {
     await waitFor(() => expect(onSkip).toHaveBeenCalledTimes(1));
   });
 
-  it('blocks invalid environment names and explains that secret values are not persisted', () => {
+  it('blocks invalid environment names and explains that secret values are not persisted', async () => {
     render(
       <SetupWizard
         settings={settings}
@@ -597,7 +589,7 @@ describe('SetupWizard', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await continueFromAgentStep();
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     const continueButton = screen.getByRole<HTMLButtonElement>('button', {
       name: /Continue/,
@@ -632,7 +624,7 @@ describe('SetupWizard', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /Set up Forgeboard/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
+    await continueFromAgentStep();
     fireEvent.click(screen.getByRole('radio', { name: /Custom/u }));
 
     expect(screen.getByText('Limits are stated, not enforced')).toBeTruthy();
@@ -653,3 +645,10 @@ describe('SetupWizard', () => {
     });
   });
 });
+
+async function continueFromAgentStep(): Promise<void> {
+  await screen.findByText('Connected');
+  const continueButton = screen.getByRole<HTMLButtonElement>('button', { name: /Continue/ });
+  await waitFor(() => expect(continueButton.disabled).toBe(false));
+  fireEvent.click(continueButton);
+}

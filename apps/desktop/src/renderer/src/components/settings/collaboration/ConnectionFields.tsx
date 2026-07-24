@@ -6,18 +6,28 @@ interface ConnectionFieldsProps {
   readonly settings: AppSettings;
   readonly setSettings: Dispatch<SetStateAction<AppSettings>>;
   readonly disabled: boolean;
+  readonly includeServerFields?: boolean;
 }
 
-export function ConnectionFields({ settings, setSettings, disabled }: ConnectionFieldsProps) {
+export function ConnectionFields({
+  settings,
+  setSettings,
+  disabled,
+  includeServerFields = true,
+}: ConnectionFieldsProps) {
   function update(patch: Partial<AppSettings>): void {
     setSettings((current) => ({ ...current, ...patch }));
   }
 
   return (
     <>
-      <div className="two-column">
-        <ServerUrlField settings={settings} disabled={disabled} update={update} />
-      </div>
+      {includeServerFields && (
+        <CollaborationServerFields
+          settings={settings}
+          setSettings={setSettings}
+          disabled={disabled}
+        />
+      )}
       <div className="two-column">
         <label>
           Collaborator ID
@@ -44,6 +54,22 @@ export function ConnectionFields({ settings, setSettings, disabled }: Connection
         />
       </label>
     </>
+  );
+}
+
+export function CollaborationServerFields({
+  settings,
+  setSettings,
+  disabled,
+}: ConnectionFieldsProps) {
+  function update(patch: Partial<AppSettings>): void {
+    setSettings((current) => ({ ...current, ...patch }));
+  }
+
+  return (
+    <div className="two-column collaboration-server-fields">
+      <ServerUrlField settings={settings} disabled={disabled} update={update} />
+    </div>
   );
 }
 
@@ -128,7 +154,7 @@ function ServerUrlField({
           onChange={(event) => update({ collaborationUrl: event.target.value })}
         />
         <small id="collaboration-url-help">
-          The ws:// or wss:// address from your administrator.
+          Shared invites require the public wss:// address from your hosted server.
         </small>
       </label>
       <label>
@@ -143,7 +169,8 @@ function ServerUrlField({
           onChange={(event) => update({ collaborationManagementUrl: event.target.value })}
         />
         <small>
-          Used to create rooms and redeem invites. HTTP is accepted only on this device.
+          Shared invites require public HTTPS. Local HTTP remains available for advanced direct
+          connections only.
         </small>
       </label>
     </>

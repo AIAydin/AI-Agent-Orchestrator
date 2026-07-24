@@ -345,7 +345,7 @@ describe('ProjectService moved-project recovery', () => {
       id: '50000000-0000-4000-8000-000000000004',
       projectId: PROJECT_ID,
       nodeId: 'agent-node',
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       status: 'succeeded',
       cwd: canonicalOriginal,
       branch: null,
@@ -489,7 +489,7 @@ describe('ProjectService moved-project recovery', () => {
       id: '50000000-0000-4000-8000-000000000004',
       projectId: PROJECT_ID,
       nodeId: 'agent-node',
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       status: 'succeeded',
       cwd: canonicalRepository,
       branch: null,
@@ -526,7 +526,7 @@ describe('ProjectService moved-project recovery', () => {
 
 describe('trusted extension adapter detection', () => {
   it('treats a valid executable chosen in Settings as installed even when it is off PATH', async () => {
-    const detections = await detectAgents('/tmp/not-used-test-agent', [], {
+    const detections = await detectAgents([], {
       codex: process.execPath,
     });
 
@@ -548,7 +548,7 @@ describe('trusted extension adapter detection', () => {
       writeFileSync(executable, `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`);
       chmodSync(executable, 0o755);
 
-      const detections = await detectAgents('/tmp/not-used-test-agent', [], {
+      const detections = await detectAgents([], {
         codex: executable,
       });
 
@@ -577,7 +577,7 @@ describe('trusted extension adapter detection', () => {
       ],
     });
 
-    const detections = await detectAgents('/tmp/not-used-test-agent', [], {}, customAgent);
+    const detections = await detectAgents([], {}, customAgent);
 
     expect(detections.find((detection) => detection.id === 'custom')).toMatchObject({
       label: 'Custom local Node',
@@ -621,7 +621,7 @@ describe('trusted extension adapter detection', () => {
       },
     });
 
-    const detections = await detectAgents('/tmp/not-used-test-agent', [manifest]);
+    const detections = await detectAgents([manifest]);
     const extension = detections.find((detection) => detection.id === manifest.id);
 
     expect(extension).toMatchObject({

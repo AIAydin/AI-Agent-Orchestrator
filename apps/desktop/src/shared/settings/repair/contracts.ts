@@ -41,6 +41,7 @@ const SettingsRepairJsonEvidenceSchema = z
 
 export const SettingsRepairFieldPathSchema = z.enum([
   'agentExecutableOverrides',
+  'agentDefaultModels',
   'customAgent',
   'defaultAgent',
   'customPermissionProfile',

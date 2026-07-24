@@ -183,13 +183,6 @@ export function ReviewGateNodeFace({ id, data }: NodeFaceProps): JSX.Element {
                 ))}
               </select>
             </label>
-            {selectedReviewer !== undefined &&
-            (selectedReviewer.adapterId ?? session.settings.defaultAgent) === 'test-agent' ? (
-              <p className="test-face-warning" role="status">
-                Test agent is a demo, not a real AI review, and can&apos;t approve Git delivery.
-                Choose Codex or Claude Code when the review must count toward delivery.
-              </p>
-            ) : null}
             {agentEntries.length === 0 ? (
               <p className="test-face-warning">
                 Add and configure an Agent node before enabling an AI reviewer.
@@ -197,9 +190,8 @@ export function ReviewGateNodeFace({ id, data }: NodeFaceProps): JSX.Element {
             ) : null}
             {unsupportedAgents.length > 0 ? (
               <p className="test-face-warning">
-                Reviewer mode currently supports Test agent, Codex, and Claude Code. Reconfigure or
-                add a supported Agent for {unsupportedAgents.map((entry) => entry.title).join(', ')}
-                .
+                Reviewer mode currently supports Codex and Claude Code. Reconfigure or add a
+                supported Agent for {unsupportedAgents.map((entry) => entry.title).join(', ')}.
               </p>
             ) : null}
             {typeof data.reviewerAgentId === 'string' &&

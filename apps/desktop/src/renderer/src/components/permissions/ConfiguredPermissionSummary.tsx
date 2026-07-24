@@ -12,13 +12,11 @@ import './permissions.css';
 export function ConfiguredPermissionSummary({
   profile,
   settings,
-  adapterId,
 }: {
   profile: PermissionProfile;
   settings: AppSettings;
-  adapterId: string;
 }) {
-  const unavailable = permissionProfileUnavailableReason(profile, settings, adapterId);
+  const unavailable = permissionProfileUnavailableReason(profile, settings);
   if (profile !== 'custom') {
     return (
       <div className="configured-permission-summary">

@@ -174,9 +174,6 @@ importers:
       '@forgeboard/git-engine':
         specifier: workspace:*
         version: link:../../packages/git-engine
-      '@forgeboard/test-agent':
-        specifier: workspace:*
-        version: link:../../packages/test-agent
       '@forgeboard/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -340,16 +337,6 @@ importers:
         version: 3.2.4(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(jsdom@26.1.0(supports-color@7.2.0))(lightningcss@1.32.0)(supports-color@7.2.0)(tsx@4.23.1)
 
   packages/peer-mcp:
-    devDependencies:
-      tsup:
-        specifier: 'catalog:'
-        version: 8.5.0(jiti@2.7.0)(postcss@8.5.21)(supports-color@7.2.0)(tsx@4.23.1)(typescript@5.8.3)
-
-  packages/test-agent:
-    dependencies:
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.67
     devDependencies:
       tsup:
         specifier: 'catalog:'

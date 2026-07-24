@@ -60,8 +60,8 @@ changing an extension after launch review prevents the process from starting. Pr
 executable, arguments, working directory, environment names, context, permission profile, and
 warnings remain visible in the standard run approval dialog.
 
-Trusted canvas node definitions appear alongside built-in templates. Forgeboard creates and renders
-the generic node, ports, inspector, and persisted values itself. Text, number, boolean, select,
+Trusted canvas node definitions appear alongside built-in node types. Forgeboard creates and
+renders the generic node, ports, inspector, and persisted values itself. Text, number, boolean, select,
 file-reference, and directory-reference fields use bounded built-in controls. File and folder
 references come only from main-owned native pickers and are stored as canonical local paths; users
 never type path configuration. Persisted values are normalized against the current field kinds,

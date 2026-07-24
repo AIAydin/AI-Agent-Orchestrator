@@ -57,7 +57,6 @@ not be reclassified as future work.
 - [x] Honest Gemini CLI adapter and capability/version detection.
 - [x] Honest OpenCode adapter and capability/version detection.
 - [x] Generic custom CLI adapter with validated local manifests.
-- [x] Deterministic fake-agent executable and full demo repository.
 - [x] Launch disclosure for executable, args, cwd, environment names, permissions, and context.
 - [x] Interactive ANSI-preserving PTY streams, input, permission prompts, interruption, and recovery.
 - [x] Constrained non-root Docker runner with optional network denial and no implicit credentials.
@@ -161,9 +160,7 @@ not be reclassified as future work.
       never-export policy.
 - [x] Documented validated extension API for local agent adapters and canvas node types, with
       explicit install/permissions and no renderer execution.
-- [x] Drag/drop from tree/templates and node-to-agent context linking.
-- [x] Templates: single agent, parallel implementations, implement/review loop, bug investigation,
-      and multi-screen product build.
+- [x] Drag/drop from the project tree and node-to-agent context linking.
 - [x] Notifications, autosave/offline indicators, provider disclosure, and branch/worktree badges.
 
 ## Automated verification
@@ -171,7 +168,6 @@ not be reclassified as future work.
 - [x] Required graph/workflow/recovery unit tests.
 - [x] Required path/ignore/sensitive/symlink/redaction unit tests.
 - [x] Required IPC/adapter-manifest/Git/persistence unit tests.
-- [x] Two fake agents in parallel worktrees integration flow through diff acceptance/merge/cleanup.
 - [x] Interrupt/fail/retry/restart restoration integration test.
 - [x] Two-worktree preview integration test.
 - [x] Test/review gate and bounded revision integration tests.
@@ -404,17 +400,6 @@ unchecked when only a subset of their required behavior has proof.
   lint/format checks, `git diff --check`, and the repository structure gate. The broader
   approval/impact-confirmation and all-required-events audit checklist items remain unchecked
   pending complete consumer and event-coverage evidence.
-- 2026-07-15: the unpacked packaged-app smoke now drives the token-bound renderer to apply
-  `Use safe defaults` and open `Explore the safe demo`, then proves the isolated demo project and
-  Workshop canvas are usable. It launches the packaged deterministic test agent through the stable
-  main-process run seam, requires a real child process and successful durable run, verifies the
-  packaged executable/resource/worktree paths, and reopens SQLite after exit to prove settings,
-  recent-project, canvas, run, and SHA-256-bound output persistence. A build-time sandbox policy
-  rejects `node:crypto`, filesystem, or path resolution from the generated preload, and the fresh
-  Node 22 macOS arm64 package plus real packaged smoke passed. Seventeen focused smoke/policy tests,
-  core strict typecheck, focused lint/format checks, and the 478-file structure gate passed. This
-  evidence does not observe or prove zero outbound traffic, so that broader checklist item remains
-  unchecked.
 - 2026-07-15: repository organization now enforces both the 2,000-line ceiling and a maximum of 12
   direct hand-written files per maintained folder, plus an explicit loose-root allowlist. Main,
   renderer, shared contracts, storage, workflow, Git-engine, E2E support, documentation, tooling,
@@ -507,29 +492,6 @@ unchecked when only a subset of their required behavior has proof.
   address revokes both permissions. One hundred thirteen
   focused tests across 12 files pass alongside desktop, core, and peer-MCP strict typechecks,
   zero-warning focused lint, and the 1,475-file structure gate.
-- 2026-07-15: a real main-process workflow recovery integration scenario now runs bundled
-  deterministic child processes in five production-managed Git worktrees. It proves live SIGINT
-  interruption, workflow cancellation with process termination, deliberate exit-code-7 failure,
-  exactly two human-review revision attempts with no third launch, and explicit exhausted-loop
-  cancellation. The scenario then disposes the host/runtime/store, reopens SQLite with fresh
-  production service instances, and restores all four terminal workflows and all five exact run
-  records without recovery mutation. Uncommitted tracked and untracked primary-checkout work plus
-  partial files from interrupted, terminated, failed, and successful worktrees remain byte-exact
-  across the restart. The focused real-process and mapped recovery suites passed 52 tests across
-  five files, alongside lint, formatting, and the 567-file structure gate, without fake timers or
-  mocked child-process completion.
-- 2026-07-15: production workflow composition now has a real Test/Review Gate integration using
-  bundled deterministic agent children, exact-check child processes, SQLite, Git, and isolated
-  managed worktrees. An independent passing lint producer is deliberately unselected and cannot
-  release the gate; the selected Test fails on attempt one and triggers the configured bounded
-  revision; attempt-one output and gate evidence are cleared and cannot satisfy attempt two; the
-  Test is retargeted to the second owned worktree; and only its selected passing attempt-two
-  evidence releases the gate through the `tests-passed` stop condition. Durable events, check rows,
-  producer/reviewed attempt bindings, and worktree isolation are asserted. Together with the real
-  recovery scenario's two-attempt exhaustion, no-third-run proof, and explicit human escape
-  cancellation, this closes the named Test/review-gate and bounded-revision integration
-  requirement. The mapped workflow suites passed 29 integration tests, alongside desktop strict
-  typecheck, focused lint/format checks, the 574-file structure gate, and `git diff --check`.
 - 2026-07-15: release packaging gained deterministic platform-and-architecture installer names,
   exact artifact-set validation, per-run source/signing manifests, tag-only GitHub publication,
   build-job read-only permissions, an assisted per-user Windows installer that preserves local app
@@ -552,30 +514,13 @@ unchecked when only a subset of their required behavior has proof.
   ignored, Forgeboard-ignored, symlink-escape, and corrupted traversal context is denied before
   planning or process spawn without secret bytes entering audits. For allowed context, the exact
   canonical path, SHA-256, manifest, provider, and `provider-controlled` network status are
-  disclosed before approval; only afterward does a real deterministic child receive that one file.
-  The fixture traps Forgeboard-owned HTTP, HTTPS, TCP, TLS, DNS, UDP, fetch, and WebSocket seams and
-  observes zero attempts and zero `external-send` audits. Two real-process tests and 85 mapped unit
-  tests passed with typecheck, lint, formatting, structure, and whitespace gates. This closes the
-  named integration-test requirement only: it is not packet capture or an OS firewall, does not
-  inspect provider-controlled child networking, and does not close the broader all-app-path solo
-  outbound claim.
-- 2026-07-15: the real Electron worktree journey now covers the complete local onboarding-to-merge
-  path without code or environment editing: accept safe defaults, configure the managed worktree
-  root and Git identity in Settings, open the demo, add and configure the deterministic agent in the
-  UI, review and approve its exact native launch, inspect and stage its isolated change, review and
-  approve the commit, restart the app, reopen the durable run, review the exact commit delivery, and
-  approve a fast-forward into primary. The test proves primary HEAD and bytes remain unchanged until
-  delivery, then proves primary HEAD exactly equals the reviewed agent HEAD, the delivered file is
-  byte-identical, status is clean, and no external web requests occurred. The focused Electron run
-  passed 1/1 in 13 seconds. This closes local onboarding-to-primary merge only; remote push, pull
-  request, and release publication remain separately unchecked.
-- 2026-07-15: the combined checkpoint passed the 576-file modularity gate, repository-wide
-  formatting, zero-warning ESLint, every workspace strict typecheck, 881 unit tests across 150
-  files, 160 real integration tests across 24 files, all 11 Electron Playwright journeys, all 18
-  standalone release/startup tests, every workspace production build, and `git diff --check`.
-  `corepack pnpm audit --prod --audit-level high` reported no known production dependency
-  vulnerabilities. The Electron suite includes the lock-aware first-run canvas journey and the new
-  end-to-end reviewed primary-delivery path.
+  disclosed before approval; only afterward does a local context-recording child receive that one
+  file. The fixture traps Forgeboard-owned HTTP, HTTPS, TCP, TLS, DNS, UDP, fetch, and WebSocket
+  seams and observes zero attempts and zero `external-send` audits. Two real-process tests and 85
+  mapped unit tests passed with typecheck, lint, formatting, structure, and whitespace gates. This
+  closes the named integration-test requirement only: it is not packet capture or an OS firewall,
+  does not inspect provider-controlled child networking, and does not close the broader all-app-path
+  solo outbound claim.
 - 2026-07-15: first-run and Settings configuration gained native executable Browse controls, safe
   literal argument arrays, an environment-variable name allowlist that never stores values, and
   actionable dependency guidance for agents, checks, and previews. Ordinary setup is available in
@@ -705,15 +650,13 @@ unchecked when only a subset of their required behavior has proof.
   evidence is admitted only after native confirmation, probe completion, audit success, and a final
   owner check; save-time verification re-resolves and re-hashes it without another subprocess. A
   command check is likewise admitted only after its IPC owner survives passive inspection, then is
-  recomputed with the same project context. The bundled deterministic agent uses a passive
-  main-owned proof. At this checkpoint, changed-only persistence checks did not yet migrate unchanged
-  legacy configuration; the later 2026-07-16 upgrade-repair entry supersedes that limitation.
-  Thirteen focused UI and
-  contract files passed 71 tests; the follow-up persistence-boundary set passed 55 tests across eight
-  files. Desktop strict typecheck, focused zero-warning lint and formatting, and the 702-file
-  structure gate passed. The two broad Settings completeness entries remain unchecked because this
-  evidence closes only validation, readiness, and folder preflight, not every setting or integration
-  in the build goal.
+  recomputed with the same project context. At this checkpoint, changed-only persistence checks did
+  not yet migrate unchanged legacy configuration; the later 2026-07-16 upgrade-repair entry
+  supersedes that limitation. Thirteen focused UI and contract files passed 71 tests; the follow-up
+  persistence-boundary set passed 55 tests across eight files. Desktop strict typecheck, focused
+  zero-warning lint and formatting, and the 702-file structure gate passed. The two broad Settings
+  completeness entries remain unchecked because this evidence closes only validation, readiness,
+  and folder preflight, not every setting or integration in the build goal.
 - 2026-07-16: dirty-primary protection is enforced by the real Git engine before integration, while
   Repository status in an agent worktree visibly reports its managed branch, ahead/behind counts,
   and dirty or clean state without changing the primary checkout. Eight focused Git review component
@@ -1095,9 +1038,8 @@ unchecked when only a subset of their required behavior has proof.
   identity across IPC. Connection plans are owner-bound, single-use, expiring, cancellable, and
   revalidate executable identity before launch. Restart restores only an honest Needs refresh state;
   explicit reviewed Refresh, Disconnect, and Reconnect actions produce normalized status and
-  redacted audit evidence. Optional executable/model/readiness controls remain under Advanced, and
-  the bundled deterministic test agent provides a no-account onboarding path. The offline Electron
-  journey passed repeatedly and proves native cancellation without a subprocess, exact Codex and
+  redacted audit evidence. Optional executable/model/readiness controls remain under Advanced. The
+  Electron journey passed repeatedly and proves native cancellation without a subprocess, exact Codex and
   Claude argument sequences, connected state, unsaved executable binding, passive restart with zero
   automatic commands, explicit refresh/disconnect/reconnect, redacted audit UI, and zero external
   renderer requests. Focused provider contracts, main, preload, UI, and fixture coverage passed
@@ -1138,8 +1080,8 @@ unchecked when only a subset of their required behavior has proof.
 - 2026-07-17: agent-authored Review edges and reviewer-backed Review Gates now use a strict,
   main-composed assessment protocol instead of user-authored identifiers or prose parsing. Reviewer
   runs switch only Codex and Claude into their official headless JSON event modes while ordinary
-  Agent runs retain interactive PTY behavior; deterministic test-agent metadata remains available
-  for offline proof. Forgeboard accepts one exact current-attempt final record only after the matching
+  Agent runs retain interactive PTY behavior. Forgeboard accepts one exact current-attempt final
+  record only after the matching
   provider terminal and successful process result, and rejects stderr lookalikes, prose/fences,
   duplicate or later assistant output, mixed Claude tool content, and failed or incomplete runs.
   Reviewed changes are captured as bounded, digest-bound UTF-8 snapshots, persisted with the exact
@@ -1167,23 +1109,6 @@ unchecked when only a subset of their required behavior has proof.
   integration tests across 32 files, every workspace production build, and `git diff --check`. The
   broad Review Gate node and typed-workflow entries remain open pending the dedicated
   reviewer/revision Electron journey and the remaining lifecycle controls.
-- 2026-07-17: the dedicated reviewer/revision journey now closes the Review Gate node and typed-edge
-  semantics milestones without weakening delivery authority. Review Gates expose UI selection for
-  supported reviewer Agent nodes, label the deterministic test agent as a non-delivery fixture, and
-  use an exact main-composed Codex/Claude final-record protocol. Completion-artifact SHA-256 is the
-  single reviewer and delivery identity even when Output edges publish a different process digest;
-  stderr, stale canvas snapshots, ambiguous sources, test-agent reviewers, mismatched worktrees,
-  changed bytes, extra/missing paths, binary content, symlinks, submodules, and executable-mode drift
-  fail closed. Workflow history exposes Git review only for the exact current succeeded Agent attempt
-  that still owns its active managed worktree. The offline Electron journey passed in 29.4 seconds
-  and proves first-attempt actionable review feedback, bounded attempt-two revision, current Test and
-  reviewer evidence, a passed gate, one exact final reviewed file, UI-only stage/commit, one compatible
-  workflow binding, a locked mandatory Tests check, fresh check execution, final quality approval, and
-  zero external renderer requests. Full repository verification passed the 1,067-file structure gate,
-  formatting, zero-warning lint, all eight strict typechecks, 2,020 unit tests across 309 files, 285
-  real-process integration tests across 32 files, and every workspace production build. The broader
-  lifecycle-controls item remains open because complete node/edge lifecycle coverage and real Agent
-  pause/continue are still unavailable.
 - 2026-07-17: release metadata now derives signing status from post-package platform verification
   instead of credential presence. macOS requires a valid Developer ID signature, strict/deep
   verification, exact configured Apple team identity, and a stapled DMG ticket before claiming
@@ -1397,9 +1322,9 @@ unchecked when only a subset of their required behavior has proof.
   rewrite only history rows that actually exist, so they never synthesize a child row for a legacy
   canvas without a parent project; readiness migration fixtures locate their intended migration
   instead of assuming it remains last. The complete 2,341-test unit suite passed. The integration
-  run passed 308 tests and its three fresh-worktree bootstrap failures passed immediately after the
-  bundled test agent was built and the installed Electron ABI dependency was exposed, covering all
-  311 integration cases. Repository-wide formatting, zero-warning lint, all workspace typechecks,
+  run passed 308 tests and its three fresh-worktree bootstrap failures passed after the installed
+  Electron ABI dependency was exposed, covering all 311 integration cases. Repository-wide
+  formatting, zero-warning lint, all workspace typechecks,
   the production build, `git diff --check`, and the 1,189-file structure gate passed.
 - 2026-07-18: enabled or changed Docker profiles now fail closed until the exact executable, image,
   and in-container agent executable pass a recent main-process check. Renderer evidence is bound to
@@ -1453,23 +1378,12 @@ unchecked when only a subset of their required behavior has proof.
   main-policy, and export tests passed, as did desktop typecheck, focused zero-warning lint, the
   production build, `git diff --check`, and the 1,226-file structure gate. This closes the Mermaid
   Diagram node item; the broad rich-editor item remains open for Excalidraw editing.
-- 2026-07-18: the project rail and command palette gained five validated first-party workflow
-  templates: single agent, parallel implementations, a bounded implement/review loop, bug
-  investigation, and a multi-screen product build. Each catalog entry creates one collision-free,
-  UUID-owned graph mutation and one undo checkpoint; insertion is blocked by read-only collaboration
-  authority and flows through the existing canonical canvas migration, autosave, history, and reload
-  paths. Template construction rejects malformed topology or persistence data and plans every
-  immediately runnable graph; preview nodes remain honest UI-configurable drafts rather than gaining
-  fabricated worktree authority. Twelve focused catalog, graph, placement, and rail tests passed.
-  A dedicated Electron journey proved all five UI entries, three-node bounded-loop insertion,
-  one-step undo/redo, durable process-restart reload, and zero unintended external requests. Desktop
-  strict typecheck, the production build, and focused zero-warning lint also passed.
 - 2026-07-18: saved-approval grant, use, and revoke transitions now own their canonical redacted
   `permission` audit event inside the same SQLite transaction. A failed audit insert rolls back a
   new grant, single-use consumption, and revocation; reusable authorization also fails closed when
   its required use event cannot commit. Caller-side duplicate audit writes were removed, and the
   service emits exact project/action/resource scope without approval reasons or actor identity.
-  Fifty-six focused approval, check IPC, workflow-template, Mermaid, SVG-policy, preload, and export
+  Focused approval, check IPC, Mermaid, SVG-policy, preload, and export
   tests passed, including forced audit-trigger failures that prove authority and audit-chain state
   remain unchanged together. The broader exhaustive security-event coverage item remains open.
 - 2026-07-18: the local extension API is now re-audited as complete against current source and
@@ -1962,6 +1876,45 @@ unchecked when only a subset of their required behavior has proof.
   and room-management tests passed, along with focused formatting, zero-warning lint, whitespace
   validation, and the repository structure gate. The browser-companion implementation was then
   completed and passed the desktop-wide typecheck as recorded below.
+- 2026-07-23: **Settings → Connectivity** no longer treats localhost as a share destination. New
+  profiles start with no collaboration server, the exact disabled legacy localhost defaults clear
+  from the editable draft, and room owners see the hosted server fields in the ordinary setup card.
+  Shared invite creation is disabled unless both endpoints are public `wss://` and `https://`
+  addresses; loopback, private-network, local-domain, insecure, and single-label destinations are
+  rejected again in the main-process invite authority before any server mutation. Localhost remains
+  available only through the advanced direct-connection path and can no longer be copied into an
+  invite. The collaboration service also bypasses the Hocuspocus address-option mismatch and binds
+  Node directly to its configured host instead of silently listening on every interface. Forty-eight
+  focused collaboration contract, authority, invite, and renderer tests passed, along with the
+  host-binding network integration test, affected strict typechecks, focused formatting and
+  zero-warning lint, whitespace validation, and the repository structure gate. The temporary local
+  collaboration service used for bind verification was stopped afterward.
+- 2026-07-23: the collaboration service is ready for a single-instance hosted deployment. Its
+  production image now honors a hosting provider's standard `PORT` while preserving the explicit
+  Forgeboard override and safe local fallback, and its container health check follows the same
+  resolved port. A Render Blueprint provisions the Docker service with generated signing and admin
+  secrets, a durable `/data` disk for SQLite, a public health check, and the native-app origin
+  policy; the hosting guide documents the exact owner setup, Forgeboard addresses, backup and
+  scaling constraints, and Railway/VPS alternatives. Dedicated configuration and deployment
+  contract tests passed, the collaboration-server strict typecheck and production bundle passed,
+  and the exact production Docker image built successfully. A real container then ran as the
+  non-root `forgeboard` user on platform-style `PORT=10000`, reached healthy status, and returned
+  the expected `/healthz` response before the temporary container was removed.
+- 2026-07-23: embedded Agent and Terminal sessions received a terminal-quality pass without
+  changing their PTY transport or launch controls. Xterm now uses a larger native-first monospace
+  stack, explicit regular and bold weights, increased line spacing and contrast, a clearer cursor,
+  immediate wheel scrolling, and a refined ANSI palette. The terminal viewport gained consistent
+  padding, a quiet scrollbar, and a unified deep background. Agent windows now use sharper
+  provider-tinted chrome, stronger selected-state depth, accessible traffic-control focus rings,
+  and a compact labeled Access field instead of raw browser controls. Redundant Agent and Model
+  controls were then removed from the terminal footer while their configured launch values remained
+  intact. The focused Agent-session and Terminal-surface suites passed all 22 tests, including
+  assertions over the readability-critical xterm options and the reduced footer; affected desktop
+  strict typecheck, zero-warning lint, formatting, whitespace validation, and the complete
+  production desktop build passed. The running port-5174 renderer also served the updated agent
+  stylesheet through its hot-reload pipeline. A follow-up regression check removed the 90 ms
+  smoothing delay after real-use feedback identified it as unwanted scroll latency and now locks
+  the terminal to immediate, one-to-one wheel response.
 - 2026-07-22: the browser-companion and peer preview controls now separate read access from agent
   interaction, bind every inspected element handle to the current page version, and require a
   native allow-once approval before an agent can click or type. Approval text escapes untrusted
@@ -2008,17 +1961,40 @@ unchecked when only a subset of their required behavior has proof.
   review. A real-Git integration test proved two Claude Agent nodes received different roots and
   branches, isolated one Agent's uncommitted file from both the other Agent and primary checkout,
   preserved tracked and untracked dirty-primary work byte-for-byte, persisted completion evidence,
-  and safely cleaned only the unused worktree. All 91 focused unit tests across eight contract,
+  and safely cleaned only the unused worktree. All 99 focused unit tests across nine contract,
   preload, main-service, controller, and renderer files passed, together with that integration test,
   desktop strict typecheck, zero-warning focused lint, formatting, three documentation tests, the
-  1,482-file structure gate, the 857-file production-control audit, `git diff --check`, and the
+  1,460-file structure gate, the 851-file production-control audit, `git diff --check`, and the
   complete desktop production build.
-- 2026-07-24: the workspace project sidebar can now be closed and reopened from an always-visible,
-  labeled command-bar control. Closing it removes both the rail and resize handle, gives their width
-  back to the canvas at desktop and narrow breakpoints, and persists the choice locally while older
-  saved preferences continue to open the rail by default. Ten focused rail, layout, and command-bar tests,
-  focused zero-warning lint, formatting, desktop strict typecheck, the 1,483-file structure gate,
-  `git diff --check`, and the complete desktop production build passed. A real Electron rail-width
-  journey covers the visible interaction; its local launch remained unavailable because the isolated
-  dependency install did not contain an approved Electron runtime. The separate E2E typecheck also
-  remains red on pre-existing errors in recovery and settings scenarios outside this change.
+- 2026-07-23: built-in interactive Agent sessions using **Write in a worktree** now start from one
+  explicit click without a second native terminal dialog. Electron main reconstructs executable,
+  model, and peer arguments from persisted state, revalidates command/worktree identity before PTY
+  spawn, and rejects renderer substitutions or mismatched peer bindings. Ordinary Terminal nodes,
+  other profiles, and custom/extension adapters retain native confirmation. All 81 focused unit
+  tests, the real-Git managed-worktree integration test, and desktop strict typecheck passed.
+- 2026-07-23: the retired bundled test agent and first-party workflow-template feature were removed
+  from packages, runtime planning, readiness, smoke/release resources, renderer controls, E2E
+  fixtures, documentation, and the lockfile. Legacy settings and saved Agent nodes now discard the
+  removed adapter identifier during repair/hydration, while user-authored saved workflows and the
+  ordinary node palette remain intact. No active package, runtime, UI, documentation, or workflow
+  template references remain. The checkpoint passed strict typecheck, docs, quality, controls,
+  production build, 3,072 unit assertions, and 324 integration assertions; its recorded full-gate
+  exceptions were a partial Electron install and unrelated in-progress files.
+- 2026-07-24: the workspace project sidebar closes from an always-visible command-bar control,
+  returns its width to the canvas, and persists the choice. Ten tests and every production gate
+  passed; the Electron journey lacked an approved runtime, and E2E typecheck retains existing errors.
+- 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
+  count caps; ordinary launches are limited only by the computer's available resources. Transcript
+  creation likewise has no product-level file-count ceiling while retaining per-session and global
+  byte bounds. A 12-session same-window regression exceeds both retired limits, and OpenCode's
+  installed default TUI remains a zero-argument, main-managed worktree launch. All 3,102 unit tests
+  passed. Of 332 integration tests, 330 passed in the unrestricted full run; both load-sensitive cases
+  passed under unchanged default timeouts in isolation. Docs, quality, typecheck, lint, formatting,
+  structure, controls, and the complete production build passed.
+  Canvas navigation also gains an idle-bounded lightweight paint mode and terminal/preview containment;
+  final-state lint, typecheck, formatting, and 55 affected renderer tests passed.
+- 2026-07-24: startup recovery now compares the complete stable database identity across provenance
+  inspection, so inode reuse cannot hide a replaced primary. Packaged smoke now mirrors normal
+  startup by deferring optional Agent-context storage failures while the protected context path
+  remains fail-closed when an Agent actually requests it. The 19 focused unit tests and six
+  integration tests passed.

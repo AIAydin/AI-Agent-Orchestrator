@@ -15,8 +15,9 @@ version keeps **Continue** disabled and shows an actionable reason. A successful
 validated executable and version.
 
 Readiness is not launch approval. Checking a draft override does not persist it, and completing setup
-does not let the renderer start that executable. Every later agent run still uses the exact
-cancel-default launch review described below.
+does not let the renderer start that executable. Task-style Agent runs still use the exact
+cancel-default launch review described below. The embedded built-in worktree session uses the
+main-reconstructed automatic path described under **Interactive Agent sessions**.
 
 The Settings UI applies the same rule to every explicitly configured provider, enabled custom CLI,
 preview command, and standard or custom check command. The save transaction independently enforces
@@ -33,7 +34,7 @@ existing parent. Backup storage may follow an alias only after checking the cano
 showing that canonicalization as a warning; backup creation then uses and records the canonical
 destination.
 
-Every agent run has a cancel-default review step. The review shows the exact top-level executable,
+Every task-style Agent run has a cancel-default review step. The review shows the exact top-level executable,
 arguments, working directory, inherited environment-variable names, selected context, context
 hashes, effective permission profile, and known limitations. Cancelling releases the prepared run
 without starting the agent.
@@ -44,6 +45,17 @@ and rejects a request whose prompt, adapter, or permission profile does not matc
 therefore prevents preparation instead of running with transient renderer state or a fallback
 profile. The renderer saves again immediately before approval; after the native confirmation, main
 re-resolves the persisted configuration and context authority before launch.
+
+## Interactive Agent sessions
+
+The embedded **Start** and **Restart** controls use a narrower path than a task-style Agent run. For a
+built-in adapter with **Write in a worktree**, one click is enough: Electron main reloads the exact
+saved Agent node, provisions its dedicated worktree, independently resolves the configured
+executable, model arguments, and main-created peer-tool arguments, and validates their identities
+again immediately before spawning. Renderer-provided executable, arguments, working directory, and
+environment names are replaced rather than trusted, so no additional native terminal dialog is
+shown. Ordinary Terminal nodes, other access profiles, and custom or extension-provided adapters
+retain native launch confirmation.
 
 ## Windows filesystem permission authority
 

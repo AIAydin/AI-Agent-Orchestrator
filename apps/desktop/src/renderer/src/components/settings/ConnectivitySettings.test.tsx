@@ -86,8 +86,8 @@ describe('ConnectivitySettings collaboration controls', () => {
       name: /Collaboration management API URL/u,
     });
     expect(managementUrl.value).toBe('https://management.example.test/control/');
-    expect(screen.getByText(/Used to create rooms and redeem invites/u)).toBeTruthy();
-    expect(screen.getByText(/HTTP is accepted only on this device/u)).toBeTruthy();
+    expect(screen.getByText(/Shared invites require public HTTPS/u)).toBeTruthy();
+    expect(screen.getByText(/Local HTTP remains available/u)).toBeTruthy();
 
     fireEvent.change(managementUrl, {
       target: { value: 'http://127.0.0.1:1234' },
@@ -166,7 +166,7 @@ function Harness() {
       theme: 'system',
       reducedMotion: false,
       density: 'comfortable',
-      defaultAgent: 'test-agent',
+      defaultAgent: 'codex',
       defaultPermissionProfile: 'worktree-write',
       worktreeRoot: '/tmp/worktrees',
       terminalShell: '/bin/sh',

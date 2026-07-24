@@ -185,10 +185,20 @@ export const AppSettingsSchema = z
     canvasGridSize: z.number().int().min(4).max(128).default(16),
     canvasSnapToGrid: z.boolean().default(true),
     keyboardPreset: z.enum(['standard', 'vscode']).default('standard'),
-    defaultAgent: z.enum(['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom']),
+    defaultAgent: z.enum(['codex', 'claude', 'gemini', 'opencode', 'custom']),
     defaultPermissionProfile: PermissionProfileSchema,
-    agentExecutableOverrides: z.record(z.string(), OptionalMachineSpecificValueSchema).default({}),
-    agentDefaultModels: z.record(z.string(), z.string().max(512)).default({}),
+    agentExecutableOverrides: z
+      .record(z.string(), OptionalMachineSpecificValueSchema)
+      .refine((entries) => entries['test-agent'] === undefined, {
+        message: 'The removed test agent cannot have an executable override.',
+      })
+      .default({}),
+    agentDefaultModels: z
+      .record(z.string(), z.string().max(512))
+      .refine((entries) => entries['test-agent'] === undefined, {
+        message: 'The removed test agent cannot have a default model.',
+      })
+      .default({}),
     customAgent: CustomAgentConfigurationSchema.default({}),
     customPermissionProfile: CustomPermissionProfileSettingsSchema.default({}),
     worktreeRoot: MachineSpecificPathSchema,
@@ -330,18 +340,6 @@ export const AppSettingsSchema = z
         message: 'Enable and set up Docker before using it for the Custom profile.',
       });
     }
-    if (
-      settings.defaultAgent === 'test-agent' &&
-      settings.defaultPermissionProfile === 'custom' &&
-      settings.customPermissionProfile.runtime === 'docker'
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['defaultAgent'],
-        message:
-          'The built-in test agent cannot run in Docker. Choose a different default agent, or run the Custom profile on this computer.',
-      });
-    }
     const hasGitIdentityName = settings.gitIdentityName.trim() !== '';
     const hasGitIdentityEmail = settings.gitIdentityEmail.trim() !== '';
     if (hasGitIdentityName !== hasGitIdentityEmail) {
@@ -427,7 +425,7 @@ export type AgentCapabilitySummary = z.infer<typeof AgentCapabilitySummarySchema
 
 export const AgentDetectionSchema = z.object({
   id: z.union([
-    z.enum(['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom', 'gh', 'docker']),
+    z.enum(['codex', 'claude', 'gemini', 'opencode', 'custom', 'gh', 'docker']),
     NamespacedAgentAdapterIdSchema,
   ]),
   label: z.string(),
@@ -441,7 +439,7 @@ export const AgentDetectionSchema = z.object({
 export type AgentDetection = z.infer<typeof AgentDetectionSchema>;
 
 export const RunAdapterIdSchema = z.union([
-  z.enum(['test-agent', 'codex', 'claude', 'gemini', 'opencode', 'custom']),
+  z.enum(['codex', 'claude', 'gemini', 'opencode', 'custom']),
   NamespacedAgentAdapterIdSchema,
 ]);
 export type RunAdapterId = z.infer<typeof RunAdapterIdSchema>;

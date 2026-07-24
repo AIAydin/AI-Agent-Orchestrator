@@ -45,7 +45,7 @@ function agentNode(id: string) {
     icon: 'agent',
     position: { x: 0, y: 0 },
     size: { width: 300, height: 200 },
-    data: { adapterId: 'test-agent', permissionProfileId: 'worktree' },
+    data: { adapterId: 'codex', permissionProfileId: 'worktree' },
     createdAt: NOW,
     updatedAt: NOW,
   };

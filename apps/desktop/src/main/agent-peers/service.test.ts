@@ -263,6 +263,26 @@ describe('AgentPeersService', () => {
     expect(valid.status).toBe(200);
   });
 
+  it('binds exact main-created launch arguments to the provision identity', async () => {
+    const a = agentNode('agent-a', 'Agent A', 'claude');
+    setCanvas([a], []);
+    const provision = await service.provision(PROJECT_ID, a.id);
+    const arguments_ = ['--mcp-config', '/private/main-owned/mcp.json'];
+
+    service.registerLaunchMaterial(provision.provisionId, 'claude', arguments_);
+    arguments_[1] = '/renderer-mutated/mcp.json';
+
+    expect(service.launchMaterialForProvision(provision.provisionId)).toEqual({
+      projectId: PROJECT_ID,
+      nodeId: a.id,
+      adapterId: 'claude',
+      arguments: ['--mcp-config', '/private/main-owned/mcp.json'],
+    });
+    expect(() => service.registerLaunchMaterial(provision.provisionId, 'claude', [])).toThrow(
+      /already registered/u,
+    );
+  });
+
   it('GET /v1/peers reflects live from findActiveSessionByNode', async () => {
     const a = agentNode('agent-a', 'Agent A');
     const b = agentNode('agent-b', 'Agent B', 'codex');

@@ -109,7 +109,7 @@ describe('WorkflowAgentExecutor preparation', () => {
         request: {
           projectId: PROJECT_ID,
           nodeId: 'agent-node-1',
-          adapterId: 'test-agent',
+          adapterId: 'codex',
           prompt: 'Apply the requested change.',
           permissionProfile: 'worktree-write',
           context: {
@@ -176,7 +176,7 @@ describe('WorkflowAgentExecutor preparation', () => {
       request: {
         projectId: PROJECT_ID,
         nodeId: task.id,
-        adapterId: 'test-agent',
+        adapterId: 'codex',
         permissionProfile: 'worktree-write',
         context: { attachments: [] },
       },
@@ -1118,20 +1118,6 @@ describe('ReviewerFinalRecordCapture', () => {
 
     expect(capture.finalRecord()).toBeUndefined();
   });
-
-  it('accepts the deterministic fixture metadata protocol without hand-authored prompt IDs', () => {
-    const capture = new ReviewerFinalRecordCapture();
-    const record = reviewerFinalRecord();
-    capture.observe(
-      reviewerEnvelope({
-        type: 'message',
-        channel: 'stdout',
-        payload: { type: 'completed', metadata: { reviewerFinalRecord: record } },
-      }),
-    );
-    capture.observe(reviewerResultEvent('succeeded'));
-    expect(capture.finalRecord()).toEqual(record);
-  });
 });
 
 function reviewerFinalRecord() {
@@ -1230,9 +1216,9 @@ class FakeAgentBackend implements WorkflowAgentExecutionBackend {
         runId: RUN_ID,
         nodeId: request.nodeId,
         adapterId: request.adapterId,
-        provider: 'Local deterministic agent',
+        provider: 'Local fake provider',
         executable: process.execPath,
-        arguments: ['/test-agent.js'],
+        arguments: ['/codex.js'],
         cwd: '/managed/agent-node-1',
         runtime: 'pipes',
         environmentVariableNames: [],
@@ -1476,7 +1462,7 @@ function agentNode(
     readonly attachmentIds?: readonly string[];
   } = {},
 ): CanvasNode {
-  const adapterId = override.adapterId === undefined ? 'test-agent' : override.adapterId;
+  const adapterId = override.adapterId === undefined ? 'codex' : override.adapterId;
   const permissionProfile =
     override.permissionProfile === undefined ? 'worktree-write' : override.permissionProfile;
   return CanvasNodeSchema.parse({

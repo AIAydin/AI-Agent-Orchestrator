@@ -237,7 +237,7 @@ describe('Git worktree cleanup contracts', () => {
     const base = {
       planId: PLAN_ID,
       expiresAt: '2026-07-16T15:05:00.000Z',
-      branch: 'forgeboard/task/test-agent-1234',
+      branch: 'forgeboard/task/codex-1234',
       clean: false,
       dirtyPathCount: 1,
     };
@@ -288,7 +288,7 @@ function cleanupPlan() {
     recovery: false,
     planId: PLAN_ID,
     expiresAt: '2026-07-16T15:05:00.000Z',
-    branch: 'forgeboard/task/test-agent-1234',
+    branch: 'forgeboard/task/codex-1234',
     baseRef: 'main',
     clean: false,
     mergedIntoBase: false,

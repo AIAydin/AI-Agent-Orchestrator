@@ -233,7 +233,10 @@
 .terminal-xterm-host {
   position: absolute;
   inset: 0;
-  padding: 7px;
+  contain: layout paint style;
+  overflow: hidden;
+  padding: 10px;
+  background: #0b0f14;
 }
 
 .terminal-xterm-host .xterm,
@@ -241,6 +244,36 @@
 .terminal-xterm-host .xterm-screen {
   width: 100%;
   height: 100%;
+}
+
+.terminal-xterm-host .xterm {
+  font-variant-ligatures: none;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+}
+
+.terminal-xterm-host .xterm-viewport {
+  background-color: #0b0f14 !important;
+  scrollbar-color: #485563 transparent;
+  scrollbar-width: thin;
+}
+
+.terminal-xterm-host .xterm-viewport::-webkit-scrollbar {
+  width: 7px;
+}
+
+.terminal-xterm-host .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-xterm-host .xterm-viewport::-webkit-scrollbar-thumb {
+  border: 2px solid #0b0f14;
+  border-radius: 999px;
+  background: #485563;
+}
+
+.terminal-xterm-host .xterm-screen canvas {
+  image-rendering: auto;
 }
 
 .terminal-empty-state {

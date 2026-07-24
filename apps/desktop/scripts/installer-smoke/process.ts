@@ -6,7 +6,6 @@ import process from 'node:process';
 import { createIsolatedSmokeProfile } from '../packaged-smoke/profile.js';
 import {
   assertDurableSmokeState,
-  assertSmokeAgentOutput,
   assertSmokeReportProfile,
   assertSqliteDatabase,
   parsePackagedSmokeReport,
@@ -116,7 +115,6 @@ export async function smokeExecutable(
   assertSmokeReportProfile(report, profile.root);
   await assertSqliteDatabase(join(userDataDirectory, 'forgeboard.sqlite'));
   assertDurableSmokeState(report);
-  await assertSmokeAgentOutput(report);
 }
 
 export async function runWithCleanup(

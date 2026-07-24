@@ -260,7 +260,10 @@ describe('SettingsIpcService transactions', () => {
   });
 
   it('requires readiness when a previously configured built-in becomes the default', async () => {
-    const current = settings({ agentDefaultModels: { codex: 'gpt-5' } });
+    const current = settings({
+      defaultAgent: 'gemini',
+      agentDefaultModels: { codex: 'gpt-5' },
+    });
     const draft = settings({
       defaultAgent: 'codex',
       agentDefaultModels: { codex: 'gpt-5' },
@@ -861,13 +864,11 @@ function repairEvidence(): SettingsRepairEvidence {
 
 function agentReadiness(request: AgentReadinessRequest): AgentReadinessResult {
   const source =
-    request.agentId === 'test-agent'
-      ? 'bundled'
-      : request.agentId === 'custom'
-        ? 'custom'
-        : request.executableOverride === undefined
-          ? 'automatic'
-          : 'override';
+    request.agentId === 'custom'
+      ? 'custom'
+      : request.executableOverride === undefined
+        ? 'automatic'
+        : 'override';
   return {
     schemaVersion: 1,
     agentId: request.agentId,
@@ -877,9 +878,7 @@ function agentReadiness(request: AgentReadinessRequest): AgentReadinessResult {
     executable:
       request.agentId === 'custom'
         ? request.configuration.executable
-        : request.agentId === 'test-agent'
-          ? '/bundled/test-agent'
-          : (request.executableOverride ?? `/usr/bin/${request.agentId}`),
+        : (request.executableOverride ?? `/usr/bin/${request.agentId}`),
     version: '1.0.0',
     checkedAt: '2026-07-15T12:00:00.000Z',
     reason: null,
@@ -971,7 +970,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     canvasGridSize: 16,
     canvasSnapToGrid: true,
     keyboardPreset: 'standard',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'plan-read-only',
     agentExecutableOverrides: {},
     agentDefaultModels: {},

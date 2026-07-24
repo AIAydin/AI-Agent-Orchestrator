@@ -2,8 +2,22 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  border-radius: 12px;
+  isolation: isolate;
+  border-color: color-mix(in srgb, var(--node-accent) 26%, var(--line));
+  border-radius: 14px;
   overflow: hidden;
+  background: #0b0f14;
+  box-shadow:
+    0 18px 52px rgb(0 0 0 / 24%),
+    inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+.canvas-node.agent-window.selected {
+  border-color: color-mix(in srgb, var(--node-accent) 82%, white 8%);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--node-accent) 22%, transparent),
+    0 22px 64px rgb(0 0 0 / 34%),
+    inset 0 1px 0 rgb(255 255 255 / 5%);
 }
 
 .canvas-node.agent-window::before {
@@ -18,13 +32,18 @@
 .agent-window-titlebar {
   display: flex;
   align-items: center;
-  gap: 7px;
-  height: 34px;
+  gap: 8px;
+  height: 42px;
   /* Never let the flex column crush the title bar out of view when the node is short. */
-  flex: 0 0 34px;
-  padding: 0 10px;
-  background: linear-gradient(var(--provider-tint), transparent), var(--surface-raised);
-  border-bottom: 1px solid var(--line);
+  flex: 0 0 42px;
+  padding: 0 12px;
+  background:
+    linear-gradient(110deg, var(--provider-tint), transparent 58%),
+    color-mix(in srgb, var(--surface-raised) 92%, #0b0f14);
+  border-bottom: 1px solid color-mix(in srgb, var(--node-accent) 18%, var(--line));
+  box-shadow:
+    inset 0 2px 0 color-mix(in srgb, var(--node-accent) 78%, white 5%),
+    0 1px 0 rgb(255 255 255 / 3%);
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -36,17 +55,36 @@
 
 .agent-drag-grip {
   flex: 0 0 auto;
-  color: var(--text-faint);
+  color: color-mix(in srgb, var(--text-faint) 78%, var(--node-accent));
+  opacity: 0.72;
   pointer-events: none;
 }
 
 .traffic {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
   border-radius: 50%;
-  border: none;
+  border: 1px solid rgb(0 0 0 / 25%);
   padding: 0;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 24%),
+    0 1px 2px rgb(0 0 0 / 28%);
   cursor: pointer;
+  transition:
+    filter 120ms ease,
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.traffic:hover {
+  filter: brightness(1.12);
+  transform: scale(1.08);
+}
+
+.traffic:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--node-accent) 75%, white);
+  outline-offset: 2px;
 }
 
 .traffic.close {
@@ -65,8 +103,9 @@
   flex: 1;
   min-width: 0;
   color: var(--text);
-  font-weight: 600;
-  font-size: var(--text-sm, 13px);
+  font-weight: 680;
+  font-size: var(--text-md, 14px);
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -88,15 +127,28 @@
 }
 
 .agent-provider-label {
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 18%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--node-accent) 7%, transparent);
   color: var(--text-faint);
   font-size: var(--text-xs);
+  font-weight: 650;
   white-space: nowrap;
 }
 
 .agent-terminal {
   flex: 1;
   min-height: 0;
-  background: #0d0f12;
+  contain: layout paint style;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 50% -35%,
+      color-mix(in srgb, var(--node-accent) 7%, transparent),
+      transparent 48%
+    ),
+    #0b0f14;
   /* The xterm host inside is `position: absolute; inset: 0`. Without a positioned
      container here it anchors to the whole `.agent-window` and covers the drag
      title bar, making the node undraggable once a session mounts. Contain it. */
@@ -105,6 +157,10 @@
 
 .agent-terminal > div {
   height: 100%;
+}
+
+.agent-terminal .terminal-xterm-host {
+  padding: 14px 16px 12px;
 }
 
 .agent-start-card {
@@ -140,17 +196,90 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 5px 8px;
-  border-top: 1px solid var(--line);
-  background: var(--surface-raised);
+  gap: 7px;
+  min-height: 48px;
+  padding: 7px 9px;
+  border-top: 1px solid color-mix(in srgb, var(--node-accent) 16%, var(--line));
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--node-accent) 5%, transparent),
+      transparent 54%
+    ),
+    var(--surface-raised);
   font-size: var(--text-xs);
 }
 
-.agent-window-strip select,
-.agent-window-strip input {
+.agent-window-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  flex: 1 1 145px;
+  min-width: 0;
+  height: 32px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-subtle) 76%, transparent);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
+}
+
+.agent-window-field:focus-within {
+  border-color: color-mix(in srgb, var(--node-accent) 68%, var(--line));
+  background: color-mix(in srgb, var(--node-accent) 7%, var(--surface-subtle));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent) 15%, transparent);
+}
+
+.agent-window-field > span {
+  padding: 0 7px 0 9px;
+  color: var(--text-faint);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+}
+
+.agent-window-field select,
+.agent-window-field input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  color: var(--text);
+  background-color: transparent;
   font-size: var(--text-xs);
-  max-width: 130px;
+  font-weight: 560;
+}
+
+.agent-window-field select {
+  appearance: none;
+  padding-right: 22px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
+    linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
+  background-position:
+    calc(100% - 11px) 13px,
+    calc(100% - 7px) 13px;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+}
+
+.agent-window-field input::placeholder {
+  color: var(--text-faint);
+  opacity: 0.82;
+}
+
+.agent-window-field select:disabled,
+.agent-window-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .agent-profile-note {
@@ -222,7 +351,7 @@
 
 .agent-review-overlay {
   position: absolute;
-  inset: 34px 0 0 0;
+  inset: 42px 0 0 0;
   z-index: 5;
   overflow: auto;
   background: color-mix(in srgb, var(--surface) 88%, transparent);

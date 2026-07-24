@@ -12,7 +12,7 @@ describe('native agent launch E2E harness', () => {
     const originalDescriptor = Object.getOwnPropertyDescriptor(fixture.dialog, 'showMessageBox');
 
     let response = -1;
-    await approveNextNativeAgentLaunch(fixture.app, reviewDialog(), 'test-agent', async () => {
+    await approveNextNativeAgentLaunch(fixture.app, reviewDialog(), 'codex', async () => {
       response = (await fixture.dialog.showMessageBox(nativeOptions())).response;
     });
 
@@ -29,7 +29,7 @@ describe('native agent launch E2E harness', () => {
     let response = -1;
 
     await expect(
-      approveNextNativeAgentLaunch(fixture.app, reviewDialog(), 'test-agent', async () => {
+      approveNextNativeAgentLaunch(fixture.app, reviewDialog(), 'codex', async () => {
         response = (
           await fixture.dialog.showMessageBox(
             nativeOptions({ fingerprint: `b${FINGERPRINT.slice(1)}` }),
@@ -49,7 +49,7 @@ describe('native agent launch E2E harness', () => {
     const failure = new Error('renderer action failed');
 
     await expect(
-      approveNextNativeAgentLaunch(fixture.app, reviewDialog(), 'test-agent', () => {
+      approveNextNativeAgentLaunch(fixture.app, reviewDialog(), 'codex', () => {
         throw failure;
       }),
     ).rejects.toBe(failure);
@@ -63,13 +63,9 @@ describe('native agent launch E2E harness', () => {
     const fixture = harnessFixture();
 
     await expect(
-      approveNextNativeAgentLaunch(
-        fixture.app,
-        reviewDialog(),
-        'test-agent',
-        () => Promise.resolve(),
-        { pollTimeoutMs: 20 },
-      ),
+      approveNextNativeAgentLaunch(fixture.app, reviewDialog(), 'codex', () => Promise.resolve(), {
+        pollTimeoutMs: 20,
+      }),
     ).rejects.toThrow();
 
     expect(Object.getOwnPropertyDescriptor(fixture.dialog, 'showMessageBox')?.value).toBe(
@@ -82,7 +78,7 @@ describe('native agent launch E2E harness', () => {
     const later = vi.fn(() => Promise.resolve({ response: 7, checkboxChecked: false }));
 
     await expect(
-      approveNextNativeAgentLaunch(fixture.app, reviewDialog(), 'test-agent', () => {
+      approveNextNativeAgentLaunch(fixture.app, reviewDialog(), 'codex', () => {
         Object.defineProperty(fixture.dialog, 'showMessageBox', {
           configurable: true,
           enumerable: false,
@@ -149,7 +145,7 @@ function nativeOptions(
   return {
     type: 'warning',
     title: 'Launch agent',
-    message: 'Launch test-agent for this node?',
+    message: 'Launch codex for this node?',
     detail: [
       `Security fingerprint (SHA-256): ${overrides.fingerprint ?? FINGERPRINT}`,
       `Approval expires at: ${overrides.expiresAt ?? EXPIRES_AT}`,

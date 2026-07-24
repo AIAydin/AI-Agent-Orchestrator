@@ -11,7 +11,7 @@ const baseSettings = {
   theme: 'system',
   reducedMotion: false,
   density: 'comfortable',
-  defaultAgent: 'test-agent',
+  defaultAgent: 'codex',
   defaultPermissionProfile: 'worktree-write',
   worktreeRoot: '/tmp/forgeboard-worktrees',
   terminalShell: '/bin/sh',
@@ -273,27 +273,6 @@ describe('Custom permission settings', () => {
         writePaths: [],
         ignoredFileRead: 'deny',
         sensitiveFileRead: 'allow',
-      }).success,
-    ).toBe(false);
-  });
-
-  it('rejects an unsupported deterministic-agent Docker Custom default', () => {
-    expect(
-      AppSettingsSchema.safeParse({
-        ...baseSettings,
-        defaultAgent: 'test-agent',
-        defaultPermissionProfile: 'custom',
-        dockerEnabled: true,
-        dockerImage: 'forgeboard-agent:local',
-        dockerContainerExecutable: '/usr/local/bin/agent',
-        customPermissionProfile: {
-          runtime: 'docker',
-          filesystem: 'assigned-worktree-read-only',
-          readPaths: ['.'],
-          writePaths: [],
-          ignoredFileRead: 'allow',
-          sensitiveFileRead: 'allow',
-        },
       }).success,
     ).toBe(false);
   });

@@ -449,7 +449,7 @@ function agentNode(attachmentIds: string[]): CanvasNode {
     ...nodeBase('agent-1', 'Agent'),
     type: 'agent',
     data: {
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       permissionProfileId: 'plan-read-only',
       promptDraft: 'Inspect selected context.',
       contextAttachmentIds: attachmentIds,

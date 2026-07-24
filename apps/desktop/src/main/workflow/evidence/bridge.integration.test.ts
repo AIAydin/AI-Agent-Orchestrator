@@ -346,7 +346,7 @@ function agentNode(): CanvasNode {
     ...nodeBase('implementation', 'Implementation'),
     type: 'agent',
     data: {
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       permissionProfileId: 'worktree-write',
       promptDraft: 'Implement the request.',
     },

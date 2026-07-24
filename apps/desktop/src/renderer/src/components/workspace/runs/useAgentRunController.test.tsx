@@ -115,7 +115,7 @@ describe('useAgentRunController persisted review boundary', () => {
     expect(prepare).toHaveBeenCalledWith({
       projectId: PROJECT.id,
       nodeId: 'agent-1',
-      adapterId: 'test-agent',
+      adapterId: 'codex',
       prompt: 'Review the linked files.',
       permissionProfile: 'plan-read-only',
     });
@@ -164,7 +164,7 @@ describe('useAgentRunController persisted review boundary', () => {
       const runs = useAgentRunController({
         project: PROJECT,
         selectedNode: node,
-        selectedAdapter: 'test-agent',
+        selectedAdapter: 'codex',
         selectedPermission: 'worktree-write',
         permissionUnavailableReason: null,
         verifyAdapterConnection,
@@ -231,7 +231,7 @@ describe('useAgentRunController persisted review boundary', () => {
       expect(operation).toHaveBeenCalledWith({
         projectId: PROJECT.id,
         nodeId: 'agent-1',
-        adapterId: 'test-agent',
+        adapterId: 'codex',
         prompt: 'Review the linked files.',
         permissionProfile: 'plan-read-only',
         parentRunId: parent.id,
@@ -272,7 +272,7 @@ describe('useAgentRunController persisted review boundary', () => {
 
     await act(async () => await hook.result.current.runs.approvePreparedRun());
 
-    expect(verifyAdapterConnection).toHaveBeenCalledWith('test-agent');
+    expect(verifyAdapterConnection).toHaveBeenCalledWith('codex');
     expect(approve).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledWith(
       "Claude Code isn't connected — connect it in Settings → Agents & runtime, then try again.",
@@ -289,7 +289,7 @@ describe('useAgentRunController persisted review boundary', () => {
 
     await act(async () => await hook.result.current.runs.approvePreparedRun());
 
-    expect(verifyAdapterConnection).toHaveBeenCalledWith('test-agent');
+    expect(verifyAdapterConnection).toHaveBeenCalledWith('codex');
     expect(approve).toHaveBeenCalledWith(disclosure().runId);
     expect(onError).not.toHaveBeenCalled();
   });
@@ -374,7 +374,7 @@ function renderController(flushCanvas: () => Promise<boolean>) {
     const runs = useAgentRunController({
       project: PROJECT,
       selectedNode: agentNode(),
-      selectedAdapter: 'test-agent',
+      selectedAdapter: 'codex',
       selectedPermission: 'plan-read-only',
       permissionUnavailableReason: null,
       verifyAdapterConnection,
@@ -394,7 +394,7 @@ function renderStatefulController(initialNode = agentNode()) {
     const runs = useAgentRunController({
       project: PROJECT,
       selectedNode: node,
-      selectedAdapter: 'test-agent',
+      selectedAdapter: 'codex',
       selectedPermission: 'plan-read-only',
       permissionUnavailableReason: null,
       verifyAdapterConnection,
@@ -459,9 +459,9 @@ function disclosure(runId = '80000000-0000-4000-8000-000000000001'): RunApproval
   return {
     runId,
     nodeId: 'agent-1',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     provider: 'Local provider',
-    executable: '/test-agent',
+    executable: '/codex',
     arguments: [],
     cwd: '/repo',
     runtime: 'pipes',
@@ -491,7 +491,7 @@ function runSummary(): RunHistorySummary {
     id: '81000000-0000-4000-8000-000000000001',
     projectId: PROJECT.id,
     nodeId: 'agent-1',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     model: null,
     permissionProfile: 'plan-read-only',
     providerSessionAvailable: true,

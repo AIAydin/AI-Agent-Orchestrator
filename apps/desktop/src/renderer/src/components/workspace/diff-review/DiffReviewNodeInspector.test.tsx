@@ -408,7 +408,7 @@ describe('DiffReviewNodeInspector', () => {
         runId: RUN_ID,
         nodeId: 'agent-node',
         worktreeId: SECOND_RUN_ID,
-        agentId: 'test-agent',
+        agentId: 'codex',
         baseRef: 'refs/heads/main',
         baseCommit: 'a'.repeat(40),
       },

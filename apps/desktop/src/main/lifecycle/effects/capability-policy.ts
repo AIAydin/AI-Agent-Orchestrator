@@ -72,7 +72,6 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
 > = {
   'agent-execution/adapter-planner.ts': entry('reviewed-runtime', [
     '@forgeboard/agent-adapters#CliAgentAdapter',
-    '@forgeboard/agent-adapters#createCustomCliAdapter',
     '@forgeboard/agent-adapters#detectDockerRuntime',
   ]),
   'agent-execution/context/immutable-snapshot.ts': entry('durable-internal-state', [

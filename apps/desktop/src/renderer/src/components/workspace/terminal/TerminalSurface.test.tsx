@@ -33,6 +33,7 @@ class MockTerminal {
   readonly dispose = vi.fn();
   readonly loadAddon = vi.fn();
   readonly open = vi.fn();
+  readonly initialOptions: Record<string, unknown>;
   readonly options: { disableStdin?: boolean };
   readonly cols = 120;
   readonly rows = 40;
@@ -46,7 +47,8 @@ class MockTerminal {
   };
   private dataListener: ((data: string) => void) | null = null;
 
-  constructor(options: { disableStdin?: boolean }) {
+  constructor(options: { disableStdin?: boolean } & Record<string, unknown>) {
+    this.initialOptions = { ...options };
     this.options = { ...options };
     xterm.instances.push(this);
   }
@@ -114,6 +116,15 @@ describe('TerminalSurface', () => {
     await waitFor(() => expect(xterm.instances).toHaveLength(1));
     const terminal = xterm.instances[0];
     expect(terminal?.write).toHaveBeenCalledWith('\u001b[32mready\u001b[0m\r\n');
+    expect(terminal?.initialOptions).toMatchObject({
+      cursorWidth: 2,
+      fontSize: 13,
+      fontWeightBold: '600',
+      lineHeight: 1.32,
+      minimumContrastRatio: 5.5,
+      scrollSensitivity: 1,
+      smoothScrollDuration: 0,
+    });
     expect(xterm.fits[0]?.fit).toHaveBeenCalled();
     expect(onResize).toHaveBeenCalledWith(120, 40);
 

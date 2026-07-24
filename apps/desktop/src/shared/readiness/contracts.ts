@@ -6,23 +6,10 @@ import {
 } from '../application/contracts.js';
 import { MachineSpecificValueSchema } from '../settings/values.js';
 
-export const ReadinessAgentIdSchema = z.enum([
-  'test-agent',
-  'codex',
-  'claude',
-  'gemini',
-  'opencode',
-  'custom',
-]);
+export const ReadinessAgentIdSchema = z.enum(['codex', 'claude', 'gemini', 'opencode', 'custom']);
 export type ReadinessAgentId = z.infer<typeof ReadinessAgentIdSchema>;
 
 const ExecutableOverrideSchema = MachineSpecificValueSchema;
-
-const BundledAgentReadinessRequestSchema = z
-  .object({
-    agentId: z.literal('test-agent'),
-  })
-  .strict();
 
 const BuiltInAgentReadinessRequestSchema = z
   .object({
@@ -39,7 +26,6 @@ const CustomAgentReadinessRequestSchema = z
   .strict();
 
 export const AgentReadinessRequestSchema = z.discriminatedUnion('agentId', [
-  BundledAgentReadinessRequestSchema,
   BuiltInAgentReadinessRequestSchema,
   CustomAgentReadinessRequestSchema,
 ]);
@@ -59,7 +45,7 @@ export const AgentReadinessResultSchema = z
     agentId: ReadinessAgentIdSchema,
     state: AgentReadinessStateSchema,
     ready: z.boolean(),
-    source: z.enum(['bundled', 'automatic', 'override', 'custom']),
+    source: z.enum(['automatic', 'override', 'custom']),
     executable: z.string().min(1).max(32_768).nullable(),
     version: z.string().min(1).max(512).nullable(),
     checkedAt: z.string().datetime(),

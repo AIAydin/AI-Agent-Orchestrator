@@ -55,7 +55,7 @@ export function launchDetectionIsReady(
     return false;
   }
   if (draft.request.agentId === 'custom') return false;
-  return draft.request.agentId === 'test-agent' || draft.request.executableOverride === undefined;
+  return draft.request.executableOverride === undefined;
 }
 
 export function currentReadinessResult(

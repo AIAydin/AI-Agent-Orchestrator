@@ -79,7 +79,7 @@ function summary() {
     id: RUN_ID,
     projectId: PROJECT_ID,
     nodeId: 'agent-node',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     model: null,
     permissionProfile: 'worktree-write',
     providerSessionAvailable: false,

@@ -73,7 +73,7 @@ function attempt(status: RunHistorySummary['status']): RunHistorySummary {
     id: 'run-1',
     projectId: 'project-1',
     nodeId: 'agent-1',
-    adapterId: 'test-agent',
+    adapterId: 'codex',
     action: 'launch',
     parentRunId: null,
     status,

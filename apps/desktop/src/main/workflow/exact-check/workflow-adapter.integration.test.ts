@@ -211,7 +211,7 @@ function appSettings(worktreeRoot: string): AppSettings {
     theme: 'system',
     reducedMotion: false,
     density: 'comfortable',
-    defaultAgent: 'test-agent',
+    defaultAgent: 'codex',
     defaultPermissionProfile: 'worktree-write',
     worktreeRoot,
     gitRemote: 'origin',

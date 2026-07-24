@@ -251,6 +251,42 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
     );
   });
 
+  it('rejects same-inode primary bytes changed during provenance inspection', async () => {
+    const root = await fixtureRoot();
+    const databasePath = join(root, 'forgeboard.sqlite');
+    await writeFile(databasePath, 'original');
+    const createStore = vi.fn(() => fakeStore());
+    const dialog = fakeDialog();
+
+    await expect(
+      openLocalStoreWithStartupDatabaseRecovery({
+        databasePath,
+        dialog,
+        userDataPath: root,
+        dependencies: {
+          createDefaultSettings: () => defaults(),
+          createStore,
+          inspectProvenance: () => {
+            writeFileSync(databasePath, 'mutated in place after inspection began');
+            return {
+              ok: true,
+              schemaVersion: 1,
+              currentSchemaVersion: 1,
+              requiresMigration: false,
+            };
+          },
+          reconcileInterruptedRestores: () => Promise.resolve(),
+        },
+      }),
+    ).resolves.toBeNull();
+
+    expect(createStore).not.toHaveBeenCalled();
+    expect(dialog.showOpenDialog).not.toHaveBeenCalled();
+    expect(dialog.showMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Local data is unavailable' }),
+    );
+  });
+
   it('rejects a database outside the canonical userData boundary before reconciliation or open', async () => {
     const root = await fixtureRoot();
     const reconcile = vi.fn(() => Promise.resolve());
@@ -391,7 +427,11 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
         dependencies: {
           createDefaultSettings: () => defaults(),
           createStore: () => fakeStore(),
-          inspectProvenance: () => ({ ok: false, reason, message: 'bounded' }),
+          inspectProvenance: () => ({
+            ok: false,
+            reason,
+            message: 'bounded',
+          }),
           reconcileInterruptedRestores: () => Promise.resolve(),
         },
       }),
@@ -399,7 +439,10 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
 
     expect(dialog.showOpenDialog).not.toHaveBeenCalled();
     expect(dialog.showMessageBox).toHaveBeenCalledWith(
-      expect.objectContaining({ title: expectedTitle, buttons: ['Quit Forgeboard'] }),
+      expect.objectContaining({
+        title: expectedTitle,
+        buttons: ['Quit Forgeboard'],
+      }),
     );
   });
 
@@ -418,7 +461,11 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
         dependencies: {
           createDefaultSettings: () => defaults(),
           createStore: () => fakeStore(),
-          inspectProvenance: () => ({ ok: false, reason: 'foreign', message: 'bounded' }),
+          inspectProvenance: () => ({
+            ok: false,
+            reason: 'foreign',
+            message: 'bounded',
+          }),
           reconcileInterruptedRestores: () => Promise.resolve(),
         },
       }),
@@ -520,7 +567,10 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
     const restored = fakeStore();
     const dialog = fakeDialog();
     dialog.showMessageBox.mockResolvedValue(messageResponse(1));
-    dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['/backup.sqlite'] });
+    dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ['/backup.sqlite'],
+    });
 
     await expect(
       openLocalStoreWithStartupDatabaseRecovery({
