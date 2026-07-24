@@ -23,8 +23,10 @@ export interface LaunchDesktopOptions {
 
 interface ElectronApplicationInternals {
   _toImpl(): {
-    _nodeConnection: {
-      close(): void;
+    _browserContext: {
+      _browser: {
+        killForTests(): Promise<void>;
+      };
     };
   };
 }
@@ -69,18 +71,10 @@ export async function closeElectronAfterTest(
   timeoutMs = 5_000,
 ): Promise<void> {
   if (app === null) return;
-  const child = app.process();
-  const exited =
-    child.exitCode !== null || child.signalCode !== null
-      ? Promise.resolve()
-      : new Promise<void>((resolvePromise) => {
-          child.once('exit', () => resolvePromise());
-        });
-  // Playwright 1.53 leaves Electron's main-process inspector socket open after a forced exit on
-  // Linux. Close the pinned implementation's transport synchronously so the worker can tear down.
-  (app as unknown as ElectronApplicationInternals)._toImpl()._nodeConnection.close();
-  child.kill('SIGKILL');
-  await settlesWithin(exited, timeoutMs);
+  // Playwright 1.53 tracks launched process groups for worker teardown. Its test-only kill path
+  // removes that registration and terminates descendants that can otherwise retain Linux stdio.
+  const implementation = (app as unknown as ElectronApplicationInternals)._toImpl();
+  await settlesWithin(implementation._browserContext._browser.killForTests(), timeoutMs);
 }
 
 async function settlesWithin(operation: Promise<unknown>, timeoutMs: number): Promise<boolean> {
