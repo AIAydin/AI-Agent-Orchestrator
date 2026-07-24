@@ -1980,20 +1980,21 @@ unchecked when only a subset of their required behavior has proof.
   template references remain. The checkpoint passed strict typecheck, docs, quality, controls,
   production build, 3,072 unit assertions, and 324 integration assertions; its recorded full-gate
   exceptions were a partial Electron install and unrelated in-progress files.
-- 2026-07-24: the workspace project sidebar closes and reopens from an always-visible command-bar
-  control, returns its width to the canvas, and persists the choice. Ten focused tests, lint,
-  formatting, desktop typecheck, structure, `git diff --check`, and production build passed; the
-  Electron journey lacked an approved runtime, and E2E typecheck retains pre-existing errors.
+- 2026-07-24: the workspace project sidebar closes from an always-visible command-bar control,
+  returns its width to the canvas, and persists the choice. Ten tests and every production gate
+  passed; the Electron journey lacked an approved runtime, and E2E typecheck retains existing errors.
 - 2026-07-24: running Agent and Terminal sessions no longer have Forgeboard-wide or per-window
   count caps; ordinary launches are limited only by the computer's available resources. Transcript
   creation likewise has no product-level file-count ceiling while retaining per-session and global
   byte bounds. A 12-session same-window regression exceeds both retired limits, and OpenCode's
-  installed default TUI remains a zero-argument, main-managed worktree launch. All 3,100 unit tests
-  passed (one unrelated load timeout passed on isolated retry), together with 332 integration tests,
-  3 docs tests, 7 quality tests, typecheck, lint, formatting, structure, controls, and production build.
+  installed default TUI remains a zero-argument, main-managed worktree launch. All 3,102 unit tests
+  passed. Of 332 integration tests, 330 passed in the unrestricted full run; both load-sensitive cases
+  passed under unchanged default timeouts in isolation. Docs, quality, typecheck, lint, formatting,
+  structure, controls, and the complete production build passed.
   Canvas navigation also gains an idle-bounded lightweight paint mode and terminal/preview containment;
   final-state lint, typecheck, formatting, and 55 affected renderer tests passed.
 - 2026-07-24: startup recovery now compares the complete stable database identity across provenance
   inspection, so inode reuse cannot hide a replaced primary. Packaged smoke now mirrors normal
   startup by deferring optional Agent-context storage failures while the protected context path
-  remains fail-closed when an Agent actually requests it.
+  remains fail-closed when an Agent actually requests it. The 19 focused unit tests and six
+  integration tests passed.
