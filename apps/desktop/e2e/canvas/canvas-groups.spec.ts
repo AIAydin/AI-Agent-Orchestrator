@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 
 test('group membership and collapse behavior work entirely from the canvas UI', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-canvas-groups-e2e-'));
@@ -86,7 +90,7 @@ test('group membership and collapse behavior work entirely from the canvas UI', 
 
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

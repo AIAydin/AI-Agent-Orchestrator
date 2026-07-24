@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
 import {
+  closeElectronAfterTest,
   launchDesktop,
   runCanvasNodeContextAction,
   watchExternalRequests,
@@ -96,7 +97,7 @@ test('a moved project is detected, reviewed, and relinked entirely in the UI', a
     await expect(page.getByRole('article', { name: /^Agent: /u })).toBeVisible();
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(root, { force: true, recursive: true });
   }
 });

@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Locator } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 import { createRepository, findFiles, primarySnapshot } from './fixture.js';
 import { choosePath } from './native-confirmation.js';
 
@@ -95,7 +99,7 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
     expect(await readFile(proofFiles[0]!, 'utf8')).toBe('managed worktree session\n');
     expect(externalRequests).toEqual([]);
   } finally {
-    await app?.close().catch(() => undefined);
+    await closeElectronAfterTest(app);
     await rm(root, { recursive: true, force: true });
   }
 });

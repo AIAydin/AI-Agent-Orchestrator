@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../../support/electron.js';
 
 export interface CanvasSessionHarness {
   readonly app: ElectronApplication;
@@ -51,6 +55,6 @@ export async function closeCanvasHarness(
   app: ElectronApplication | null,
   userDataDirectory: string,
 ): Promise<void> {
-  await app?.close().catch(() => undefined);
+  await closeElectronAfterTest(app);
   await rm(userDataDirectory, { recursive: true, force: true });
 }

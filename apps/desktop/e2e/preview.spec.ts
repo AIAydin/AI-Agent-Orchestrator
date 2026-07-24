@@ -7,7 +7,11 @@ import { resolve } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from './support/electron.js';
 import {
   approveNextNativePreviewLaunch,
   type NativePreviewConfirmationBinding,
@@ -87,7 +91,7 @@ test('web and mobile preview nodes run a sandboxed loopback server from UI confi
     await expect(mobilePreview.getByLabel('Second device')).toHaveValue('tablet');
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });
@@ -140,7 +144,7 @@ test('an occupied preview range reports a real collision without spawning a prev
     await expect(preview.getByRole('button', { name: 'Start dev server' })).toBeEnabled();
     expect(collision.servers.every((server) => server.listening)).toBe(true);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await Promise.all(collision.servers.map(async (server) => await closeServer(server)));
     await rm(userDataDirectory, { recursive: true, force: true });
   }

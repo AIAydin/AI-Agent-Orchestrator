@@ -56,16 +56,6 @@ export async function launchDesktop(
     env: environment,
     timeout: 30_000,
   });
-  const implementation = electronImplementation(app);
-  const closeGracefully = app.close.bind(app);
-  app.close = async () => {
-    try {
-      await closeGracefully();
-    } finally {
-      // Windows can report the application closed before descendants release the user-data lock.
-      await implementation._browserContext._browser.killForTests();
-    }
-  };
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   return { app, page };

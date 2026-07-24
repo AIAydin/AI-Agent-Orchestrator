@@ -1,10 +1,30 @@
 import type { ElectronApplication, Locator } from '@playwright/test';
 import { describe, expect, it, vi } from 'vitest';
 
-import { approveNextNativeAgentLaunch } from './electron.js';
+import { approveNextNativeAgentLaunch, closeElectronAfterTest } from './electron.js';
 
 const FINGERPRINT = 'a'.repeat(64);
 const EXPIRES_AT = '2099-07-15T00:05:00.000Z';
+
+describe('Electron E2E cleanup', () => {
+  it('uses Playwright process-group cleanup without starting a graceful close', async () => {
+    const killForTests = vi.fn(() => Promise.resolve());
+    const close = vi.fn(() => Promise.resolve());
+    const app = {
+      _toImpl: () => ({
+        _browserContext: {
+          _browser: { killForTests },
+        },
+      }),
+      close,
+    } as unknown as ElectronApplication;
+
+    await closeElectronAfterTest(app);
+
+    expect(killForTests).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+  });
+});
 
 describe('native agent launch E2E harness', () => {
   it('approves the exact reviewed binding and restores the complete original descriptor', async () => {

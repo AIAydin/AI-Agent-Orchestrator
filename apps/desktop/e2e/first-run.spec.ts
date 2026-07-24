@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
 import {
+  closeElectronAfterTest,
   launchDesktop,
   openCanvasNodeDetails,
   renameCanvasNode,
@@ -329,7 +330,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

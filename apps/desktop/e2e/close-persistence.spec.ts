@@ -4,7 +4,12 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, renameCanvasNode, watchExternalRequests } from './support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  renameCanvasNode,
+  watchExternalRequests,
+} from './support/electron.js';
 
 test('immediate app and project closes preserve the latest canvas revision', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-close-persistence-e2e-'));
@@ -79,7 +84,7 @@ test('immediate app and project closes preserve the latest canvas revision', asy
 
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
     await expect(access(userDataDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
   }

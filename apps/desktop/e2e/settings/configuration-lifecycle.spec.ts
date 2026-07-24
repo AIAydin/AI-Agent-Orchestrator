@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../support/electron.js';
 import { chooseSettingsExportPath, chooseSettingsImportPath } from './native-file-dialogs.js';
 
 test('ordinary settings configure, persist, export, reset, import, and revalidate through the UI', async () => {
@@ -164,7 +168,7 @@ test('ordinary settings configure, persist, export, reset, import, and revalidat
 
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

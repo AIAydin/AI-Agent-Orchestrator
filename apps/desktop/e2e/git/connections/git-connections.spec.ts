@@ -5,7 +5,11 @@ import { basename, join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../../support/electron.js';
 import { writeConfiguredFakeGitHubCli } from './fake-github-cli.js';
 import {
   continuePlanWithNativeResponse,
@@ -63,7 +67,7 @@ test('Enter in Git connection text fields cannot submit Settings or create a rem
     expect(gitRemoteUrl(projectPath, guardedRemoteName)).toBeNull();
     expect(await nativeDialogs(electronApp)).toHaveLength(dialogsBeforeEnter);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
     await expect(access(userDataDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
   }
@@ -279,7 +283,7 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
 
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     restoreEnvironment(environment);
     await rm(userDataDirectory, { recursive: true, force: true });
     await expect(access(userDataDirectory)).rejects.toMatchObject({ code: 'ENOENT' });

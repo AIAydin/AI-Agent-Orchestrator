@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { test, expect, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop } from './support/electron.js';
+import { closeElectronAfterTest, launchDesktop } from './support/electron.js';
 
 test('the project rail stays bounded and can give its space back to the canvas', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-rail-layout-'));
@@ -97,7 +97,7 @@ test('the project rail stays bounded and can give its space back to the canvas',
     await expect(rail).toBeVisible();
     await expect(grid).not.toHaveClass(/project-sidebar-closed/u);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true }).catch(() => undefined);
   }
 });
