@@ -1,8 +1,10 @@
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { access, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
 
 import {
   _electron as electron,
@@ -35,7 +37,9 @@ interface ElectronApplicationInternals {
 const desktopRoot = resolve(import.meta.dirname, '../..');
 const mainEntry = join(desktopRoot, 'dist', 'main', 'index.js');
 const require = createRequire(import.meta.url);
+const execFileAsync = promisify(execFile);
 const userDataDirectories = new WeakMap<ElectronApplication, string>();
+const windowsElectronProcessIds = new WeakMap<ElectronApplication, number>();
 
 export async function launchDesktop(
   userDataDirectory: string,
@@ -59,9 +63,20 @@ export async function launchDesktop(
     timeout: 30_000,
   });
   userDataDirectories.set(app, userDataDirectory);
-  const page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
-  return { app, page };
+  try {
+    if (process.platform === 'win32') {
+      const electronProcessId = await app.evaluate(() => process.pid);
+      if (Number.isSafeInteger(electronProcessId) && electronProcessId > 0) {
+        windowsElectronProcessIds.set(app, electronProcessId);
+      }
+    }
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    return { app, page };
+  } catch (error) {
+    await closeElectronAfterTest(app);
+    throw error;
+  }
 }
 
 /**
@@ -71,6 +86,12 @@ export async function launchDesktop(
  */
 export async function closeElectronAfterTest(app: ElectronApplication | null): Promise<void> {
   if (app === null) return;
+  if (process.platform === 'win32') {
+    const electronProcessId = windowsElectronProcessIds.get(app);
+    if (electronProcessId !== undefined) {
+      await terminateWindowsProcessTree(electronProcessId);
+    }
+  }
   // Playwright 1.53 tracks launched process groups for worker teardown. Its test-only kill path
   // removes that registration and terminates descendants that can retain stdio and user-data locks.
   await electronImplementation(app)._browserContext._browser.killForTests();
@@ -79,6 +100,18 @@ export async function closeElectronAfterTest(app: ElectronApplication | null): P
     if (userDataDirectory !== undefined) {
       await removeWindowsLockFile(join(userDataDirectory, 'lockfile'));
     }
+  }
+}
+
+async function terminateWindowsProcessTree(processId: number): Promise<void> {
+  try {
+    await execFileAsync('taskkill.exe', ['/pid', String(processId), '/T', '/F'], {
+      timeout: 10_000,
+      windowsHide: true,
+    });
+  } catch {
+    // The process may have exited between PID capture and cleanup. The bounded lock-file removal
+    // below remains the source of truth that the exact profile is no longer in use.
   }
 }
 
