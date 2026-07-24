@@ -10,7 +10,10 @@ import {
   type Project,
   type RunAdapterId,
 } from '../../../../../../shared/application/contracts.js';
-import type { TerminalLaunchPlanView } from '../../../../../../shared/terminal/index.js';
+import type {
+  TerminalLaunchPlanView,
+  TerminalSessionView,
+} from '../../../../../../shared/terminal/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import type { AgentProviderGate } from '../useAgentProviderGate.js';
 import { CanvasNodeInteractionProvider } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
@@ -47,11 +50,19 @@ const controller = {
 // Captures the options (in particular `configuration`) the node last passed into the controller
 // hook, so tests can assert the peer provision's extraArguments/peerProvisionId reached it.
 const { controllerOptionsHolder } = vi.hoisted(() => ({
-  controllerOptionsHolder: { current: null as { configuration?: unknown } | null },
+  controllerOptionsHolder: {
+    current: null as {
+      configuration?: unknown;
+      onSessionChange?: (session: TerminalSessionView | null) => void;
+    } | null,
+  },
 }));
 
 vi.mock('../../terminal/useTerminalNodeController.js', () => ({
-  useTerminalNodeController: (options: { configuration?: unknown }) => {
+  useTerminalNodeController: (options: {
+    configuration?: unknown;
+    onSessionChange?: (session: TerminalSessionView | null) => void;
+  }) => {
     controllerOptionsHolder.current = options;
     return controller;
   },
@@ -199,6 +210,7 @@ const REVIEW_PLAN: TerminalLaunchPlanView = {
     network: 'operating-system-user',
     detail: 'The working directory limits context but is not a security sandbox.',
   },
+  workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
   expiresAt: '2026-07-17T16:10:00.000Z',
 };
 
@@ -240,6 +252,54 @@ describe('AgentSessionNode', () => {
     // Peer provisioning now happens before prepareLaunch, so the launch fires only after that
     // IPC round trip resolves — no longer synchronously within the click handler.
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+  });
+
+  it('requests a managed worktree and records the durable run returned by main', () => {
+    renderNode();
+    expect(controllerOptionsHolder.current?.configuration).toMatchObject({
+      workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+    });
+
+    controllerOptionsHolder.current?.onSessionChange?.({
+      id: '30000000-0000-4000-8000-000000000001',
+      projectId: 'proj-1',
+      nodeId: NODE_ID,
+      executable: 'claude',
+      arguments: [],
+      cwdRelative: '.',
+      environmentVariableNames: [],
+      columns: 80,
+      rows: 24,
+      permission: {
+        label: 'Local terminal',
+        sandboxed: false,
+        filesystem: 'operating-system-user',
+        network: 'operating-system-user',
+        detail: 'Local terminal.',
+      },
+      status: 'running',
+      startedAt: '2026-07-23T12:00:00.000Z',
+      endedAt: null,
+      exitCode: null,
+      exitSignal: null,
+      earliestSequence: 1,
+      nextSequence: 1,
+      outputTruncated: false,
+      workspace: {
+        kind: 'managed-agent-worktree',
+        runId: '40000000-0000-4000-8000-000000000001',
+        branch: 'forgeboard/node-x/claude-1',
+      },
+      updatedAt: '2026-07-23T12:00:00.000Z',
+    });
+
+    expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, {
+      runId: '40000000-0000-4000-8000-000000000001',
+      branch: 'forgeboard/node-x/claude-1',
+      worktreeId: undefined,
+      worktreeRecordedActive: true,
+      lastRunPermissionProfile: 'worktree-write',
+    });
   });
 
   it('provisions peer tools before preparing the launch, threading the material into the configuration', async () => {

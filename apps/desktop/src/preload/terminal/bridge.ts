@@ -145,6 +145,8 @@ function launchPlanFor(input: TerminalPrepareLaunchInput) {
       plan.cwdRelative !== input.cwdRelative ||
       plan.columns !== input.columns ||
       plan.rows !== input.rows ||
+      JSON.stringify(plan.workspace ?? { kind: 'project' }) !==
+        JSON.stringify(input.workspace ?? { kind: 'project' }) ||
       !sameStrings(plan.arguments, input.arguments) ||
       !sameStrings(plan.environmentVariableNames, input.environmentVariableNames);
     if (mismatched) {

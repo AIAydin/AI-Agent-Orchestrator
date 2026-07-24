@@ -23,6 +23,10 @@ import {
   type PeerEnvironmentProvider,
   type TerminalServiceStore,
 } from './service.js';
+import type {
+  PreparedTerminalWorkspace,
+  TerminalWorkspaceManager,
+} from './workspaces/contracts.js';
 
 const PROJECT_ID = '10000000-0000-4000-8000-000000000001';
 const PLAN_ID = '20000000-0000-4000-8000-000000000001';
@@ -107,6 +111,47 @@ describe('TerminalService', () => {
         (await harness.service.getSession('owner-a', { sessionId: SESSION_ID }))?.status ===
         'interrupted',
     );
+  });
+
+  it('launches a managed Agent request from the main-resolved worktree root', async () => {
+    const workspaceManager = new FakeTerminalWorkspaceManager();
+    const harness = await fixture({ workspaceManager });
+    const plan = await harness.service.prepareLaunch('owner-a', {
+      ...harness.input,
+      nodeId: 'agent-one',
+      workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+    });
+    let reviewedCwd: string | undefined;
+
+    const session = await harness.service.confirmLaunch('owner-a', plan.planId, (review) => {
+      reviewedCwd = review.exact.cwd;
+      return Promise.resolve('approved');
+    });
+
+    expect(reviewedCwd).toBe(workspaceManager.prepared?.rootPath);
+    expect(harness.spawnedLaunch()?.cwd).toBe(workspaceManager.prepared?.rootPath);
+    expect(session?.workspace).toEqual(workspaceManager.prepared?.view);
+    expect(workspaceManager.running).toHaveLength(1);
+    harness.pty.emitExit({ exitCode: 0, signal: null });
+    await expectEventually(() => Promise.resolve(workspaceManager.finished.length === 1));
+  });
+
+  it('releases an unused managed Agent worktree when native review is denied', async () => {
+    const workspaceManager = new FakeTerminalWorkspaceManager();
+    const harness = await fixture({ workspaceManager });
+    const plan = await harness.service.prepareLaunch('owner-a', {
+      ...harness.input,
+      nodeId: 'agent-one',
+      workspace: { kind: 'managed-agent-worktree', adapterId: 'claude' },
+    });
+
+    await expect(
+      harness.service.confirmLaunch('owner-a', plan.planId, () => Promise.resolve('denied')),
+    ).resolves.toBeNull();
+
+    expect(workspaceManager.prepared).toBeDefined();
+    expect(workspaceManager.discarded).toEqual([workspaceManager.prepared]);
+    expect(harness.spawnedLaunch()).toBeUndefined();
   });
 
   it('rechecks expiry and async launch authority immediately before spawn', async () => {
@@ -670,6 +715,7 @@ describe('TerminalService', () => {
       readonly failRetentionAudit?: boolean;
       readonly failSessionDeletion?: boolean;
       readonly peerProvider?: PeerEnvironmentProvider;
+      readonly workspaceManager?: TerminalWorkspaceManager;
     } = {},
   ): Promise<{
     readonly service: TerminalService;
@@ -722,6 +768,9 @@ describe('TerminalService', () => {
       maximumTranscriptBytes: 1_024 * 1_024,
       maximumTotalTranscriptBytes: 2 * 1_024 * 1_024,
       maximumTranscriptFiles: 10,
+      ...(options.workspaceManager === undefined
+        ? {}
+        : { workspaceManager: options.workspaceManager }),
     });
     if (options.peerProvider !== undefined)
       service.setPeerEnvironmentProvider(options.peerProvider);
@@ -747,6 +796,66 @@ describe('TerminalService', () => {
     };
   }
 });
+
+class FakeTerminalWorkspaceManager implements TerminalWorkspaceManager {
+  prepared: PreparedTerminalWorkspace | undefined;
+  readonly running: TerminalSessionView[] = [];
+  readonly finished: TerminalSessionView[] = [];
+  readonly discarded: PreparedTerminalWorkspace[] = [];
+
+  async provision(input: {
+    readonly project: Project;
+    readonly nodeId: string;
+    readonly adapterId: string;
+  }): Promise<PreparedTerminalWorkspace> {
+    const rootPath = path.join(input.project.path, 'managed-agent-root');
+    await mkdir(rootPath);
+    this.prepared = {
+      rootPath,
+      view: {
+        kind: 'managed-agent-worktree',
+        runId: '60000000-0000-4000-8000-000000000001',
+        branch: 'forgeboard/agent-one/claude-1',
+      },
+      ownership: {
+        schemaVersion: 1,
+        id: '70000000-0000-4000-8000-000000000001',
+        repositoryRoot: input.project.path,
+        managedRoot: input.project.path,
+        worktreePath: rootPath,
+        branch: 'forgeboard/agent-one/claude-1',
+        baseRef: 'HEAD',
+        baseCommit: 'a'.repeat(40),
+        agentId: input.adapterId,
+        taskId: input.nodeId,
+        createdAt: '2026-07-23T12:00:00.000Z',
+        updatedAt: '2026-07-23T12:00:00.000Z',
+        status: 'active',
+        cleanupPolicy: 'manual',
+      },
+    };
+    return this.prepared;
+  }
+
+  assertCurrent(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  markRunning(_workspace: PreparedTerminalWorkspace, session: TerminalSessionView): Promise<void> {
+    this.running.push(session);
+    return Promise.resolve();
+  }
+
+  markFinished(_workspace: PreparedTerminalWorkspace, session: TerminalSessionView): Promise<void> {
+    this.finished.push(session);
+    return Promise.resolve();
+  }
+
+  discard(workspace: PreparedTerminalWorkspace): Promise<void> {
+    this.discarded.push(workspace);
+    return Promise.resolve();
+  }
+}
 
 class FakeTerminalStore implements TerminalServiceStore {
   readonly sessions = new Map<string, StoredTerminalSession>();

@@ -12,6 +12,8 @@ import {
   TerminalPrepareLaunchInputSchema,
   TerminalReplayViewSchema,
   TerminalSessionViewSchema,
+  TerminalWorkspaceRequestSchema,
+  TerminalWorkspaceViewSchema,
   type TerminalLaunchPlanView,
   type TerminalSessionView,
 } from './index.js';
@@ -109,6 +111,44 @@ describe('terminal IPC contracts', () => {
       TerminalPrepareLaunchInputSchema.safeParse({
         ...input,
         arguments: ['bad\0argument'],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('keeps managed worktree requests and views path-free', () => {
+    expect(
+      TerminalWorkspaceRequestSchema.parse({
+        kind: 'managed-agent-worktree',
+        adapterId: 'claude',
+      }),
+    ).toEqual({
+      kind: 'managed-agent-worktree',
+      adapterId: 'claude',
+    });
+    expect(
+      TerminalWorkspaceRequestSchema.safeParse({
+        kind: 'managed-agent-worktree',
+        adapterId: 'claude',
+        rootPath: '/private/renderer-selected-worktree',
+      }).success,
+    ).toBe(false);
+    expect(
+      TerminalWorkspaceViewSchema.parse({
+        kind: 'managed-agent-worktree',
+        runId: SESSION_ID,
+        branch: 'forgeboard/claude/terminal-1',
+      }),
+    ).toEqual({
+      kind: 'managed-agent-worktree',
+      runId: SESSION_ID,
+      branch: 'forgeboard/claude/terminal-1',
+    });
+    expect(
+      TerminalWorkspaceViewSchema.safeParse({
+        kind: 'managed-agent-worktree',
+        runId: SESSION_ID,
+        branch: 'forgeboard/claude/terminal-1',
+        rootPath: '/private/main-resolved-worktree',
       }).success,
     ).toBe(false);
   });

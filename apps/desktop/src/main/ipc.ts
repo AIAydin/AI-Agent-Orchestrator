@@ -99,6 +99,7 @@ import {
 import { createNativePreviewActionAuthorizer } from './agent-peers/preview-control/native-approval.js';
 import { TerminalIpcService } from './terminal/ipc.js';
 import { TerminalService } from './terminal/service.js';
+import { ManagedTerminalWorkspaceService } from './terminal/workspaces/service.js';
 import { UpdateIpcService } from './updates/service.js';
 import { VoiceIpcService } from './voice/service.js';
 import { createWorkflowRuntimeComposition } from './workflow/host/composition.js';
@@ -310,8 +311,15 @@ export function registerIpcHandlers(
   // Shared with `AgentPeersService` below (`setPeerEnvironmentProvider`) so a single
   // `TerminalService` instance is the source of truth for both the terminal IPC surface and the
   // agent-peer hub's session bridge.
-  const terminalCore = new TerminalService(store, join(transcripts, 'terminal'), () =>
-    store.getSettings(createDefaultSettings()),
+  const getCurrentSettings = (): AppSettings => store.getSettings(createDefaultSettings());
+  const terminalWorkspaces = new ManagedTerminalWorkspaceService(store, getCurrentSettings, {
+    repositories,
+  });
+  const terminalCore = new TerminalService(
+    store,
+    join(transcripts, 'terminal'),
+    getCurrentSettings,
+    { workspaceManager: terminalWorkspaces },
   );
   const terminal = new TerminalIpcService(dialog, terminalCore, approvals, undefined, (event) =>
     collaboration.assertTerminalMutationAuthorized(event.sender),

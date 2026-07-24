@@ -56,6 +56,8 @@ export interface ResolvedTerminalLaunch {
   readonly projectId: string;
   readonly projectName: string;
   readonly projectPath: string;
+  /** Canonical root selected for this launch: the project checkout or a main-owned worktree. */
+  readonly rootPath: string;
   readonly nodeId: string;
   readonly configuredExecutable: string;
   readonly executable: string;
@@ -74,6 +76,7 @@ export interface ResolvedTerminalLaunch {
   readonly columns: number;
   readonly rows: number;
   readonly rootIdentity: DirectoryIdentity;
+  readonly projectIdentity: DirectoryIdentity;
   readonly cwdIdentity: DirectoryIdentity;
   readonly executableIdentity: LaunchExecutableIdentity;
 }
@@ -82,12 +85,17 @@ export async function resolveTerminalLaunch(
   project: Project,
   input: TerminalPrepareLaunchInput,
   settings: AppSettings,
+  selectedRootPath: string = project.path,
 ): Promise<ResolvedTerminalLaunch> {
   const parsed = TerminalPrepareLaunchInputSchema.parse(input);
   if (project.id !== parsed.projectId || project.missing) {
     throw new Error('The selected terminal project is no longer available.');
   }
-  const root = await canonicalDirectory(project.path, 'project');
+  const projectIdentity = await canonicalDirectory(project.path, 'project');
+  const root =
+    selectedRootPath === project.path
+      ? projectIdentity
+      : await canonicalDirectory(selectedRootPath, 'workspace');
   const requestedCwd = resolve(root.path, parsed.cwdRelative === '.' ? '' : parsed.cwdRelative);
   const cwd = await canonicalDirectory(requestedCwd, 'working');
   assertContained(root.path, cwd.path);
@@ -113,6 +121,7 @@ export async function resolveTerminalLaunch(
     projectId: project.id,
     projectName: project.name,
     projectPath: project.path,
+    rootPath: root.path,
     nodeId: parsed.nodeId,
     configuredExecutable: parsed.executable,
     executable,
@@ -124,6 +133,7 @@ export async function resolveTerminalLaunch(
     columns: parsed.columns,
     rows: parsed.rows,
     rootIdentity: root,
+    projectIdentity,
     cwdIdentity: cwd,
     executableIdentity,
   };
@@ -144,12 +154,14 @@ export async function assertTerminalLaunchCurrent(
       'The selected project changed after this terminal was reviewed. Review it again.',
     );
   }
-  const [root, cwd] = await Promise.all([
+  const [projectIdentity, root, cwd] = await Promise.all([
     canonicalDirectory(project.path, 'project'),
-    canonicalDirectory(resolve(project.path, resolved.cwdRelative), 'working'),
+    canonicalDirectory(resolved.rootPath, 'workspace'),
+    canonicalDirectory(resolve(resolved.rootPath, resolved.cwdRelative), 'working'),
   ]);
   assertContained(root.path, cwd.path);
   if (
+    !sameDirectoryIdentity(projectIdentity, resolved.projectIdentity) ||
     !sameDirectoryIdentity(root, resolved.rootIdentity) ||
     !sameDirectoryIdentity(cwd, resolved.cwdIdentity)
   ) {
@@ -163,7 +175,7 @@ export async function assertTerminalLaunchCurrent(
 
 async function canonicalDirectory(
   path: string,
-  label: 'project' | 'working',
+  label: 'project' | 'workspace' | 'working',
 ): Promise<DirectoryIdentity> {
   let canonical: string;
   try {

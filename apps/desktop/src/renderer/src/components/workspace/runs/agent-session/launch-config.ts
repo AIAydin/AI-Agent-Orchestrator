@@ -65,6 +65,7 @@ export function agentSessionLaunch(
       enforced = true;
     }
   }
+  if (profile === 'worktree-write') enforced = true;
   const modelFlag = MODEL_FLAG_BY_ADAPTER[agent.id];
   if (modelFlag !== undefined && trimmedModel !== '') {
     args.push(modelFlag, trimmedModel);
@@ -76,10 +77,18 @@ export function agentSessionLaunch(
       arguments: args,
       cwdRelative: '.',
       environmentVariableNames: [],
+      ...(profile === 'worktree-write'
+        ? {
+            workspace: {
+              kind: 'managed-agent-worktree' as const,
+              adapterId: agent.id,
+            },
+          }
+        : {}),
       ...(peers !== null ? { peerProvisionId: peers.provisionId } : {}),
     },
     profileNote: enforced
       ? null
-      : 'Interactive sessions run at the project root; this profile fully applies to flow runs. The CLI asks before writing.',
+      : 'This interactive profile is not enforced yet. The session runs at the project root and the CLI asks before writing.',
   };
 }
