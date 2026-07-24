@@ -45,6 +45,7 @@ export const CollaborationNodeTypeSchema = z.enum([
   'diagram',
   'whiteboard',
   'note-image',
+  'text',
   'group-frame',
 ]);
 export type CollaborationNodeType = z.infer<typeof CollaborationNodeTypeSchema>;

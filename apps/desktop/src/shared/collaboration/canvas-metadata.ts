@@ -304,6 +304,7 @@ function collaborationNodeType(node: CanvasNode): CollaborationNodeType | undefi
     case 'git-pr':
     case 'diagram':
     case 'note-image':
+    case 'text':
     case 'group-frame':
       return node.type;
   }
