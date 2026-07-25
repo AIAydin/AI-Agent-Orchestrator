@@ -416,19 +416,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function createPipeRuntime(plan: PreparedAgentLaunch, beforeSpawn?: () => void): RuntimeProcess {
   const shouldCreateProcessGroup = supportsHostProcessGroupPause(plan);
-  beforeSpawn?.();
-  const child: ChildProcessWithoutNullStreams = spawn(
+  const launch = resolveWindowsBatchLaunch(
     plan.disclosure.executable,
     plan.disclosure.arguments,
-    {
-      cwd: plan.disclosure.cwd,
-      env: plan.environment,
-      shell: false,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-      detached: shouldCreateProcessGroup,
-    },
+    plan.environment,
   );
+  beforeSpawn?.();
+  const child: ChildProcessWithoutNullStreams = spawn(launch.executable, launch.arguments, {
+    cwd: plan.disclosure.cwd,
+    env: plan.environment,
+    shell: false,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+    detached: shouldCreateProcessGroup,
+  });
   const pauseSupported = shouldCreateProcessGroup && hasOwnedProcessGroup(child.pid);
   const dataListeners: Array<(channel: RuntimeChannel, data: string) => void> = [];
   const exitListeners: Array<(exit: RuntimeExit) => void> = [];
@@ -493,8 +494,13 @@ async function createPtyRuntime(
 ): Promise<RuntimeProcess> {
   await ensureNodePtySpawnHelper();
   const pty = await import('node-pty');
+  const launch = resolveWindowsBatchLaunch(
+    plan.disclosure.executable,
+    plan.disclosure.arguments,
+    plan.environment,
+  );
   beforeSpawn?.();
-  const terminal = pty.spawn(plan.disclosure.executable, plan.disclosure.arguments, {
+  const terminal = pty.spawn(launch.executable, [...launch.arguments], {
     cwd: plan.disclosure.cwd,
     env: plan.environment,
     name: 'xterm-256color',
@@ -984,7 +990,18 @@ async function runExecutableProbe(
   return await new Promise((resolve) => {
     let output = '';
     let settled = false;
-    const child = spawn(executable, arguments_, {
+    let launch: { readonly executable: string; readonly arguments: readonly string[] };
+    try {
+      launch = resolveWindowsBatchLaunch(executable, arguments_, process.env);
+    } catch (error) {
+      resolve({
+        exitCode: null,
+        output: '',
+        reason: error instanceof Error ? error.message : 'The executable could not be launched.',
+      });
+      return;
+    }
+    const child = spawn(launch.executable, launch.arguments, {
       env: process.env,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1022,6 +1039,47 @@ async function runExecutableProbe(
     });
     child.on('close', (exitCode) => finish({ exitCode, output }));
   });
+}
+
+const SAFE_WINDOWS_BATCH_COMPONENT = /^[^"&|<>^%!\r\n\0]*$/u;
+
+/**
+ * Windows cannot execute .cmd/.bat shims directly through CreateProcess. Route a bounded,
+ * metacharacter-free command line through the system command processor without enabling Node's
+ * general-purpose `shell` option for arbitrary agent input.
+ */
+export function resolveWindowsBatchLaunch(
+  executable: string,
+  arguments_: readonly string[],
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): { readonly executable: string; readonly arguments: readonly string[] } {
+  if (platform !== 'win32' || !/\.(?:bat|cmd)$/iu.test(executable)) {
+    return { executable, arguments: arguments_ };
+  }
+  if (![executable, ...arguments_].every((value) => SAFE_WINDOWS_BATCH_COMPONENT.test(value))) {
+    throw new Error(
+      'The Windows agent command contains shell metacharacters that cannot be passed safely. Choose the underlying executable instead of its .cmd or .bat shim.',
+    );
+  }
+  const commandProcessor =
+    environment.ComSpec ??
+    environment.COMSPEC ??
+    path.win32.join(
+      environment.SystemRoot ?? environment.SYSTEMROOT ?? 'C:\\Windows',
+      'System32',
+      'cmd.exe',
+    );
+  if (!path.win32.isAbsolute(commandProcessor) || /["&|<>^%!\r\n\0]/u.test(commandProcessor)) {
+    throw new Error('The Windows command processor path is invalid.');
+  }
+  const commandLine = [`"${executable}"`, ...arguments_.map((argument) => `"${argument}"`)].join(
+    ' ',
+  );
+  return {
+    executable: commandProcessor,
+    arguments: ['/d', '/s', '/v:off', '/c', commandLine],
+  };
 }
 
 function includesEveryMarker(output: string, markers: readonly string[]): boolean {

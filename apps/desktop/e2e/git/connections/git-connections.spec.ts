@@ -145,7 +145,13 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Add Git remote?',
         buttons: ['Cancel', 'Add remote'],
       });
-      await expect(settings.getByRole('button', { name: 'Remove origin' })).toBeVisible();
+      const connectionMessages = await settings
+        .locator('.git-connections-notice, [role="alert"]')
+        .allTextContents();
+      await expect(
+        settings.getByRole('button', { name: 'Remove origin' }),
+        `Git connection result: ${connectionMessages.join(' | ')}`,
+      ).toBeVisible();
       expect(gitRemoteUrl(projectPath, 'origin')).toBe(FIRST_NETWORK_URL);
     });
 

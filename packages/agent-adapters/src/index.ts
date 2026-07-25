@@ -8,6 +8,7 @@ export {
   launchPreparedAgent,
   prepareAgentLaunch,
   prepareAgentResume,
+  resolveWindowsBatchLaunch,
   type AgentSession,
   type AgentExecutableProbe,
   type AgentExecutableLocationOptions,

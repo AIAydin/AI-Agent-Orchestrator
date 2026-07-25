@@ -14,7 +14,7 @@ export async function clickExposedCorner(
   const box = await node.boundingBox();
   if (box === null) throw new Error('The canvas node must be visible before it can be selected.');
   await node.click({
-    position: { x: 14, y: 14 },
+    position: { x: Math.max(14, box.width - 14), y: 14 },
     modifiers: [...modifiers],
   });
 }
