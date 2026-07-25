@@ -1,10 +1,7 @@
 import type { WebContents } from 'electron';
 
 import { parsePreviewWebviewPartition } from '../../../shared/preview/webview-partition.js';
-
-const MAX_TEXT_CHARACTERS = 64 * 1_024;
-const MAX_DOM_CHARACTERS = 128 * 1_024;
-const MAX_SCREENSHOT_BYTES = 8 * 1_024 * 1_024;
+import { createGuestAgentSource } from './preview-guest-agent.js';
 
 export interface AgentPreviewInspection {
   readonly url: string;
@@ -77,6 +74,7 @@ export interface AgentPreviewSource {
     action: AgentPreviewAction,
     expectedPageVersion: string,
   ): Promise<AgentPreviewActionResult>;
+  navigate?(url: string): Promise<{ url: string }>;
 }
 
 /**
@@ -95,25 +93,10 @@ export class PreviewAgentBrowser {
     const existing = this.#sources.get(key);
     // Prefer the primary guest over a comparison slot for deterministic reads.
     if (existing !== undefined && identity.slot !== null) return;
-    const source: AgentPreviewSource = {
-      isLive: () => !contents.isDestroyed(),
-      inspect: async () => {
-        const result = (await contents.executeJavaScript(DOM_INSPECTION_EXPRESSION, true)) as {
-          url?: unknown;
-          title?: unknown;
-          text?: unknown;
-          dom?: unknown;
-        };
-        return boundedInspection(result);
-      },
-      screenshot: async () => {
-        const data = (await contents.capturePage()).toPNG();
-        if (data.byteLength > MAX_SCREENSHOT_BYTES) throw new Error('preview-screenshot-too-large');
-        return { mimeType: 'image/png', data: data.toString('base64') };
-      },
-    };
+    const { source, dispose } = createGuestAgentSource(contents);
     this.#sources.set(key, source);
     contents.once('destroyed', () => {
+      dispose();
       if (this.#sources.get(key) === source) this.#sources.delete(key);
     });
   }
@@ -183,6 +166,13 @@ export class PreviewAgentBrowser {
     return await source.performAction(action, expectedPageVersion);
   }
 
+  async navigate(projectId: string, nodeId: string, url: string): Promise<{ url: string }> {
+    const source = this.#liveSource(projectId, nodeId);
+    if (source === null) throw new Error('preview-not-live');
+    if (source.navigate === undefined) throw new Error('preview-interaction-unavailable');
+    return await source.navigate(url);
+  }
+
   #liveSource(projectId: string, nodeId: string): AgentPreviewSource | null {
     const source = this.#sources.get(previewKey(projectId, nodeId));
     if (source === undefined || !source.isLive()) return null;
@@ -190,53 +180,6 @@ export class PreviewAgentBrowser {
   }
 }
 
-function boundedInspection(result: {
-  url?: unknown;
-  title?: unknown;
-  text?: unknown;
-  dom?: unknown;
-}): AgentPreviewInspection {
-  const text = typeof result.text === 'string' ? result.text.slice(0, MAX_TEXT_CHARACTERS) : '';
-  return {
-    url: sanitizedPageUrl(result.url),
-    title: typeof result.title === 'string' ? result.title.slice(0, 1_024) : '',
-    text,
-    // Preserve the legacy response shape without exposing hidden elements,
-    // attributes, form values, or embedded application state. Agents only
-    // receive an escaped representation of the same visible text field.
-    dom: visibleTextDom(text),
-    // Browser console messages commonly contain access tokens, request
-    // payloads, and application internals. They never cross the agent bridge.
-    console: [],
-  };
-}
-
-function sanitizedPageUrl(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
-    return `${parsed.origin}${parsed.pathname}`.slice(0, 2_048);
-  } catch {
-    return '';
-  }
-}
-
-function visibleTextDom(text: string): string {
-  const escaped = text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-  return `<body>${escaped}</body>`.slice(0, MAX_DOM_CHARACTERS);
-}
-
 function previewKey(projectId: string, nodeId: string): string {
   return `${projectId}\u0000${nodeId}`;
 }
-
-const DOM_INSPECTION_EXPRESSION = String.raw`(() => {
-  const text = (document.body?.innerText ?? '').slice(0, ${String(MAX_TEXT_CHARACTERS)});
-  return {
-    url: (location.origin + location.pathname).slice(0, 2048),
-    title: document.title,
-    text,
-    dom: ''
-  };
-})()`;
