@@ -14,6 +14,7 @@ import type {
 import { findPeerByName, resolvePeers, type PeerDescriptor } from './peer-graph.js';
 import {
   parseActionRequest,
+  parseNavigateRequest,
   parseScrollRequest,
   type PreviewActionAuthorizer,
 } from './preview-control/contracts.js';
@@ -65,6 +66,7 @@ export interface AgentPeersPreviewBridge {
     nodeId: string,
     deltaY: number,
   ): Promise<{ pageVersion: string; url: string }>;
+  navigate(projectId: string, nodeId: string, url: string): Promise<{ url: string }>;
   describeAction(
     projectId: string,
     nodeId: string,
@@ -416,6 +418,10 @@ export class AgentPeersService {
       }
       if (request.method === 'POST' && url.pathname === '/v1/preview/scroll') {
         await this.#handlePreviewScroll(provision, request, response);
+        return;
+      }
+      if (request.method === 'POST' && url.pathname === '/v1/preview/navigate') {
+        await this.#handlePreviewNavigate(provision, request, response);
         return;
       }
       if (request.method === 'POST' && url.pathname === '/v1/preview/action') {
@@ -868,6 +874,39 @@ export class AgentPeersService {
     }
   }
 
+  async #handlePreviewNavigate(
+    provision: ProvisionRecord,
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    const body = await this.#readJsonBody(request, response);
+    if (body === null) return;
+    const input = parseNavigateRequest(body);
+    if (input === null) {
+      this.#respondJson(response, 400, { error: 'invalid-preview-navigate' });
+      return;
+    }
+    const preview = this.#authorizedPreview(provision, input.previewId, true);
+    if (preview === null) {
+      this.#auditPreview(provision, input.previewId, 'denied', 'navigate');
+      this.#respondJson(response, 403, { error: 'preview-interaction-denied' });
+      return;
+    }
+    if (this.#previews === null) {
+      this.#respondJson(response, 404, { error: 'preview-not-live' });
+      return;
+    }
+    try {
+      const result = await this.#previews.navigate(provision.projectId, preview.node.id, input.url);
+      this.#auditPreview(provision, preview.node.id, 'allowed', 'navigate');
+      this.#respondJson(response, 200, result);
+    } catch (error) {
+      this.#respondJson(response, 409, {
+        error: safePreviewActionError(error),
+      });
+    }
+  }
+
   async #handlePreviewAction(
     provision: ProvisionRecord,
     request: IncomingMessage,
@@ -1101,4 +1140,6 @@ const SAFE_PREVIEW_ACTION_ERRORS = new Set([
   'preview-element-not-editable',
   'preview-element-not-visible',
   'preview-scroll-delta-required',
+  'preview-navigation-blocked',
+  'preview-navigation-failed',
 ]);
