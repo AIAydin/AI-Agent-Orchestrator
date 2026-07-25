@@ -899,9 +899,9 @@ unchecked when only a subset of their required behavior has proof.
   macOS Intel proof remains open. Forgeboard validates and uses `gh` but does not install it or
   authenticate the user. An operating-system or process interruption inside the remote config
   transaction can leave its Git lock/recovery staging artifact, and UI repair for that state is not
-  implemented. The repository remains private with no tags or GitHub Release, so there is not yet a
-  public download. Hosted Actions remain excluded because the billing/payment gate stops jobs before
-  any workflow step executes.
+  implemented. At this checkpoint the repository was private with no tags or GitHub Release, so
+  there was not yet a public download. Hosted Actions remained excluded because the billing/payment
+  gate stopped jobs before any workflow step executed.
 - 2026-07-17: Interactive Terminal nodes gained complete ordinary-user configuration in the
   inspector: native executable selection, literal argument rows, project-relative cwd, and
   Settings-allowlisted environment names. Every launch uses an expiring single-use renderer review
@@ -1755,9 +1755,9 @@ unchecked when only a subset of their required behavior has proof.
   the production marker/control audit found no required TODO, fake-success, placeholder, stub, or
   inert-button blocker. A fresh unsigned macOS arm64 ZIP, DMG, and unpacked application were built,
   and packaged first-run smoke passed. This closes checklist items 188 and 196. Items 18, 183, and
-  184 remain honestly open because the private repository still has no published GitHub Release and
-  hosted Windows/Linux installation plus signing/notarization evidence requires restored GitHub
-  Actions billing and the optional platform credentials.
+  184 remain honestly open because, at this checkpoint, the private repository had no published
+  GitHub Release and hosted Windows/Linux installation plus signing/notarization evidence required
+  restored GitHub Actions billing and the optional platform credentials.
 - 2026-07-21: Forgeboard gained an opt-in local voice-command path backed by pinned Transformers.js,
   ONNX Runtime, and the exact `onnx-community/whisper-tiny.en` revision. Settings owns model
   install/removal and safe-action auto-run; the one-time model download uses the main outbound gate
@@ -1997,3 +1997,12 @@ unchecked when only a subset of their required behavior has proof.
   distinguish stopped, interrupted, and disconnected sessions and render signal 15 as `SIGTERM`.
   All 3,108 unit and 332 integration tests, docs, quality, workspace typecheck, zero-warning lint,
   formatting, structure and production-control gates, whitespace validation, and build passed.
+- 2026-07-25: public-repository hardening enabled GitHub secret scanning, push protection,
+  Dependabot alerts/security updates and automated fixes, and private vulnerability reporting.
+  Public documentation no longer exposes personal checkout paths or describes the repository as
+  private. The one Stripe-shaped redaction fixture now constructs its test value at runtime, and
+  GitHub has zero open secret alerts. Workspace overrides move Sharp to 0.35.0 and tar to 7.5.21;
+  the live production audit reports zero advisories. Structure (1,473 files), controls (858 files),
+  formatting, lint, typecheck, 3,139 unit tests, 331/332 integration tests together plus the
+  load-sensitive 19/19 file in isolation, three docs tests, seven quality tests, and all production
+  builds passed.

@@ -1,7 +1,7 @@
 # Releases and signing
 
 Forgeboard is intended to be downloaded by end users from GitHub Releases without Node.js, pnpm, a
-source checkout, or config-file edits. The repository is currently private and has no tags or
+source checkout, or config-file edits. The source repository is public and currently has no tags or
 published end-user release. For a matching release tag, the workflow is configured to build native
 installers on GitHub-hosted macOS, Windows, and Linux runners, execute the verification and
 packaged-app smoke suites, and publish platform-and-architecture-specific SHA-256 checksums only
@@ -55,15 +55,15 @@ that ledger and all corresponding immutable source commits in the same reviewed 
 
 ## Current publication blockers
 
-As verified on 2026-07-19, the official repository is private, has no tags or published Releases,
-and its latest four-platform workflow attempt failed before any runner step started because of the
-repository account's billing or spending-limit restriction. That account restriction must be
-resolved before hosted installer proof or publication is possible. After it is resolved, the
-remaining release evidence is a successful native install-and-launch smoke on every hosted target,
-including Windows, Linux, and both macOS architectures, followed by a tag-gated publication whose
-assets and checksums are independently verified. Production signing also remains optional external
-maintainer setup: do not claim macOS signing/notarization or Windows Authenticode until the generated
-artifacts themselves pass the workflow's post-package verification.
+As verified on 2026-07-25, the official repository is public and has no tags or published Releases.
+The latest four-platform workflow attempt, from 2026-07-14, failed before any runner step started;
+its jobs contain no runnable-step logs. Before tagging, rerun the workflow to confirm that hosted
+runner access is available. The remaining release evidence is a successful native
+install-and-launch smoke on every hosted target, including Windows, Linux, and both macOS
+architectures, followed by a tag-gated publication whose assets and checksums are independently
+verified. Production signing also remains optional external maintainer setup: do not claim macOS
+signing/notarization or Windows Authenticode until the generated artifacts themselves pass the
+workflow's post-package verification.
 
 ## Optional signing credentials
 

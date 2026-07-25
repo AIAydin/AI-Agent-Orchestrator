@@ -2,7 +2,7 @@
 
 Forgeboard is intended to be distributed through
 [GitHub Releases](https://github.com/AIAydin/AI-Agent-Orchestrator/releases), but this repository is
-currently private and has no tags, published end-user release, or public installer download. When a
+public and currently has no tags, published end-user release, or installer download. When a
 release is published, its installer will be self-contained: end users will not need Node.js, pnpm, an
 API key, an environment file, or source-code edits. Check the release notes, source commit, checksums,
 and signing status before installing it; do not treat an unpublished local build as an official

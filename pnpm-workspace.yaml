@@ -3,6 +3,9 @@ packages:
   - packages/*
 
 overrides:
+  # Remove once the upstream ranges include the advisory-fixed versions.
+  sharp: 0.35.0
+  tar: 7.5.21
   typescript: 5.8.3
 
 allowBuilds:
