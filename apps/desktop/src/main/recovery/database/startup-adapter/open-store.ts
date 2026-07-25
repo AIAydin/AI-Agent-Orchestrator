@@ -1,4 +1,4 @@
-import { lstatSync, realpathSync, type Stats } from 'node:fs';
+import { appendFileSync, lstatSync, realpathSync, type Stats } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 
@@ -84,6 +84,7 @@ export interface StartupDatabaseRecoveryOptions {
 export async function openLocalStoreWithStartupDatabaseRecovery(
   options: StartupDatabaseRecoveryOptions,
 ): Promise<LocalStore | null> {
+  traceE2eDatabaseStartup('database-open-entered');
   const dependencies = options.dependencies ?? {};
   const cleanup = dependencies.cleanupAttemptDirectory ?? cleanupAttemptDirectory;
   const cleanupDeferred = dependencies.cleanupDeferredStaging ?? cleanupDeferredRecoveryStaging;
@@ -133,9 +134,12 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
 
   const prepareBoundary = async (): Promise<string> => {
     if (platform === 'win32' && windowsSid === undefined) {
+      traceE2eDatabaseStartup('database-windows-identity-requested');
       windowsSid = await windowsSecurity.currentUserSid();
+      traceE2eDatabaseStartup('database-windows-identity-resolved');
     }
     if (canonicalUserData === undefined) {
+      traceE2eDatabaseStartup('database-user-data-boundary-requested');
       canonicalUserData = await prepareUserDataBoundary(
         options.userDataPath,
         platform,
@@ -143,6 +147,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
         windowsSid,
         getUserId,
       );
+      traceE2eDatabaseStartup('database-user-data-boundary-prepared');
       const cleanupWindowsSid = windowsSid;
       cleanupReport = await cleanupDeferred(canonicalUserData, {
         platform,
@@ -158,9 +163,11 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
             }
           : {}),
       });
+      traceE2eDatabaseStartup('database-staging-cleanup-completed');
     }
     databasePath ??= assertDirectDatabasePath(options.databasePath, canonicalUserData);
     await protectDatabaseBoundary(databasePath, platform, windowsSecurity, windowsSid, getUserId);
+    traceE2eDatabaseStartup('database-file-boundary-prepared');
     return databasePath;
   };
 
@@ -175,6 +182,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
         windowsDurability,
         dependencies.reconcileInterruptedRestores,
       );
+      traceE2eDatabaseStartup('database-restore-reconciliation-completed');
       reconciliationCompleted = true;
       await protectDatabaseBoundary(
         preparedDatabasePath,
@@ -196,6 +204,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
       windowsMarkerDurability,
     );
     const marker = await readInitializationMarker(preparedUserData, markerOptions);
+    traceE2eDatabaseStartup('database-initialization-marker-read');
     const exists = await databaseFileExists(preparedDatabasePath);
     if (!exists && marker === 'initialized') throw new StartupDatabaseMissingError();
     let expectedIdentity: ExpectedDatabaseIdentity | undefined;
@@ -216,6 +225,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
       expectedIdentity,
       requiresAuditDeleteTriggerUpgrade,
     );
+    traceE2eDatabaseStartup('database-store-created');
     try {
       if (cleanupReport.failedCount > 0 && !cleanupWarningRecorded) {
         opened.appendAudit('recovery', 'staging-cleanup', 'failed', {
@@ -226,6 +236,7 @@ export async function openLocalStoreWithStartupDatabaseRecovery(
       if (marker === 'absent') {
         await writeInitializationMarker(preparedUserData, markerOptions);
       }
+      traceE2eDatabaseStartup('database-initialization-marker-ready');
       return opened;
     } catch (error) {
       opened.close();
@@ -464,8 +475,11 @@ async function prepareUserDataBoundary(
   }
   if (platform === 'win32') {
     if (windowsSid === undefined) throw new Error('Windows recovery identity is unavailable.');
+    traceE2eDatabaseStartup('database-user-data-protection-requested');
     await windowsSecurity.protectPrivateDirectory(canonical, windowsSid);
+    traceE2eDatabaseStartup('database-user-data-protected');
     await windowsSecurity.assertPrivateDirectory(canonical, windowsSid);
+    traceE2eDatabaseStartup('database-user-data-protection-verified');
   } else {
     assertOwnedByCurrentUser(current, 'user data directory', getUserId);
     await chmod(canonical, 0o700);
@@ -481,6 +495,16 @@ async function prepareUserDataBoundary(
     assertOwnedByCurrentUser(protectedStats, 'user data directory', getUserId);
   }
   return canonical;
+}
+
+function traceE2eDatabaseStartup(stage: string): void {
+  const tracePath = process.env['FORGEBOARD_E2E_STARTUP_TRACE_PATH'];
+  if (tracePath === undefined) return;
+  try {
+    appendFileSync(tracePath, `${stage}\n`, { encoding: 'utf8' });
+  } catch {
+    // Diagnostics must never alter product startup behavior.
+  }
 }
 
 async function protectDatabaseBoundary(
