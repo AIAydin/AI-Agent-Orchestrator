@@ -44,7 +44,7 @@ export async function addAndConfigureAgent(page: Page, prompt: string): Promise<
     .locator('.template-section')
     .getByRole('button', { name: /^Agent/ })
     .click();
-  const node = page.getByRole('article', { name: 'Agent: Agent' });
+  const node = page.getByRole('article', { name: /^Agent: /u });
   await node.click();
   const configuration = page.getByRole('region', { name: 'Agent run settings' });
   await configuration.getByLabel('Agent to run').selectOption(ADAPTER_ID);

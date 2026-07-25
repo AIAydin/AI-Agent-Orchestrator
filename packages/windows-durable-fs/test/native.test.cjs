@@ -32,6 +32,47 @@ test(
       binding.moveFileWriteThrough(source, destination, true);
       assert.equal(await readFile(destination, 'utf8'), 'replacement');
 
+      const sid = binding.currentUserSid();
+      assert.match(sid, /^S-\d(?:-\d+){1,15}$/u);
+      binding.protectFilesystemAcl(root, sid, true);
+      const directoryAcl = JSON.parse(binding.inspectFilesystemAcl(root));
+      assert.equal(directoryAcl.ownerSid, sid);
+      assert.equal(directoryAcl.protected, true);
+      assert.equal(directoryAcl.rules.length, 2);
+      for (const expectedSid of [sid, 'S-1-5-18']) {
+        let observed;
+        for (const rule of directoryAcl.rules) {
+          if (rule.sid === expectedSid) observed = rule;
+        }
+        assert.deepEqual(observed, {
+          sid: expectedSid,
+          accessType: 'Allow',
+          rights: 0x1f01ff,
+          inherited: false,
+          inheritanceFlags: 3,
+          propagationFlags: 0,
+        });
+      }
+      binding.protectFilesystemAcl(destination, sid, false);
+      const fileAcl = JSON.parse(binding.inspectFilesystemAcl(destination));
+      assert.equal(fileAcl.ownerSid, sid);
+      assert.equal(fileAcl.protected, true);
+      assert.equal(fileAcl.rules.length, 2);
+      for (const expectedSid of [sid, 'S-1-5-18']) {
+        let observed;
+        for (const rule of fileAcl.rules) {
+          if (rule.sid === expectedSid) observed = rule;
+        }
+        assert.deepEqual(observed, {
+          sid: expectedSid,
+          accessType: 'Allow',
+          rights: 0x1f01ff,
+          inherited: false,
+          inheritanceFlags: 0,
+          propagationFlags: 0,
+        });
+      }
+
       const unpublishedDirectory = join(root, 'restore-directory.staging');
       const publishedDirectory = join(root, 'restore-directory');
       await mkdir(unpublishedDirectory);

@@ -116,6 +116,7 @@ const spies = {
   recheckProvider: vi.fn(),
   openSettings: vi.fn(),
   reportError: vi.fn(),
+  flushCanvas: vi.fn(() => Promise.resolve(true)),
   updateNodeData: vi.fn(),
   recordHistory: vi.fn(),
   nodeTitle: vi.fn((): string | null => null),
@@ -138,6 +139,7 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     recheckProvider: spies.recheckProvider,
     openSettings: spies.openSettings,
     reportError: spies.reportError,
+    flushCanvas: spies.flushCanvas,
     updateNodeData: spies.updateNodeData,
     fitGroupFrame: spies.fitGroupFrame,
     arrangeGroupFrame: spies.arrangeGroupFrame,
@@ -254,6 +256,25 @@ describe('AgentSessionNode', () => {
     // Peer provisioning now happens before prepareLaunch, so the launch fires only after that
     // IPC round trip resolves — no longer synchronously within the click handler.
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
+    expect(spies.flushCanvas).toHaveBeenCalledOnce();
+    expect(spies.flushCanvas.mock.invocationCallOrder[0]).toBeLessThan(
+      provisionMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('does not provision or launch when the current canvas cannot be saved', async () => {
+    spies.flushCanvas.mockResolvedValueOnce(false);
+    renderNode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    await waitFor(() =>
+      expect(spies.reportError).toHaveBeenCalledWith(
+        "The agent session didn't start because the canvas couldn't be saved.",
+      ),
+    );
+    expect(provisionMock).not.toHaveBeenCalled();
+    expect(controller.prepareLaunch).not.toHaveBeenCalled();
   });
 
   it('requests a managed worktree and records the durable run returned by main', () => {

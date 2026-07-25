@@ -1,9 +1,10 @@
-import { execFile } from 'node:child_process';
-import path from 'node:path';
+import {
+  currentWindowsUserSid,
+  inspectWindowsFilesystemAcl,
+  protectWindowsFilesystemAcl,
+} from '@forgeboard/windows-durable-fs';
 
 const ACL_SCHEMA_VERSION = 2;
-const POWERSHELL_TIMEOUT_MS = 8_000;
-const POWERSHELL_MAX_BUFFER_BYTES = 64 * 1024;
 const SYSTEM_SID = 'S-1-5-18';
 const ADMINISTRATORS_SID = 'S-1-5-32-544';
 const CREATOR_OWNER_SID = 'S-1-3-0';
@@ -22,126 +23,6 @@ const DANGEROUS_PARENT_RIGHTS =
   0x10000 | // Delete this directory.
   0x40000 | // Change permissions.
   0x80000; // Take ownership.
-
-const INSPECT_DIRECTORY_ACL_SCRIPT = String.raw`
-$ErrorActionPreference = 'Stop'
-$target = $env:FORGEBOARD_WINDOWS_ACL_PATH
-if ([string]::IsNullOrEmpty($target)) { throw 'The ACL target is missing.' }
-$sections = [System.Security.AccessControl.AccessControlSections]::Access -bor [System.Security.AccessControl.AccessControlSections]::Owner
-$acl = [System.IO.Directory]::GetAccessControl($target, $sections)
-$binary = $acl.GetSecurityDescriptorBinaryForm()
-$raw = [System.Security.AccessControl.RawSecurityDescriptor]::new($binary, 0)
-$daclPresent = (($raw.ControlFlags -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent) -ne 0) -and ($null -ne $raw.DiscretionaryAcl)
-$hasUnsupportedDaclAce = $false
-if ($daclPresent) {
-  foreach ($ace in $raw.DiscretionaryAcl) {
-    if (($ace -isnot [System.Security.AccessControl.CommonAce]) -or $ace.IsCallback) {
-      $hasUnsupportedDaclAce = $true
-      break
-    }
-  }
-}
-$rules = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object {
-  $rights = [Convert]::ToUInt32(([int64]$_.FileSystemRights -band 0xffffffffL))
-  [ordered]@{
-    sid = $_.IdentityReference.Value
-    accessType = $_.AccessControlType.ToString()
-    rights = [uint64]$rights
-    inherited = [bool]$_.IsInherited
-    inheritanceFlags = [int]$_.InheritanceFlags
-    propagationFlags = [int]$_.PropagationFlags
-  }
-})
-$result = [ordered]@{
-  schemaVersion = 2
-  ownerSid = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
-  daclPresent = [bool]$daclPresent
-  hasUnsupportedDaclAce = [bool]$hasUnsupportedDaclAce
-  protected = [bool]$acl.AreAccessRulesProtected
-  rules = $rules
-}
-[Console]::Out.Write(($result | ConvertTo-Json -Compress -Depth 4))
-`;
-
-const PROTECT_DIRECTORY_ACL_SCRIPT = String.raw`
-$ErrorActionPreference = 'Stop'
-$target = $env:FORGEBOARD_WINDOWS_ACL_PATH
-$userSidValue = $env:FORGEBOARD_WINDOWS_USER_SID
-if ([string]::IsNullOrEmpty($target) -or [string]::IsNullOrEmpty($userSidValue)) {
-  throw 'The private ACL input is missing.'
-}
-$userSid = [System.Security.Principal.SecurityIdentifier]::new($userSidValue)
-$systemSid = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')
-$inheritance = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
-$propagation = [System.Security.AccessControl.PropagationFlags]::None
-$allow = [System.Security.AccessControl.AccessControlType]::Allow
-$fullControl = [System.Security.AccessControl.FileSystemRights]::FullControl
-$acl = [System.Security.AccessControl.DirectorySecurity]::new()
-$acl.SetOwner($userSid)
-$acl.SetAccessRuleProtection($true, $false)
-$acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($userSid, $fullControl, $inheritance, $propagation, $allow)) | Out-Null
-$acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($systemSid, $fullControl, $inheritance, $propagation, $allow)) | Out-Null
-[System.IO.Directory]::SetAccessControl($target, $acl)
-`;
-
-const INSPECT_FILE_ACL_SCRIPT = String.raw`
-$ErrorActionPreference = 'Stop'
-$target = $env:FORGEBOARD_WINDOWS_ACL_PATH
-if ([string]::IsNullOrEmpty($target)) { throw 'The ACL target is missing.' }
-$sections = [System.Security.AccessControl.AccessControlSections]::Access -bor [System.Security.AccessControl.AccessControlSections]::Owner
-$acl = [System.IO.File]::GetAccessControl($target, $sections)
-$binary = $acl.GetSecurityDescriptorBinaryForm()
-$raw = [System.Security.AccessControl.RawSecurityDescriptor]::new($binary, 0)
-$daclPresent = (($raw.ControlFlags -band [System.Security.AccessControl.ControlFlags]::DiscretionaryAclPresent) -ne 0) -and ($null -ne $raw.DiscretionaryAcl)
-$hasUnsupportedDaclAce = $false
-if ($daclPresent) {
-  foreach ($ace in $raw.DiscretionaryAcl) {
-    if (($ace -isnot [System.Security.AccessControl.CommonAce]) -or $ace.IsCallback) {
-      $hasUnsupportedDaclAce = $true
-      break
-    }
-  }
-}
-$rules = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object {
-  $rights = [Convert]::ToUInt32(([int64]$_.FileSystemRights -band 0xffffffffL))
-  [ordered]@{
-    sid = $_.IdentityReference.Value
-    accessType = $_.AccessControlType.ToString()
-    rights = [uint64]$rights
-    inherited = [bool]$_.IsInherited
-    inheritanceFlags = [int]$_.InheritanceFlags
-    propagationFlags = [int]$_.PropagationFlags
-  }
-})
-$result = [ordered]@{
-  schemaVersion = 2
-  ownerSid = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
-  daclPresent = [bool]$daclPresent
-  hasUnsupportedDaclAce = [bool]$hasUnsupportedDaclAce
-  protected = [bool]$acl.AreAccessRulesProtected
-  rules = $rules
-}
-[Console]::Out.Write(($result | ConvertTo-Json -Compress -Depth 4))
-`;
-
-const PROTECT_FILE_ACL_SCRIPT = String.raw`
-$ErrorActionPreference = 'Stop'
-$target = $env:FORGEBOARD_WINDOWS_ACL_PATH
-$userSidValue = $env:FORGEBOARD_WINDOWS_USER_SID
-if ([string]::IsNullOrEmpty($target) -or [string]::IsNullOrEmpty($userSidValue)) {
-  throw 'The private ACL input is missing.'
-}
-$userSid = [System.Security.Principal.SecurityIdentifier]::new($userSidValue)
-$systemSid = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')
-$allow = [System.Security.AccessControl.AccessControlType]::Allow
-$fullControl = [System.Security.AccessControl.FileSystemRights]::FullControl
-$acl = [System.Security.AccessControl.FileSecurity]::new()
-$acl.SetOwner($userSid)
-$acl.SetAccessRuleProtection($true, $false)
-$acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($userSid, $fullControl, $allow)) | Out-Null
-$acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($systemSid, $fullControl, $allow)) | Out-Null
-[System.IO.File]::SetAccessControl($target, $acl)
-`;
 
 export type WindowsAclBoundaryErrorCode =
   | 'identity-unavailable'
@@ -189,27 +70,27 @@ export interface WindowsFilesystemSecurity {
   assertPrivateFile(filePath: string, currentUserSid: string): Promise<void>;
 }
 
-interface PowerShellResult {
-  readonly stdout: string;
-}
-
-type RunPowerShell = (
-  script: string,
-  environment: Readonly<Record<string, string>>,
-) => Promise<PowerShellResult>;
-
+type InspectWindowsAcl = (path: string) => Promise<string>;
+type ProtectWindowsAcl = (
+  path: string,
+  currentUserSid: string,
+  directory: boolean,
+) => Promise<void>;
 type ResolveWindowsUserSid = () => Promise<string>;
 
-export class PowerShellWindowsFilesystemSecurity implements WindowsFilesystemSecurity {
-  readonly #run: RunPowerShell;
+export class NativeWindowsFilesystemSecurity implements WindowsFilesystemSecurity {
+  readonly #inspectWindowsAcl: InspectWindowsAcl;
+  readonly #protectWindowsAcl: ProtectWindowsAcl;
   readonly #resolveWindowsUserSid: ResolveWindowsUserSid;
   #currentSid: Promise<string> | undefined;
 
   public constructor(
-    run: RunPowerShell = runSystemPowerShell,
-    resolveWindowsUserSid: ResolveWindowsUserSid = resolveSystemWindowsUserSid,
+    inspectWindowsAcl: InspectWindowsAcl = inspectWindowsFilesystemAcl,
+    protectWindowsAcl: ProtectWindowsAcl = protectWindowsFilesystemAcl,
+    resolveWindowsUserSid: ResolveWindowsUserSid = currentWindowsUserSid,
   ) {
-    this.#run = run;
+    this.#inspectWindowsAcl = inspectWindowsAcl;
+    this.#protectWindowsAcl = protectWindowsAcl;
     this.#resolveWindowsUserSid = resolveWindowsUserSid;
   }
 
@@ -257,10 +138,7 @@ export class PowerShellWindowsFilesystemSecurity implements WindowsFilesystemSec
   ): Promise<void> {
     assertWindowsSid(currentUserSid);
     try {
-      await this.#run(PROTECT_DIRECTORY_ACL_SCRIPT, {
-        FORGEBOARD_WINDOWS_ACL_PATH: directoryPath,
-        FORGEBOARD_WINDOWS_USER_SID: currentUserSid,
-      });
+      await this.#protectWindowsAcl(directoryPath, currentUserSid, true);
     } catch {
       throw new WindowsAclBoundaryError(
         'protection-failed',
@@ -290,10 +168,7 @@ export class PowerShellWindowsFilesystemSecurity implements WindowsFilesystemSec
   public async protectPrivateFile(filePath: string, currentUserSid: string): Promise<void> {
     assertWindowsSid(currentUserSid);
     try {
-      await this.#run(PROTECT_FILE_ACL_SCRIPT, {
-        FORGEBOARD_WINDOWS_ACL_PATH: filePath,
-        FORGEBOARD_WINDOWS_USER_SID: currentUserSid,
-      });
+      await this.#protectWindowsAcl(filePath, currentUserSid, false);
     } catch {
       throw new WindowsAclBoundaryError(
         'protection-failed',
@@ -329,21 +204,15 @@ export class PowerShellWindowsFilesystemSecurity implements WindowsFilesystemSec
   }
 
   async #inspectDirectory(directoryPath: string): Promise<WindowsDirectoryAcl> {
-    const { stdout } = await this.#run(INSPECT_DIRECTORY_ACL_SCRIPT, {
-      FORGEBOARD_WINDOWS_ACL_PATH: directoryPath,
-    });
-    return parseWindowsDirectoryAcl(stdout);
+    return parseWindowsDirectoryAcl(await this.#inspectWindowsAcl(directoryPath));
   }
 
   async #inspectFile(filePath: string): Promise<WindowsDirectoryAcl> {
-    const { stdout } = await this.#run(INSPECT_FILE_ACL_SCRIPT, {
-      FORGEBOARD_WINDOWS_ACL_PATH: filePath,
-    });
-    return parseWindowsDirectoryAcl(stdout);
+    return parseWindowsDirectoryAcl(await this.#inspectWindowsAcl(filePath));
   }
 }
 
-export const windowsFilesystemSecurity = new PowerShellWindowsFilesystemSecurity();
+export const windowsFilesystemSecurity = new NativeWindowsFilesystemSecurity();
 
 export function assertSafeWindowsParentAcl(
   report: WindowsDirectoryAcl,
@@ -601,118 +470,6 @@ function isUint32(value: unknown): value is number {
 
 function isBoundedFlags(value: unknown, mask: number): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0 && (Number(value) & ~mask) === 0;
-}
-
-async function runSystemPowerShell(
-  script: string,
-  environment: Readonly<Record<string, string>>,
-): Promise<PowerShellResult> {
-  const executable = systemPowerShellPath();
-  const encoded = Buffer.from(script, 'utf16le').toString('base64');
-  return await new Promise((resolve, reject) => {
-    const child = execFile(
-      executable,
-      [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-EncodedCommand',
-        encoded,
-      ],
-      {
-        encoding: 'utf8',
-        env: windowsAuthorityEnvironment(environment),
-        killSignal: 'SIGKILL',
-        maxBuffer: POWERSHELL_MAX_BUFFER_BYTES,
-        shell: false,
-        timeout: POWERSHELL_TIMEOUT_MS,
-        windowsHide: true,
-      },
-      (error, stdout) => {
-        if (error !== null) {
-          reject(new Error('The bounded Windows permission authority failed.'));
-          return;
-        }
-        resolve({ stdout });
-      },
-    );
-    child.stdin?.end();
-  });
-}
-
-async function resolveSystemWindowsUserSid(): Promise<string> {
-  const executable = systemWindowsPath('System32', 'whoami.exe');
-  return await new Promise((resolveSid, rejectSid) => {
-    const child = execFile(
-      executable,
-      ['/user', '/fo', 'csv', '/nh'],
-      {
-        encoding: 'utf8',
-        env: windowsAuthorityEnvironment({}),
-        killSignal: 'SIGKILL',
-        maxBuffer: POWERSHELL_MAX_BUFFER_BYTES,
-        shell: false,
-        timeout: POWERSHELL_TIMEOUT_MS,
-        windowsHide: true,
-      },
-      (error, stdout) => {
-        if (error !== null) {
-          rejectSid(new Error('The bounded Windows identity authority failed.'));
-          return;
-        }
-        try {
-          resolveSid(parseWindowsUserSid(stdout));
-        } catch (parseError) {
-          rejectSid(
-            parseError instanceof Error
-              ? parseError
-              : new Error('The Windows identity response could not be parsed.'),
-          );
-        }
-      },
-    );
-    child.stdin?.end();
-  });
-}
-
-export function parseWindowsUserSid(output: string): string {
-  const match = /,\s*"(S-\d+(?:-\d+){2,})"\s*$/u.exec(output.trim());
-  if (match?.[1] === undefined) throw new Error('Invalid Windows identity response.');
-  return assertWindowsSid(match[1]);
-}
-
-function systemPowerShellPath(): string {
-  return systemWindowsPath('System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-}
-
-function systemWindowsPath(...segments: readonly string[]): string {
-  const systemRoot =
-    process.env['SystemRoot'] ?? process.env['SYSTEMROOT'] ?? process.env['WINDIR'];
-  if (
-    systemRoot === undefined ||
-    !path.win32.isAbsolute(systemRoot) ||
-    systemRoot.includes('\0') ||
-    /[\r\n]/u.test(systemRoot)
-  ) {
-    throw new WindowsAclBoundaryError(
-      'identity-unavailable',
-      'Forgeboard could not resolve the system Windows permission authority. No agent context was launched.',
-    );
-  }
-  return path.win32.join(path.win32.normalize(systemRoot), ...segments);
-}
-
-function windowsAuthorityEnvironment(
-  authorityValues: Readonly<Record<string, string>>,
-): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = { ...authorityValues };
-  for (const name of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP'] as const) {
-    const value = process.env[name];
-    if (value !== undefined) environment[name] = value;
-  }
-  return environment;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

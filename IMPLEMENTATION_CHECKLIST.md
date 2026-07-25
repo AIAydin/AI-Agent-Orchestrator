@@ -1944,10 +1944,10 @@ unchecked when only a subset of their required behavior has proof.
   `node_modules` is out of sync; package routing was therefore verified with that automatic repair
   disabled rather than presenting the local dependency installation as healthy.
 - 2026-07-23: clean-run verification no longer assumes a prebuilt peer-MCP artifact, an interactive
-  `TERM`, the host's login shell, or a specific numeric user id. Windows account identity now comes
-  from the literal system `whoami.exe` path with strict bounded CSV/SID parsing before the existing
-  fail-closed PowerShell ACL authority runs. Database swap detection also binds size and change and
-  modification times alongside device and inode identity. The isolated full unit suite passed all
+  `TERM`, the host's login shell, or a specific numeric user id. Windows account identity and
+  fail-closed ACL authority now use direct Node-API Win32 calls with exact current-user and
+  LocalSystem DACL validation. Database swap detection also binds size and change and modification
+  times alongside device and inode identity. The isolated full unit suite passed all
   3,110 tests across 455 files; all 335 integration tests, 41 release/startup tests, 3 docs tests,
   and 5 quality tests passed. Typecheck, zero-warning lint, formatting, the 1,478-file structure
   gate, the 854-file production-control audit, the collaboration artifact startup smoke, and the
@@ -1973,12 +1973,9 @@ unchecked when only a subset of their required behavior has proof.
   other profiles, and custom/extension adapters retain native confirmation. All 81 focused unit
   tests, the real-Git managed-worktree integration test, and desktop strict typecheck passed.
 - 2026-07-23: the retired bundled test agent and first-party workflow-template feature were removed
-  from packages, runtime planning, readiness, smoke/release resources, renderer controls, E2E
-  fixtures, documentation, and the lockfile. Legacy settings and saved Agent nodes now discard the
-  removed adapter identifier during repair/hydration, while user-authored saved workflows and the
-  ordinary node palette remain intact. No active package, runtime, UI, documentation, or workflow
-  template references remain. The checkpoint passed strict typecheck, docs, quality, controls,
-  production build, 3,072 unit assertions, and 324 integration assertions; its recorded full-gate
+  throughout runtime, UI, tests, docs, and the lockfile. Legacy settings and saved Agent nodes discard
+  the retired adapter while user workflows and the ordinary palette remain intact. Typecheck, docs,
+  quality, controls, build, 3,072 unit assertions, and 324 integration assertions passed; recorded
   exceptions were a partial Electron install and unrelated in-progress files.
 - 2026-07-24: the workspace project sidebar closes from an always-visible command-bar control,
   returns its width to the canvas, persists the choice, and passed ten tests and all production gates.
@@ -1997,6 +1994,10 @@ unchecked when only a subset of their required behavior has proof.
   distinguish stopped, interrupted, and disconnected sessions and render signal 15 as `SIGTERM`.
   All 3,108 unit and 332 integration tests, docs, quality, workspace typecheck, zero-warning lint,
   formatting, structure and production-control gates, whitespace validation, and build passed.
+- 2026-07-24: PR #22 was reconciled with current `main` without discarding managed-worktree,
+  hosting, startup, Settings, Terminal, canvas, E2E, invite, or persistent-session behavior.
+- 2026-07-24: the post-merge repair persists Agent nodes; fixes canvas input; injects bundled Git
+  into Preview; uses native Windows ACLs; and checks Test artifacts by visible Refresh, not IPC.
 - 2026-07-25: public-repository hardening enabled GitHub secret scanning, push protection,
   Dependabot alerts/security updates and automated fixes, and private vulnerability reporting.
   Public documentation no longer exposes personal checkout paths or describes the repository as
@@ -2014,3 +2015,12 @@ unchecked when only a subset of their required behavior has proof.
   on its previous page. The focused Preview node suite passed all 30 tests, followed by affected
   formatting and zero-warning lint checks, the desktop strict typecheck, whitespace validation, and
   the repository structure gate.
+- 2026-07-25: PR #26 was reconciled with current `main` and its runtime verification was repaired.
+  E2E cleanup supports both current and earlier Playwright process mappings, canvas multi-selection
+  holds the real platform shortcut during its display-scale-safe click, Windows batch shims retain
+  quoted executable paths through a validated native Node/Electron PTY bridge, and Git remote
+  configuration uses the existing write-through Windows filesystem authority for atomic commit and
+  rollback replacement. The five previously failing E2E scenarios
+  passed locally. Structure (1,475 files), controls (859 files), formatting, zero-warning lint,
+  workspace typecheck, all 3,149 unit tests, all 333 integration tests, three docs tests, seven
+  quality tests, and every production build passed.

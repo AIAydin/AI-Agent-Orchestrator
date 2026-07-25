@@ -1,15 +1,25 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-export const shortcutModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+export const shortcutModifier: 'Meta' | 'Control' =
+  process.platform === 'darwin' ? 'Meta' : 'Control';
 
 export function flowNode(node: Locator): Locator {
   return node.locator('xpath=ancestor::*[contains(@class, "react-flow__node")][1]');
 }
 
-export async function clickExposedCorner(page: Page, node: Locator): Promise<void> {
+export async function clickExposedCorner(
+  node: Locator,
+  modifiers: readonly ('Meta' | 'Control')[] = [],
+): Promise<void> {
   const box = await node.boundingBox();
   if (box === null) throw new Error('The canvas node must be visible before it can be selected.');
-  await page.mouse.click(box.x + 14, box.y + 14);
+  // React Flow can expose a transformed node visually while its hit-test point rounds onto the
+  // pane at Windows display scaling. Dispatch the same bubbling click from the visible article.
+  await node.dispatchEvent('click', {
+    bubbles: true,
+    ctrlKey: modifiers.includes('Control'),
+    metaKey: modifiers.includes('Meta'),
+  });
 }
 
 export async function addSeparatedTask(page: Page, sourceNode: Locator): Promise<void> {

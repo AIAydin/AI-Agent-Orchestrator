@@ -4,7 +4,13 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  renameCanvasNode,
+  runCanvasNodeContextAction,
+  watchExternalRequests,
+} from './support/electron.js';
 
 test('canvas recovery, portable import, and automatic backups work entirely in the UI', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-recovery-e2e-'));
@@ -29,8 +35,10 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
       .locator('.template-section')
       .getByRole('button', { name: /Product brief/ })
       .click();
-    await page.getByRole('article', { name: 'Product brief: Product brief' }).click();
-    await page.locator('.inspector').getByLabel('Title').fill('Recoverable brief');
+    await renameCanvasNode(
+      page.getByRole('article', { name: /^Product brief: /u }),
+      'Recoverable brief',
+    );
 
     await test.step('automatic backup behavior and destination are configured in Settings', async () => {
       const settings = await openDataSettings(page);
@@ -48,8 +56,11 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
       await settings.getByRole('button', { name: 'Close settings' }).click();
     });
 
-    await page.getByRole('article', { name: 'Product brief: Recoverable brief' }).click();
-    await page.locator('.inspector').getByRole('button', { name: 'Delete' }).click();
+    await runCanvasNodeContextAction(
+      page,
+      page.getByRole('article', { name: 'Product brief: Recoverable brief' }),
+      'Delete',
+    );
     await expect(
       page.getByRole('article', { name: 'Product brief: Recoverable brief' }),
     ).toHaveCount(0);
@@ -84,8 +95,11 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
       await settings.getByRole('button', { name: 'Close settings' }).click();
 
       await openOnlyRecentProject(page);
-      await page.getByRole('article', { name: 'Product brief: Recoverable brief' }).click();
-      await page.locator('.inspector').getByRole('button', { name: 'Delete' }).click();
+      await runCanvasNodeContextAction(
+        page,
+        page.getByRole('article', { name: 'Product brief: Recoverable brief' }),
+        'Delete',
+      );
       await closeProject(page);
 
       await chooseImportPath(app, exportPath);
@@ -114,7 +128,7 @@ test('canvas recovery, portable import, and automatic backups work entirely in t
       .toHaveLength(1);
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

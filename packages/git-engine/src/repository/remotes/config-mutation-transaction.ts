@@ -12,6 +12,8 @@ import {
 import { open, unlink, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 
+import { moveFileWriteThrough } from '@forgeboard/windows-durable-fs';
+
 import { GitEngineError } from '../../model/errors.js';
 import type { RepositoryService } from '../service.js';
 import type { GitCommonDirectoryIdentity } from './contracts.js';
@@ -56,8 +58,8 @@ export type GitRemoteConfigurationFileMutation =
 export interface PreparedRemoteConfigurationMutation {
   /** Revalidates the original config, its Git lock, and the prepared replacement by identity. */
   assertCurrent(signal?: AbortSignal): Promise<void>;
-  /** Atomic and synchronous so the caller can place it directly after its final authority check. */
-  commit(): void;
+  /** Atomically replaces the configuration directly after the caller's final authority check. */
+  commit(): Promise<void>;
   /** Restores the byte-exact original config after committed outcome verification fails. */
   rollback(): Promise<void>;
   /** Releases the Git-compatible lock after the committed state has been verified. */
@@ -195,7 +197,7 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
     throwIfAborted(signal);
   }
 
-  public commit(): void {
+  public async commit(): Promise<void> {
     this.#assertState('prepared');
     const configuration = readOrdinaryFileSync(this.identity.configurationPath);
     const lock = readOrdinaryFileSync(this.lockPath);
@@ -204,7 +206,7 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
     assertSameFile(this.lockedOriginal, lock, 'The repository configuration lock changed.');
     assertSameFile(this.prepared, staging, 'The prepared repository configuration changed.');
     try {
-      renameSync(this.stagingPath, this.identity.configurationPath);
+      await replaceFile(this.stagingPath, this.identity.configurationPath);
       this.#state = 'committed';
       syncDirectoryBestEffort(path.dirname(this.identity.configurationPath));
     } catch (error) {
@@ -229,7 +231,7 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
         lock,
         'The repository configuration recovery lock changed before rollback.',
       );
-      renameSync(this.lockPath, this.identity.configurationPath);
+      await replaceFile(this.lockPath, this.identity.configurationPath);
       this.#state = 'finished';
       removeBestEffort(this.stagingLockPath);
       syncDirectoryBestEffort(path.dirname(this.identity.configurationPath));
@@ -237,7 +239,11 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
       throw new GitEngineError(
         'COMMAND_FAILED',
         'Git remote configuration may have changed the repository and its rollback failed.',
-        { outcomeUncertain: true, recoveryRequired: true, refreshRequired: true },
+        {
+          outcomeUncertain: true,
+          recoveryRequired: true,
+          refreshRequired: true,
+        },
         { cause: error },
       );
     }
@@ -268,7 +274,11 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
       throw new GitEngineError(
         'COMMAND_FAILED',
         'The Git remote configuration changed, but its lock could not be released safely.',
-        { mutationApplied: true, outcomeUncertain: true, recoveryRequired: true },
+        {
+          mutationApplied: true,
+          outcomeUncertain: true,
+          recoveryRequired: true,
+        },
         { cause: error },
       );
     }
@@ -301,6 +311,14 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
       );
     }
   }
+}
+
+async function replaceFile(source: string, destination: string): Promise<void> {
+  if (process.platform === 'win32') {
+    await moveFileWriteThrough(source, destination, true);
+    return;
+  }
+  renameSync(source, destination);
 }
 
 async function applyStagedMutation(
@@ -389,7 +407,10 @@ function parseRemoteEntries(
           'Git returned an invalid prepared remote configuration entry.',
         );
       }
-      return { key: record.slice(0, separator), value: record.slice(separator + 1) };
+      return {
+        key: record.slice(0, separator),
+        value: record.slice(separator + 1),
+      };
     });
 }
 

@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from './support/electron.js';
 
 test('first-run CLI readiness is remediated and completed entirely in the UI', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-readiness-e2e-'));
@@ -105,14 +109,14 @@ test('first-run CLI readiness is remediated and completed entirely in the UI', a
     await expect(settings.getByLabel('Program file', { exact: true })).toHaveValue(executable);
     await settings.getByRole('button', { name: 'Checks', exact: true }).click();
     const tests = settings.getByRole('group', { name: 'Tests command' });
-    await expect(tests.getByLabel('Executable')).toHaveValue(executable);
+    await expect(tests.getByLabel('Executable', { exact: true })).toHaveValue(executable);
     await expect(tests.getByLabel('Arguments')).toHaveValue('-e\nprocess.stdout.write("READY")');
     await settings.getByRole('button', { name: 'Help & shortcuts' }).click();
     await settings.getByText('Replay Getting started tour').click();
     await expect(settings.getByRole('region', { name: 'Getting started tour' })).toBeVisible();
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

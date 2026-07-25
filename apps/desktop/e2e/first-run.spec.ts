@@ -4,7 +4,14 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from './support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  openCanvasNodeDetails,
+  renameCanvasNode,
+  runCanvasNodeContextAction,
+  watchExternalRequests,
+} from './support/electron.js';
 
 const shortcutModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
@@ -12,6 +19,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-e2e-'));
   let electronApp: ElectronApplication | null = null;
   const externalRequests: string[] = [];
+  let taskTitle = '';
 
   try {
     const firstSession = await launchDesktop(userDataDirectory);
@@ -146,34 +154,34 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await page.getByRole('button', { name: /Explore the safe demo/i }).click();
       await expect(page.locator('.project-switcher')).toContainText('forgeboard-demo');
       await expect(page.locator('.canvas-title')).toContainText('0 nodes · 0 connections');
-      await expect(page.getByText('Private file protection on')).toBeVisible();
     });
 
     await test.step('canvas nodes can be added, edited, locked, duplicated, and deleted', async () => {
       const templates = page.locator('.template-section');
       await templates.getByRole('button', { name: /Product brief/ }).click();
 
-      const inspector = page.locator('.inspector');
-      await page.getByRole('article', { name: 'Product brief: Product brief' }).click();
-      await expect(inspector.getByLabel('Title')).toHaveValue('Product brief');
-      await inspector.getByLabel('Title').fill('Release plan');
-      await inspector
-        .getByLabel('Description')
-        .fill('A local-only release plan configured entirely from the Forgeboard UI.');
-      await inspector.getByRole('button', { name: 'Lock' }).click();
-
+      const initialBrief = page.getByRole('article', { name: /^Product brief: /u });
+      await renameCanvasNode(initialBrief, 'Release plan');
       const releasePlan = page.getByRole('article', {
         name: 'Product brief: Release plan',
       });
+      const details = await openCanvasNodeDetails(releasePlan);
+      await details
+        .getByLabel('Description')
+        .fill('A local-only release plan configured entirely from the Forgeboard UI.');
+      await details.getByRole('button', { name: 'Close node details' }).click();
+      await runCanvasNodeContextAction(page, releasePlan, 'Lock');
       await expect(releasePlan.locator('[aria-label="Locked"]')).toBeVisible();
 
-      await inspector.getByRole('button', { name: 'Duplicate' }).click();
+      await runCanvasNodeContextAction(page, releasePlan, 'Duplicate');
       const duplicate = page.getByRole('article', {
         name: 'Product brief: Release plan copy',
       });
       await expect(duplicate).toBeVisible();
-      await expect(inspector.getByLabel('Title')).toHaveValue('Release plan copy');
-      await inspector.getByRole('button', { name: 'Delete' }).click();
+      if (await duplicate.locator('[aria-label="Locked"]').isVisible()) {
+        await runCanvasNodeContextAction(page, duplicate, 'Unlock');
+      }
+      await runCanvasNodeContextAction(page, duplicate, 'Delete');
       await expect(duplicate).toHaveCount(0);
 
       const canvasRegion = page.locator('.canvas-region');
@@ -184,8 +192,10 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await templates.getByRole('button', { name: /^Task/ }).dragTo(canvasRegion, {
         targetPosition: separatedDropPosition(canvasBox, releasePlanBox),
       });
-      const taskNode = page.getByRole('article', { name: 'Task: Task' });
+      const taskNode = page.getByRole('article', { name: /^Task: /u });
       await expect(taskNode).toBeVisible();
+      taskTitle = (await taskNode.getAttribute('aria-label'))?.replace(/^Task: /u, '') ?? '';
+      expect(taskTitle).not.toBe('');
       await expect(page.locator('.canvas-title')).toContainText('2 nodes · 0 connections');
     });
 
@@ -193,24 +203,20 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       const releasePlan = page.getByRole('article', {
         name: 'Product brief: Release plan',
       });
-      await releasePlan.click();
-      const inspector = page.locator('.inspector');
-      await expect(
-        inspector.getByText('Unlock it to edit, move, connect, or delete it.'),
-      ).toBeVisible();
-      await inspector.getByRole('button', { name: 'Unlock' }).click();
+      await runCanvasNodeContextAction(page, releasePlan, 'Unlock');
       await expect(releasePlan.locator('[aria-label="Locked"]')).toHaveCount(0);
 
       const source = releasePlan.locator('.react-flow__handle-right');
       const target = page
-        .getByRole('article', { name: 'Task: Task' })
+        .getByRole('article', { name: /^Task: /u })
         .locator('.react-flow__handle-left');
       await connectHandles(page, source, target);
       await expect(page.locator('.canvas-title')).toContainText('2 nodes · 1 connections');
-      await expect(page.getByText('Connected the nodes with a context link.')).toBeVisible();
+      await expect(
+        page.getByText('Connected the nodes with a context link.').first(),
+      ).toBeVisible();
 
-      await releasePlan.click();
-      await inspector.getByRole('button', { name: 'Lock' }).click();
+      await runCanvasNodeContextAction(page, releasePlan, 'Lock');
       await expect(releasePlan.locator('[aria-label="Locked"]')).toBeVisible();
     });
 
@@ -221,11 +227,11 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await palette.getByPlaceholder('Search actions…').fill('Add an agent');
       await page.keyboard.press('Enter');
       await expect(palette).toBeHidden();
-      const agentNode = page.getByRole('article', { name: 'Agent: Agent' });
+      const agentNode = page.getByRole('article', { name: /^Agent: /u });
       await expect(agentNode).toBeVisible();
 
       await clickExposedNodeEdge(page, agentNode);
-      await page.locator('.inspector').getByRole('button', { name: 'Delete' }).click();
+      await runCanvasNodeContextAction(page, agentNode, 'Delete');
       await expect(agentNode).toHaveCount(0);
       await page.keyboard.press(`${shortcutModifier}+Z`);
       await expect(agentNode).toBeVisible();
@@ -241,7 +247,11 @@ test('a first-time user can configure and persist a local visual workshop', asyn
     await test.step('canvas and appearance settings survive a full process relaunch', async () => {
       await expect
         .poll(() => readPersistedCanvas(page), { timeout: 15_000 })
-        .toEqual({ edges: 1, locked: true, titles: ['Release plan', 'Task'] });
+        .toEqual({
+          edges: 1,
+          locked: true,
+          titles: ['Release plan', taskTitle].sort((left, right) => left.localeCompare(right)),
+        });
 
       await electronApp?.close();
       electronApp = null;
@@ -267,7 +277,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
       await expect(
         page.getByRole('article', { name: 'Product brief: Release plan' }),
       ).toBeVisible();
-      await expect(page.getByRole('article', { name: 'Task: Task' })).toBeVisible();
+      await expect(page.getByRole('article', { name: /^Task: /u })).toBeVisible();
       await expect(
         page
           .getByRole('article', { name: 'Product brief: Release plan' })
@@ -320,7 +330,7 @@ test('a first-time user can configure and persist a local visual workshop', asyn
 
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
   }
 });

@@ -5,7 +5,11 @@ import { basename, join } from 'node:path';
 
 import { expect, test, type ElectronApplication } from '@playwright/test';
 
-import { launchDesktop, watchExternalRequests } from '../../support/electron.js';
+import {
+  closeElectronAfterTest,
+  launchDesktop,
+  watchExternalRequests,
+} from '../../support/electron.js';
 import { writeConfiguredFakeGitHubCli } from './fake-github-cli.js';
 import {
   continuePlanWithNativeResponse,
@@ -63,7 +67,7 @@ test('Enter in Git connection text fields cannot submit Settings or create a rem
     expect(gitRemoteUrl(projectPath, guardedRemoteName)).toBeNull();
     expect(await nativeDialogs(electronApp)).toHaveLength(dialogsBeforeEnter);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     await rm(userDataDirectory, { recursive: true, force: true });
     await expect(access(userDataDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
   }
@@ -141,7 +145,10 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Add Git remote?',
         buttons: ['Cancel', 'Add remote'],
       });
-      await expect(settings.getByRole('button', { name: 'Remove origin' })).toBeVisible();
+      await expect(
+        settings.getByRole('button', { name: 'Remove origin' }),
+        'The approved local Git mutation should settle in Settings before an external Git reader opens the config.',
+      ).toBeVisible({ timeout: 20_000 });
       expect(gitRemoteUrl(projectPath, 'origin')).toBe(FIRST_NETWORK_URL);
     });
 
@@ -158,7 +165,8 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Replace Git remote?',
         buttons: ['Cancel', 'Replace remote'],
       });
-      await expect.poll(() => gitRemoteUrl(projectPath, 'origin')).toBe(REPLACEMENT_NETWORK_URL);
+      await expect(settings).toContainText('Replaced remote origin.', { timeout: 20_000 });
+      expect(gitRemoteUrl(projectPath, 'origin')).toBe(REPLACEMENT_NETWORK_URL);
     });
 
     await test.step('local picker paths stay native-only and the selected local remote is added', async () => {
@@ -186,9 +194,10 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         buttons: ['Cancel', 'Add remote'],
       });
       expect(nativeDialogText(approved)).toContain(localRemotePath);
-      await expect
-        .poll(() => gitRemoteUrl(projectPath, 'local-backup'))
-        .toBe(await realpath(localRemotePath));
+      await expect(settings.getByRole('button', { name: 'Remove local-backup' })).toBeVisible({
+        timeout: 20_000,
+      });
+      expect(gitRemoteUrl(projectPath, 'local-backup')).toBe(await realpath(localRemotePath));
     });
 
     await test.step('removal discloses and deletes only the exact managed tracking refs', async () => {
@@ -204,8 +213,11 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Remove Git remote?',
         buttons: ['Cancel', 'Remove remote'],
       });
-      await expect.poll(() => gitRemoteUrl(projectPath, 'origin')).toBeNull();
-      await expect.poll(() => gitRef(projectPath, TRACKING_REF)).toBeNull();
+      await expect(settings.getByRole('button', { name: 'Remove origin' })).toBeHidden({
+        timeout: 20_000,
+      });
+      expect(gitRemoteUrl(projectPath, 'origin')).toBeNull();
+      expect(gitRef(projectPath, TRACKING_REF)).toBeNull();
       expect(gitRemoteUrl(projectPath, 'local-backup')).toBe(await realpath(localRemotePath));
     });
 
@@ -279,7 +291,7 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
 
     expect(externalRequests).toEqual([]);
   } finally {
-    await electronApp?.close().catch(() => undefined);
+    await closeElectronAfterTest(electronApp);
     restoreEnvironment(environment);
     await rm(userDataDirectory, { recursive: true, force: true });
     await expect(access(userDataDirectory)).rejects.toMatchObject({ code: 'ENOENT' });

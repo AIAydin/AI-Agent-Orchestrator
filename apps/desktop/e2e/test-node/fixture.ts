@@ -26,16 +26,18 @@ export async function openSafeDemo(page: Page): Promise<void> {
 
 export async function addAndSelectTestNode(page: Page): Promise<Locator> {
   await page.locator('.template-section').getByRole('button', { name: /^Test/ }).click();
-  await page.getByRole('article', { name: 'Test: Test' }).click();
-  const panel = page.getByRole('region', { name: 'Test node' });
+  await page.getByRole('article', { name: /^Test: /u }).click();
+  const panel = page.getByRole('region', { name: 'Test runner' });
   await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: 'Configure test command' }).click();
   return panel;
 }
 
 export async function selectRestoredTestNode(page: Page): Promise<Locator> {
-  await page.getByRole('article', { name: 'Test: Test' }).click();
-  const panel = page.getByRole('region', { name: 'Test node' });
+  await page.getByRole('article', { name: /^Test: /u }).click();
+  const panel = page.getByRole('region', { name: 'Test runner' });
   await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: 'Configure test command' }).click();
   return panel;
 }
 
@@ -71,9 +73,7 @@ export async function expectParsedSummary(
   panel: Locator,
   expected: { passed: number; failed: number; skipped: number; total: number },
 ): Promise<void> {
-  const summary = panel.locator('.test-node-result').first().getByLabel('Test result summary');
-  await expect(summary).toContainText(`Passed${String(expected.passed)}`);
-  await expect(summary).toContainText(`Failed${String(expected.failed)}`);
-  await expect(summary).toContainText(`Skipped${String(expected.skipped)}`);
-  await expect(summary).toContainText(`Total${String(expected.total)}`);
+  await expect(panel.locator('.test-face-summary').first()).toHaveText(
+    `${String(expected.passed)} passed · ${String(expected.failed)} failed · ${String(expected.total)} total`,
+  );
 }

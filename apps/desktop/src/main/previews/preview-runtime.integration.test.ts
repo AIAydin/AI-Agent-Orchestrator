@@ -4,6 +4,8 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { RepositoryService } from '@forgeboard/git-engine';
+
 import {
   AppSettingsSchema,
   type PreviewStartInput,
@@ -38,6 +40,34 @@ afterEach(async () => {
 });
 
 describe('PreviewRuntime', () => {
+  it('uses the injected trusted repository service for Git preview targets', async () => {
+    root = await mkdtemp(join(tmpdir(), 'forgeboard-preview-runtime-git-'));
+    const project = {
+      ...projectAt(root),
+      health: { ...projectAt(root).health, isGitRepository: true },
+    };
+    const store: PreviewRuntimeStore = {
+      listProjects: () => [project],
+      getProject: () => project,
+      listProjectRuns: () => [],
+      appendAudit: () => undefined,
+    };
+    const resolveRepositoryRoot = vi.fn().mockResolvedValue(root);
+    const repositories = { resolveRepositoryRoot } as unknown as RepositoryService;
+
+    runtime = new PreviewRuntime(
+      store,
+      () => ({ worktreeRoot: join(root!, 'worktrees') }) as never,
+      () => undefined,
+      { repositories },
+    );
+
+    await expect(runtime.listTargets(PROJECT_ID)).resolves.toMatchObject([
+      { target: { kind: 'primary' }, available: true },
+    ]);
+    expect(resolveRepositoryRoot).toHaveBeenCalledWith(root);
+  });
+
   it('owns a real loopback server across start, validated navigation, restart, and stop', async () => {
     root = await mkdtemp(join(tmpdir(), 'forgeboard-preview-runtime-'));
     const project = projectAt(root);
@@ -438,9 +468,16 @@ describe('PreviewRuntime', () => {
   it('drains an in-flight readiness attempt without auditing after disposal', async () => {
     root = await mkdtemp(join(tmpdir(), 'forgeboard-preview-runtime-'));
     const audits: string[] = [];
+    let resolveAuthorized: () => void = () => undefined;
+    const authorized = new Promise<void>((resolve) => {
+      resolveAuthorized = resolve;
+    });
     const store: PreviewRuntimeStore = {
       listProjects: () => [projectAt(root ?? '')],
-      appendAudit: (_category, action, outcome) => audits.push(`${action}:${outcome}`),
+      appendAudit: (_category, action, outcome) => {
+        audits.push(`${action}:${outcome}`);
+        if (action === 'start' && outcome === 'allowed') resolveAuthorized();
+      },
     };
     const settings = AppSettingsSchema.parse({
       theme: 'system',
@@ -475,7 +512,7 @@ describe('PreviewRuntime', () => {
       readinessPath: '/',
       urlPath: '/',
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await authorized;
 
     await runtime.dispose();
     await expect(starting).rejects.toThrow();

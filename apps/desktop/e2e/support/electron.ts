@@ -1,7 +1,10 @@
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { access } from 'node:fs/promises';
+import { access, readFile, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
 
 import {
   _electron as electron,
@@ -21,9 +24,33 @@ export interface LaunchDesktopOptions {
   readonly environment?: Readonly<Record<string, string>>;
 }
 
+interface ElectronImplementation {
+  _browserContext: {
+    _browser: {
+      killForTests(): Promise<void>;
+    };
+  };
+}
+
+interface ElectronApplicationInternals {
+  _connection?: {
+    toImpl(app: ElectronApplication): ElectronImplementation;
+  };
+  _toImpl?(): {
+    _browserContext: {
+      _browser: {
+        killForTests(): Promise<void>;
+      };
+    };
+  };
+}
+
 const desktopRoot = resolve(import.meta.dirname, '../..');
 const mainEntry = join(desktopRoot, 'dist', 'main', 'index.js');
 const require = createRequire(import.meta.url);
+const execFileAsync = promisify(execFile);
+const userDataDirectories = new WeakMap<ElectronApplication, string>();
+const windowsElectronProcessIds = new WeakMap<ElectronApplication, number>();
 
 export async function launchDesktop(
   userDataDirectory: string,
@@ -38,6 +65,11 @@ export async function launchDesktop(
   delete environment.ELECTRON_RENDERER_URL;
   delete environment.ELECTRON_RUN_AS_NODE;
   Object.assign(environment, options.environment);
+  const startupTracePath = join(userDataDirectory, 'startup-trace.log');
+  if (process.platform === 'win32') {
+    environment.FORGEBOARD_E2E_STARTUP_TRACE = '1';
+    environment.FORGEBOARD_E2E_STARTUP_TRACE_PATH = startupTracePath;
+  }
 
   const app = await electron.launch({
     executablePath: require('electron') as string,
@@ -46,9 +78,90 @@ export async function launchDesktop(
     env: environment,
     timeout: 30_000,
   });
-  const page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
-  return { app, page };
+  userDataDirectories.set(app, userDataDirectory);
+  const startupDiagnostics: string[] = [];
+  app.process().stderr?.on('data', (chunk: Buffer | string) => {
+    startupDiagnostics.push(String(chunk));
+  });
+  try {
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    if (process.platform === 'win32') {
+      const electronProcessId = await app.evaluate(() => process.pid);
+      if (Number.isSafeInteger(electronProcessId) && electronProcessId > 0) {
+        windowsElectronProcessIds.set(app, electronProcessId);
+      }
+    }
+    return { app, page };
+  } catch (error) {
+    await closeElectronAfterTest(app);
+    const trace = await readFile(startupTracePath, 'utf8').catch(() => '');
+    const detail = [startupDiagnostics.join('').trim(), trace.trim()]
+      .filter((entry) => entry.length > 0)
+      .join('\n')
+      .slice(-8_192);
+    throw new Error(
+      `${error instanceof Error ? error.message : 'Electron did not open a window.'}` +
+        (detail.length === 0 ? ' No Electron startup diagnostics were emitted.' : `\n${detail}`),
+      { cause: error },
+    );
+  }
+}
+
+/**
+ * Finalizers must not start a Playwright close handshake that can strand the worker after product
+ * behavior has already been verified. Tests that need to prove graceful shutdown should still
+ * await `app.close()` explicitly before using this bounded cleanup for their final session.
+ */
+export async function closeElectronAfterTest(app: ElectronApplication | null): Promise<void> {
+  if (app === null) return;
+  if (process.platform === 'win32') {
+    const electronProcessId = windowsElectronProcessIds.get(app);
+    if (electronProcessId !== undefined) {
+      await terminateWindowsProcessTree(electronProcessId);
+    }
+  }
+  // Playwright 1.53 tracks launched process groups for worker teardown. Its test-only kill path
+  // removes that registration and terminates descendants that can retain stdio and user-data locks.
+  await electronImplementation(app)._browserContext._browser.killForTests();
+  if (process.platform === 'win32') {
+    const userDataDirectory = userDataDirectories.get(app);
+    if (userDataDirectory !== undefined) {
+      await removeWindowsLockFile(join(userDataDirectory, 'lockfile'));
+    }
+  }
+}
+
+async function terminateWindowsProcessTree(processId: number): Promise<void> {
+  try {
+    await execFileAsync('taskkill.exe', ['/pid', String(processId), '/T', '/F'], {
+      timeout: 10_000,
+      windowsHide: true,
+    });
+  } catch {
+    // The process may have exited between PID capture and cleanup. The bounded lock-file removal
+    // below remains the source of truth that the exact profile is no longer in use.
+  }
+}
+
+function electronImplementation(app: ElectronApplication): ElectronImplementation {
+  const internals = app as unknown as ElectronApplicationInternals;
+  if (internals._toImpl !== undefined) return internals._toImpl();
+  if (internals._connection !== undefined) return internals._connection.toImpl(app);
+  throw new Error('The Playwright Electron application does not expose a process cleanup path.');
+}
+
+async function removeWindowsLockFile(path: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rm(path, { force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if ((code !== 'EBUSY' && code !== 'EPERM') || attempt >= 49) throw error;
+      await delay(100);
+    }
+  }
 }
 
 export async function approveNextNativeAgentLaunch(
@@ -245,6 +358,42 @@ export function watchNetworkRequests(page: Page, networkRequests: string[]): voi
     capture(request.url());
   });
   page.on('websocket', (webSocket) => capture(webSocket.url()));
+}
+
+export async function renameCanvasNode(node: Locator, title: string): Promise<void> {
+  await node.locator('.canvas-node-title').dblclick();
+  const input = node.getByRole('textbox', { name: 'Node title' });
+  await input.fill(title);
+  await input.press('Enter');
+}
+
+export async function openCanvasNodeDetails(
+  node: Locator,
+  tab: 'Settings' | 'Comments' | 'History' = 'Settings',
+): Promise<Locator> {
+  await node.getByRole('button', { name: /^Node details for /u }).click();
+  const dialog = node.getByRole('dialog', { name: / details$/u });
+  if (tab !== 'Settings') await dialog.getByRole('tab', { name: tab }).click();
+  return dialog;
+}
+
+export async function runCanvasNodeContextAction(
+  page: Page,
+  node: Locator,
+  action: 'Collapse' | 'Delete' | 'Duplicate' | 'Expand' | 'Inspect' | 'Lock' | 'Unlock',
+): Promise<void> {
+  const bounds = await node.boundingBox();
+  if (bounds === null) throw new Error('The canvas node must be visible before opening its menu.');
+  await node.dispatchEvent('contextmenu', {
+    bubbles: true,
+    button: 2,
+    clientX: bounds.x + bounds.width / 2,
+    clientY: bounds.y + bounds.height / 2,
+  });
+  await page
+    .getByRole('menu', { name: /^Actions for /u })
+    .getByRole('menuitem', { name: action })
+    .dispatchEvent('click');
 }
 
 function isLoopbackUrl(url: URL): boolean {

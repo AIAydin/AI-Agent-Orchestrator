@@ -158,7 +158,10 @@ describe('main-process local effect capability architecture', () => {
         relativeRoot: 'packages/agent-adapters/src',
         inventoryPrefix: 'packages/agent-adapters/src/',
       },
-      { relativeRoot: 'packages/git-engine/src', inventoryPrefix: 'packages/git-engine/src/' },
+      {
+        relativeRoot: 'packages/git-engine/src',
+        inventoryPrefix: 'packages/git-engine/src/',
+      },
     ]);
     expect(policyFiles('reviewed-domain-operation')).toEqual([
       'packages/git-engine/src/diff/changes.ts',
