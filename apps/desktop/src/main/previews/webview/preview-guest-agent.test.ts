@@ -19,14 +19,14 @@ class FakeGuest extends EventEmitter {
   destroyed = false;
   currentUrl = 'http://localhost:5173/dashboard';
   worldReplies: unknown[] = [];
-  executeJavaScript = vi.fn((_code: string, _gesture?: boolean) => Promise.resolve<unknown>(LOCAL_PAGE));
-  executeJavaScriptInIsolatedWorld = vi.fn((_world: number, _scripts: Array<{ code: string }>) =>
+  executeJavaScript = vi.fn(() => Promise.resolve<unknown>(LOCAL_PAGE));
+  executeJavaScriptInIsolatedWorld = vi.fn(() =>
     Promise.resolve<unknown>(this.worldReplies.shift()),
   );
   capturePage = vi.fn(() => Promise.resolve({ toPNG: () => Buffer.from('png bytes', 'utf8') }));
-  loadURL = vi.fn((_url: string) => Promise.resolve());
+  loadURL = vi.fn(() => Promise.resolve());
   sendInputEvent = vi.fn();
-  insertText = vi.fn((_text: string) => Promise.resolve());
+  insertText = vi.fn(() => Promise.resolve());
   isDestroyed(): boolean {
     return this.destroyed;
   }
