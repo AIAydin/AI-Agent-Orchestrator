@@ -40,6 +40,8 @@ export function WhiteboardCanvas({
 
   const onPointerDown = (event: PointerEvent<SVGSVGElement>): void => {
     if (readOnly) return;
+    // Focus the surface so Delete/Backspace lands here, not on the workspace canvas.
+    event.currentTarget.focus();
     event.currentTarget.setPointerCapture(event.pointerId);
     drawing.beginGesture(pointOf(event), handleOf(event.target));
   };
@@ -55,7 +57,13 @@ export function WhiteboardCanvas({
       return;
     }
     if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+    // With no shape selected the key bubbles on, so the workspace canvas can
+    // still delete the whiteboard node itself.
+    if (drawing.selectedId === null) return;
+    // React Flow deletes selected nodes from a document-level keydown listener;
+    // stopping propagation here is what keeps the node alive while a shape dies.
     event.preventDefault();
+    event.stopPropagation();
     drawing.deleteSelected();
   };
 

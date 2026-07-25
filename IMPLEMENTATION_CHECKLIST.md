@@ -1998,3 +1998,10 @@ unchecked when only a subset of their required behavior has proof.
   startup by deferring optional Agent-context storage failures while the protected context path
   remains fail-closed when an Agent actually requests it. The 19 focused unit tests and six
   integration tests passed.
+- 2026-07-25: pressing Delete/Backspace on a whiteboard with a selected shape now deletes just that
+  shape (WS-I-4): the drawing surface takes focus on pointer down and stops the key from reaching
+  the workspace canvas's document-level delete listener, while an empty selection still lets the
+  key bubble so the node itself remains deletable. Select/move, inline text, and free-draw were
+  verified already live from the drawable-whiteboard work (WS-I-1..3). Six new canvas tests cover
+  select-tool moves, empty-canvas clicks, both delete keys with propagation assertions, and pointer
+  focus; the 752-test workspace unit suite, desktop typecheck, and lint on touched files passed.
