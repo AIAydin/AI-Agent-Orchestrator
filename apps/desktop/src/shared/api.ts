@@ -40,6 +40,7 @@ import type {
   BrowserCompanionStatus,
   BrowserCompanionViewportInput,
 } from './browser-companion/contracts.js';
+import type { AgentSessionPrInput, AgentSessionPrView } from './agent-pr/index.js';
 import type { AgentReadinessRequest, AgentReadinessResult } from './readiness/contracts.js';
 import type { CanvasHistorySaveInput, CanvasWorkspaceState } from './canvas/history/contracts.js';
 import type {
@@ -481,6 +482,9 @@ export interface ForgeboardApi {
   agentPeers: {
     provision(input: AgentPeersProvisionInput): Promise<IpcResult<AgentPeersProvisionView>>;
     onEvent(listener: (event: AgentPeersEvent) => void): () => void;
+  };
+  agentPr: {
+    create(input: AgentSessionPrInput): Promise<IpcResult<AgentSessionPrView>>;
   };
   previews: {
     listTargets(input: PreviewTargetListInput): Promise<IpcResult<PreviewTargetView[]>>;

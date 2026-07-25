@@ -24,12 +24,14 @@ import {
   type AppSettings,
   type IpcResult,
 } from '../shared/application/contracts.js';
+import { AgentSessionPrInputSchema } from '../shared/agent-pr/index.js';
 import { CommandReadinessRequestSchema } from '../shared/command-readiness/contracts.js';
 import {
   CanvasHistorySaveInputSchema,
   emptyCanvasHistory,
 } from '../shared/canvas/history/contracts.js';
 import { IntegrityCheckInputSchema } from '../shared/integrity/contracts.js';
+import { AgentSessionPrService } from './agent-pr/service.js';
 import { ApprovalService } from './approvals/approval-service.js';
 import { AutomaticBackupCoordinator } from './backups/automatic-backup-coordinator.js';
 import { CheckIpcService } from './checks/check-ipc.js';
@@ -676,6 +678,10 @@ export function registerIpcHandlers(
       );
     });
   });
+  const agentPr = new AgentSessionPrService(store);
+  handle(IPC_CHANNELS.agentSessionCreatePr, z.tuple([AgentSessionPrInputSchema]), async (input) =>
+    runDataOperation(() => agentPr.create(input)),
+  );
   handleWithEvent(
     IPC_CHANNELS.commandsCheckReadiness,
     z.tuple([CommandReadinessRequestSchema]),
