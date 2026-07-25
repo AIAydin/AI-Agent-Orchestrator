@@ -2,7 +2,7 @@ import type {
   WorkflowExecutionView,
   WorkflowInteractionEventEnvelope,
 } from '../../../../../../shared/workflow/contracts.js';
-import { parseCheckSummary, type ParsedCheckSummary } from '../../checks/check-output.js';
+import { parseCheckSummary, type ParsedCheckSummary } from './check-output.js';
 import type { TestNodeArtifact } from './contracts.js';
 
 export interface TestNodeAttemptView {

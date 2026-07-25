@@ -1,55 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Activity,
-  CheckCircle2,
-  FileCode2,
-  GitBranch,
-  PanelBottomClose,
-  ShieldCheck,
-  Workflow,
-} from 'lucide-react';
+import { Activity, FileCode2, GitBranch, PanelBottomClose, ShieldCheck } from 'lucide-react';
 
 import type { AuditEvent } from '../../../../../shared/application/contracts.js';
-import type { CheckExecutionView } from '../../../../../shared/checks/contracts.js';
-import type {
-  WorkflowExecutionView,
-  WorkflowInteractionEventEnvelope,
-  WorkflowNodeInput,
-  WorkflowNodeInterrupt,
-} from '../../../../../shared/workflow/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
-import type { ChangeReport, CheckCommand } from '../model/types.js';
-import type { WorkflowDecisionTarget } from '../workflows/workflow-ui-types.js';
-import { WorkspaceChecksPanel } from '../checks/WorkspaceChecksPanel.js';
-import { WorkspaceWorkflowPanel } from '../workflows/WorkspaceWorkflowPanel.js';
+import type { ChangeReport } from '../model/types.js';
 import { WorkspaceTooltip } from '../shell/tooltips/WorkspaceTooltip.js';
 
-type DrawerTab = 'activity' | 'workflows' | 'changes' | 'checks' | 'audit';
-const DRAWER_TABS: readonly DrawerTab[] = ['activity', 'workflows', 'changes', 'checks', 'audit'];
+type DrawerTab = 'activity' | 'changes' | 'audit';
+const DRAWER_TABS: readonly DrawerTab[] = ['activity', 'changes', 'audit'];
 
 interface WorkspaceActivityDrawerProps {
   events: string[];
   changeReports: ChangeReport[];
-  checkCommands: CheckCommand[];
-  latestChecks: ReadonlyMap<string, CheckExecutionView>;
-  busyCheckId: string | null;
-  workflowExecutions: readonly WorkflowExecutionView[];
-  currentWorkflow: WorkflowExecutionView | null;
-  workflowNodeTitles: ReadonlyMap<string, string>;
-  workflowInteractiveNodeIds: ReadonlySet<string>;
-  workflowInteractionEvents: readonly WorkflowInteractionEventEnvelope[];
-  workflowLoading: boolean;
-  workflowBusyAction: string | null;
-  workflowMutationsAuthorized: boolean;
-  onPrepareCheck: (checkId: string) => void;
-  onCancelCheck: (executionId: string) => void;
-  onSelectWorkflow: (executionId: string) => void;
-  onRefreshWorkflows: () => void;
-  onCancelWorkflow: (executionId: string) => void;
-  onReviewWorkflowDecision: (target: WorkflowDecisionTarget) => void;
-  onSendWorkflowInput: (input: WorkflowNodeInput) => Promise<boolean>;
-  onInterruptWorkflowNode: (input: WorkflowNodeInterrupt) => Promise<boolean>;
-  onOpenSettings: () => void;
   onOpenGitReview: (runId?: string) => void;
   onClose: () => void;
 }
@@ -57,26 +19,6 @@ interface WorkspaceActivityDrawerProps {
 export function WorkspaceActivityDrawer({
   events,
   changeReports,
-  checkCommands,
-  latestChecks,
-  busyCheckId,
-  workflowExecutions,
-  currentWorkflow,
-  workflowNodeTitles,
-  workflowInteractiveNodeIds,
-  workflowInteractionEvents,
-  workflowLoading,
-  workflowBusyAction,
-  workflowMutationsAuthorized,
-  onPrepareCheck,
-  onCancelCheck,
-  onSelectWorkflow,
-  onRefreshWorkflows,
-  onCancelWorkflow,
-  onReviewWorkflowDecision,
-  onSendWorkflowInput,
-  onInterruptWorkflowNode,
-  onOpenSettings,
   onOpenGitReview,
   onClose,
 }: WorkspaceActivityDrawerProps) {
@@ -86,14 +28,6 @@ export function WorkspaceActivityDrawer({
   const [auditRefresh, setAuditRefresh] = useState(0);
   const [eventAnnouncement, setEventAnnouncement] = useState({ message: '', sequence: 0 });
   const eventsSeenRef = useRef(false);
-  const workflowDecisionCount =
-    (currentWorkflow?.approvals.length ?? 0) +
-    (currentWorkflow?.humanDecisions.length ?? 0) +
-    (currentWorkflow?.revisionEscapes.length ?? 0);
-
-  useEffect(() => {
-    if (workflowDecisionCount > 0) setTab('workflows');
-  }, [workflowDecisionCount]);
 
   useEffect(() => {
     const latest = events[0];
@@ -131,14 +65,8 @@ export function WorkspaceActivityDrawer({
           <DrawerTabButton tab="activity" activeTab={tab} onSelect={setTab}>
             <Activity size={14} aria-hidden="true" /> Activity
           </DrawerTabButton>
-          <DrawerTabButton tab="workflows" activeTab={tab} onSelect={setTab}>
-            <Workflow size={14} aria-hidden="true" /> Workflows
-          </DrawerTabButton>
           <DrawerTabButton tab="changes" activeTab={tab} onSelect={setTab}>
             <GitBranch size={14} aria-hidden="true" /> Changes
-          </DrawerTabButton>
-          <DrawerTabButton tab="checks" activeTab={tab} onSelect={setTab}>
-            <CheckCircle2 size={14} aria-hidden="true" /> Checks
           </DrawerTabButton>
           <DrawerTabButton tab="audit" activeTab={tab} onSelect={setTab}>
             <ShieldCheck size={14} aria-hidden="true" /> History
@@ -159,37 +87,8 @@ export function WorkspaceActivityDrawer({
         <span key={eventAnnouncement.sequence}>{eventAnnouncement.message}</span>
       </span>
       {tab === 'activity' && <ActivityPanel events={events} />}
-      {tab === 'workflows' && (
-        <WorkspaceWorkflowPanel
-          executions={workflowExecutions}
-          current={currentWorkflow}
-          nodeTitles={workflowNodeTitles}
-          interactiveNodeIds={workflowInteractiveNodeIds}
-          interactionEvents={workflowInteractionEvents}
-          loading={workflowLoading}
-          busyAction={workflowBusyAction}
-          mutationsAuthorized={workflowMutationsAuthorized}
-          onSelect={onSelectWorkflow}
-          onRefresh={onRefreshWorkflows}
-          onCancel={onCancelWorkflow}
-          onReviewDecision={onReviewWorkflowDecision}
-          onOpenAgentWorktree={onOpenGitReview}
-          onSendInput={onSendWorkflowInput}
-          onInterrupt={onInterruptWorkflowNode}
-        />
-      )}
       {tab === 'changes' && (
         <ChangesPanel reports={changeReports} onOpenGitReview={onOpenGitReview} />
-      )}
-      {tab === 'checks' && (
-        <WorkspaceChecksPanel
-          commands={checkCommands}
-          latestByCheckId={latestChecks}
-          busyCheckId={busyCheckId}
-          onPrepare={onPrepareCheck}
-          onCancel={onCancelCheck}
-          onOpenSettings={onOpenSettings}
-        />
       )}
       {tab === 'audit' && (
         <AuditPanel

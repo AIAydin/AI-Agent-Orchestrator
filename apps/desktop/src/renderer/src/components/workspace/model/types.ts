@@ -3,7 +3,6 @@ import type { Edge } from '@xyflow/react';
 import type {
   AgentDetection,
   AppSettings,
-  CommandConfiguration,
   ExtensionCanvasNodeTypeView,
   ExtensionDiscoveryView,
   InstalledExtensionView,
@@ -50,11 +49,4 @@ export interface ChangeReport {
   files: string[];
   runId: string | null;
   runPermissionProfile: WorkshopNode['data']['lastRunPermissionProfile'] | null;
-}
-
-export interface CheckCommand {
-  id: string;
-  label: string;
-  command: CommandConfiguration;
-  detectedScript: string | undefined;
 }

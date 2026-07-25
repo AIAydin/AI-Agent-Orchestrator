@@ -300,18 +300,6 @@ vi.mock('../runs/useAgentRunController.js', () => ({
     approvePreparedRun: vi.fn(),
   }),
 }));
-vi.mock('../useProjectChecks.js', () => ({
-  useProjectChecks: () => ({
-    latestByCheckId: new Map(),
-    busyCheckId: null,
-    prepare: vi.fn(),
-    cancel: vi.fn(),
-    plan: null,
-    approving: false,
-    dismissPlan: vi.fn(),
-    confirm: vi.fn(),
-  }),
-}));
 vi.mock('../workflows/useWorkflowRuns.js', () => ({
   workflowIsActive: () => false,
   useWorkflowRuns: () => ({

@@ -25,10 +25,7 @@ import { emptyCanvasHistory } from '../../../../../shared/canvas/history/contrac
 import type { CollaborationMetadataSnapshot } from '../../../../../shared/collaboration/index.js';
 import { FileDocumentSchema } from '../../../../../shared/files/contracts.js';
 import { unwrap } from '../../../lib/ipc.js';
-import {
-  commandPaletteShortcutLabel,
-  opensCommandPalette,
-} from '../../../lib/keyboard/keyboard-preset.js';
+import { opensCommandPalette } from '../../../lib/keyboard/keyboard-preset.js';
 import {
   NODE_DEFINITIONS,
   TEMPLATE_NODE_KINDS,
@@ -46,7 +43,6 @@ import {
 } from '../../extensions/extension-nodes.js';
 import { GitReviewDialog } from '../../git-review/GitReviewDialog.js';
 import { permissionProfileUnavailableReason } from '../../permissions/permission-profile-ui.js';
-import { CheckApprovalDialog } from '../CheckApprovalDialog.js';
 import { RunApprovalDialog } from '../runs/RunApprovalDialog.js';
 import { WorkspaceActivityDrawer } from '../activity/WorkspaceActivityDrawer.js';
 import { WorkspaceCanvas } from '../canvas/WorkspaceCanvas.js';
@@ -94,7 +90,6 @@ import {
   workshopNodeForPersistence,
 } from '../model/node-persistence.js';
 import type {
-  CheckCommand,
   EdgeKind,
   ExtensionTemplate,
   WorkshopEdge,
@@ -115,7 +110,6 @@ import { durableHistoryState, hydrateHistorySnapshot } from '../canvas/history/s
 import { normalizeCanvasViewport } from '../canvas/view-state/viewport.js';
 import { useCollaborationCanvas } from '../collaboration/useCollaborationCanvas.js';
 import { mergeCollaborationCanvasSnapshot } from '../collaboration/merge-canvas.js';
-import { useProjectChecks } from '../useProjectChecks.js';
 import { useWorkflowRuns } from '../workflows/useWorkflowRuns.js';
 import { useWorkspacePreviews } from '../previews/useWorkspacePreviews.js';
 import { initialWorkflowNodeData } from '../workflows/workflow-node-config.js';
@@ -956,15 +950,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     setEvents,
     onError,
   });
-  const checks = useProjectChecks({
-    projectId: project.id,
-    setEvents,
-    onError,
-  });
-  const workflowNodeTitles = useMemo(
-    () => new Map(nodes.map((node) => [node.id, node.data.title] as const)),
-    [nodes],
-  );
   const workflowEvidenceExecution = workflowExecutionMatchesCurrentCanvas(
     workflows.currentExecution,
     persistedUpdatedAt,
@@ -972,15 +957,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
   )
     ? workflows.currentExecution
     : null;
-  const workflowInteractiveNodeIds = useMemo(
-    () =>
-      new Set(
-        nodes
-          .filter((node) => node.data.kind === 'agent' || node.data.kind === 'task')
-          .map((node) => node.id),
-      ),
-    [nodes],
-  );
   const workflowNodeStatuses = useMemo(
     () =>
       new Map(
@@ -1122,14 +1098,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     }
   }, [workflowDecision, workflows.currentExecution, workflows.mutationsAuthorized]);
 
-  const workflowDecisionCount =
-    (workflows.currentExecution?.approvals.length ?? 0) +
-    (workflows.currentExecution?.humanDecisions.length ?? 0) +
-    (workflows.currentExecution?.revisionEscapes.length ?? 0);
-  useEffect(() => {
-    if (workflowDecisionCount > 0) setActivityOpen(true);
-  }, [workflowDecisionCount]);
-
   const searchTerm = search.toLowerCase();
   const filteredTemplates = TEMPLATE_NODE_KINDS.filter((kind) =>
     nodeRegistry.resolve({ kind }).label.toLowerCase().includes(searchTerm),
@@ -1160,39 +1128,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         ]
       : [];
   });
-  const checkCommands: CheckCommand[] = [
-    {
-      id: 'lint',
-      label: 'Lint',
-      command: settings.lintCommand,
-      detectedScript: project.health.scripts.lint,
-    },
-    {
-      id: 'typecheck',
-      label: 'Typecheck',
-      command: settings.typecheckCommand,
-      detectedScript: project.health.scripts.typecheck,
-    },
-    {
-      id: 'test',
-      label: 'Tests',
-      command: settings.testCommand,
-      detectedScript: project.health.scripts.test,
-    },
-    {
-      id: 'build',
-      label: 'Build',
-      command: settings.buildCommand,
-      detectedScript: project.health.scripts.build,
-    },
-    ...(settings.customChecks ?? []).map((check) => ({
-      id: check.id,
-      label: check.label,
-      command: check.command,
-      detectedScript: undefined,
-    })),
-  ];
-
   const { arrangeGroupFrame, deleteNode, fitGroupFrame, setNodeLocked } = useWorkspaceNodeMutations(
     {
       projectId: project.id,
@@ -1345,7 +1280,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         workflowStatus={
           workflows.activeExecution?.status ?? workflows.currentExecution?.status ?? null
         }
-        commandPaletteShortcut={commandPaletteShortcutLabel(settings.keyboardPreset)}
         collaborationEnabled={settings.collaborationEnabled}
         sharingStatus={collaborationCanvas.connectionStatus}
         projectSidebarOpen={!sidebarLayout.rail.collapsed}
@@ -1360,7 +1294,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           })
         }
         onOpenGitReview={openProjectGitReview}
-        onOpenCommands={() => setPaletteOpen(true)}
         onOpenSettings={onOpenSettings}
       />
 
@@ -1555,26 +1488,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         <WorkspaceActivityDrawer
           events={events}
           changeReports={changeReports}
-          checkCommands={checkCommands}
-          latestChecks={checks.latestByCheckId}
-          busyCheckId={checks.busyCheckId}
-          workflowExecutions={workflows.executions}
-          currentWorkflow={workflows.currentExecution}
-          workflowNodeTitles={workflowNodeTitles}
-          workflowInteractiveNodeIds={workflowInteractiveNodeIds}
-          workflowInteractionEvents={workflows.interactionEvents}
-          workflowLoading={workflows.loading}
-          workflowBusyAction={workflows.busyAction}
-          workflowMutationsAuthorized={workflows.mutationsAuthorized}
-          onPrepareCheck={(checkId) => void checks.prepare(checkId)}
-          onCancelCheck={(executionId) => void checks.cancel(executionId)}
-          onSelectWorkflow={workflows.selectExecution}
-          onRefreshWorkflows={() => void workflows.refresh()}
-          onCancelWorkflow={(executionId) => void workflows.cancel(executionId)}
-          onReviewWorkflowDecision={setWorkflowDecision}
-          onSendWorkflowInput={workflows.sendInput}
-          onInterruptWorkflowNode={workflows.interrupt}
-          onOpenSettings={onOpenSettings}
           onOpenGitReview={(runId) =>
             gitReview.openTarget(
               runId === undefined
@@ -1663,14 +1576,6 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           busy={runs.approvingRun}
           onCancel={() => void runs.cancelPreparedRun()}
           onApprove={() => void runs.approvePreparedRun()}
-        />
-      )}
-      {checks.plan && (
-        <CheckApprovalDialog
-          plan={checks.plan}
-          busy={checks.approving}
-          onCancel={checks.dismissPlan}
-          onContinue={() => void checks.confirm()}
         />
       )}
     </main>

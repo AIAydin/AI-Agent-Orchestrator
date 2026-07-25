@@ -11,7 +11,6 @@ describe('WorkspaceActivityDrawer', () => {
   it('links tabs to panels and supports roving arrow-key navigation', () => {
     render(<WorkspaceActivityDrawer {...props()} />);
     const activityTab = screen.getByRole('tab', { name: 'Activity' });
-    const workflowsTab = screen.getByRole('tab', { name: 'Workflows' });
     const changesTab = screen.getByRole('tab', { name: 'Changes' });
 
     expect(activityTab.getAttribute('aria-controls')).toBe('workspace-panel-activity');
@@ -19,21 +18,19 @@ describe('WorkspaceActivityDrawer', () => {
 
     activityTab.focus();
     fireEvent.keyDown(activityTab, { key: 'ArrowRight' });
-    expect(workflowsTab.getAttribute('aria-selected')).toBe('true');
-    expect(workflowsTab.getAttribute('tabindex')).toBe('0');
-    expect(document.activeElement).toBe(workflowsTab);
-    expect(screen.getByRole('tabpanel', { name: 'Workflows' }).id).toBe(
-      'workspace-panel-workflows',
-    );
-
-    fireEvent.keyDown(workflowsTab, { key: 'ArrowRight' });
     expect(changesTab.getAttribute('aria-selected')).toBe('true');
     expect(changesTab.getAttribute('tabindex')).toBe('0');
     expect(document.activeElement).toBe(changesTab);
     expect(screen.getByRole('tabpanel', { name: 'Changes' }).id).toBe('workspace-panel-changes');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Checks' }));
-    expect(screen.getByRole('tabpanel', { name: 'Checks' }).id).toBe('workspace-panel-checks');
+    // History stays reachable; opening it is covered by the audit IPC flow.
+    expect(screen.getByRole('tab', { name: 'History' }).getAttribute('aria-controls')).toBe(
+      'workspace-panel-audit',
+    );
+
+    // Workflows and Checks are gone from the drawer.
+    expect(screen.queryByRole('tab', { name: 'Workflows' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Checks' })).toBeNull();
   });
 
   it('explains the compact close control and shows an honest empty activity state', () => {
@@ -119,33 +116,6 @@ function props(): React.ComponentProps<typeof WorkspaceActivityDrawer> {
   return {
     events: ['Project opened.'],
     changeReports: [],
-    checkCommands: [
-      {
-        id: 'lint',
-        label: 'Lint',
-        command: { executable: 'node', arguments: ['--version'] },
-        detectedScript: undefined,
-      },
-    ],
-    latestChecks: new Map(),
-    busyCheckId: null,
-    workflowExecutions: [],
-    currentWorkflow: null,
-    workflowNodeTitles: new Map(),
-    workflowInteractiveNodeIds: new Set(),
-    workflowInteractionEvents: [],
-    workflowLoading: false,
-    workflowBusyAction: null,
-    workflowMutationsAuthorized: true,
-    onPrepareCheck: vi.fn(),
-    onCancelCheck: vi.fn(),
-    onSelectWorkflow: vi.fn(),
-    onRefreshWorkflows: vi.fn(),
-    onCancelWorkflow: vi.fn(),
-    onReviewWorkflowDecision: vi.fn(),
-    onSendWorkflowInput: vi.fn(),
-    onInterruptWorkflowNode: vi.fn(),
-    onOpenSettings: vi.fn(),
     onOpenGitReview: vi.fn(),
     onClose: vi.fn(),
   };
