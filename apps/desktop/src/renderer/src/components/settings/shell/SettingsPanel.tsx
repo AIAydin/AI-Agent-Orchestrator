@@ -39,6 +39,7 @@ import { useCommandReadiness } from '../../configuration/useCommandReadiness.js'
 import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadiness.js';
 import { useSettingsFolderReadiness } from '../readiness/useSettingsFolderReadiness.js';
 import { settingsCommandDrafts } from './command-drafts.js';
+import { BrandMark } from '../../shell/BrandMark.js';
 import { UpdateSettings } from '../updates/UpdateSettings.js';
 import { VoiceSettings } from '../voice/VoiceSettings.js';
 import {
@@ -208,7 +209,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
       >
         <header className="settings-header">
           <div>
-            <span className="brand-mark small">F</span>
+            <BrandMark size={27} />
             <div>
               <h2 id="settings-title">Settings</h2>
               <p>Change how Forgeboard works here. Unavailable features are clearly labeled.</p>

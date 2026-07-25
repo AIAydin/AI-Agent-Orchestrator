@@ -30,6 +30,7 @@ import type {
 import { unwrap } from '../../lib/ipc.js';
 import { CommandBuilder } from '../configuration/CommandBuilder.js';
 import { FirstRunTour } from '../help/tour/FirstRunTour.js';
+import { BrandMark } from '../shell/BrandMark.js';
 import { ProviderConnectionCards } from '../settings/agents/connections/index.js';
 import { AgentDefaultModelField } from '../settings/fields/AgentDefaultModelField.js';
 import {
@@ -206,7 +207,7 @@ export function SetupWizard(props: SetupWizardProps) {
       <div className="setup-window">
         <aside className="setup-steps" aria-label="Setup progress">
           <div className="setup-brand">
-            <span className="brand-mark">F</span>
+            <BrandMark />
             <span>
               <strong>Forgeboard</strong>
               <small>Local setup</small>

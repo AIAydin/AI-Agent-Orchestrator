@@ -1,5 +1,7 @@
 import { LoaderCircle, RotateCcw, TriangleAlert } from 'lucide-react';
 
+import { BrandMark } from '../../shell/BrandMark.js';
+
 interface BootstrapScreenProps {
   readonly error: string | null;
   readonly onRetry: () => void;
@@ -11,7 +13,7 @@ export function BootstrapScreen({ error, onRetry }: BootstrapScreenProps) {
 
   return (
     <main className={`loading-screen${failed ? ' failed' : ''}`} aria-busy={!failed}>
-      <div className="brand-mark large">F</div>
+      <BrandMark size={48} />
       {failed ? (
         <>
           <TriangleAlert className="loading-screen-error-icon" aria-hidden="true" />
