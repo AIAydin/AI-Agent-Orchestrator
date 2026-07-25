@@ -274,7 +274,6 @@ export const AppSettingsSchema = z
     updateChannel: z.enum(['stable', 'prerelease', 'disabled']).default('prerelease'),
     automaticUpdateDownloads: z.boolean().default(false),
     voiceCommandsEnabled: z.boolean().default(false),
-    voiceAutoRunSafeActions: z.boolean().default(false),
   })
   .superRefine((settings, context) => {
     if (settings.previewPortEnd <= settings.previewPortStart) {

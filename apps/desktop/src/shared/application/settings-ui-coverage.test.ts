@@ -4,7 +4,7 @@ import { SETTINGS_UI_MANIFEST } from '../settings/ui-coverage/manifest.js';
 
 describe('ordinary settings UI coverage', () => {
   it('classifies every persisted settings field without a generic configuration-file escape hatch', () => {
-    expect(Object.keys(SETTINGS_UI_MANIFEST)).toHaveLength(60);
+    expect(Object.keys(SETTINGS_UI_MANIFEST)).toHaveLength(59);
     expect(
       Object.values(SETTINGS_UI_MANIFEST).filter((entry) => entry.kind === 'first-run'),
     ).toEqual([{ kind: 'first-run', action: 'Use safe defaults', validation: 'schema' }]);
