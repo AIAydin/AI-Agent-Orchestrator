@@ -54,6 +54,7 @@ export async function launchDesktop(
   delete environment.ELECTRON_RENDERER_URL;
   delete environment.ELECTRON_RUN_AS_NODE;
   Object.assign(environment, options.environment);
+  if (process.platform === 'win32') environment.FORGEBOARD_E2E_STARTUP_TRACE = '1';
 
   const app = await electron.launch({
     executablePath: require('electron') as string,
@@ -63,6 +64,10 @@ export async function launchDesktop(
     timeout: 30_000,
   });
   userDataDirectories.set(app, userDataDirectory);
+  const startupDiagnostics: string[] = [];
+  app.process().stderr?.on('data', (chunk: Buffer | string) => {
+    startupDiagnostics.push(String(chunk));
+  });
   try {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
@@ -75,7 +80,12 @@ export async function launchDesktop(
     return { app, page };
   } catch (error) {
     await closeElectronAfterTest(app);
-    throw error;
+    const detail = startupDiagnostics.join('').trim().slice(-8_192);
+    throw new Error(
+      `${error instanceof Error ? error.message : 'Electron did not open a window.'}` +
+        (detail.length === 0 ? ' No Electron startup diagnostics were emitted.' : `\n${detail}`),
+      { cause: error },
+    );
   }
 }
 
