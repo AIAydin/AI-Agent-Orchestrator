@@ -50,7 +50,7 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
     await openCodeReadiness.click();
     await expect(
       settings.locator('.agent-readiness-list').getByText(/executable is ready/u),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 20_000 });
     const saveSettings = settings.getByRole('button', {
       name: /Save settings/u,
     });

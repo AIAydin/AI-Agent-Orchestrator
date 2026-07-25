@@ -21,7 +21,7 @@ import type { SelectedBackupValidationOptions, StagedSelectedBackup } from '../s
 import type { ForgeboardDatabaseProvenanceResult } from '../provenance/inspect.js';
 import type { WindowsFilesystemSecurity } from '../../../security/windows/filesystem-acl.js';
 import type { LocalStore } from '../../../storage.js';
-import { openLocalStoreWithStartupDatabaseRecovery } from './open-store.js';
+import { openLocalStoreWithStartupDatabaseRecovery, sameCanonicalPath } from './open-store.js';
 import { writeInitializationMarker } from './initialization-marker.js';
 
 const roots: string[] = [];
@@ -31,6 +31,24 @@ afterEach(async () => {
 });
 
 describe('openLocalStoreWithStartupDatabaseRecovery', () => {
+  it('accepts casing-only Windows canonicalization without accepting path aliases', () => {
+    expect(
+      sameCanonicalPath(
+        'C:\\Users\\RunnerAdmin\\AppData\\Local\\Temp\\Forgeboard',
+        'C:\\Users\\RUNNERADMIN\\AppData\\Local\\Temp\\Forgeboard',
+        'win32',
+      ),
+    ).toBe(true);
+    expect(
+      sameCanonicalPath(
+        'C:\\Users\\RunnerAdmin\\AppData\\Local\\Temp\\Forgeboard',
+        'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\Forgeboard',
+        'win32',
+      ),
+    ).toBe(false);
+    expect(sameCanonicalPath('/tmp/Forgeboard', '/tmp/forgeboard', 'linux')).toBe(false);
+  });
+
   it('reconciles before a healthy first open and presents no recovery UI', async () => {
     const root = await fixtureRoot();
     const events: string[] = [];

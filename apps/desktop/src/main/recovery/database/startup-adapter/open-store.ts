@@ -466,7 +466,7 @@ async function prepareUserDataBoundary(
     throw new Error('The Forgeboard user data location must be an ordinary directory.');
   }
   const canonical = await realpath(userDataPath);
-  if (canonical !== resolve(userDataPath)) {
+  if (!sameCanonicalPath(canonical, resolve(userDataPath), platform)) {
     throw new Error('The Forgeboard user data location must not traverse filesystem links.');
   }
   const current = await lstat(canonical);
@@ -505,6 +505,16 @@ function traceE2eDatabaseStartup(stage: string): void {
   } catch {
     // Diagnostics must never alter product startup behavior.
   }
+}
+
+export function sameCanonicalPath(
+  canonical: string,
+  resolved: string,
+  platform: NodeJS.Platform,
+): boolean {
+  return platform === 'win32'
+    ? canonical.toLowerCase() === resolved.toLowerCase()
+    : canonical === resolved;
 }
 
 async function protectDatabaseBoundary(
