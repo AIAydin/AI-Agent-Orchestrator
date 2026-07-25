@@ -1286,21 +1286,17 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     closeProject: () => void closeProject(),
   });
 
-  const { nodeTitle, openDiffReview, openGitPrReadiness, recheckProvider } =
-    useWorkspaceAgentSessionCallbacks({
-      projectId: project.id,
-      nodesRef,
-      gitReview,
-      providerGates,
-    });
+  const { nodeTitle, openDiffReview, openGitPrReadiness } = useWorkspaceAgentSessionCallbacks({
+    projectId: project.id,
+    nodesRef,
+    gitReview,
+  });
   const agentSessionValue = useWorkspaceAgentSessionValue({
     nodes,
     project,
     settings,
     runnableAgents,
     graphReadOnly: collaborationCanvas.graphReadOnly,
-    gateFor: providerGates.gateFor,
-    recheckProvider,
     openSettings: onOpenSettings,
     reportError: onError,
     updateNodeData,

@@ -15,7 +15,6 @@ import type {
   TerminalSessionView,
 } from '../../../../../../shared/terminal/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
-import type { AgentProviderGate } from '../useAgentProviderGate.js';
 import { CanvasNodeInteractionProvider } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
 import { AgentSessionProvider, type AgentSessionContextValue } from './AgentSessionContext.js';
 import { AgentSessionNode } from './AgentSessionNode.js';
@@ -110,10 +109,7 @@ const settings: AppSettings = AppSettingsSchema.parse({
 
 const NODE_ID = 'node-x';
 
-let gate: AgentProviderGate | null = null;
 const spies = {
-  gateFor: vi.fn((): AgentProviderGate | null => gate),
-  recheckProvider: vi.fn(),
   openSettings: vi.fn(),
   reportError: vi.fn(),
   updateNodeData: vi.fn(),
@@ -134,8 +130,6 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     settings,
     runnableAgents: [claude],
     graphReadOnly: false,
-    gateFor: spies.gateFor,
-    recheckProvider: spies.recheckProvider,
     openSettings: spies.openSettings,
     reportError: spies.reportError,
     updateNodeData: spies.updateNodeData,
@@ -218,7 +212,6 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gate = null;
   controller.session = null;
   controller.active = false;
   controller.pendingPlan = null;
@@ -391,23 +384,11 @@ describe('AgentSessionNode', () => {
     await waitFor(() => expect(controller.prepareLaunch).toHaveBeenCalledOnce());
   });
 
-  it('hides Start behind a provider gate warning and rechecks the provider', () => {
-    gate = {
-      providerId: 'anthropic' as never,
-      productName: 'Claude',
-      state: 'unknown',
-      settled: true,
-      busy: false,
-      blockedReason: 'needs a refresh',
-      warning: 'needs a refresh',
-      actionLabel: 'Refresh status',
-      busyActionLabel: 'Refreshing…',
-    };
+  it('offers Start immediately — no provider connection gate on the node', () => {
     renderNode();
-    expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
-    expect(screen.getByText('needs a refresh')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
-    expect(spies.recheckProvider).toHaveBeenCalledWith('claude');
+    expect(screen.getByRole('button', { name: 'Start session' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Refresh status' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open settings' })).toBeNull();
   });
 
   it('renders the terminal surface while a session is active', () => {

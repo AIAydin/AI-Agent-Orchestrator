@@ -8,7 +8,6 @@ import type {
 } from '../../../../../../shared/application/contracts.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import type { DiffReviewOpenRequest } from '../../diff-review/DiffReviewNodeInspector.js';
-import type { AgentProviderGate } from '../useAgentProviderGate.js';
 
 /** Low-churn snapshot of canvas nodes for faces that need cross-node options. */
 export interface CanvasNodeRosterEntry {
@@ -64,8 +63,6 @@ export interface AgentSessionContextValue {
   readonly settings: AppSettings;
   readonly runnableAgents: readonly (AgentDetection & { id: RunAdapterId })[];
   readonly graphReadOnly: boolean;
-  gateFor(adapterId: string): AgentProviderGate | null;
-  recheckProvider(adapterId: string): void;
   openSettings(): void;
   reportError(message: string): void;
   updateNodeData(nodeId: string, data: Partial<WorkshopNodeData>): void;

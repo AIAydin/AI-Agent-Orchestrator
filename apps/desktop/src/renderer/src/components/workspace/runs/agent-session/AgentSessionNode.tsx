@@ -58,9 +58,6 @@ export function AgentSessionNode({
     settings,
     runnableAgents,
     graphReadOnly,
-    gateFor,
-    recheckProvider,
-    openSettings,
     reportError,
     updateNodeData,
     recordHistory,
@@ -117,10 +114,8 @@ export function AgentSessionNode({
 
   const readOnly = graphReadOnly || data.locked || interactions.readOnly;
   const theme = providerTheme(adapter);
-  const gate = gateFor(adapter);
   const unavailableReason = agentSessionUnavailableReason(agent);
-  const blocked = gate !== null && gate.state !== 'connected';
-  const canStart = unavailableReason === null && !blocked;
+  const canStart = unavailableReason === null;
 
   const hasActiveSession = controller.session !== null && controller.active;
   const endedSession = controller.session !== null && !controller.active;
@@ -398,18 +393,6 @@ export function AgentSessionNode({
           </span>
           {unavailableReason !== null ? (
             <p className="agent-start-reason">{unavailableReason}</p>
-          ) : gate !== null && gate.warning !== null ? (
-            <div className="recovery-guidance warning">
-              <p>{gate.warning}</p>
-              <div className="recovery-guidance-actions">
-                <button type="button" className="button" onClick={() => recheckProvider(adapter)}>
-                  {gate.actionLabel}
-                </button>
-                <button type="button" className="button" onClick={() => openSettings()}>
-                  Open settings
-                </button>
-              </div>
-            </div>
           ) : null}
           {canStart && (
             <button
