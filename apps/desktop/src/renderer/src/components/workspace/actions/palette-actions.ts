@@ -67,9 +67,15 @@ export function createWorkspacePaletteActions(input: WorkspacePaletteActionInput
     },
     ...(input.canRunWorkflow && input.workflowMutationsAuthorized
       ? [
-          confirmAction('run-workflow', 'Run the saved canvas workflow', 'Workflow', () => {
-            if (!input.workflowStartBusy) input.startWorkflow({ kind: 'workflow' });
-          }),
+          safeAction(
+            'run-workflow',
+            'Run the saved canvas workflow',
+            'Workflow',
+            () => {
+              if (!input.workflowStartBusy) input.startWorkflow({ kind: 'workflow' });
+            },
+            ['run the workflow', 'start the workflow'],
+          ),
         ]
       : []),
     ...(input.selectedNodeTitle === null ||
@@ -77,7 +83,7 @@ export function createWorkspacePaletteActions(input: WorkspacePaletteActionInput
     !input.workflowMutationsAuthorized
       ? []
       : [
-          confirmAction(
+          safeAction(
             'run-selected-workflow-node',
             `Run ${input.selectedNodeTitle} and everything it needs`,
             'Workflow',

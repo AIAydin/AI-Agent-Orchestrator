@@ -356,7 +356,6 @@ function retentionSettings(): AppSettings {
     updateChannel: 'stable',
     automaticUpdateDownloads: false,
     voiceCommandsEnabled: false,
-    voiceAutoRunSafeActions: false,
   };
 }
 

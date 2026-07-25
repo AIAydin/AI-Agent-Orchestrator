@@ -392,6 +392,5 @@ function settings(): AppSettings {
     updateChannel: 'stable',
     automaticUpdateDownloads: false,
     voiceCommandsEnabled: false,
-    voiceAutoRunSafeActions: false,
   };
 }

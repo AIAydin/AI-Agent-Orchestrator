@@ -206,7 +206,6 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     updateChannel: 'stable',
     automaticUpdateDownloads: false,
     voiceCommandsEnabled: false,
-    voiceAutoRunSafeActions: false,
     ...overrides,
   };
 }

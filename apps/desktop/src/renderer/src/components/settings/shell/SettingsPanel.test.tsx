@@ -378,7 +378,7 @@ describe('SettingsPanel draft transactions', () => {
     );
 
     const entries = Object.entries(SETTINGS_UI_MANIFEST);
-    expect(entries).toHaveLength(60);
+    expect(entries).toHaveLength(59);
     expect(entries.filter(([, entry]) => entry.kind === 'first-run')).toHaveLength(1);
     for (const tab of [
       'Appearance',

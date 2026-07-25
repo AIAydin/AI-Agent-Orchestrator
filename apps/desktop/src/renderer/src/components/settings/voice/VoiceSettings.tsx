@@ -54,7 +54,7 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
   return (
     <SettingsSection
       title="Local voice commands"
-      description="Record a short command, transcribe it locally with Whisper, and match it only to a registered Forgeboard action. Audio and transcripts are not saved."
+      description="Record a command, transcribe it locally with Whisper, and run the closest registered action right away. Audio and transcripts are not saved."
     >
       <div className="info-path">
         <span>
@@ -86,7 +86,10 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
       <label className="switch-row">
         <span>
           <strong>Enable voice commands</strong>
-          <small>Allows microphone access only in the main Forgeboard window.</small>
+          <small>
+            Mic access stays in the main window. Commands run right after transcription;
+            destructive actions still ask.
+          </small>
         </span>
         <input
           type="checkbox"
@@ -97,31 +100,6 @@ export function VoiceSettings({ draft, setDraft, busy, perform }: AsyncSettingsP
             setDraft((current) => ({
               ...current,
               voiceCommandsEnabled: event.target.checked,
-              voiceAutoRunSafeActions: event.target.checked
-                ? current.voiceAutoRunSafeActions
-                : false,
-            }))
-          }
-        />
-      </label>
-
-      <label className="switch-row">
-        <span>
-          <strong>Run safe actions automatically</strong>
-          <small>
-            Creation and view actions run after transcription. Closing projects and starting work
-            still require confirmation.
-          </small>
-        </span>
-        <input
-          type="checkbox"
-          name="voice-auto-run-safe-actions"
-          checked={draft.voiceAutoRunSafeActions}
-          disabled={busy || !ready || !draft.voiceCommandsEnabled}
-          onChange={(event) =>
-            setDraft((current) => ({
-              ...current,
-              voiceAutoRunSafeActions: event.target.checked,
             }))
           }
         />

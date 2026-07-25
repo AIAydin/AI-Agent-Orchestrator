@@ -209,7 +209,6 @@ export function createDefaultSettings(): AppSettings {
     updateChannel: 'prerelease',
     automaticUpdateDownloads: false,
     voiceCommandsEnabled: false,
-    voiceAutoRunSafeActions: false,
   };
 }
 

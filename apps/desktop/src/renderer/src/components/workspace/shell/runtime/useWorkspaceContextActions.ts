@@ -118,7 +118,7 @@ export function useWorkspaceContextActions({
           .then(unwrap)
           .then(() => {
             setEvents((items) =>
-              [`Sent a voice-confirmed prompt to ${target.data.title}.`, ...items].slice(0, 30),
+              [`Sent a voice prompt to ${target.data.title}.`, ...items].slice(0, 30),
             );
           })
           .catch((cause: unknown) => {
@@ -138,7 +138,7 @@ export function useWorkspaceContextActions({
       setSelectedEdgeId(null);
       setEvents((items) =>
         [
-          `Set ${target.data.title}'s prompt from the confirmed voice command. Review the run before starting it.`,
+          `Set ${target.data.title}'s prompt by voice. Review the run before starting it.`,
           ...items,
         ].slice(0, 30),
       );
@@ -210,7 +210,7 @@ export function useWorkspaceContextActions({
       setEdges(nextEdges);
       setEvents((items) =>
         [
-          `Connected ${source.data.title} to ${target.data.title} with confirmed voice input.`,
+          `Connected ${source.data.title} to ${target.data.title} by voice.`,
           ...items,
         ].slice(0, 30),
       );
