@@ -6,17 +6,15 @@ import {
   fsyncSync,
   openSync,
   readFileSync,
-  renameSync,
   unlinkSync,
 } from 'node:fs';
 import { open, unlink, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 
-import { moveFileWriteThrough } from '@forgeboard/windows-durable-fs';
-
 import { GitEngineError } from '../../model/errors.js';
 import type { RepositoryService } from '../service.js';
 import type { GitCommonDirectoryIdentity } from './contracts.js';
+import { replaceFileAtomically } from './windows-durable-replace.js';
 
 const CONFIGURATION_FILE_LIMIT = 32 * 1_024 * 1_024;
 const MUTATION_OUTPUT_LIMIT = 64 * 1_024;
@@ -206,7 +204,18 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
     assertSameFile(this.lockedOriginal, lock, 'The repository configuration lock changed.');
     assertSameFile(this.prepared, staging, 'The prepared repository configuration changed.');
     try {
-      await replaceFile(this.stagingPath, this.identity.configurationPath);
+      await replaceFileAtomically(this.stagingPath, this.identity.configurationPath, () => {
+        assertSameFile(
+          this.original,
+          readOrdinaryFileSync(this.identity.configurationPath),
+          'The repository configuration changed during commit.',
+        );
+        assertSameFile(
+          this.prepared,
+          readOrdinaryFileSync(this.stagingPath),
+          'The prepared repository configuration changed during commit.',
+        );
+      });
       this.#state = 'committed';
       syncDirectoryBestEffort(path.dirname(this.identity.configurationPath));
     } catch (error) {
@@ -231,7 +240,18 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
         lock,
         'The repository configuration recovery lock changed before rollback.',
       );
-      await replaceFile(this.lockPath, this.identity.configurationPath);
+      await replaceFileAtomically(this.lockPath, this.identity.configurationPath, () => {
+        assertSameFile(
+          this.prepared,
+          readOrdinaryFileSync(this.identity.configurationPath),
+          'The committed repository configuration changed during rollback.',
+        );
+        assertSameFile(
+          this.lockedOriginal,
+          readOrdinaryFileSync(this.lockPath),
+          'The repository configuration recovery lock changed during rollback.',
+        );
+      });
       this.#state = 'finished';
       removeBestEffort(this.stagingLockPath);
       syncDirectoryBestEffort(path.dirname(this.identity.configurationPath));
@@ -311,14 +331,6 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
       );
     }
   }
-}
-
-async function replaceFile(source: string, destination: string): Promise<void> {
-  if (process.platform === 'win32') {
-    await moveFileWriteThrough(source, destination, true);
-    return;
-  }
-  renameSync(source, destination);
 }
 
 async function applyStagedMutation(

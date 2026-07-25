@@ -47,6 +47,10 @@ describe('Windows batch agent launch', () => {
         '""C:\\Tools\\opencode.cmd" "run" "--model" "openai/gpt-5.1""',
       ],
       windowsVerbatimArguments: true,
+      windowsPty: {
+        arguments: ['/d', '/q', '/v:off'],
+        initialInput: 'call "C:\\Tools\\opencode.cmd" "run" "--model" "openai/gpt-5.1" & exit',
+      },
     });
   });
 

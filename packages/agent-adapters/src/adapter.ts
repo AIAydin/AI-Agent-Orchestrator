@@ -528,6 +528,9 @@ async function createPtyRuntime(
     if (exitListeners.length === 0) pendingExit = exit;
     else for (const listener of exitListeners) listener(exit);
   });
+  if (terminalLaunch.initialInput !== undefined) {
+    terminal.write(terminalLaunch.initialInput);
+  }
 
   return {
     pid: terminal.pid,
@@ -1068,6 +1071,10 @@ export function resolveWindowsBatchLaunch(
   readonly executable: string;
   readonly arguments: readonly string[];
   readonly windowsVerbatimArguments?: true;
+  readonly windowsPty?: {
+    readonly arguments: readonly string[];
+    readonly initialInput: string;
+  };
 } {
   if (platform !== 'win32' || !/\.(?:bat|cmd)$/iu.test(executable)) {
     return { executable, arguments: arguments_ };
@@ -1099,6 +1106,18 @@ export function resolveWindowsBatchLaunch(
     // Node's default Windows argv encoder follows the C runtime rules. cmd.exe uses different
     // quote parsing, so pass this already-validated command line without a second escaping layer.
     windowsVerbatimArguments: true,
+    // node-pty's Windows backend applies C-runtime quoting, which is incompatible with cmd.exe's
+    // `/c` quote removal. Start cmd.exe as the PTY itself and submit one trusted, validated command
+    // through its input instead. The generated `exit` closes the bootstrap shell with the agent.
+    windowsPty: {
+      arguments: ['/d', '/q', '/v:off'],
+      initialInput: [
+        'call',
+        `"${executable}"`,
+        ...arguments_.map((argument) => `"${argument}"`),
+        '& exit',
+      ].join(' '),
+    },
   };
 }
 

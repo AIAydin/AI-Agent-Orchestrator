@@ -145,10 +145,17 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Add Git remote?',
         buttons: ['Cancel', 'Add remote'],
       });
-      await expect(
-        settings.getByRole('button', { name: 'Remove origin' }),
-        'The approved local Git mutation should settle in Settings before an external Git reader opens the config.',
-      ).toBeVisible({ timeout: 20_000 });
+      try {
+        await expect(
+          settings.getByRole('button', { name: 'Remove origin' }),
+          'The approved local Git mutation should settle in Settings before an external Git reader opens the config.',
+        ).toBeVisible({ timeout: 20_000 });
+      } catch (cause) {
+        throw new Error(
+          `The approved Git addition did not settle. Settings: ${JSON.stringify(await settings.textContent())}.`,
+          { cause },
+        );
+      }
       expect(gitRemoteUrl(projectPath, 'origin')).toBe(FIRST_NETWORK_URL);
     });
 
