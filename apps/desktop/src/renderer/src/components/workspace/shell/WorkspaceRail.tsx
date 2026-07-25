@@ -5,6 +5,7 @@ import type {
   Project,
   RunAdapterId,
 } from '../../../../../shared/application/contracts.js';
+import type { FileTreeEntry } from '../../../../../shared/files/contracts.js';
 import type { ProjectFileBrowserOperations } from '../../file-editor/browser/useProjectFileBrowser.js';
 import type { NodeKind, WorkshopNode } from '../canvas/CanvasNode.js';
 import { WorkspaceProjectTree } from '../context-dnd/WorkspaceProjectTree.js';
@@ -37,6 +38,7 @@ interface WorkspaceRailProps {
     targetNodeId: string,
     payload: WorkspaceContextDragPayload,
   ) => Promise<void>;
+  onOpenProjectFile: (entry: FileTreeEntry) => void;
 }
 
 export function WorkspaceRail({
@@ -60,6 +62,7 @@ export function WorkspaceRail({
   onInitializeGit,
   onSelectNode,
   onAttachAgentContext,
+  onOpenProjectFile,
 }: WorkspaceRailProps) {
   return (
     <aside id="workspace-project-sidebar" className="project-rail" hidden={hidden}>
@@ -99,6 +102,7 @@ export function WorkspaceRail({
             agentTargets={nodes}
             readOnly={collaborationGraphReadOnly}
             onAttach={onAttachAgentContext}
+            onOpenFile={onOpenProjectFile}
           />
           <ProjectTemplates
             project={project}

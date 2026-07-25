@@ -123,6 +123,7 @@ import { useDiffReviewNodeController } from '../diff-review/useDiffReviewNodeCon
 import { useDiffReviewSession } from '../diff-review/useDiffReviewSession.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { linkProjectFileToAgent, removeProjectFileFromAgent } from '../context-dnd/linking.js';
+import { openProjectFileNode } from '../model/open-file-node.js';
 import {
   runnableWorkflowNodeCount,
   workflowExecutionMatchesCurrentCanvas,
@@ -723,6 +724,53 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       );
     },
     [collaborationCanvas.graphReadOnly, nodes.length, record, reportCollaborationReadOnly],
+  );
+
+  const openProjectFileOnCanvas = useCallback(
+    (entry: { readonly relativePath: string }) => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return;
+      }
+      const result = openProjectFileNode({
+        projectId: project.id,
+        relativePath: entry.relativePath,
+        nodes: nodesRef.current,
+        newNodeId: crypto.randomUUID(),
+      });
+      if (result.kind === 'existing') {
+        const node = nodesRef.current.find((candidate) => candidate.id === result.nodeId);
+        setSelectedNodeId(result.nodeId);
+        setSelectedEdgeId(null);
+        setNodes((items) =>
+          items.map((item) => ({ ...item, selected: item.id === result.nodeId })),
+        );
+        if (node !== undefined) {
+          void instance?.setCenter(node.position.x, node.position.y, {
+            zoom: 1.15,
+            duration: settings.reducedMotion ? 0 : 220,
+          });
+        }
+        return;
+      }
+      record();
+      pendingNodeSelection.current = result.nodeId;
+      nodesRef.current = result.nodes;
+      setNodes(result.nodes);
+      setSelectedNodeId(result.nodeId);
+      window.setTimeout(() => {
+        if (pendingNodeSelection.current === result.nodeId) pendingNodeSelection.current = null;
+      }, 250);
+      setEvents((items) => [`Opened ${entry.relativePath} as a file node.`, ...items].slice(0, 30));
+    },
+    [
+      collaborationCanvas.graphReadOnly,
+      instance,
+      project.id,
+      record,
+      reportCollaborationReadOnly,
+      settings.reducedMotion,
+    ],
   );
 
   const attachProjectFileContext = useCallback(
@@ -1388,6 +1436,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onAddExtensionNode={addExtensionNode}
           onInitializeGit={() => void initializeGit()}
           onAttachAgentContext={attachProjectFileContext}
+          onOpenProjectFile={openProjectFileOnCanvas}
           onSelectNode={(node) => {
             setSelectedNodeId(node.id);
             setSelectedEdgeId(null);
