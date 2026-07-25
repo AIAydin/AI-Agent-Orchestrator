@@ -2018,9 +2018,9 @@ unchecked when only a subset of their required behavior has proof.
 - 2026-07-25: PR #26 was reconciled with current `main` and its runtime verification was repaired.
   E2E cleanup supports both current and earlier Playwright process mappings, canvas multi-selection
   holds the real platform shortcut during its display-scale-safe click, Windows batch shims retain
-  quoted executable paths through a validated, verbatim `cmd.exe` command line, and Git remote
-  configuration retries only bounded Windows sharing violations while revalidating both file
-  identities before every commit or rollback retry. The five previously failing E2E scenarios
+  quoted executable paths through a validated native Node/Electron PTY bridge, and Git remote
+  configuration uses the existing write-through Windows filesystem authority for atomic commit and
+  rollback replacement. The five previously failing E2E scenarios
   passed locally. Structure (1,475 files), controls (859 files), formatting, zero-warning lint,
   workspace typecheck, all 3,149 unit tests, all 333 integration tests, three docs tests, seven
   quality tests, and every production build passed.

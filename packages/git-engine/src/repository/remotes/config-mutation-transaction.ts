@@ -6,15 +6,17 @@ import {
   fsyncSync,
   openSync,
   readFileSync,
+  renameSync,
   unlinkSync,
 } from 'node:fs';
 import { open, unlink, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 
+import { moveFileWriteThrough } from '@forgeboard/windows-durable-fs';
+
 import { GitEngineError } from '../../model/errors.js';
 import type { RepositoryService } from '../service.js';
 import type { GitCommonDirectoryIdentity } from './contracts.js';
-import { replaceFileWithWindowsRetry } from './windows-replace.js';
 
 const CONFIGURATION_FILE_LIMIT = 32 * 1_024 * 1_024;
 const MUTATION_OUTPUT_LIMIT = 64 * 1_024;
@@ -204,18 +206,7 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
     assertSameFile(this.lockedOriginal, lock, 'The repository configuration lock changed.');
     assertSameFile(this.prepared, staging, 'The prepared repository configuration changed.');
     try {
-      await replaceFileWithWindowsRetry(this.stagingPath, this.identity.configurationPath, () => {
-        assertSameFile(
-          this.original,
-          readOrdinaryFileSync(this.identity.configurationPath),
-          'The repository configuration changed during commit.',
-        );
-        assertSameFile(
-          this.prepared,
-          readOrdinaryFileSync(this.stagingPath),
-          'The prepared repository configuration changed during commit.',
-        );
-      });
+      await replaceFile(this.stagingPath, this.identity.configurationPath);
       this.#state = 'committed';
       syncDirectoryBestEffort(path.dirname(this.identity.configurationPath));
     } catch (error) {
@@ -240,18 +231,7 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
         lock,
         'The repository configuration recovery lock changed before rollback.',
       );
-      await replaceFileWithWindowsRetry(this.lockPath, this.identity.configurationPath, () => {
-        assertSameFile(
-          this.prepared,
-          readOrdinaryFileSync(this.identity.configurationPath),
-          'The committed repository configuration changed during rollback.',
-        );
-        assertSameFile(
-          this.lockedOriginal,
-          readOrdinaryFileSync(this.lockPath),
-          'The repository configuration recovery lock changed during rollback.',
-        );
-      });
+      await replaceFile(this.lockPath, this.identity.configurationPath);
       this.#state = 'finished';
       removeBestEffort(this.stagingLockPath);
       syncDirectoryBestEffort(path.dirname(this.identity.configurationPath));
@@ -259,7 +239,11 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
       throw new GitEngineError(
         'COMMAND_FAILED',
         'Git remote configuration may have changed the repository and its rollback failed.',
-        { outcomeUncertain: true, recoveryRequired: true, refreshRequired: true },
+        {
+          outcomeUncertain: true,
+          recoveryRequired: true,
+          refreshRequired: true,
+        },
         { cause: error },
       );
     }
@@ -290,7 +274,11 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
       throw new GitEngineError(
         'COMMAND_FAILED',
         'The Git remote configuration changed, but its lock could not be released safely.',
-        { mutationApplied: true, outcomeUncertain: true, recoveryRequired: true },
+        {
+          mutationApplied: true,
+          outcomeUncertain: true,
+          recoveryRequired: true,
+        },
         { cause: error },
       );
     }
@@ -323,6 +311,14 @@ class PreparedMutation implements PreparedRemoteConfigurationMutation {
       );
     }
   }
+}
+
+async function replaceFile(source: string, destination: string): Promise<void> {
+  if (process.platform === 'win32') {
+    await moveFileWriteThrough(source, destination, true);
+    return;
+  }
+  renameSync(source, destination);
 }
 
 async function applyStagedMutation(
@@ -411,7 +407,10 @@ function parseRemoteEntries(
           'Git returned an invalid prepared remote configuration entry.',
         );
       }
-      return { key: record.slice(0, separator), value: record.slice(separator + 1) };
+      return {
+        key: record.slice(0, separator),
+        value: record.slice(separator + 1),
+      };
     });
 }
 

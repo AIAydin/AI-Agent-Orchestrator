@@ -13,6 +13,7 @@ export {
   type AgentExecutableProbe,
   type AgentExecutableLocationOptions,
 } from './adapter.js';
+export { resolvePtyRuntimeLaunch } from './windows-pty-launch.js';
 export {
   BUILT_IN_AGENT_MANIFESTS,
   CLAUDE_MANIFEST,

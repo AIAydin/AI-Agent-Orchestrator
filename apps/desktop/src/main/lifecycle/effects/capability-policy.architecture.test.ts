@@ -158,7 +158,10 @@ describe('main-process local effect capability architecture', () => {
         relativeRoot: 'packages/agent-adapters/src',
         inventoryPrefix: 'packages/agent-adapters/src/',
       },
-      { relativeRoot: 'packages/git-engine/src', inventoryPrefix: 'packages/git-engine/src/' },
+      {
+        relativeRoot: 'packages/git-engine/src',
+        inventoryPrefix: 'packages/git-engine/src/',
+      },
     ]);
     expect(policyFiles('reviewed-domain-operation')).toEqual([
       'packages/git-engine/src/diff/changes.ts',
@@ -166,7 +169,6 @@ describe('main-process local effect capability architecture', () => {
       'packages/git-engine/src/repository/executor.ts',
       'packages/git-engine/src/repository/path-safety.ts',
       'packages/git-engine/src/repository/remotes/config-mutation-transaction.ts',
-      'packages/git-engine/src/repository/remotes/windows-replace.ts',
       'packages/git-engine/src/repository/service.ts',
       'packages/git-engine/src/repository/worktree-recovery/inspection.ts',
       'packages/git-engine/src/repository/worktrees.ts',

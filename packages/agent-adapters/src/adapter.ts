@@ -26,6 +26,7 @@ import {
   type ParsedAgentResumeRequest,
   type PreparedAgentLaunch,
 } from './schema.js';
+import { resolvePtyRuntimeLaunch } from './windows-pty-launch.js';
 
 const SAFE_INHERITED_ENVIRONMENT = Object.freeze([
   'COLORTERM',
@@ -500,12 +501,11 @@ async function createPtyRuntime(
     plan.disclosure.arguments,
     plan.environment,
   );
+  const terminalLaunch = resolvePtyRuntimeLaunch(launch, plan.environment);
   beforeSpawn?.();
-  const terminalArguments =
-    launch.windowsVerbatimArguments === true ? launch.arguments.join(' ') : [...launch.arguments];
-  const terminal = pty.spawn(launch.executable, terminalArguments, {
+  const terminal = pty.spawn(terminalLaunch.executable, [...terminalLaunch.arguments], {
     cwd: plan.disclosure.cwd,
-    env: plan.environment,
+    env: terminalLaunch.environment,
     name: 'xterm-256color',
     cols: 120,
     rows: 40,
@@ -521,7 +521,10 @@ async function createPtyRuntime(
     else for (const listener of dataListeners) listener('pty', data);
   });
   terminal.onExit(({ exitCode, signal }) => {
-    const exit = { exitCode, signal: signal === undefined ? null : String(signal) };
+    const exit = {
+      exitCode,
+      signal: signal === undefined ? null : String(signal),
+    };
     if (exitListeners.length === 0) pendingExit = exit;
     else for (const listener of exitListeners) listener(exit);
   });

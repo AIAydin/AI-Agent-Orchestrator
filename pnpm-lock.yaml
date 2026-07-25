@@ -329,6 +329,9 @@ importers:
       '@forgeboard/core':
         specifier: workspace:*
         version: link:../core
+      '@forgeboard/windows-durable-fs':
+        specifier: workspace:*
+        version: link:../windows-durable-fs
       zod:
         specifier: 'catalog:'
         version: 3.25.67
