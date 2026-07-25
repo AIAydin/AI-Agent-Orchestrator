@@ -1,5 +1,5 @@
 import { chmod, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /**
@@ -14,11 +14,34 @@ export async function writeConfiguredFakeGitHubCli(input: {
   const fixtureUrl = pathToFileURL(
     join(import.meta.dirname, '..', 'scripts', 'fixtures', 'fake-gh.mjs'),
   ).href;
+  if (process.platform === 'win32') {
+    const entryPath = join(dirname(input.executablePath), 'fake-gh-entry.mjs');
+    await writeFile(entryPath, configuredSource(input, fixtureUrl), 'utf8');
+    await writeFile(
+      input.executablePath,
+      ['@echo off', `"${process.execPath}" "${entryPath}" %*`].join('\r\n'),
+      'utf8',
+    );
+    return;
+  }
   const source = `#!/usr/bin/env node
-process.env.FORGEBOARD_FAKE_GH_STATE = ${JSON.stringify(input.statePath)};
+${configuredSource(input, fixtureUrl)}`;
+  await writeFile(input.executablePath, source, {
+    encoding: 'utf8',
+    mode: 0o700,
+  });
+  await chmod(input.executablePath, 0o700);
+}
+
+function configuredSource(
+  input: {
+    readonly statePath: string;
+    readonly logPath: string;
+  },
+  fixtureUrl: string,
+): string {
+  return `process.env.FORGEBOARD_FAKE_GH_STATE = ${JSON.stringify(input.statePath)};
 process.env.FORGEBOARD_FAKE_GH_LOG = ${JSON.stringify(input.logPath)};
 await import(${JSON.stringify(fixtureUrl)});
 `;
-  await writeFile(input.executablePath, source, { encoding: 'utf8', mode: 0o700 });
-  await chmod(input.executablePath, 0o700);
 }

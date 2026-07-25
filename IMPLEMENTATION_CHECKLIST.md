@@ -2017,10 +2017,15 @@ unchecked when only a subset of their required behavior has proof.
   the repository structure gate.
 - 2026-07-25: PR #26 was reconciled with current `main` and its runtime verification was repaired.
   E2E cleanup supports both current and earlier Playwright process mappings, canvas multi-selection
-  holds the real platform shortcut during its display-scale-safe click, Windows batch shims retain
-  quoted executable paths through a validated native Node/Electron PTY bridge, and Git remote
-  configuration uses the existing write-through Windows filesystem authority for atomic commit and
-  rollback replacement. The five previously failing E2E scenarios
-  passed locally. Structure (1,475 files), controls (859 files), formatting, zero-warning lint,
-  workspace typecheck, all 3,149 unit tests, all 333 integration tests, three docs tests, seven
-  quality tests, and every production build passed.
+  holds the real platform shortcut during its display-scale-safe click, and Windows batch shims
+  retain quoted executable paths through a validated interactive `cmd.exe` PTY bootstrap in both
+  adapter and managed desktop Terminal sessions. Git remote configuration uses read/write staging
+  handles for Windows durability flushes plus the existing write-through filesystem authority with
+  bounded, identity-revalidated sharing retries for atomic commit and rollback replacement. The five
+  previously failing E2E scenarios passed locally. Reviewed Windows `.cmd`/`.bat` GitHub CLI shims
+  now launch through a metacharacter-rejecting `cmd.exe` boundary while executable identity,
+  validation auditing, and the shell-free native-executable path remain intact; the full Git
+  connections E2E flow uses a program fixture outside Forgeboard's Windows ACL-hardened user-data
+  root and passed locally. Structure (1,479 files), controls (861 files), formatting, zero-warning
+  lint, workspace typecheck, all 3,155 unit tests, all 333 integration tests, three docs tests,
+  seven quality tests, and every production build passed.

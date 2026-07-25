@@ -186,10 +186,24 @@ function shellQuote(value: string): string {
 }
 
 async function expectTerminalText(agent: Locator, expected: string): Promise<void> {
-  await expect
-    .poll(
-      async () => (await agent.getByRole('application', { name: 'Terminal' }).textContent()) ?? '',
-      { timeout: 20_000 },
-    )
-    .toContain(expected);
+  const terminal = agent.getByRole('application', { name: 'Terminal' });
+  try {
+    await expect
+      .poll(async () => (await terminal.textContent()) ?? '', {
+        timeout: 20_000,
+      })
+      .toContain(expected);
+  } catch (cause) {
+    const terminalText =
+      (await terminal.count()) === 0
+        ? '<terminal not mounted>'
+        : await terminal.textContent({ timeout: 1_000 }).catch(() => '<terminal unavailable>');
+    const agentText = await agent
+      .textContent({ timeout: 1_000 })
+      .catch(() => '<agent node unavailable>');
+    throw new Error(
+      `Agent terminal did not contain ${JSON.stringify(expected)}. Terminal: ${JSON.stringify(terminalText)}. Agent: ${JSON.stringify(agentText)}.`,
+      { cause },
+    );
+  }
 }
