@@ -107,20 +107,66 @@ function shellQuote(token: string): string {
  *     Ctrl+C (or any exit) that quits the CLI leaves a shell prompt the user can keep typing in,
  *     rather than a dead terminal. The `;` (not `&&`) means the shell is reached on any exit code.
  *
- * Windows has no equivalent login-shell contract, so the command is spawned directly.
+ * Windows native executables are spawned directly. Batch shims start inside a validated `cmd.exe`
+ * PTY so ConPTY does not have to reinterpret cmd's incompatible `/c` quoting rules; the shell
+ * remains interactive after the shim exits.
  */
 export function interactiveShellInvocation(
   executable: string,
   args: readonly string[],
   platform: NodeJS.Platform = process.platform,
   shellPath: string | undefined = process.env['SHELL'],
-): { readonly file: string; readonly args: readonly string[] } {
+  commandProcessorPath: string | undefined = process.env['COMSPEC'],
+): {
+  readonly file: string;
+  readonly args: readonly string[];
+  readonly initialInput?: string;
+} {
   if (platform === 'win32') {
+    if (/\.(?:bat|cmd)$/iu.test(executable)) {
+      return windowsBatchInvocation(executable, args, commandProcessorPath);
+    }
     return { file: executable, args: [...args] };
   }
   const shell = shellPath !== undefined && shellPath.startsWith('/') ? shellPath : '/bin/zsh';
   const command = [executable, ...args].map(shellQuote).join(' ');
-  return { file: shell, args: ['-l', '-c', `${command}; exec ${shellQuote(shell)} -i`] };
+  return {
+    file: shell,
+    args: ['-l', '-c', `${command}; exec ${shellQuote(shell)} -i`],
+  };
+}
+
+const SAFE_WINDOWS_BATCH_COMPONENT = /^[^"&|<>^%!\r\n\0]*$/u;
+
+function windowsBatchInvocation(
+  executable: string,
+  args: readonly string[],
+  commandProcessorPath: string | undefined,
+): {
+  readonly file: string;
+  readonly args: readonly string[];
+  readonly initialInput: string;
+} {
+  if (![executable, ...args].every((value) => SAFE_WINDOWS_BATCH_COMPONENT.test(value))) {
+    throw new Error(
+      'The Windows terminal command contains shell metacharacters that cannot be passed safely. Choose the underlying executable instead of its .cmd or .bat shim.',
+    );
+  }
+  const commandProcessor =
+    commandProcessorPath ??
+    path.win32.join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'cmd.exe');
+  if (
+    !path.win32.isAbsolute(commandProcessor) ||
+    !SAFE_WINDOWS_BATCH_COMPONENT.test(commandProcessor)
+  ) {
+    throw new Error('The Windows command processor path is invalid.');
+  }
+  return {
+    file: commandProcessor,
+    args: ['/d', '/q', '/v:off'],
+    initialInput:
+      ['call', `"${executable}"`, ...args.map((argument) => `"${argument}"`)].join(' ') + '\r',
+  };
 }
 
 export const createTerminalPty: TerminalPtyFactory = async (launch, beforeSpawn) => {
@@ -132,7 +178,11 @@ export const createTerminalPty: TerminalPtyFactory = async (launch, beforeSpawn)
     cwd: launch.cwd,
     // Base infrastructure first, then the reviewed allowlist, then the main-side-only peer-hub
     // env last so it always wins — it is never renderer-supplied (see `ResolvedTerminalLaunch`).
-    env: { ...baseTerminalEnvironment(), ...launch.environment, ...launch.peerEnvironment },
+    env: {
+      ...baseTerminalEnvironment(),
+      ...launch.environment,
+      ...launch.peerEnvironment,
+    },
     name: 'xterm-256color',
     cols: launch.columns,
     rows: launch.rows,
@@ -164,6 +214,7 @@ export const createTerminalPty: TerminalPtyFactory = async (launch, beforeSpawn)
     pendingExit = exit;
     for (const listener of exitListeners) listener(exit);
   });
+  if (invocation.initialInput !== undefined) terminal.write(invocation.initialInput);
   return {
     pid: terminal.pid,
     get earlyOutputTruncated() {

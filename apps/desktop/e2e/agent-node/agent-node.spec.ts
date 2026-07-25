@@ -189,11 +189,20 @@ async function expectTerminalText(agent: Locator, expected: string): Promise<voi
   const terminal = agent.getByRole('application', { name: 'Terminal' });
   try {
     await expect
-      .poll(async () => (await terminal.textContent()) ?? '', { timeout: 20_000 })
+      .poll(async () => (await terminal.textContent()) ?? '', {
+        timeout: 20_000,
+      })
       .toContain(expected);
   } catch (cause) {
+    const terminalText =
+      (await terminal.count()) === 0
+        ? '<terminal not mounted>'
+        : await terminal.textContent({ timeout: 1_000 }).catch(() => '<terminal unavailable>');
+    const agentText = await agent
+      .textContent({ timeout: 1_000 })
+      .catch(() => '<agent node unavailable>');
     throw new Error(
-      `Agent terminal did not contain ${JSON.stringify(expected)}. Terminal: ${JSON.stringify(await terminal.textContent())}. Agent: ${JSON.stringify(await agent.textContent())}.`,
+      `Agent terminal did not contain ${JSON.stringify(expected)}. Terminal: ${JSON.stringify(terminalText)}. Agent: ${JSON.stringify(agentText)}.`,
       { cause },
     );
   }

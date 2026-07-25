@@ -535,7 +535,9 @@ function readOrdinaryFileSync(filePath: string): FileSnapshot {
 async function chmodSyncAndReadOrdinaryFile(filePath: string, mode: number): Promise<FileSnapshot> {
   let handle: FileHandle;
   try {
-    handle = await open(filePath, constants.O_RDONLY | NO_FOLLOW_FLAG);
+    // Windows rejects fsync on a read-only descriptor. This is the transaction-owned staging file,
+    // so retain read/write access while durably flushing the Git mutation before identity capture.
+    handle = await open(filePath, constants.O_RDWR | NO_FOLLOW_FLAG);
   } catch (error) {
     throw stale('The prepared repository configuration is unavailable.', error);
   }
