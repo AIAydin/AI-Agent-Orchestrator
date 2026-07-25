@@ -50,6 +50,7 @@ describe('ProjectFileService', () => {
     await writeFile(path.join(projectRoot, '.env'), 'TOKEN=secret\n');
     await writeFile(path.join(projectRoot, 'ignored.txt'), 'ignored\n');
     await mkdir(path.join(projectRoot, 'ignored-dir'));
+    await writeFile(path.join(projectRoot, 'ignored-dir', 'nested.txt'), 'nested\n');
     await mkdir(path.join(projectRoot, 'src'));
     await writeFile(path.join(projectRoot, 'src', 'index.ts'), 'export {};\n');
     await writeFile(path.join(outsideRoot, 'secret.txt'), 'outside\n');
@@ -72,10 +73,11 @@ describe('ProjectFileService', () => {
       policy: { status: 'symlink' },
       canOpen: false,
     });
-    await expectCode(
-      service.tree({ projectId: PROJECT_ID, directory: 'ignored-dir' }),
-      'IGNORED_FILE',
-    );
+    const ignoredListing = await service.tree({ projectId: PROJECT_ID, directory: 'ignored-dir' });
+    expect(ignoredListing.entries.find((entry) => entry.name === 'nested.txt')).toMatchObject({
+      policy: { status: 'ignored' },
+      canOpen: false,
+    });
     const bounded = await new ProjectFileService(store, {
       maxDirectoryEntries: 2,
     }).tree({ projectId: PROJECT_ID, directory: '.' });

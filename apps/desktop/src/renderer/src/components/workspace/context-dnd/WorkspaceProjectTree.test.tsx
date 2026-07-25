@@ -110,6 +110,60 @@ describe('WorkspaceProjectTree', () => {
     await waitFor(() => expect(tree).toHaveBeenCalledTimes(4));
   });
 
+  it('shows ignored files with their shield and opens them on click without dragging', async () => {
+    const onOpenFile = vi.fn();
+    render(
+      <WorkspaceProjectTree
+        projectId={PROJECT_ID}
+        operations={{ tree: projectTreeOperation(), search: vi.fn(), read: vi.fn() }}
+        onOpenFile={onOpenFile}
+      />,
+    );
+
+    const ignored = await screen.findByRole('treeitem', { name: 'Ignored file debug.log' });
+    expect(ignored.getAttribute('draggable')).toBe('false');
+    expect(ignored.getAttribute('aria-disabled')).toBe('false');
+    fireEvent.click(ignored);
+    expect(onOpenFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relativePath: 'debug.log',
+        policy: { status: 'ignored', reason: 'Ignored by .gitignore.' },
+      }),
+    );
+  });
+
+  it('expands ignored folders by listing them on demand, shield kept', async () => {
+    const tree = projectTreeOperation();
+    render(
+      <WorkspaceProjectTree
+        projectId={PROJECT_ID}
+        operations={{ tree, search: vi.fn(), read: vi.fn() }}
+      />,
+    );
+
+    const folder = await screen.findByRole('treeitem', { name: 'Expand folder dist' });
+    fireEvent.click(folder);
+    expect(await screen.findByRole('treeitem', { name: 'Ignored file dist/bundle.js' })).toBeTruthy();
+    expect(tree).toHaveBeenCalledWith({ projectId: PROJECT_ID, directory: 'dist' });
+  });
+
+  it('opens a clicked project file on the canvas', async () => {
+    const onOpenFile = vi.fn();
+    render(
+      <WorkspaceProjectTree
+        projectId={PROJECT_ID}
+        operations={{ tree: projectTreeOperation(), search: vi.fn(), read: vi.fn() }}
+        onOpenFile={onOpenFile}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'Expand folder src' }));
+    fireEvent.click(screen.getByRole('treeitem', { name: 'File src/index.ts' }));
+    expect(onOpenFile).toHaveBeenCalledWith(
+      expect.objectContaining({ relativePath: 'src/index.ts' }),
+    );
+  });
+
   it('reveals a folder from search results by expanding it in the tree', async () => {
     render(
       <WorkspaceProjectTree
@@ -160,6 +214,24 @@ function treeResult(directory: string): FileTreeResult {
               canOpen: true,
             },
             {
+              name: 'dist',
+              relativePath: 'dist',
+              kind: 'directory',
+              sizeBytes: null,
+              modifiedAt: '2026-07-15T12:00:00.000Z',
+              policy: { status: 'ignored', reason: 'Ignored by .gitignore.' },
+              canOpen: false,
+            },
+            {
+              name: 'debug.log',
+              relativePath: 'debug.log',
+              kind: 'file',
+              sizeBytes: 40,
+              modifiedAt: '2026-07-15T12:00:00.000Z',
+              policy: { status: 'ignored', reason: 'Ignored by .gitignore.' },
+              canOpen: false,
+            },
+            {
               name: '.env',
               relativePath: '.env',
               kind: 'file',
@@ -169,17 +241,29 @@ function treeResult(directory: string): FileTreeResult {
               canOpen: false,
             },
           ]
-        : [
-            {
-              name: 'index.ts',
-              relativePath: 'src/index.ts',
-              kind: 'file',
-              sizeBytes: 10,
-              modifiedAt: '2026-07-15T12:00:00.000Z',
-              policy: { status: 'normal', reason: null },
-              canOpen: true,
-            },
-          ],
+        : directory === 'dist'
+          ? [
+              {
+                name: 'bundle.js',
+                relativePath: 'dist/bundle.js',
+                kind: 'file',
+                sizeBytes: 900,
+                modifiedAt: '2026-07-15T12:00:00.000Z',
+                policy: { status: 'ignored', reason: 'Ignored by .gitignore.' },
+                canOpen: false,
+              },
+            ]
+          : [
+              {
+                name: 'index.ts',
+                relativePath: 'src/index.ts',
+                kind: 'file',
+                sizeBytes: 10,
+                modifiedAt: '2026-07-15T12:00:00.000Z',
+                policy: { status: 'normal', reason: null },
+                canOpen: true,
+              },
+            ],
   };
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight,
   File,
@@ -31,6 +31,8 @@ interface WorkspaceProjectTreeProps {
   readonly agentTargets?: readonly WorkshopNode[];
   readonly readOnly?: boolean;
   readonly onAttach?: (targetNodeId: string, payload: WorkspaceContextDragPayload) => Promise<void>;
+  /** Opens the clicked file as a file node on the canvas. */
+  readonly onOpenFile?: (entry: FileTreeEntry) => void;
 }
 
 interface ProjectTreeRow {
@@ -44,6 +46,7 @@ export function WorkspaceProjectTree({
   agentTargets = [],
   readOnly = false,
   onAttach,
+  onOpenFile,
 }: WorkspaceProjectTreeProps) {
   const browser = useProjectFileBrowser(projectId, operations);
   const [expandedDirectories, setExpandedDirectories] = useState<ReadonlySet<string>>(
@@ -75,7 +78,26 @@ export function WorkspaceProjectTree({
     if (!agents.some((agent) => agent.id === targetNodeId)) setTargetNodeId(agents[0]?.id ?? '');
   }, [agents, targetNodeId]);
 
+  // Directories the background scan skips (ignored folders) list lazily on first expand.
+  const indexedParents = useMemo(() => {
+    const parents = new Set<string>();
+    for (const entry of browser.entries) parents.add(parentDirectory(entry.relativePath));
+    return parents;
+  }, [browser.entries]);
+  const requestedDirectories = useRef(new Set<string>());
+  useEffect(() => {
+    if (browser.status === 'loading') requestedDirectories.current.clear();
+  }, [browser.status]);
+  const ensureDirectoryListed = (relativePath: string) => {
+    if (indexedParents.has(relativePath) || requestedDirectories.current.has(relativePath)) return;
+    requestedDirectories.current.add(relativePath);
+    void browser.loadDirectory(relativePath).catch(() => {
+      requestedDirectories.current.delete(relativePath);
+    });
+  };
+
   const toggleDirectory = (relativePath: string) => {
+    ensureDirectoryListed(relativePath);
     setExpandedDirectories((current) => {
       const next = new Set(current);
       if (next.has(relativePath)) next.delete(relativePath);
@@ -84,6 +106,7 @@ export function WorkspaceProjectTree({
     });
   };
   const revealDirectory = (relativePath: string) => {
+    ensureDirectoryListed(relativePath);
     setExpandedDirectories((current) => {
       const next = new Set(current);
       let directory = relativePath;
@@ -101,8 +124,8 @@ export function WorkspaceProjectTree({
       <header>
         <div>
           <strong>Project files</strong>
-          <span title="Share files with an agent by dragging or selecting.">
-            Share files with an agent by dragging or selecting.
+          <span title="Click to open on the canvas; drag onto an agent to share.">
+            Click to open on the canvas; drag onto an agent to share.
           </span>
         </div>
         <button type="button" aria-label="Refresh project files" onClick={browser.refresh}>
@@ -136,7 +159,10 @@ export function WorkspaceProjectTree({
             searching={searching}
             expanded={expandedDirectories.has(entry.relativePath)}
             selected={selectedFile?.relativePath === entry.relativePath}
-            onSelectFile={setSelectedFile}
+            onSelectFile={(selected) => {
+              if (selected.policy.status === 'normal') setSelectedFile(selected);
+              onOpenFile?.(selected);
+            }}
             onToggleDirectory={searching ? revealDirectory : toggleDirectory}
           />
         ))}
@@ -265,12 +291,13 @@ function ProjectTreeEntry({
   readonly onToggleDirectory: (relativePath: string) => void;
 }) {
   const safe = entry.canOpen && entry.policy.status === 'normal';
+  const ignored = entry.policy.status === 'ignored';
   const draggable = safe && entry.kind === 'file';
-  const protectedPolicy = entry.policy.status !== 'normal';
   const label = searching ? entry.relativePath : entry.name;
   const indent = { paddingInlineStart: 4 + depth * 12 };
   if (entry.kind === 'directory') {
-    if (!safe) {
+    // Ignored folders stay browsable (shield kept); sensitive ones never list.
+    if (!safe && !ignored) {
       return (
         <WorkspaceTooltip content={entry.policy.reason ?? policyLabel(entry)}>
           <div
@@ -296,7 +323,7 @@ function ProjectTreeEntry({
         role="treeitem"
         className="workspace-project-tree-row"
         style={indent}
-        title={entry.relativePath}
+        title={ignored ? (entry.policy.reason ?? policyLabel(entry)) : entry.relativePath}
         aria-level={depth + 1}
         {...(searching ? {} : { 'aria-expanded': open })}
         aria-label={`${open ? 'Collapse' : 'Expand'} folder ${entry.relativePath}`}
@@ -324,12 +351,16 @@ function ProjectTreeEntry({
           <Folder size={13} aria-hidden="true" />
         )}
         <span>{label}</span>
+        {ignored ? <ShieldAlert size={12} aria-hidden="true" /> : null}
       </button>
     );
   }
+  const openable = safe || ignored;
   const guidance = draggable
-    ? `Drag ${entry.relativePath} onto an agent to share it`
-    : (entry.policy.reason ?? "This file can't be attached.");
+    ? `Drag ${entry.relativePath} onto an agent to share it, or click to open it`
+    : ignored
+      ? 'Ignored — opens on the canvas, never shared with agents.'
+      : (entry.policy.reason ?? "This file can't be opened.");
   return (
     <WorkspaceTooltip content={guidance}>
       <button
@@ -337,15 +368,17 @@ function ProjectTreeEntry({
         role="treeitem"
         className="workspace-project-tree-row"
         style={indent}
-        disabled={!draggable}
+        disabled={!openable}
         draggable={draggable}
         aria-level={depth + 1}
         aria-label={
-          draggable
+          safe
             ? `File ${entry.relativePath}`
-            : `Protected file ${entry.relativePath}${protectedPolicy ? ` (${policyLabel(entry)})` : ''}`
+            : ignored
+              ? `Ignored file ${entry.relativePath}`
+              : `Protected file ${entry.relativePath} (${policyLabel(entry)})`
         }
-        aria-disabled={!draggable}
+        aria-disabled={!openable}
         aria-selected={selected}
         onDragStart={(event) => {
           if (!draggable) {
@@ -364,7 +397,7 @@ function ProjectTreeEntry({
         <span className="workspace-project-tree-gutter" aria-hidden="true" />
         <File size={13} aria-hidden="true" />
         <span>{label}</span>
-        {draggable ? null : <ShieldAlert size={12} aria-hidden="true" />}
+        {safe ? null : <ShieldAlert size={12} aria-hidden="true" />}
       </button>
     </WorkspaceTooltip>
   );

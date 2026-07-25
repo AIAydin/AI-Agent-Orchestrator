@@ -32,7 +32,7 @@ import {
   type FileProjectStore,
 } from './authority.js';
 import { FileDomainError, fileDomainBoundary } from './errors.js';
-import { assertFileContentAllowed } from './policy.js';
+import { assertDirectoryListable, assertFileContentAllowed } from './policy.js';
 import { readProjectDocument } from './reader.js';
 import {
   defaultProjectFileSearchOptions,
@@ -91,7 +91,7 @@ export class ProjectFileService {
       const root = await resolveProjectFileRoot(this.store, parsed.projectId);
       const matcher = await loadProjectIgnoreMatcher(root);
       if (parsed.directory !== '.') {
-        assertFileContentAllowed(matcher, parsed.directory, true);
+        assertDirectoryListable(parsed.directory);
       }
       return FileTreeResultSchema.parse(
         await listProjectDirectory(root, parsed.projectId, parsed.directory, matcher, {

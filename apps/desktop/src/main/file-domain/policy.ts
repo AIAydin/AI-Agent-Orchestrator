@@ -66,3 +66,14 @@ export function assertFileContentAllowed(
     );
   }
 }
+
+/**
+ * Tree listings show ignored entries (the UI marks them), so only sensitive
+ * paths are refused here. File content stays behind assertFileContentAllowed.
+ */
+export function assertDirectoryListable(relativePath: string): void {
+  const sensitive = findSensitivePath(relativePath);
+  if (sensitive !== undefined) {
+    throw new FileDomainError('SENSITIVE_FILE', sensitive.reason);
+  }
+}
