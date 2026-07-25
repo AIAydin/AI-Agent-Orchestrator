@@ -459,17 +459,30 @@ async function prepareUserDataBoundary(
   windowsSid: string | undefined,
   getUserId: () => number | undefined,
 ): Promise<string> {
+  traceE2eDatabaseStartup('database-user-data-initial-lstat-requested');
   const initial = await optionalLstat(userDataPath);
+  traceE2eDatabaseStartup(
+    initial === undefined
+      ? 'database-user-data-initial-lstat-missing'
+      : 'database-user-data-initial-lstat-resolved',
+  );
   if (initial === undefined) {
+    traceE2eDatabaseStartup('database-user-data-mkdir-requested');
     await mkdir(userDataPath, { recursive: true, mode: 0o700 });
+    traceE2eDatabaseStartup('database-user-data-mkdir-completed');
   } else if (!initial.isDirectory() || initial.isSymbolicLink()) {
     throw new Error('The Forgeboard user data location must be an ordinary directory.');
   }
+  traceE2eDatabaseStartup('database-user-data-realpath-requested');
   const canonical = await realpath(userDataPath);
-  if (!sameCanonicalPath(canonical, resolve(userDataPath), platform)) {
+  const resolved = resolve(userDataPath);
+  traceE2eDatabaseStartup(`database-user-data-realpath-resolved:${canonical}|${resolved}`);
+  if (!sameCanonicalPath(canonical, resolved, platform)) {
     throw new Error('The Forgeboard user data location must not traverse filesystem links.');
   }
+  traceE2eDatabaseStartup('database-user-data-canonical-path-accepted');
   const current = await lstat(canonical);
+  traceE2eDatabaseStartup('database-user-data-canonical-lstat-resolved');
   if (!current.isDirectory() || current.isSymbolicLink()) {
     throw new Error('The Forgeboard user data location must be an ordinary directory.');
   }
