@@ -2006,3 +2006,8 @@ unchecked when only a subset of their required behavior has proof.
   formatting, lint, typecheck, 3,139 unit tests, 331/332 integration tests together plus the
   load-sensitive 19/19 file in isolation, three docs tests, seven quality tests, and all production
   builds passed.
+- 2026-07-25: editing an external Preview node address now navigates its already-connected managed
+  Chrome tab through the existing validated browser-companion open path instead of leaving the tab
+  on its previous page. The focused Preview node suite passed all 30 tests, followed by affected
+  formatting and zero-warning lint checks, the desktop strict typecheck, whitespace validation, and
+  the repository structure gate.
