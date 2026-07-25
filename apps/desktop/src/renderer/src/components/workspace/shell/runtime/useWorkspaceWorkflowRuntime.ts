@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 
 import type { WorkflowReviewGateView } from '../../../../../../shared/workflow/contracts.js';
-import { unwrap } from '../../../../lib/ipc.js';
 import {
   workflowPendingDecision,
   type WorkflowRuntimeContextValue,
@@ -42,12 +41,6 @@ export function useWorkspaceWorkflowRuntime({
       requestDecision,
       startNode: (nodeId: string) => void start({ kind: 'node', nodeId, includeUpstream: false }),
       cancelNode: (input) => void cancelNode(input),
-      revealArtifact: async (input) => {
-        unwrap(await window.forgeboard.workflows.revealArtifact(input));
-      },
-      openArtifact: async (input) => {
-        unwrap(await window.forgeboard.workflows.openArtifact(input));
-      },
     }),
     [
       busyAction,

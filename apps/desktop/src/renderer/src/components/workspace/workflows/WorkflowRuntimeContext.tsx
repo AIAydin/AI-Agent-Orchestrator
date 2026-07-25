@@ -1,7 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 
 import type {
-  WorkflowArtifactActionInput,
   WorkflowExecutionView,
   WorkflowInteractionEventEnvelope,
   WorkflowReviewGateView,
@@ -23,8 +22,6 @@ export interface WorkflowRuntimeContextValue {
   requestDecision(target: WorkflowDecisionTarget): void;
   startNode(nodeId: string): void;
   cancelNode(input: { executionId: string; nodeId: string; attempt: number }): void;
-  revealArtifact(input: WorkflowArtifactActionInput): Promise<void>;
-  openArtifact(input: WorkflowArtifactActionInput): Promise<void>;
 }
 
 /**

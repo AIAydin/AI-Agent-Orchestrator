@@ -9,13 +9,6 @@ import { permissionProfileUnavailableReason } from '../../permissions/permission
 
 const BUILT_IN_CHECK_KINDS = new Set<CheckKind>(['lint', 'typecheck', 'test', 'build']);
 
-export interface WorkflowCommandPreset {
-  readonly id: string;
-  readonly label: string;
-  readonly kind: NonNullable<WorkshopNode['data']['checkKind']>;
-  readonly command: WorkshopCommandConfiguration;
-}
-
 export function initialWorkflowNodeData(
   kind: NodeKind,
   _nodeId: string,
@@ -66,18 +59,6 @@ export function initialWorkflowNodeData(
   return {};
 }
 
-export function commandPresets(settings: AppSettings): readonly WorkflowCommandPreset[] {
-  return [
-    preset('lint', 'Project lint', 'lint', settings.lintCommand),
-    preset('typecheck', 'Project typecheck', 'typecheck', settings.typecheckCommand),
-    preset('test', 'Project tests', 'test', settings.testCommand),
-    preset('build', 'Project build', 'build', settings.buildCommand),
-    ...(settings.customChecks ?? []).map((check) =>
-      preset(check.id, check.label, 'custom', check.command),
-    ),
-  ].filter((candidate) => candidate.command.executable.trim().length > 0);
-}
-
 export function checkProducerId(node: WorkshopNode): string {
   return checkProducerIdFor(node.data, node.id);
 }
@@ -90,23 +71,11 @@ export function checkProducerIdFor(data: WorkshopNode['data'], nodeId: string): 
   return isCustomCheckId(configured) ? configured : nodeId;
 }
 
-export function producerIdForCheckKind(kind: CheckKind, current: string | undefined): string {
-  if (kind !== 'custom') return kind;
-  return isCustomCheckId(current) ? current : crypto.randomUUID();
-}
-
 export function normalizeCheckProducerData(data: WorkshopNode['data']): WorkshopNode['data'] {
   if (data.kind !== 'test') return data;
   const kind = data.checkKind ?? 'test';
   if (kind === 'custom' || (data.runIds?.length === 1 && data.runIds[0] === kind)) return data;
   return { ...data, checkKind: kind, runIds: [kind] };
-}
-
-export function parseLineList(value: string): string[] {
-  return value
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 export function normalizedCommand(node: WorkshopNode): WorkshopCommandConfiguration {
@@ -123,15 +92,6 @@ export function normalizedCommandFor(data: WorkshopNode['data']): WorkshopComman
   };
 }
 
-function preset(
-  id: string,
-  label: string,
-  kind: WorkflowCommandPreset['kind'],
-  command: CommandConfiguration,
-): WorkflowCommandPreset {
-  return { id, label, kind, command: copyCommand(command) };
-}
-
 function copyCommand(command: CommandConfiguration): WorkshopCommandConfiguration {
   return { executable: command.executable, arguments: [...command.arguments] };
 }
@@ -140,22 +100,6 @@ function isCustomCheckId(value: string | undefined): value is string {
   if (value === undefined) return false;
   const parsed = CheckIdSchema.safeParse(value);
   return parsed.success && !BUILT_IN_CHECK_KINDS.has(parsed.data as CheckKind);
-}
-
-export function updatedCriteria(
-  previous: NonNullable<WorkshopNode['data']['acceptanceCriteria']>,
-  value: string,
-): NonNullable<WorkshopNode['data']['acceptanceCriteria']> {
-  return value
-    .split('\n')
-    .map((description) => description.trim())
-    .filter(Boolean)
-    .map((description, index) => {
-      const current = previous[index];
-      return current?.description === description
-        ? current
-        : { id: current?.id ?? crypto.randomUUID(), description, satisfied: false };
-    });
 }
 
 export function gateLabel(state: WorkshopNode['data']['gateState']): string {

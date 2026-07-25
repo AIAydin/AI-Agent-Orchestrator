@@ -76,8 +76,6 @@ function runtimeValue(
     requestDecision,
     startNode: vi.fn(),
     cancelNode: vi.fn(),
-    revealArtifact: vi.fn(),
-    openArtifact: vi.fn(),
     ...overrides,
   } as WorkflowRuntimeContextValue;
 }
