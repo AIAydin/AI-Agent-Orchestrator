@@ -59,6 +59,7 @@ const hub: HubClient = {
       url: 'https://example.com/',
     }),
   ),
+  navigatePreview: vi.fn(() => Promise.resolve({ url: 'http://localhost:5173/settings' })),
   actionPreview: vi.fn(() =>
     Promise.resolve({
       performed: true as const,
@@ -120,6 +121,7 @@ describe('peer-mcp protocol', () => {
       'screenshot_preview',
       'inspect_preview_elements',
       'scroll_preview',
+      'navigate_preview',
       'click_preview_element',
       'type_preview_text',
     ]);
@@ -257,6 +259,23 @@ describe('peer-mcp protocol', () => {
       kind: 'click',
       elementHandle: '11111111-1111-4111-8111-111111111111',
     });
+
+    const navigated = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 10,
+        method: 'tools/call',
+        params: {
+          name: 'navigate_preview',
+          arguments: { preview_id: 'preview-1', url: 'http://localhost:5173/settings' },
+        },
+      },
+      hub,
+    );
+    expect(hub.navigatePreview).toHaveBeenCalledWith('preview-1', 'http://localhost:5173/settings');
+    expect(
+      (navigated as { result: { content: Array<{ text: string }> } }).result.content[0]?.text,
+    ).toContain('http://localhost:5173/settings');
   });
 
   it('ignores notifications (no id) and answers ping', async () => {

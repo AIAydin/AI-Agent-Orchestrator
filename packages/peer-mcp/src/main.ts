@@ -45,6 +45,11 @@ const hub: HubClient = {
       method: 'POST',
       body: JSON.stringify({ previewId, deltaY }),
     }) as never,
+  navigatePreview: (previewId, url) =>
+    call('/v1/preview/navigate', {
+      method: 'POST',
+      body: JSON.stringify({ previewId, url }),
+    }) as never,
   actionPreview: (previewId, action) =>
     call('/v1/preview/action', {
       method: 'POST',
