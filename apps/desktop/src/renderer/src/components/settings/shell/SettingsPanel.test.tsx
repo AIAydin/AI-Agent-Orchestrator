@@ -857,80 +857,20 @@ describe('SettingsPanel draft transactions', () => {
     expect(updateSettings.mock.calls[1]?.[0].externalEditorExecutable).toBe('');
   });
 
-  it('builds and validates the Custom permission profile entirely in the permission centre', async () => {
-    pickReferences.mockResolvedValue({
-      ok: true,
-      value: ['/tmp/detected-project/src'],
-    });
-    pickExecutable.mockResolvedValue({
-      ok: true,
-      value: '/usr/local/bin/codex',
-    });
+  it('offers Write in current directory instead of Custom in the permission centre', async () => {
     render(<SettingsPanel {...props({ activeProject: project() })} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Permissions' }));
     expect(screen.getByRole('heading', { name: 'Permission centre' })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Default permission profile'), {
-      target: { value: 'custom' },
-    });
-    fireEvent.change(screen.getByLabelText('File access'), {
-      target: { value: 'explicit-paths' },
-    });
+    const profileSelect = screen.getByLabelText('Default permission profile');
+    expect(profileSelect.querySelector('option[value="custom"]')).toBeNull();
 
-    const readable = screen.getByRole('group', {
-      name: 'Folders the agent can read',
-    });
-    fireEvent.click(
-      within(readable).getByRole('button', {
-        name: 'Browse project folders',
-      }),
-    );
-    await waitFor(() => expect(within(readable).getByDisplayValue('src')).toBeTruthy());
-    const writable = screen.getByRole('group', {
-      name: 'Folders the agent can change',
-    });
-    fireEvent.click(within(writable).getByRole('button', { name: 'Add a folder' }));
-    fireEvent.change(within(writable).getByRole('textbox', { name: 'Writable folder 1' }), {
-      target: { value: 'src/generated' },
-    });
-
-    fireEvent.change(screen.getByLabelText('Which programs can start it'), {
-      target: { value: 'allowlist' },
-    });
-    const executableGroup = screen.getByRole('group', {
-      name: 'Programs allowed to start the agent',
-    });
-    expect(screen.getByRole('button', { name: 'Save settings' })).toHaveProperty('disabled', true);
-    expect(
-      screen.getAllByText(/Add at least one program by its full path/u).length,
-    ).toBeGreaterThan(0);
-    fireEvent.click(
-      within(executableGroup).getByRole('button', {
-        name: 'Browse for an allowed program',
-      }),
-    );
-    await waitFor(() =>
-      expect(within(executableGroup).getByDisplayValue('/usr/local/bin/codex')).toBeTruthy(),
-    );
-    fireEvent.click(screen.getByRole('checkbox', { name: /Ask the agent to allow tests/u }));
+    fireEvent.change(profileSelect, { target: { value: 'project-write' } });
     await clickSaveSettings();
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
     expect(updateSettings.mock.calls[0]?.[0]).toMatchObject({
-      defaultPermissionProfile: 'custom',
-      customPermissionProfile: {
-        runtime: 'host',
-        filesystem: 'explicit-paths',
-        readPaths: ['src'],
-        writePaths: ['src/generated'],
-        executablePolicy: 'allowlist',
-        allowedExecutables: ['/usr/local/bin/codex'],
-        forgeboardManagedActions: {
-          developmentServers: 'deny',
-          tests: 'allow',
-        },
-        requireReviewBeforePrimary: true,
-      },
+      defaultPermissionProfile: 'project-write',
     });
   });
 
