@@ -14,11 +14,13 @@ export function VideoNodeFace({ id, data }: NodeFaceProps): JSX.Element {
   const [result, setResult] = useState<ProjectVideoLoadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // A stale `missing` flag from an old save must not block a retry, so the
+  // load is attempted whenever a file reference exists.
   useEffect(() => {
     let current = true;
     setResult(null);
     setError(null);
-    if (reference === undefined || reference.missing || reference.kind !== 'file') return;
+    if (reference === undefined || reference.kind !== 'file') return;
     void window.forgeboard.files
       .loadVideo({
         projectId: reference.projectId,
@@ -34,7 +36,7 @@ export function VideoNodeFace({ id, data }: NodeFaceProps): JSX.Element {
     return () => {
       current = false;
     };
-  }, [reference?.kind, reference?.missing, reference?.projectId, reference?.relativePath]);
+  }, [reference?.kind, reference?.projectId, reference?.relativePath]);
 
   const choose = async (): Promise<void> => {
     try {
@@ -50,6 +52,7 @@ export function VideoNodeFace({ id, data }: NodeFaceProps): JSX.Element {
   };
 
   const disabled = data.locked || session.graphReadOnly || interactions.readOnly;
+  const unavailableMessage = result !== null && result.status !== 'available' ? result.message : null;
   return (
     <section className="node-face video-node-face" aria-label="Video player">
       <div className="node-face-strip nodrag">
@@ -62,19 +65,21 @@ export function VideoNodeFace({ id, data }: NodeFaceProps): JSX.Element {
         </button>
       </div>
       <div className="node-face-body video-node-face-body nowheel nodrag">
-        {result?.status === 'available' ? (
-          <video controls preload="metadata" src={result.playbackUrl}>
+        {error === null && result?.status === 'available' ? (
+          <video
+            controls
+            preload="metadata"
+            src={result.playbackUrl}
+            onError={() => setError("This video couldn't be played. Try choosing it again.")}
+          >
             Your system cannot play this video format.
           </video>
         ) : (
           <p className="node-face-hint" role="status">
-            {error ?? result?.message ?? 'Choose an MP4, WebM, or Ogg video from this project.'}
+            {error ?? unavailableMessage ?? 'Choose an MP4, WebM, or Ogg video from this project.'}
           </p>
         )}
       </div>
-      <p className="video-node-context-hint">
-        Drag this node onto an Agent to share verified video context.
-      </p>
     </section>
   );
 }

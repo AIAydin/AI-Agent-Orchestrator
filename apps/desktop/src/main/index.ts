@@ -1,11 +1,12 @@
 import { join } from 'node:path';
 
 import { PRODUCT } from '@forgeboard/core';
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, session, shell } from 'electron';
 
 import { PACKAGED_SMOKE_MARKER } from '../shared/smoke/contracts.js';
 import { PROJECT_VIDEO_SCHEME } from '../shared/files/videos/contracts.js';
 import { attemptContextSnapshotStorageStartup } from './agent-execution/context/snapshot-store/startup.js';
+import { videoPlaybackResponse } from './file-domain/videos/playback-response.js';
 import { CloseCoordinator } from './lifecycle/close-coordinator.js';
 import { createDefaultSettings, registerIpcHandlers } from './ipc.js';
 import type { ApplicationServices } from './ipc.js';
@@ -88,9 +89,11 @@ void app
       try {
         const fileUrl = await services?.files.videoFileUrlForRequest(request.url);
         if (fileUrl === null || fileUrl === undefined) return new Response(null, { status: 404 });
-        return await net.fetch(fileUrl, {
+        // The media element sends Range requests; answer them directly so
+        // MP4s with a trailing index load and seeking works.
+        return await videoPlaybackResponse(fileUrl, {
           method: request.method,
-          headers: request.headers,
+          rangeHeader: request.headers.get('range'),
         });
       } catch {
         return new Response(null, { status: 404 });
