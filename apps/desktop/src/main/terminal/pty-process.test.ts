@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { baseTerminalEnvironment, interactiveShellInvocation } from './pty-process.js';
+import {
+  baseTerminalEnvironment,
+  interactiveShellInvocation,
+  passthroughTerminalEnvironment,
+} from './pty-process.js';
 
 const TOUCHED = [
   'HOME',
@@ -10,6 +14,8 @@ const TOUCHED = [
   'LD_PRELOAD',
   'NODE_OPTIONS',
   'FORGEBOARD_NULLY',
+  'SSH_AUTH_SOCK',
+  'FORGEBOARD_TEST_TOKEN',
 ];
 const saved = new Map(TOUCHED.map((name) => [name, process.env[name]]));
 
@@ -46,6 +52,26 @@ describe.runIf(process.platform !== 'win32')('baseTerminalEnvironment', () => {
     // FORGEBOARD_NULLY is not a base name, so it is never included regardless.
     process.env.FORGEBOARD_NULLY = 'x';
     expect(baseTerminalEnvironment()).not.toHaveProperty('FORGEBOARD_NULLY');
+  });
+});
+
+describe('passthroughTerminalEnvironment', () => {
+  it('inherits the full user environment so agent CLIs behave like in a real terminal', () => {
+    process.env.SSH_AUTH_SOCK = '/tmp/ssh-agent.sock';
+    process.env.FORGEBOARD_TEST_TOKEN = 'user-provided-secret';
+    const env = passthroughTerminalEnvironment();
+    expect(env.SSH_AUTH_SOCK).toBe('/tmp/ssh-agent.sock');
+    expect(env.FORGEBOARD_TEST_TOKEN).toBe('user-provided-secret');
+  });
+
+  it('still excludes injection-prone loader variables', () => {
+    process.env.DYLD_INSERT_LIBRARIES = '/tmp/evil.dylib';
+    process.env.LD_PRELOAD = '/tmp/evil.so';
+    process.env.NODE_OPTIONS = '--require /tmp/evil.js';
+    const env = passthroughTerminalEnvironment();
+    expect(env).not.toHaveProperty('DYLD_INSERT_LIBRARIES');
+    expect(env).not.toHaveProperty('LD_PRELOAD');
+    expect(env).not.toHaveProperty('NODE_OPTIONS');
   });
 });
 
