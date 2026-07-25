@@ -226,15 +226,11 @@ export function PreviewNodeFace({
     session.updateNodeData(id, {
       previewPort: nextPort,
       url: nextUrl,
-      ...(nextUrl === undefined
-        ? {}
-        : {
-            browserAuthenticationEnabled: false,
-            // Consent belongs to the page the user reviewed. Navigating this
-            // node to a different website must require a fresh opt-in.
-            agentBrowserAccess: false,
-            agentBrowserInteraction: false,
-          }),
+      // Consent belongs to the page the user reviewed. Pointing this node at
+      // a different address must require a fresh opt-in.
+      agentBrowserAccess: false,
+      agentBrowserInteraction: false,
+      ...(nextUrl === undefined ? {} : { browserAuthenticationEnabled: false }),
     });
   };
 
@@ -504,7 +500,7 @@ export function PreviewNodeFace({
                 type="checkbox"
                 name={`node-${id}-preview-agent-browser-access`}
                 checked={agentBrowserAccess}
-                disabled={readOnly || !isExternalUrl}
+                disabled={readOnly}
                 onChange={(event) =>
                   updateConfig({
                     agentBrowserAccess: event.target.checked,
@@ -516,8 +512,9 @@ export function PreviewNodeFace({
             </label>
             {agentBrowserAccess ? (
               <p className="preview-face-security-note">
-                Shares visible text and screenshots. Hidden fields, URL secrets, cookies, and
-                console logs stay private.
+                {isExternalUrl
+                  ? 'Shares visible text and screenshots. Hidden fields, URL secrets, cookies, and console logs stay private.'
+                  : 'Shares this page with connected agents: text, DOM outline, console, screenshots.'}
               </p>
             ) : null}
             <label className="preview-face-check">
@@ -525,7 +522,7 @@ export function PreviewNodeFace({
                 type="checkbox"
                 name={`node-${id}-preview-agent-browser-interaction`}
                 checked={agentBrowserInteraction}
-                disabled={readOnly || !isExternalUrl || !agentBrowserAccess}
+                disabled={readOnly || !agentBrowserAccess}
                 onChange={(event) =>
                   updateConfig({
                     agentBrowserInteraction: event.target.checked,
@@ -536,7 +533,9 @@ export function PreviewNodeFace({
             </label>
             {agentBrowserInteraction ? (
               <p className="preview-face-security-note">
-                Scrolling is allowed. Every click or typed entry still requires your approval.
+                {isExternalUrl
+                  ? 'Scrolling is allowed. Every click or typed entry still requires your approval.'
+                  : 'Scrolling and same-app navigation are allowed. Every click or typed entry still requires your approval.'}
               </p>
             ) : null}
             {!isExternalUrl && sideBySide ? (
