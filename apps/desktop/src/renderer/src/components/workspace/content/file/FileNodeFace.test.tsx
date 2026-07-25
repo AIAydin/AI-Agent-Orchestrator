@@ -1,73 +1,38 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 
-vi.mock('../../../file-editor/tabs/FileEditorWorkspace.js', () => ({
-  FileEditorWorkspace: ({ readOnly }: { readOnly: boolean }) => (
-    <div data-testid="file-editor" data-readonly={String(readOnly)} />
-  ),
-}));
-vi.mock('../../../file-editor/browser/ProjectFileBrowser.js', () => ({
-  ProjectFileBrowser: ({
-    onSelect,
-  }: {
-    onSelect: (selection: {
-      projectId: string;
-      relativePath: string;
-      document: { sha256: string | null };
-    }) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="file-browser"
-      onClick={() =>
-        onSelect({ projectId: 'p1', relativePath: 'src/app.ts', document: { sha256: 'abc' } })
-      }
-    >
-      pick
-    </button>
+vi.mock('../../../file-editor/MonacoTextEditor.js', () => ({
+  MonacoTextEditor: ({ value, readOnly }: { value: string; readOnly: boolean }) => (
+    <div data-testid="code-view" data-readonly={String(readOnly)}>
+      {value}
+    </div>
   ),
 }));
 
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
-import { CanvasNodeInteractionProvider } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
-import {
-  AgentSessionProvider,
-  type AgentSessionContextValue,
-} from '../../runs/agent-session/AgentSessionContext.js';
 import { FileNodeFace } from './FileNodeFace.js';
 
-const updateNodeData = vi.fn();
-const recordHistory = vi.fn();
+const read = vi.fn();
 
 afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, 'forgeboard');
 });
 beforeEach(() => {
-  updateNodeData.mockClear();
-  recordHistory.mockClear();
+  read.mockReset();
   Object.defineProperty(window, 'forgeboard', {
     configurable: true,
-    value: { files: {} },
+    value: { files: { read } },
   });
 });
-
-function sessionValue(): AgentSessionContextValue {
-  return {
-    project: { id: 'p1' },
-    graphReadOnly: false,
-    updateNodeData,
-    recordHistory,
-  } as unknown as AgentSessionContextValue;
-}
 
 function nodeData(overrides: Partial<WorkshopNodeData> = {}): WorkshopNodeData {
   return {
     kind: 'file',
-    title: 'File',
-    description: '',
+    title: 'Atlas',
+    description: 'app.ts',
     status: 'idle',
     locked: false,
     collapsed: false,
@@ -76,53 +41,85 @@ function nodeData(overrides: Partial<WorkshopNodeData> = {}): WorkshopNodeData {
   } as WorkshopNodeData;
 }
 
-function renderFace(overrides: Partial<WorkshopNodeData> = {}) {
-  return render(
-    <CanvasNodeInteractionProvider readOnly={false} setCollapsed={() => undefined}>
-      <AgentSessionProvider value={sessionValue()}>
-        <FileNodeFace id="n1" data={nodeData(overrides)} />
-      </AgentSessionProvider>
-    </CanvasNodeInteractionProvider>,
-  );
-}
-
 const fileReference = {
-  projectId: 'p1',
+  projectId: '00000000-0000-4000-8000-000000000001',
   relativePath: 'src/app.ts',
   kind: 'file' as const,
   missing: false,
 };
 
+function document(overrides: Record<string, unknown> = {}) {
+  return {
+    projectId: fileReference.projectId,
+    relativePath: fileReference.relativePath,
+    contentKind: 'text',
+    content: 'export const answer = 42;\n',
+    encoding: 'utf-8',
+    sizeBytes: 26,
+    modifiedAt: '2026-07-15T12:00:00.000Z',
+    sha256: 'a'.repeat(64),
+    readOnly: false,
+    readOnlyReason: null,
+    ...overrides,
+  };
+}
+
 describe('FileNodeFace', () => {
-  it('shows the file browser and mounts no editor without an assignment', () => {
-    renderFace();
-    expect(screen.getByTestId('file-browser')).toBeTruthy();
-    expect(screen.queryByTestId('file-editor')).toBeNull();
-  });
+  it('shows the file name and a read-only code view — nothing else', async () => {
+    read.mockResolvedValue(document());
+    render(<FileNodeFace id="n1" data={nodeData({ file: fileReference })} />);
 
-  it('persists the chosen file assignment', () => {
-    renderFace();
-    fireEvent.click(screen.getByTestId('file-browser'));
-    expect(recordHistory).toHaveBeenCalled();
-    expect(updateNodeData).toHaveBeenCalledWith('n1', {
-      file: {
-        projectId: 'p1',
-        relativePath: 'src/app.ts',
-        kind: 'file',
-        missing: false,
-        lastKnownHash: 'abc',
-      },
+    expect(screen.getByText('app.ts')).toBeTruthy();
+    const code = await screen.findByTestId('code-view');
+    expect(code.getAttribute('data-readonly')).toBe('true');
+    expect(code.textContent).toContain('export const answer = 42;');
+    expect(read).toHaveBeenCalledWith({
+      projectId: fileReference.projectId,
+      relativePath: fileReference.relativePath,
     });
+    // Minimal by design: no Choose, no Change, no Settings, no buttons at all.
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 
-  it('mounts the editor when a file is assigned (ResizeObserver absent → eager)', () => {
-    renderFace({ file: fileReference });
-    expect(screen.getByTestId('file-editor')).toBeTruthy();
-    expect(screen.getByTestId('file-editor').getAttribute('data-readonly')).toBe('false');
+  it('hints at the project tree when no file is linked and reads nothing', () => {
+    render(<FileNodeFace id="n1" data={nodeData()} />);
+    expect(screen.getByText('Click a file in the project tree to open it here.')).toBeTruthy();
+    expect(read).not.toHaveBeenCalled();
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 
-  it('opens read-only for locked nodes', () => {
-    renderFace({ file: fileReference, locked: true });
-    expect(screen.getByTestId('file-editor').getAttribute('data-readonly')).toBe('true');
+  it('surfaces the read policy message for files the renderer cannot read', async () => {
+    read.mockRejectedValue({
+      code: 'IGNORED_FILE',
+      message: 'Ignored files are not exposed to the embedded renderer.',
+    });
+    render(<FileNodeFace id="n1" data={nodeData({ file: fileReference })} />);
+    expect(
+      await screen.findByText('Ignored files are not exposed to the embedded renderer.'),
+    ).toBeTruthy();
+  });
+
+  it('keeps binary files content-free with a terse reason', async () => {
+    read.mockResolvedValue(
+      document({
+        contentKind: 'binary',
+        content: null,
+        encoding: null,
+        sha256: null,
+        readOnly: true,
+        readOnlyReason: 'Not a text file.',
+      }),
+    );
+    render(<FileNodeFace id="n1" data={nodeData({ file: fileReference })} />);
+    expect(await screen.findByText('Not a text file.')).toBeTruthy();
+    expect(screen.queryByTestId('code-view')).toBeNull();
+  });
+
+  it('marks a missing file instead of reading it', () => {
+    render(
+      <FileNodeFace id="n1" data={nodeData({ file: { ...fileReference, missing: true } })} />,
+    );
+    expect(screen.getByText('This file is missing on disk.')).toBeTruthy();
+    expect(read).not.toHaveBeenCalled();
   });
 });

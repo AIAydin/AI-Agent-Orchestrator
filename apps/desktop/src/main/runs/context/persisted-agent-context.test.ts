@@ -12,6 +12,7 @@ import type {
 } from '../../../shared/application/contracts.js';
 import {
   assertPersistedAgentLaunchAuthorityCurrent,
+  assertPersistedAgentNodeMutable,
   PersistedAgentRunContextResolver,
 } from './persisted-agent-context.js';
 
@@ -22,6 +23,32 @@ const roots: string[] = [];
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+describe('assertPersistedAgentNodeMutable', () => {
+  it('accepts a persisted Agent node, with and without a bound run', () => {
+    const runId = '00000000-0000-4000-8000-000000000042';
+    const store = { loadCanvas: () => canvas([], [], { runId }) };
+
+    expect(() => assertPersistedAgentNodeMutable(store, PROJECT_ID, 'agent-1')).not.toThrow();
+    expect(() =>
+      assertPersistedAgentNodeMutable(store, PROJECT_ID, 'agent-1', runId),
+    ).not.toThrow();
+  });
+
+  it('accepts a live agent session node persisted with context attachments', () => {
+    const store = {
+      loadCanvas: () => canvas(['file-1'], [fileNode('file-1', 'src/context.ts')]),
+    };
+    expect(() => assertPersistedAgentNodeMutable(store, PROJECT_ID, 'agent-1')).not.toThrow();
+  });
+
+  it('still refuses nodes missing from the saved canvas', () => {
+    const store = { loadCanvas: () => canvas([], []) };
+    expect(() => assertPersistedAgentNodeMutable(store, PROJECT_ID, 'missing-node')).toThrow(
+      /exact persisted Agent node/u,
+    );
+  });
 });
 
 describe('PersistedAgentRunContextResolver', () => {

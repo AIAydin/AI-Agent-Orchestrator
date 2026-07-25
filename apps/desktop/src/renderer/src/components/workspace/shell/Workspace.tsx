@@ -126,6 +126,7 @@ import { useDiffReviewNodeController } from '../diff-review/useDiffReviewNodeCon
 import { useDiffReviewSession } from '../diff-review/useDiffReviewSession.js';
 import type { WorkspaceContextDragPayload } from '../context-dnd/contracts.js';
 import { linkProjectFileToAgent, removeProjectFileFromAgent } from '../context-dnd/linking.js';
+import { openProjectFileNode } from '../model/open-file-node.js';
 import {
   runnableWorkflowNodeCount,
   workflowExecutionMatchesCurrentCanvas,
@@ -763,6 +764,53 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     [collaborationCanvas.graphReadOnly, record, reportCollaborationReadOnly],
   );
 
+  const openProjectFileOnCanvas = useCallback(
+    (entry: { readonly relativePath: string }) => {
+      if (collaborationCanvas.graphReadOnly) {
+        reportCollaborationReadOnly();
+        return;
+      }
+      const result = openProjectFileNode({
+        projectId: project.id,
+        relativePath: entry.relativePath,
+        nodes: nodesRef.current,
+        newNodeId: crypto.randomUUID(),
+      });
+      if (result.kind === 'existing') {
+        const node = nodesRef.current.find((candidate) => candidate.id === result.nodeId);
+        setSelectedNodeId(result.nodeId);
+        setSelectedEdgeId(null);
+        setNodes((items) =>
+          items.map((item) => ({ ...item, selected: item.id === result.nodeId })),
+        );
+        if (node !== undefined) {
+          void instance?.setCenter(node.position.x, node.position.y, {
+            zoom: 1.15,
+            duration: settings.reducedMotion ? 0 : 220,
+          });
+        }
+        return;
+      }
+      record();
+      pendingNodeSelection.current = result.nodeId;
+      nodesRef.current = result.nodes;
+      setNodes(result.nodes);
+      setSelectedNodeId(result.nodeId);
+      window.setTimeout(() => {
+        if (pendingNodeSelection.current === result.nodeId) pendingNodeSelection.current = null;
+      }, 250);
+      setEvents((items) => [`Opened ${entry.relativePath} as a file node.`, ...items].slice(0, 30));
+    },
+    [
+      collaborationCanvas.graphReadOnly,
+      instance,
+      project.id,
+      record,
+      reportCollaborationReadOnly,
+      settings.reducedMotion,
+    ],
+  );
+
   const attachProjectFileContext = useCallback(
     async (targetNodeId: string, payload: WorkspaceContextDragPayload): Promise<void> => {
       if (collaborationGraphReadOnlyRef.current) {
@@ -814,6 +862,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       recordSnapshot(currentNodes, currentEdges);
       nodesRef.current = result.nodes;
       setNodes(result.nodes);
+      // Persist right after the state commit so main-process agent controls see
+      // the attachment (they validate against the SAVED canvas, not live state).
+      window.setTimeout(() => void flushCanvas(), 0);
       setEvents((items) =>
         [
           `${result.createdFileNode ? 'Created a file node and added' : 'Added'} the project file to the agent.`,
@@ -821,7 +872,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         ].slice(0, 30),
       );
     },
-    [project.id, recordSnapshot, reportCollaborationReadOnly],
+    [flushCanvas, project.id, recordSnapshot, reportCollaborationReadOnly],
   );
 
   const removeProjectFileContext = useCallback(
@@ -1285,6 +1336,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     graphReadOnly: collaborationCanvas.graphReadOnly,
     openSettings: onOpenSettings,
     reportError: onError,
+    flushCanvas,
     updateNodeData,
     fitGroupFrame,
     arrangeGroupFrame,
@@ -1374,6 +1426,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           onAddExtensionNode={addExtensionNode}
           onInitializeGit={() => void initializeGit()}
           onAttachAgentContext={attachProjectFileContext}
+          onOpenProjectFile={openProjectFileOnCanvas}
           onSelectNode={(node) => {
             setSelectedNodeId(node.id);
             setSelectedEdgeId(null);

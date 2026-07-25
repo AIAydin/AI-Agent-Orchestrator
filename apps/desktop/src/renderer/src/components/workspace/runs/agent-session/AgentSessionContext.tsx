@@ -52,6 +52,12 @@ export interface AgentSessionContextValue {
   readonly graphReadOnly: boolean;
   openSettings(): void;
   reportError(message: string): void;
+  /**
+   * Persists the live canvas now. Agent launch/controls validate against the
+   * SAVED canvas in the main process, so faces flush before starting a session
+   * to keep "Agent controls require an exact persisted Agent node." away.
+   */
+  flushCanvas(): Promise<boolean>;
   updateNodeData(nodeId: string, data: Partial<WorkshopNodeData>): void;
   fitGroupFrame(nodeId: string): void;
   arrangeGroupFrame(nodeId: string, layout: NonNullable<WorkshopNodeData['layout']>): void;

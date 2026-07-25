@@ -1,108 +1,104 @@
-import { FolderSearch, Replace, type LucideProps } from 'lucide-react';
 import { useEffect, useRef, useState, type JSX } from 'react';
 
 import {
-  ProjectFileBrowser,
-  type ProjectFileSelection,
-} from '../../../file-editor/browser/ProjectFileBrowser.js';
-import { FileEditorWorkspace } from '../../../file-editor/tabs/FileEditorWorkspace.js';
+  FileDocumentSchema,
+  type FileDocument,
+} from '../../../../../../shared/files/contracts.js';
 import { minimumNodeDimensionsForKind } from '../../../../../../shared/canvas/node-dimensions.js';
+import { fileBrowserError } from '../../../file-editor/browser/useProjectFileBrowser.js';
+import { languageForFile } from '../../../file-editor/language.js';
+import { MonacoTextEditor } from '../../../file-editor/MonacoTextEditor.js';
 import { useAboveMinSize } from '../../../../lib/use-above-min-size.js';
 import type { NodeFaceProps } from '../../canvas/faces/node-face-registry.js';
-import { useCanvasNodeInteractions } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
-import { useAgentSession } from '../../runs/agent-session/AgentSessionContext.js';
 
 const FILE_FACE_MINIMUM = minimumNodeDimensionsForKind('file');
 
+type FileViewState =
+  | { readonly status: 'loading' }
+  | { readonly status: 'error'; readonly message: string }
+  | { readonly status: 'ready'; readonly document: FileDocument };
+
 /**
- * File face: the Monaco-backed FileEditorWorkspace fills the node body, but only
- * mounts while the node is expanded, has a usable file assignment, and is above
- * the file kind's minimum size — one Monaco instance per visible expanded file
- * node is the perf concern this guards. File assignment uses a ProjectFileBrowser
- * popover. Alt-text/relink and agent-context sharing stay in the panel until 2d.
+ * Minimal file node: the file name in the strip and the file's code below —
+ * read-only, scrollable, nothing else. Clicking a file in the project tree is
+ * what creates these nodes; a node without a file only shows a hint.
  */
-export function FileNodeFace({ id, data }: NodeFaceProps): JSX.Element {
-  const session = useAgentSession();
-  const interactions = useCanvasNodeInteractions();
-  const bodyRef = useRef<HTMLDivElement | null>(null);
+export function FileNodeFace({ data }: NodeFaceProps): JSX.Element {
   const reference = data.file;
-  const graphReadOnly = session.graphReadOnly || interactions.readOnly;
-  const [browsing, setBrowsing] = useState(reference === undefined || reference.missing);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   const large = useAboveMinSize(bodyRef, FILE_FACE_MINIMUM);
+  const [view, setView] = useState<FileViewState>({ status: 'loading' });
+  const readable = reference !== undefined && !reference.missing && reference.kind === 'file';
 
   useEffect(() => {
-    if (reference === undefined || reference.missing) setBrowsing(true);
-  }, [reference?.missing, reference?.projectId, reference?.relativePath]);
-
-  const editable = reference !== undefined && !reference.missing && reference.kind === 'file';
-  const editorReadOnly = graphReadOnly || data.locked || !editable;
-
-  const selectFile = (selection: ProjectFileSelection): void => {
-    session.recordHistory();
-    session.updateNodeData(id, {
-      file: {
-        projectId: selection.projectId,
-        relativePath: selection.relativePath,
-        kind: 'file',
-        missing: false,
-        ...(selection.document.sha256 === null ? {} : { lastKnownHash: selection.document.sha256 }),
-      },
-    });
-    setBrowsing(false);
-  };
+    if (!readable || reference === undefined) return;
+    let active = true;
+    setView({ status: 'loading' });
+    void window.forgeboard.files
+      .read({ projectId: reference.projectId, relativePath: reference.relativePath })
+      .then((document) => {
+        if (!active) return;
+        setView({ status: 'ready', document: FileDocumentSchema.parse(document) });
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setView({
+          status: 'error',
+          message: fileBrowserError(cause, "This file couldn't be opened."),
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [readable, reference?.projectId, reference?.relativePath]);
 
   return (
-    <section className="node-face file-node-face" aria-label="File editor">
+    <section className="node-face file-node-face" aria-label="File view">
       <div className="node-face-strip nodrag">
-        <span className="node-face-strip-label">
-          {reference === undefined ? 'No file assigned' : reference.relativePath}
-        </span>
-        <button
-          type="button"
-          aria-label={reference === undefined ? 'Choose file' : 'Change file'}
-          aria-pressed={browsing}
-          disabled={data.locked || graphReadOnly}
-          onClick={() => setBrowsing((open) => !open)}
+        <span
+          className="node-face-strip-label"
+          title={reference === undefined ? undefined : reference.relativePath}
         >
-          {reference === undefined ? <FolderSearch {...ICON} /> : <Replace {...ICON} />}
-          {reference === undefined ? 'Choose' : 'Change'}
-        </button>
+          {reference === undefined ? 'No file' : fileName(reference.relativePath)}
+        </span>
       </div>
 
       <div className="node-face-body nowheel nodrag" ref={bodyRef}>
-        {reference !== undefined && reference.kind !== 'file' ? (
-          <p className="node-face-hint" role="status">
-            This node points to a {reference.kind}. Choose a file to edit it here.
+        {!readable ? (
+          <p className="node-face-hint">
+            {reference?.missing === true
+              ? 'This file is missing on disk.'
+              : 'Click a file in the project tree to open it here.'}
           </p>
-        ) : !editable ? (
-          <p className="node-face-hint">Choose a file from this project to edit it on the node.</p>
         ) : !large ? (
-          <p className="node-face-hint">Make this node larger to edit the file.</p>
-        ) : (
-          <FileEditorWorkspace
-            primary={{ projectId: reference.projectId, relativePath: reference.relativePath }}
-            operations={window.forgeboard.files}
-            readOnly={editorReadOnly}
-            onBrowseFiles={() => setBrowsing(true)}
-            onRevealInTree={() => setBrowsing(true)}
+          <p className="node-face-hint">Make this node larger to read the file.</p>
+        ) : view.status === 'loading' ? (
+          <p className="node-face-hint" role="status">
+            Opening file…
+          </p>
+        ) : view.status === 'error' ? (
+          <p className="node-face-hint" role="alert">
+            {view.message}
+          </p>
+        ) : view.document.contentKind === 'text' ? (
+          <MonacoTextEditor
+            value={view.document.content ?? ''}
+            language={languageForFile(view.document.relativePath)}
+            readOnly
+            ariaLabel={`Reading ${view.document.relativePath}`}
+            onChange={() => undefined}
+            onSave={() => undefined}
           />
+        ) : (
+          <p className="node-face-hint" role="status">
+            {view.document.readOnlyReason ?? 'Not a text file.'}
+          </p>
         )}
-
-        {browsing ? (
-          <div className="node-face-popover" aria-label="Choose a project file">
-            <ProjectFileBrowser
-              projectId={session.project.id}
-              operations={window.forgeboard.files}
-              {...(reference === undefined ? {} : { selectedRelativePath: reference.relativePath })}
-              assignmentDisabled={data.locked}
-              onSelect={selectFile}
-              {...(reference === undefined ? {} : { onCancel: () => setBrowsing(false) })}
-            />
-          </div>
-        ) : null}
       </div>
     </section>
   );
 }
 
-const ICON: LucideProps = { size: 12, 'aria-hidden': true };
+function fileName(relativePath: string): string {
+  return relativePath.split('/').at(-1) ?? relativePath;
+}

@@ -56,6 +56,7 @@ describe('WorkspaceRail accessibility', () => {
       onInitializeGit: vi.fn(),
       onSelectNode: vi.fn(),
       onAttachAgentContext: vi.fn(),
+      onOpenProjectFile: vi.fn(),
     };
     const { rerender } = render(<WorkspaceRail {...props} tab="project" />);
 
@@ -112,6 +113,7 @@ describe('WorkspaceRail accessibility', () => {
         onInitializeGit={onInitializeGit}
         onSelectNode={vi.fn()}
         onAttachAgentContext={vi.fn()}
+        onOpenProjectFile={vi.fn()}
       />,
     );
 
@@ -142,6 +144,7 @@ describe('WorkspaceRail accessibility', () => {
         onInitializeGit={vi.fn()}
         onSelectNode={vi.fn()}
         onAttachAgentContext={vi.fn()}
+        onOpenProjectFile={vi.fn()}
       />,
     );
 
