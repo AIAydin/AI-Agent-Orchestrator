@@ -1,12 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 
-import type {
-  AppSettings,
-  CommandConfiguration,
-} from '../../../../shared/application/contracts.js';
-import { CommandBuilder } from '../configuration/CommandBuilder.js';
-import type { CommandPurpose } from '../configuration/dependency-guidance.js';
-import type { CommandReadinessStatus } from '../configuration/useCommandReadiness.js';
+import type { AppSettings } from '../../../../shared/application/contracts.js';
 
 export interface SettingsDraftProps {
   draft: AppSettings;
@@ -35,36 +29,6 @@ export function SettingsSection({
       </header>
       <div className="settings-fields">{children}</div>
     </section>
-  );
-}
-
-export function CommandEditor({
-  label,
-  name,
-  value,
-  onChange,
-  onBrowse,
-  purpose = 'check',
-  readiness,
-}: {
-  label: string;
-  name: string;
-  value: CommandConfiguration;
-  onChange: (value: CommandConfiguration) => void;
-  onBrowse: () => void;
-  purpose?: CommandPurpose;
-  readiness?: CommandReadinessStatus | undefined;
-}) {
-  return (
-    <CommandBuilder
-      label={label}
-      name={name}
-      value={value}
-      purpose={purpose}
-      onChange={onChange}
-      onBrowse={onBrowse}
-      readiness={readiness}
-    />
   );
 }
 

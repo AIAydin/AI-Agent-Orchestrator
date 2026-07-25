@@ -225,7 +225,6 @@ export function App() {
             await loadBootstrap();
             setShowSettings(false);
           }}
-          onExtensionsChanged={loadBootstrap}
           onDeleteAll={async (confirmation) => {
             const deleted = unwrap(await window.forgeboard.privacy.deleteAll(confirmation));
             if (!deleted) return;

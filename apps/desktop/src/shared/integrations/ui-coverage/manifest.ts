@@ -1,8 +1,6 @@
 export type IntegrationUiRoute =
   | 'Welcome'
   | 'Settings > Agents & runtime'
-  | 'Settings > Git & previews'
-  | 'Settings > Extensions'
   | 'Settings > Connectivity'
   | 'Settings > Data & privacy'
   | 'Settings > Permissions';
@@ -15,13 +13,9 @@ export type IntegrationStateScope =
   | 'external-evidence';
 
 export type IntegrationReadinessClass =
-  | 'provider-oauth'
-  | 'agent-cli'
-  | 'git-config'
   | 'github-cli'
   | 'docker-runtime'
   | 'collaboration-session'
-  | 'extension-review'
   | 'update-review'
   | 'folder-readiness'
   | 'storage-integrity'
@@ -63,16 +57,12 @@ const field = (
 
 const SETTINGS_PANEL_TEST =
   'apps/desktop/src/renderer/src/components/settings/shell/SettingsPanel.test.tsx';
-const PROVIDER_TEST =
-  'apps/desktop/src/renderer/src/components/settings/agents/connections/ProviderConnectionCards.test.tsx';
 const GIT_TEST =
-  'apps/desktop/src/renderer/src/components/settings/git-connections/GitConnectionsSettings.test.tsx';
+  'apps/desktop/src/renderer/src/components/settings/git-connections/GitHubCliConnection.test.tsx';
 const COLLAB_INVITE_TEST =
   'apps/desktop/src/renderer/src/components/settings/collaboration/CollaborationInvites.test.tsx';
 const COLLAB_ROOM_TEST =
   'apps/desktop/src/renderer/src/components/settings/collaboration/room/RoomManagement.test.tsx';
-const PRESENCE_TEST =
-  'apps/desktop/src/renderer/src/components/settings/integration-coverage/IntegrationActionPresence.test.tsx';
 const UPDATE_TEST =
   'apps/desktop/src/renderer/src/components/settings/updates/UpdateSettings.test.tsx';
 const RECOVERY_TEST =
@@ -84,121 +74,8 @@ const RECOVERY_TEST =
  * recovery plans stay in their narrower authority scopes.
  */
 export const INTEGRATION_UI_MANIFEST = {
-  codexConnection: {
-    route: 'Settings > Agents & runtime',
-    controls: [
-      button('Connect with OpenAI', {
-        within: 'Codex CLI',
-        state: 'disconnected',
-      }),
-      button('Refresh', { within: 'Codex CLI' }),
-      button('Cancel sign-in', {
-        within: 'Codex CLI',
-        state: 'connecting',
-        conditional: true,
-      }),
-      button('Disconnect', {
-        within: 'Codex CLI',
-        state: 'connected',
-        conditional: true,
-      }),
-    ],
-    readiness: 'provider-oauth',
-    stateScope: 'secret-bound',
-    exportPolicy: 'never-export',
-    evidence: {
-      source:
-        'apps/desktop/src/renderer/src/components/settings/agents/connections/ProviderConnectionCards.tsx',
-      test: PROVIDER_TEST,
-      testTitle: 'names both provider cards and scopes their independent connection lifecycles',
-    },
-    limitation: 'OpenAI owns OAuth tokens; Forgeboard retains only normalized local CLI status.',
-  },
-  claudeConnection: {
-    route: 'Settings > Agents & runtime',
-    controls: [
-      button('Connect with Anthropic', {
-        within: 'Claude Code',
-        state: 'disconnected',
-      }),
-      button('Refresh', { within: 'Claude Code' }),
-      button('Reconnect', {
-        within: 'Claude Code',
-        state: 'needs-refresh',
-        conditional: true,
-      }),
-      button('Disconnect', {
-        within: 'Claude Code',
-        state: 'connected',
-        conditional: true,
-      }),
-    ],
-    readiness: 'provider-oauth',
-    stateScope: 'secret-bound',
-    exportPolicy: 'never-export',
-    evidence: {
-      source:
-        'apps/desktop/src/renderer/src/components/settings/agents/connections/ProviderConnectionCards.tsx',
-      test: PROVIDER_TEST,
-      testTitle: 'names both provider cards and scopes their independent connection lifecycles',
-    },
-    limitation: 'Anthropic owns OAuth tokens; Forgeboard retains only normalized local CLI status.',
-  },
-  agentCliReadiness: {
-    route: 'Settings > Agents & runtime',
-    controls: [button('Check OpenAI Codex CLI again'), field('combobox', 'Default agent')],
-    readiness: 'agent-cli',
-    stateScope: 'device-bound',
-    exportPolicy: 'reference-only',
-    evidence: {
-      source: 'apps/desktop/src/renderer/src/components/readiness/AgentReadinessPanel.tsx',
-      test: SETTINGS_PANEL_TEST,
-      testTitle: 'requires current readiness evidence for a configured non-default agent',
-    },
-    limitation:
-      'Executable paths may export as preferences, but readiness evidence is device-local.',
-  },
-  gitCommitIdentity: {
-    route: 'Settings > Git & previews',
-    controls: [
-      field('textbox', 'Git identity name'),
-      field('textbox', 'Git identity email'),
-      button('Check Git identity'),
-    ],
-    readiness: 'git-config',
-    stateScope: 'portable-setting',
-    exportPolicy: 'portable',
-    evidence: {
-      source: 'apps/desktop/src/renderer/src/components/settings/git-identity/GitIdentityCheck.tsx',
-      test: 'apps/desktop/src/renderer/src/components/settings/git-identity/GitIdentityCheck.test.tsx',
-      testTitle: 'checks the exact normalized unsaved Settings identity without a project',
-    },
-    limitation:
-      'The configured identity is portable; repository fallback is project-bound and transient check evidence remains renderer-session state. Neither is exported.',
-  },
-  gitProjectRemotes: {
-    route: 'Settings > Git & previews',
-    controls: [
-      button('Refresh remotes'),
-      button('Add remote'),
-      button('Choose a folder on this computer'),
-      button('Review replacement', { conditional: true }),
-      button('Remove origin', { conditional: true }),
-    ],
-    readiness: 'git-config',
-    stateScope: 'project-bound',
-    exportPolicy: 'reference-only',
-    evidence: {
-      source:
-        'apps/desktop/src/renderer/src/components/settings/git-connections/RemoteConnections.tsx',
-      test: GIT_TEST,
-      testTitle:
-        'uses a native local picker, discloses exact removal refs, and cancels the plan explicitly',
-    },
-    limitation: 'Remote mutations apply to the selected repository and are not portable settings.',
-  },
   githubCli: {
-    route: 'Settings > Git & previews',
+    route: 'Settings > Agents & runtime',
     controls: [
       button('Refresh GitHub CLI status'),
       button('Find GitHub CLI automatically'),
@@ -233,7 +110,8 @@ export const INTEGRATION_UI_MANIFEST = {
   collaborationSession: {
     route: 'Settings > Connectivity',
     controls: [
-      button('Join with invite'),
+      button('Join room'),
+      button('Create invite link'),
       button('Connect with access token'),
       button('Create room and connect'),
       button('Leave room', { state: 'connected', conditional: true }),
@@ -291,27 +169,6 @@ export const INTEGRATION_UI_MANIFEST = {
     },
     limitation:
       'Owner credentials and administrator input remain main-process or volatile authority.',
-  },
-  localExtensions: {
-    route: 'Settings > Extensions',
-    controls: [
-      button('Choose extension folder'),
-      button('Choose extension file'),
-      button('Refresh'),
-      button('Continue to confirmation', { conditional: true }),
-      button('Remove extension', { conditional: true }),
-    ],
-    readiness: 'extension-review',
-    stateScope: 'device-bound',
-    exportPolicy: 'never-export',
-    evidence: {
-      source: 'apps/desktop/src/renderer/src/components/extensions/ExtensionSettings.tsx',
-      test: PRESENCE_TEST,
-      testTitle:
-        'reviews and applies extension install, update, and removal through renderer controls',
-    },
-    limitation:
-      'Trusted snapshots and source folders stay on this device and are excluded from exports.',
   },
   applicationUpdates: {
     route: 'Settings > Connectivity',

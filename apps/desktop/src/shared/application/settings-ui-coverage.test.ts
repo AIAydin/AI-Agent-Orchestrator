@@ -18,4 +18,12 @@ describe('ordinary settings UI coverage', () => {
       'Automatic downloads are unsupported; the UI permits only clearing the legacy value.',
     ]);
   });
+
+  it('states an honest reason for every field the simplified UI no longer edits', () => {
+    const defaultOnly = Object.values(SETTINGS_UI_MANIFEST).filter(
+      (entry) => entry.kind === 'default-only',
+    );
+    expect(defaultOnly).toHaveLength(18);
+    expect(defaultOnly.every((entry) => entry.reason.length > 20)).toBe(true);
+  });
 });

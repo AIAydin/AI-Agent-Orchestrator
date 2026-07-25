@@ -1,6 +1,5 @@
 import type { AppSettings, Project } from '../../../../shared/application/contracts.js';
 import { ConfiguredPermissionSummary } from '../permissions/ConfiguredPermissionSummary.js';
-import { CustomPermissionProfileEditor } from '../permissions/CustomPermissionProfileEditor.js';
 import {
   PERMISSION_PROFILE_OPTIONS,
   permissionProfileNeedsDocker,
@@ -20,11 +19,14 @@ export function PermissionSettings({
   busy,
   onError,
 }: PermissionSettingsProps) {
+  const options = PERMISSION_PROFILE_OPTIONS.filter(
+    (option) => option.value !== 'custom' || draft.defaultPermissionProfile === 'custom',
+  );
   return (
     <>
       <SettingsSection
-        title="Permission centre"
-        description="Pick the default profile and see what each one allows. Every launch still asks for your approval."
+        title="Permissions"
+        description="Pick the default profile for new agent sessions. Each card shows what it allows."
       >
         <label>
           Default permission profile
@@ -44,7 +46,7 @@ export function PermissionSettings({
               });
             }}
           >
-            {PERMISSION_PROFILE_OPTIONS.map((option) => (
+            {options.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -52,7 +54,7 @@ export function PermissionSettings({
           </select>
         </label>
         <div className="permission-profile-cards" aria-label="Available permission profiles">
-          {PERMISSION_PROFILE_OPTIONS.map((option) => (
+          {options.map((option) => (
             <article key={option.value}>
               <strong>{option.label}</strong>
               <p>{option.description}</p>
@@ -60,18 +62,6 @@ export function PermissionSettings({
             </article>
           ))}
         </div>
-      </SettingsSection>
-      <SettingsSection
-        title="Custom profile"
-        description="One reusable profile with ordinary controls — no code, JSON, or environment files to edit."
-      >
-        <CustomPermissionProfileEditor
-          draft={draft}
-          setDraft={setDraft}
-          activeProject={activeProject}
-          busy={busy}
-          onError={onError}
-        />
       </SettingsSection>
       <SettingsSection
         title="Saved approvals"
