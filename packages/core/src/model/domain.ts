@@ -626,6 +626,17 @@ export const NoteImageNodeSchema = createNodeSchema(
     .strict(),
 );
 
+export const TextNodeSchema = createNodeSchema(
+  'text',
+  z
+    .object({
+      text: z.string().max(10_000).default(''),
+      fontSize: z.enum(['s', 'm', 'l']).default('m'),
+      rotationDeg: z.number().min(-180).max(180).default(0),
+    })
+    .strict(),
+);
+
 export const GroupFrameNodeSchema = createNodeSchema(
   'group-frame',
   z
@@ -668,6 +679,7 @@ export const CanvasNodeSchema = z.discriminatedUnion('type', [
   DiagramNodeSchema,
   WhiteboardMockupNodeSchema,
   NoteImageNodeSchema,
+  TextNodeSchema,
   GroupFrameNodeSchema,
   ExtensionNodeSchema,
 ]);

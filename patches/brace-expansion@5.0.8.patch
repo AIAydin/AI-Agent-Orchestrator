@@ -1,0 +1,12 @@
+diff --git a/dist/commonjs/index.js b/dist/commonjs/index.js
+index be9df86be09c7655787a65c55ae6da01858894c3..5365182088255cb35246d63f4f1aa728c57ca1ae 100644
+--- a/dist/commonjs/index.js
++++ b/dist/commonjs/index.js
+@@ -260,4 +260,7 @@ function expand_(str, max, maxLength, isTop) {
+     }
+     return acc;
+ }
++// Preserve the callable CommonJS API expected by legacy minimatch consumers while retaining the
++// named exports introduced in brace-expansion 5.
++module.exports = Object.assign(expand, exports);
+ //# sourceMappingURL=index.js.map

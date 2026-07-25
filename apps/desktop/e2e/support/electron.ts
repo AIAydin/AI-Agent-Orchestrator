@@ -24,8 +24,19 @@ export interface LaunchDesktopOptions {
   readonly environment?: Readonly<Record<string, string>>;
 }
 
+interface ElectronImplementation {
+  _browserContext: {
+    _browser: {
+      killForTests(): Promise<void>;
+    };
+  };
+}
+
 interface ElectronApplicationInternals {
-  _toImpl(): {
+  _connection?: {
+    toImpl(app: ElectronApplication): ElectronImplementation;
+  };
+  _toImpl?(): {
     _browserContext: {
       _browser: {
         killForTests(): Promise<void>;
@@ -133,10 +144,11 @@ async function terminateWindowsProcessTree(processId: number): Promise<void> {
   }
 }
 
-function electronImplementation(
-  app: ElectronApplication,
-): ReturnType<ElectronApplicationInternals['_toImpl']> {
-  return (app as unknown as ElectronApplicationInternals)._toImpl();
+function electronImplementation(app: ElectronApplication): ElectronImplementation {
+  const internals = app as unknown as ElectronApplicationInternals;
+  if (internals._toImpl !== undefined) return internals._toImpl();
+  if (internals._connection !== undefined) return internals._connection.toImpl(app);
+  throw new Error('The Playwright Electron application does not expose a process cleanup path.');
 }
 
 async function removeWindowsLockFile(path: string): Promise<void> {

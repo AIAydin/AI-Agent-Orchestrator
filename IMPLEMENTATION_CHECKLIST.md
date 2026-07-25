@@ -899,9 +899,9 @@ unchecked when only a subset of their required behavior has proof.
   macOS Intel proof remains open. Forgeboard validates and uses `gh` but does not install it or
   authenticate the user. An operating-system or process interruption inside the remote config
   transaction can leave its Git lock/recovery staging artifact, and UI repair for that state is not
-  implemented. The repository remains private with no tags or GitHub Release, so there is not yet a
-  public download. Hosted Actions remain excluded because the billing/payment gate stops jobs before
-  any workflow step executes.
+  implemented. At this checkpoint the repository was private with no tags or GitHub Release, so
+  there was not yet a public download. Hosted Actions remained excluded because the billing/payment
+  gate stopped jobs before any workflow step executed.
 - 2026-07-17: Interactive Terminal nodes gained complete ordinary-user configuration in the
   inspector: native executable selection, literal argument rows, project-relative cwd, and
   Settings-allowlisted environment names. Every launch uses an expiring single-use renderer review
@@ -1755,9 +1755,9 @@ unchecked when only a subset of their required behavior has proof.
   the production marker/control audit found no required TODO, fake-success, placeholder, stub, or
   inert-button blocker. A fresh unsigned macOS arm64 ZIP, DMG, and unpacked application were built,
   and packaged first-run smoke passed. This closes checklist items 188 and 196. Items 18, 183, and
-  184 remain honestly open because the private repository still has no published GitHub Release and
-  hosted Windows/Linux installation plus signing/notarization evidence requires restored GitHub
-  Actions billing and the optional platform credentials.
+  184 remain honestly open because, at this checkpoint, the private repository had no published
+  GitHub Release and hosted Windows/Linux installation plus signing/notarization evidence required
+  restored GitHub Actions billing and the optional platform credentials.
 - 2026-07-21: Forgeboard gained an opt-in local voice-command path backed by pinned Transformers.js,
   ONNX Runtime, and the exact `onnx-community/whisper-tiny.en` revision. Settings owns model
   install/removal and safe-action auto-run; the one-time model download uses the main outbound gate
@@ -1998,3 +1998,28 @@ unchecked when only a subset of their required behavior has proof.
   hosting, startup, Settings, Terminal, canvas, E2E, invite, or persistent-session behavior.
 - 2026-07-24: the post-merge repair persists Agent nodes; fixes canvas input; injects bundled Git
   into Preview; uses native Windows ACLs; and checks Test artifacts by visible Refresh, not IPC.
+- 2026-07-25: public-repository hardening enabled GitHub secret scanning, push protection,
+  Dependabot alerts/security updates and automated fixes, and private vulnerability reporting.
+  Public documentation no longer exposes personal checkout paths or describes the repository as
+  private. The one Stripe-shaped redaction fixture now constructs its test value at runtime, and
+  GitHub has zero open secret alerts. Electron, Playwright, Vite, Vitest, Sharp, tar, and
+  brace-expansion now resolve to patched versions; a pnpm-managed compatibility patch preserves the
+  callable CommonJS API required by legacy minimatch consumers. The complete 875-package audit
+  reports zero advisories. Structure (1,473 files), controls (858 files), formatting, lint,
+  typecheck, all 3,139 unit tests, all 332 integration tests, three docs tests, seven quality tests,
+  every production build, and the Electron 39 text-node create/edit/rotate/relaunch E2E scenario
+  passed. The wider E2E suite still contains pre-existing stale readiness and canvas expectations;
+  its representative keyboard-readiness failure reproduces unchanged on pristine `main`.
+- 2026-07-25: editing an external Preview node address now navigates its already-connected managed
+  Chrome tab through the existing validated browser-companion open path instead of leaving the tab
+  on its previous page. The focused Preview node suite passed all 30 tests, followed by affected
+  formatting and zero-warning lint checks, the desktop strict typecheck, whitespace validation, and
+  the repository structure gate.
+- 2026-07-25: PR #26 was reconciled with current `main` and its runtime verification was repaired.
+  E2E cleanup supports both current and earlier Playwright process mappings, canvas multi-selection
+  holds the real platform shortcut during its display-scale-safe click, Windows batch shims retain
+  quoted executable paths through `cmd.exe`, and Git remote configuration uses the existing durable
+  Windows replace authority for both commit and rollback. The five previously failing E2E scenarios
+  passed locally. Structure (1,473 files), controls (858 files), formatting, zero-warning lint,
+  workspace typecheck, all 3,146 unit tests, all 333 integration tests, three docs tests, seven
+  quality tests, and every production build passed.

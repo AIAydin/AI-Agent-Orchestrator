@@ -8,6 +8,7 @@ import { useWorkflowRuntime } from '../../workflows/WorkflowRuntimeContext.js';
 import { NodeRunHistory } from '../../node-history/NodeRunHistory.js';
 import { LocalComments } from '../../comments/LocalComments.js';
 import { SharedComments } from '../../collaboration/comments/SharedComments.js';
+import { normalizeRotation } from '../../content/text/text-rotation.js';
 import { useNodeComments } from './NodeCommentsContext.js';
 
 type DetailsTab = 'settings' | 'comments' | 'history';
@@ -172,6 +173,25 @@ function SettingsSection({
           onChange={(event) => updateNodeData(id, { color: event.target.value })}
         />
       </label>
+      {data.kind === 'text' && (
+        <label>
+          Rotation (degrees)
+          <input
+            type="number"
+            name={`node-${id}-details-rotation`}
+            min={-180}
+            max={180}
+            step={1}
+            value={Math.round(data.rotationDeg ?? 0)}
+            onFocus={recordHistory}
+            onChange={(event) =>
+              updateNodeData(id, {
+                rotationDeg: normalizeRotation(Number(event.target.value) || 0),
+              })
+            }
+          />
+        </label>
+      )}
     </fieldset>
   );
 }

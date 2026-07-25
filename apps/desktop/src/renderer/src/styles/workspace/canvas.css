@@ -621,3 +621,99 @@
 .node-details-fields:disabled {
   opacity: 0.55;
 }
+
+/* Frameless text node */
+.react-flow__node-workshop:has(> .canvas-node[data-node-kind='text']:not(.collapsed)) {
+  min-width: 120px;
+  min-height: 40px;
+  height: auto !important;
+}
+
+.canvas-node.text-node {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: rotate(var(--text-rotation, 0deg));
+}
+
+.canvas-node.text-node::before {
+  display: none;
+}
+
+.canvas-node.text-node.selected {
+  border-color: var(--node-accent);
+}
+
+.canvas-node.text-node > header {
+  position: absolute;
+  top: -38px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 12%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.canvas-node.text-node.selected > header {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.text-size-controls {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.text-size-button {
+  min-width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.text-size-button.active {
+  background: color-mix(in srgb, var(--node-accent) 18%, transparent);
+}
+
+.text-size-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.text-rotate-handle {
+  position: absolute;
+  top: -64px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  cursor: grab;
+}
+
+.react-flow__node:has(.canvas-node[data-node-kind='text'])
+  .react-flow__resize-control:is(
+    .top,
+    .bottom,
+    .top-left,
+    .top-right,
+    .bottom-left,
+    .bottom-right
+  ) {
+  display: none;
+}

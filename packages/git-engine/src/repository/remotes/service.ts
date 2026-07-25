@@ -145,7 +145,7 @@ export class GitRemoteConfigurationService {
       await assertTargetStillCurrent(this.repositories, plan.target);
       await transaction.assertCurrent(options.signal);
       options.beforeMutation?.();
-      transaction.commit();
+      await transaction.commit();
     } catch (error) {
       return await abortPreparedMutation(transaction, error);
     }
@@ -186,11 +186,11 @@ export class GitRemoteConfigurationService {
 
     try {
       // The config lock is held for both checks, so a standard Git writer cannot enter between
-      // this CAS validation and the synchronous commit immediately following main authority.
+      // this CAS validation and the atomic replacement immediately following main authority.
       await this.#assertCurrent(plan);
       await transaction.assertCurrent(options.signal);
       options.beforeMutation?.();
-      transaction.commit();
+      await transaction.commit();
     } catch (error) {
       return await abortPreparedMutation(transaction, error);
     }

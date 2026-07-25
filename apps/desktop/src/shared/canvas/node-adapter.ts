@@ -33,6 +33,7 @@ const KIND_ALIASES: Readonly<Record<string, CanvasNodeType>> = {
   whiteboard: 'whiteboard-mockup',
   'whiteboard-mockup': 'whiteboard-mockup',
   'note-image': 'note-image',
+  text: 'text',
   'group-frame': 'group-frame',
   extension: 'extension',
 };
@@ -53,6 +54,7 @@ const LEGACY_KINDS: Readonly<Record<CanvasNodeType, string>> = {
   diagram: 'diagram',
   'whiteboard-mockup': 'whiteboard',
   'note-image': 'note-image',
+  text: 'text',
   'group-frame': 'group-frame',
   extension: 'extension',
 };
@@ -314,6 +316,13 @@ function canonicalData(
         images: raw['images'],
         altText: raw['altText'],
       });
+    case 'text':
+      return compact({
+        ...base,
+        text: truncatedString(raw['text'], 10_000),
+        fontSize: enumOrUndefined(raw['fontSize'], ['s', 'm', 'l']),
+        rotationDeg: numberWithinRange(raw['rotationDeg'], -180, 180),
+      });
     case 'group-frame':
       return compact({
         ...base,
@@ -520,6 +529,25 @@ function stringRendererValueOrPrevious(
 
 function positiveNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function numberWithinRange(value: unknown, min: number, max: number): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+    ? value
+    : undefined;
+}
+
+function truncatedString(value: unknown, maxLength: number): string | undefined {
+  return typeof value === 'string' ? value.slice(0, maxLength) : undefined;
+}
+
+function enumOrUndefined<const TValue extends string>(
+  value: unknown,
+  values: readonly TValue[],
+): TValue | undefined {
+  return typeof value === 'string' && values.includes(value as TValue)
+    ? (value as TValue)
+    : undefined;
 }
 
 function colorValue(value: unknown): string | undefined {

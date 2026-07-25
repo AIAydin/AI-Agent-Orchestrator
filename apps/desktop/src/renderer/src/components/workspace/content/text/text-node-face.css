@@ -1,0 +1,39 @@
+.text-node-face {
+  --text-face-size: 24px;
+  display: flex;
+  flex: 1 1 auto;
+  padding: 4px 6px;
+}
+
+.text-node-face[data-text-size='s'] {
+  --text-face-size: 16px;
+}
+
+.text-node-face[data-text-size='l'] {
+  --text-face-size: 40px;
+}
+
+.text-face-display,
+.text-face-editor {
+  width: 100%;
+  font-size: var(--text-face-size);
+  font-weight: 550;
+  line-height: 1.25;
+  color: var(--text-strong, inherit);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.text-face-editor {
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  overflow: hidden;
+}
+
+.text-face-placeholder {
+  opacity: 0.45;
+}

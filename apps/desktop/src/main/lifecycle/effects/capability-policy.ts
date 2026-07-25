@@ -227,7 +227,10 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     '@forgeboard/git-engine#ChangeService',
     '@forgeboard/git-engine#RepositoryService',
   ]),
-  'index.ts': entry('audited-authority', ['electron#shell']), // external-open handoff for preview webviews
+  'index.ts': entry('audited-authority', [
+    'electron#shell', // external-open handoff for preview webviews
+    'node:fs#appendFileSync', // optional E2E startup diagnostics
+  ]),
   'ipc.ts': entry('audited-authority', [
     '@forgeboard/git-engine#GitRemoteConfigurationService',
     'electron#shell',
@@ -301,6 +304,7 @@ export const LOCAL_EFFECT_CAPABILITY_INVENTORY: Readonly<
     ],
   ),
   'recovery/database/startup-adapter/open-store.ts': entry('journaled-startup-recovery', [
+    'node:fs#appendFileSync', // optional E2E startup diagnostics
     'node:fs/promises#chmod',
     'node:fs/promises#mkdir',
     'node:fs/promises#mkdtemp',

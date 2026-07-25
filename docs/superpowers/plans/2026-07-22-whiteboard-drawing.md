@@ -14,7 +14,7 @@ Spec: `docs/superpowers/specs/2026-07-22-whiteboard-drawing-design.md`
 
 - **No new dependencies.** The whiteboard stays Forgeboard-owned inert SVG.
 - **Structure gate** (`scripts/structure/check.mjs`): max 12 hand-written files per directory, max 2,000 lines per file. `content/whiteboard/` ends at 7 files, `content/whiteboard/drawing/` at 11.
-- **Run `check:structure` from the main checkout** (`/Users/aydin/AI Agent Orchestrator`), never from this worktree — it fails inside worktrees because `.git` is a pointer file.
+- **Run `check:structure` from the checkout being verified.** The gate supports both primary checkouts and worktrees.
 - **Zero-warning lint:** `corepack pnpm lint` runs with `--max-warnings=0`. No unused exports, no dead code.
 - **Viewbox is fixed at 960 × 640.** Declared once as `VIEW_BOX_WIDTH` / `VIEW_BOX_HEIGHT` in `model.ts`; `svg.ts`'s local `WIDTH`/`HEIGHT` constants are replaced by imports of these.
 - **Bounds, copied verbatim from the existing model:** coordinates clamp to ±4,000; width/height clamp to 1..4,000; `strokeWidth` 1..8; `opacity` 0..100; `fontSize` 8..96; text 20,000 chars; `MAX_ELEMENTS = 2_000`. New: `MAX_POINTS_PER_STROKE = 512`, `MIN_ELEMENT_SIZE = 4`.
@@ -1043,10 +1043,10 @@ corepack pnpm format:check
 
 Expected: all clean, zero warnings.
 
-- [ ] **Step 3: Structure gate — from the MAIN checkout, not this worktree**
+- [ ] **Step 3: Structure gate**
 
 ```bash
-cd "/Users/aydin/AI Agent Orchestrator" && node scripts/structure/check.mjs
+corepack pnpm check:structure
 ```
 
 Expected: clean. If it reports `content/whiteboard/drawing` over 12 files, fold a test file into a sibling rather than adding a directory.
