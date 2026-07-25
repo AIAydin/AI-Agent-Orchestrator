@@ -67,6 +67,10 @@ import {
 } from '../canvas/interactions/keyboard-navigation.js';
 import { projectGroupDisplay } from '../canvas/interactions/groups/group-display.js';
 import {
+  canvasPlacementObstacles,
+  freeCanvasPosition,
+} from '../canvas/interactions/auto-placement.js';
+import {
   fitAutomaticGroupFrames,
   frameIdsClaimingMembers,
 } from '../canvas/interactions/groups/group-workspace-state.js';
@@ -144,6 +148,9 @@ import { useWorkspaceWorkflowRuntime } from './runtime/useWorkspaceWorkflowRunti
 import { isTextEntryTarget, workflowDecisionIsCurrent } from './runtime/workspace-event-policy.js';
 
 const LOCKED_CONNECTION_ACTIVITY = 'Unlock locked nodes before changing their connections.';
+
+/** Where a node lands when it is added without an explicit drop position. */
+const DEFAULT_NODE_ANCHOR = { x: 220, y: 150 } as const;
 
 export const Workspace = forwardRef<WorkspaceHandle, WorkspaceProps>(
   function Workspace(props, ref) {
@@ -624,7 +631,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       const definition = NODE_DEFINITIONS[kind];
       const id = crypto.randomUUID();
       const currentNodes = nodesRef.current;
-      const offset = currentNodes.length * 24;
+      const dimensions = initialWorkshopNodeDimensions(kind);
       const titlesInUse = new Set(currentNodes.map((node) => node.data.title));
       pendingNodeSelection.current = id;
       setNodes((items) => [
@@ -633,8 +640,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           id,
           type: 'workshop',
           selected: true,
-          position: position ?? { x: 220 + offset, y: 150 + offset },
-          ...initialWorkshopNodeDimensions(kind),
+          position:
+            position ??
+            freeCanvasPosition(
+              DEFAULT_NODE_ANCHOR,
+              dimensions,
+              canvasPlacementObstacles(currentNodes),
+            ),
+          ...dimensions,
           data: {
             kind,
             title: assignNodeName(titlesInUse),
@@ -686,8 +699,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       const { extension, definition } = template;
       const binding = createExtensionNodeBinding(extension, definition);
       const id = crypto.randomUUID();
-      const offset = nodes.length * 24;
-      const titlesInUse = new Set(nodesRef.current.map((node) => node.data.title));
+      const currentNodes = nodesRef.current;
+      const dimensions = initialWorkshopNodeDimensions('extension');
+      const titlesInUse = new Set(currentNodes.map((node) => node.data.title));
       pendingNodeSelection.current = id;
       setNodes((items) => [
         ...items.map((node) => ({ ...node, selected: false })),
@@ -695,8 +709,14 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
           id,
           type: 'workshop',
           selected: true,
-          position: position ?? { x: 220 + offset, y: 150 + offset },
-          ...initialWorkshopNodeDimensions('extension'),
+          position:
+            position ??
+            freeCanvasPosition(
+              DEFAULT_NODE_ANCHOR,
+              dimensions,
+              canvasPlacementObstacles(currentNodes),
+            ),
+          ...dimensions,
           data: {
             kind: 'extension',
             title: assignNodeName(titlesInUse),
@@ -722,7 +742,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         [`Added ${definition.displayName} extension node.`, ...items].slice(0, 30),
       );
     },
-    [collaborationCanvas.graphReadOnly, nodes.length, record, reportCollaborationReadOnly],
+    [collaborationCanvas.graphReadOnly, record, reportCollaborationReadOnly],
   );
 
   const attachProjectFileContext = useCallback(
