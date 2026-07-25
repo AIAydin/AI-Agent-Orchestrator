@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import {
   AppSettingsSchema,
@@ -17,7 +17,11 @@ import type {
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
 import { CanvasNodeInteractionProvider } from '../../canvas/interactions/CanvasNodeInteractionContext.js';
 import { AgentSessionProvider, type AgentSessionContextValue } from './AgentSessionContext.js';
-import { AgentSessionNode } from './AgentSessionNode.js';
+import {
+  AGENT_LAUNCH_TIMEOUT_MS,
+  AGENT_PEER_PROVISION_TIMEOUT_MS,
+  AgentSessionNode,
+} from './AgentSessionNode.js';
 
 const controller = {
   loaded: false,
@@ -26,6 +30,7 @@ const controller = {
     status: string;
     exitCode?: number | null;
     exitSignal?: string | null;
+    workspace?: unknown;
   } | null,
   sessions: [] as unknown[],
   output: [] as unknown[],
@@ -75,6 +80,7 @@ vi.mock('../../terminal/TerminalSurface.js', () => ({
 }));
 
 const provisionMock = vi.fn();
+const agentPrCreateMock = vi.fn();
 
 const claude: AgentDetection & { id: RunAdapterId } = {
   id: 'claude',
@@ -232,12 +238,25 @@ beforeEach(() => {
       extraArguments: [],
     },
   });
+  agentPrCreateMock.mockReset();
+  agentPrCreateMock.mockResolvedValue({
+    ok: true,
+    value: {
+      url: 'https://github.com/acme/app/pull/7',
+      branch: 'forgeboard/node-x/claude-1',
+      committed: true,
+    },
+  });
   (
     window as unknown as {
-      forgeboard: { agentPeers: { provision: typeof provisionMock } };
+      forgeboard: {
+        agentPeers: { provision: typeof provisionMock };
+        agentPr: { create: typeof agentPrCreateMock };
+      };
     }
   ).forgeboard = {
     agentPeers: { provision: provisionMock },
+    agentPr: { create: agentPrCreateMock },
   };
 });
 
@@ -673,5 +692,144 @@ describe('AgentSessionNode', () => {
     const worktreeOption = permissionSelect.querySelector('option[value="worktree-write"]');
     expect(dockerOption?.hasAttribute('disabled')).toBe(true);
     expect(worktreeOption?.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('offers Write in current directory and hides Custom in the Access select', () => {
+    renderNode();
+    const permissionSelect = screen.getByLabelText('Permission profile');
+    expect(permissionSelect.querySelector('option[value="project-write"]')?.textContent).toBe(
+      'Write in current directory',
+    );
+    expect(permissionSelect.querySelector('option[value="custom"]')).toBeNull();
+  });
+
+  it('shows the provider brand mark in the title bar instead of a monogram letter', () => {
+    renderNode();
+    const providerLabel = screen.getByText('Claude Code');
+    const logo = providerLabel.previousElementSibling;
+    expect(logo?.classList.contains('agent-title-logo')).toBe(true);
+    expect(logo?.querySelector('svg')).toBeTruthy();
+  });
+
+  it('shows the branch and worktree directory of the live session in the bottom strip', () => {
+    controller.session = {
+      id: 's1',
+      status: 'running',
+      workspace: {
+        kind: 'managed-agent-worktree',
+        runId: '40000000-0000-4000-8000-000000000001',
+        branch: 'forgeboard/node-x/claude-1',
+        directory: '/tmp/worktrees/app-claude-1',
+      },
+    };
+    controller.active = true;
+    renderNode();
+
+    const line = screen.getByLabelText('Session workspace');
+    expect(line.textContent).toBe('forgeboard/node-x/claude-1 · app-claude-1');
+    expect(line.getAttribute('title')).toBe('/tmp/worktrees/app-claude-1');
+  });
+
+  it('shows the project directory for a session that writes in the current directory', () => {
+    controller.session = {
+      id: 's1',
+      status: 'running',
+      workspace: { kind: 'project', directory: '/Users/example/app' },
+    };
+    controller.active = true;
+    renderNode(nodeData({ permissionProfile: 'project-write' }));
+
+    expect(screen.getByLabelText('Session workspace').textContent).toBe('app');
+  });
+
+  it('flips endless Starting into a terse timeout with Retry', async () => {
+    vi.useFakeTimers();
+    try {
+      controller.loaded = true;
+      renderNode();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(controller.prepareLaunch).toHaveBeenCalledOnce();
+      expect(screen.getByText('Starting…')).toBeTruthy();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AGENT_LAUNCH_TIMEOUT_MS);
+      });
+      expect(screen.getByText('Start timed out.')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(provisionMock).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText('Start timed out.')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('launches anyway when peer provisioning hangs, instead of wedging on Starting', async () => {
+    vi.useFakeTimers();
+    try {
+      provisionMock.mockReturnValueOnce(new Promise(() => undefined));
+      controller.loaded = true;
+      renderNode();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AGENT_PEER_PROVISION_TIMEOUT_MS);
+      });
+      expect(controller.prepareLaunch).toHaveBeenCalledOnce();
+      expect(screen.getByText('Peer tools unavailable.')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('creates a pull request after one terse confirmation and shows the URL', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderNode(nodeData({ runId: '40000000-0000-4000-8000-000000000001' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'PR' }));
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(agentPrCreateMock).toHaveBeenCalledWith({
+        projectId: 'proj-1',
+        nodeId: NODE_ID,
+        runId: '40000000-0000-4000-8000-000000000001',
+      }),
+    );
+    expect(await screen.findByText('https://github.com/acme/app/pull/7')).toBeTruthy();
+    confirmSpy.mockRestore();
+  });
+
+  it('does not create a pull request when the confirmation is declined', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderNode(nodeData({ runId: '40000000-0000-4000-8000-000000000001' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'PR' }));
+    expect(agentPrCreateMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('surfaces a terse PR failure on the node', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    agentPrCreateMock.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'OPERATION_FAILED', message: 'gh pr create: boom' },
+    });
+    renderNode(nodeData({ runId: '40000000-0000-4000-8000-000000000001' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'PR' }));
+    expect(await screen.findByText('gh pr create: boom')).toBeTruthy();
+    confirmSpy.mockRestore();
+  });
+
+  it('offers the PR action only once a branch exists to deliver', () => {
+    renderNode();
+    expect(screen.queryByRole('button', { name: 'PR' })).toBeNull();
+    cleanup();
+    renderNode(nodeData({ permissionProfile: 'project-write' }));
+    expect(screen.getByRole('button', { name: 'PR' })).toBeTruthy();
   });
 });

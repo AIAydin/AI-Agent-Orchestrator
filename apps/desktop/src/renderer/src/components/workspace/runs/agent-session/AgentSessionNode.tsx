@@ -6,7 +6,9 @@ import type { PermissionProfile } from '../../../../../../shared/application/con
 import type { AgentPeersProvisionView } from '../../../../../../shared/agent-peers/index.js';
 import type { TerminalSessionView } from '../../../../../../shared/terminal/index.js';
 import type { WorkshopNodeData } from '../../canvas/CanvasNode.js';
+import { unwrap } from '../../../../lib/ipc.js';
 import { isRunAdapterId } from '../../model/helpers.js';
+import { providerBrandLogo } from '../../node-registry/brand-logos.js';
 import { providerTheme } from '../../node-registry/provider-themes.js';
 import { ensureUniqueNodeName } from '../../node-registry/node-names.js';
 import {
@@ -40,6 +42,37 @@ const EMPTY_CONFIGURATION: TerminalNodeConfiguration = {
 
 /** Shown whenever the hub could not hand back a usable peer channel, whatever the cause. */
 const PEER_TOOLS_UNAVAILABLE_HINT = 'Peer tools unavailable.';
+
+/** How long a start may stay silent (no session, no error) before the node offers Retry. */
+export const AGENT_LAUNCH_TIMEOUT_MS = 20_000;
+
+/** Peer provisioning is optional — a hung provision IPC must never wedge the whole launch. */
+export const AGENT_PEER_PROVISION_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolvePromise, rejectPromise) => {
+    const timer = window.setTimeout(
+      () => rejectPromise(new Error('The operation timed out.')),
+      timeoutMs,
+    );
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolvePromise(value);
+      },
+      (cause: unknown) => {
+        window.clearTimeout(timer);
+        rejectPromise(cause instanceof Error ? cause : new Error('The operation failed.'));
+      },
+    );
+  });
+}
+
+/** Last path segment for the terse workspace line; the full path stays in the tooltip. */
+function directoryLabel(directory: string): string {
+  const segments = directory.split(/[\\/]/u).filter((segment) => segment !== '');
+  return segments.at(-1) ?? directory;
+}
 
 /**
  * The canvas window that hosts a real CLI session for an agent node. It renders the provider-tinted
@@ -114,6 +147,7 @@ export function AgentSessionNode({
 
   const readOnly = graphReadOnly || data.locked || interactions.readOnly;
   const theme = providerTheme(adapter);
+  const Logo = providerBrandLogo(adapter);
   const unavailableReason = agentSessionUnavailableReason(agent);
   const canStart = unavailableReason === null;
 
@@ -176,18 +210,31 @@ export function AgentSessionNode({
   const pendingStartRef = useRef(false);
   const [provisionAttempt, setProvisionAttempt] = useState(0);
 
+  // Launch watchdog: counts every start attempt; if none of session/exit/error shows up within
+  // the timeout, the node flips to a terse "Start timed out." + Retry instead of endless Starting.
+  const [launchAttempt, setLaunchAttempt] = useState(0);
+  const [launchStalled, setLaunchStalled] = useState(false);
+
   const provisionAndRelaunch = (): void => {
     if (provisioningRef.current) return;
     provisioningRef.current = true;
+    setLaunchStalled(false);
+    setLaunchAttempt((count) => count + 1);
     void (async () => {
       try {
         let view: AgentPeersProvisionView | null = null;
         try {
-          const result = await window.forgeboard.agentPeers.provision({
-            projectId: project.id,
-            nodeId: id,
-            adapterId: adapter,
-          });
+          // Bounded: peer tools are a bonus, so a provision IPC that never settles falls back
+          // to "unavailable" and the CLI still launches (it also keeps `provisioningRef` from
+          // wedging permanently true, which would silently swallow every later Retry).
+          const result = await withTimeout(
+            window.forgeboard.agentPeers.provision({
+              projectId: project.id,
+              nodeId: id,
+              adapterId: adapter,
+            }),
+            AGENT_PEER_PROVISION_TIMEOUT_MS,
+          );
           view = result.ok ? result.value : null;
         } catch {
           view = null;
@@ -238,6 +285,20 @@ export function AgentSessionNode({
     void controllerRef.current.prepareLaunch();
   }, [provisionAttempt]);
 
+  // The watchdog re-arms per attempt and stands down as soon as the launch lands anywhere
+  // observable (live session, exit strip, or an error that already offers Retry). It exists
+  // because several silent dead-ends are reachable — a plan cancelled between prepare and
+  // auto-confirm, a prepare abandoned by a generation bump — and every one of them used to
+  // leave the node on "Starting…" forever.
+  useEffect(() => {
+    if (launchAttempt === 0 || hasActiveSession || endedSession || controller.error !== null) {
+      setLaunchStalled(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setLaunchStalled(true), AGENT_LAUNCH_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [launchAttempt, hasActiveSession, endedSession, controller.error]);
+
   // Single-use: once the session exits, drop the stashed provision so the next Start/Restart
   // provisions fresh instead of relaunching with a stale provisionId/token.
   useEffect(() => {
@@ -275,6 +336,48 @@ export function AgentSessionNode({
   const contextChips = (data.contextAttachmentIds ?? [])
     .map((cid) => ({ cid, title: nodeTitle(cid) }))
     .filter((entry): entry is { cid: string; title: string } => entry.title !== null);
+
+  // Terse workspace line: which branch + directory the live session actually runs in.
+  const sessionWorkspace = controller.session?.workspace;
+  const workspaceBranch =
+    sessionWorkspace?.kind === 'managed-agent-worktree' ? sessionWorkspace.branch : null;
+  const workspaceDirectory = sessionWorkspace?.directory ?? null;
+
+  // PR action: one terse confirmation, then main commits (if needed), pushes, and runs
+  // `gh pr create --fill` in the session's worktree or the project directory.
+  const [prBusy, setPrBusy] = useState(false);
+  const [prNote, setPrNote] = useState<{ readonly text: string; readonly failed: boolean } | null>(
+    null,
+  );
+  const canOpenPr = data.runId !== undefined || profile === 'project-write';
+  const openPullRequest = (): void => {
+    if (prBusy) return;
+    if (!window.confirm('Commit, push, and open a pull request for this session?')) return;
+    setPrBusy(true);
+    setPrNote(null);
+    void (async () => {
+      try {
+        const view = unwrap(
+          await window.forgeboard.agentPr.create({
+            projectId: project.id,
+            nodeId: id,
+            ...(data.runId === undefined ? {} : { runId: data.runId }),
+          }),
+        );
+        setPrNote({
+          text: view.url ?? `Pull request opened from ${view.branch}.`,
+          failed: false,
+        });
+      } catch (cause) {
+        setPrNote({
+          text: cause instanceof Error ? cause.message : 'Could not create the pull request.',
+          failed: true,
+        });
+      } finally {
+        setPrBusy(false);
+      }
+    })();
+  };
 
   const lastRunSummary = data.lastRunSummary ?? '';
   const transcript = data.transcript ?? '';
@@ -353,6 +456,11 @@ export function AgentSessionNode({
             {data.title}
           </strong>
         )}
+        {Logo !== null && (
+          <span className="agent-title-logo" style={{ color: theme?.accent }} aria-hidden="true">
+            <Logo size={14} />
+          </span>
+        )}
         <span className="agent-provider-label">{theme?.label ?? agent?.label ?? adapter}</span>
         <span
           className={`run-status ${data.status}`}
@@ -401,19 +509,24 @@ export function AgentSessionNode({
       ) : (
         <div className="agent-start-card">
           <span className="agent-monogram" aria-hidden="true">
-            {theme?.monogram ?? adapter.slice(0, 1).toUpperCase()}
+            {Logo === null ? adapter.slice(0, 1).toUpperCase() : <Logo size={22} />}
           </span>
           {unavailableReason !== null ? (
             <p className="agent-start-reason">{unavailableReason}</p>
-          ) : controller.error !== null ? (
-            <button
-              type="button"
-              className="button primary"
-              disabled={readOnly}
-              onClick={() => startSession()}
-            >
-              Retry
-            </button>
+          ) : controller.error !== null || launchStalled ? (
+            <>
+              {controller.error === null && launchStalled && (
+                <p className="agent-start-reason">Start timed out.</p>
+              )}
+              <button
+                type="button"
+                className="button primary"
+                disabled={readOnly}
+                onClick={() => startSession()}
+              >
+                Retry
+              </button>
+            </>
           ) : readOnly ? null : (
             <p className="agent-start-reason">Starting…</p>
           )}
@@ -450,6 +563,33 @@ export function AgentSessionNode({
             ))}
           </select>
         </label>
+        {canOpenPr && (
+          <button
+            type="button"
+            className="agent-pr-button nodrag"
+            disabled={readOnly || prBusy}
+            title="Commit, push, and open a pull request"
+            onClick={openPullRequest}
+          >
+            {prBusy ? 'PR…' : 'PR'}
+          </button>
+        )}
+        {(workspaceBranch !== null || workspaceDirectory !== null) && (
+          <span
+            className="agent-workspace-line"
+            title={workspaceDirectory ?? undefined}
+            aria-label="Session workspace"
+          >
+            {[workspaceBranch, workspaceDirectory === null ? null : directoryLabel(workspaceDirectory)]
+              .filter((part): part is string => part !== null)
+              .join(' · ')}
+          </span>
+        )}
+        {prNote !== null && (
+          <small className={`agent-pr-note${prNote.failed ? ' warning' : ''}`} role="status">
+            {prNote.text}
+          </small>
+        )}
         {launch?.profileNote != null && (
           <small className="agent-profile-note">{launch.profileNote}</small>
         )}
