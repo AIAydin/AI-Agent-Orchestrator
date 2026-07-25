@@ -2,9 +2,9 @@
 
 ## Reporting a vulnerability
 
-Please do not open a public issue for a suspected vulnerability. Until a dedicated security contact
-is configured, use GitHub's private vulnerability reporting for this repository. Include impact,
-reproduction steps, affected versions, and any suggested mitigation.
+Please do not open a public issue for a suspected vulnerability. Use GitHub's enabled private
+vulnerability reporting for this repository. Include impact, reproduction steps, affected versions,
+and any suggested mitigation.
 
 ## Security posture
 
