@@ -220,6 +220,21 @@
   margin-bottom: 12px;
 }
 
+.collaboration-advanced-fields > section {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.collaboration-advanced-fields > section > label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--text-soft);
+  font-size: var(--text-md);
+  font-weight: 650;
+}
+
 @media (max-width: 760px) {
   .collaboration-setup-grid {
     grid-template-columns: 1fr;

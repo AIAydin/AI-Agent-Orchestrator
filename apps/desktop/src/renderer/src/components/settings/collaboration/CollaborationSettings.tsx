@@ -379,10 +379,23 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
     setOperationBusy(false);
   }
 
+  const hostConfigured =
+    settings.collaborationUrl.trim() !== '' &&
+    settings.collaborationManagementUrl.trim() !== '' &&
+    settings.collaborationRoom.trim() !== '' &&
+    settings.collaborationSubject.trim() !== '' &&
+    settings.collaborationDisplayName.trim() !== '';
+  const inviteConnectionIssue = hostConfigured
+    ? collaborationPublicInviteConnectionIssue(
+        settings.collaborationUrl,
+        settings.collaborationManagementUrl,
+      )
+    : null;
+
   return (
     <SettingsSection
       title="Collaboration"
-      description="Work together on the same canvas through a server your team controls."
+      description="Invite someone into your session, or join theirs — you both edit the same canvas live."
     >
       <CollaborationStatus
         connection={connection}
@@ -398,11 +411,8 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
           />
           <div className="collaboration-setup-grid">
             <section className="collaboration-setup-card primary" aria-labelledby="join-room-title">
-              <span className="collaboration-card-kicker">Recommended</span>
-              <h4 id="join-room-title">Join with an invite</h4>
-              <p>
-                Paste the link you received. New Forgeboard invites configure the server for you.
-              </p>
+              <h4 id="join-room-title">Join a session</h4>
+              <p>Paste the invite link you received. It carries the connection for you.</p>
               <InviteJoinControls
                 settings={settings}
                 setSettings={setSettings}
@@ -411,9 +421,67 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
                 onJoin={joinInvite}
               />
             </section>
-            <section className="collaboration-setup-card" aria-labelledby="host-room-title">
-              <h4 id="host-room-title">Create or recover a room</h4>
-              <p>Use a hosted server that every invited computer can reach.</p>
+            <section
+              className="collaboration-setup-card"
+              aria-labelledby="create-invite-title"
+            >
+              <h4 id="create-invite-title">Invite someone</h4>
+              <p>Creates your room and copies a one-use invite link that works for 10 minutes.</p>
+              <button
+                className="button primary"
+                type="button"
+                disabled={controlsBusy || !hostConfigured || inviteConnectionIssue !== null}
+                onClick={() =>
+                  void bootstrapRoomAndCreateInvite({
+                    serverUrl: settings.collaborationUrl,
+                    managementBaseUrl: settings.collaborationManagementUrl,
+                    roomId: settings.collaborationRoom,
+                    subject: settings.collaborationSubject,
+                    displayName: settings.collaborationDisplayName,
+                    color: settings.collaborationColor,
+                    reconnect: settings.collaborationReconnect,
+                  })
+                }
+              >
+                Create invite link
+              </button>
+              {!hostConfigured && (
+                <small className="collaboration-missing-links" role="status">
+                  Add your hosted server address under Advanced first.
+                </small>
+              )}
+              {inviteConnectionIssue !== null && (
+                <small className="collaboration-missing-links" role="status">
+                  Invite links need a public server — check the addresses under Advanced.
+                </small>
+              )}
+            </section>
+          </div>
+          <details
+            className="collaboration-advanced"
+            open={advancedOpen}
+            onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+          >
+            <summary>
+              <span>
+                <strong>Advanced</strong>
+                <small>Server, room, owner recovery, and direct tokens.</small>
+              </span>
+            </summary>
+            <div className="collaboration-advanced-fields">
+              <label className="switch-row">
+                <span>
+                  <strong>Enable collaboration</strong>
+                  <small>Joining a room turns this on automatically.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  name="collaboration-enabled"
+                  checked={settings.collaborationEnabled}
+                  disabled={controlsBusy}
+                  onChange={(event) => void setCollaborationEnabled(event.target.checked)}
+                />
+              </label>
               <CollaborationServerFields
                 settings={settings}
                 setSettings={setSettings}
@@ -431,33 +499,6 @@ export function CollaborationSettings({ settings, setSettings, busy }: Collabora
                 onBootstrapAndInvite={bootstrapRoomAndCreateInvite}
                 onRecover={ownerAccess.recoverOwner}
               />
-            </section>
-          </div>
-          <details
-            className="collaboration-advanced"
-            open={advancedOpen}
-            onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
-          >
-            <summary>
-              <span>
-                <strong>Server and advanced options</strong>
-                <small>Local development, collaborator ID, reconnect, and direct tokens.</small>
-              </span>
-            </summary>
-            <div className="collaboration-advanced-fields">
-              <label className="switch-row">
-                <span>
-                  <strong>Enable collaboration</strong>
-                  <small>Joining a room turns this on automatically.</small>
-                </span>
-                <input
-                  type="checkbox"
-                  name="collaboration-enabled"
-                  checked={settings.collaborationEnabled}
-                  disabled={controlsBusy}
-                  onChange={(event) => void setCollaborationEnabled(event.target.checked)}
-                />
-              </label>
               <ConnectionFields
                 settings={settings}
                 setSettings={setSettings}
