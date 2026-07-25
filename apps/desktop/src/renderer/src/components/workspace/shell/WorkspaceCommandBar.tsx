@@ -1,6 +1,5 @@
 import {
   CircleDot,
-  Command,
   GitCompareArrows,
   Maximize2,
   PanelLeftClose,
@@ -27,7 +26,6 @@ interface WorkspaceCommandBarProps {
   canUndo: boolean;
   canRedo: boolean;
   workflowStatus: string | null;
-  commandPaletteShortcut: string;
   collaborationEnabled: boolean;
   sharingStatus: WorkspaceSharingStatus;
   projectSidebarOpen: boolean;
@@ -39,7 +37,6 @@ interface WorkspaceCommandBarProps {
   onRedo: () => void;
   onFitCanvas: () => void;
   onOpenGitReview: () => void;
-  onOpenCommands: () => void;
   onOpenSettings: () => void;
 }
 
@@ -52,7 +49,6 @@ export function WorkspaceCommandBar({
   canUndo,
   canRedo,
   workflowStatus,
-  commandPaletteShortcut,
   collaborationEnabled,
   sharingStatus,
   projectSidebarOpen,
@@ -64,7 +60,6 @@ export function WorkspaceCommandBar({
   onRedo,
   onFitCanvas,
   onOpenGitReview,
-  onOpenCommands,
   onOpenSettings,
 }: WorkspaceCommandBarProps) {
   return (
@@ -157,9 +152,6 @@ export function WorkspaceCommandBar({
           <GitCompareArrows size={14} /> Changes
         </button>
       </WorkspaceTooltip>
-      <button className="command-trigger" type="button" onClick={onOpenCommands}>
-        <Command size={14} /> Commands <kbd>{commandPaletteShortcut}</kbd>
-      </button>
       <WorkspaceTooltip content="Open Forgeboard settings">
         <button
           className="icon-button"

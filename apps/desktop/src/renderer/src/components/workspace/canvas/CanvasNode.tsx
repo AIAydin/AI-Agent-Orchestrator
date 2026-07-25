@@ -23,6 +23,7 @@ import type { RunStatus } from '@forgeboard/core/domain';
 export {
   NODE_DEFINITIONS,
   NODE_KINDS,
+  TEMPLATE_NODE_KINDS,
   type BuiltInNodeKind,
   type NodeKind,
 } from '../node-registry/registry.js';

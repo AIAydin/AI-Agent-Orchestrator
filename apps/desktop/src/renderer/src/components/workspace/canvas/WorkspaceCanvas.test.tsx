@@ -430,7 +430,7 @@ describe('WorkspaceCanvas palette drops', () => {
 
     fireEvent(
       region,
-      paletteDropEvent(paletteDataTransfer('application/x-forgeboard-node', 'task')),
+      paletteDropEvent(paletteDataTransfer('application/x-forgeboard-node', 'brief')),
     );
 
     expect(screenToFlowPosition).toHaveBeenNthCalledWith(1, { x: 900, y: 700 }, undefined);
@@ -445,26 +445,26 @@ describe('WorkspaceCanvas palette drops', () => {
       { snapToGrid: false },
     );
     const position = vi.mocked(canvasProps.onAddNode).mock.calls[0]?.[1];
-    expect(position?.x).toBeCloseTo(109);
-    expect(position?.y).toBeCloseTo(13.6);
+    expect(position?.x).toBeCloseTo(61.8);
+    expect(position?.y).toBeCloseTo(6.4);
   });
 
-  it('uses the rendered group-frame and extension dimensions when clamping drops', () => {
-    const groupProps = props(vi.fn());
-    const groupView = render(<WorkspaceCanvas {...groupProps} />);
-    const groupRegion = canvasRegion(groupView.container);
-    vi.spyOn(groupRegion, 'getBoundingClientRect').mockReturnValue(canvasBounds());
+  it('uses the rendered terminal and extension dimensions when clamping drops', () => {
+    const terminalProps = props(vi.fn());
+    const terminalView = render(<WorkspaceCanvas {...terminalProps} />);
+    const terminalRegion = canvasRegion(terminalView.container);
+    vi.spyOn(terminalRegion, 'getBoundingClientRect').mockReturnValue(canvasBounds());
 
     fireEvent(
-      groupRegion,
-      paletteDropEvent(paletteDataTransfer('application/x-forgeboard-node', 'group-frame')),
+      terminalRegion,
+      paletteDropEvent(paletteDataTransfer('application/x-forgeboard-node', 'terminal')),
     );
 
-    expect(groupProps.onAddNode).toHaveBeenCalledWith('group-frame', {
-      x: 464,
-      y: 374,
+    expect(terminalProps.onAddNode).toHaveBeenCalledWith('terminal', {
+      x: 424,
+      y: 254,
     });
-    groupView.unmount();
+    terminalView.unmount();
 
     const extensionProps = props(vi.fn());
     const template = extensionTemplate();
@@ -484,6 +484,22 @@ describe('WorkspaceCanvas palette drops', () => {
       x: 664,
       y: 554,
     });
+  });
+
+  it('ignores drops of retired template kinds', () => {
+    const canvasProps = props(vi.fn());
+    const view = render(<WorkspaceCanvas {...canvasProps} />);
+    const region = canvasRegion(view.container);
+    vi.spyOn(region, 'getBoundingClientRect').mockReturnValue(canvasBounds());
+
+    for (const retired of ['task', 'group-frame', 'agent', 'diagram']) {
+      fireEvent(
+        region,
+        paletteDropEvent(paletteDataTransfer('application/x-forgeboard-node', retired)),
+      );
+    }
+
+    expect(canvasProps.onAddNode).not.toHaveBeenCalled();
   });
 });
 
@@ -661,6 +677,7 @@ function props(
     workflowMutationsAuthorized: true,
     onRunWorkflowScope: vi.fn(),
     onAddNode: vi.fn(),
+    onAddAgent: vi.fn(),
     onAddExtensionNode: vi.fn(),
     onAttachAgentContext: vi.fn().mockResolvedValue(undefined),
     onContextDropError: vi.fn(),

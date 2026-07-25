@@ -19,6 +19,10 @@ describe('NODE_NAME_POOL', () => {
       expect(name.length).toBeGreaterThan(0);
     }
   });
+
+  it('avoids names that collide with well-known tools', () => {
+    expect(NODE_NAME_POOL).not.toContain('Hermes');
+  });
 });
 
 describe('assignNodeName', () => {

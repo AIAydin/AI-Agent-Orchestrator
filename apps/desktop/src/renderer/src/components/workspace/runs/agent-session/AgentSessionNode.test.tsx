@@ -522,7 +522,7 @@ describe('AgentSessionNode', () => {
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(spies.updateNodeData).toHaveBeenCalledWith(NODE_ID, {
-      title: 'Hermes',
+      title: 'Atlas',
     });
   });
 

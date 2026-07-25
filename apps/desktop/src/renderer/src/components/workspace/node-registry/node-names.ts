@@ -2,10 +2,10 @@
  * Curated pool of friendly, distinct node names (mythology / constellations), used as the
  * default identifier for every canvas node. The shown name is also the peer identifier
  * (`peer-graph.ts` `resolvePeers` derives the peer name from `node.title`), so names here must
- * be pleasant, unambiguous, and free of punctuation that would read oddly in chat.
+ * be pleasant, unambiguous, free of punctuation that would read oddly in chat, and must not
+ * collide with well-known developer tools (which is why Hermes is absent).
  */
 export const NODE_NAME_POOL: readonly string[] = [
-  'Hermes',
   'Atlas',
   'Orion',
   'Vega',
@@ -85,6 +85,16 @@ export const NODE_NAME_POOL: readonly string[] = [
   'Thor',
   'Saga',
   'Idun',
+  'Callisto',
+  'Amalthea',
+  'Nereid',
+  'Titania',
+  'Oberon',
+  'Vesta',
+  'Caelum',
+  'Dorado',
+  'Eridanus',
+  'Tucana',
 ];
 
 /**

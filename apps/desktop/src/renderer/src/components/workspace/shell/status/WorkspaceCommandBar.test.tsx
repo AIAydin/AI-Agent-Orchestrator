@@ -68,6 +68,8 @@ describe('WorkspaceCommandBar', () => {
 
     expect(screen.queryByRole('button', { name: 'Run canvas' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Run selected' })).toBeNull();
+    // The palette stays keyboard-only — no Commands button in the top bar.
+    expect(screen.queryByRole('button', { name: /Commands/u })).toBeNull();
     const status = screen.getByRole('status', {
       name: /Workflow · waiting for approval/u,
     });
@@ -88,7 +90,6 @@ function commandBarProps() {
     canUndo: false,
     canRedo: false,
     workflowStatus: null,
-    commandPaletteShortcut: '⌘K',
     collaborationEnabled: false,
     sharingStatus: 'not-connected' as const,
     projectSidebarOpen: true,
@@ -100,7 +101,6 @@ function commandBarProps() {
     onRedo: callback,
     onFitCanvas: callback,
     onOpenGitReview: callback,
-    onOpenCommands: callback,
     onOpenSettings: callback,
   };
 }

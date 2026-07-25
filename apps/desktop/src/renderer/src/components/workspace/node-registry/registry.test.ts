@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ExtensionCanvasNodeTypeView } from '../../../../../shared/application/contracts.js';
-import { NODE_KINDS, NodeTypeRegistry, extensionNodeTypeKey } from './registry.js';
+import {
+  NODE_KINDS,
+  NodeTypeRegistry,
+  TEMPLATE_NODE_KINDS,
+  extensionNodeTypeKey,
+} from './registry.js';
 
 describe('NodeTypeRegistry', () => {
   it('registers every required built-in with the complete shared behavior contract', () => {
@@ -19,6 +24,25 @@ describe('NodeTypeRegistry', () => {
         runHistory: true,
       });
     }
+  });
+
+  it('keeps retired kinds parseable but out of the creatable template list', () => {
+    const retired = [
+      'agent',
+      'task',
+      'file',
+      'diff',
+      'review-gate',
+      'git-pr',
+      'diagram',
+      'group-frame',
+    ] as const;
+    const registry = new NodeTypeRegistry();
+    for (const kind of retired) {
+      expect(TEMPLATE_NODE_KINDS).not.toContain(kind);
+      expect(registry.resolve({ kind }).kind).toBe(kind);
+    }
+    for (const kind of TEMPLATE_NODE_KINDS) expect(NODE_KINDS).toContain(kind);
   });
 
   it('resolves only an exact installed extension identity and rejects duplicate registrations', () => {
