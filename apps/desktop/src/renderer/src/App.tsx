@@ -155,6 +155,7 @@ export function App() {
         />
       ) : activeProject ? (
         <Workspace
+          key={activeProject.id}
           ref={workspaceRef}
           project={activeProject}
           settings={bootstrap.settings}
