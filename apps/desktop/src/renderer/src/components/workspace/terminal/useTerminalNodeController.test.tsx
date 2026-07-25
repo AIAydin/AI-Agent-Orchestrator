@@ -148,6 +148,22 @@ describe('useTerminalNodeController', () => {
     expect(result.current.output.at(-1)?.sequence).toBe(1_030);
   });
 
+  it('reports loaded once the initial session listing settles', async () => {
+    const fixture = createOperations();
+    const { result } = renderController(fixture.operations);
+    expect(result.current.loaded).toBe(false);
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.session).toBeNull();
+  });
+
+  it('reports loaded even when the initial session listing fails', async () => {
+    const fixture = createOperations();
+    fixture.operations.listSessions.mockRejectedValue(new Error('ipc down'));
+    const { result } = renderController(fixture.operations);
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.error).not.toBeNull();
+  });
+
   it('coalesces PTY resize updates and never sends dimensions after confirmed exit', async () => {
     vi.useFakeTimers();
     const fixture = createOperations({ sessions: [SESSION] });

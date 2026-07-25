@@ -1,7 +1,9 @@
 # Instant agent node startup
 
 **Date:** 2026-07-25
-**Status:** Approved (node gate: remove entirely; auto-start: new nodes only)
+**Status:** Approved (node gate: remove entirely; auto-start: revised same day —
+owner rejected any Start button: "it should literally just be open instantly
+into claude code or any other agent")
 
 ## Problem
 
@@ -38,34 +40,49 @@ Untouched:
   If `gateFor`/`recheckProvider` end up with no consumers in
   `AgentSessionContext`, drop them from the context value.
 
-### 2. Auto-start sessions for newly created agent nodes
+### 2. Zero-click sessions: agent nodes launch whenever they lack a live one
 
-Creating an agent node (rail click, palette, canvas drop → `addAgentNode`)
-marks the node data with a transient `autoStart: true`. On mount,
-`AgentSessionNode` consumes the flag: it clears it via `updateNodeData` and
-invokes the existing `startSession()` path (fresh peer provision → launch →
-auto-confirm) provided the node is startable (`agent` resolved, not
-read-only/locked). Because the flag is cleared on consumption and never set on
-load, reopening a saved workspace shows the normal Start card instead of
-spawning a CLI per node.
+There is no "Start session" button. An agent node IS its CLI: on mount, once
+`useTerminalNodeController`'s initial session listing settles (a new
+`loaded: boolean` on the controller — true after the first `refresh()`
+completes, success or failure), the node launches a session through the
+existing `startSession()` path (fresh peer provision → launch → auto-confirm)
+unless one of these holds:
 
-Unchanged: the exit strip's "Restart" stays an explicit click; the Start card
-(with "Start session") remains for nodes without a live session, e.g. after
-workspace reload.
+- a live session was reattached (`controller.active`) — just show it;
+- the node is read-only (graph read-only, locked, collab read-only);
+- the agent is unavailable (`agentSessionUnavailableReason`);
+- the controller already reported an error.
+
+The launch fires at most once per mount (ref guard; StrictMode-safe). This
+covers creation (rail/palette/drop) and workspace reopen alike — a persisted
+*ended* session from a previous app run is relaunched over, not parked behind
+a button. A session that ends while the node is mounted stays on the exit
+strip ("Restart"), which also bounds a crash-looping CLI to one launch per
+mount.
+
+Start-card states: unavailable reason (as today); "Retry" button when a launch
+errored (`controller.error`); otherwise a terse "Starting…" line. The exit
+strip's "Restart" stays an explicit click. No `autoStart` node-data flag —
+always-launch makes creation-time marking unnecessary.
 
 ## Error handling
 
 - Signed-out provider: the CLI shows its login prompt inside the terminal.
 - Missing/invalid executable: launch fails through the existing controller
-  error path (`controller.error` renders on the node), same as a manual Start.
-- Read-only graph / locked node / collaboration read-only: auto-start is
-  skipped; the Start card renders as today.
+  error path (`controller.error` renders on the node) and the card offers
+  "Retry".
+- Read-only graph / locked node / collaboration read-only: auto-launch is
+  skipped; the card shows only the monogram (nothing to click).
 
 ## Testing
 
-- `AgentSessionNode` unit tests: gate no longer blocks (a disconnected/unknown
-  provider still shows the Start card, not the banner); auto-start fires once
-  for `autoStart: true` nodes, clears the flag, and skips when read-only.
-- `Workspace`/`addAgentNode` test: newly added agent nodes carry
-  `autoStart: true`.
-- Update existing tests that assert the banner/gate behavior on the node.
+- `useTerminalNodeController` tests: `loaded` flips true once the initial
+  session listing settles (including on failure).
+- `AgentSessionNode` unit tests: no gate/Start/Refresh buttons; auto-launch
+  fires once when `loaded` with no active session (including over a persisted
+  ended session); no launch before `loaded`, when read-only, over a live
+  session, or when the controller has an error; "Retry" relaunches after an
+  error; Restart on the exit strip still provisions fresh.
+- Update existing tests that clicked "Start session" to drive the auto-launch
+  path (`controller.loaded = true`) instead.

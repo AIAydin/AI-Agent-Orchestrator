@@ -10,6 +10,17 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-25-instant-agent-node-startup-design.md`
 
+> **Revision (2026-07-25, mid-execution):** After Task 1 shipped, the owner rejected
+> any Start button ("it should literally just be open instantly"). Task 2 as written
+> below (one-shot `autoStart` node-data flag, `creation.ts` helper) was implemented,
+> then superseded and reverted before commit. Shipped instead: a `loaded` signal on
+> `useTerminalNodeController` (true once the initial session listing settles) and an
+> `AgentSessionNode` effect that, once loaded, launches a session whenever none is
+> active — once per mount, skipping read-only/unavailable/errored nodes. The start
+> card lost its button: it shows "Starting…", the unavailable reason, or "Retry"
+> after a launch error. The spec's section 2 describes the shipped design; Task 2's
+> steps below are retained only as an execution record.
+
 ## Global Constraints
 
 - Never `git add -A`, `-u`, or `.`; stage only files this plan edits, by exact path. The tree carries unrelated user WIP (`IMPLEMENTATION_CHECKLIST.md`, `PreviewNodeFace.test.tsx`, `ChromeCompanionSurface.tsx`) — do not stage those.

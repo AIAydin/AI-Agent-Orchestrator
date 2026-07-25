@@ -220,6 +220,18 @@ export function AgentSessionNode({
 
   const startSession = (): void => provisionAndRelaunch();
 
+  // Zero-click sessions: an agent node IS its CLI. Once the initial session listing settles,
+  // a node without a live session launches one — creation and workspace reopen alike, even
+  // over a persisted ended session. At most once per mount (the ref survives StrictMode's
+  // re-run), so a session that dies rests on the exit strip instead of crash-looping.
+  const autoLaunchedRef = useRef(false);
+  useEffect(() => {
+    if (!controller.loaded || autoLaunchedRef.current) return;
+    autoLaunchedRef.current = true;
+    if (readOnly || !canStart || controller.active || controller.error !== null) return;
+    startSession();
+  });
+
   useEffect(() => {
     if (!pendingStartRef.current) return;
     pendingStartRef.current = false;
@@ -393,16 +405,17 @@ export function AgentSessionNode({
           </span>
           {unavailableReason !== null ? (
             <p className="agent-start-reason">{unavailableReason}</p>
-          ) : null}
-          {canStart && (
+          ) : controller.error !== null ? (
             <button
               type="button"
               className="button primary"
               disabled={readOnly}
               onClick={() => startSession()}
             >
-              Start session
+              Retry
             </button>
+          ) : readOnly ? null : (
+            <p className="agent-start-reason">Starting…</p>
           )}
         </div>
       )}
