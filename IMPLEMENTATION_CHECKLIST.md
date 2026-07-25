@@ -2025,6 +2025,7 @@ unchecked when only a subset of their required behavior has proof.
   previously failing E2E scenarios passed locally. Reviewed Windows `.cmd`/`.bat` GitHub CLI shims
   now launch through a metacharacter-rejecting `cmd.exe` boundary while executable identity,
   validation auditing, and the shell-free native-executable path remain intact; the full Git
-  connections E2E flow passed locally. Structure (1,479 files), controls (861 files), formatting,
-  zero-warning lint, workspace typecheck, all 3,155 unit tests, all 333 integration tests, three
-  docs tests, seven quality tests, and every production build passed.
+  connections E2E flow uses a program fixture outside Forgeboard's Windows ACL-hardened user-data
+  root and passed locally. Structure (1,479 files), controls (861 files), formatting, zero-warning
+  lint, workspace typecheck, all 3,155 unit tests, all 333 integration tests, three docs tests,
+  seven quality tests, and every production build passed.

@@ -75,14 +75,16 @@ test('Enter in Git connection text fields cannot submit Settings or create a rem
 
 test('Git connections are configured, reviewed, cancelled, and persisted entirely in Settings', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-git-connections-e2e-'));
+  const fixtureDirectory = await mkdtemp(join(tmpdir(), 'forgeboard-git-connections-fixture-'));
   const sandboxRoot = await realpath(userDataDirectory);
+  const fixtureRoot = await realpath(fixtureDirectory);
   const localRemotePath = join(sandboxRoot, 'local-backup.git');
   const fakeGhExecutable = join(
-    sandboxRoot,
+    fixtureRoot,
     process.platform === 'win32' ? 'fake-gh.cmd' : 'fake-gh.mjs',
   );
-  const fakeGhStatePath = join(sandboxRoot, 'fake-gh-state.json');
-  const fakeGhLogPath = join(sandboxRoot, 'fake-gh.jsonl');
+  const fakeGhStatePath = join(fixtureRoot, 'fake-gh-state.json');
+  const fakeGhLogPath = join(fixtureRoot, 'fake-gh.jsonl');
   const environment = preserveEnvironment(['FORGEBOARD_FAKE_GH_STATE', 'FORGEBOARD_FAKE_GH_LOG']);
   const externalRequests: string[] = [];
   let electronApp: ElectronApplication | null = null;
@@ -277,7 +279,14 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
     settings = await openGitConnectionsSettings(page);
 
     await test.step('custom CLI identity persists across restart and automatic remains reviewed', async () => {
-      await expect(settings.getByText('GitHub CLI ready')).toBeVisible();
+      try {
+        await expect(settings.getByText('GitHub CLI ready')).toBeVisible();
+      } catch (cause) {
+        throw new Error(
+          `The persisted GitHub CLI identity did not remain ready. Settings: ${JSON.stringify(await settings.textContent())}.`,
+          { cause },
+        );
+      }
       await expect(settings.locator('.git-connections-cli-status')).toContainText('Chosen file');
       await expect(settings.locator('.git-connections-cli-status')).toContainText('2.76.1');
       expect(await readGhArguments(fakeGhLogPath)).toEqual([['--version']]);
@@ -311,7 +320,9 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
     await closeElectronAfterTest(electronApp);
     restoreEnvironment(environment);
     await rm(userDataDirectory, { recursive: true, force: true });
+    await rm(fixtureDirectory, { recursive: true, force: true });
     await expect(access(userDataDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(access(fixtureDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
   }
 });
 
