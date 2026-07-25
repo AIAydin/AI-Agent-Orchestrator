@@ -42,9 +42,19 @@ export function ChromeCompanionSurface({
   const imageRef = useRef<HTMLImageElement | null>(null);
   const lastMoveAt = useRef(0);
   const setViewportRef = useRef(companion.setViewport);
+  const openRef = useRef(companion.open);
+  const previousUrlRef = useRef(url);
   setViewportRef.current = companion.setViewport;
+  openRef.current = companion.open;
 
   useEffect(() => onStatus?.(companion.status.state), [companion.status.state, onStatus]);
+
+  useEffect(() => {
+    const urlChanged = previousUrlRef.current !== url;
+    previousUrlRef.current = url;
+    if (!urlChanged || !connected) return;
+    void openRef.current(url);
+  }, [connected, url]);
 
   useEffect(() => {
     if (!connected || typeof ResizeObserver === 'undefined') return;
