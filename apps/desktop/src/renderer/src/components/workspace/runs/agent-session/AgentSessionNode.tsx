@@ -59,6 +59,7 @@ export function AgentSessionNode({
     runnableAgents,
     graphReadOnly,
     reportError,
+    flushCanvas,
     updateNodeData,
     recordHistory,
     nodeTitle,
@@ -181,6 +182,9 @@ export function AgentSessionNode({
     provisioningRef.current = true;
     void (async () => {
       try {
+        // Main-process launch authority reads the SAVED canvas; a node that only
+        // exists in live state would fail its "exact persisted Agent node" guard.
+        await flushCanvas().catch(() => false);
         let view: AgentPeersProvisionView | null = null;
         try {
           const result = await window.forgeboard.agentPeers.provision({

@@ -824,6 +824,9 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
       recordSnapshot(currentNodes, currentEdges);
       nodesRef.current = result.nodes;
       setNodes(result.nodes);
+      // Persist right after the state commit so main-process agent controls see
+      // the attachment (they validate against the SAVED canvas, not live state).
+      window.setTimeout(() => void flushCanvas(), 0);
       setEvents((items) =>
         [
           `${result.createdFileNode ? 'Created a file node and added' : 'Added'} the project file to the agent.`,
@@ -831,7 +834,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
         ].slice(0, 30),
       );
     },
-    [project.id, recordSnapshot, reportCollaborationReadOnly],
+    [flushCanvas, project.id, recordSnapshot, reportCollaborationReadOnly],
   );
 
   const removeProjectFileContext = useCallback(
@@ -1347,6 +1350,7 @@ const WorkspaceInner = forwardRef<WorkspaceHandle, WorkspaceProps>(function Work
     graphReadOnly: collaborationCanvas.graphReadOnly,
     openSettings: onOpenSettings,
     reportError: onError,
+    flushCanvas,
     updateNodeData,
     fitGroupFrame,
     arrangeGroupFrame,

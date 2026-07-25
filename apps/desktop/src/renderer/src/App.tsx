@@ -17,6 +17,8 @@ import type { WorkspaceHandle } from './components/workspace/model/types.js';
 import { unwrap } from './lib/ipc.js';
 import { BootstrapScreen } from './components/application/bootstrap/BootstrapScreen.js';
 
+const ERROR_TOAST_MS = 8_000;
+
 interface BootstrapState {
   info: AppInfo;
   settings: AppSettings;
@@ -35,6 +37,14 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const workspaceRef = useRef<WorkspaceHandle>(null);
+
+  // Error toasts clear themselves; the Dismiss button stays for impatient reads.
+  // Bootstrap failures keep their message — that screen pairs it with Retry.
+  useEffect(() => {
+    if (error === null || bootstrap === null) return;
+    const timer = window.setTimeout(() => setError(null), ERROR_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [bootstrap, error]);
 
   useEffect(
     () =>

@@ -113,6 +113,7 @@ const NODE_ID = 'node-x';
 const spies = {
   openSettings: vi.fn(),
   reportError: vi.fn(),
+  flushCanvas: vi.fn(() => Promise.resolve(true)),
   updateNodeData: vi.fn(),
   recordHistory: vi.fn(),
   nodeTitle: vi.fn((): string | null => null),
@@ -133,6 +134,7 @@ function contextValue(overrides: Partial<AgentSessionContextValue> = {}): AgentS
     graphReadOnly: false,
     openSettings: spies.openSettings,
     reportError: spies.reportError,
+    flushCanvas: spies.flushCanvas,
     updateNodeData: spies.updateNodeData,
     fitGroupFrame: spies.fitGroupFrame,
     arrangeGroupFrame: spies.arrangeGroupFrame,
