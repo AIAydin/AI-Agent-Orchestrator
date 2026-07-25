@@ -95,7 +95,14 @@
   line-height: 1.5;
 }
 .settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   margin-top: 17px;
+}
+.settings-fields > label,
+.settings-fields > .settings-form-field {
+  margin: 0;
 }
 .settings-fields > label small {
   color: var(--text-faint);
@@ -106,10 +113,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 15px;
   color: var(--text-soft);
   font-size: var(--text-lg);
   font-weight: 650;
+}
+.settings-fields > .segmented-field {
+  margin-bottom: 0;
 }
 .segmented-field > div {
   display: flex;
@@ -138,7 +147,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px !important;
-  padding: 12px 0;
+  padding: 4px 0;
 }
 .switch-row span {
   display: flex;
@@ -290,7 +299,7 @@
 }
 .privacy-integrations small {
   color: var(--text-soft);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 .two-column {
