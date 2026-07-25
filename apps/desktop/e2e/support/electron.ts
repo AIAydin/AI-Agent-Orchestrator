@@ -64,14 +64,14 @@ export async function launchDesktop(
   });
   userDataDirectories.set(app, userDataDirectory);
   try {
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
     if (process.platform === 'win32') {
       const electronProcessId = await app.evaluate(() => process.pid);
       if (Number.isSafeInteger(electronProcessId) && electronProcessId > 0) {
         windowsElectronProcessIds.set(app, electronProcessId);
       }
     }
-    const page = await app.firstWindow();
-    await page.waitForLoadState('domcontentloaded');
     return { app, page };
   } catch (error) {
     await closeElectronAfterTest(app);
