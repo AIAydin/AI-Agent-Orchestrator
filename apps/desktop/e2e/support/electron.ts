@@ -1,10 +1,10 @@
-import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { access, rm } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import { join, resolve } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
-import { promisify } from 'node:util';
+import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { access, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
 
 import {
   _electron as electron,
@@ -12,7 +12,7 @@ import {
   type ElectronApplication,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from "@playwright/test";
 
 export interface ElectronSession {
   app: ElectronApplication;
@@ -34,8 +34,8 @@ interface ElectronApplicationInternals {
   };
 }
 
-const desktopRoot = resolve(import.meta.dirname, '../..');
-const mainEntry = join(desktopRoot, 'dist', 'main', 'index.js');
+const desktopRoot = resolve(import.meta.dirname, "../..");
+const mainEntry = join(desktopRoot, "dist", "main", "index.js");
 const require = createRequire(import.meta.url);
 const execFileAsync = promisify(execFile);
 const userDataDirectories = new WeakMap<ElectronApplication, string>();
@@ -49,24 +49,32 @@ export async function launchDesktop(
   await access(entry);
 
   const environment = Object.fromEntries(
-    Object.entries(process.env).filter((entry): entry is [string, string] => Boolean(entry[1])),
+    Object.entries(process.env).filter((entry): entry is [string, string] =>
+      Boolean(entry[1]),
+    ),
   );
   delete environment.ELECTRON_RENDERER_URL;
   delete environment.ELECTRON_RUN_AS_NODE;
   Object.assign(environment, options.environment);
+  if (process.platform === "win32")
+    environment.FORGEBOARD_E2E_STARTUP_TRACE = "1";
 
   const app = await electron.launch({
-    executablePath: require('electron') as string,
+    executablePath: require("electron") as string,
     cwd: desktopRoot,
     args: [entry, `--user-data-dir=${userDataDirectory}`],
     env: environment,
     timeout: 30_000,
   });
   userDataDirectories.set(app, userDataDirectory);
+  const startupDiagnostics: string[] = [];
+  app.process().stderr?.on("data", (chunk: Buffer | string) => {
+    startupDiagnostics.push(String(chunk));
+  });
   try {
     const page = await app.firstWindow();
-    await page.waitForLoadState('domcontentloaded');
-    if (process.platform === 'win32') {
+    await page.waitForLoadState("domcontentloaded");
+    if (process.platform === "win32") {
       const electronProcessId = await app.evaluate(() => process.pid);
       if (Number.isSafeInteger(electronProcessId) && electronProcessId > 0) {
         windowsElectronProcessIds.set(app, electronProcessId);
@@ -75,7 +83,14 @@ export async function launchDesktop(
     return { app, page };
   } catch (error) {
     await closeElectronAfterTest(app);
-    throw error;
+    const detail = startupDiagnostics.join("").trim().slice(-8_192);
+    throw new Error(
+      `${error instanceof Error ? error.message : "Electron did not open a window."}` +
+        (detail.length === 0
+          ? " No Electron startup diagnostics were emitted."
+          : `\n${detail}`),
+      { cause: error },
+    );
   }
 }
 
@@ -84,9 +99,11 @@ export async function launchDesktop(
  * behavior has already been verified. Tests that need to prove graceful shutdown should still
  * await `app.close()` explicitly before using this bounded cleanup for their final session.
  */
-export async function closeElectronAfterTest(app: ElectronApplication | null): Promise<void> {
+export async function closeElectronAfterTest(
+  app: ElectronApplication | null,
+): Promise<void> {
   if (app === null) return;
-  if (process.platform === 'win32') {
+  if (process.platform === "win32") {
     const electronProcessId = windowsElectronProcessIds.get(app);
     if (electronProcessId !== undefined) {
       await terminateWindowsProcessTree(electronProcessId);
@@ -95,20 +112,24 @@ export async function closeElectronAfterTest(app: ElectronApplication | null): P
   // Playwright 1.53 tracks launched process groups for worker teardown. Its test-only kill path
   // removes that registration and terminates descendants that can retain stdio and user-data locks.
   await electronImplementation(app)._browserContext._browser.killForTests();
-  if (process.platform === 'win32') {
+  if (process.platform === "win32") {
     const userDataDirectory = userDataDirectories.get(app);
     if (userDataDirectory !== undefined) {
-      await removeWindowsLockFile(join(userDataDirectory, 'lockfile'));
+      await removeWindowsLockFile(join(userDataDirectory, "lockfile"));
     }
   }
 }
 
 async function terminateWindowsProcessTree(processId: number): Promise<void> {
   try {
-    await execFileAsync('taskkill.exe', ['/pid', String(processId), '/T', '/F'], {
-      timeout: 10_000,
-      windowsHide: true,
-    });
+    await execFileAsync(
+      "taskkill.exe",
+      ["/pid", String(processId), "/T", "/F"],
+      {
+        timeout: 10_000,
+        windowsHide: true,
+      },
+    );
   } catch {
     // The process may have exited between PID capture and cleanup. The bounded lock-file removal
     // below remains the source of truth that the exact profile is no longer in use.
@@ -117,7 +138,7 @@ async function terminateWindowsProcessTree(processId: number): Promise<void> {
 
 function electronImplementation(
   app: ElectronApplication,
-): ReturnType<ElectronApplicationInternals['_toImpl']> {
+): ReturnType<ElectronApplicationInternals["_toImpl"]> {
   return (app as unknown as ElectronApplicationInternals)._toImpl();
 }
 
@@ -128,7 +149,7 @@ async function removeWindowsLockFile(path: string): Promise<void> {
       return;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if ((code !== 'EBUSY' && code !== 'EPERM') || attempt >= 49) throw error;
+      if ((code !== "EBUSY" && code !== "EPERM") || attempt >= 49) throw error;
       await delay(100);
     }
   }
@@ -142,10 +163,16 @@ export async function approveNextNativeAgentLaunch(
   options: { pollTimeoutMs?: number } = {},
 ): Promise<void> {
   const disclosureFingerprint =
-    (await reviewDialog.getByLabel('Security fingerprint (SHA-256)').textContent())?.trim() ?? '';
+    (
+      await reviewDialog
+        .getByLabel("Security fingerprint (SHA-256)")
+        .textContent()
+    )?.trim() ?? "";
   expect(disclosureFingerprint).toMatch(/^[0-9a-f]{64}$/u);
   const expiresAt =
-    (await reviewDialog.getByLabel('Approval expires at').getAttribute('datetime')) ?? '';
+    (await reviewDialog
+      .getByLabel("Approval expires at")
+      .getAttribute("datetime")) ?? "";
   expect(new Date(expiresAt).toISOString()).toBe(expiresAt);
 
   const token = randomUUID();
@@ -159,32 +186,42 @@ export async function approveNextNativeAgentLaunch(
         }>;
         originalDescriptor: PropertyDescriptor | undefined;
         restoreIfOwned: () => void;
-        status: 'armed' | 'approved' | 'rejected';
+        status: "armed" | "approved" | "rejected";
       }
       const state = globalThis as typeof globalThis & {
         __forgeboardE2eAgentLaunchDialogs?: Map<string, HarnessRecord>;
       };
-      const records = state.__forgeboardE2eAgentLaunchDialogs ?? new Map<string, HarnessRecord>();
+      const records =
+        state.__forgeboardE2eAgentLaunchDialogs ??
+        new Map<string, HarnessRecord>();
       state.__forgeboardE2eAgentLaunchDialogs = records;
-      const originalDescriptor = Object.getOwnPropertyDescriptor(dialog, 'showMessageBox');
+      const originalDescriptor = Object.getOwnPropertyDescriptor(
+        dialog,
+        "showMessageBox",
+      );
       const record: HarnessRecord = {
         interceptor,
         originalDescriptor,
         restoreIfOwned,
-        status: 'armed',
+        status: "armed",
       };
 
       function restoreIfOwned(): void {
-        if (Object.getOwnPropertyDescriptor(dialog, 'showMessageBox')?.value !== interceptor)
+        if (
+          Object.getOwnPropertyDescriptor(dialog, "showMessageBox")?.value !==
+          interceptor
+        )
           return;
         if (originalDescriptor === undefined) {
-          Reflect.deleteProperty(dialog, 'showMessageBox');
+          Reflect.deleteProperty(dialog, "showMessageBox");
         } else {
-          Object.defineProperty(dialog, 'showMessageBox', originalDescriptor);
+          Object.defineProperty(dialog, "showMessageBox", originalDescriptor);
         }
       }
 
-      function interceptor(...arguments_: unknown[]): ReturnType<HarnessRecord['interceptor']> {
+      function interceptor(
+        ...arguments_: unknown[]
+      ): ReturnType<HarnessRecord["interceptor"]> {
         restoreIfOwned();
         const options = arguments_.at(-1) as
           | {
@@ -198,37 +235,49 @@ export async function approveNextNativeAgentLaunch(
               type?: unknown;
             }
           | undefined;
-        const detailLines = typeof options?.detail === 'string' ? options.detail.split('\n') : [];
+        const detailLines =
+          typeof options?.detail === "string" ? options.detail.split("\n") : [];
         const errors = [
-          options?.type === 'warning' ? undefined : 'type must be warning',
-          options?.title === 'Launch agent' ? undefined : 'title must identify the agent launch',
+          options?.type === "warning" ? undefined : "type must be warning",
+          options?.title === "Launch agent"
+            ? undefined
+            : "title must identify the agent launch",
           options?.message === `Launch ${binding.adapterId} for this node?`
             ? undefined
             : `message must identify ${binding.adapterId}`,
-          JSON.stringify(options?.buttons) === JSON.stringify(['Cancel', 'Launch agent'])
+          JSON.stringify(options?.buttons) ===
+          JSON.stringify(["Cancel", "Launch agent"])
             ? undefined
-            : 'buttons must be Cancel then Launch agent',
-          options?.defaultId === 0 ? undefined : 'Cancel must be the default action',
-          options?.cancelId === 0 ? undefined : 'Cancel must be the escape action',
-          options?.noLink === true ? undefined : 'native links must be disabled',
-          detailLines.includes(`Security fingerprint (SHA-256): ${binding.disclosureFingerprint}`)
+            : "buttons must be Cancel then Launch agent",
+          options?.defaultId === 0
             ? undefined
-            : 'detail must contain the exact reviewed disclosure fingerprint',
+            : "Cancel must be the default action",
+          options?.cancelId === 0
+            ? undefined
+            : "Cancel must be the escape action",
+          options?.noLink === true
+            ? undefined
+            : "native links must be disabled",
+          detailLines.includes(
+            `Security fingerprint (SHA-256): ${binding.disclosureFingerprint}`,
+          )
+            ? undefined
+            : "detail must contain the exact reviewed disclosure fingerprint",
           detailLines.includes(`Approval expires at: ${binding.expiresAt}`)
             ? undefined
-            : 'detail must contain the exact reviewed expiry',
+            : "detail must contain the exact reviewed expiry",
         ].filter((error): error is string => error !== undefined);
 
         if (errors.length > 0) {
-          record.error = errors.join('; ');
-          record.status = 'rejected';
+          record.error = errors.join("; ");
+          record.status = "rejected";
           return Promise.resolve({ response: 0, checkboxChecked: false });
         }
-        record.status = 'approved';
+        record.status = "approved";
         return Promise.resolve({ response: 1, checkboxChecked: false });
       }
       records.set(binding.token, record);
-      Object.defineProperty(dialog, 'showMessageBox', {
+      Object.defineProperty(dialog, "showMessageBox", {
         configurable: true,
         value: interceptor,
       });
@@ -246,23 +295,27 @@ export async function approveNextNativeAgentLaunch(
         async () => {
           observedResult = await app.evaluate((_, currentToken) => {
             const state = globalThis as typeof globalThis & {
-              __forgeboardE2eAgentLaunchDialogs?: Map<string, { error?: string; status: string }>;
+              __forgeboardE2eAgentLaunchDialogs?: Map<
+                string,
+                { error?: string; status: string }
+              >;
             };
             return state.__forgeboardE2eAgentLaunchDialogs?.get(currentToken);
           }, token);
-          return observedResult?.status ?? 'missing';
+          return observedResult?.status ?? "missing";
         },
         {
-          message: 'the owner-bound native agent launch confirmation should open',
+          message:
+            "the owner-bound native agent launch confirmation should open",
           timeout: options.pollTimeoutMs ?? 5_000,
         },
       )
-      .not.toBe('armed');
+      .not.toBe("armed");
 
-    if (observedResult?.status !== 'approved') {
+    if (observedResult?.status !== "approved") {
       throw new Error(
         observedResult?.error ??
-          'The native agent launch confirmation did not approve the reviewed run.',
+          "The native agent launch confirmation did not approve the reviewed run.",
       );
     }
   } catch (error) {
@@ -301,83 +354,112 @@ export async function approveNextNativeAgentLaunch(
 }
 
 function isDestroyedEvaluationContext(error: unknown): boolean {
-  return error instanceof Error && /Execution context was destroyed/u.test(error.message);
+  return (
+    error instanceof Error &&
+    /Execution context was destroyed/u.test(error.message)
+  );
 }
 
-export function watchExternalRequests(page: Page, externalRequests: string[]): void {
+export function watchExternalRequests(
+  page: Page,
+  externalRequests: string[],
+): void {
   const capture = (rawUrl: string): void => {
     const url = new URL(rawUrl);
-    if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) && !isLoopbackUrl(url)) {
+    if (
+      ["http:", "https:", "ws:", "wss:"].includes(url.protocol) &&
+      !isLoopbackUrl(url)
+    ) {
       externalRequests.push(rawUrl);
     }
   };
-  page.on('request', (request) => {
+  page.on("request", (request) => {
     capture(request.url());
   });
-  page.on('websocket', (webSocket) => capture(webSocket.url()));
+  page.on("websocket", (webSocket) => capture(webSocket.url()));
 }
 
-export function watchNetworkRequests(page: Page, networkRequests: string[]): void {
+export function watchNetworkRequests(
+  page: Page,
+  networkRequests: string[],
+): void {
   const capture = (rawUrl: string): void => {
     const url = new URL(rawUrl);
-    if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) {
+    if (["http:", "https:", "ws:", "wss:"].includes(url.protocol)) {
       networkRequests.push(rawUrl);
     }
   };
-  page.on('request', (request) => {
+  page.on("request", (request) => {
     capture(request.url());
   });
-  page.on('websocket', (webSocket) => capture(webSocket.url()));
+  page.on("websocket", (webSocket) => capture(webSocket.url()));
 }
 
-export async function renameCanvasNode(node: Locator, title: string): Promise<void> {
-  await node.locator('.canvas-node-title').dblclick();
-  const input = node.getByRole('textbox', { name: 'Node title' });
+export async function renameCanvasNode(
+  node: Locator,
+  title: string,
+): Promise<void> {
+  await node.locator(".canvas-node-title").dblclick();
+  const input = node.getByRole("textbox", { name: "Node title" });
   await input.fill(title);
-  await input.press('Enter');
+  await input.press("Enter");
 }
 
 export async function openCanvasNodeDetails(
   node: Locator,
-  tab: 'Settings' | 'Comments' | 'History' = 'Settings',
+  tab: "Settings" | "Comments" | "History" = "Settings",
 ): Promise<Locator> {
-  await node.getByRole('button', { name: /^Node details for /u }).click();
-  const dialog = node.getByRole('dialog', { name: / details$/u });
-  if (tab !== 'Settings') await dialog.getByRole('tab', { name: tab }).click();
+  await node.getByRole("button", { name: /^Node details for /u }).click();
+  const dialog = node.getByRole("dialog", { name: / details$/u });
+  if (tab !== "Settings") await dialog.getByRole("tab", { name: tab }).click();
   return dialog;
 }
 
 export async function runCanvasNodeContextAction(
   page: Page,
   node: Locator,
-  action: 'Collapse' | 'Delete' | 'Duplicate' | 'Expand' | 'Inspect' | 'Lock' | 'Unlock',
+  action:
+    | "Collapse"
+    | "Delete"
+    | "Duplicate"
+    | "Expand"
+    | "Inspect"
+    | "Lock"
+    | "Unlock",
 ): Promise<void> {
   const bounds = await node.boundingBox();
-  if (bounds === null) throw new Error('The canvas node must be visible before opening its menu.');
-  await node.dispatchEvent('contextmenu', {
+  if (bounds === null)
+    throw new Error("The canvas node must be visible before opening its menu.");
+  await node.dispatchEvent("contextmenu", {
     bubbles: true,
     button: 2,
     clientX: bounds.x + bounds.width / 2,
     clientY: bounds.y + bounds.height / 2,
   });
   await page
-    .getByRole('menu', { name: /^Actions for /u })
-    .getByRole('menuitem', { name: action })
-    .dispatchEvent('click');
+    .getByRole("menu", { name: /^Actions for /u })
+    .getByRole("menuitem", { name: action })
+    .dispatchEvent("click");
 }
 
 function isLoopbackUrl(url: URL): boolean {
   const hostname = url.hostname
-    .replace(/^\[|\]$/gu, '')
-    .replace(/\.$/u, '')
+    .replace(/^\[|\]$/gu, "")
+    .replace(/\.$/u, "")
     .toLowerCase();
-  if (hostname === 'localhost' || hostname === '::1' || hostname === '0:0:0:0:0:0:0:1') {
+  if (
+    hostname === "localhost" ||
+    hostname === "::1" ||
+    hostname === "0:0:0:0:0:0:0:1"
+  ) {
     return true;
   }
-  const octets = hostname.split('.').map(Number);
+  const octets = hostname.split(".").map(Number);
   return (
     octets.length === 4 &&
     octets[0] === 127 &&
-    octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
+    octets.every(
+      (octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255,
+    )
   );
 }
