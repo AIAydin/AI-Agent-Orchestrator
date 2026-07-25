@@ -145,6 +145,12 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         title: 'Add Git remote?',
         buttons: ['Cancel', 'Add remote'],
       });
+      await expect
+        .poll(() => gitRemoteUrl(projectPath, 'origin'), {
+          message: 'The approved local Git mutation should finish before the UI refreshes.',
+          timeout: 20_000,
+        })
+        .toBe(FIRST_NETWORK_URL);
       const connectionMessages = await settings
         .locator('.git-connections-notice, [role="alert"]')
         .allTextContents();
@@ -152,7 +158,6 @@ test('Git connections are configured, reviewed, cancelled, and persisted entirel
         settings.getByRole('button', { name: 'Remove origin' }),
         `Git connection result: ${connectionMessages.join(' | ')}`,
       ).toBeVisible();
-      expect(gitRemoteUrl(projectPath, 'origin')).toBe(FIRST_NETWORK_URL);
     });
 
     await test.step('simple remote replacement changes only the reviewed URL', async () => {

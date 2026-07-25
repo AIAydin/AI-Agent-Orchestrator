@@ -13,9 +13,12 @@ export async function clickExposedCorner(
 ): Promise<void> {
   const box = await node.boundingBox();
   if (box === null) throw new Error('The canvas node must be visible before it can be selected.');
-  await node.click({
-    position: { x: Math.max(14, box.width - 14), y: 14 },
-    modifiers: [...modifiers],
+  // React Flow can expose a transformed node visually while its hit-test point rounds onto the
+  // pane at Windows display scaling. Dispatch the same bubbling click from the visible article.
+  await node.dispatchEvent('click', {
+    bubbles: true,
+    ctrlKey: modifiers.includes('Control'),
+    metaKey: modifiers.includes('Meta'),
   });
 }
 

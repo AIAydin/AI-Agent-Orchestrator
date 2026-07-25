@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 
+import { resolveWindowsBatchLaunch } from '@forgeboard/agent-adapters';
+
 const MAX_DIAGNOSTIC_BYTES = 64 * 1_024;
 const FORCE_KILL_DELAY_MS = 2_000;
 
@@ -51,6 +53,7 @@ export const runProviderAuthProcess: ProviderAuthProcessRunner = async (command,
     const statusBytes: Record<'stdout' | 'stderr', number> = { stdout: 0, stderr: 0 };
     let forceKillTimer: NodeJS.Timeout | undefined;
     let child!: ChildProcess;
+    let launch: { readonly executable: string; readonly arguments: readonly string[] };
 
     const finish = (result: ProviderAuthProcessResult): void => {
       if (settled) return;
@@ -76,7 +79,12 @@ export const runProviderAuthProcess: ProviderAuthProcessRunner = async (command,
     timeout.unref?.();
 
     try {
-      child = spawn(command.executable, [...command.arguments], {
+      launch = resolveWindowsBatchLaunch(
+        command.executable,
+        command.arguments,
+        command.environment,
+      );
+      child = spawn(launch.executable, [...launch.arguments], {
         cwd: command.cwd,
         env: { ...command.environment },
         shell: false,

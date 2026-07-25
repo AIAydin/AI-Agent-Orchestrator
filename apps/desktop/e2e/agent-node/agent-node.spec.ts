@@ -48,8 +48,11 @@ test('Agent sessions launch a reconstructed built-in command in a managed worktr
       .locator('.agent-readiness-list')
       .getByRole('button', { name: /Check OpenCode again/u });
     await openCodeReadiness.click();
+    await expect(openCodeReadiness).toBeEnabled({ timeout: 20_000 });
+    const readinessMessages = await settings.locator('.agent-readiness-list').allTextContents();
     await expect(
       settings.locator('.agent-readiness-list').getByText(/executable is ready/u),
+      `OpenCode readiness: ${readinessMessages.join(' | ')}`,
     ).toBeVisible({ timeout: 20_000 });
     const saveSettings = settings.getByRole('button', {
       name: /Save settings/u,
@@ -142,11 +145,11 @@ async function writeFakeOpenCode(root: string): Promise<string> {
       executablePath,
       [
         '@echo off',
-        'if "%1"=="--version" (',
+        'if "%~1"=="--version" (',
         '  echo 1.2.3',
         '  exit /b 0',
         ')',
-        'if "%1"=="--help" (',
+        'if "%~1"=="--help" (',
         '  echo --session --model --prompt',
         '  exit /b 0',
         ')',
