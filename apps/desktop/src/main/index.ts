@@ -29,6 +29,13 @@ let closeCoordinator: CloseCoordinator | null = null;
 let quitReady = false;
 let quitAttempt: Promise<boolean> | null = null;
 const approvedWindowCloses = new WeakSet<BrowserWindow>();
+/**
+ * Partitions that passed the will-attach-webview guard. Guest WebContents have
+ * no public API exposing their own partition name, so agent observation
+ * resolves it by session identity: `session.fromPartition(name)` returns the
+ * same Session instance for a given partition string for the life of the app.
+ */
+const attachedPreviewPartitions = new Set<string>();
 protocol.registerSchemesAsPrivileged([
   {
     scheme: PROJECT_VIDEO_SCHEME,
@@ -120,7 +127,12 @@ void app
       // compromised or invokes an obsolete preview-origin bridge.
       allowedOriginForGuestSession: () => null,
       authenticationEnabledForGuestSession: () => false,
-      partitionForGuestSession: () => null,
+      partitionForGuestSession: (guestSession) => {
+        for (const partition of attachedPreviewPartitions) {
+          if (session.fromPartition(partition) === guestSession) return partition;
+        }
+        return null;
+      },
       onGuestCreated: (partition, contents) =>
         previewAgentBrowser.registerGuest(partition, contents),
       audit: (action, outcome, metadata) => {
@@ -308,6 +320,8 @@ function createWindow(
       return;
     }
     hardenAttachingWebviewPreferences(webPreferences as unknown as Record<string, unknown>);
+    const partition = (params as unknown as Record<string, unknown>)['partition'];
+    if (typeof partition === 'string') attachedPreviewPartitions.add(partition);
   });
   if (showWhenReady) window.once('ready-to-show', () => window.show());
 
