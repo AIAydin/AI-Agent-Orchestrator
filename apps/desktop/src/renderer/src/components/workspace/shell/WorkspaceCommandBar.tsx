@@ -1,5 +1,4 @@
 import {
-  ChevronDown,
   CircleDot,
   Command,
   GitCompareArrows,
@@ -12,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import type { AgentDetection, Project } from '../../../../../shared/application/contracts.js';
+import { ProjectSwitcher } from './ProjectSwitcher.js';
 import {
   WorkspaceStatusIndicators,
   type WorkspaceSharingStatus,
@@ -31,6 +31,8 @@ interface WorkspaceCommandBarProps {
   collaborationEnabled: boolean;
   sharingStatus: WorkspaceSharingStatus;
   projectSidebarOpen: boolean;
+  onSwitchProject: (project: Project) => void;
+  onNewProject: () => void;
   onCloseProject: () => void;
   onToggleProjectSidebar: () => void;
   onUndo: () => void;
@@ -54,6 +56,8 @@ export function WorkspaceCommandBar({
   collaborationEnabled,
   sharingStatus,
   projectSidebarOpen,
+  onSwitchProject,
+  onNewProject,
   onCloseProject,
   onToggleProjectSidebar,
   onUndo,
@@ -66,14 +70,13 @@ export function WorkspaceCommandBar({
   return (
     <header className="command-bar">
       <div className="window-drag-space" />
-      <button className="project-switcher" type="button" onClick={onCloseProject}>
-        <span className="brand-mark tiny">F</span>
-        <span>
-          <strong>{project.name}</strong>
-          <small>{canvasName ?? 'Loading canvas…'}</small>
-        </span>
-        <ChevronDown size={14} />
-      </button>
+      <ProjectSwitcher
+        project={project}
+        canvasName={canvasName}
+        onSwitchProject={onSwitchProject}
+        onNewProject={onNewProject}
+        onCloseProject={onCloseProject}
+      />
       <WorkspaceTooltip
         content={projectSidebarOpen ? 'Hide the project sidebar' : 'Show the project sidebar'}
       >

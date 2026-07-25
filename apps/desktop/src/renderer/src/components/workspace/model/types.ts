@@ -28,6 +28,12 @@ export interface WorkspaceProps {
   extensionDiscovery: ExtensionDiscoveryView;
   onClose: () => void;
   onProjectUpdated: (project: Project) => Promise<void>;
+  onSwitchProject: (project: Project) => Promise<void>;
+  onCreateProject: (input: {
+    parentPath: string;
+    name: string;
+    initializeGit: boolean;
+  }) => Promise<void>;
   onOpenSettings: () => void;
   onError: (message: string) => void;
 }

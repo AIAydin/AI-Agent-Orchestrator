@@ -165,6 +165,12 @@ export function App() {
             setActiveProject(project);
             await loadBootstrap();
           }}
+          onSwitchProject={(target) =>
+            run(async () => unwrap(await window.forgeboard.projects.open(target.path)))
+          }
+          onCreateProject={(input) =>
+            run(async () => unwrap(await window.forgeboard.projects.create(input)))
+          }
           onOpenSettings={() => openSettings()}
           onError={setError}
         />

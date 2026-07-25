@@ -92,6 +92,8 @@ function commandBarProps() {
     collaborationEnabled: false,
     sharingStatus: 'not-connected' as const,
     projectSidebarOpen: true,
+    onSwitchProject: callback,
+    onNewProject: callback,
     onCloseProject: callback,
     onToggleProjectSidebar: callback,
     onUndo: callback,
