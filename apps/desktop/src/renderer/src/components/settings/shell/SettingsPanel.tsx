@@ -4,10 +4,8 @@ import {
   Database,
   FolderGit2,
   CircleHelp,
-  ListChecks,
   Mic,
   Palette,
-  Puzzle,
   RotateCcw,
   Save,
   ShieldCheck,
@@ -22,23 +20,17 @@ import type {
   Project,
 } from '../../../../../shared/application/contracts.js';
 import { settingsDraftValidationIssues } from '../../../../../shared/settings/draft-validation.js';
+import { applyAppearance } from '../../../lib/appearance.js';
 import { unwrap } from '../../../lib/ipc.js';
-import { ExtensionSettings } from '../../extensions/ExtensionSettings.js';
 import { WorkspaceTooltip } from '../../workspace/shell/tooltips/WorkspaceTooltip.js';
 import { AgentsSettings } from '../agents/AgentsSettings.js';
 import { AppearanceSettings } from '../AppearanceSettings.js';
-import { CheckSettings } from '../CheckSettings.js';
 import { ConnectivitySettings } from '../ConnectivitySettings.js';
 import { GitPreviewSettings } from '../GitPreviewSettings.js';
 import { HelpSettings } from '../help/HelpSettings.js';
 import { PermissionSettings } from '../PermissionSettings.js';
 import { PrivacySettings } from '../privacy/PrivacySettings.js';
-import { customPermissionConfigurationIssues } from '../../permissions/permission-profile-ui.js';
-import { environmentAllowlistIssues } from '../../configuration/EnvironmentAllowlistEditor.js';
-import { useCommandReadiness } from '../../configuration/useCommandReadiness.js';
-import { useSettingsAgentReadiness } from '../readiness/useSettingsAgentReadiness.js';
 import { useSettingsFolderReadiness } from '../readiness/useSettingsFolderReadiness.js';
-import { settingsCommandDrafts } from './command-drafts.js';
 import { BrandMark } from '../../shell/BrandMark.js';
 import { UpdateSettings } from '../updates/UpdateSettings.js';
 import { VoiceSettings } from '../voice/VoiceSettings.js';
@@ -52,8 +44,6 @@ export type SettingsTab =
   | 'agents'
   | 'permissions'
   | 'git'
-  | 'checks'
-  | 'extensions'
   | 'voice'
   | 'connectivity'
   | 'help'
@@ -67,7 +57,6 @@ interface SettingsPanelProps {
   activeProject: Project | null;
   onClose: () => void;
   onSaved: () => Promise<void>;
-  onExtensionsChanged: () => Promise<void>;
   onDeleteAll: (confirmation: string) => Promise<void>;
   onFlushActiveCanvas: () => Promise<boolean>;
   onRecoveryApplied: () => Promise<void>;
@@ -86,23 +75,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
   const closeButton = useRef<HTMLButtonElement>(null);
   const closeRef = useRef(props.onClose);
   const busyRef = useRef(busy);
+  const savedSettingsRef = useRef(props.settings);
   closeRef.current = props.onClose;
   busyRef.current = busy;
-  const permissionIssues = customPermissionConfigurationIssues(draft);
-  const environmentIssues = environmentAllowlistIssues(draft.envAllowlist);
+  savedSettingsRef.current = props.settings;
   const draftIssues = settingsDraftValidationIssues(draft);
-  const commandDrafts = settingsCommandDrafts(draft);
-  const commandReadiness = useCommandReadiness(
-    commandDrafts,
-    props.activeProject?.id ?? null,
-    checkCommandReadiness,
-  );
-  const agentReadiness = useSettingsAgentReadiness(
-    draft,
-    props.settings,
-    props.agents,
-    checkAgentReadiness,
-  );
   const folderReadiness = useSettingsFolderReadiness(draft, checkFolderReadiness);
   const dockerIssue = dockerReadinessIssue(draft, dockerReadiness, props.settings);
 
@@ -114,6 +91,16 @@ export function SettingsPanel(props: SettingsPanelProps) {
     draft.dockerImage,
     draft.dockerContainerExecutable,
   ]);
+
+  // Preview appearance choices immediately; the saved settings return on close or save.
+  useEffect(() => {
+    applyAppearance({
+      theme: draft.theme,
+      density: draft.density,
+      reducedMotion: draft.reducedMotion,
+    });
+  }, [draft.theme, draft.density, draft.reducedMotion]);
+  useEffect(() => () => applyAppearance(savedSettingsRef.current), []);
 
   useEffect(() => {
     const previousFocus =
@@ -175,14 +162,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
   }
 
   const saveBlockedReason =
-    permissionIssues[0] ??
-    environmentIssues[0] ??
-    draftIssues[0] ??
-    dockerIssue ??
-    folderReadiness.blockingIssues[0] ??
-    agentReadiness.blockingIssues[0] ??
-    commandReadiness.blockingIssues[0] ??
-    undefined;
+    draftIssues[0] ?? dockerIssue ?? folderReadiness.blockingIssues[0] ?? undefined;
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -212,7 +192,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
             <BrandMark size={27} />
             <div>
               <h2 id="settings-title">Settings</h2>
-              <p>Change how Forgeboard works here. Unavailable features are clearly labeled.</p>
+              <p>Change how Forgeboard works here.</p>
             </div>
           </div>
           <WorkspaceTooltip
@@ -258,18 +238,6 @@ export function SettingsPanel(props: SettingsPanelProps) {
               onClick={() => setTab('git')}
             />
             <SettingsTabButton
-              active={tab === 'checks'}
-              icon={<ListChecks size={16} />}
-              label="Checks"
-              onClick={() => setTab('checks')}
-            />
-            <SettingsTabButton
-              active={tab === 'extensions'}
-              icon={<Puzzle size={16} />}
-              label="Extensions"
-              onClick={() => setTab('extensions')}
-            />
-            <SettingsTabButton
               active={tab === 'connectivity'}
               icon={<Wifi size={16} />}
               label="Connectivity"
@@ -304,8 +272,6 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 setDraft={setDraft}
                 busy={busy}
                 perform={perform}
-                readiness={agentReadiness}
-                terminalReadiness={commandReadiness.statuses['terminal-default']}
                 dockerReadiness={dockerReadiness}
                 onDockerReadinessChange={setDockerReadiness}
                 onError={props.onError}
@@ -323,29 +289,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
             )}
             {tab === 'git' && (
               <GitPreviewSettings
-                projects={props.projects}
-                activeProject={props.activeProject}
                 draft={draft}
                 setDraft={setDraft}
                 busy={busy}
                 perform={perform}
-                onError={props.onError}
-                developmentReadiness={commandReadiness.statuses['development']}
                 managedWorktreeReadiness={folderReadiness.statuses['managed-worktrees']}
               />
-            )}
-            {tab === 'checks' && (
-              <CheckSettings
-                activeProject={props.activeProject}
-                draft={draft}
-                setDraft={setDraft}
-                busy={busy}
-                perform={perform}
-                readiness={commandReadiness.statuses}
-              />
-            )}
-            {tab === 'extensions' && (
-              <ExtensionSettings onError={props.onError} onChanged={props.onExtensionsChanged} />
             )}
             {tab === 'connectivity' && (
               <>
@@ -399,59 +348,21 @@ export function SettingsPanel(props: SettingsPanelProps) {
         <footer className="settings-footer">
           <span>
             Forgeboard {props.info.version} · {props.info.platform}
-            {permissionIssues[0] !== undefined && (
-              <small id="settings-permission-validation" role="alert">
-                {permissionIssues[0]}
+            {draftIssues[0] !== undefined && (
+              <small id="settings-draft-validation" role="alert">
+                {draftIssues[0]}
               </small>
             )}
-            {permissionIssues.length === 0 && environmentIssues[0] !== undefined && (
-              <small id="settings-environment-validation" role="alert">
-                {environmentIssues[0]}
+            {draftIssues.length === 0 && dockerIssue !== undefined && (
+              <small id="settings-docker-validation" role="alert">
+                {dockerIssue}
               </small>
             )}
-            {permissionIssues.length === 0 &&
-              environmentIssues.length === 0 &&
-              draftIssues[0] !== undefined && (
-                <small id="settings-draft-validation" role="alert">
-                  {draftIssues[0]}
-                </small>
-              )}
-            {permissionIssues.length === 0 &&
-              environmentIssues.length === 0 &&
-              draftIssues.length === 0 &&
-              dockerIssue !== undefined && (
-                <small id="settings-docker-validation" role="alert">
-                  {dockerIssue}
-                </small>
-              )}
-            {permissionIssues.length === 0 &&
-              environmentIssues.length === 0 &&
-              draftIssues.length === 0 &&
+            {draftIssues.length === 0 &&
               dockerIssue === undefined &&
               folderReadiness.blockingIssues[0] !== undefined && (
                 <small id="settings-folder-validation" role="alert">
                   {folderReadiness.blockingIssues[0]}
-                </small>
-              )}
-            {permissionIssues.length === 0 &&
-              environmentIssues.length === 0 &&
-              draftIssues.length === 0 &&
-              dockerIssue === undefined &&
-              folderReadiness.blockingIssues.length === 0 &&
-              agentReadiness.blockingIssues[0] !== undefined && (
-                <small id="settings-agent-validation" role="alert">
-                  {agentReadiness.blockingIssues[0]}
-                </small>
-              )}
-            {permissionIssues.length === 0 &&
-              environmentIssues.length === 0 &&
-              draftIssues.length === 0 &&
-              dockerIssue === undefined &&
-              folderReadiness.blockingIssues.length === 0 &&
-              agentReadiness.blockingIssues.length === 0 &&
-              commandReadiness.blockingIssues[0] !== undefined && (
-                <small id="settings-command-validation" role="alert">
-                  {commandReadiness.blockingIssues[0]}
                 </small>
               )}
           </span>
@@ -477,16 +388,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 className="button primary"
                 type="submit"
                 aria-label="Save settings"
-                disabled={
-                  busy ||
-                  dockerIssue !== undefined ||
-                  permissionIssues.length > 0 ||
-                  environmentIssues.length > 0 ||
-                  draftIssues.length > 0 ||
-                  folderReadiness.blockingIssues.length > 0 ||
-                  agentReadiness.blockingIssues.length > 0 ||
-                  commandReadiness.blockingIssues.length > 0
-                }
+                disabled={busy || saveBlockedReason !== undefined}
               >
                 <Save size={15} /> Save settings
               </button>
@@ -496,18 +398,6 @@ export function SettingsPanel(props: SettingsPanelProps) {
       </form>
     </div>
   );
-}
-
-async function checkCommandReadiness(
-  input: Parameters<typeof window.forgeboard.commands.checkReadiness>[0],
-) {
-  return unwrap(await window.forgeboard.commands.checkReadiness(input));
-}
-
-async function checkAgentReadiness(
-  input: Parameters<typeof window.forgeboard.agents.checkReadiness>[0],
-) {
-  return unwrap(await window.forgeboard.agents.checkReadiness(input));
 }
 
 async function checkFolderReadiness(

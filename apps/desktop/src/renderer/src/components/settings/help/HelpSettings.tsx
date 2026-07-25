@@ -1,10 +1,12 @@
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import type { AppSettings } from '../../../../../shared/application/contracts.js';
 import { FirstRunTour } from '../../help/tour/FirstRunTour.js';
 import { HELP_ARTICLES, searchHelpArticles } from './help-content.js';
 import './HelpSettings.css';
+
+export const HELP_PAGE_SIZE = 6;
 
 export function HelpSettings({
   keyboardPreset,
@@ -13,7 +15,14 @@ export function HelpSettings({
   activeKeyboardPreset: AppSettings['keyboardPreset'];
 }) {
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
   const articles = useMemo(() => searchHelpArticles(query), [query]);
+  const pageCount = Math.max(1, Math.ceil(articles.length / HELP_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visibleArticles = articles.slice(
+    currentPage * HELP_PAGE_SIZE,
+    (currentPage + 1) * HELP_PAGE_SIZE,
+  );
   const paletteShortcut = keyboardPreset === 'vscode' ? 'F1 or Ctrl/⌘ Shift P' : 'Ctrl/⌘ K';
   const paletteShortcutLabel =
     keyboardPreset === 'vscode'
@@ -28,10 +37,7 @@ export function HelpSettings({
       <header>
         <span className="eyebrow">Local guide</span>
         <h3 id="help-settings-title">Help & shortcuts</h3>
-        <p>
-          Step-by-step guides for setup, agents, reviews, and recovery. Everything works offline —
-          no file editing needed.
-        </p>
+        <p>Short guides for setup, agents, reviews, and recovery. Everything works offline.</p>
       </header>
 
       <div className="help-shortcut" role="group" aria-labelledby="help-palette-shortcut-title">
@@ -59,7 +65,10 @@ export function HelpSettings({
           name="help-search"
           value={query}
           placeholder="Search setup, agents, Git, recovery, privacy…"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setPage(0);
+          }}
         />
       </label>
 
@@ -70,10 +79,13 @@ export function HelpSettings({
       </p>
 
       <div className="help-articles">
-        {articles.map((article, index) => {
+        {visibleArticles.map((article, index) => {
           const Icon = article.icon;
           return (
-            <details key={article.id} open={query.trim() !== '' || index === 0}>
+            <details
+              key={article.id}
+              open={query.trim() !== '' || (currentPage === 0 && index === 0)}
+            >
               <summary>
                 <span className="help-article-icon">
                   <Icon size={16} aria-hidden="true" />
@@ -102,6 +114,32 @@ export function HelpSettings({
           </div>
         )}
       </div>
+
+      {pageCount > 1 && (
+        <nav className="help-pagination" aria-label="Help pages">
+          <button
+            type="button"
+            className="button"
+            aria-label="Previous help page"
+            disabled={currentPage === 0}
+            onClick={() => setPage(currentPage - 1)}
+          >
+            <ChevronLeft size={14} aria-hidden="true" /> Previous
+          </button>
+          <span role="status">
+            Page {currentPage + 1} of {pageCount}
+          </span>
+          <button
+            type="button"
+            className="button"
+            aria-label="Next help page"
+            disabled={currentPage >= pageCount - 1}
+            onClick={() => setPage(currentPage + 1)}
+          >
+            Next <ChevronRight size={14} aria-hidden="true" />
+          </button>
+        </nav>
+      )}
     </section>
   );
 }

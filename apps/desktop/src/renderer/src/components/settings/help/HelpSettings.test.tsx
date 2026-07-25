@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { HelpSettings } from './HelpSettings.js';
+import { HelpSettings, HELP_PAGE_SIZE } from './HelpSettings.js';
 import { HELP_ARTICLES, searchHelpArticles } from './help-content.js';
 
 afterEach(cleanup);
@@ -16,13 +16,53 @@ describe('HelpSettings', () => {
     expect(screen.getByRole('group', { name: 'Command palette' })).toBeTruthy();
     expect(screen.getByLabelText('Control or Command plus K').textContent).toBe('Ctrl/⌘ K');
     expect(screen.getByText('Standard preset · currently active')).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toBe(`${HELP_ARTICLES.length} local guides`);
+    expect(screen.getByText(`${HELP_ARTICLES.length} local guides`)).toBeTruthy();
     expect(screen.getByText('Run your first agent')).toBeTruthy();
-    expect(screen.getByText('Understand what can leave this device')).toBeTruthy();
     fireEvent.click(screen.getByText('Replay Getting started tour'));
     expect(screen.getByRole('heading', { name: 'Getting started tour', level: 4 })).toBeTruthy();
     expect(screen.getAllByRole('tab')).toHaveLength(4);
     expect(view.container.querySelectorAll('a')).toHaveLength(0);
+  });
+
+  it('paginates every guide without trimming entries', () => {
+    render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
+
+    const pageCount = Math.ceil(HELP_ARTICLES.length / HELP_PAGE_SIZE);
+    expect(pageCount).toBeGreaterThan(1);
+    expect(screen.getByText(`Page 1 of ${pageCount}`)).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Previous help page' }).disabled).toBe(
+      true,
+    );
+
+    const seen = new Set<string>();
+    const collectTitles = () => {
+      for (const article of HELP_ARTICLES) {
+        if (screen.queryByText(article.title) !== null) seen.add(article.id);
+      }
+    };
+    collectTitles();
+    for (let page = 1; page < pageCount; page += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Next help page' }));
+      collectTitles();
+    }
+    expect(seen.size).toBe(HELP_ARTICLES.length);
+    expect(screen.getByText(`Page ${pageCount} of ${pageCount}`)).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next help page' }).disabled).toBe(true);
+    expect(screen.getByText('Understand what can leave this device')).toBeTruthy();
+  });
+
+  it('returns to the first page when a search begins', () => {
+    render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next help page' }));
+    expect(screen.getByText(/Page 2 of/u)).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
+      target: { value: 'agent' },
+    });
+
+    expect(screen.queryByText(/Page 2 of/u)).toBeNull();
+    expect(screen.getByText(/matching guide/u)).toBeTruthy();
   });
 
   it('shows the VS Code palette shortcut without implying it is configurable in code', () => {
@@ -49,7 +89,7 @@ describe('HelpSettings', () => {
       target: { value: 'moved repository' },
     });
 
-    expect(screen.getByRole('status').textContent).toBe('1 matching guide');
+    expect(screen.getByText('1 matching guide')).toBeTruthy();
     expect(screen.getByText('A project was moved or renamed')).toBeTruthy();
     expect(screen.getByText(/Choose Locate project/u)).toBeTruthy();
     expect(screen.queryByText('Running agents in Docker is unavailable')).toBeNull();
@@ -62,11 +102,10 @@ describe('HelpSettings', () => {
       target: { value: 'read-only comparison' },
     });
     expect(screen.getByText(/read-only comparison of everything the run saved/u)).toBeTruthy();
-    expect(screen.getByText(/select the finished agent run/u)).toBeTruthy();
+    expect(screen.getByText(/PR action on the agent node/u)).toBeTruthy();
     expect(screen.getByText(/Forgeboard never force-pushes/u)).toBeTruthy();
     expect(screen.getByText(/only checks your GitHub sign-in/u)).toBeTruthy();
-    expect(screen.queryByText(/push, and pull-request controls are not available yet/u)).toBeNull();
-    expect(screen.queryByText(/include both committed and uncommitted/u)).toBeNull();
+    expect(screen.queryByText(/Add a Git \/ PR node/u)).toBeNull();
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
       target: { value: 'docker image' },
@@ -82,7 +121,7 @@ describe('HelpSettings', () => {
       target: { value: 'non-fast-forward expired gh' },
     });
 
-    expect(screen.getByRole('status').textContent).toBe('1 matching guide');
+    expect(screen.getByText('1 matching guide')).toBeTruthy();
     expect(screen.getByText('Sharing your work online is blocked')).toBeTruthy();
     expect(screen.getByText(/names listed next to the Remote field/u)).toBeTruthy();
     expect(screen.getByText(/normal Git push still works/u)).toBeTruthy();
@@ -111,18 +150,18 @@ describe('HelpSettings', () => {
     expect(screen.getByText(/never edits the backup in place/u)).toBeTruthy();
   });
 
-  it('finds the OAuth-first Codex and Claude connection guide without claiming other providers', () => {
+  it('explains that agents work out of the box without a connection flow', () => {
     render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
-      target: { value: 'oauth reconnect token' },
+      target: { value: 'sign in account codex' },
     });
 
-    expect(screen.getByRole('status').textContent).toBe('1 matching guide');
-    expect(screen.getByText('Connect Codex or Claude Code')).toBeTruthy();
-    expect(screen.getByText(/never sees or stores the OAuth token/u)).toBeTruthy();
-    expect(screen.getByText(/current override is validated/u)).toBeTruthy();
-    expect(screen.getByText(/Gemini and OpenCode do not use this OAuth flow/u)).toBeTruthy();
+    expect(screen.getByText('Agents work out of the box')).toBeTruthy();
+    expect(screen.getByText(/finds installed CLIs automatically/u)).toBeTruthy();
+    expect(screen.getByText(/never sees or stores provider credentials/u)).toBeTruthy();
+    expect(screen.queryByText(/Connect with OpenAI/u)).toBeNull();
+    expect(screen.queryByText(/OAuth/u)).toBeNull();
   });
 
   it('renders an actionable empty state for an unmatched search', () => {
@@ -132,20 +171,20 @@ describe('HelpSettings', () => {
       target: { value: 'nonexistent-frobnicator' },
     });
 
-    expect(screen.getByRole('status').textContent).toBe('0 matching guides');
+    expect(screen.getByText('0 matching guides')).toBeTruthy();
     expect(screen.getByText('No guides match your search')).toBeTruthy();
   });
 
-  it('explains Custom host and Docker boundaries without claiming cwd is a sandbox', () => {
+  it('explains permission profiles and Docker boundaries without claiming cwd is a sandbox', () => {
     render(<HelpSettings keyboardPreset="standard" activeKeyboardPreset="standard" />);
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search local help' }), {
-      target: { value: 'custom cwd sandbox' },
+      target: { value: 'cwd sandbox' },
     });
 
-    expect(screen.getByText('Create a Custom permission profile')).toBeTruthy();
-    expect(screen.getByText(/\(cwd\) is not an operating-system sandbox/u)).toBeTruthy();
-    expect(screen.getByText(/whole worktree is mounted read-only or read-write/u)).toBeTruthy();
+    expect(screen.getByText('Choose what an agent may do')).toBeTruthy();
+    expect(screen.getByText(/does not confine the agent/u)).toBeTruthy();
+    expect(screen.getByText(/sign-ins — are never shared in/u)).toBeTruthy();
   });
 });
 

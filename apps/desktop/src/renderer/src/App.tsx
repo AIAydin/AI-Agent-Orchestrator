@@ -15,6 +15,7 @@ import { Welcome } from './components/onboarding/Welcome.js';
 import { Workspace } from './components/workspace/shell/Workspace.js';
 import type { WorkspaceHandle } from './components/workspace/model/types.js';
 import { unwrap } from './lib/ipc.js';
+import { applyAppearance, watchSystemTheme } from './lib/appearance.js';
 import { BootstrapScreen } from './components/application/bootstrap/BootstrapScreen.js';
 
 const ERROR_TOAST_MS = 8_000;
@@ -92,12 +93,9 @@ export function App() {
 
   useEffect(() => {
     if (!bootstrap) return;
-    const dark =
-      bootstrap.settings.theme === 'dark' ||
-      (bootstrap.settings.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    document.documentElement.dataset.density = bootstrap.settings.density;
-    document.documentElement.dataset.reducedMotion = String(bootstrap.settings.reducedMotion);
+    applyAppearance(bootstrap.settings);
+    if (bootstrap.settings.theme !== 'system') return;
+    return watchSystemTheme(() => applyAppearance(bootstrap.settings));
   }, [bootstrap]);
 
   const run = useCallback(
@@ -244,7 +242,6 @@ export function App() {
             await loadBootstrap();
             setShowSettings(false);
           }}
-          onExtensionsChanged={loadBootstrap}
           onDeleteAll={async (confirmation) => {
             const deleted = unwrap(await window.forgeboard.privacy.deleteAll(confirmation));
             if (!deleted) return;
