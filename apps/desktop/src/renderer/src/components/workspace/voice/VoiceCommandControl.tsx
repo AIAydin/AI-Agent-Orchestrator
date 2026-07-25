@@ -38,11 +38,18 @@ export function VoiceCommandControl({
   const [transcript, setTranscript] = useState('');
   const [match, setMatch] = useState<VoiceActionMatch | null>(null);
   const [guesses, setGuesses] = useState<readonly PaletteAction[]>([]);
-  const [autoRan, setAutoRan] = useState(false);
+  const [ran, setRan] = useState(false);
   const recording = useRef<ActiveRecording | null>(null);
+  const dismissTimer = useRef<number | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
 
-  useEffect(() => () => void stopAndDiscard(recording), []);
+  useEffect(
+    () => () => {
+      void stopAndDiscard(recording);
+      if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
+    },
+    [],
+  );
   useEffect(() => {
     if (transcript === '') return;
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -50,10 +57,7 @@ export function VoiceCommandControl({
       trapModalFocus(event, dialog.current);
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      setTranscript('');
-      setMatch(null);
-      setGuesses([]);
-      setAutoRan(false);
+      closeResult();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -61,10 +65,7 @@ export function VoiceCommandControl({
   if (!settings.voiceCommandsEnabled) return null;
 
   async function start(): Promise<void> {
-    setTranscript('');
-    setMatch(null);
-    setGuesses([]);
-    setAutoRan(false);
+    closeResult();
     let stream: MediaStream | null = null;
     let context: AudioContext | null = null;
     setState('requesting');
@@ -141,13 +142,10 @@ export function VoiceCommandControl({
       setTranscript(result.text);
       setMatch(interpretation.match);
       setGuesses(interpretation.guesses);
-      if (
-        interpretation.match !== null &&
-        interpretation.match.action.voiceSafety === 'safe' &&
-        settings.voiceAutoRunSafeActions
-      ) {
+      if (interpretation.match !== null && interpretation.match.action.voiceSafety !== 'confirm') {
         interpretation.match.action.run();
-        setAutoRan(true);
+        setRan(true);
+        dismissTimer.current = window.setTimeout(() => closeResult(), 2_200);
       }
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Local transcription failed.');
@@ -157,10 +155,14 @@ export function VoiceCommandControl({
   }
 
   function closeResult(): void {
+    if (dismissTimer.current !== null) {
+      window.clearTimeout(dismissTimer.current);
+      dismissTimer.current = null;
+    }
     setTranscript('');
     setMatch(null);
     setGuesses([]);
-    setAutoRan(false);
+    setRan(false);
   }
 
   return (
@@ -237,14 +239,14 @@ export function VoiceCommandControl({
                   <Settings2 size={14} aria-hidden="true" /> Voice settings
                 </button>
               </div>
-            ) : autoRan ? (
+            ) : ran ? (
               <p className="voice-action-match success">
                 <Check size={16} aria-hidden="true" /> Ran: {match.action.label}
               </p>
             ) : (
               <div className="voice-action-match">
                 <span>
-                  <small>Matched registered action</small>
+                  <small>Confirm to run</small>
                   <strong>{match.action.label}</strong>
                 </span>
                 <button
@@ -255,7 +257,7 @@ export function VoiceCommandControl({
                     closeResult();
                   }}
                 >
-                  <Play size={14} aria-hidden="true" /> Run action
+                  <Play size={14} aria-hidden="true" /> Run
                 </button>
               </div>
             )}

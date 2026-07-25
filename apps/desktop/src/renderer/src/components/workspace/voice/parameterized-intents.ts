@@ -39,7 +39,7 @@ function matchAgentPrompt(input: ParameterizedVoiceIntentInput): VoiceActionMatc
     id: `voice-prompt-${best.id}`,
     label: `Prompt ${best.data.title}: “${boundedLabel(prompt)}”`,
     section: 'Voice · Agent',
-    voiceSafety: 'confirm',
+    voiceSafety: 'safe',
     run: () => input.promptAgent(best.id, prompt),
   };
   return { action, phrase: `prompt ${target}` };
@@ -76,7 +76,7 @@ function matchConnection(
     id: `voice-connect-${match.source.id}-${match.target.id}`,
     label: `Connect ${match.source.data.title} to ${match.target.data.title}`,
     section: 'Voice · Canvas',
-    voiceSafety: 'confirm',
+    voiceSafety: 'safe',
     run: () => input.connectNodes(match.source.id, match.target.id),
   };
   return { action, phrase: match.phrase };
