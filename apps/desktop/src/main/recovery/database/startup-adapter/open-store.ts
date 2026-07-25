@@ -477,6 +477,9 @@ async function prepareUserDataBoundary(
   const canonical = await realpath(userDataPath);
   const resolved = resolve(userDataPath);
   traceE2eDatabaseStartup(`database-user-data-realpath-resolved:${canonical}|${resolved}`);
+  if (platform === 'win32') {
+    await assertNoFilesystemLinkTraversal(resolved);
+  }
   if (!sameCanonicalPath(canonical, resolved, platform)) {
     throw new Error('The Forgeboard user data location must not traverse filesystem links.');
   }
@@ -525,9 +528,25 @@ export function sameCanonicalPath(
   resolved: string,
   platform: NodeJS.Platform,
 ): boolean {
-  return platform === 'win32'
-    ? canonical.toLowerCase() === resolved.toLowerCase()
-    : canonical === resolved;
+  // Windows realpath expands ordinary 8.3 path components (for example RUNNER~1) and normalizes
+  // casing. Link traversal is therefore validated component-by-component before this comparison.
+  return platform === 'win32' || canonical === resolved;
+}
+
+async function assertNoFilesystemLinkTraversal(resolvedPath: string): Promise<void> {
+  const candidates: string[] = [];
+  let candidate = resolvedPath;
+  for (;;) {
+    const parent = dirname(candidate);
+    if (parent === candidate) break;
+    candidates.push(candidate);
+    candidate = parent;
+  }
+  for (const path of candidates.reverse()) {
+    if ((await lstat(path)).isSymbolicLink()) {
+      throw new Error('The Forgeboard user data location must not traverse filesystem links.');
+    }
+  }
 }
 
 async function protectDatabaseBoundary(

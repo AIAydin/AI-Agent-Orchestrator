@@ -31,7 +31,7 @@ afterEach(async () => {
 });
 
 describe('openLocalStoreWithStartupDatabaseRecovery', () => {
-  it('accepts casing-only Windows canonicalization without accepting path aliases', () => {
+  it('accepts Windows canonicalization differences after component link validation', () => {
     expect(
       sameCanonicalPath(
         'C:\\Users\\RunnerAdmin\\AppData\\Local\\Temp\\Forgeboard',
@@ -45,7 +45,7 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
         'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\Forgeboard',
         'win32',
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(sameCanonicalPath('/tmp/Forgeboard', '/tmp/forgeboard', 'linux')).toBe(false);
   });
 
@@ -510,6 +510,26 @@ describe('openLocalStoreWithStartupDatabaseRecovery', () => {
         dialog: fakeDialog(),
         userDataPath: linkedUserData,
         dependencies: { createDefaultSettings: () => defaults(), createStore },
+      }),
+    ).resolves.toBeNull();
+    expect(createStore).not.toHaveBeenCalled();
+
+    const actualParent = join(parent, 'actual-parent');
+    const nestedUserData = join(actualParent, 'nested');
+    await mkdir(nestedUserData, { recursive: true });
+    const linkedParent = join(parent, 'linked-parent');
+    await symlink(actualParent, linkedParent);
+    await expect(
+      openLocalStoreWithStartupDatabaseRecovery({
+        databasePath: join(linkedParent, 'nested', 'forgeboard.sqlite'),
+        dialog: fakeDialog(),
+        userDataPath: join(linkedParent, 'nested'),
+        dependencies: {
+          platform: 'win32',
+          windowsSecurity: fakeWindowsSecurity(),
+          createDefaultSettings: () => defaults(),
+          createStore,
+        },
       }),
     ).resolves.toBeNull();
     expect(createStore).not.toHaveBeenCalled();
